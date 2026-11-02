@@ -130,7 +130,7 @@ def claude_result(uuid: str, tool_id: str, text: str, error: bool = False) -> di
 
 
 
-def test_claude_subagent_keeps_its_task_its_commander_and_its_tools(tmp_path: Path) -> None:
+def test_claude_subagent_keeps_its_task_its_team_and_its_tools(tmp_path: Path) -> None:
     session = tmp_path / "session.jsonl"
     lines(session, [claude_prompt("h", "hello", origin={"kind": "human"})])
     subagent = tmp_path / "session/subagents/agent-a1.jsonl"

@@ -116,7 +116,7 @@ class Cli(Runtime):
     prefixes = frozenset({"cli_", "tool_", "tools"})
 
 
-class Commander(Runtime):
+class Team(Runtime):
     pass
 
 

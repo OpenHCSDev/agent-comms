@@ -101,8 +101,8 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
         return requested
 
     @classmethod
-    def require_commander_fork(cls) -> None:
-        raise RelationViolationError('This thread is not a declared commander fork.')
+    def require_fork(cls) -> None:
+        raise RelationViolationError('This thread is not a declared teammate fork.')
 
     @classmethod
     def require_subagent(cls) -> None:
@@ -131,8 +131,8 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
         return thread.role.executor(thread)
 
     @classmethod
-    def commander_forks(cls, thread: Thread) -> tuple[Thread, ...]:
-        """The thread when it is a fork working inside its commander's turn."""
+    def forks(cls, thread: Thread) -> tuple[Thread, ...]:
+        """The thread when it is a fork working inside its teammate's turn."""
         return ()
 
     @classmethod
@@ -268,24 +268,24 @@ class SubagentExecution(ExternalThreadExecution):
         existing.execution.require_subagent()
 
 
-class CommanderForkExecution(NoChannelInbox, SubagentExecution):
+class ForkExecution(NoChannelInbox, SubagentExecution, declared_name="commander_fork_execution"):
     """An SDK child borrows its bound parent's context and records its own fork goal.
 
     Any independent parent can declare it; the stored execution identity stays stable.
     """
 
     @classmethod
-    def require_commander_fork(cls) -> None:
+    def require_fork(cls) -> None:
         pass
 
     @classmethod
-    def commander_forks(cls, thread: Thread) -> tuple[Thread, ...]:
+    def forks(cls, thread: Thread) -> tuple[Thread, ...]:
         return (thread,)
 
     @classmethod
     def child_of(cls, parent: Thread, child: Thread) -> Thread:
-        """A fork acts for its commander, so it carries every tag the commander carries,
-        #commanders included: it is seen where its commander is."""
+        """A fork acts for its teammate, so it carries every tag the teammate carries,
+        #teammates included: it is seen where its teammate is."""
         return replace(child, tags=parent.tags)
 
     @classmethod
@@ -294,4 +294,4 @@ class CommanderForkExecution(NoChannelInbox, SubagentExecution):
 
     @classmethod
     def require_resumes(cls, existing: Thread) -> None:
-        existing.execution.require_commander_fork()
+        existing.execution.require_fork()

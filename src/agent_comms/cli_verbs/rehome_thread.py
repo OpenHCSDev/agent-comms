@@ -14,7 +14,7 @@ from typing import Annotated
 class RehomeThreadCliCommand(
     RunningSessionCliCommand, ConversationLimitsCliCommand, declared_name="rehome-thread",
 ):
-    help = ("Move an existing unit from its harness onto native Pi, keeping its birth, goal, "
+    help = ("Move an existing teammate from its harness onto native Pi, keeping its birth, goal, "
             "orders and inbox; retires the harness's bridge for that session")
     name: Annotated[
         str,

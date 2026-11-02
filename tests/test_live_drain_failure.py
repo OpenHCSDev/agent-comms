@@ -246,7 +246,7 @@ async def test_cancelled_drain_keeps_original_failure(tmp_path):
 def test_unit_deaf_is_dated_by_the_drain_that_cannot_read_its_inbox(
     tmp_path, monkeypatch, kind, deaf,
 ):
-    from agent_comms.commander.standing import InboxUnavailable, UnitDeaf
+    from agent_comms.team.standing import InboxUnavailable, UnitDeaf
     from test_acp_private_nk_delivery import _private_comms
 
     comms, _ = _private_comms(tmp_path)

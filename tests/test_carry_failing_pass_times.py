@@ -15,7 +15,7 @@ def test_carry_gives_a_stored_failure_its_first_failure_time_once(tmp_path):
     path.write_text(
         json.dumps(
             {
-                "failing": {"CommanderHeartbeat": {"since": 1793331540.0, "error": "TypeError: x"}},
+                "failing": {"TeamHeartbeat": {"since": 1793331540.0, "error": "TypeError: x"}},
                 "commander_completed": [
                     [{"name": "lead", "created_at": 1792300653.5}, 1793350616.1]
                 ],
@@ -26,6 +26,6 @@ def test_carry_gives_a_stored_failure_its_first_failure_time_once(tmp_path):
 
     assert step.carry(apply=False).changed == 1
     assert step.carry(apply=True).rewritten == (path.relative_to(root),)
-    failure = ServicePassStore(path).read().failing["CommanderHeartbeat"]
+    failure = ServicePassStore(path).read().failing["TeamHeartbeat"]
     assert (failure.since, failure.failed_at) == (1793331540.0, 1793331540.0)
     assert step.carry(apply=True).changed == 0

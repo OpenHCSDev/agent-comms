@@ -14,9 +14,9 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.commander_hud import CommanderFrame, CommanderHud
-from agent_comms.commander_heartbeat import CommanderHeartbeat
-from commander_heartbeat_fixture import ObservedHeartbeat, current_hud, observe_commander
+from agent_comms.team_hud import TeamFrame, TeamHud
+from agent_comms.team_heartbeat import TeamHeartbeat
+from team_heartbeat_fixture import ObservedHeartbeat, current_hud, observe_team
 from agent_comms.comms import wire
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.launch_runtime import LaunchRoot
@@ -35,7 +35,7 @@ from agent_comms.todos import (
 )
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tool_declaration import NativeRequestTools
-from agent_comms.ui_model.unit_state import Unreadable
+from agent_comms.ui_model.teammate_state import Unreadable
 from agent_comms.work_branches import WorkBranchError, WorkBranches
 from fixture_git import IDENTITY
 from source_revision_fixture import SourceRepository
@@ -160,18 +160,18 @@ def test_deleted_branch_marks_one_card_unreadable(held_bus):
                    process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.register(lead)
 
-    plans = CommanderHeartbeat()
+    plans = TeamHeartbeat()
     with LaunchRoot.from_path(comms.root).selected():
-        before = observe_commander(comms, lead, ProgressRead(), plans=plans)
+        before = observe_team(comms, lead, ProgressRead(), plans=plans)
         healthy = tuple(card for card in before.states if card.unit.name != 'worker')
         git(checkout, 'update-ref', '-d', f'refs/heads/{branch}')
-        interrupted = observe_commander(comms, lead, ProgressRead(), plans=plans)
+        interrupted = observe_team(comms, lead, ProgressRead(), plans=plans)
         asyncio.run(ObservedHeartbeat((interrupted,)).run(lambda: nullcontext(comms)))
-        published, = CommanderFrame.read_all(comms.root)
+        published, = TeamFrame.read_all(comms.root)
         assert tuple(card.unit for card in published.units) == tuple(card.unit for card in interrupted.states)
         assert branch not in WorkBranches(checkout).worktrees()
         for _ in range(2):
-            frame = observe_commander(comms, lead, ProgressRead(), plans=plans)
+            frame = observe_team(comms, lead, ProgressRead(), plans=plans)
             (broken,) = (card for card in frame.states if card.unit.name == 'worker')
             assert isinstance(broken, Unreadable)
             with pytest.raises((GitCommandError, WorkBranchError)) as source_failure:
@@ -180,7 +180,7 @@ def test_deleted_branch_marks_one_card_unreadable(held_bus):
             assert tuple(card for card in frame.states if card.unit.name != 'worker') == healthy
             asyncio.run(ObservedHeartbeat((frame,)).run(lambda: nullcontext(comms)))
             expected = current_hud(comms, lead.name, frame.frame, frame.states)
-            assert CommanderFrame.read_all(comms.root) == (expected,)
+            assert TeamFrame.read_all(comms.root) == (expected,)
         print(broken.line())
 
 

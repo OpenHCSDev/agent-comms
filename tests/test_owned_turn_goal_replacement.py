@@ -30,7 +30,7 @@ from agent_comms.reservation_rules import ReservationViolationError
 from agent_comms.threads import Thread
 from agent_comms.turn_input_source import NoTurnAcceptance
 from compaction_loopback import LoopbackProvider
-from conftest import answer_rules, declare_fleet, installed_comms
+from conftest import answer_rules, declare_team, installed_comms
 from native_backend_fixture import native_backend_fixture, wait_for
 from source_revision_fixture import SourceRepository
 from test_todos import order
@@ -56,7 +56,7 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
         async with saved.open_owner(native_options=()) as (agent, session_id):
             comms = agent._comms
             worker = agent.sessions.require(session_id)
-            declare_fleet(comms, Thread(
+            declare_team(comms, Thread(
                 'lead', frozenset(), Checkout(saved.project),
                 process_identity=ProcessIdentity.capture(os.getpid()),
             ))
@@ -202,12 +202,12 @@ async def test_order_reactivating_a_blocked_goal_keeps_the_running_turn(tmp_path
     source = SourceRepository.create(tmp_path / 'source')
     comms, agent = prepared_owner
     request = comms.goals.todos.add_request(
-        comms.registry.require('lead').incarnation, 'Repair the blocked unit').id
+        comms.registry.require('lead').incarnation, 'Repair the blocked teammate').id
     comms.goals.update_goal('worker', CreateProblemGoalAction(
         problem='P1', order=order(source), request=request,
         review_at=RecordedEventTime(1000), commander='lead',
         assigner=comms.registry.require('lead').incarnation,
-        repo=RepositoryName.from_wire('org/repo'), text='Repair the blocked unit',
+        repo=RepositoryName.from_wire('org/repo'), text='Repair the blocked teammate',
     ))
     blocked = comms.goals.update_goal(
         'worker', BlockedGoalAction(block_reason='Backend turn ended without a result.')

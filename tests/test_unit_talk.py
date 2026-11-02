@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from agent_comms.commander.unit_talk import BlockedTalk, Ceremony, UnitTalk
+from agent_comms.team.teammate_talk import BlockedTalk, Ceremony, TeammateTalk
 from agent_comms.nominal.field_codec import MessageId
 from agent_comms.thread_identity import RecordedThreadIncarnation
 
@@ -11,7 +11,7 @@ UNIT = RecordedThreadIncarnation("install-speed", 1792869186.2298183)
 
 
 @dataclass(frozen=True)
-class Talk(UnitTalk):
+class Talk(TeammateTalk):
     """The real window over fixed messages and commits instead of a live bus."""
 
     said: tuple[SimpleNamespace, ...] = ()

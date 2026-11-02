@@ -325,7 +325,7 @@ def test_exhausted_goal_revision_refuses_transition_without_write(comms):
     assert (comms.root / "registry.json").read_bytes() == before
 
 
-def test_a_blocked_goal_is_retried_by_its_unit_or_commander_and_authorize_retry_guards_each(comms, monkeypatch):
+def test_a_blocked_goal_is_retried_by_its_unit_or_team_and_authorize_retry_guards_each(comms, monkeypatch):
     """No owner session exists: the unit retries through comms_goal, the commander retries and
     replaces through the runtime actor, and an unresolved attempt still refuses a retry."""
     goal_id = FieldCodec.decode(GoalId, _goal(comms, monkeypatch)["id"])
@@ -344,10 +344,10 @@ def test_a_blocked_goal_is_retried_by_its_unit_or_commander_and_authorize_retry_
     assert retried['goal']['state'] == {'kind': 'active'} and goal.progress == 'cause fixed'
 
     failed_turn()
-    commander_retry = comms.goals.update_goal(
+    team_retry = comms.goals.update_goal(
         "owner", RetryGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal_id))))
-    commander_retry.require_active()
-    assert comms.registry.require('owner').goal == commander_retry
+    team_retry.require_active()
+    assert comms.registry.require('owner').goal == team_retry
 
     failed_turn()
     comms.goals.update_goal("owner", RetryGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal_id))))

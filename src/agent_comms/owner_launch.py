@@ -135,7 +135,7 @@ class ReadHostResourcesRuntimeRequest(AttachedResultRuntimeRequest):
                 comms.registry.store.cache.read_counts(),
                 comms.registry.storage_rule.host_memory_bytes,
                 sum(row.resident for row in ResidentMemory.tree(process, Path("/proc")).values()),
-                comms.registry.storage_rule.fleet_memory_budget(owners),
+                comms.registry.storage_rule.team_memory_budget(owners),
             )
         return await Coordination.run_worker(capture)
 

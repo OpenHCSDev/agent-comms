@@ -12,7 +12,7 @@ from agent_comms.todos import PullRequestHeadRevision
 from agent_comms.change_report import FileLine
 from agent_comms.errors import MissingSourceLine
 from agent_comms.check_root import CheckRoot
-from agent_comms.commander.order import OrderFile
+from agent_comms.team.order import OrderFile
 from cli_command import core
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.goal_actions import CreateProblemGoalAction
@@ -31,7 +31,7 @@ from agent_comms.threads import Thread
 @pytest.mark.parametrize('scope', (TriageScope(), FIX_SCOPE))
 def test_scope_round_trips_through_the_actual_order_file(tmp_path, scope, source_repository):
     document = OrderFile(order=replace(order(source_repository), scope=scope),
-                         defect='The unit was given a fix without a declared parent',
+                         defect='The teammate was given a fix without a declared parent',
                          why_stupid='The report and implementation require different delivery facts')
     assert OrderFile.read(json.dumps(FieldCodec.encode(document))) == document
     assert FieldCodec.decode(OrderScope, FieldCodec.encode(scope)) == scope

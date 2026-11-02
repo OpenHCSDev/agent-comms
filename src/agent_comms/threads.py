@@ -116,7 +116,7 @@ class ParkedThreadWorkState(ThreadWorkState):
 
     def require_assignment(self) -> None:
         raise RelationViolationError(
-            "The commander parked this thread; resume it before assigning work."
+            "The teammate parked this thread; resume it before assigning work."
         )
 
 

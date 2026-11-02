@@ -14,7 +14,7 @@ from agent_comms.child_process import NoProcess
 from agent_comms.cli import main
 from agent_comms.comms import Comms, wire
 from agent_comms.errors import UnreceivedAnswerError
-from agent_comms.messaging import CommanderReceipts
+from agent_comms.messaging import TeamReceipts
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript, UserTranscript
 from agent_comms.native_entries import NativeEntry
@@ -167,10 +167,10 @@ def test_a_message_answers_only_what_its_sender_received(source):
         assert source.bus.bus.lookup(reply.seq).answers == (original.reference,)
 
 
-def test_acting_for_a_commander_answers_what_that_commander_received(source):
+def test_acting_for_a_team_answers_what_that_team_received(source):
     # 10-30: 35 asks owed by retired codex-greentext refused every successor and its forks
     # because the gate asked "did you receive it" instead of "do you act for who did".
-    retired_ask = source.messaging.send("unselected", "A", "Ask the retired commander").message
+    retired_ask = source.messaging.send("unselected", "A", "Ask the retired teammate").message
     people = source.registry.snapshot()
     retired = people.require("A").incarnation.require_recorded()
     peer = people.require("B").incarnation.require_recorded()
@@ -178,14 +178,14 @@ def test_acting_for_a_commander_answers_what_that_commander_received(source):
     fork = people.require("unselected").incarnation.require_recorded().acting_for(peer_authority)
     for actor in (peer_authority, fork):
         reply = source.messaging.send(
-            "B", "unselected", "Answered for the retired commander",
+            "B", "unselected", "Answered for the retired teammate",
             answers=(retired_ask.reference,),
-            answerer=CommanderReceipts(actor, (retired,))).message
+            answerer=TeamReceipts(actor, (retired,))).message
         assert source.bus.bus.lookup(reply.seq).answers == (retired_ask.reference,)
     with pytest.raises(UnreceivedAnswerError, match=f"B never received {retired_ask.message_id}"):
-        source.messaging.send("B", "unselected", "Not my commander",
+        source.messaging.send("B", "unselected", "Not my teammate",
                               answers=(retired_ask.reference,),
-                              answerer=CommanderReceipts(peer, (retired,)))
+                              answerer=TeamReceipts(peer, (retired,)))
 
 
 def test_a_check_root_answers_a_dm_received_before_the_copy(source, scratch_root):

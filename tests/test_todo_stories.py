@@ -9,7 +9,7 @@ from dataclasses import replace
 import pytest
 from cutover.carry_todo_stories import INLINE_FIELDS, TodoStories
 
-from agent_comms.commander.order import Commander
+from agent_comms.team.order import Team
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     GoalId,
@@ -153,7 +153,7 @@ def test_undated_strike_counts_without_inventing_an_order_time(recorded_problem)
     assert saved.history.events(saved.id, StrikeTodo) == (strike,)
 
 
-def test_commander_unstrike_selects_the_newest_live_record(recorded_problem, source_repository):
+def test_team_unstrike_selects_the_newest_live_record(recorded_problem, source_repository):
     comms = recorded_problem
     store = comms.goals.todos
     first = story_members(comms)[0]
@@ -161,7 +161,7 @@ def test_commander_unstrike_selects_the_newest_live_record(recorded_problem, sou
     second = replace(first, expected_revision=struck.revision,
         reason="The worker omitted the installed application check for its changed owner.")
     store.apply("P1", second)
-    commander = Commander.on_root("lead", (source_repository,), comms.root)
+    commander = Team.on_root("lead", (source_repository,), comms.root)
     commander.unstrike("P1", "The second strike was issued in error after the required owner was repaired.")
     assert store.get("P1").live_strikes() == (first,)
 

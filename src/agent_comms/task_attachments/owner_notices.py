@@ -65,7 +65,7 @@ class MeantNotice(OwnerNotice, declared_name="meant_question"):
 
 
 @dataclass(frozen=True)
-class FleetNotice(OwnerNotice, declared_name="fleet_notice"):
+class TeamNotice(OwnerNotice, declared_name="fleet_notice"):
     """A line for the whole fleet's channel; it informs and starts no member's turn."""
 
     role = NoticeRole()
@@ -76,7 +76,7 @@ class FleetNotice(OwnerNotice, declared_name="fleet_notice"):
 
 @dataclass(frozen=True)
 class EscalationNotice(OwnerNotice, declared_name=None):
-    """One line of a burst to a commander birth. Escalations arrive as a burst of short messages
+    """One line of a burst to a teammate birth. Escalations arrive as a burst of short messages
     a beat apart, so each lands as its own input: one wall of text is skimmed, a burst is not.
     An answer naming any line covers every line of that burst sent before it."""
 
@@ -119,7 +119,7 @@ class EscalationNotice(OwnerNotice, declared_name=None):
     @classmethod
     def lines(cls, source: BusReader, snapshot: RegistrySnapshot, commander: str,
               before: float) -> tuple[Message, ...]:
-        """This burst kind's lines to the commander's birth within the horizon, newest first."""
+        """This burst kind's lines to the teammate's birth within the horizon, newest first."""
         notice = cls.of(snapshot, commander)
         with source.observing() as db:
             sent = EscalationPosition.sent(
@@ -129,7 +129,7 @@ class EscalationNotice(OwnerNotice, declared_name=None):
     @classmethod
     def newest_answer(cls, source: BusReader, snapshot: RegistrySnapshot, commander: str,
                       lines: Sequence[Message]) -> tuple[Message, ...]:
-        """The newest answer naming any of those lines from this commander or any commander of
+        """The newest answer naming any of those lines from this teammate or any teammate of
         the bus: every one of them holds the gate this burst closes, so one answer opens it."""
         answerers = (commander, *(thread.name for thread
                                   in snapshot.commander_project.commanders(snapshot)))

@@ -12,13 +12,13 @@ from .comms import Comms
 from .nominal.field_codec import FieldCodec, MalformedRecord
 from .todos import DirectiveText
 from .read_basis import OperatorOutcomes
-from .tool_caller import CommanderForkCaller, NoThreadCaller, ThreadCaller, ToolCaller
+from .tool_caller import ForkCaller, NoThreadCaller, ThreadCaller, ToolCaller
 from .tool_request import ToolArgumentsRefusedError, ToolRequest
 
 
 @dataclass(frozen=True, kw_only=True)
 class ActingFork:
-    fork: CommanderForkCaller | NoThreadCaller = NoThreadCaller()
+    fork: ForkCaller | NoThreadCaller = NoThreadCaller()
 
 
 @dataclass(frozen=True)
@@ -36,7 +36,7 @@ class ConnectorCaller(ThreadCaller):
 
 
 class ForkingCaller(ConnectorCaller):
-    """A thread grant; its holder may act as one of its own registered commander forks."""
+    """A thread grant; its holder may act as one of its own registered teammate forks."""
 
     def acting(self, arguments: Mapping[str, object]) -> tuple[ToolCaller, Mapping[str, object]]:
         keys = {plan.key for plan in FieldCodec.field_plans(ActingFork)}

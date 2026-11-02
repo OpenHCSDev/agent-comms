@@ -1,4 +1,4 @@
-"""Repository facts shared by branch readers and commander configuration."""
+"""Repository facts shared by branch readers and teammate configuration."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ class RepositorySelection(ABC):
     def founding(self, commander: str) -> tuple[Repo, ...]: ...
 
     @abstractmethod
-    def without_commander(self) -> None: ...
+    def without_team(self) -> None: ...
 
 
 class GitCommandError(RuntimeError, CommandFailure):

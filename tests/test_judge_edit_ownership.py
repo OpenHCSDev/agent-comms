@@ -28,9 +28,9 @@ pytest_plugins = ("test_held_problem_orders",)
 
 
 @pytest.fixture
-def two_orders(held_commander, cited_source):
+def two_orders(held_team, cited_source):
     """The worker holds P1 and a newer P2; each problem has its own declared checkout."""
-    ctx = held_commander
+    ctx = held_team
     lead = ctx.comms.registry.require(ctx.commander)
     worker = ctx.comms.registry.require("worker")
     # Core refuses a unit a second, unrelated order; a bus saved before that rule can hold

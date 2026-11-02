@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from agent_comms.repo import Checkout
 from functools import partial
 
-from agent_comms.commander.vibe_check import Chokehold, ChokeholdAnswer
+from agent_comms.team.vibe_check import Chokehold, ChokeholdAnswer
 from agent_comms.goal_actions import ChokeholdPausedGoalAction, OwnerInvocable, PausedGoalAction
 from agent_comms.goal_states import ChokeholdPause, OwnerPause
 from agent_comms.task_attachments.owner_notices import ChokeholdNotice

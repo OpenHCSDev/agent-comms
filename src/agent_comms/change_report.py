@@ -31,7 +31,7 @@ from .repo import Checkout, GitCommandError, Repo
 from .repository_name import RepositoryName
 
 if TYPE_CHECKING:
-    from .registry_document import CommanderProject
+    from .registry_document import TeamProject
 
 
 class SourceText(ABC):
@@ -178,10 +178,10 @@ class CommitRevision(FetchedRevision):
 
 
 class SourceRoots(ABC):
-    """Where citations are read: the checkout an unqualified citation names, and the commander
+    """Where citations are read: the checkout an unqualified citation names, and the teammate
     project whose registered repositories a qualified citation names instead."""
 
-    project: CommanderProject
+    project: TeamProject
 
     @property
     @abstractmethod
@@ -195,7 +195,7 @@ class OrderRoots(SourceRoots):
     unqualified ones are read there."""
 
     checkout: Path
-    project: CommanderProject
+    project: TeamProject
 
     @property
     def order(self) -> Path:
@@ -207,7 +207,7 @@ class RegisteredRoots(SourceRoots):
     """Citations with no order behind them: unqualified ones need exactly one registered
     repository to name."""
 
-    project: CommanderProject
+    project: TeamProject
 
     @property
     def order(self) -> Path:
@@ -410,7 +410,7 @@ class FileLine(WireValue, SourceReference):
                 "owner/name:src/agent_comms/FILE.py:LINE for another registered repository"}
 
     @classmethod
-    def scan(cls, text: str, project: CommanderProject) -> tuple[FileLine, ...]:
+    def scan(cls, text: str, project: TeamProject) -> tuple[FileLine, ...]:
         """Every file:line reference a message body already declares. A prefix is the
         citation's repository only when it names a registered one; any other prefix
         (``origin/main:``, ``HEAD~1:``) is a revision spelling and the line is the order's."""

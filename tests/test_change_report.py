@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.channel_targets import CommandTarget
-from agent_comms.registry_document import NoCommanderProject
+from agent_comms.registry_document import NoTeamProject
 from agent_comms.change_report import OrderRoots
 from agent_comms.change_report import ChangedFact, ChangeReport, FileLine
 from agent_comms.errors import MissingSourceLine
@@ -114,9 +114,9 @@ class TestChangeReportKind:
             naming("example/other:owner.py:400").require_references_exist(roots)
         with pytest.raises(MissingSourceLine, match="'ghost' does not resolve"):
             replace(naming("example/other:owner.py:2"), branch="ghost").require_references_exist(roots)
-        with pytest.raises(ValueError, match='no registered commander project'):
+        with pytest.raises(ValueError, match='no registered team project'):
             naming("example/other:owner.py:2").require_references_exist(
-                OrderRoots(reporter_repo, NoCommanderProject()))
+                OrderRoots(reporter_repo, NoTeamProject()))
 
     def test_declared_report_publishes_and_round_trips(self, reporter, reporter_repo):
         committed = reporter.messaging.send(
@@ -156,7 +156,7 @@ class TestKindDeclarations:
         })
         assert stored.type is HandoffKind
         with pytest.raises(ValueError):
-            stored.report.require_references_exist(OrderRoots(Path(), NoCommanderProject()))
+            stored.report.require_references_exist(OrderRoots(Path(), NoTeamProject()))
 
     def test_kind_selector_resolves_once(self):
         from agent_comms.nominal.field_codec import FieldCodec
@@ -167,5 +167,5 @@ class TestKindDeclarations:
 
     def test_file_line_scans_references_from_text(self):
         references = FileLine.scan("see src/a.py:12, org.py:3, `/home/ts/a.py:9` and plain seq:7",
-                                   NoCommanderProject())
+                                   NoTeamProject())
         assert [r.to_wire() for r in references] == ["src/a.py:12", "org.py:3", "/home/ts/a.py:9"]

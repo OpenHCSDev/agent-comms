@@ -13,14 +13,14 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import ClassVar
 
-from agent_comms.commander.standing import PlanIdle, PlanStalled
+from agent_comms.team.standing import PlanIdle, PlanStalled
 
 from .child_process import CountPrinted, NoIntegerPrinted
-from .commander.order import CheckRequest
+from .team.order import CheckRequest
 from .nominal.declared_family import DeclaredFamily
 from .pattern_sources import (
     CeremonyFailure,
-    CommanderRule,
+    TeamRule,
     HeldPlanFailure,
     IntentionsAsAccomplishmentsFailure,
     MeasuredWrongThingFailure,
@@ -116,7 +116,7 @@ class BehaviourPattern(DeclaredFamily, affix="Pattern"):
             "A pending check records a known gap, not enforcement. Adding a pattern means"
             " adding one `BehaviourPattern` subclass; membership and this document derive"
             " from those classes. `tests/test_behaviour_catalog.py` rejects hand edits.\n\n"
-            f"The [Codex postmortem]({POSTMORTEM}) and October 19 commander incidents record"
+            f"The [Codex postmortem]({POSTMORTEM}) and October 19 teammate incidents record"
             " these failures; coverage below derives"
             " from the patterns that cite them:\n\n"
             f"{failures}\n" + "\n".join(member.section() for member in members)
@@ -126,7 +126,7 @@ class BehaviourPattern(DeclaredFamily, affix="Pattern"):
 class PlanIdlePattern(BehaviourPattern):
     signature = (
         "A plan phase whose earlier phases are all done is not done itself, and no open"
-        " order held by a unit serves it."
+        " order held by a teammate serves it."
     )
     checks = (RuleCheck(PlanIdle),)
     sources = (ProblemFix("P83", "34ba68c81"),)
@@ -134,7 +134,7 @@ class PlanIdlePattern(BehaviourPattern):
 
 class PlanStalledPattern(BehaviourPattern):
     signature = (
-        "A plan phase whose earlier phases are all done is held by a unit, and main still lacks"
+        "A plan phase whose earlier phases are all done is held by a teammate, and main still lacks"
         " it two hours after the phase was first ordered."
     )
     checks = (RuleCheck(PlanStalled),)
@@ -151,11 +151,11 @@ class BoardDisagreesPattern(BehaviourPattern):
 
 class PlainTextPattern(BehaviourPattern):
     signature = (
-        "A commander order, strike, roast or directive whose words outside cited spans match"
+        "A teammate order, strike, roast or directive whose words outside cited spans match"
         " the declared jargon list in `PlainText`."
     )
     checks = (CallableCheck(PlainText),)
-    sources = (CommanderRule("Hate jargon."), CeremonyFailure())
+    sources = (TeamRule("Hate jargon."), CeremonyFailure())
 
 
 class RepeatedStrikePattern(BehaviourPattern):
@@ -193,11 +193,11 @@ class UncountedCheckPattern(BehaviourPattern):
 class StrikeOnNamedProblemPattern(BehaviourPattern):
     signature = (
         "A strike recorded on a problem other than the one given as its argument, such"
-        " as one moved by a problem number inside its reason. Hunts are commander records,"
+        " as one moved by a problem number inside its reason. Hunts are teammate records,"
         " not strikes on a problem."
     )
     checks = (CallableCheck(TodoStore.apply),)
-    sources = (ProblemFix("P194", "b26843727"), CommanderRule("Strikes measure misses and trigger scrutiny; they never release work."))
+    sources = (ProblemFix("P194", "b26843727"), TeamRule("Strikes measure misses and trigger scrutiny; they never release work."))
 
 
 class ReportInsteadOfStatePattern(BehaviourPattern):
@@ -214,9 +214,9 @@ class WrongMeasurePattern(BehaviourPattern):
     sources = (SeedCatalog(4), MeasuredWrongThingFailure())
 
 
-class CommanderOverloadedPattern(BehaviourPattern):
+class TeamOverloadedPattern(BehaviourPattern, declared_name="commander_overloaded"):
     signature = (
-        "The commander's unread backlog is over the limit while no second commander is forked"
+        "The teammate's unread backlog is over the limit while no second teammate is forked"
         " to share it."
     )
     checks = (PendingCheck("P199", "#1750, closed without merge"),)
@@ -225,7 +225,7 @@ class CommanderOverloadedPattern(BehaviourPattern):
 
 class DeadProviderPattern(BehaviourPattern):
     signature = (
-        "A unit's latest turn ended in a usage or credit limit on its own model and the unit"
+        "A teammate's latest turn ended in a usage or credit limit on its own model and the teammate"
         " still runs on that model."
     )
     checks = (PendingCheck("P200", "#1746, closed without merge"),)

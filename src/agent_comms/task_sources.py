@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     from .cli_bridges.shared import CliBridge
     from .context_segments.wake import MessageDelivery
     from .harness_delivery_states import Outcome
-    from .task_attachments.commander_pings import CommanderUpdate
+    from .task_attachments.team_pings import TeamUpdate
     from .goal_management import Goals
     from .input_attempt import StoredInput
     from .input_disposition import InputDispositions
@@ -234,8 +234,8 @@ class TaskAttachment(
         """Search rows this attachment adds beside its original message: none."""
         return iter(())
 
-    def commander_update(self, commander: ThreadLookup) -> tuple[CommanderUpdate, ...]:
-        """The observations this attachment carries for that commander birth: none."""
+    def team_update(self, commander: ThreadLookup) -> tuple[TeamUpdate, ...]:
+        """The observations this attachment carries for that teammate birth: none."""
         return ()
 
     def category(self, spoken: type[MessageCategory]) -> type[MessageCategory]:

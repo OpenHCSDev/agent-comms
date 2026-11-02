@@ -43,7 +43,7 @@ from .acp_extension import (
     UpdateMetadata,
 )
 from .bus_read import OwnerLiveRead, OwnerScopedRead, UiRead
-from .commander_hud import CommanderFrame, CommanderHud, CommanderLoad, CommanderUnitDetail
+from .team_hud import TeamFrame, TeamHud, TeamLoad, TeammateDetail
 from .comms import Comms
 from .coordinator import Coordination
 from .nominal.field_codec import FieldCodec, MessageId, OrderId, RecordProblems, WireName
@@ -53,7 +53,7 @@ from .head_review import HeadReviewOrder, PreparedHeadReview, PullRequestHead
 from .held_orders import HeldOrders
 from .input_attempt import UNOBSERVED_DELIVERY_SCOPE
 from .input_disposition import DeliveryOverview
-from .order_story import FleetStory, OrderStory
+from .order_story import TeamStory, OrderStory
 from .order_work import OrderWork
 from agent_comms.runtime_server import AttachedRuntimeRequestContext
 from .plan_phases import OrderPhase
@@ -140,7 +140,7 @@ class MessagePublished(ToolResult):
 class CommsTodoTool(ThreadToolRequest):
     label = "Change problem"
     description = (
-        "Apply an exact revision-checked Todo command; only its commander may invoke this tool."
+        "Apply an exact revision-checked Todo command; only its teammate may invoke this tool."
     )
     problem: Annotated[str, *tool_field("Problem ID")]
 
@@ -173,7 +173,7 @@ class CommsVerdictTool(ThreadToolRequest):
     """One verdict is a batch of one: Goals.judge_calls owns checking and recording."""
     label = "Judge order tool call"
     description = (
-        "Record the commander's verdict on one tool call the holder made for its "
+        "Record the teammate's verdict on one tool call the holder made for its "
         "order: an accepted verdict quotes 4+ words of the order; a send-back strikes "
         "the holder and revises its Goal in the same write."
     )
@@ -253,7 +253,7 @@ class CommsUnjudgedTool(ThreadReadTool):
         passes = ServicePassStore.at(comms.root).read()
         edits: list[EditCall] = []
         unavailable: list[UnavailableOrderEdits] = []
-        for read in OrderEditsRead.for_commander(comms, owner.name):
+        for read in OrderEditsRead.for_team(comms, owner.name):
             try:
                 edits.extend(read.read())
             except (WorkBranchError, OSError) as error:
@@ -264,7 +264,7 @@ class CommsUnjudgedTool(ThreadReadTool):
 
 @dataclass(frozen=True, kw_only=True)
 class BoardReadTool(ThreadReadTool, declared_name=None):
-    """A read of one commander's board. An omitted thread reads the caller's own, and an
+    """A read of one teammate's board. An omitted thread reads the caller's own, and an
     empty board looks like a broken reader, so the reply names whose board it read."""
 
     def reply(self, read: dict[str, JsonValue], caller: ToolCaller) -> dict[str, JsonValue]:
@@ -272,36 +272,36 @@ class BoardReadTool(ThreadReadTool, declared_name=None):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsCommanderLoadTool(BoardReadTool):
-    label = "Measured commander load"
-    description = "Read retained commander load with recorded service failures and its original completion clock."
+class CommsTeamLoadTool(BoardReadTool, declared_name="comms_commander_load"):
+    label = "Measured teammate load"
+    description = "Read retained teammate load with recorded service failures and its original completion clock."
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> CommanderLoad:
-        return CommanderHud.read(comms, caller.subject(self.thread)).load_reading()
+    def apply(self, comms: Comms, caller: ToolCaller) -> TeamLoad:
+        return TeamHud.read(comms, caller.subject(self.thread)).load_reading()
 
 
 @dataclass(frozen=True, kw_only=True)
 class CommsHudTool(ThreadReadTool):
-    label = "Commander HUD"
+    label = "Team HUD"
     description = (
-        "Read the commander's latest published Tristan frame: orders, review timers, "
+        "Read the teammate's latest published Tristan frame: orders, review timers, "
         "strikes, edits, PRs, plan phases and load. Recorded failures precede retained data; "
         "stale rows stay explicitly stale, and missing frames remain unavailable."
     )
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> CommanderHud:
-        return CommanderHud.read(comms, caller.subject(self.thread))
+    def apply(self, comms: Comms, caller: ToolCaller) -> TeamHud:
+        return TeamHud.read(comms, caller.subject(self.thread))
 
 
 @dataclass(frozen=True, kw_only=True)
 class CommsFireTool(ThreadToolRequest):
-    label = "Fire unit"
+    label = "Fire teammate"
     description = (
-        "Release every open problem the unit holds in one operation, recording one "
-        "plain reason on each; only their commander may invoke this tool."
+        "Release every open problem the teammate holds in one operation, recording one "
+        "plain reason on each; only their teammate may invoke this tool."
     )
-    unit: Annotated[str, *tool_field("Unit thread to fire")]
-    reason: Annotated[StrikeReason, *tool_field("What the unit did, plainly")]
+    unit: Annotated[str, *tool_field("Teammate thread to fire")]
+    reason: Annotated[StrikeReason, *tool_field("What the teammate did, plainly")]
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> TodoList:
         return TodoList(comms.goals.fire(self.unit, self.reason, caller.identity(comms)))
@@ -309,14 +309,14 @@ class CommsFireTool(ThreadToolRequest):
 
 @dataclass(frozen=True, kw_only=True)
 class CommsCorrectWordingTool(ThreadToolRequest):
-    label = "Correct unit wording"
+    label = "Correct teammate wording"
     description = (
-        "Answer a unit's jargon with a correction naming its open orders; the unit's "
-        "strikes stay as they are. Only its commander may invoke this tool."
+        "Answer a teammate's jargon with a correction naming its open orders; the teammate's "
+        "strikes stay as they are. Only its teammate may invoke this tool."
     )
-    unit: Annotated[str, *tool_field("Unit thread whose message used jargon")]
-    message_id: Annotated[MessageId, *tool_field("The unit's message")]
-    text: Annotated[str, *tool_field("The unit's message text")]
+    unit: Annotated[str, *tool_field("Teammate thread whose message used jargon")]
+    message_id: Annotated[MessageId, *tool_field("The teammate's message")]
+    text: Annotated[str, *tool_field("The teammate's message text")]
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> MessagePublished:
         actor = comms.registry.require(caller.name).incarnation
@@ -338,7 +338,7 @@ class CommsCorrectWordingTool(ThreadToolRequest):
 @dataclass(frozen=True, kw_only=True)
 class CommsTodoListTool(BoardReadTool):
     label = "Read problems"
-    description = "Read the commander's canonical Todo orders, review timers, strikes and hunts."
+    description = "Read the teammate's canonical Todo orders, review timers, strikes and hunts."
 
     def apply(self, comms: Comms, caller: ToolCaller) -> TodoList:
         snapshot = comms.registry.snapshot()
@@ -366,11 +366,11 @@ class CommsOrderTool(ThreadToolRequest):
     label = "Assign problem order"
     description = (
         "Reserve the order's Todo assignments in one transaction and publish its Goal with "
-        "the commander's review timer; does not replay input."
+        "the teammate's review timer; does not replay input."
     )
     order: Annotated[
         OrderGoalAction, *tool_field(
-            "Problem, request, expected_revision, review_at, commander, and together: the "
+            "Problem, request, expected_revision, review_at, teammate, and together: the "
             "order's other open problems with their expected revisions")
     ]
     owner: Annotated[str, *tool_field("Assignee thread")]
@@ -395,7 +395,7 @@ class CommsTodoCreateTool(CommsOrderTool):
 class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller], ThreadToolRequest):
     label = "Claim order delivery"
     description = (
-        "Record the holder's delivery claim and answer its commander. "
+        "Record the holder's delivery claim and answer its teammate. "
         "Only the holder may claim a pending order; this does not accept its delivery."
     )
     problem: Annotated[str, *tool_field("Held problem ID")]
@@ -414,7 +414,7 @@ class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller], ThreadToolReque
         generation = todo.held().generation
         todo.require_assignee(actor, generation)
         # The identical call resumes a retained claim's publication; nothing is claimed again.
-        for claim in todo.order.commander_claims():
+        for claim in todo.order.team_claims():
             if claim.resumed_by(self.pull_request, self.head, self.report.text):
                 resumed = ResumeClaimOrder(todo.revision, actor, generation, claim).record(
                     comms.goals, todo.id)
@@ -433,7 +433,7 @@ class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller], ThreadToolReque
 @dataclass(frozen=True, kw_only=True)
 class CommsOrderDoneTool(CommsTodoTool):
     label = "Check delivered order"
-    description = "Verify and deliver an open order by its own ID; the unit's Goal is unchanged."
+    description = "Verify and deliver an open order by its own ID; the teammate's Goal is unchanged."
     order_id: Annotated[OrderId, *tool_field("Exact open order ID")]
     delivery: Annotated[
         OrderCompletion,
@@ -461,7 +461,7 @@ class CommsOrderCheckTool(CommsTodoTool):
     label = "Correct order check"
     description = (
         "Replace the check of an open order, recording the old check, the new one and "
-        "why; only its commander may invoke this tool, and the order keeps its review timer "
+        "why; only its teammate may invoke this tool, and the order keeps its review timer "
         "and strikes."
     )
     check: Annotated[
@@ -479,7 +479,7 @@ class CommsOrderRunTool(CommsTodoTool):
     label = "Correct order run"
     description = (
         "Replace the run text that closes an open application order, recording the old run "
-        "and why; only its commander may invoke this tool, and the order keeps its review "
+        "and why; only its teammate may invoke this tool, and the order keeps its review "
         "timer and strikes."
     )
     run: Annotated[str, *tool_field("The corrected run: what the installed app must show")]
@@ -495,7 +495,7 @@ class CommsOrderRunTool(CommsTodoTool):
 class CommsOrderServeTool(CommsTodoTool):
     label = "Name order phase"
     description = (
-        "Name the plan phase an open order serves; only its commander may invoke this "
+        "Name the plan phase an open order serves; only its teammate may invoke this "
         "tool, and the order keeps its id, review timer and strikes."
     )
     serves: Annotated[type[OrderPhase], *tool_field("The plan phase the order serves")]
@@ -548,7 +548,7 @@ class InputDeliveryRead(
     """One delivery projection, refined by the actual owner's queue when observed."""
 
     label = "Input delivery"
-    description = ("Read a unit's inputs that failed or are UNKNOWN, and its earlier delivery "
+    description = ("Read a teammate's inputs that failed or are UNKNOWN, and its earlier delivery "
                    "notices, each with its bus sequence and input id; none is ever replayed.")
     include_history: Annotated[
         bool, *tool_field("Include earlier delivery notices; current inputs are always read")
@@ -581,7 +581,7 @@ class OwnerGoalRead(OwnerLiveRead[GoalSnapshotReply], declared_name="comms_owner
 
     label = "Owner goal"
     description = (
-        "Read a unit's current goal snapshot and the turn state its live native "
+        "Read a teammate's current goal snapshot and the turn state its live native "
         "owner read with it."
     )
 
@@ -643,40 +643,40 @@ class TranscriptPageRead(
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommanderUnitRead(
-    UiRead[CommanderUnitDetail],
+class TeammateRead(
+    UiRead[TeammateDetail],
     ReadTool,
     ToolRequest,
     declared_name="comms_commander_unit",
 ):
-    """One unit's card on a commander's published frame, expanded with its orders' bounded
+    """One unit's card on a teammate's published frame, expanded with its orders' bounded
     instructions, stories, commits and activity. The held incarnations and orders select the
     exact card and witness it; they are never whose authority the read runs under."""
 
-    label = "Commander unit"
+    label = "Team teammate"
     description = (
-        "Expand one unit's card on a commander's published frame: its orders' "
+        "Expand one teammate's card on a teammate's published frame: its orders' "
         "bounded instructions, stories and commits, and its recent activity. "
-        "Refuses when either incarnation or the unit's assignment changed."
+        "Refuses when either incarnation or the teammate's assignment changed."
     )
     commander: Annotated[
-        ThreadIncarnation, *tool_field("Commander incarnation whose frame shows the card")
+        ThreadIncarnation, *tool_field("Team incarnation whose frame shows the card")
     ]
-    unit: Annotated[ThreadIncarnation, *tool_field("Unit incarnation on that card")]
+    unit: Annotated[ThreadIncarnation, *tool_field("Teammate incarnation on that card")]
     orders: Annotated[tuple[OrderId, ...], *tool_field("The card's orders, exactly as published")]
 
-    def apply(self, comms: Comms, reader: ReadAuthority) -> CommanderUnitDetail:
+    def apply(self, comms: Comms, reader: ReadAuthority) -> TeammateDetail:
         snapshot = comms.registry.snapshot()
         if not self.commander.current(snapshot) or not self.unit.current(snapshot):
             raise ToolRefusedError(
-                "The selected commander or unit incarnation is no longer current"
+                "The selected teammate or teammate incarnation is no longer current"
             )
-        hud = CommanderFrame.current(comms, self.commander.name)
+        hud = TeamFrame.current(comms, self.commander.name)
         hud.require_current()
         for card in hud.units:
             if card.unit == self.unit:
                 return card.detail(comms, self.orders)
-        raise ToolRefusedError("The selected unit is no longer in this commander's published frame")
+        raise ToolRefusedError("The selected teammate is no longer in this teammate's published frame")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -694,13 +694,13 @@ class CommsOrderStoryTool(ReadTool, ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsFleetStoryTool(ReadTool, ToolRequest):
-    label = "Fleet story"
+class CommsTeamStoryTool(ReadTool, ToolRequest, declared_name="comms_fleet_story"):
+    label = "Team story"
     description = ("Read what each held order on the shared board is doing now, one line per "
                    "order; orders held by unregistered participants collapse into one line.")
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> FleetStory:
-        return FleetStory.collect(HeldOrders.read(comms))
+    def apply(self, comms: Comms, caller: ToolCaller) -> TeamStory:
+        return TeamStory.collect(HeldOrders.read(comms))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -708,7 +708,7 @@ class CommsOrderWorkTool(ReadTool, ToolRequest):
     label = "Order work"
     description = (
         "Read every tool call the problem's assignee made since its order, newest "
-        "first, from the unit's own turn records."
+        "first, from the teammate's own turn records."
     )
     problem: Annotated[str, *tool_field("Problem ID")]
 

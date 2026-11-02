@@ -53,7 +53,7 @@ from agent_comms.child_process import (
     OrderCheckFailedError,
 )
 from agent_comms.command import Command
-from agent_comms.commander.rule_file import RuleFile
+from agent_comms.team.rule_file import RuleFile
 from agent_comms.coordination_session import NativeCapture
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.errors import (
@@ -167,14 +167,14 @@ from agent_comms_hooks import ToolRefusedError
 from .goal_scope import OneGoal
 
 from agent_comms.change_report import FetchedRevision, OrderRoots
-from agent_comms.registry_document import CommanderProject
+from agent_comms.registry_document import TeamProject
 
 if TYPE_CHECKING:
     from agent_comms.held_orders import LiveHold
     from agent_comms.bus import BusReader
-    from agent_comms.commander.order import (
-        Commander,
-        CommanderContext,
+    from agent_comms.team.order import (
+        Team,
+        TeamContext,
         OrderedProblems,
         OrderFile,
         Reassignment,
@@ -505,7 +505,7 @@ class RecordedCommitDelivery(CommitSourceDelivery, declared_name="commit"):
         self, todo: Todo, registry: Registration,
         verified_claims: dict[ProgressClaim, tuple[str, ...]],
     ) -> CheckedDelivery:
-        raise TodoError("A commit delivery names the unit's delivered commit and the checked one.")
+        raise TodoError("A commit delivery names the teammate's delivered commit and the checked one.")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -621,7 +621,7 @@ class OperationDelivery(WorkingEvidence, FreshMainCheck, CheckedDelivery):
 
 @dataclass(frozen=True, kw_only=True)
 class ReportDelivery(OrderDelivery):
-    """The triage answer returned to the commander, not a claim of implementation."""
+    """The triage answer returned to the teammate, not a claim of implementation."""
 
     report: str
 
@@ -860,7 +860,7 @@ class RefusedCarryMergeBlock(MergeBlock):
         return f"carried review status refused: {self.refusal}"
 
     def remedy(self) -> str:
-        return "restore the repository's write access or drop it from the commander's repos"
+        return "restore the repository's write access or drop it from the teammate's repos"
 
 
 @dataclass(frozen=True)
@@ -914,7 +914,7 @@ class ListedPullRequest(HeadReviewStatus, DeclaredFamily, affix="ListedPullReque
         return ()
 
     def landing(self) -> bool:
-        """Armed, or carrying the commander's verdict, with nothing blocking the merge: the
+        """Armed, or carrying the teammate's verdict, with nothing blocking the merge: the
         next install can carry it."""
         return ((bool(self.armed_times) or HeadReview.context in self.status_contexts)
                 and not self.merge_blocks)
@@ -1944,7 +1944,7 @@ class EditingProgress(Moving, NoCommitProgress, FoundProgress):
 
 @dataclass(frozen=True)
 class OrderWords(WireValue):
-    """Text the commander writes; quoted, backticked, indented and path-like spans are someone else's words."""
+    """Text the teammate writes; quoted, backticked, indented and path-like spans are someone else's words."""
 
     # A path/file match starts at a token boundary or immediately after a
     # quoted span. Retrying its greedy prefix at every character is quadratic
@@ -2064,14 +2064,14 @@ class StrikeReason(VerdictReason):
     wording is answered by a correction, never a strike: a reason whose every quoted span
     is jargon is about wording alone."""
 
-    refusal = "Say what the unit did plainly in {}+ words; jargon {} hides what happened."
+    refusal = "Say what the teammate did plainly in {}+ words; jargon {} hides what happened."
     least_words = 10
 
     @classmethod
     def wording_refusal(cls, text: str) -> tuple[str, ...]:
         cited = [span.group(0).strip('`"“” ') for span in cls.CITED.finditer(text)]
         if cited and all(PlainText.found(span) for span in cited):
-            return (f"{cited} is the unit's wording; send it a correction, not a strike.",)
+            return (f"{cited} is the teammate's wording; send it a correction, not a strike.",)
         return super().wording_refusal(text)
 
 
@@ -2143,7 +2143,7 @@ class HierarchyText(DirectiveWords):
 
 
 class DirectiveText:
-    """What the commander and the owner's voice send units: order send, order say and the
+    """What the teammate and the owner's voice send units: order send, order say and the
     connector's send refuse a text failing any of these."""
 
     @staticmethod
@@ -2365,11 +2365,11 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
         """Whether this order's next action belongs to its holder's application run."""
         return False
 
-    def commander_claims(self) -> tuple[OrderClaim, ...]:
+    def team_claims(self) -> tuple[OrderClaim, ...]:
         return ()
 
     def owed_claims(self) -> tuple[OrderClaim, ...]:
-        """Claims that still await the commander's verdict."""
+        """Claims that still await the teammate's verdict."""
         return ()
 
     def closing_artifact(self) -> str:
@@ -2377,7 +2377,7 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
 
     def orphan_clearing(self, todo: Todo) -> str:
         """What clears this order once its holder is no longer registered."""
-        return (f"no live unit can deliver it; send it to a live unit with `order send UNIT "
+        return (f"no live teammate can deliver it; send it to a live teammate with `order send UNIT "
                 f"ORDER.json` naming {todo.id}, or retire it with `order withdraw {todo.id}`")
 
     def linked(self, order: PendingProblemOrder) -> PendingProblemOrder:
@@ -2479,7 +2479,7 @@ class SourceCompletion(OrderCompletion, declared_name=None):
 
 @dataclass(frozen=True)
 class OrderScope[Delivery: OrderDelivery](DeclaredFamily, affix="Scope"):
-    """What the commander authorizes, including the delivery type at its boundary."""
+    """What the teammate authorizes, including the delivery type at its boundary."""
 
     delivery_class: ClassVar[type[OrderDelivery]]
 
@@ -2539,7 +2539,7 @@ class TriageScope(OrderScope[ReportDelivery]):
 
     def instructions(self, problem: str) -> tuple[str, ...]:
         return ("Scope: triage; classify and report only. Do not edit source or deliver commits.",
-                "Return the report to your commander; do not open an implementation PR.")
+                "Return the report to your teammate; do not open an implementation PR.")
 
     def verified_claims(
         self, delivery: ReportDelivery, claims: tuple[ProgressClaim, ...],
@@ -2581,7 +2581,7 @@ class FixScope(OrderScope[CheckedDelivery]):
                 "Members: " + ", ".join(m.to_wire() for m in self.shape.members),
                 f"Open the PR with agent-comms-commander order pr {problem} "
                 "--title '<title>' --body-file <file>; Core records its link on this order.",
-                "Record the unit's delivery claim in Core before waiting for the commander's "
+                "Record the teammate's delivery claim in Core before waiting for the teammate's "
                 "verdict; a chat report does not change the order.")
 
     def verified_claims(
@@ -2666,7 +2666,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def cited_revision(self) -> SourceRevision:
         return CitedRevisions((*map(PullRequestHeadRevision, self.pull_requests), MainRevision()))
 
-    def source_roots(self, project: CommanderProject) -> SourceRoots:
+    def source_roots(self, project: TeamProject) -> SourceRoots:
         return OrderRoots(self.check.directory, project)
 
     def source_repositories(self) -> tuple[RepositoryName, ...]:
@@ -2678,7 +2678,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
               for repository in location.repository.named_repositories()),
         )))
 
-    def require_references(self, project: CommanderProject) -> None:
+    def require_references(self, project: TeamProject) -> None:
         roots, revision = self.source_roots(project), self.cited_revision
         self.owner.require_exists(roots, revision)
         self.finding.require_references(roots, revision)
@@ -2700,7 +2700,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         Repo.git(repo, 'fetch', '-q', Repo.remote, 'main')
         check.require_acceptance(self.check_base(repo), worktrees)
 
-    def source_refusals(self, context: CommanderContext, document: OrderFile,
+    def source_refusals(self, context: TeamContext, document: OrderFile,
                         traced: FileLine | NoSourceReference) -> list[str]:
         """Scope, prose and pattern citations share the order's source revision."""
         check = self.check
@@ -2947,7 +2947,7 @@ class MergedProblemOrder(AwaitingInstallationProblemOrder):
 
     def require_linkable(self) -> None:
         raise TodoError(f"Order {self.id} merged as {self.sha[:9]}; its pull requests are closed. "
-                         "Ask the commander for a send-back before opening or linking another PR.")
+                         "Ask the teammate for a send-back before opening or linking another PR.")
 
     def merged_link(self, link: PullRequestLink) -> MergedLink:
         return MergedLink(link, self.unlinked(link).sha)
@@ -2986,7 +2986,7 @@ class MergedProblemOrder(AwaitingInstallationProblemOrder):
 
 @dataclass(frozen=True, kw_only=True)
 class DeliverableProblemOrder(FreshMainCheck, OpenProblemOrder, declared_name=None):
-    """Pending work and a holder's claim both await the commander's delivery verdict."""
+    """Pending work and a holder's claim both await the teammate's delivery verdict."""
 
     def writes_source(self, todo: Todo, read: dict[str, OrderProgress]) -> bool:
         """Until its PR merges; a merged order's proof run writes no source."""
@@ -3031,7 +3031,7 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
     first_call_deadline: EventTime = field(
         default_factory=lambda: RecordedEventTime(time.time() + 120))
 
-    def assignment_refusals(self, context: CommanderContext, document: OrderFile, unit: str,
+    def assignment_refusals(self, context: TeamContext, document: OrderFile, unit: str,
                             group: Sequence[str], listed: Mapping[str, Todo],
                             target: OrderedProblems,
                             traced: FileLine | NoSourceReference) -> list[str]:
@@ -3052,7 +3052,7 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
                 problems.append(str(error))
         return problems
 
-    def require_send(self, context: CommanderContext, document: OrderFile, unit: str,
+    def require_send(self, context: TeamContext, document: OrderFile, unit: str,
                      group: Sequence[str], listed: Mapping[str, Todo], target: OrderedProblems,
                      reassign: Reassignment, holders: Sequence[str], clean: bool,
                      traced: FileLine | NoSourceReference) -> None:
@@ -3066,7 +3066,7 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
         if problems:
             sys.exit('Refused order:\n  ' + '\n  '.join(problems))
 
-    def message(self, context: CommanderContext, document: OrderFile, unit: str, group: Sequence[str],
+    def message(self, context: TeamContext, document: OrderFile, unit: str, group: Sequence[str],
                 replacing: bool, reassign: Reassignment) -> str:
         """Render owned fields; never parse this message back into an order."""
         instructions = '\n'.join((document.prose, *(slop.render() for slop in document.slop),
@@ -3083,7 +3083,7 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
                 + '\n'.join(line for pid in group for line in self.scope.instructions(pid)))
 
     def send(
-        self, context: Commander, document: OrderFile, unit: str, clean: bool,
+        self, context: Team, document: OrderFile, unit: str, clean: bool,
         reassign: Reassignment, target: OrderedProblems,
         traced: FileLine | NoSourceReference, answers: tuple[MessageReference, ...],
         request: RequestSelection,
@@ -3101,7 +3101,7 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
         return replace(self, pull_requests=(*self.pull_requests, *carried)) if carried else self
 
     def issue(
-        self, context: Commander, document: OrderFile, unit: str, clean: bool,
+        self, context: Team, document: OrderFile, unit: str, clean: bool,
         reassign: Reassignment, target: OrderedProblems,
         traced: FileLine | NoSourceReference, answers: tuple[MessageReference, ...],
         request: RequestSelection, group: Sequence[str], listed: Mapping[str, Todo],
@@ -3127,7 +3127,7 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
             reassign.send_back(context, document, unit, group[0], struck_already)
 
     def publish(
-        self, context: Commander, unit: str, group: Sequence[str], message: str,
+        self, context: Team, unit: str, group: Sequence[str], message: str,
         answers: tuple[MessageReference, ...],
     ) -> None:
         """Bind the one published message to every problem through its native command."""
@@ -3139,7 +3139,7 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
             ), context.incarnation)
 
     def notify_replaced(
-        self, context: Commander, unit: str, group: Sequence[str], holders: Sequence[str],
+        self, context: Team, unit: str, group: Sequence[str], holders: Sequence[str],
         listed: Mapping[str, Todo], reassign: Reassignment,
     ) -> None:
         """The order that takes over the work tells each former holder why."""
@@ -3176,7 +3176,7 @@ class DroppedProblemOrder(UnorderedProblemOrder, CheckedProblemOrder):
 
 @dataclass(frozen=True)
 class OrderClaim:
-    """The holder's assertion, not the commander's verified delivery."""
+    """The holder's assertion, not the teammate's verified delivery."""
 
     pull_request: PullRequestLink
     head: Annotated[str, GitCommitText]
@@ -3212,7 +3212,7 @@ class ClaimedProblemOrder(BranchPointCheck, DeliverableProblemOrder):
 
     @property
     def line(self) -> str:
-        return "Claimed by the unit, waiting on the commander's verdict"
+        return "Claimed by the teammate, waiting on the teammate's verdict"
 
     @property
     def work_commit(self) -> str:
@@ -3227,7 +3227,7 @@ class ClaimedProblemOrder(BranchPointCheck, DeliverableProblemOrder):
         if proposed.owner_identity != todo.holder_state.previous_assignment().owner_identity:
             self.require_transfer(todo)
 
-    def commander_claims(self) -> tuple[OrderClaim, ...]:
+    def team_claims(self) -> tuple[OrderClaim, ...]:
         return (self.claim,)
 
     def closed_by_merge(
@@ -3386,7 +3386,7 @@ class InstalledMergedProblemOrder(InstalledEvidence, MergedProblemOrder):
 
 @dataclass(frozen=True)
 class MeasuredReview:
-    """When the commander first reviews an order, from a snapshot's distinct delivered-order
+    """When the teammate first reviews an order, from a snapshot's distinct delivered-order
     observations; never another duration store, never a due time shown to the unit."""
 
     rates: tuple[float, ...]
@@ -3420,7 +3420,7 @@ class MeasuredReview:
 
 @dataclass(frozen=True, kw_only=True)
 class WithdrawnProblemOrder(CheckedProblemOrder):
-    """An order the commander sent in error and retired before delivery; it strikes no one."""
+    """An order the teammate sent in error and retired before delivery; it strikes no one."""
 
     previous: Assignment
     why: str
@@ -3507,18 +3507,18 @@ class SharedWorktreeRefusal(TodoRefusal):
         )
 
 
-class UnitOccupied(TodoRefusal):  # noqa: N818 - domain refusal
+class TeammateOccupied(TodoRefusal):  # noqa: N818 - domain refusal
     """The unit holds an open order the incoming work does not own; a standing rule that
     restores work to it reports this refusal instead of applying."""
 
-    reason: ClassVar[str] = "the unit already holds other work"
+    reason: ClassVar[str] = "the teammate already holds other work"
 
 
 class ForeignRequest(TodoRefusal):  # noqa: N818 - domain refusal
-    """An owner request answers only its own commanders; a standing rule that restores work
-    serving another commander's request reports this refusal instead of ending the pass."""
+    """An owner request answers only its own teammates; a standing rule that restores work
+    serving another teammate's request reports this refusal instead of ending the pass."""
 
-    reason: ClassVar[str] = "the order serves another commander's request"
+    reason: ClassVar[str] = "the order serves another teammate's request"
 
 
 class HolderConsentRequired(TodoRefusal):
@@ -3540,7 +3540,7 @@ class ClaimPublicationUnavailable(TodoError):  # noqa: N818 - domain-specific re
         self.claim = claim
         super().__init__(
             f"{problem}'s claim of {claim.head} (message {claim.message.message_id}) is saved, "
-            "but its publication to the commander could not be completed. Repeat the same "
+            "but its publication to the teammate could not be completed. Repeat the same "
             "comms_order_deliver call, with the same pull request, head and report: it "
             "publishes the claim once, or returns the original if it is already on the bus.")
 
@@ -3644,10 +3644,10 @@ class IncomingWork:
         held = TransactionTodoHistory(db).attach(TodoStore.held_in(db, '1', (), unit=unit))
         if other := tuple(todo for todo in held
                           if todo.order.occupies_holder() and not self.covers(todo)):
-            raise UnitOccupied(
+            raise TeammateOccupied(
                 f"{unit.name} already holds orders "
                 + ", ".join(f"{todo.id} (assigned by {todo.held().parent})" for todo in other)
-                + f"; running units holding no order: {self.idle(db, snapshot) or 'none'}")
+                + f"; running teammates holding no order: {self.idle(db, snapshot) or 'none'}")
 
     def idle(self, db: sqlite3.Connection, snapshot: RegistrySnapshot) -> str:
         """Running candidates with no occupying order, including the requesting colleague."""
@@ -3732,7 +3732,7 @@ class Assignment(TodoHolder):
 
     @property
     def parent_identity(self) -> ThreadIncarnation:
-        """The acting assigner: commander, registered fork, or watcher; not Todo.creator."""
+        """The acting assigner: teammate, registered fork, or watcher; not Todo.creator."""
         return ThreadIncarnation.from_wire({"name": self.parent, "created_at": self.parent_created})
 
     def held(self, current: Todo) -> Assignment:
@@ -3874,11 +3874,11 @@ class DoneTodoState(TodoState):
 
 
 # Todo stores these commands, so it is declared after them; the alias reads it lazily.
-type CommandedTodo = Todo
+type DirectedTodo = Todo
 
 
 @dataclass(frozen=True)
-class TodoCommand(Command[CommandedTodo, CommandedTodo], DeclaredFamily, StorySource,
+class TodoCommand(Command[DirectedTodo, DirectedTodo], DeclaredFamily, StorySource,
                   affix="TodoOperation"):
     expected_revision: int
 
@@ -3972,7 +3972,7 @@ class TodoBatch:
 
 
 class TodoOperation(TodoCommand, declared_name=None):
-    """Commands the ordinary commander's tools accept."""
+    """Commands the ordinary teammate's tools accept."""
 
     def authored_by(self, actor: ThreadIncarnation) -> Self:
         return replace(self, actor=actor)
@@ -3995,7 +3995,7 @@ class ReleasesHold(TodoOperation, declared_name=None):
 
 @dataclass(frozen=True)
 class AssignTodo(ReleasesHold):
-    """The order's commander gives the problem to a unit.
+    """The order's teammate gives the problem to a unit.
 
     Its group is every problem the same order assigns in this Todo transaction; a command
     sent alone has only its own. The group is command input and is never recorded."""
@@ -4205,7 +4205,7 @@ class VerdictAudience:
 
     @classmethod
     def of(cls, unit: str, todo: Todo) -> VerdictAudience:
-        """The order records its commander; a request lookup adds no authority."""
+        """The order records its teammate; a request lookup adds no authority."""
         return cls(tuple(dict.fromkeys((unit, todo.creator))))
 
     def target_from(self, sender: str) -> NamedTarget:
@@ -4225,7 +4225,7 @@ class VerdictAudience:
 
 @dataclass(frozen=True)
 class OrderVerdict(TodoCommand, StoryEvent, declared_name=None):
-    """The commander's verdict on one tool call the holder made for its order, kept on the order."""
+    """The teammate's verdict on one tool call the holder made for its order, kept on the order."""
 
     audience: ClassVar[type[VerdictAudience]] = VerdictAudience
     actor: ThreadIncarnation
@@ -4344,7 +4344,7 @@ class HeadVerdict(HeadReview, declared_name=None):
 
     @classmethod
     def require_ok(cls, request: PullRequestHead) -> None:
-        """The commander's admin merge needs this exact head's recorded ok, nothing more."""
+        """The teammate's admin merge needs this exact head's recorded ok, nothing more."""
         if not cls.allows_integration():
             raise TodoError(
                 f"{request.repo.to_wire()}#{request.pr} at {request.head} has no recorded ok verdict.")
@@ -4547,7 +4547,7 @@ class RejectedHeadVerdict(DecidedHeadVerdict):
 
 
 class DiscardedHeadVerdict(DecidedHeadVerdict, declared_name=None):
-    """The commander explicitly gives up this exact head; a closed PR's lost commits take
+    """The teammate explicitly gives up this exact head; a closed PR's lost commits take
     their recorded reason from here."""
 
     state = "failure"
@@ -4946,7 +4946,7 @@ class PeerAcceptedVerdict(AcceptedVerdict):
         if (message.sender == self.actor.name or
                 (message.target != current.holder and
                  current.holder not in {mention.thread for mention in message.mentions})):
-            raise TodoError("--peer must name another sender's message to this unit.")
+            raise TodoError("--peer must name another sender's message to this teammate.")
         self.require_quote(message.body)
         return self
 
@@ -4967,10 +4967,10 @@ class SupersededVerdict(ToolCallVerdict):
     def prepare(self, goals, current):
         replacing = [todo for todo in goals.todos.held_orders() if todo.id == self.replacement]
         if not replacing:
-            raise TodoError('The replacing problem is not held for this commander.')
+            raise TodoError('The replacing problem is not held for this teammate.')
         if any(todo.holder == current.holder for todo in replacing):
             raise TodoError(
-                'The replacing order went to the same unit; judge its edits ok or back.')
+                'The replacing order went to the same teammate; judge its edits ok or back.')
         if len(self.reason.split()) < 6:
             raise TodoError('Say why this edit was replaced in 6+ words.')
         return self
@@ -5003,7 +5003,7 @@ class EditVerdict(ToolCallVerdict, declared_name=None):
 
 @dataclass(frozen=True)
 class GitSettledVerdict(EditVerdict, declared_name=None):
-    """Git answers at judge time that no reviewable copy of the edit is left; the commander
+    """Git answers at judge time that no reviewable copy of the edit is left; the teammate
     supplies only the edit Core recorded."""
     added: tuple[str, ...] = field(kw_only=True)
 
@@ -5120,7 +5120,7 @@ class EditSendBackVerdict(SendBackVerdict, EditVerdict):
 
 @dataclass(frozen=True)
 class VoidStrikeTodo(TodoOperation, StoryEvent):
-    """The commander takes back a strike recorded in error; the strike stays on the record."""
+    """The teammate takes back a strike recorded in error; the strike stays on the record."""
     actor: ThreadIncarnation
     strike: StrikeTodo
     reason: str
@@ -5151,7 +5151,7 @@ class VoidStrikeTodo(TodoOperation, StoryEvent):
 
 @dataclass(frozen=True)
 class ReleaseTodo(ReleasesHold, StoryEvent, TodoHolder):
-    """The commander takes an open problem off its unit; the order and its strikes stay."""
+    """The teammate takes an open problem off its unit; the order and its strikes stay."""
 
     def previous_assignment(self) -> Assignment:
         """The release keeps the assignment of the holder it removed."""
@@ -5211,7 +5211,7 @@ class RestoreHolderTodo(TodoCommand):
 
 @dataclass(frozen=True)
 class CorrectOrderTodo(TodoOperation, declared_name=None):
-    """The commander replaces a wrong part of an open order.
+    """The teammate replaces a wrong part of an open order.
 
     The order keeps its id, holder, review timer and strikes; a correction is not a resend."""
     actor: ThreadIncarnation
@@ -5245,7 +5245,7 @@ class CorrectOrderTodo(TodoOperation, declared_name=None):
 
 @dataclass(frozen=True)
 class CorrectCheckTodo(CorrectOrderTodo):
-    """The commander replaces a wrong check of an open order."""
+    """The teammate replaces a wrong check of an open order."""
     previous: OrderCheck
     check: OrderCheck
 
@@ -5266,7 +5266,7 @@ class CorrectCheckTodo(CorrectOrderTodo):
 
 @dataclass(frozen=True)
 class CorrectRunTodo(CorrectOrderTodo):
-    """The commander replaces the run that closes an open order, e.g. one naming deleted code."""
+    """The teammate replaces the run that closes an open order, e.g. one naming deleted code."""
     previous: OrderRun
     run: OrderRun
 
@@ -5279,7 +5279,7 @@ class CorrectRunTodo(CorrectOrderTodo):
 
 @dataclass(frozen=True)
 class CorrectMergedLinkTodo(CorrectOrderTodo):
-    """The commander takes back a merge recorded through a pull request that never held this
+    """The teammate takes back a merge recorded through a pull request that never held this
     order's work, such as a merged prerequisite. The order is pending again under its own id,
     check, run, edits and times; only that link leaves it. Any other linked pull request stays,
     so a merge of real work on it is read again from the forge, never dropped."""
@@ -5294,7 +5294,7 @@ class CorrectMergedLinkTodo(CorrectOrderTodo):
 
 @dataclass(frozen=True)
 class CorrectLinkTodo(CorrectOrderTodo):
-    """The commander takes a pull request off an open order that never held its work, such as
+    """The teammate takes a pull request off an open order that never held its work, such as
     another order's pull request recorded by a mistaken claim. The order keeps its state, holder,
     review timer, strikes and every other link; a later send carries only the links left."""
     previous: tuple[PullRequestLink, ...]
@@ -5328,7 +5328,7 @@ class WordingCorrection(TodoOperation, StoryEvent):
 
 @dataclass(frozen=True)
 class OrderMessage(TodoOperation, StoryEvent):
-    """The bus message the commander sent this order in; a verdict citing it lands here."""
+    """The bus message the teammate sent this order in; a verdict citing it lands here."""
     actor: ThreadIncarnation
     message_id: MessageId
     at: EventTime = field(kw_only=True)
@@ -5351,7 +5351,7 @@ class RecordPullRequest(TodoCommand):
         """A companion link is checked against the registered project under the write."""
         project = store.registry_cut().commander_project
         if self.link.repo not in project.linkable(current.repo):
-            raise TodoError(f"{self.link.repo.to_wire()} is not a repository of this commander "
+            raise TodoError(f"{self.link.repo.to_wire()} is not a repository of this teammate "
                             f"project; {current.id} links only registered repositories.")
 
     def changed(self, current: Todo) -> Todo:
@@ -5366,7 +5366,7 @@ class RecordPullRequest(TodoCommand):
 
 @dataclass(frozen=True)
 class ServeTodo(TodoOperation):
-    """The commander names the plan phase an open order serves; it keeps its id and holder."""
+    """The teammate names the plan phase an open order serves; it keeps its id and holder."""
     actor: ThreadIncarnation
     serves: type[OrderPhase]
 
@@ -5427,7 +5427,7 @@ class ResumeClaimOrder(ClaimOrder):
     In the Todo transaction it requires the expected revision, the open state, the holder's
     birth and generation, and this exact claim among the order's current claims, so a claim
     replaced or reissued since the call read it, or never retained, refuses before any
-    publication. A sender or commander whose address changed since the claim was retained
+    publication. A sender or teammate whose address changed since the claim was retained
     refuses too: following a renamed or reused thread name would change who it is from or to."""
 
     def record(self, goals: Goals, problem: str) -> Todo:
@@ -5451,7 +5451,7 @@ class ResumeClaimOrder(ClaimOrder):
     def changed(self, current: Todo) -> Todo:
         current.state.require_open(current)
         current.require_assignee(self.actor, self.generation)
-        if self.claim not in current.order.commander_claims():
+        if self.claim not in current.order.team_claims():
             raise TodoError(
                 f"{current.id} does not hold the claim of {self.claim.head} "
                 f"(message {self.claim.message.message_id}); nothing is published.")
@@ -5492,7 +5492,7 @@ class DeliverTodo(TodoOperation, declared_name=None):
 
 @dataclass(frozen=True)
 class CloseOrderTodo(TodoOperation, declared_name=None):
-    """The commander records the order's terminal state and closes its problem in one revision."""
+    """The teammate records the order's terminal state and closes its problem in one revision."""
     actor: ThreadIncarnation
 
     @abstractmethod
@@ -5554,12 +5554,12 @@ class ChangeTodoState(TodoOperation):
 class OwnerRequest(TodoStoreRows, TypedTable, SharedFileTables, DurableTables):
     """One owner's request, independent of any current turn goal."""
 
-    indexes = (Index(("commander_created_at", "state", "created_at")),)
+    indexes = (Index(("team_created_at", "state", "created_at")),)
 
     id: Annotated[OwnerRequestId, Column(primary_key=True, storage=TextStorage)]
     commander: RecordedThreadIncarnation
-    commander_created_at: ClassVar[Generated] = Generated(
-        float, Column(generated="json_extract({commander}, '$.created_at')"),
+    team_created_at: ClassVar[Generated] = Generated(
+        float, Column(generated="json_extract({teammate}, '$.created_at')"),
     )
     text: str
     state: RequestState = OpenRequestState()
@@ -5624,7 +5624,7 @@ class Todo(TodoStoreRows, TypedTable):
     assignment: Assignment | None
     order: ProblemOrder
     review_at: EventTime = field(default_factory=UnrecordedEventTime)
-    """When the commander next reviews the held order; the unit is never shown it."""
+    """When the teammate next reviews the held order; the unit is never shown it."""
     history: Annotated[TodoHistory, WireTransient()] = field(
         default_factory=lambda: TodoHistory(), compare=False, repr=False,
     )
@@ -6387,7 +6387,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
             recorded.upsert(db)
         return recorded
 
-    def hunts_for_commander(self, commander: ThreadIncarnation) -> tuple[Hunt, ...]:
+    def hunts_for_team(self, commander: ThreadIncarnation) -> tuple[Hunt, ...]:
         with self.snapshot() as db:
             return tuple(record.hunt for record in HuntRecord.select(db, commander=commander))
 
@@ -6403,7 +6403,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         old = self.resolve_order(commander, unit, problem)
         newer = self.resolve_order(commander, unit, by)
         if not old.pending or not newer.pending or newer.order.at.at <= old.order.at.at:
-            raise TodoError('Only a live newer order to the same unit replaces an old one.')
+            raise TodoError('Only a live newer order to the same teammate replaces an old one.')
         return self.apply_together((ProblemCommand(old.id, DropTodo(
             old.revision, commander, ExpectedProblem(newer.id, newer.revision),
             newer.latest_message.message_id)),))[0]
@@ -6504,8 +6504,8 @@ class TodoStore(OwnerRequestStore, TodoHistory):
                             reader=partial(self._open, state=state))
 
     def reassignable(self) -> tuple[Todo, ...]:
-        """Work Core released after its objective strikes; never a commander's released backlog.
-        No clock releases work: a held order stays held until its commander moves it."""
+        """Work Core released after its objective strikes; never a teammate's released backlog.
+        No clock releases work: a held order stays held until its teammate moves it."""
         return tuple(todo for todo in self._select("assignment IS NULL", (),
                      reader=partial(self._open, state=OpenTodoState))
                      if todo.pending and todo.handed_out_on_release)
@@ -6526,7 +6526,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
             '1', (), reader=partial(self.held_in, unit=owner)))
 
     def board(self) -> tuple[Todo, ...]:
-        """Every open order on the bus: one board, whichever commander wrote the order."""
+        """Every open order on the bus: one board, whichever teammate wrote the order."""
         return self._select("1", (), reader=self._open)
 
     @staticmethod
@@ -6564,7 +6564,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         return self._select("1", ())
 
 
-    def board_units(self) -> frozenset[ThreadIncarnation]:
+    def board_teammates(self) -> frozenset[ThreadIncarnation]:
         """Everyone who holds or held an order, by birth, so a renamed holder stays one unit."""
         return frozenset(
             assignment.owner_identity for todo in self.board_history()

@@ -1,7 +1,7 @@
 # agent-comms: where things are
 
-The rules are not in this file. Behaviour lives in `src/agent_comms/commander/rules/`,
-and those rules follow from the two papers in `src/agent_comms/commander/paper/`
+The rules are not in this file. Behaviour lives in `src/agent_comms/team/rules/`,
+and those rules follow from the two papers in `src/agent_comms/team/paper/`
 (semantic-completeness, then less-is-harder). A session Core launches carries the
 whole deal in its system prompt (native Pi; Claude Code started with `claude-comms`)
 and answers it in the gate's audit before its first tool call. Another session bound

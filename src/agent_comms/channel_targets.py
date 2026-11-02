@@ -682,8 +682,8 @@ class DeclaredTag(DeclaredFamily, affix="Tag"):
 
 class CommsTag(DeclaredTag):
     """The channel the fleet coordinates on: installer reports, Core's strike announcements
-    and the commander's posts address it."""
+    and the teammate's posts address it."""
 
 
-class CommandersTag(DeclaredTag):
+class TeammatesTag(DeclaredTag, declared_name="commanders"):
     """A coordination channel identity, never a permission or execution role."""

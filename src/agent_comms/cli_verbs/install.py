@@ -22,7 +22,7 @@ class InstallCliCommand(InstallRequest, CliCommand, declared_name=InstallRequest
     kind: Annotated[Literal["install"], WireExclude()] = dataclasses.field(
         default=InstallRequest.kind, init=False)
     help = ("Upgrade this machine's bus, checkout and runtime to --to, then set up every coding "
-            "harness to use the bus, with the commander skill and tools")
+            "harness to use the bus, with the teammate skill and tools")
     @classmethod
     def published_launch(cls) -> LaunchRoot:
         """Install runs where no route selects a bus yet: the published bus while its route

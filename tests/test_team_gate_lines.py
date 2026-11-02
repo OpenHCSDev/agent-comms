@@ -1,0 +1,43 @@
+"""Only a heartbeat line the commander can dispose of locks its writing verbs."""
+
+from agent_comms.heartbeat_subjects import TeamHistory, TeammateSubject
+from agent_comms.build_identity import InstalledCommitInstallation, MissingCommitInstallation, RecordedBuildIdentity
+from agent_comms.task_attachments.team_pings import RulePing, TeammatePing
+from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun
+from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.standing_rules import OrderlessUnreviewedHead
+from agent_comms.text_digest import TextDigest
+from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.ui_model.teammate_state import AwaitingApplicationRun, DeliveredUnclosed, TeammateState
+
+
+RUN = "The real application shows the merged fix working after a restart."
+
+
+UNIT = RecordedThreadIncarnation("unit", 1.0)
+
+
+def unit_line(state: type[TeammateState], since: float) -> TeammatePing:
+    return TeammatePing(UNIT, state, (), (), TextDigest.of(state.question), text=state.question,
+                    subjects=(TeammateSubject(UNIT),), since=RecordedEventTime(since))
+
+
+def test_only_team_disposable_stale_lines_are_undisposed(comms):
+    """2026-10-25: AWAIT RUN lines, the holder's to dispose of, were restated as UNDISPOSED and
+    printed on every verb refusal beside the lines that actually locked."""
+    cut = 1000.0
+    history = TeamHistory.read(comms, frozenset())
+    judge = RulePing(OrderlessUnreviewedHead, TextDigest.of("JUDGE"), text="JUDGE", subjects=(TeammateSubject(UNIT),),
+                     since=RecordedEventTime(10.0))
+    assert unit_line(DeliveredUnclosed, 10.0).undisposed(history, cut)
+    assert judge.undisposed(history, cut)
+    assert not unit_line(DeliveredUnclosed, 2000.0).undisposed(history, cut)
+    assert not unit_line(DeliveredUnclosed, 2000.0).waits_on_team(cut)
+    assert not unit_line(AwaitingApplicationRun, 10.0).undisposed(history, cut)
+
+
+def test_an_installed_application_order_waits_on_its_holder_not_the_team():
+    installed, missing = InstalledCommitInstallation(), MissingCommitInstallation("a" * 40, RecordedBuildIdentity(()))
+    assert installed.awaits_holder(ApplicationOrderRun(RUN))
+    assert not installed.awaits_holder(MechanicalOrderRun())
+    assert not missing.awaits_holder(ApplicationOrderRun(RUN))

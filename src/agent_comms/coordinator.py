@@ -136,7 +136,7 @@ class Coordination(ExecutionStore, AttemptStore):
     ) -> None:
         """Join each entered pass before idling; cancellation also joins borrowed work.
 
-        Each outcome is recorded where the commander's standing rules read it, because the
+        Each outcome is recorded where the teammate's standing rules read it, because the
         connector's log reaches nobody.
         """
         name = type(watch).__name__

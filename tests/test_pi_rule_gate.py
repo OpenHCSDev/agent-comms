@@ -16,7 +16,7 @@ from agent_comms.nominal.field_codec import FieldCodec, MessageId
 
 from agent_comms import agent_events as events
 from agent_comms.channel_targets import CommandTarget
-from agent_comms.commander.package import CommanderPackage
+from agent_comms.team.package import TeamPackage
 from agent_comms.context_reading import ContextUsage
 from agent_comms.native_tool_call import CodingCall
 from agent_comms.native_tools import ReadTool
@@ -38,17 +38,17 @@ def call(name: str, arguments: dict[str, object]) -> CodingCall:
 
 
 @pytest.fixture
-def unit_deal(commander_bus):
+def unit_deal(team_bus):
     """The deal Core renews for the bus's ordinary unit, in the bus's own scratch."""
-    deal = PiRedeal.of(commander_bus, commander_bus.registry.require("unit-x"))
-    assert deal.scratch.is_relative_to(commander_bus.root)
+    deal = PiRedeal.of(team_bus, team_bus.registry.require("unit-x"))
+    assert deal.scratch.is_relative_to(team_bus.root)
     return deal
 
 
-def test_every_independent_thread_is_dealt_the_same_sources_once(commander_bus):
+def test_every_independent_thread_is_dealt_the_same_sources_once(team_bus):
     """A lead and an untagged peer share the deal; a restart keeps its original audit."""
     for name in ("claude-code", "unit-x"):
-        deal = PiRedeal.of(commander_bus, commander_bus.registry.require(name))
+        deal = PiRedeal.of(team_bus, team_bus.registry.require(name))
         deal.start()
         assert deal.current().dealt == tuple(path.resolve() for path in DeckReader.sources())
         deal.audit.write_text("{}")
@@ -79,15 +79,15 @@ def test_every_dealt_file_fits_one_default_read_on_every_backend():
 
 
 def test_a_compacted_pi_thread_reads_every_dealt_rule_then_writes_its_audit(
-    tmp_path, unit_deal, commander_bus
+    tmp_path, unit_deal, team_bus
 ):
     words = ("read the rules", "then fix the gate")
     for body in words:
-        commander_bus.messaging.send_user_message(
+        team_bus.messaging.send_user_message(
             CommandTarget.named("unit-x"), body, worktree=Checkout(tmp_path)
         )
         # Core's notice publishes under the owner's thread, but nobody typed it.
-        RestartNotice().publish(commander_bus.messaging, CommandTarget.named("unit-x"),
+        RestartNotice().publish(team_bus.messaging, CommandTarget.named("unit-x"),
                                 "COMMANDER · unit-x · continue your orders")
     bash = call("bash", {"command": "ls"})
     bash.judge_under(unit_deal)  # never dealt: nothing to read
@@ -177,15 +177,15 @@ def test_the_rules_come_back_once_at_each_declared_share_of_context_left(unit_de
     and deals the papers too."""
     assert [refresh.remaining for refresh in unit_deal.refreshes] == [0.66, 0.33]
     events.CompactionEnd().deal_rules(unit_deal)
-    assert unit_deal.current().dealt[:len(CommanderPackage.paper())] == tuple(
-        path.resolve() for path in CommanderPackage.paper())
+    assert unit_deal.current().dealt[:len(TeamPackage.paper())] == tuple(
+        path.resolve() for path in TeamPackage.paper())
     answer_deal(unit_deal)
     for used, closes in ((30, False), (35, True), (40, False), (70, True), (95, False)):
         unit_deal.observe_context(ContextUsage(used, 100))
         assert refused(unit_deal) is closes, used
         if closes:
             assert not set(unit_deal.current().dealt) & {
-                path.resolve() for path in CommanderPackage.paper()}
+                path.resolve() for path in TeamPackage.paper()}
         answer_deal(unit_deal)
     events.CompactionEnd().deal_rules(unit_deal)
     answer_deal(unit_deal)
@@ -214,8 +214,8 @@ def test_automatic_redeals_preserve_the_configured_session(unit_deal, mode):
 
 
 @pytest.mark.parametrize("name", ("unit-x", "claude-code"))
-def test_compaction_mode_redeals_lost_context_but_never_periodic_refreshes(commander_bus, name):
-    deal = PiRedeal.of(commander_bus, commander_bus.registry.require(name))
+def test_compaction_mode_redeals_lost_context_but_never_periodic_refreshes(team_bus, name):
+    deal = PiRedeal.of(team_bus, team_bus.registry.require(name))
     deal.start()
     answer_deal(deal)
     deal.configure(CompactionDealMode)
@@ -277,17 +277,17 @@ def test_every_refusal_opens_with_why_its_deal_was_dealt(unit_deal):
         bash.judge_under(unit_deal)
 
 
-def test_the_dealt_commander_skill_owes_an_answer_like_a_rule(commander_bus):
+def test_the_dealt_team_skill_owes_an_answer_like_a_rule(team_bus):
     """The commander skill is dealt and read, so it fills the unanswered window like a rule:
     on 2026-10-30 claude-nra read it owing nothing and broke its rotation within the hour."""
     import sys
 
     from agent_comms.rule_deal import ReadSpan, StartedDeal
 
-    deal = PiRedeal.of(commander_bus, commander_bus.registry.require("claude-code"))
+    deal = PiRedeal.of(team_bus, team_bus.registry.require("claude-code"))
     deal.redeal(StartedDeal())
     record = deal.current()
-    skill = CommanderPackage.skill().resolve()
+    skill = TeamPackage.skill().resolve()
     assert skill.stem in record.due.rules
     order = list(record.dealt)
     before = [source for source in order[:order.index(skill)] if source.stem in record.due.rules]
@@ -320,18 +320,18 @@ def owner_lines(bus, name: str) -> list[str]:
 
 @pytest.mark.usefixtures("native_runtime_package")
 def test_pi_question_settles_only_on_its_exact_successful_audit_write(
-    tmp_path, commander_bus
+    tmp_path, team_bus
 ):
     """An audit answers the actual question; journal words and an uncompleted edit do not.
 
     These are gate/transport controls, not a configured-model acceptance run.
     """
     session = create_fresh_private_session(tmp_path / "sessions", worktree=Checkout(tmp_path)).path
-    commander_bus.registry.declare(Thread(
+    team_bus.registry.declare(Thread(
         "unit-p", frozenset(), Checkout(tmp_path),
-        session_file=RegistrySessionLocation.from_path(str(session), commander_bus.root),
+        session_file=RegistrySessionLocation.from_path(str(session), team_bus.root),
         model=DeclaredModel("anthropic/claude-opus-4-6")))
-    deal = PiRedeal.of(commander_bus, commander_bus.registry.require("unit-p"))
+    deal = PiRedeal.of(team_bus, team_bus.registry.require("unit-p"))
     events.CompactionEnd().deal_rules(deal)
     record = deal.current()
     first = next(source for source in record.dealt if source.stem in record.due.rules)
@@ -342,7 +342,7 @@ def test_pi_question_settles_only_on_its_exact_successful_audit_write(
     write.judge_under(deal)
     write.completed_under(deal)
 
-    [line] = owner_lines(commander_bus, "unit-p")
+    [line] = owner_lines(team_bus, "unit-p")
     assert line.endswith("did you mean it?")
     with pytest.raises(RulesUnread, match="Tristan is asking you"):
         call("bash", {"command": "ls"}).judge_under(deal)
@@ -355,7 +355,7 @@ def test_pi_question_settles_only_on_its_exact_successful_audit_write(
     with pytest.raises(RulesUnread, match="Tristan is asking you"):
         call("bash", {"command": "ls"}).judge_under(deal)
     assert deal.meant.read() == pending
-    assert owner_lines(commander_bus, "unit-p") == [line]
+    assert owner_lines(team_bus, "unit-p") == [line]
 
     question = pending.open[0].message_id
     with pytest.raises(RulesUnread, match=str(question)) as refusal:
@@ -375,17 +375,17 @@ def test_pi_question_settles_only_on_its_exact_successful_audit_write(
     short = replace(audit, meant=(MeantAnswer(question, "Yes."),))
     deal.audit.write_text(FieldCodec.compact(FieldCodec.encode(short)))
     write.completed_under(deal)
-    assert owner_lines(commander_bus, "unit-p") == [line, "fuck you"]
+    assert owner_lines(team_bus, "unit-p") == [line, "fuck you"]
     for _ in range(2):
         with pytest.raises(RulesUnread):
             call("bash", {"command": "ls"}).judge_under(deal)
     assert len(deal.meant.read().open) == 2
-    assert owner_lines(commander_bus, "unit-p") == [line, "fuck you"]
+    assert owner_lines(team_bus, "unit-p") == [line, "fuck you"]
 
     short = replace(audit, meant=(MeantAnswer(question, "No."),))
     deal.audit.write_text(FieldCodec.compact(FieldCodec.encode(short)))
     write.completed_under(deal)
-    lines = owner_lines(commander_bus, "unit-p")
+    lines = owner_lines(team_bus, "unit-p")
     assert len(lines) == 3
     assert audit.rules[-1].does.strip().splitlines()[0][:200] in lines[-1]
     assert len(deal.meant.read().open) == 3
@@ -400,32 +400,32 @@ def test_pi_question_settles_only_on_its_exact_successful_audit_write(
     assert not deal.meant.read().open
     assert deal.meant.read().asked == pending.asked
     write.completed_under(deal)
-    assert owner_lines(commander_bus, "unit-p") == lines
+    assert owner_lines(team_bus, "unit-p") == lines
 
 
 @pytest.mark.usefixtures("native_runtime_package")
-def test_an_open_question_keeps_its_id_until_the_answer_naming_it(tmp_path, commander_bus):
+def test_an_open_question_keeps_its_id_until_the_answer_naming_it(tmp_path, team_bus):
     """Answering more rules while a question is open asks nothing new, so the answer the
     session writes for the question it read still settles it."""
     session = create_fresh_private_session(tmp_path / "sessions", worktree=Checkout(tmp_path)).path
-    commander_bus.registry.declare(Thread(
+    team_bus.registry.declare(Thread(
         "unit-q", frozenset(), Checkout(tmp_path),
-        session_file=RegistrySessionLocation.from_path(str(session), commander_bus.root),
+        session_file=RegistrySessionLocation.from_path(str(session), team_bus.root),
         model=DeclaredModel("anthropic/claude-opus-4-6")))
-    deal = PiRedeal.of(commander_bus, commander_bus.registry.require("unit-q"))
+    deal = PiRedeal.of(team_bus, team_bus.registry.require("unit-q"))
     events.CompactionEnd().deal_rules(deal)
     record = deal.current()
     first, second = [source for source in record.dealt if source.stem in record.due.rules][:2]
     write = call("write", {"path": str(deal.audit), "content": ""})
     deal.audit.write_text(json.dumps({"rules": [engaged(first.stem, first)], "owner_words": []}))
     write.completed_under(deal)
-    [line] = owner_lines(commander_bus, "unit-q")
+    [line] = owner_lines(team_bus, "unit-q")
     question = deal.meant.read().open[0].message_id
 
     both = {"rules": [engaged(first.stem, first), engaged(second.stem, second)], "owner_words": []}
     deal.audit.write_text(json.dumps(both))
     write.completed_under(deal)
-    assert owner_lines(commander_bus, "unit-q") == [line]
+    assert owner_lines(team_bus, "unit-q") == [line]
     assert deal.meant.read().open[0].message_id == question
 
     answer = "Yes, I meant both answers, and I am reading the next batch of rules now."

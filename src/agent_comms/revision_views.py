@@ -60,8 +60,8 @@ class NotificationEvidenceView(RevisionView):
     """Assignment and human read evidence, independent of timed status refreshes."""
 
 
-class CommanderFramesView(RevisionView):
-    """The heartbeat's newest frame per commander; nothing else feeds the commander page."""
+class TeamFramesView(RevisionView, declared_name="commander_frames"):
+    """The heartbeat's newest frame per teammate; nothing else feeds the team page."""
 
 
 class BusSourceView(RevisionView):

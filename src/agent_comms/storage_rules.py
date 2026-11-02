@@ -579,7 +579,7 @@ class StorageRule(RoomAllocation, DurableFile):
     def host_memory_exceeded(self, memory: ResidentMemory) -> bool:
         return max(memory.resident, memory.peak) > self.host_memory_bytes
 
-    def fleet_memory_budget(self, owners: int) -> int:
+    def team_memory_budget(self, owners: int) -> int:
         return self.host_memory_bytes + owners * self.native_owner_memory_bytes
 
     def below_floor(self, free_gib: float) -> bool:

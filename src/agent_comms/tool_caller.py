@@ -16,7 +16,7 @@ from .read_basis import OperatorOutcomes, ReadAuthority
 from .registration import Registration
 from .notification_evidence import OutcomeViewer, OwnerOutcomes
 from .presentation import SentMessageSummary, ThreadRecord
-from .thread_execution import CommanderForkExecution
+from .thread_execution import ForkExecution
 from .thread_identity import ThreadIncarnation
 from .tool_result import ToolResult
 from .turn_phase import IdlePhase
@@ -60,7 +60,7 @@ class ToolCaller(ReadAuthority):
         """The command line's --from argument naming this caller, if it names a thread."""
 
     def commanding(self, comms: Comms) -> None:
-        """An ordinary caller needs no commander-child registration."""
+        """An ordinary caller needs no teammate-child registration."""
         return None
 
     def join(self, comms: Comms, parent: str) -> None:
@@ -71,7 +71,7 @@ class ToolCaller(ReadAuthority):
         self.end(comms)
 
     def end(self, comms: Comms) -> None:
-        raise ToolRefusedError('Only a commander fork can retire through this verb.')
+        raise ToolRefusedError('Only a teammate fork can retire through this verb.')
 
     @abstractmethod
     def as_thread(self, commander: str) -> ThreadCaller: ...
@@ -181,9 +181,9 @@ class SubagentCaller(ThreadCaller):
         """What a child reports as it ends; a role slot's history is already on its thread."""
 
 
-class ActsForCommander(ThreadCaller):
-    """Recorded under its own incarnation, holding its commander's authority: the commander
-    verbs accept its orders and verdicts as the commander's, and the record names who acted."""
+class ActsForTeam(ThreadCaller):
+    """Recorded under its own incarnation, holding its teammate's authority: the teammate
+    verbs accept its orders and verdicts as the teammate's, and the record names who acted."""
 
     @abstractmethod
     def commander(self, comms: Comms) -> Thread: ...
@@ -194,18 +194,18 @@ class ActsForCommander(ThreadCaller):
 
 
 @dataclass(frozen=True)
-class CommanderPeerCaller(ThreadCaller):
+class PeerCaller(ThreadCaller):
     """A collaborator acts under its own incarnation, independently of channel tags.
 
     Binding to another lead's records remains explicit through as_thread.
     """
 
     def as_thread(self, commander: str) -> ThreadCaller:
-        return CommanderPeerAuthority(self.name, commander)
+        return PeerAuthority(self.name, commander)
 
 
 @dataclass(frozen=True)
-class CommanderPeerAuthority(CommanderPeerCaller):
+class PeerAuthority(PeerCaller):
     """Explicit record selection, never representation of the selected storage owner."""
 
     authority: str
@@ -221,19 +221,19 @@ class CommanderPeerAuthority(CommanderPeerCaller):
 
 
 @dataclass(frozen=True)
-class CommanderForkCaller(ActsForCommander, SubagentCaller):
-    """Commander verbs use a registered child without copying registry procedures."""
+class ForkCaller(ActsForTeam, SubagentCaller):
+    """Team verbs use a registered child without copying registry procedures."""
 
     def commanding(self, comms: Comms) -> None:
         """A verb resumes the fork under the parent that spawned it, never under whichever
-        thread the bus records as commander."""
+        thread the bus records as teammate."""
         self.join(comms, self.spawner(comms))
 
     def join(self, comms: Comms, parent: str) -> None:
         """The SubagentStart hook declares the fork under the session that spawned it, in its
         own process, before the fork's first call; the child inherits that parent's tags.
         A connector grant names its holder, so a fork of another parent is refused."""
-        comms.registry.register_child(self.name, parent, CommanderForkExecution, comms.goals)
+        comms.registry.register_child(self.name, parent, ForkExecution, comms.goals)
 
     def spawner(self, comms: Comms) -> str:
         """The parent the hook registered; before it has, the bus thread the calling Claude
@@ -256,7 +256,7 @@ class CommanderForkCaller(ActsForCommander, SubagentCaller):
         return comms.registry.require(parent)
 
     @staticmethod
-    def end_session(comms: Comms, callers: tuple[CommanderForkCaller, ...]) -> tuple[CommanderForkCaller, ...]:
+    def end_session(comms: Comms, callers: tuple[ForkCaller, ...]) -> tuple[ForkCaller, ...]:
         """Only children that joined this bus can be ended; every entry uses the same owner."""
         registered = tuple(caller for caller in callers if caller.name in comms.registry)
         for caller in registered:
@@ -280,7 +280,7 @@ class CommanderForkCaller(ActsForCommander, SubagentCaller):
         self.end(comms)
 
     def leaving(self, comms: Comms) -> None:
-        """A fork that recorded nothing tells its commander the work is missing."""
+        """A fork that recorded nothing tells its teammate the work is missing."""
         if not self.recorded(comms):
             commander = self.commander(comms).name
             comms.messaging.send(self.name, commander, (

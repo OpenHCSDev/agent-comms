@@ -46,7 +46,7 @@ async def test_enrol_register_rename_and_rebind_preserve_reader(comms, tmp_path,
         assert original.owner == reader.incarnation
         assert reader.tags == tags
         assert tuple(reader.parent.names()) == ()
-        assert reader.acting_identity.commanding_identity == reader.incarnation
+        assert reader.acting_identity.acting_identity == reader.incarnation
         assert reader.worktree == Checkout(Path.cwd())
 
         comms.registry.rename('new-reader', 'renamed-reader')

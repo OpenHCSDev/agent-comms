@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.commander.order import CheckRequest
+from agent_comms.team.order import CheckRequest
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.work_branches import WorkBranches

@@ -6,19 +6,19 @@ from contextlib import nullcontext
 from dataclasses import replace
 from datetime import UTC, datetime
 
-from agent_comms.commander import judge
-from agent_comms.commander_heartbeat import CommanderHeartbeat
+from agent_comms.team import judge
+from agent_comms.team_heartbeat import TeamHeartbeat
 from agent_comms.closed_pull_requests import ClosedPullRequestWatch
-from agent_comms.commander.publication_rules import (
+from agent_comms.team.publication_rules import (
     ClosedPullRequestScanPending, ClosedUnmergedPullRequest,
 )
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.head_review import PullRequestHead
-from commander_heartbeat_fixture import capture_frame
-from agent_comms.heartbeat_subjects import CommanderHistory
+from team_heartbeat_fixture import capture_frame
+from agent_comms.heartbeat_subjects import TeamHistory
 from agent_comms.order_tools import CommsHeadVerdictTool
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.task_attachments.commander_pings import RulePing
+from agent_comms.task_attachments.team_pings import RulePing
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.work_branches import SharedCommitBase, UnrelatedCommitBase, UnservableCommitBase
 from agent_comms.todos import (
@@ -37,7 +37,7 @@ def test_unscanned_repository_is_pending_not_lost(head_bus, reviewed_source):
         7, 'closed/7', source.branch_commit, closed_at=stamp, updated=stamp,
         base='main', reviewable_times=(stamp,)))
     repos = comms.registry.snapshot().commander_project.require().repository_names()
-    plans = CommanderHeartbeat()
+    plans = TeamHeartbeat()
 
     def rules(frame):
         return (ClosedUnmergedPullRequest.scan_observed(comms, 'lead', (), frame),
@@ -67,7 +67,7 @@ def test_unrelated_closed_head_does_not_poison_its_repository(head_bus, reviewed
             base='main', reviewable_times=(stamp,)))
     watch = ClosedPullRequestWatch()
     asyncio.run(watch.run(lambda: nullcontext(comms)))
-    frame = capture_frame(comms, 'lead', ProgressRead(()), CommanderHeartbeat())
+    frame = capture_frame(comms, 'lead', ProgressRead(()), TeamHeartbeat())
     rules = {rule.request.pr: rule for rule in
              ClosedUnmergedPullRequest.scan_observed(comms, 'lead', (), frame)}
     assert set(rules) == {7, 10}
@@ -93,7 +93,7 @@ def test_closed_head_no_ref_reaches_is_compared_and_an_unservable_one_is_its_own
             number, f'closed/{number}', closed, updated=stamp, closed_at=stamp,
             base='main', reviewable_times=(stamp,)))
     asyncio.run(ClosedPullRequestWatch().run(lambda: nullcontext(comms)))
-    frame = capture_frame(comms, 'lead', ProgressRead(()), CommanderHeartbeat())
+    frame = capture_frame(comms, 'lead', ProgressRead(()), TeamHeartbeat())
     rules = {rule.request.pr: rule for rule in
              ClosedUnmergedPullRequest.scan_observed(comms, 'lead', (), frame)}
     assert rules[7].base == SharedCommitBase(source.main_commit)
@@ -139,7 +139,7 @@ def test_closed_unmerged_pull_request_flags_lost_commits(head_bus, reviewed_sour
         return ClosedUnmergedPullRequest.scan_observed(comms, 'lead', (), frame)
 
     watch = ClosedPullRequestWatch()
-    plans = CommanderHeartbeat()
+    plans = TeamHeartbeat()
 
     def capture():
         asyncio.run(watch.run(lambda: nullcontext(comms)))
@@ -160,7 +160,7 @@ def test_closed_unmerged_pull_request_flags_lost_commits(head_bus, reviewed_sour
     review.invoke(comms, review.arguments, caller=ThreadCaller('lead'))
     assert set(scan(capture())) == {lost, old_lost}
     ping = replace(RulePing.capture(lost), since=RecordedEventTime(lost.began()))
-    assert not ping.acted(CommanderHistory.read(comms, frozenset(('lead',))))
+    assert not ping.acted(TeamHistory.read(comms, frozenset(('lead',))))
     assert FieldCodec.decode(RulePing, FieldCodec.encode(ping)) == ping
 
     verdict = judge.SupersededVerb(

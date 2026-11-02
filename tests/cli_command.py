@@ -12,7 +12,7 @@ from io import StringIO
 from unittest.mock import patch
 
 from agent_comms import cli
-from agent_comms.commander import cli as commander_cli
+from agent_comms.team import cli as team_cli
 
 
 def core(*argv: str) -> subprocess.CompletedProcess[str]:
@@ -38,7 +38,7 @@ def commander(*argv: str) -> subprocess.CompletedProcess[str]:
     code = 0
     with patch.object(sys, 'argv', list(argv)), redirect_stdout(output), redirect_stderr(error):
         try:
-            commander_cli.main()
+            team_cli.main()
         except SystemExit as exited:
             # CPython prints a non-integer SystemExit value and returns 1.
             if isinstance(exited.code, str):

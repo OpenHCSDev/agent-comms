@@ -31,8 +31,8 @@ class CompletedWatch:
         return 2 * cls.pass_duration + Coordination.watch_period
 
 
-class CommanderPass(CompletedWatch):
-    """The commander's board pass: its service runs it, and its readers judge freshness by it."""
+class TeamPass(CompletedWatch):
+    """The teammate's board pass: its service runs it, and its readers judge freshness by it."""
 
     pass_duration: ClassVar[float] = 270
     """The longest pass on the live bus: first passes after the 2026-10-30 installs took
@@ -59,7 +59,7 @@ class FailingPass:
 class ServicePasses:
     failing: dict[str, FailingPass] = field(default_factory=dict)
     commander_completed: dict[RecordedThreadIncarnation, float] = field(default_factory=dict)
-    """Last observation completed for each commander, including quiet observations."""
+    """Last observation completed for each teammate, including quiet observations."""
 
     def failure_lines(self) -> tuple[str, ...]:
         return tuple(failure.failure_line(watch) for watch, failure in sorted(self.failing.items()))
@@ -71,8 +71,8 @@ class ServicePasses:
         return UnrecordedEventTime()
 
     def heartbeat_current(self, heartbeat: EventTime) -> bool:
-        """Only the commander's completion clock determines heartbeat freshness."""
-        return heartbeat.since(time.time() - CommanderPass.completion_ceiling())
+        """Only the teammate's completion clock determines heartbeat freshness."""
+        return heartbeat.since(time.time() - TeamPass.completion_ceiling())
 
 
 @dataclass(frozen=True)
@@ -98,7 +98,7 @@ class ServiceReading(ToolResult):
     def require_current(self) -> None:
         """A disclosure without a health header cannot serve stale cards silently."""
         if not self.services.heartbeat_current(self.heartbeat):
-            raise BoardUnavailable(self, 'the commander heartbeat is stale')
+            raise BoardUnavailable(self, 'the teammate heartbeat is stale')
 
 
 class BoardUnavailable(ToolRefusedError):
@@ -112,7 +112,7 @@ class BoardUnavailable(ToolRefusedError):
 @dataclass(frozen=True, slots=True)
 class ServicePassStore(SingleFileStore, DurableFile, LockedStore[ServicePasses], DependentStateTier,
                        Watched):
-    """The connector's log reaches nobody; the commander's standing rules read this file."""
+    """The connector's log reaches nobody; the teammate's standing rules read this file."""
 
     filename: ClassVar[str] = "service_passes.json"
     record_type = ServicePasses

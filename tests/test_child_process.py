@@ -471,7 +471,7 @@ Path(sys.argv[1]).write_text(json.dumps([FieldCodec.encode(c) for c in (plain, r
 
 
 @pytest.mark.skipif(not ResidentManager.current().required_units(),
-                    reason="the cgroup a unit kills exists only under a user manager")
+                    reason="the cgroup a teammate kills exists only under a user manager")
 @pytest.mark.asyncio
 async def test_ended_unit_takes_its_plain_child_and_leaves_its_resident(tmp_path: Path) -> None:
     announcement = tmp_path / "children.json"
@@ -488,7 +488,7 @@ async def test_ended_unit_takes_its_plain_child_and_leaves_its_resident(tmp_path
         async with asyncio.timeout(5):
             while plain.alive():
                 await asyncio.sleep(.01)
-        assert resident.alive(), "a declared resident must outlive its launcher's unit"
+        assert resident.alive(), "a declared resident must outlive its launcher's teammate"
     finally:
         for member in observed:
             if member.alive():

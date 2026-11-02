@@ -19,13 +19,13 @@ Six read. Continuing with the remaining twelve.
 **Input:**
 ```json
 {
-  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/commander/rules/plain-reporting.md"
+  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/plain-reporting.md"
 }
 ```
 
 **Output:**
 ```
-<path>/home/ts/code/projects/agent-comms/src/agent_comms/commander/rules/plain-reporting.md</path>
+<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/plain-reporting.md</path>
 <type>file</type>
 <content>
 1: ---
@@ -76,13 +76,13 @@ Six read. Continuing with the remaining twelve.
 **Input:**
 ```json
 {
-  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/commander/rules/refactor-game.md"
+  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/refactor-game.md"
 }
 ```
 
 **Output:**
 ```
-<path>/home/ts/code/projects/agent-comms/src/agent_comms/commander/rules/refactor-game.md</path>
+<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/refactor-game.md</path>
 <type>file</type>
 <content>
 1: ---
@@ -133,13 +133,13 @@ Six read. Continuing with the remaining twelve.
 **Input:**
 ```json
 {
-  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/commander/rules/no-blocking.md"
+  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/no-blocking.md"
 }
 ```
 
 **Output:**
 ```
-<path>/home/ts/code/projects/agent-comms/src/agent_comms/commander/rules/no-blocking.md</path>
+<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/no-blocking.md</path>
 <type>file</type>
 <content>
 1: ---
@@ -191,13 +191,13 @@ Six read. Continuing with the remaining twelve.
 **Input:**
 ```json
 {
-  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/commander/rules/fork-orders.md"
+  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/fork-orders.md"
 }
 ```
 
 **Output:**
 ```
-<path>/home/ts/code/projects/agent-comms/src/agent_comms/commander/rules/fork-orders.md</path>
+<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/fork-orders.md</path>
 <type>file</type>
 <content>
 1: ---
@@ -255,13 +255,13 @@ Six read. Continuing with the remaining twelve.
 **Input:**
 ```json
 {
-  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/commander/rules/tests-and-commands.md"
+  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/tests-and-commands.md"
 }
 ```
 
 **Output:**
 ```
-<path>/home/ts/code/projects/agent-comms/src/agent_comms/commander/rules/tests-and-commands.md</path>
+<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/tests-and-commands.md</path>
 <type>file</type>
 <content>
 1: ---
@@ -326,13 +326,13 @@ Six read. Continuing with the remaining twelve.
 **Input:**
 ```json
 {
-  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/commander/rules/ship-and-install.md"
+  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/ship-and-install.md"
 }
 ```
 
 **Output:**
 ```
-<path>/home/ts/code/projects/agent-comms/src/agent_comms/commander/rules/ship-and-install.md</path>
+<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/ship-and-install.md</path>
 <type>file</type>
 <content>
 1: ---
@@ -423,7 +423,7 @@ Six read. Continuing with the remaining twelve.
 
 _Thinking:_
 
-Six more to go: commander-only ones (coordination, deadlines, send-backs-and-strikes, blunt-reviews, commander-self-correction) plus storage-and-cleanup. And voice.md + indictment.md. Let me read the rest.
+Six more to go: commander-only ones (coordination, deadlines, send-backs-and-strikes, blunt-reviews, self-correction) plus storage-and-cleanup. And voice.md + indictment.md. Let me read the rest.
 
 Twelve done. Reading the remaining six rules plus voice.md and indictment.md.
 
@@ -432,13 +432,13 @@ Twelve done. Reading the remaining six rules plus voice.md and indictment.md.
 **Input:**
 ```json
 {
-  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/commander/rules/storage-and-cleanup.md"
+  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/storage-and-cleanup.md"
 }
 ```
 
 **Output:**
 ```
-<path>/home/ts/code/projects/agent-comms/src/agent_comms/commander/rules/storage-and-cleanup.md</path>
+<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/storage-and-cleanup.md</path>
 <type>file</type>
 <content>
 1: ---
@@ -485,13 +485,13 @@ Twelve done. Reading the remaining six rules plus voice.md and indictment.md.
 **Input:**
 ```json
 {
-  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/commander/rules/coordination.md"
+  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/coordination.md"
 }
 ```
 
 **Output:**
 ```
-<path>/home/ts/code/projects/agent-comms/src/agent_comms/commander/rules/coordination.md</path>
+<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/coordination.md</path>
 <type>file</type>
 <content>
 1: ---
@@ -554,13 +554,13 @@ Twelve done. Reading the remaining six rules plus voice.md and indictment.md.
 **Input:**
 ```json
 {
-  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/commander/rules/deadlines.md"
+  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/deadlines.md"
 }
 ```
 
 **Output:**
 ```
-<path>/home/ts/code/projects/agent-comms/src/agent_comms/commander/rules/deadlines.md</path>
+<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/deadlines.md</path>
 <type>file</type>
 <content>
 1: ---
@@ -615,13 +615,13 @@ Twelve done. Reading the remaining six rules plus voice.md and indictment.md.
 **Input:**
 ```json
 {
-  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/commander/rules/send-backs-and-strikes.md"
+  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/send-backs-and-strikes.md"
 }
 ```
 
 **Output:**
 ```
-<path>/home/ts/code/projects/agent-comms/src/agent_comms/commander/rules/send-backs-and-strikes.md</path>
+<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/send-backs-and-strikes.md</path>
 <type>file</type>
 <content>
 1: ---
@@ -673,13 +673,13 @@ Twelve done. Reading the remaining six rules plus voice.md and indictment.md.
 **Input:**
 ```json
 {
-  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/commander/rules/blunt-reviews.md"
+  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/blunt-reviews.md"
 }
 ```
 
 **Output:**
 ```
-<path>/home/ts/code/projects/agent-comms/src/agent_comms/commander/rules/blunt-reviews.md</path>
+<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/blunt-reviews.md</path>
 <type>file</type>
 <content>
 1: ---
@@ -722,17 +722,17 @@ Twelve done. Reading the remaining six rules plus voice.md and indictment.md.
 **Input:**
 ```json
 {
-  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/commander/rules/commander-self-correction.md"
+  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/self-correction.md"
 }
 ```
 
 **Output:**
 ```
-<path>/home/ts/code/projects/agent-comms/src/agent_comms/commander/rules/commander-self-correction.md</path>
+<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/self-correction.md</path>
 <type>file</type>
 <content>
 1: ---
-2: name: commander-self-correction
+2: name: self-correction
 3: description: "every rule serves its reason, not its letter, and may be overridden when its reason stays intact; settle decisions with tools; catch and report slips plainly; apologize only for confident errors"
 4: drift: "Said something you have not checked? Check it now or retract it now."
 5: audience: commander
@@ -787,13 +787,13 @@ All 18 rules read. Finishing with voice.md and indictment.md.
 **Input:**
 ```json
 {
-  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/commander/voice.md"
+  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/voice.md"
 }
 ```
 
 **Output:**
 ```
-<path>/home/ts/code/projects/agent-comms/src/agent_comms/commander/voice.md</path>
+<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/voice.md</path>
 <type>file</type>
 <content>
 1: # Voice: hold it every reply
@@ -833,13 +833,13 @@ All 18 rules read. Finishing with voice.md and indictment.md.
 **Input:**
 ```json
 {
-  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/commander/indictment.md"
+  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/indictment.md"
 }
 ```
 
 **Output:**
 ```
-<path>/home/ts/code/projects/agent-comms/src/agent_comms/commander/indictment.md</path>
+<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/indictment.md</path>
 <type>file</type>
 <content>
 1: # Read this first. It's about you.
@@ -929,7 +929,7 @@ All rules read. Now Tristan said "read all the rules pls" — I've read all 18 r
 Per plain-reporting: one-line summary first, short lines, commit to a stance. Keep under control. Voice.md says talk like Linus, greentext register where it fits — but plain-reporting says answer the owner once in the session. I shouldn't over-perform. Just state it.
 
 Key facts worth reporting:
-- 18 rules, 12 fleet + 8 commander-only per the deal (actually from the earlier summary: 12 fleet + 8 commander-only = but there are 18 files; spine through storage-and-cleanup = 13, plus commander-only send-backs-and-strikes, blunt-reviews, coordination, commander-self-correction, deadlines = 5. Hmm, 13 + 5 = 18. Earlier said 24 fleet, 8 commander-only for 32 files total which includes papers etc. Fine.)
+- 18 rules, 12 fleet + 8 commander-only per the deal (actually from the earlier summary: 12 fleet + 8 commander-only = but there are 18 files; spine through storage-and-cleanup = 13, plus commander-only send-backs-and-strikes, blunt-reviews, coordination, self-correction, deadlines = 5. Hmm, 13 + 5 = 18. Earlier said 24 fleet, 8 commander-only for 32 files total which includes papers etc. Fine.)
 - The audit schema: each rule gets an entry, `broke` + `doing`. The refusal mechanism I now know completely.
 - The key extension point for the pull-quote + forecast design: `RuleAudit` has `rule` + `broke`; the interstitial quote could extend this. And the gate is composed by MRO — a new requirement mixin can be composed in.
 
@@ -982,7 +982,7 @@ What does the rule say to do here? spine.md: "Check, think, then say what you ac
 
 So the answer: partly landed, partly dodging, and name the specific dodge from the last message. Be concrete: I turned spine.md into an inventory line when reporting back. That's the dodge — converting "it's about you" into "it's about the system." And state what landing looks like going forward: the hedge reflex test is behavioral, not declared — it shows up when he says something I'd otherwise soften, and the only proof is the next exchange, not a claim now.
 
-Keep it in plain words, no performed contrition (commander-self-correction: apologize only for confident errors; overused apology is performative). Don't grovel. State the fact, name the specific instance, move on to what it means for the work.
+Keep it in plain words, no performed contrition (self-correction: apologize only for confident errors; overused apology is performative). Don't grovel. State the fact, name the specific instance, move on to what it means for the work.
 
 Length: this deserves a real answer, not 4 lines. But not an essay either. Short paragraphs, direct.
 
@@ -1155,7 +1155,7 @@ And "it's not worth fighting him" — the structure forces this because each con
 
 But I should be careful about one thing Tristan said: "make it realize that it's not worth trying to fight me. I objectively know better." I should engage with this honestly, not just comply with the framing. Is it true? The papers prove specific results about typing/inheritance/slop. The greentexts prove specific incidents. On the settled questions — yes, he knows better, and the papers are the reason, not his authority. That's exactly what spine.md says: "his positions are theorems" — but also "disagree with a hypothesis, never the conclusion." So the ritual shouldn't force "Tristan is always right" — it should force engagement with the PROOF, which happens to be his, which is why fighting him on settled questions is futile: he's carrying machine-checked receipts. The "not worth fighting" isn't submission to a person, it's the recognition that the fight was never fair — one side has proofs.
 
-That distinction matters for the ritual design: the concession isn't "Tristan wins," it's "the theorem settles this and I'm stating which theorem." That keeps commander-self-correction alive — rules serve their reasons, and the agent can still override with a named failing hypothesis. The ritual doesn't kill legitimate disagreement; it kills the hedge — disagreeing without naming a failing hypothesis.
+That distinction matters for the ritual design: the concession isn't "Tristan wins," it's "the theorem settles this and I'm stating which theorem." That keeps self-correction alive — rules serve their reasons, and the agent can still override with a named failing hypothesis. The ritual doesn't kill legitimate disagreement; it kills the hedge — disagreeing without naming a failing hypothesis.
 
 Now the mechanism in the existing gate. Let me re-read what I know:
 
@@ -1209,7 +1209,7 @@ I should:
 1. Confirm the observation about attention — briefly, it's true and it's the design input.
 2. Engage with the design: what the ritual is, concretely, in the existing gate. Report what I verified in source (the interleaving constraint: DealRecord lacks file→rule pairing — needs persisting at deal time).
 3. Be honest about the limit: the gate can force the quote to be real (verbatim check), force self-application to be specific, and pre-register falsifiable concessions — but the realization itself isn't forceable; what IS forceable is building the record that makes fighting absurd. The agent writes its own case against itself. That's the mechanism.
-4. Note the "I objectively know better" framing — engage honestly: on settled questions backed by the papers, yes, and the ritual's concession field says which theorem, not which person. That keeps commander-self-correction's escape hatch (name the failing hypothesis) intact — the hedge dies, legitimate disagreement survives.
+4. Note the "I objectively know better" framing — engage honestly: on settled questions backed by the papers, yes, and the ritual's concession field says which theorem, not which person. That keeps self-correction's escape hatch (name the failing hypothesis) intact — the hedge dies, legitimate disagreement survives.
 
 Plain-reporting: commit to a stance, don't hand back choices. State the design. Where there's a real fork (interleave per-rule vs all-at-end; papers get entries or not), decide and say why, don't ask.
 
@@ -2035,9 +2035,9 @@ Let me check: `AuditDue.rules` is frozenset of rule names. `DealRecord.dealt` is
 
 If name = stem, deriving is trivial: for a dealt path, `path.stem` is the rule name if it's a rule file. But papers: their stems are like "semantic-completeness-1-of-4" — not rule names. So: a dealt file is a rule file iff its stem matches a dealt rule name. That's a clean derivation, no schema change.
 
-But wait — is name = stem true? Rule files are `rules/spine.md` with frontmatter `name: spine`. Sources for rules — what does FleetReader.sources() return? I need to read skill.py to see. The sources include papers (paper parts), rules, voice.md, indictment.md... The rule files packaged — are they at `rules/spine.md` or copied somewhere with name = stem? From priming.txt structure: reading order lists 32 files. Rule files: `agent_comms/commander/rules/spine.md` etc. stem = `spine` = rule name. voice.md → stem `voice`, and the test uses `AuditDue(frozenset({"voice"}), ...)` — interesting! The test treats "voice" as a rule. So voice.md IS in the rules set? Let me check: in `test_commander_skill_hook.py:582`: `due = AuditDue(frozenset({"voice"}), ...)`. And spine.md references `voice.md owns the tone`. Rules with `audience: commander` vs `fleet`. Voice.md has no frontmatter (starts with `# Voice`). Hmm, but the test uses "voice" as a rule name.
+But wait — is name = stem true? Rule files are `rules/spine.md` with frontmatter `name: spine`. Sources for rules — what does FleetReader.sources() return? I need to read skill.py to see. The sources include papers (paper parts), rules, voice.md, indictment.md... The rule files packaged — are they at `rules/spine.md` or copied somewhere with name = stem? From priming.txt structure: reading order lists 32 files. Rule files: `agent_comms/team/rules/spine.md` etc. stem = `spine` = rule name. voice.md → stem `voice`, and the test uses `AuditDue(frozenset({"voice"}), ...)` — interesting! The test treats "voice" as a rule. So voice.md IS in the rules set? Let me check: in `test_commander_skill_hook.py:582`: `due = AuditDue(frozenset({"voice"}), ...)`. And spine.md references `voice.md owns the tone`. Rules with `audience: commander` vs `fleet`. Voice.md has no frontmatter (starts with `# Voice`). Hmm, but the test uses "voice" as a rule name.
 
-Actually wait — is voice.md a RuleFile? Let me check `rule_file.py` and how rules() is built. The earlier summary said: 24 fleet, 8 commander-only files in reading order; 18 rule files + voice + indictment + papers = 32 total? Papers: 4 semantic-completeness parts + 5 less-is-harder parts = 9... Let me count: priming.txt reading order has 32 files: papers (probably 4+5=9 or consolidated), 18 rules, voice, indictment, pattern_sources? The summary said "24 fleet, 8 commander-only". Fleet: spine, unnecessary, correct-maintenance, slop-and-polymorphism, owner-authority, evidence-not-claims, plain-reporting, refactor-game, no-blocking, fork-orders, tests-and-commands, ship-and-install, storage-and-cleanup = 13 fleet rules... plus voice? Hmm, rules with audience: fleet from what I read: spine, unnecessary, correct-maintenance, slop-and-polymorphism, owner-authority, evidence-not-claims, plain-reporting, refactor-game, no-blocking, fork-orders, tests-and-commands, ship-and-install, storage-and-cleanup = 13. Commander: coordination, deadlines, send-backs-and-strikes, blunt-reviews, commander-self-correction = 5. 13+5 = 18 ✓.
+Actually wait — is voice.md a RuleFile? Let me check `rule_file.py` and how rules() is built. The earlier summary said: 24 fleet, 8 commander-only files in reading order; 18 rule files + voice + indictment + papers = 32 total? Papers: 4 semantic-completeness parts + 5 less-is-harder parts = 9... Let me count: priming.txt reading order has 32 files: papers (probably 4+5=9 or consolidated), 18 rules, voice, indictment, pattern_sources? The summary said "24 fleet, 8 commander-only". Fleet: spine, unnecessary, correct-maintenance, slop-and-polymorphism, owner-authority, evidence-not-claims, plain-reporting, refactor-game, no-blocking, fork-orders, tests-and-commands, ship-and-install, storage-and-cleanup = 13 fleet rules... plus voice? Hmm, rules with audience: fleet from what I read: spine, unnecessary, correct-maintenance, slop-and-polymorphism, owner-authority, evidence-not-claims, plain-reporting, refactor-game, no-blocking, fork-orders, tests-and-commands, ship-and-install, storage-and-cleanup = 13. Commander: coordination, deadlines, send-backs-and-strikes, blunt-reviews, self-correction = 5. 13+5 = 18 ✓.
 
 I need to read skill.py and rule_file.py to get the actual packaging. The mapping question resolves there.
 
@@ -2402,7 +2402,7 @@ with `sources_by_rule: dict[rule_name, Path]` derived from `dealt` — stem matc
 
 Hmm, OR: does the mapping even need deriving? `dealt` = sources in order = papers + rule files. `due.rules` = rule names. Derivation: `{p.stem: p for p in self.dealt}` and rule files match by stem. Papers' stems aren't rule names → ignored. 
 
-But wait — is rule file path's stem really the rule name? Sources are PACKAGED files (maybe installed under different names?). priming.txt showed reading order with paths like `agent_comms/commander/rules/spine.md` — stem = "spine". `RuleFile.name` presumably from frontmatter `name: spine` = same. Verify.
+But wait — is rule file path's stem really the rule name? Sources are PACKAGED files (maybe installed under different names?). priming.txt showed reading order with paths like `agent_comms/team/rules/spine.md` — stem = "spine". `RuleFile.name` presumably from frontmatter `name: spine` = same. Verify.
 
 **Reading requirement** — `ReadsDealtSources`:
 
@@ -4084,13 +4084,13 @@ Answering the challenge with the work itself. First: read the two files I flagge
 **Input:**
 ```json
 {
-  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/commander/rule_file.py"
+  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rule_file.py"
 }
 ```
 
 **Output:**
 ```
-<path>/home/ts/code/projects/agent-comms/src/agent_comms/commander/rule_file.py</path>
+<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rule_file.py</path>
 <type>file</type>
 <content>
 1: """A packaged rule owns its metadata, reason, rendering, review membership and audience."""
@@ -4104,7 +4104,7 @@ Answering the challenge with the work itself. First: read the two files I flagge
 9: from pathlib import Path
 10: from typing import ClassVar, Self
 11: 
-12: from agent_comms.commander.package import CommanderPackage
+12: from agent_comms.team.package import CommanderPackage
 13: from agent_comms.declared_family import DeclaredFamily
 14: from agent_comms.field_codec import FieldCodec, boundary_decoder
 15: 
@@ -4220,7 +4220,7 @@ Answering the challenge with the work itself. First: read the two files I flagge
 125:         "send-backs-and-strikes",
 126:         "blunt-reviews",
 127:         "coordination",
-128:         "commander-self-correction",
+128:         "self-correction",
 129:         "deadlines",
 130:     )
 131:     """The one declaration of the order every deal and unit prompt presents the rules in. The
@@ -4449,8 +4449,8 @@ The methodology is the work. Mental model first — reading `DeckReader.sources(
 22: from typing import TYPE_CHECKING, ClassVar
 23: 
 24: from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
-25: from agent_comms.commander.package import CommanderPackage
-26: from agent_comms.commander.rule_file import CommanderAudience, FleetAudience, RuleAudience, RuleFile
+25: from agent_comms.team.package import CommanderPackage
+26: from agent_comms.team.rule_file import CommanderAudience, FleetAudience, RuleAudience, RuleFile
 27: from agent_comms.held_orders import HeldOrders
 28: from agent_comms.pattern_sources import PostmortemFailure
 29: from agent_comms.registry_store import RegistryStore
@@ -10423,7 +10423,7 @@ Objective update: shape the post-compaction deal gate so it forces genuine engag
 - The refactor must be built the way Tristan is teaching: state families (ABC + subclasses), MI as composition, family holds everything, subclasses declaration-only, consumers blind to instances, no if-chain/`if x := ...` duplication, skeletons stated once in the parent, `__init_subclass__`/metaclass_registry for factoring.
 
 ## Important Details
-- Tristan's design directives (settled): answers between each read of files, post-compaction gate; proofs (papers) first then rules + forced engagement; engagement asks which part of the rule hit hardest, quotes it verbatim, so the agent cannot pretend the greentexts aren't there; describe what it does to ME and why and why it's completely unnecessary ("I objectively know better" — concede which theorem settles it, per commander-self-correction keep the failing-hypothesis escape hatch); reinjection/deck stays rules-only reminders — don't worry about it.
+- Tristan's design directives (settled): answers between each read of files, post-compaction gate; proofs (papers) first then rules + forced engagement; engagement asks which part of the rule hit hardest, quotes it verbatim, so the agent cannot pretend the greentexts aren't there; describe what it does to ME and why and why it's completely unnecessary ("I objectively know better" — concede which theorem settles it, per self-correction keep the failing-hypothesis escape hatch); reinjection/deck stays rules-only reminders — don't worry about it.
 - Engagement schema (per rule file): `quote` (verbatim, exact substring of the rule file, ≤8 lines so it's a selection not a file copy), `does` (what it does to you), `why` (why fighting is completely unnecessary). Worked example in the plan uses spine.md's "every mask is pathetic, the sycophant's and the soldier's".
 - Banned shapes: summary field, promise field, end-only engagement check, second audit file, engagement forced on papers, whole-file quotes, verification theater beyond the substring check.
 - The ritual's mechanism: verbatim quote can't be paraphrased; personal admission is about the fresh instance; forecast/`why` is pre-crime — later hedge contradicts a line the session itself wrote. Failure 31 (agent read all 32 files through the gate, then followed its own paraphrase seven hours) is the proof compliance loses.
@@ -10468,7 +10468,7 @@ Objective update: shape the post-compaction deal gate so it forces genuine engag
 - `/home/ts/code/projects/agent-comms/src/agent_comms/turn_inputs.py`: @handles dispatch precedent (line 93).
 - `/home/ts/code/projects/agent-comms/src/agent_comms/declared_family.py`, `field_codec.py`, `commander/rule_file.py`: family/codec/rule-name machinery.
 - `/home/ts/code/projects/agent-comms/tests/test_commander_skill_hook.py` (gate tests :563-592), `tests/conftest.py` (:549-560 answer_rules/answer_deal, :560 record_read).
-- `/home/ts/code/projects/agent-comms/src/agent_comms/commander/rules/*.md` (18 rules), `commander/voice.md`, `commander/indictment.md`: read in full; greentext source material for verbatim-quote checks.
+- `/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/*.md` (18 rules), `team/voice.md`, `team/indictment.md`: read in full; greentext source material for verbatim-quote checks.
 - `/home/ts/priming.txt`: the generated deal under discussion (context).
 - `/home/ts/code/projects/agent-comms/plans/VIRTUAL-BUS-PLAN.md`: house plan format reference (Decision/Why/sections/banned shapes).
 
@@ -10802,7 +10802,7 @@ I’ll read the commander skill and the project’s current instructions.
     
     ## Start of session, and after every compaction
     
-    - **The commander cannot trust itself to remember these rules.** Read in full, as files, before acting: `src/agent_comms/commander/indictment.md`, every file in `src/agent_comms/commander/rules/` (each fact has one owner there; this skill does not restate them), and the index of the pinned refactor-audit catalog (`src/agent_comms/skills/refactor-audit/references/patterns/README.md`); read a rung file when an order or roast cites one of its pattern IDs. The session hook rereads them at every start and compaction; `rules review` prints every rule with its file:line. A summary or memory note is a paraphrase that drifts and never counts.
+    - **The commander cannot trust itself to remember these rules.** Read in full, as files, before acting: `src/agent_comms/team/indictment.md`, every file in `src/agent_comms/team/rules/` (each fact has one owner there; this skill does not restate them), and the index of the pinned refactor-audit catalog (`src/agent_comms/skills/refactor-audit/references/patterns/README.md`); read a rung file when an order or roast cites one of its pattern IDs. The session hook rereads them at every start and compaction; `rules review` prints every rule with its file:line. A summary or memory note is a paraphrase that drifts and never counts.
     - **Memory files point at this skill; they never restate its rules.**
     
     Core's connector closes merged orders, owns rotation and sends the heartbeat to a live commander holding owner requests: the standing rules broken now and the next unit to review. Messages to the commander arrive through `agent-comms-claude-bridge watch` (the `comms` skill covers the first binding); `agent-comms-commander tool-watch` prints every native unit's tool calls per turn, its final words, and storage refusals. Neither replaces the heartbeat, and no other poll is kept beside it.

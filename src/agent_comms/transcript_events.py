@@ -91,7 +91,7 @@ class ImportedInput(ImportedMessage):
 
 
 class ImportedRequest(PresentMember, ImportedInput):
-    """A person's or a commanding agent's prompt."""
+    """A person's or a directing agent's prompt."""
 
     def remember(self, buffer: ImportBuffer) -> None:
         buffer.latest_request = self.body[: buffer.limits.per_message]

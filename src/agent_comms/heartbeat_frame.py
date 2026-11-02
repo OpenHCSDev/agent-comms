@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class CommanderInputs(HeldOrders):
+class TeamInputs(HeldOrders):
     """The live hold cut and acquired inputs that observation must not reopen."""
 
     pulls: ProgressRead
@@ -58,7 +58,7 @@ class CommanderInputs(HeldOrders):
 
 
 @dataclass(frozen=True)
-class HeartbeatFrame(CommanderInputs):
+class HeartbeatFrame(TeamInputs):
     """One beat's observed answers, sharing its already prepared hold/forge/plan inputs."""
 
     answers: tuple[OwedAnswer, ...]
@@ -102,7 +102,7 @@ class HeartbeatFrame(CommanderInputs):
         return self._edit_counts
 
     @classmethod
-    def capture(cls, comms: Comms, commander: str, inputs: CommanderInputs,
+    def capture(cls, comms: Comms, commander: str, inputs: TeamInputs,
                 plans: PlanReadings) -> Self:
         snapshot = comms.registry.snapshot()
         project = snapshot.commander_project.require()

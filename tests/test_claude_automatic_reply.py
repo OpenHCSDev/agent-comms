@@ -23,11 +23,11 @@ from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.threads import Thread
 from agent_comms.harness_delivery_states import DeliveredOutcome
 from agent_comms.messages import AckKind, AlertKind, HandoffKind, InfoKind, Message, MessageKind, NoticeRole, QuestionKind
-from agent_comms.channel_targets import CommandersTag, ThreadTarget
+from agent_comms.channel_targets import TeammatesTag, ThreadTarget
 from agent_comms.repo import Checkout
 from agent_comms.turn_digests import LastTurns
 from agent_comms.registration import Registration
-from agent_comms.registry_document import RegisteredCommanderProject
+from agent_comms.registry_document import RegisteredTeamProject
 from agent_comms.runtime_updates import AllTurnsCancelled, AllTurnsEnded, RuntimeUpdate, ThreadOutput
 from agent_comms.turn_item import NamedSourceTurn, NativeTurnId
 from transcript_record_fixture import transcript_record
@@ -195,10 +195,10 @@ def assert_opening_send(comms: Comms, opening: Message, later: Message, turn_id:
 
 
 @pytest.mark.asyncio
-async def test_commander_send_answers_only_the_question_that_opened_its_turn(bridge: ClaudeBridge) -> None:
+async def test_team_send_answers_only_the_question_that_opened_its_turn(bridge: ClaudeBridge) -> None:
     comms = bridge.comms
     commander = comms.registry.require('viewer')
-    comms.registry.set_commander_project(RegisteredCommanderProject(commander.incarnation, ()))
+    comms.registry.set_team_project(RegisteredTeamProject(commander.incarnation, ()))
     output = bridge.output_type.for_comms(comms.transcripts.external('viewer'), comms)
     session = ClaudeSession()
     opening = comms.messaging.send('peer', 'viewer', 'Please investigate', QuestionKind).message
@@ -317,10 +317,10 @@ async def test_twelve_directives_require_the_final_of_the_turn_they_opened(
     comms = bridge.comms
     commander = comms.registry.require('viewer')
     comms.registry.declare(
-        Thread('peer', frozenset({CommandersTag.declared_name}), Checkout(Path.cwd())),
+        Thread('peer', frozenset({TeammatesTag.declared_name}), Checkout(Path.cwd())),
         StoppedThreadStatus(),
     )
-    comms.registry.set_commander_project(RegisteredCommanderProject(commander.incarnation, ()))
+    comms.registry.set_team_project(RegisteredTeamProject(commander.incarnation, ()))
     output = bridge.output_type.for_comms(comms.transcripts.external('viewer'), comms)
     session = ClaudeSession()
     output.publish_batch(list(opening_record('previous-turn').updates(session)))

@@ -8,7 +8,7 @@ import time
 
 import pytest
 
-from agent_comms.commander.order import Commander, CommanderContext
+from agent_comms.team.order import Team, TeamContext
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.head_review import CombinedInput, IntegrationInput, IntegrationSource, PullRequestHead
@@ -18,7 +18,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.todos import DraftListedPullRequest, PullRequests, RecordPullRequest
-from agent_comms.tool_caller import CommanderPeerCaller
+from agent_comms.tool_caller import PeerCaller
 from fixture_git import ENVIRONMENT
 from github_fixture import GitHubFixture
 from source_revision_fixture import SourceRepository
@@ -27,7 +27,7 @@ from module_layers import MaterializedClients
 
 @dataclass(frozen=True)
 class MutualSources:
-    context: CommanderContext
+    context: TeamContext
     core: SourceRepository
     client: SourceRepository
     checkout: IntegrationCheckout
@@ -64,7 +64,7 @@ class MutualSources:
 @pytest.fixture
 def source_pair(
     held_bus: Comms,
-    configured_repository: Callable[[Comms, *tuple[Repo, ...]], Commander],
+    configured_repository: Callable[[Comms, *tuple[Repo, ...]], Team],
     github_cli: GitHubFixture,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -137,6 +137,6 @@ def mutual_sources(source_pair: MutualSources) -> MutualSources:
                       check=replace(primary.order.check, directory=source_pair.client.checkout)),
         review_at=RecordedEventTime(time.time() + 3600),
     )
-    CommanderPeerCaller("worker").as_thread("lead").invoke(
+    PeerCaller("worker").as_thread("lead").invoke(
         CommsTodoCreateTool(owner="worker", order=creation), comms)
     return source_pair

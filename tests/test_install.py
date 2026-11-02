@@ -20,9 +20,9 @@ from agent_comms.bus import Bus
 from agent_comms.recorded_bus import RecordedBusIdentity
 from bus_record_fixture import prepare_native_comms
 from agent_comms.comms import wire
-from agent_comms.commander.config import GivenRepos, KeptRepos, NamedCommander
+from agent_comms.team.config import GivenRepos, KeptRepos, NamedTeam
 from agent_comms.repo import Repo, RepositoryName
-from agent_comms.registry_document import NoCommanderProject, RegisteredCommanderProject
+from agent_comms.registry_document import NoTeamProject, RegisteredTeamProject
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.backup import bus_files
@@ -159,8 +159,8 @@ def test_install_report_encodes_its_registered_harnesses() -> None:
     from agent_comms.installer.probes.harnesses import InstallResult
     from agent_comms.nominal.field_codec import FieldCodec
 
-    for config in (RegisteredCommanderProject(RecordedThreadIncarnation("lead", 1.0), ()),
-                   NoCommanderProject()):
+    for config in (RegisteredTeamProject(RecordedThreadIncarnation("lead", 1.0), ()),
+                   NoTeamProject()):
         report = InstallResult(config, {"claude-code": ("skill", "tools")})
         assert FieldCodec.decode(InstallResult, FieldCodec.encode(report)) == report
 
@@ -173,7 +173,7 @@ def _harnessless_home(directory: Path, monkeypatch) -> Path:
     return home
 
 
-def test_an_install_on_a_bus_with_no_commander_writes_no_commander_config(private_directory, monkeypatch):
+def test_an_install_on_a_bus_with_no_team_writes_no_team_config(private_directory, monkeypatch):
     # The laptop's install failed its last step: the flag default named this machine's commander.
     from agent_comms.cli_verbs.install import InstallCliCommand
 
@@ -182,16 +182,16 @@ def test_an_install_on_a_bus_with_no_commander_writes_no_commander_config(privat
     comms = wire(root)
     home = _harnessless_home(private_directory, monkeypatch)
     result = InstallCliCommand(project=private_directory).apply(comms)
-    assert result.config == NoCommanderProject()
+    assert result.config == NoTeamProject()
     assert not (root / "commander.json").exists()
     assert not (home / ".config/agent-comms/commander.json").exists()
 
 
 @pytest.mark.parametrize("flags", [
-    {"commander": NamedCommander("lead")},
+    {"commander": NamedTeam("lead")},
     {"repos": GivenRepos((Path("/checkout"),))},
 ], ids=["commander-without-repos", "repos-without-commander"])
-def test_an_install_refuses_flags_a_bus_without_a_commander_record_cannot_use(
+def test_an_install_refuses_flags_a_bus_without_a_team_record_cannot_use(
     private_directory, monkeypatch, flags,
 ):
     from agent_comms.cli_verbs.install import InstallCliCommand
@@ -206,7 +206,7 @@ def test_an_install_refuses_flags_a_bus_without_a_commander_record_cannot_use(
     assert not (root / "commander.json").exists() and not (home / ".config/agent-comms/commander.json").is_symlink()
 
 
-def test_an_install_without_flags_keeps_native_commander_and_parked_state(
+def test_an_install_without_flags_keeps_native_team_and_parked_state(
     private_directory, monkeypatch,
 ):
     import multiprocessing
@@ -222,8 +222,8 @@ def test_an_install_without_flags_keeps_native_commander_and_parked_state(
     comms.registry.declare(Thread(
         "parked-unit", frozenset(), Checkout(private_directory)))
     comms.registry.set_work_state("parked-unit", ParkedThreadWorkState())
-    recorded = RegisteredCommanderProject(comms.registry.require("lead").incarnation, ())
-    comms.registry.set_commander_project(recorded)
+    recorded = RegisteredTeamProject(comms.registry.require("lead").incarnation, ())
+    comms.registry.set_team_project(recorded)
     home = _harnessless_home(private_directory, monkeypatch)
     before = comms.registry.store.path.read_bytes()
     context = multiprocessing.get_context("spawn")
@@ -243,14 +243,14 @@ def test_an_install_without_flags_keeps_native_commander_and_parked_state(
     assert not (home / ".config/agent-comms/commander.json").exists()
     assert comms.registry.require("parked-unit").work_state == ParkedThreadWorkState()
     comms.registry.declare(Thread("replacement", frozenset(), Checkout(private_directory)))
-    changed = InstallCliCommand(project=private_directory, commander=NamedCommander("replacement")).apply(comms)
+    changed = InstallCliCommand(project=private_directory, commander=NamedTeam("replacement")).apply(comms)
     assert changed.config.commander == comms.registry.require("replacement").incarnation
     assert comms.registry.snapshot().commander_project == changed.config
 
 
-def test_the_commander_verb_names_a_lead_and_removes_a_commander_at_runtime(private_directory):
+def test_the_team_verb_names_a_lead_and_removes_a_team_at_runtime(private_directory):
     # Tristan 10-30: commanders are assigned at runtime, not only by a five-minute install.
-    from agent_comms.cli_verbs.commander import CommanderCliCommand
+    from agent_comms.cli_verbs.team import TeamCliCommand
     from agent_comms.errors import RelationViolationError
 
     root = private_directory / "wire"
@@ -259,22 +259,22 @@ def test_the_commander_verb_names_a_lead_and_removes_a_commander_at_runtime(priv
     comms.registry.declare(Thread("old-lead", frozenset(), Checkout(private_directory)))
     comms.registry.declare(Thread("new-lead", frozenset({"commanders"}), Checkout(private_directory)))
     comms.registry.declare(Thread("peer", frozenset({"commanders"}), Checkout(private_directory)))
-    recorded = RegisteredCommanderProject(
+    recorded = RegisteredTeamProject(
         comms.registry.require("old-lead").incarnation, (Repo(checkout=private_directory, github=RepositoryName.from_wire("owner/repo")),))
-    comms.registry.set_commander_project(recorded)
-    named = CommanderCliCommand(lead=NamedCommander("new-lead")).apply(comms)
+    comms.registry.set_team_project(recorded)
+    named = TeamCliCommand(lead=NamedTeam("new-lead")).apply(comms)
     project = comms.registry.snapshot().commander_project
     assert project == recorded.named(comms.registry.require("new-lead").incarnation, KeptRepos())
     assert project.repos == recorded.repos
     assert named.leads == ("new-lead",) and "old-lead" not in named.commanders
     before = comms.registry.store.path.read_bytes()
     with pytest.raises(RelationViolationError):
-        CommanderCliCommand(remove=frozenset({"new-lead"})).apply(comms)
+        TeamCliCommand(remove=frozenset({"new-lead"})).apply(comms)
     with pytest.raises(RelationViolationError):
-        CommanderCliCommand(lead=NamedCommander("peer"),
+        TeamCliCommand(lead=NamedTeam("peer"),
                             remove=frozenset({"peer", "new-lead"})).apply(comms)
     assert comms.registry.store.path.read_bytes() == before
-    removed = CommanderCliCommand(remove=frozenset({"peer"})).apply(comms)
+    removed = TeamCliCommand(remove=frozenset({"peer"})).apply(comms)
     assert removed.commanders == ("new-lead",)
     assert "commanders" not in comms.registry.require("peer").tags
 

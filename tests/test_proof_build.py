@@ -16,8 +16,8 @@ from agent_comms.build_identity import (
     UninstalledRepositoryError,
 )
 from agent_comms.check_root import CheckRoot
-from agent_comms.commander.order import Commander
-from agent_comms.commander.standing import InstallDue
+from agent_comms.team.order import Team
+from agent_comms.team.standing import InstallDue
 from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.goal_actions import CreateProblemGoalAction
@@ -369,7 +369,7 @@ def test_install_due_compares_fetched_main_to_installed_build(
         with pytest.raises(UninstalledRepositoryError):
             RecordedBuildIdentity.installed().for_repository(extra)
     registered = (graph.repository, *extras)
-    Commander.on_root("lead", registered, bus.root)
+    Team.on_root("lead", registered, bus.root)
 
     github_cli.configure(graph.repository.github)
     due = InstallDue.due(bus, ProgressRead())
@@ -429,7 +429,7 @@ def test_a_one_minute_old_merge_is_due_and_names_its_request_without_launching(
         42, "fix/next", "b" * 40, stamp, "main", reviewable_times=(stamp,), armed_times=(stamp,)))
     bus = wire(tmp_path / "bus")
     bus.registry.declare(Thread("lead", frozenset(), Checkout(checkout)))
-    Commander.on_root("lead", (graph.repository,), bus.root)
+    Team.on_root("lead", (graph.repository,), bus.root)
     merged = int(Repo.git(checkout, "log", "-1", "--format=%ct", merge))
     monkeypatch.setattr(time, "time", lambda: merged + 60)
 

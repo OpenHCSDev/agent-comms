@@ -12,9 +12,9 @@ from agent_comms.presentation import WireRevision
 from agent_comms.private_path import FileRevision
 from agent_comms.revision_views import StatusView
 from agent_comms.ui_model.observation import (
-    CommanderHudReading,
+    TeamHudReading,
     NotificationReading,
-    ObserveCommanderHud,
+    ObserveTeamHud,
     ObserveNotifications,
     ObservationPending,
     ObservationService,
@@ -103,7 +103,7 @@ class CountReads:
 
 @pytest.mark.parametrize('member,interest,own_field,unrelated_field', [
     (SidebarReading, ObserveSidebar(Checkout(Path('worktree')), True, True), 'bus_seq', 'commander_frames'),
-    (CommanderHudReading, ObserveCommanderHud(), 'commander_frames', 'bus_seq'),
+    (TeamHudReading, ObserveTeamHud(), 'commander_frames', 'bus_seq'),
     (NotificationReading, ObserveNotifications(frozenset()), 'reads', 'commander_frames'),
     (ThreadReading, ObserveThreads(frozenset()), 'bus_seq', 'commander_frames'),
 ])

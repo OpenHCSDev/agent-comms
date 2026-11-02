@@ -5,11 +5,11 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.commander.standing import GoalBlocked, RequestStalled
+from agent_comms.team.standing import GoalBlocked, RequestStalled
 from agent_comms.goal_actions import SetGoalAction
-from agent_comms.heartbeat_subjects import CommanderHistory
+from agent_comms.heartbeat_subjects import TeamHistory
 from agent_comms.goal_states import ActiveGoal, BlockedGoal, UnrecordedBlockGoal
-from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderUpdate, RulePing
+from agent_comms.task_attachments.team_pings import TeamDecisions, TeamUpdate, RulePing
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.text_digest import TextDigest
 
@@ -68,9 +68,9 @@ def test_blocked_goal_leads_the_board_and_clears_when_active(comms, tmp_path, st
     now = time.time()
     old = RulePing(RequestStalled, TextDigest.of("old housekeeping"),
                    text="IDLE housekeeping", since=RecordedEventTime(now - 600))
-    previous = CommanderDecisions(thread.incarnation, (old,), (old,), ())
-    history = CommanderHistory.read(comms, frozenset({thread.name}))
-    delivery = CommanderUpdate.derive(thread.incarnation, (), (rule,), (previous,),
+    previous = TeamDecisions(thread.incarnation, (old,), (old,), ())
+    history = TeamHistory.read(comms, frozenset({thread.name}))
+    delivery = TeamUpdate.derive(thread.incarnation, (), (rule,), (previous,),
                                        published=(previous,), now=now, history=history)
     update = delivery.packet
     assert update.handled[0].urgent
@@ -80,7 +80,7 @@ def test_blocked_goal_leads_the_board_and_clears_when_active(comms, tmp_path, st
         comms.registry.status("paper"),
     )
     assert GoalBlocked.violations(comms, "paper") == ()
-    cleared = CommanderUpdate.derive(thread.incarnation, (), (), (update,),
+    cleared = TeamUpdate.derive(thread.incarnation, (), (), (update,),
                                      published=(update,), now=now + 60, history=history)
     assert cleared.packet.handled == ()
 

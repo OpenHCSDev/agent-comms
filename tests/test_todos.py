@@ -24,12 +24,12 @@ from pathlib import Path
 import pytest
 
 from agent_comms.child_process import NoProcess, ProcessIdentity
-from agent_comms.commander.order import Commander, PullRequestVerb, SayVerb
+from agent_comms.team.order import Team, PullRequestVerb, SayVerb
 from agent_comms.standing_rules import OwedAnswer, StandingRule
-from agent_comms.task_attachments.commander_pings import RulePing
-from agent_comms.ui_model.unit_state import AwaitingCommander
-from agent_comms.commander.standing import RetainedHolderWheelSpin, UnownedOrderWatch, UnownedWheelSpin
-from agent_comms.commander_heartbeat import CommanderHeartbeat
+from agent_comms.task_attachments.team_pings import RulePing
+from agent_comms.ui_model.teammate_state import AwaitingTeam
+from agent_comms.team.standing import RetainedHolderWheelSpin, UnownedOrderWatch, UnownedWheelSpin
+from agent_comms.team_heartbeat import TeamHeartbeat
 from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId
 from agent_comms.goal_actions import SetGoalAction
@@ -275,7 +275,7 @@ def test_withdrawn_order_is_not_a_recurrence(tmp_path, source_repository):
     )
     store.apply(original.id, WithdrawTodo(
         original.revision, lead.incarnation, original.held(),
-        "The commander sent this order in error before any repair.",
+        "The teammate sent this order in error before any repair.",
     ))
     replacement = replace(order(source_repository), id=OrderId.mint(), at=RecordedEventTime(30))
     store.require_recurrence_declaration(
@@ -399,14 +399,14 @@ def test_merged_order_refuses_a_new_pull_request(
                              PullRequestLink(repo, 3085), held.generation)
     with pytest.raises(TodoError, match="merged as 2b9c1f1ab"):
         link.changed(merged)
-    with pytest.raises(TodoError, match="Ask the commander for a send-back"):
+    with pytest.raises(TodoError, match="Ask the teammate for a send-back"):
         merged.order.open_pull_request(merged, source_repository, "Title", "Body", store,
                                        held.owner_identity)
     assert github_cli.calls() == ()
     assert link.changed(todo).order.checked().pull_requests == (PullRequestLink(repo, 3085),)
 
 @pytest.fixture
-def pr_commander(tmp_path, monkeypatch, proof_build_checkouts, durable_home, github_cli):
+def pr_team(tmp_path, monkeypatch, proof_build_checkouts, durable_home, github_cli):
     """One cited source, its real bare remote and installed history; only GitHub is synthetic."""
     graph = next(graph for graph in proof_build_checkouts
                  if graph.repository.github == CorePackage.repository)
@@ -418,7 +418,7 @@ def pr_commander(tmp_path, monkeypatch, proof_build_checkouts, durable_home, git
     (source.checkout / module).parent.mkdir(parents=True)
     shutil.copyfile(current / module, source.checkout / module)
     source.git(source.checkout, 'add', 'plans', 'src')
-    source.git(source.checkout, 'commit', '-qm', 'Declare current commander plans')
+    source.git(source.checkout, 'commit', '-qm', 'Declare current teammate plans')
     source.git(source.checkout, 'push', '-q', 'origin', 'HEAD:main')
     merged = graph.installed
     for number in (1, 2):
@@ -444,10 +444,10 @@ def pr_commander(tmp_path, monkeypatch, proof_build_checkouts, durable_home, git
     Registration(tmp_path / "registry.json").register(lead)
     # The source carries the copied plans; a second checkout of its repository would
     # be compared against the source's installed commit, which it never holds.
-    Commander.on_root('lead', (source,), tmp_path)
+    Team.on_root('lead', (source,), tmp_path)
     bus = wire(tmp_path)
     bus.goals.todos.add_request(lead.incarnation, "Repair the copied order workflow")
-    return Commander.read_root(tmp_path)
+    return Team.read_root(tmp_path)
 
 
 def pr_order(
@@ -481,15 +481,15 @@ def adopt_pr(ctx, pid, number):
     return ctx.comms.goals.todos.get(pid)
 
 
-def test_order_pr_adopts_a_registered_companion_once(pr_commander, proof_build_checkouts,
+def test_order_pr_adopts_a_registered_companion_once(pr_team, proof_build_checkouts,
                                                      github_cli, tmp_path):
     """An agent-comms order records a registered Toad PR from its companion checkout; an
     unregistered repository's PR is refused at the Todo write; repeating changes nothing."""
-    core = pr_commander.repos[0]
+    core = pr_team.repos[0]
     toad, textual = (next(graph.repository for graph in proof_build_checkouts
                           if graph.repository.github == package.repository)
                      for package in (ToadPackage, TextualPackage))
-    ctx = Commander.on_root('lead', (core, toad), pr_commander.root)
+    ctx = Team.on_root('lead', (core, toad), pr_team.root)
     # Core already has PR 1: the companion link must name Toad's 1, never the order's repo.
     for repository in (toad, textual):
         github_cli.configure(repository.github)
@@ -512,7 +512,7 @@ def test_order_pr_adopts_a_registered_companion_once(pr_commander, proof_build_c
     body.write_text("A companion PR is never created by this order.")
     with pytest.raises(SystemExit, match="adopt a companion PR with --existing"):
         order_pr(ctx, toad_checkout, original.id, "--title", "Companion", "--body-file", str(body))
-    with pytest.raises(TodoError, match="openhcsdev/textual is not a repository of this commander project"):
+    with pytest.raises(TodoError, match="openhcsdev/textual is not a repository of this team project"):
         order_pr(ctx, textual_checkout, original.id, "--existing", "1")
     assert TodoStore(ctx.root).get(original.id) == original
 
@@ -538,9 +538,9 @@ def github_body(ctx, number):
 
 
 @pytest.fixture
-def released_published_orders(pr_commander, github_cli):
+def released_published_orders(pr_team, github_cli):
     """Real clean pushed trees and released rows; only the external forge is synthetic."""
-    ctx = pr_commander
+    ctx = pr_team
     c, source = ctx.comms, ctx.repos[0]
     declared = {}
     for name in ('pi-mi', 'unit-installer', 'unit-backend', 'aaa-idle'):
@@ -576,7 +576,7 @@ def released_published_orders(pr_commander, github_cli):
         # saved before that rule can hold the watcher's release, so it is written as that row.
         release = ReleaseTodo(
             row.revision, CoreWatcherIncarnation.watcher(), row.held(),
-            StrikeReason('The watcher released this active unit while its published work remains open.'))
+            StrikeReason('The watcher released this active teammate while its published work remains open.'))
         released = release.apply(row)
         with c.goals.todos.writing() as db:
             StoredOrderStory.archive(db, row, released.order)
@@ -596,7 +596,7 @@ def test_released_open_work_restores_its_own_holder_never_swaps(released_publish
         assert {rule.todo.id for rule in rules} == set(originals)
         assert all(isinstance(rule, RetainedHolderWheelSpin) for rule in rules)
         # 2026-10-25: Core restores the holder itself; KEEP lines locked the verbs for 169 min.
-        assert all(not RulePing.capture(rule).commander_disposes for rule in rules)
+        assert all(not RulePing.capture(rule).team_disposes for rule in rules)
         assert StandingRule.enforce_all(c, ctx.commander, rules) == {}
         for problem, before in originals.items():
             after = c.goals.todos.get(problem)
@@ -627,8 +627,8 @@ def test_only_retired_holder_or_closed_pr_allows_cross_unit_dispatch(
         assert all(c.goals.todos.get(pid).holder is None for pid in originals)
 
 
-def test_recorded_closed_request_is_not_open_or_merged(pr_commander):
-    ctx = pr_commander
+def test_recorded_closed_request_is_not_open_or_merged(pr_team):
+    ctx = pr_team
     original = pr_order(ctx, "P1")
     linked = adopt_pr(ctx, original.id, 3)
     pulls = ProgressRead((linked,))
@@ -637,8 +637,8 @@ def test_recorded_closed_request_is_not_open_or_merged(pr_commander):
     assert len(pulls.listed(linked.repo, ClosedListedPullRequest, linked)) == 1
 
 
-def test_order_is_merged_only_when_every_linked_request_merged(pr_commander, github_cli):
-    ctx = pr_commander
+def test_order_is_merged_only_when_every_linked_request_merged(pr_team, github_cli):
+    ctx = pr_team
     source = ctx.repos[0]
     merged = subprocess.run(("git", "-C", str(source.checkout), "rev-parse", "HEAD"),
                             capture_output=True, text=True, check=True).stdout.strip()
@@ -695,15 +695,15 @@ def test_order_is_merged_only_when_every_linked_request_merged(pr_commander, git
         assert all(item.order.sha == merged for item in closed)
 
 
-def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch):
+def test_watcher_git_and_github_reads_leave_wire_free(pr_team, monkeypatch):
     """Both real watcher entrypoints, a copied bus, real Git and the external forge stub."""
     pr_work_goal_id = GoalId.mint()
-    ctx = pr_commander
+    ctx = pr_team
     source = ctx.repos[0]
     with LaunchRoot.from_path(ctx.root).selected():
         c = ctx.comms
         c.goals.update_goal(ctx.commander, SetGoalAction(
-            text="Keep the commander request active for both watcher passes",
+            text="Keep the teammate request active for both watcher passes",
             goal_id=pr_work_goal_id))
         lead = c.registry.require(ctx.commander)
         c.registry.register(replace(lead, process_identity=ProcessIdentity.capture(os.getpid())))
@@ -725,7 +725,7 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
             sent.reference, store=c.goals.todos,
         )
         claim = replace(claim, message=replace(
-            claim.message, timestamp=time.time() - AwaitingCommander.seconds - 1))
+            claim.message, timestamp=time.time() - AwaitingTeam.seconds - 1))
         original = ClaimOrder(
             original.revision, worker.incarnation, original.held().generation, claim,
         ).record(c.goals, original.id)
@@ -773,19 +773,19 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
             monkeypatch.setenv("PATH", os.pathsep.join((str(binaries), os.environ["PATH"])))
             observed = []
             # Run the standalone watcher while the released checkout is still pending.
-            for watch in (UnownedOrderWatch(), CommanderHeartbeat()):
+            for watch in (UnownedOrderWatch(), TeamHeartbeat()):
                 start = calls.stat().st_size
                 asyncio.run(watch.run(lambda: nullcontext(copied)))
                 readings = calls.read_text()[start:].splitlines()
                 observed.extend(readings)
             application = copied.goals.todos.get(original.id)
             assert application.order.sha == merged and not application.order.accepted
-            assert application.order.commander_claims() == ()
+            assert application.order.team_claims() == ()
             assert not any(rule.message.message_id == claim.message.message_id
                            for rule in OwedAnswer.opened(copied, ctx.commander))
             report = root / "after-merge.txt"
             report.write_text("Merged; installation evidence is still pending")
-            SayVerb(units="#comms", body_file=str(report)).apply(Commander.read_root(root))
+            SayVerb(units="#comms", body_file=str(report)).apply(Team.read_root(root))
             assert copied.goals.todos.get(released.id).held() == released.held()
             assert any(line.startswith("gh ") for line in observed)
             assert any(line.startswith("git ") for line in observed)
@@ -795,7 +795,7 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
 
 
 def test_reused_enforcement_rejects_a_new_idle_goal(checkout_bus):
-    from agent_comms.commander.standing import ReassignedWheelSpin, UnownedWheelSpin
+    from agent_comms.team.standing import ReassignedWheelSpin, UnownedWheelSpin
     from agent_comms.goals import GoalChangedError, NoGoal
 
     with LaunchRoot.from_path(checkout_bus.root).selected():
@@ -818,8 +818,8 @@ def test_reused_enforcement_rejects_a_new_idle_goal(checkout_bus):
 
 
 @pytest.mark.parametrize("number", (0, -1))
-def test_existing_selection_leaves_number_validation_to_the_link(pr_commander, number):
-    ctx = pr_commander
+def test_existing_selection_leaves_number_validation_to_the_link(pr_team, number):
+    ctx = pr_team
     original = pr_order(ctx, "P1")
     with pytest.raises(ValueError, match="pull request number must be positive"):
         adopt_pr(ctx, original.id, number)

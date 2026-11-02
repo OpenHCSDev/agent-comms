@@ -1,4 +1,4 @@
-"""The install operation's options, shared by CLI dispatch and commander launches."""
+"""The install operation's options, shared by CLI dispatch and teammate launches."""
 
 from __future__ import annotations
 

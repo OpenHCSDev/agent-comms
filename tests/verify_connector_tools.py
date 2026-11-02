@@ -198,7 +198,7 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
         "comms_fire": {
             "unit": "worker",
             "reason": (
-                "The scratch unit changed the saved file without reading "
+                "The scratch teammate changed the saved file without reading "
                 "its original contents first."
             ),
         },

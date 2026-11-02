@@ -307,7 +307,7 @@ def test_standby_on_a_paused_bridge_waits_only_while_its_process_lives(tmp_path,
     if bridge_alive:
         commander = replace(commander, process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.register(commander, PausedBridgeThreadStatus())
-    goal = comms.goals.update_goal("unit", SetGoalAction(text="Wait for the commander's verdict"))
+    goal = comms.goals.update_goal("unit", SetGoalAction(text="Wait for the teammate's verdict"))
     standby = StandbyGoalAction(
         expect=GoalPrecondition(goal_id=OneGoal(goal.id)), wait_for=("commander",))
     if bridge_alive:

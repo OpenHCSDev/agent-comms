@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Annotated
 
 from agent_comms.cli_result import CliResult
-from agent_comms.commander.config import CommanderChoice, KeptCommander, KeptRepos, RepoChoice
+from agent_comms.team.config import TeamChoice, KeptTeam, KeptRepos, RepoChoice
 from agent_comms.comms import (
     Comms,
     client_wire,
@@ -16,7 +16,7 @@ from agent_comms.comms import (
 from agent_comms.nominal.field_codec import AbsolutePathText, Argument, PathText
 from agent_comms.harness_install import Harness
 from agent_comms.installer.interpreter_operation import RuntimeProbe, TargetProbe
-from agent_comms.registry_document import CommanderProject
+from agent_comms.registry_document import TeamProject
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.repo import Checkout
 from agent_comms.threads import Thread
@@ -24,7 +24,7 @@ from agent_comms.threads import Thread
 
 @dataclass(frozen=True)
 class InstallResult(CliResult):
-    config: CommanderProject
+    config: TeamProject
     registered: dict[str, tuple[str, ...]]
 
 
@@ -44,11 +44,11 @@ class HarnessInstallation:
         ),
     ] = KeptRepos()
     commander: Annotated[
-        CommanderChoice,
+        TeamChoice,
         Argument(
             flags=("--commander",), options={"help": "Record this thread as the bus's commander"}
         ),
-    ] = KeptCommander()
+    ] = KeptTeam()
 
     def declared_part(self) -> HarnessInstallation:
         """Project a CLI subclass onto this operation's declared fields."""
@@ -66,7 +66,7 @@ class HarnessInstallation:
         snapshot = ctx.registry.snapshot()
         project = self.commander.configured(snapshot.commander_project, self.repos, snapshot)
         if project != snapshot.commander_project:
-            ctx.registry.set_commander_project(project)
+            ctx.registry.set_team_project(project)
         return InstallResult(
             project,
             {

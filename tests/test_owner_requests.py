@@ -8,10 +8,10 @@ import pytest
 
 from agent_comms.nominal.field_codec import GoalId
 from agent_comms.change_report import FileLine, MainRevision
-from agent_comms.channel_targets import CommandersTag
-from agent_comms.commander.order import Commander
-from agent_comms.commander.standing import RequestStalled
-from agent_comms.commander.request import main as request_main
+from agent_comms.channel_targets import TeammatesTag
+from agent_comms.team.order import Team
+from agent_comms.team.standing import RequestStalled
+from agent_comms.team.request import main as request_main
 from agent_comms.comms import Comms
 from agent_comms.connector import ConnectorSendTool
 from agent_comms.standing_rules import DirectiveUnacted
@@ -40,13 +40,13 @@ from agent_comms.threads import Thread
 from agent_comms_hooks import ToolRefusedError
 
 
-def test_retired_commander_requests_follow_peer_authority(
+def test_retired_team_requests_follow_peer_authority(
     comms: Comms, capsys: pytest.CaptureFixture[str],
 ) -> None:
     repository = Repo(checkout=Path.cwd(), github=RepositoryName("OpenHCSDev", "agent-comms"))
     for name, tags in (
-        ("request-author", frozenset({CommandersTag.declared_name})),
-        ("request-peer", frozenset({CommandersTag.declared_name})),
+        ("request-author", frozenset({TeammatesTag.declared_name})),
+        ("request-peer", frozenset({TeammatesTag.declared_name})),
         ("request-outsider", frozenset()),
     ):
         comms.registry.declare(
@@ -69,14 +69,14 @@ def test_retired_commander_requests_follow_peer_authority(
     assert first.id in {
         rule.request.id for rule in RequestStalled.violations(comms, peer.name)
     }
-    peer_context = Commander.on_root(peer.name, (repository,), comms.root)
+    peer_context = Team.on_root(peer.name, (repository,), comms.root)
     request_main(["list"], peer_context)
     assert first.id.value in capsys.readouterr().out
-    outsider_context = Commander.on_root(outsider.name, (repository,), comms.root)
-    with pytest.raises(RejectedEnforcementError, match="belongs to another commander") as refused:
+    outsider_context = Team.on_root(outsider.name, (repository,), comms.root)
+    with pytest.raises(RejectedEnforcementError, match="belongs to another teammate") as refused:
         request_main(["complete", first.id.value, "--why", "Not my request."], outsider_context)
     assert isinstance(refused.value, TodoError)
-    peer_context = Commander.on_root(peer.name, (repository,), comms.root)
+    peer_context = Team.on_root(peer.name, (repository,), comms.root)
     request_main(
         ["complete", first.id.value, "--why", "The peer completed the request."], peer_context,
     )
@@ -88,10 +88,10 @@ def test_retired_commander_requests_follow_peer_authority(
     assert store.owner_request(first.id).commander == author.incarnation
 
 
-def test_a_directive_the_commander_answered_is_owed_by_no_peer(comms: Comms) -> None:
+def test_a_directive_the_team_answered_is_owed_by_no_peer(comms: Comms) -> None:
     """The gate and --answers both read this debt, so it cannot depend on who reads it."""
     checkout = Checkout(Path.cwd())
-    commanders = frozenset({CommandersTag.declared_name})
+    commanders = frozenset({TeammatesTag.declared_name})
     for name, tags in (("author", commanders), ("peer", commanders), ("claude-code", frozenset())):
         comms.registry.declare(Thread(name, tags, checkout), StoppedThreadStatus())
     author = comms.registry.require("author")
@@ -119,8 +119,8 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
     commander = comms.registry.require("commander")
     worker = comms.registry.require("worker")
     store = comms.goals.todos
-    ctx = Commander.on_root("commander", (repository,), comms.root)
-    request_main(["add", "commander native in Core"], ctx)
+    ctx = Team.on_root("commander", (repository,), comms.root)
+    request_main(["add", "teammate native in Core"], ctx)
     first_id = capsys.readouterr().out.strip()
     request_main(["add", "virtual bus"], ctx)
     second_id = capsys.readouterr().out.strip()
@@ -162,7 +162,7 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
     listed = capsys.readouterr().out
     assert all(
         text in listed
-        for text in (first_id, second_id, "P1", "commander native in Core", "virtual bus")
+        for text in (first_id, second_id, "P1", "teammate native in Core", "virtual bus")
     )
     with pytest.raises(ValueError):
         request_main(["complete", first_id, "--why", "The work is finished."], ctx)
@@ -252,7 +252,7 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
     assert not store.open_requests(commander.incarnation)
 
     awaiting = store.add_request(
-        commander.incarnation, "Wait for the commander's delivery verdict."
+        commander.incarnation, "Wait for the teammate's delivery verdict."
     )
     awaiting_order = order.reissued(order.at.recorded_at("Order") + 1)
     awaiting_todo = store.create(

@@ -24,13 +24,13 @@ from agent_comms.bus import (
 from agent_comms.bus_route_counts import BusRouteCounts
 from agent_comms.bus_publication import Delivered, HumanOrigin, KeyedPublication
 from agent_comms.bus_tables import AnsweredSource, BusSchema, MessageIdentitySource
-from agent_comms.task_attachments.commander_pings import CommanderNotice, CommanderUpdate
+from agent_comms.task_attachments.team_pings import TeamUpdateNotice, TeamUpdate
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.messages import (
     BusProjectionTables,
     BusRow,
     BusTables,
-    CommanderUpdatePosition,
+    TeamUpdatePosition,
     Claimed,
     ClaimHistoryKind,
     ClaimNoticeKind,
@@ -149,26 +149,26 @@ import importlib, inspect, json, sys
 startup = sys.argv[1]
 if startup != "table-first":
     importlib.import_module(startup)
-from agent_comms.messages import CommanderUpdatePosition
+from agent_comms.messages import TeamUpdatePosition
 if startup == "table-first":
     # The cold direct call: nothing has completed the writer family yet.
     from agent_comms.projection_source import ProjectionSource
-    ProjectionSource.writers_for(CommanderUpdatePosition)
+    ProjectionSource.writers_for(TeamUpdatePosition)
 if startup == "agent_comms.cli_verbs.reconcile_stores":
     from agent_comms.producer_stamp import stamped_digests
-    first = stamped_digests()[CommanderUpdatePosition.declared_name]
+    first = stamped_digests()[TeamUpdatePosition.declared_name]
 else:
-    first = CommanderUpdatePosition.producer_digest()
+    first = TeamUpdatePosition.producer_digest()
 from agent_comms.messages import BusRecord
 from agent_comms.projection_source import ProjectionSource
-writers = ProjectionSource.writers_for(CommanderUpdatePosition)
+writers = ProjectionSource.writers_for(TeamUpdatePosition)
 print(json.dumps(dict(
-    first=first, source=inspect.getfile(CommanderUpdatePosition),
+    first=first, source=inspect.getfile(TeamUpdatePosition),
     kinds=sorted(kind.__name__ for kind in BusRecord.members_with(BusRecord) if kind in writers),
 )))
 """
 STARTUPS = (
-    "table-first", "agent_comms.task_attachments.commander_pings", "agent_comms.worker",
+    "table-first", "agent_comms.task_attachments.team_pings", "agent_comms.worker",
     "agent_comms.cli_verbs.reconcile_stores",
 )
 
@@ -182,7 +182,7 @@ def first_position_digest(source: Path, startup: str) -> dict:
     ).stdout)
 
 
-def test_the_first_commander_position_digest_does_not_depend_on_import_order(
+def test_the_first_team_position_digest_does_not_depend_on_import_order(
     projection_source: Path,
 ) -> None:
     """A table read before any task module is imported still commits to the task that
@@ -192,7 +192,7 @@ def test_the_first_commander_position_digest_does_not_depend_on_import_order(
     assert len({first["first"] for first in firsts.values()}) == 1
     assert {tuple(first["kinds"]) for first in firsts.values()} == {
         ("ClaimRecord", "KeyedPrivateRecord", "PrivateRecord", "PublicRecord")}
-    edit_inside(projection_source, CommanderUpdate, "projections", return_no_rows)
+    edit_inside(projection_source, TeamUpdate, "projections", return_no_rows)
     for startup in STARTUPS[:2]:
         assert first_position_digest(projection_source, startup)["first"] != firsts[startup]["first"]
 
@@ -200,7 +200,7 @@ def test_the_first_commander_position_digest_does_not_depend_on_import_order(
 @pytest.mark.parametrize("owner, member", (
     (TypedTable, "select"),
     (AnsweredSource, "unanswered_references"),
-    (CommanderUpdatePosition, "latest"),
+    (TeamUpdatePosition, "latest"),
 ))
 def test_projection_digest_ignores_reader_bodies(
     projection_source: Path, owner: type, member: str,
@@ -243,7 +243,7 @@ def test_projection_digest_tracks_actual_delivery_production(projection_source: 
     affected = {row.declared_name for row in Delivered.writes}
     assert affected
     assert all(after[name] != before[name] for name in affected)
-    assert after[CommanderUpdatePosition.declared_name] == before[CommanderUpdatePosition.declared_name]
+    assert after[TeamUpdatePosition.declared_name] == before[TeamUpdatePosition.declared_name]
 
 
 @pytest.mark.parametrize("owner", (MessageRoutes, ClaimNoticeKind))
@@ -262,7 +262,7 @@ def test_projection_digest_tracks_output_column_shape(projection_source: Path) -
     edit_inside(projection_source, AnsweredSource, "original", change_column_type)
     after = json.loads(projection_source_digest(projection_source))
     assert after[AnsweredSource.declared_name] != before[AnsweredSource.declared_name]
-    assert after[CommanderUpdatePosition.declared_name] == before[CommanderUpdatePosition.declared_name]
+    assert after[TeamUpdatePosition.declared_name] == before[TeamUpdatePosition.declared_name]
 
 
 def test_activity_source_changes_only_sent_activity(projection_source: Path) -> None:
@@ -643,40 +643,40 @@ def test_answer_projection_rebuild_preserves_sequence_links_and_public_reference
     assert bus.unanswered_references((original.seq,), frozenset({"lead"})) == ()
 
 
-def commander_packet(bus, commander, body):
+def team_packet(bus, commander, body):
     return bus.append(lambda seq, db: PublicRecord.from_message(Message(
         "user", commander.name, body, InfoKind, seq=seq,
-        task=CommanderNotice(commander, ()))))
+        task=TeamUpdateNotice(commander, ()))))
 
 
-def test_commander_packet_positions_append_with_their_message_and_rebuild_from_it(bus, tmp_path):
+def test_team_packet_positions_append_with_their_message_and_rebuild_from_it(bus, tmp_path):
     """Each typed packet's position is written in its own append; a taskless message from the
     same sender writes none, and only that table rebuilds from the original records."""
     lead, other = RecordedThreadIncarnation("lead", 1.0), RecordedThreadIncarnation("other", 2.0)
-    first = commander_packet(bus, lead, "first board")
+    first = team_packet(bus, lead, "first board")
     raw = bus.append(lambda seq, db: PublicRecord.from_message(
         Message("user", "lead", "independent instruction", InfoKind, seq=seq)))
-    theirs = commander_packet(bus, other, "another commander's board")
+    theirs = team_packet(bus, other, "another teammate's board")
 
     def positions():
         with bus.observing() as db:
-            return CommanderUpdatePosition.select(db, order_by=("seq",))
+            return TeamUpdatePosition.select(db, order_by=("seq",))
 
     appended = positions()
-    assert appended == [CommanderUpdatePosition(first.seq, lead.lookup),
-                        CommanderUpdatePosition(theirs.seq, other.lookup)]
+    assert appended == [TeamUpdatePosition(first.seq, lead.lookup),
+                        TeamUpdatePosition(theirs.seq, other.lookup)]
     with bus.observing() as db:
-        assert CommanderUpdatePosition.latest(db, lead.lookup) == (first,)
-        assert CommanderUpdatePosition.latest(db, other.lookup) == (theirs,)
-        assert CommanderUpdatePosition.latest(db, RecordedThreadIncarnation("lead", 3.0).lookup) == ()
+        assert TeamUpdatePosition.latest(db, lead.lookup) == (first,)
+        assert TeamUpdatePosition.latest(db, other.lookup) == (theirs,)
+        assert TeamUpdatePosition.latest(db, RecordedThreadIncarnation("lead", 3.0).lookup) == ()
     with bus.writer_connection() as db:
         ProjectionProducer.update(
-            db, where="{projection}=?", parameters=(CommanderUpdatePosition.declared_name,),
+            db, where="{projection}=?", parameters=(TeamUpdatePosition.declared_name,),
             producer_digest="0" * 64,
         )
-        db.execute(f'DELETE FROM "{CommanderUpdatePosition.declared_name}"')
+        db.execute(f'DELETE FROM "{TeamUpdatePosition.declared_name}"')
         assert BusSchema.reconcile_schema(db, WriterOwnedFile())
-        assert CommanderUpdatePosition.select(db, order_by=("seq",)) == appended
+        assert TeamUpdatePosition.select(db, order_by=("seq",)) == appended
         before = db.total_changes
         assert not BusSchema.reconcile_schema(db, WriterOwnedFile())
         assert db.total_changes == before
@@ -688,15 +688,15 @@ def test_commander_packet_positions_append_with_their_message_and_rebuild_from_i
     # A new bus installed from this history indexes the same packets from their copies.
     copied = Bus.install(Bus.path_in(tmp_path / "history"), history=(first, raw, theirs))
     with copied.observing() as db:
-        assert CommanderUpdatePosition.select(db, order_by=("seq",)) == appended
-        assert CommanderUpdatePosition.latest(db, lead.lookup) == (first.history_record,)
-        assert CommanderUpdatePosition.latest(db, other.lookup) == (theirs.history_record,)
+        assert TeamUpdatePosition.select(db, order_by=("seq",)) == appended
+        assert TeamUpdatePosition.latest(db, lead.lookup) == (first.history_record,)
+        assert TeamUpdatePosition.latest(db, other.lookup) == (theirs.history_record,)
     for original in (first, raw, theirs):
         kept = copied.lookup(original.seq)
         assert (kept.reference, kept.body, kept.task) == (original.reference, original.body, original.task)
 
 
-def test_a_late_constraint_refusal_rolls_back_the_commander_position(tmp_path, bus):
+def test_a_late_constraint_refusal_rolls_back_the_team_position(tmp_path, bus):
     """The position is written inside the packet's own transaction; a real SQLite refusal
     after it takes the header, task and position back together."""
     lead = RecordedThreadIncarnation("lead", 1.0)
@@ -705,9 +705,9 @@ def test_a_late_constraint_refusal_rolls_back_the_commander_position(tmp_path, b
     def build(seq, db):
         record_from(PrivateRecord, Message(
             "user", "lead", "not committed", InfoKind, seq=seq,
-            task=CommanderNotice(lead, ())),
+            task=TeamUpdateNotice(lead, ())),
         ).append_to(db, seq)
-        written.append((seq, CommanderUpdatePosition.select(db)))
+        written.append((seq, TeamUpdatePosition.select(db)))
         BusRow.require(db, seq=seq).insert(db)
 
     with pytest.raises(HumanSendRefusedError) as refused:
@@ -716,9 +716,9 @@ def test_a_late_constraint_refusal_rolls_back_the_commander_position(tmp_path, b
     assert type(cause) is sqlite3.IntegrityError
     assert "UNIQUE constraint failed: bus.seq" in str(cause)
     (seq, positions), = written
-    assert positions == [CommanderUpdatePosition(seq, lead.lookup)]
+    assert positions == [TeamUpdatePosition(seq, lead.lookup)]
     with closing(sqlite3.connect(bus.path)) as db:
-        assert CommanderUpdatePosition.count(db) == 0
+        assert TeamUpdatePosition.count(db) == 0
         assert all(table.count(db) == 0 for table in TypedTable.members_with(BusTables))
 
 

@@ -6,14 +6,14 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.change_report import FileLine, NamedRepository
-from agent_comms.commander.judge import Edit, main
+from agent_comms.team.judge import Edit, main
 from agent_comms.errors import TodoError
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.nominal.field_codec import (
     RecordProblems,
     ToolCallId,
 )
-from agent_comms.registry_document import RegisteredCommanderProject
+from agent_comms.registry_document import RegisteredTeamProject
 from agent_comms.todos import DroppedVerdict, FixScope, FixShape, RewrittenVerdict
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.transcript_events import ToolStartTranscript
@@ -22,7 +22,7 @@ from source_revision_fixture import SourceRepository
 
 pytest_plugins = ("test_held_problem_orders",)
 
-FOREIGN = "FOREIGN_MARKER_LINE = 'only in the second repository the unit edits'"
+FOREIGN = "FOREIGN_MARKER_LINE = 'only in the second repository the teammate edits'"
 LIVE = "LIVE_MARKER_LINE = 'kept on the checkout head'"
 DROPPED = "DROPPED_MARKER_LINE = 'only on the discarded formatter branch'"
 
@@ -58,8 +58,8 @@ def judge_dropped(ctx, edit: Edit, line: str) -> None:
 
 
 @pytest.fixture
-def discarded_and_kept(held_commander, cited_source):
-    ctx = held_commander
+def discarded_and_kept(held_team, cited_source):
+    ctx = held_team
     repo = ctx.repos[0]
     rule = ctx.comms.registry.storage_rule
     gone = rule.order_checkout(rule.roots_of(ctx.comms.registry.require("worker")), "P1")
@@ -160,7 +160,7 @@ def test_rewritten_reads_the_repository_the_edit_was_made_in(discarded_and_kept,
     other = next(graph.repository for graph in proof_build_checkouts
                  if graph.repository.github != ctx.repos[0].github)
     lead = ctx.comms.registry.require(ctx.commander).incarnation
-    ctx.comms.registry.set_commander_project(RegisteredCommanderProject(lead, (*ctx.repos, other)))
+    ctx.comms.registry.set_team_project(RegisteredTeamProject(lead, (*ctx.repos, other)))
     rule = ctx.comms.registry.storage_rule
     allocated = rule.repository_checkout(rule.roots_of(ctx.comms.registry.require("worker")),
                                          "P1", other.github)

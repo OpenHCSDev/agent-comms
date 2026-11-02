@@ -657,7 +657,7 @@ class Prompting(PromptOrigin, ABC, declared_name=None):
 
 
 class AgentPrompt(Prompting, declared_name=None):
-    """Input another agent wrote: the commanding session, or a peer session. It never
+    """Input another agent wrote: the directing session, or a peer session. It never
     starts a turn of its own."""
 
     def prompt(self, record: TimedRecord, text: str,

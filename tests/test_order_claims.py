@@ -15,8 +15,8 @@ from agent_comms.coordination_errors import (
 )
 
 from agent_comms.change_report import FileLine
-from agent_comms.commander.order import OrderFile, main
-from agent_comms.commander.standing import DeliveryAwaitingJudgement, Scrutinize
+from agent_comms.team.order import OrderFile, main
+from agent_comms.team.standing import DeliveryAwaitingJudgement, Scrutinize
 from agent_comms.standing_rules import OwedAnswer
 from agent_comms.errors import (
     TodoConflict,
@@ -77,9 +77,9 @@ from test_todos import order, thread
 pytest_plugins = ("test_held_problem_orders",)
 
 
-def test_pathname_handoff_publishes_without_completing_the_held_work(held_commander):
-    comms = held_commander.comms
-    commander = held_commander.commander
+def test_pathname_handoff_publishes_without_completing_the_held_work(held_team):
+    comms = held_team.comms
+    commander = held_team.commander
     assigned = comms.goals.todos.get("P1")
     comms.goals.update_goal("worker", SetGoalAction(
         text=ProblemGoalOrder.text, order=ProblemGoalOrder(),
@@ -113,11 +113,11 @@ def test_delivery_report_refuses_a_flat_status_memo():
     assert DeliveryReport(blunt).text == blunt
 
 
-def test_a_delivery_records_the_repository_its_pull_request_lives_in(held_commander):
+def test_a_delivery_records_the_repository_its_pull_request_lives_in(held_team):
     """An order in one repo can be delivered by a pull request in another (Core order, Textual PR)."""
     from agent_comms.repository_name import RepositoryName
 
-    ctx = held_commander
+    ctx = held_team
     comms = ctx.comms
     original = comms.goals.todos.get("P1")
     comms.goals.update_goal("worker", SetGoalAction(
@@ -136,8 +136,8 @@ def test_a_delivery_records_the_repository_its_pull_request_lives_in(held_comman
     assert claim.pull_request.repo != original.repo
 
 
-def test_claim_verdict_family_on_retained_copy(held_commander):
-    ctx = held_commander
+def test_claim_verdict_family_on_retained_copy(held_team):
+    ctx = held_team
     comms = ctx.comms
     original = comms.goals.todos.get("P1")
     comms.goals.update_goal("worker", SetGoalAction(
@@ -241,8 +241,8 @@ def unsent_claim(ctx):
     return request, claimed, before
 
 
-def test_an_unsent_claim_stays_owed_and_the_same_call_publishes_it_once(held_commander):
-    ctx = held_commander
+def test_an_unsent_claim_stays_owed_and_the_same_call_publishes_it_once(held_team):
+    ctx = held_team
     comms = ctx.comms
     request, claimed, before = unsent_claim(ctx)
     claim = claimed.order.claim
@@ -271,10 +271,10 @@ def test_an_unsent_claim_stays_owed_and_the_same_call_publishes_it_once(held_com
     assert owed.request == claim.request()
 
 
-def test_a_resume_publishes_only_the_order_s_current_claim(held_commander):
+def test_a_resume_publishes_only_the_order_s_current_claim(held_team):
     """A claim the order never held, or a resume prepared before a real send-back replaced the
     claim, refuses in the Todo transaction: no bus original and no Todo change."""
-    ctx = held_commander
+    ctx = held_team
     comms = ctx.comms
     _request, claimed, before = unsent_claim(ctx)
     worker = comms.registry.require("worker").incarnation
@@ -297,7 +297,7 @@ def test_a_resume_publishes_only_the_order_s_current_claim(held_commander):
         ),
     ), comms)
     replaced = comms.goals.todos.get("P1")
-    assert claim not in replaced.order.commander_claims()
+    assert claim not in replaced.order.team_claims()
     sent = comms.bus.bus.revision()
     with pytest.raises(TodoError):
         prepared.record(comms.goals, "P1")
@@ -305,10 +305,10 @@ def test_a_resume_publishes_only_the_order_s_current_claim(held_commander):
     assert comms.goals.todos.get("P1") == replaced
 
 
-def test_a_published_claim_retried_on_a_held_bus_is_unavailable_never_unsent(held_commander):
+def test_a_published_claim_retried_on_a_held_bus_is_unavailable_never_unsent(held_team):
     """A retry that cannot take the bus writer cannot see the original it already published:
     it reports the publication unavailable, and after release returns that original."""
-    ctx = held_commander
+    ctx = held_team
     comms = ctx.comms
     original = comms.goals.todos.get("P1")
     comms.goals.update_goal("worker", SetGoalAction(
@@ -335,8 +335,8 @@ def test_a_published_claim_retried_on_a_held_bus_is_unavailable_never_unsent(hel
     assert comms.goals.todos.get("P1") == claimed
 
 
-def test_an_unsent_claim_is_never_resent_under_a_renamed_commander(held_commander):
-    ctx = held_commander
+def test_an_unsent_claim_is_never_resent_under_a_renamed_team(held_team):
+    ctx = held_team
     comms = ctx.comms
     request, claimed, before = unsent_claim(ctx)
     comms.registry.rename(ctx.commander, "renamed-lead")
@@ -347,11 +347,11 @@ def test_an_unsent_claim_is_never_resent_under_a_renamed_commander(held_commande
 
 
 def test_claimed_check_correction_reads_the_base_the_fix_was_built_on(
-    held_commander, cited_source, tmp_path,
+    held_team, cited_source, tmp_path,
 ):
     """Once the claimed PR merges, current main passes every correct check; the claim's own
     branch point still holds the defect, so a correct check is accepted and done records it."""
-    ctx = held_commander
+    ctx = held_team
     comms = ctx.comms
     base, first, merge = merge_two_commit_fix(cited_source, tmp_path / "bin", 4)
     original = comms.goals.todos.get("P1")
@@ -377,8 +377,8 @@ def test_claimed_check_correction_reads_the_base_the_fix_was_built_on(
     assert delivered.strike_count == claimed.strike_count
 
 
-def test_failed_check_strike_keeps_the_holder_at_the_updated_revision(held_commander):
-    ctx = held_commander
+def test_failed_check_strike_keeps_the_holder_at_the_updated_revision(held_team):
+    ctx = held_team
     store = ctx.comms.goals.todos
     original = store.get("P1")
     first = store.apply(original.id, StrikeTodo(
@@ -404,8 +404,8 @@ def test_failed_check_strike_keeps_the_holder_at_the_updated_revision(held_comma
     assert store.get(first.id) == struck
 
 
-def test_third_strike_keeps_holder_and_order_and_requests_scrutiny(held_commander):
-    ctx = held_commander
+def test_third_strike_keeps_holder_and_order_and_requests_scrutiny(held_team):
+    ctx = held_team
     store = ctx.comms.goals.todos
     original = todo = store.get("P1")
     for ordinal in range(3):
@@ -430,8 +430,8 @@ def test_third_strike_keeps_holder_and_order_and_requests_scrutiny(held_commande
     assert after.strike_count == 2
 
 
-def test_unstrike_does_not_undo_an_explicit_release(held_commander):
-    ctx = held_commander
+def test_unstrike_does_not_undo_an_explicit_release(held_team):
+    ctx = held_team
     store = ctx.comms.goals.todos
     todo = store.get('P1')
     struck = store.apply(todo.id, StrikeTodo(
@@ -474,8 +474,8 @@ def corrected_order_file(ctx, source) -> str:
         replace(order(source), id=OrderId.mint(),
                 check=OrderCheck(ctx.repos[0].checkout, f"test ! -e {shlex.quote(str(marker))}"),
                 at=RecordedEventTime(now), first_call_deadline=RecordedEventTime(now + 120)),
-        "The claimed change keeps the duplicated decision the order told the unit to delete",
-        "This is stupid because the commander's order named the wrong member to delete",
+        "The claimed change keeps the duplicated decision the order told the teammate to delete",
+        "This is stupid because the teammate's order named the wrong member to delete",
         unplanned_reason="This isolated workflow verifies claimed order correction rather than advancing a plan.",
         problems=("P1",),
     )
@@ -484,8 +484,8 @@ def corrected_order_file(ctx, source) -> str:
     return str(path)
 
 
-def test_corrected_order_to_the_claimant_replaces_its_claim(held_commander, cited_source):
-    ctx = held_commander
+def test_corrected_order_to_the_claimant_replaces_its_claim(held_team, cited_source):
+    ctx = held_team
     claimed = claimed_by_worker(ctx)
     main(["send", "worker", corrected_order_file(ctx, cited_source), "--clean", "--as", "worker"], ctx)
     corrected = ctx.comms.goals.todos.get("P1")
@@ -497,10 +497,10 @@ def test_corrected_order_to_the_claimant_replaces_its_claim(held_commander, cite
 
 
 def test_two_delivery_claims_warn_without_deadlocking_other_orders(
-    held_commander, cited_source, capsys,
+    held_team, cited_source, capsys,
 ):
     other_order_goal_id = GoalId.mint()
-    ctx = held_commander
+    ctx = held_team
     comms = ctx.comms
     store = comms.goals.todos
     source = ctx.repos[0]
@@ -557,13 +557,13 @@ def test_two_delivery_claims_warn_without_deadlocking_other_orders(
     main(["send", "worker", corrected_order_file(ctx, cited_source), "--clean", "--as", "worker"], ctx)
     corrected = store.get("P1")
     assert isinstance(corrected.order, PendingProblemOrder)
-    assert corrected.order.commander_claims() == ()
+    assert corrected.order.team_claims() == ()
     assert claims[0].order in corrected.history.events(corrected.id, CheckedProblemOrder)
     assert store.get("P2") == claims[1]
 
 
-def test_claimed_order_to_another_unit_is_refused_and_writes_nothing(held_commander, cited_source):
-    ctx = held_commander
+def test_claimed_order_to_another_unit_is_refused_and_writes_nothing(held_team, cited_source):
+    ctx = held_team
     ctx.comms.registry.register(thread("other", ctx.root, 3.0))
     claimed = claimed_by_worker(ctx)
     with pytest.raises(TodoError, match="Only an undelivered order can change owner"):
@@ -573,8 +573,8 @@ def test_claimed_order_to_another_unit_is_refused_and_writes_nothing(held_comman
     assert ctx.comms.goals.todos.get("P1") == claimed
 
 
-def test_claimed_order_takes_a_check_correction_through_the_real_verb(held_commander):
-    ctx = held_commander
+def test_claimed_order_takes_a_check_correction_through_the_real_verb(held_team):
+    ctx = held_team
     claimed = claimed_by_worker(ctx)
     repo = ctx.repos[0]
 
@@ -589,28 +589,28 @@ def test_claimed_order_takes_a_check_correction_through_the_real_verb(held_comma
         claimed.holder, claimed.review_at, claimed.strike_count)
 
 
-def test_held_application_order_takes_a_run_correction_through_the_real_verb(held_commander):
-    ctx = held_commander
+def test_held_application_order_takes_a_run_correction_through_the_real_verb(held_team):
+    ctx = held_team
     store = ctx.comms.goals.todos
     current = store.get("P1")
-    stale = ApplicationOrderRun("The turn view shows the unit's newest turn after it ends.")
+    stale = ApplicationOrderRun("The turn view shows the teammate's newest turn after it ends.")
     with store.writing() as connection:
         replace(current, order=replace(current.order, run=stale),
                 revision=current.revision + 1).upsert(connection)
     held = store.get("P1")
 
-    main(["run", "P1", "--run", "The order story shows the unit's newest tool call after it ends.",
+    main(["run", "P1", "--run", "The order story shows the teammate's newest tool call after it ends.",
           "--why", "the recorded run names a turn view that a merged deletion removed"], ctx)
     corrected = store.get("P1")
     assert corrected.order.run == ApplicationOrderRun(
-        "The order story shows the unit's newest tool call after it ends.")
+        "The order story shows the teammate's newest tool call after it ends.")
     assert corrected.order.corrections[-1].previous == stale
     assert (corrected.holder, corrected.review_at, corrected.strike_count) == (
         held.holder, held.review_at, held.strike_count)
 
 
-def test_closed_problem_refuses_a_check_correction_and_writes_nothing(held_commander):
-    ctx = held_commander
+def test_closed_problem_refuses_a_check_correction_and_writes_nothing(held_team):
+    ctx = held_team
     claimed = claimed_by_worker(ctx)
     closed = replace(claimed, state=DoneTodoState)
     correction = CorrectCheckTodo(
@@ -623,10 +623,10 @@ def test_closed_problem_refuses_a_check_correction_and_writes_nothing(held_comma
     assert ctx.comms.goals.todos.get("P1") == claimed
 
 
-def test_say_without_answers_answers_the_target_units_open_asks(held_commander, capsys):
+def test_say_without_answers_answers_the_target_units_open_asks(held_team, capsys):
     from test_holder_standing_rules import publish
 
-    ctx = held_commander
+    ctx = held_team
     comms = ctx.comms
     reply = ctx.root / "answer.txt"
     reply.write_text("Take the owner fix at the declaration and push it.")
@@ -642,10 +642,10 @@ def test_say_without_answers_answers_the_target_units_open_asks(held_commander, 
             if message.sender == ctx.commander][:2] == [(unnamed.reference,), (named.reference,)]
 
 
-def test_a_measuring_order_owes_no_restated_fact(held_commander, cited_source):
+def test_a_measuring_order_owes_no_restated_fact(held_team, cited_source):
     """2026-10-30: Tristan's Toad profiling request sat with no order because the recurrence gate
     asked a measurement for the fact it was being sent to find."""
-    store = held_commander.comms.goals.todos
+    store = held_team.comms.goals.todos
     fix = replace(store.get("P1").order.checked(), id=OrderId.mint())
     where = fix.owner
     with pytest.raises(TodoError):
@@ -654,8 +654,8 @@ def test_a_measuring_order_owes_no_restated_fact(held_commander, cited_source):
         replace(fix, scope=TriageScope()), where, cited_source.checkout, (), 20)
 
 
-def test_recurrence_refusal_names_accepted_derivations(held_commander, cited_source):
-    ctx = held_commander
+def test_recurrence_refusal_names_accepted_derivations(held_team, cited_source):
+    ctx = held_team
     store = ctx.comms.goals.todos
     original = store.get("P1")
     planned = replace(original.order.checked(), id=OrderId.mint())

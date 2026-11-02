@@ -13,20 +13,20 @@ from pathlib import Path
 import pytest
 
 
-from agent_comms.commander import judge, order
+from agent_comms.team import judge, order
 from agent_comms.comms import Comms
 from agent_comms.connector_caller import DirectorCaller
 from agent_comms.closed_pull_requests import ClosedPullRequestWatch
-from agent_comms.commander.publication_rules import ClosedUnmergedPullRequest
-from agent_comms.commander_heartbeat import CommanderHeartbeat
+from agent_comms.team.publication_rules import ClosedUnmergedPullRequest
+from agent_comms.team_heartbeat import TeamHeartbeat
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.build_identity import RepositoryCommit
 from agent_comms.head_review import (
     DraftMergeArm, HeadReview, IntegrationInput, LocalIntegrationSource, MergedIntegrationSource, MergeHeadReview, OrdinaryInput, PromotedHeadReview, PullRequestHead, ReadPullRequestHead,
 )
 from agent_comms.integration import IntegrationRun
-from commander_heartbeat_fixture import capture_frame
-from agent_comms.heartbeat_subjects import CommanderHistory, HeadSubject, UnlandedHeadSubject
+from team_heartbeat_fixture import capture_frame
+from agent_comms.heartbeat_subjects import TeamHistory, HeadSubject, UnlandedHeadSubject
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import (
@@ -34,12 +34,12 @@ from agent_comms.standing_rules import (
     LinkedUnreviewedHead, ReviewTimerUp, StuckMerge,
 )
 from agent_comms.repo import Checkout
-from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderUpdate, CommanderUpdateStore, RulePing
+from agent_comms.task_attachments.team_pings import TeamDecisions, TeamUpdate, TeamUpdateStore, RulePing
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.threads import Thread
 from agent_comms.errors import TodoError
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, MalformedRecord, RecordProblems
-from agent_comms.tool_caller import CommanderPeerCaller, ThreadCaller
+from agent_comms.tool_caller import PeerCaller, ThreadCaller
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.work_branches import (
     SourceGrowth, ThreadBranchCheckout, UnregisteredBranchCheckout, WorkBranches,
@@ -115,7 +115,7 @@ def invoke(comms, request, verdict, order=NoHeadOrder(), *, caller=ThreadCaller(
     return tool.invoke(comms, tool.arguments, caller=caller)
 
 
-def promote(context: order.CommanderContext, request: PullRequestHead) -> HeadReviewed:
+def promote(context: order.TeamContext, request: PullRequestHead) -> HeadReviewed:
     return judge.PromoteVerb(pr=request.pr, head=request.head, repo=request.repo.to_wire(),
                              why=ACCEPTED.text).review_head(context, request, NoHeadOrder())
 
@@ -130,7 +130,7 @@ def test_qualification_records_each_open_order_cut_without_promoting_or_finishin
         linked_head_bus, claim_order):
     """A ready companion's source stage is a decision, not permission to ship its incomplete pair."""
     comms, github, request = linked_head_bus
-    context = order.Commander.read_root(comms.root)
+    context = order.Team.read_root(comms.root)
 
     def qualify_unchanged():
         before = comms.goals.todos.get("P2")
@@ -167,7 +167,7 @@ def test_qualification_records_each_open_order_cut_without_promoting_or_finishin
 def companion_checkout(
     linked_head_bus: tuple[Comms, GitHubFixture, PullRequestHead],
     reviewed_source: SourceRepository,
-    configured_repository: Callable[[Comms, *tuple[SourceRepository, ...]], order.Commander],
+    configured_repository: Callable[[Comms, *tuple[SourceRepository, ...]], order.Team],
     tmp_path: Path,
 ) -> Path:
     comms, github, primary = linked_head_bus
@@ -200,7 +200,7 @@ def test_native_companion_link_preserves_claim_review_goal_and_is_idempotent(
     reviews = StoredHeadReview.head_reviews(comms.goals.todos, primary)
     history = tuple(comms.registry.goal_history(before.held().owner))
     link = PullRequestLink(SourceRepository.of(companion_checkout).github, primary.pr)
-    context = order.Commander.read_root(comms.root)
+    context = order.Team.read_root(comms.root)
     with chdir(companion_checkout):
         order.main(["pr", before.id, "--existing", str(primary.pr)], context)
     after = comms.goals.todos.get(before.id)
@@ -244,7 +244,7 @@ def test_native_companion_adoption_is_the_same_reviewed_orders_actual_qualificat
     checkout.parent.mkdir(parents=True, exist_ok=True)
     pair.client.git(pair.client.checkout, "worktree", "add", "--detach", str(checkout), pair.client.branch_commit)
     with chdir(checkout):
-        order.main(["pr", before.id, "--existing", str(pair.client.number)], order.Commander.read_root(comms.root))
+        order.main(["pr", before.id, "--existing", str(pair.client.number)], order.Team.read_root(comms.root))
     linked = comms.goals.todos.get(before.id)
     assert linked == replace(before, revision=before.revision + 1,
                              order=before.order.checked().linked_to(pair.client.link))
@@ -272,7 +272,7 @@ def test_native_companion_creation_records_its_owned_checkout_repository_not_the
     body.write_text("The actual paired source belongs to this existing order.\n")
     with chdir(companion_checkout):
         order.main(["pr", before.id, "--title", "Migrate the paired source",
-                    "--body-file", str(body)], order.Commander.read_root(comms.root))
+                    "--body-file", str(body)], order.Team.read_root(comms.root))
     after = comms.goals.todos.get(before.id)
     link = PullRequestLink(companion.github, number)
     assert after == replace(before, revision=before.revision + 1,
@@ -289,7 +289,7 @@ def test_companion_adoption_cannot_edit_or_adopt_missing_pr(
 ) -> None:
     comms, github, primary = linked_head_bus
     before = comms.goals.todos.get("P2")
-    context = order.Commander.read_root(comms.root)
+    context = order.Team.read_root(comms.root)
     with chdir(companion_checkout):
         for arguments in (
             ["--existing", str(primary.pr), "--title", "Do not edit"],
@@ -309,7 +309,7 @@ def test_companion_metadata_refuses_an_existing_but_inaccessible_remote_pr(
     companion = SourceRepository.of(companion_checkout)
     github.refuse_read(companion.github, primary.pr, "GraphQL: Resource not accessible by integration")
     with chdir(companion_checkout), pytest.raises(subprocess.CalledProcessError):
-        order.main(["pr", before.id, "--existing", str(primary.pr)], order.Commander.read_root(comms.root))
+        order.main(["pr", before.id, "--existing", str(primary.pr)], order.Team.read_root(comms.root))
     assert comms.goals.todos.get(before.id) == before
     assert not any(call[:2] in (("pr", "create"), ("pr", "edit")) for call in github.calls())
 
@@ -327,7 +327,7 @@ def test_companion_metadata_refuses_another_owners_checkout(
     companion.git(companion_checkout, "worktree", "add", "--detach", str(checkout), "HEAD")
     calls = github.calls()
     with chdir(checkout), pytest.raises(ValueError, match="owned by"):
-        order.main(["pr", before.id, "--existing", str(primary.pr)], order.Commander.read_root(comms.root))
+        order.main(["pr", before.id, "--existing", str(primary.pr)], order.Team.read_root(comms.root))
     assert comms.goals.todos.get(before.id) == before
     assert github.calls() == calls
 
@@ -335,7 +335,7 @@ def test_companion_metadata_refuses_another_owners_checkout(
 def test_companion_metadata_refuses_an_unregistered_origin_before_forge_read(
     linked_head_bus: tuple[Comms, GitHubFixture, PullRequestHead], companion_checkout: Path,
     reviewed_source: SourceRepository,
-    configured_repository: Callable[[Comms, *tuple[SourceRepository, ...]], order.Commander],
+    configured_repository: Callable[[Comms, *tuple[SourceRepository, ...]], order.Team],
 ) -> None:
     comms, github, primary = linked_head_bus
     before = comms.goals.todos.get("P2")
@@ -358,7 +358,7 @@ def test_companion_metadata_refuses_a_closed_order_without_forge_or_link_changes
     closed = comms.goals.todos.get(before.id)
     calls = github.calls()
     with chdir(companion_checkout), pytest.raises((ValueError, TodoError)):
-        order.main(["pr", before.id, "--existing", str(primary.pr)], order.Commander.read_root(comms.root))
+        order.main(["pr", before.id, "--existing", str(primary.pr)], order.Team.read_root(comms.root))
     assert comms.goals.todos.get(before.id) == closed
     assert github.calls() == calls
 
@@ -389,7 +389,7 @@ def test_qualification_withdraws_acceptance_without_claiming_to_disarm_the_reque
     arms = tuple(call for call in github.calls() if call[:2] == ("pr", "merge"))
     assert arms == () and HeadReview.accepted(request.repo, request.head)
     with pytest.raises(ToolRefusedError, match="captured combined carrier"):
-        ReviewedHeadVerdict.require_merge(request, order.Commander.read_root(comms.root).repos)
+        ReviewedHeadVerdict.require_merge(request, order.Team.read_root(comms.root).repos)
     invoke(comms, request, QualifiedHeadVerdict(QUALIFIED))
     assert StoredHeadReview.current_verdict(comms.goals.todos, request) is QualifiedHeadVerdict
     assert not HeadReview.accepted(request.repo, request.head)
@@ -425,7 +425,7 @@ def test_linked_qualification_requires_the_original_order_quote(linked_head_bus,
     with pytest.raises(ToolRefusedError):
         judge.main(["qualify", "--repo", request.repo.to_wire(), "--pr", str(request.pr),
                     "--head", request.head, "--why", QUALIFIED.text, "--serves", quote],
-                   order.Commander.read_root(comms.root))
+                   order.Team.read_root(comms.root))
     assert comms.goals.todos.get(before.id) == before
     assert not StoredHeadReview.head_reviews(comms.goals.todos, request)
     assert not any("statuses/" in call[1] for call in github.calls())
@@ -619,7 +619,7 @@ def test_companion_input_changes_the_identity_of_an_unchanged_local_patch(
 def test_pending_sources_can_compute_but_only_reviewed_other_heads_allow_carrier_promotion(
         mutual_sources: MutualSources, github_cli: GitHubFixture, actor: str) -> None:
     pair = replace(mutual_sources, context=mutual_sources.context.model_copy(
-        update={"actor": CommanderPeerCaller(actor)}))
+        update={"actor": PeerCaller(actor)}))
     comms = pair.context.comms
     client = PullRequestHead(pair.client.github, pair.client.number, pair.client.branch_commit)
     invoke(comms, client, UnderReviewHeadVerdict())
@@ -745,7 +745,7 @@ def test_orderless_head_family_persists_both_outcomes_and_posts_each_exact_head(
 
 def test_judge_ok_and_back_dispatch_orderless_prs_without_positional_edit_ids(head_bus):
     comms, github, request = head_bus
-    context = order.Commander.read_root(comms.root)
+    context = order.Team.read_root(comms.root)
     why = ACCEPTED.text
     common = ["--repo", request.repo.to_wire(), "--pr", str(request.pr), "--head", request.head,
               "--why", why]
@@ -783,7 +783,7 @@ def test_only_explicit_combined_promotion_arms_the_reviewed_head_and_reports_for
         github_cli.refuse_arm(request.repo, request.pr, "Merge permission denied")
     arguments = ["promote", "--repo", request.repo.to_wire(), "--pr", str(request.pr),
                  "--head", request.head, "--why", ACCEPTED.text]
-    context = order.Commander.read_root(comms.root)
+    context = order.Team.read_root(comms.root)
     if refused:
         with pytest.raises(ToolRefusedError, match="Merge permission denied"):
             judge.main(arguments, context)
@@ -834,7 +834,7 @@ def test_capture_derives_only_exact_saved_orderless_sources_in_the_actual_carrie
     mutual_sources: MutualSources, github_cli: GitHubFixture, state: str, reviewer: str,
 ) -> None:
     pair = mutual_sources
-    context = pair.context.model_copy(update={"actor": CommanderPeerCaller("worker")})
+    context = pair.context.model_copy(update={"actor": PeerCaller("worker")})
     comms = context.comms
     peer = SourceRepository(checkout=pair.core.checkout, github=pair.core.github, number=9)
     peer.git(peer.checkout, "switch", "-c", "orderless-source", "main")
@@ -907,7 +907,7 @@ def test_failed_final_rejection_status_leaves_the_member_pending_not_old_green(
 
 def test_source_acceptance_never_enqueues_and_promotion_refuses_an_individual_member(head_bus) -> None:
     comms, github, request = head_bus
-    context = order.Commander.read_root(comms.root)
+    context = order.Team.read_root(comms.root)
     arguments = ["--repo", request.repo.to_wire(), "--pr", str(request.pr),
                  "--head", request.head, "--why", ACCEPTED.text]
     judge.main(["ok", *arguments], context)
@@ -921,7 +921,7 @@ def test_source_acceptance_never_enqueues_and_promotion_refuses_an_individual_me
 def test_a_verdict_lists_every_argument_refusal_in_one_run_and_records_nothing(head_bus):
     """ok with empty --serves and both edit IDs and --pr took one run per refusal."""
     comms, github, request = head_bus
-    context = order.Commander.read_root(comms.root)
+    context = order.Team.read_root(comms.root)
     with pytest.raises(RecordProblems) as refused:
         judge.main(["ok", "E1:abcd", "--pr", str(request.pr), "--head", request.head,
                     "--why", ACCEPTED.text, "--serves", ""], context)
@@ -937,7 +937,7 @@ def test_judge_reviewing_after_ok_withdraws_the_accepted_status_on_that_head(
     """GitHub keeps the newest status per context on a commit, so reviewing an approved head
     holds it out of the merge queue until a new ok."""
     comms, github, request = head_bus
-    context = order.Commander.read_root(comms.root)
+    context = order.Team.read_root(comms.root)
     second_checkout = tmp_path / "second-review-checkout"
     reviewed_source.git(reviewed_source.checkout, "worktree", "add", "-q", "--detach",
                         str(second_checkout))
@@ -1114,10 +1114,10 @@ def test_a_reviewing_mark_owes_the_judge_line_until_a_decision(head_bus):
 
     invoke(comms, request, UnderReviewHeadVerdict())
     assert owed() == [request]
-    assert not CommanderHistory.read(comms, frozenset()).action_at(subject).since(since)
+    assert not TeamHistory.read(comms, frozenset()).action_at(subject).since(since)
     invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
     assert owed() == []
-    history = CommanderHistory.read(comms, frozenset())
+    history = TeamHistory.read(comms, frozenset())
     assert history.action_at(subject).since(since)
     assert subject.disposed(history, since)
     assert not subject.disposed(history, time.time() + 1)
@@ -1334,7 +1334,7 @@ def test_retained_head_verdict_precedes_the_published_lost_packet(
         request.pr, 'feature', request.head, closed_at=stamp, updated=stamp,
         base='main', reviewable_times=(stamp,)))
     asyncio.run(ClosedPullRequestWatch().run(lambda: nullcontext(comms)))
-    frame = capture_frame(comms, 'lead', ProgressRead(()), CommanderHeartbeat())
+    frame = capture_frame(comms, 'lead', ProgressRead(()), TeamHeartbeat())
     lost, = ClosedUnmergedPullRequest.scan_observed(comms, 'lead', (), frame)
     assert lost.request == request
 
@@ -1346,15 +1346,15 @@ def test_retained_head_verdict_precedes_the_published_lost_packet(
     # Publish the actual typed packet; no board rows or history records are rewritten.
     owner = comms.registry.require('lead').incarnation
     ping = replace(RulePing.capture(lost), since=RecordedEventTime(published))
-    packet = CommanderDecisions(owner, (ping,), (ping,), ())
-    CommanderUpdateStore.record(comms.root, packet)
+    packet = TeamDecisions(owner, (ping,), (ping,), ())
+    TeamUpdateStore.record(comms.root, packet)
     original, = packet.send(comms, ())
-    previous = CommanderUpdate.latest(comms, owner)
+    previous = TeamUpdate.latest(comms, owner)
     assert previous == (packet,)
-    assert isinstance(original.task, CommanderDecisions)
+    assert isinstance(original.task, TeamDecisions)
     assert original.task == packet
-    history = CommanderHistory.read(comms, frozenset(('lead',)))
-    assert (CommanderUpdate.current_board(comms, 'lead') == ()) is cleared
+    history = TeamHistory.read(comms, frozenset(('lead',)))
+    assert (TeamUpdate.current_board(comms, 'lead') == ()) is cleared
     assert (packet.open_pings(history) == ()) is cleared
     if cleared:
         subject, = ping.subjects
@@ -1368,15 +1368,15 @@ def test_retained_head_verdict_precedes_the_published_lost_packet(
     assert not HeadSubject(request).disposed(history, published)
 
     # Retained observations own age; actual publications own which lines were announced.
-    delivery = CommanderUpdate.derive(owner, (), (lost,), previous,
-                                      published=CommanderUpdate.published(comms, owner),
+    delivery = TeamUpdate.derive(owner, (), (lost,), previous,
+                                      published=TeamUpdate.published(comms, owner),
                                       now=time.time(), history=history)
     assert delivery.packet.handled[0].since == ping.since
     assert (delivery.open_pings == ()) is cleared
-    CommanderUpdateStore.record(comms.root, delivery.packet)
+    TeamUpdateStore.record(comms.root, delivery.packet)
     delivery.packet.send(comms, ())
-    assert CommanderUpdate.latest(comms, owner) == (delivery.packet,)
-    assert (CommanderUpdate.current_board(comms, 'lead') == ()) is cleared
+    assert TeamUpdate.latest(comms, owner) == (delivery.packet,)
+    assert (TeamUpdate.current_board(comms, 'lead') == ()) is cleared
     assert original.task.handled == (ping,)
 
 
@@ -1452,7 +1452,7 @@ def test_a_request_no_order_links_reaches_the_thread_working_on_its_branch(
     assert still_stuck.line().endswith(" -> fix debt-src at its owner at armer")
 
 
-def test_another_commanders_linked_request_stays_off_the_orderless_board(head_bus):
+def test_another_teammates_linked_request_stays_off_the_orderless_board(head_bus):
     """The 2026-10-25 guarantee holds: a request an open order links is never orderless.
     The orders read are every commander's open orders, so another commander's linked
     request is its own board's line, never this one's."""

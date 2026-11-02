@@ -2,7 +2,7 @@
 condition never uses `pgrep -f`, whose pattern also matches the waiter's own command line
 and every other waiter naming the same task, so such loops keep each other alive forever.
 
-On 2026-10-21 the commander session and its forks left 177 of these loops running (the
+On 2026-10-21 the teammate session and its forks left 177 of these loops running (the
 oldest 2,981 minutes), 378 forks/s and 48% system CPU on a 12-core machine.
 """
 

@@ -2180,7 +2180,7 @@ class RoomTicket(Id128):
 
 
 class HuntId(Id128):
-    """One recorded commander hunt."""
+    """One recorded teammate hunt."""
 
 
 class ContextStoreId(Id128):

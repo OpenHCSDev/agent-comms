@@ -1,4 +1,4 @@
-"""The commander's current board: changes once, then one unchanged count per tool call.
+"""The teammate's current board: changes once, then one unchanged count per tool call.
 
 The board is the newest heartbeat packet's lines that no recorded action has disposed of yet.
 Only Core can answer that, and importing Core costs the hook over a second, so the hook asks

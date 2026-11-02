@@ -13,7 +13,7 @@ from agent_comms.cli_commands import BusReadBack
 from agent_comms.cli_command import CliCommand
 from agent_comms.cli_verbs.history import HistoryCliCommand
 from agent_comms.installer.probes.harnesses import InstallResult
-from agent_comms.registry_document import NoCommanderProject
+from agent_comms.registry_document import NoTeamProject
 from agent_comms.repo import Checkout, GitCommandError
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.host_services import RestartedService
@@ -97,7 +97,7 @@ def test_typed_results_publish_as_installer_and_survive_history_read(private_com
     found = Upgrade("a" * 40, "b" * 40, comms.root, ("carry_order_scopes",))
     installed = InstalledUpgrade(
         found.source, found.target, found.root, found.pending, FreshRehearsal(),
-        live, InstallResult(NoCommanderProject(), {}),
+        live, InstallResult(NoTeamProject(), {}),
         phases=[PhaseTiming(CommandPhase(("uv", "sync")), 61.2, 61.2),
                 *(PhaseTiming(CommandPhase(("git", "show", str(index))), 0.1, 0.2)
                   for index in range(7))],
@@ -250,7 +250,7 @@ def test_an_install_whose_bridges_did_not_resume_says_so_in_its_headline(private
     comms = declare_test_bus(private_comms, channels=("comms",))
     unresumed = UnresumedUpgrade(
         "a" * 40, "b" * 40, comms.root, (), FreshRehearsal(), UnchangedRun(),
-        InstallResult(NoCommanderProject(), {}), phases=[],
+        InstallResult(NoTeamProject(), {}), phases=[],
         bridge_resumes=(UnobservedBridge("copied-session", "new runtime absent"),),
     )
     InstallReportProbe(comms.root, "\n".join(FinishedInstall(unresumed).lines())).run()
@@ -279,7 +279,7 @@ def test_terminal_report_follows_real_tree_cleanup_and_keeps_original_error(
         refusal = UpgradeRefused("operation refused before its result")
         installed = InstalledUpgrade(
             "a" * 40, target, comms.root, (), FreshRehearsal(), UnchangedRun(),
-            InstallResult(NoCommanderProject(), {}), phases=[],
+            InstallResult(NoTeamProject(), {}), phases=[],
         )
         observed = None
         try:

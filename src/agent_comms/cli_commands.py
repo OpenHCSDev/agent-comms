@@ -114,7 +114,7 @@ class ThreadTagsResult(CliResult):
 
 
 @dataclass(frozen=True)
-class CommandersResult(CliResult):
+class TeammatesResult(CliResult):
     leads: tuple[str, ...]
     commanders: tuple[str, ...]
 

@@ -17,7 +17,7 @@ from agent_comms_hooks import ToolRefusedError
 from .activity import ActivityCapture, ObservedActivity
 from .agent_activity import AgentActivity
 from .catalog_document import CatalogAccess
-from .channel_targets import CommandersTag, ResolvedTarget, SurroundingChannel
+from .channel_targets import TeammatesTag, ResolvedTarget, SurroundingChannel
 from .channels import Channel, ChannelMemberIndex
 from .child_process import NoProcess, ProcessIdentity
 from .nominal.declared_family import DeclaredFamily
@@ -610,8 +610,8 @@ class HistoricalRootPurpose(RootPurpose):
 
 
 @dataclass(frozen=True)
-class CommanderProject(DeclaredFamily, affix="CommanderProject"):
-    """This bus's commander declaration; identity resolves through the registry lookup."""
+class TeamProject(DeclaredFamily, affix="TeamProject"):
+    """This bus's teammate declaration; identity resolves through the registry lookup."""
 
     def participants(self, threads: Iterable[Thread]) -> tuple[Thread, ...]:
         """An undeclared project admits no participants."""
@@ -622,11 +622,11 @@ class CommanderProject(DeclaredFamily, affix="CommanderProject"):
         return self.participants(snapshot.threads.values())
 
     def require_actor(self, snapshot: RegistrySnapshot,
-                      actor: ThreadIncarnation) -> RegisteredCommanderProject:
+                      actor: ThreadIncarnation) -> RegisteredTeamProject:
         """Validate the actual birth and its declared independent or in-turn caller binding."""
         project = self.require()
         own = snapshot.born(actor.require_recorded().lookup)
-        candidates = (own, *snapshot.threads_for(actor.commanding_identity.require_recorded()))
+        candidates = (own, *snapshot.threads_for(actor.acting_identity.require_recorded()))
         if not project.participants(candidates):
             raise ToolRefusedError(
                 "Only registered independent colleagues or their bound in-turn children "
@@ -634,7 +634,7 @@ class CommanderProject(DeclaredFamily, affix="CommanderProject"):
         return project
 
     def require_scope(self, snapshot: RegistrySnapshot, actor: ThreadIncarnation,
-                      repository: RepositoryName) -> RegisteredCommanderProject:
+                      repository: RepositoryName) -> RegisteredTeamProject:
         """The shared actor and configured-repository boundary for review and integration."""
         project = self.require_actor(snapshot, actor)
         if repository not in project.repository_names():
@@ -644,7 +644,7 @@ class CommanderProject(DeclaredFamily, affix="CommanderProject"):
 
     @abstractmethod
     def leads(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
-        """The registered commander that owns the project's board, repositories and orders."""
+        """The registered teammate that owns the project's board, repositories and orders."""
 
     def unique_repositories(self, name: str = '') -> tuple[Repo, ...]:
         return ()
@@ -658,37 +658,37 @@ class CommanderProject(DeclaredFamily, affix="CommanderProject"):
         return (primary, *self.repository_names())
 
     @abstractmethod
-    def require(self) -> RegisteredCommanderProject: ...
+    def require(self) -> RegisteredTeamProject: ...
 
     @abstractmethod
     def named(self, commander: ThreadIncarnation,
-              repositories: RepositorySelection) -> RegisteredCommanderProject: ...
+              repositories: RepositorySelection) -> RegisteredTeamProject: ...
 
     @abstractmethod
-    def reconfigured(self, repositories: RepositorySelection) -> CommanderProject: ...
+    def reconfigured(self, repositories: RepositorySelection) -> TeamProject: ...
 
 
-class NoCommanderProject(CommanderProject):
+class NoTeamProject(TeamProject):
     def leads(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
         return ()
 
     def repository_names(self, name: str = "") -> tuple[RepositoryName, ...]:
         return ()
 
-    def require(self) -> RegisteredCommanderProject:
-        raise ToolRefusedError("This bus has no registered commander project.")
+    def require(self) -> RegisteredTeamProject:
+        raise ToolRefusedError("This bus has no registered team project.")
 
     def named(self, commander: ThreadIncarnation,
-              repositories: RepositorySelection) -> RegisteredCommanderProject:
-        return RegisteredCommanderProject(commander, repositories.founding(commander.name))
+              repositories: RepositorySelection) -> RegisteredTeamProject:
+        return RegisteredTeamProject(commander, repositories.founding(commander.name))
 
-    def reconfigured(self, repositories: RepositorySelection) -> CommanderProject:
-        repositories.without_commander()
+    def reconfigured(self, repositories: RepositorySelection) -> TeamProject:
+        repositories.without_team()
         return self
 
 
 @dataclass(frozen=True)
-class RegisteredCommanderProject(CommanderProject):
+class RegisteredTeamProject(TeamProject):
     commander: ThreadIncarnation
     repos: tuple[Repo, ...]
 
@@ -699,14 +699,14 @@ class RegisteredCommanderProject(CommanderProject):
             for peer in thread.role.independent_threads(thread)))
 
     def lead(self, snapshot: RegistrySnapshot) -> Thread:
-        """The one registered commander a fork is declared under."""
+        """The one registered teammate a fork is declared under."""
         (thread,) = self.leads(snapshot)
         return thread
 
     def leads(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
         selected = snapshot.threads_for(self.commander.require_recorded())
         if not selected:
-            raise RelationViolationError("The registered commander thread no longer exists.")
+            raise RelationViolationError("The registered teammate thread no longer exists.")
         return selected
 
     def repository_names(self, name: str = "") -> tuple[RepositoryName, ...]:
@@ -720,14 +720,14 @@ class RegisteredCommanderProject(CommanderProject):
             selected.setdefault(repo.github, repo)
         return tuple(selected.values())
 
-    def require(self) -> RegisteredCommanderProject:
+    def require(self) -> RegisteredTeamProject:
         return self
 
     def named(self, commander: ThreadIncarnation,
-              repositories: RepositorySelection) -> RegisteredCommanderProject:
-        return RegisteredCommanderProject(commander, repositories.applied(self.repos))
+              repositories: RepositorySelection) -> RegisteredTeamProject:
+        return RegisteredTeamProject(commander, repositories.applied(self.repos))
 
-    def reconfigured(self, repositories: RepositorySelection) -> CommanderProject:
+    def reconfigured(self, repositories: RepositorySelection) -> TeamProject:
         return replace(self, repos=repositories.applied(self.repos))
 
 
@@ -741,8 +741,8 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         default_factory=WorkingRootPurpose
     )
     commander_project: Annotated[
-        CommanderProject, SlicePolicy(WholeDocumentValue), WireOmitDefault()
-    ] = field(default_factory=NoCommanderProject)
+        TeamProject, SlicePolicy(WholeDocumentValue), WireOmitDefault()
+    ] = field(default_factory=NoTeamProject)
     threads: Annotated[ThreadRows, SlicePolicy(ThreadRowsSlice)] = field(
         default_factory=ThreadRows
     )
@@ -867,8 +867,8 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         self.threads[current.name] = updated
         return updated
 
-    def set_commander_project(self, project: CommanderProject) -> CommanderProject:
-        """Publish a project for its registered commander identity."""
+    def set_team_project(self, project: TeamProject) -> TeamProject:
+        """Publish a project for its registered teammate identity."""
         self.commander_project = project
         return project
 
@@ -1167,8 +1167,8 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
     aliases: Annotated[Mapping[str, str], SlicePolicy(MappingRowsSlice)]
     owner_generations: Annotated[Mapping[str, int], SlicePolicy(MappingRowsSlice)]
     _claimed_generations: Annotated[Mapping[str, int], SlicePolicy(MappingRowsSlice)] = field(repr=False)
-    commander_project: Annotated[CommanderProject, SlicePolicy(WholeDocumentValue)] = field(
-        default_factory=NoCommanderProject
+    commander_project: Annotated[TeamProject, SlicePolicy(WholeDocumentValue)] = field(
+        default_factory=NoTeamProject
     )
     def __post_init__(self) -> None:
         """Own each copied value and derive the birth index from the frozen threads."""
@@ -1210,9 +1210,9 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
         """Deleted declarations keep their generation without exposing its store."""
         return tuple(name for name in self._claimed_generations if name not in self.threads)
 
-    def commanders_channel(self) -> tuple[Thread, ...]:
-        """Every member of #commanders, forks included: each may answer for any commander."""
-        return tuple(ChannelMemberIndex(self.threads.values())[CommandersTag.declared_name])
+    def teammates_channel(self) -> tuple[Thread, ...]:
+        """Every member of #teammates, forks included: each may answer for any teammate."""
+        return tuple(ChannelMemberIndex(self.threads.values())[TeammatesTag.declared_name])
 
     def threads_for(self, incarnation: RecordedThreadIncarnation) -> tuple[Thread, ...]:
         return (

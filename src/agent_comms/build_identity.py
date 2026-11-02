@@ -43,7 +43,7 @@ class CommitInstallation(DeclaredFamily, affix="CommitInstallation"):
     def after_merge(self, todo: Todo, merged: MergedProblemOrder) -> Todo: ...
 
     def awaits_holder(self, run: OrderRun) -> bool:
-        """Whether the merged order now waits on its holder rather than the commander's install."""
+        """Whether the merged order now waits on its holder rather than the teammate's install."""
         return False
 
 

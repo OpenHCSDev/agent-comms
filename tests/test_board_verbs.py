@@ -8,20 +8,20 @@ from inspect import isabstract
 
 import pytest
 
-from agent_comms.commander import judge, order
+from agent_comms.team import judge, order
 from agent_comms.errors import TodoError
-from agent_comms.thread_execution import CommanderForkExecution, ExternalThreadExecution
+from agent_comms.thread_execution import ForkExecution, ExternalThreadExecution
 from agent_comms.threads import Thread
-from agent_comms.commander.standing import DeliveryAwaitingJudgement
+from agent_comms.team.standing import DeliveryAwaitingJudgement
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.goal_actions import SetGoalAction
-from commander_heartbeat_fixture import capture_frame
+from team_heartbeat_fixture import capture_frame
 from agent_comms.head_review import HeadReviewOrder, PullRequestHead
-from agent_comms.tool_caller import CommanderForkCaller, ThreadCaller
+from agent_comms.tool_caller import ForkCaller, ThreadCaller
 from agent_comms_hooks import ToolRefusedError
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import HeadReviewTimerUp, LinkedUnreviewedHead, OrderlessUnreviewedHead, ReviewTimerUp, StandingRule
-from agent_comms.task_attachments.commander_pings import RulePing
+from agent_comms.task_attachments.team_pings import RulePing
 from agent_comms.todos import (
     Assignment, ClaimOrder, DeliveredProblemOrder, NoHeadOrder, OrderHeadReview, OrderClaim,
     OrderHeadReviewRecord, OrderMessage, ProgressRead, RecordOrderHeadVerdict, RecordPullRequest, ReleaseTodo,
@@ -29,9 +29,9 @@ from agent_comms.todos import (
 )
 
 from test_held_problem_orders import merge_two_commit_fix
-from test_commander_notifications import beat, notifications
+from test_team_notifications import beat, notifications
 
-pytest_plugins = ("test_head_review", "test_held_problem_orders", "test_commander_notifications")
+pytest_plugins = ("test_head_review", "test_held_problem_orders", "test_team_notifications")
 
 REASON = VerdictReason("The existing class owns this behavior without another copy")
 ROAST = "This is stupid because the same decision is written twice instead of belonging to its existing class."
@@ -66,7 +66,7 @@ def board_review(head_bus):
 
 
 def assert_review_preconditions(rule, comms, request):
-    ctx = order.Commander.read_root(comms.root)
+    ctx = order.Team.read_root(comms.root)
     observed = rule.command_values()
     todo = comms.goals.todos.get(observed.get("problem", "P2"))
     # Supply review prose once by declared argument, not a second roster of verb requirements.
@@ -216,7 +216,7 @@ def test_claim_link_survives_sendbacks_and_explicit_release_without_editing_goal
     assert judge.OkVerb in rule.clearing_actions()
     command, = judge.OkVerb.commands({**rule.command_values(),
         "why": shlex.quote(REASON.text), "serves": shlex.quote(QUOTE)})
-    judge.main(shlex.split(command)[1:], order.Commander.read_root(comms.root))
+    judge.main(shlex.split(command)[1:], order.Team.read_root(comms.root))
     accepted = comms.goals.todos.get(original.id)
     assert accepted.order.holds_head(request)
     assert StoredHeadReview.head_reviews(comms.goals.todos, request)[0].order.problem == original.id
@@ -227,8 +227,8 @@ def test_claim_link_survives_sendbacks_and_explicit_release_without_editing_goal
 
 
 def test_released_merged_work_refuses_late_review_but_can_be_delivered(
-        held_commander, cited_source, tmp_path):
-    ctx = held_commander
+        held_team, cited_source, tmp_path):
+    ctx = held_team
     store = ctx.comms.goals.todos
     todo = store.get("P1")
     previous = todo.held()
@@ -284,13 +284,13 @@ def test_independent_colleagues_may_review_without_rank_tags(board_review, revie
 
 def test_in_turn_review_uses_the_actual_bound_parent_not_a_second_independent_actor(board_review):
     comms, request, _, _ = board_review
-    child = comms.registry.register_child("review-child", "worker", CommanderForkExecution,
+    child = comms.registry.register_child("review-child", "worker", ForkExecution,
                                           comms.goals)
     with pytest.raises(ToolRefusedError):
         ThreadCaller(child.name).head_review_actor(comms, request, NoHeadOrder())
-    actor = CommanderForkCaller(child.name).head_review_actor(comms, request, NoHeadOrder())
+    actor = ForkCaller(child.name).head_review_actor(comms, request, NoHeadOrder())
     assert actor == child.incarnation
-    assert actor.commanding_identity == comms.registry.require("worker").incarnation
+    assert actor.acting_identity == comms.registry.require("worker").incarnation
 
 
 def test_review_scope_requires_the_actual_registered_birth(board_review):

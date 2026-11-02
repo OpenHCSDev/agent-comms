@@ -18,7 +18,7 @@ from agent_comms.threads import Thread
 from agent_comms.todos import Assignment, SharedWorktreeRefusal
 from agent_comms.tool_caller import ThreadCaller
 
-pytest_plugins = ('test_commander_forks',)
+pytest_plugins = ('test_forks',)
 
 
 @pytest.fixture

@@ -16,9 +16,9 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_identity import CoreWatcherIncarnation, RecordedThreadIncarnation
 from agent_comms.threads import ParkedThreadWorkState
 from agent_comms.todos import AssignTodo, HolderConsentRequired, ReleaseTodo, StrikeReason
-from agent_comms.tool_caller import CommanderForkCaller, CommanderPeerCaller, ThreadCaller
+from agent_comms.tool_caller import ForkCaller, PeerCaller, ThreadCaller
 
-from test_commander_forks import fork_bus  # noqa: F401
+from test_forks import fork_bus  # noqa: F401
 
 RELEASE = StrikeReason("The current holder explicitly releases its exact recorded work assignment.")
 
@@ -28,17 +28,17 @@ def test_shared_maintenance_and_storage_selection_do_not_release_another_holder(
     comms, _, _ = fork_bus
     store = comms.goals.todos
     current = store.get("P40")
-    caller = CommanderPeerCaller(name).as_thread("retained")
+    caller = PeerCaller(name).as_thread("retained")
     actor = caller.identity(comms)
     assert actor.commands(current.creator_identity)
-    assert actor.commanding_identity == comms.registry.require(name).incarnation
+    assert actor.acting_identity == comms.registry.require(name).incarnation
     assert not actor.represents(current.held().owner_identity)
     with pytest.raises(HolderConsentRequired):
         ReleaseTodo(current.revision, actor, current.held(), RELEASE).record(comms.goals, current.id)
     assert store.get(current.id) == current
 
 
-@pytest.mark.parametrize("caller", (ThreadCaller("retained"), CommanderForkCaller("holder-child")))
+@pytest.mark.parametrize("caller", (ThreadCaller("retained"), ForkCaller("holder-child")))
 def test_holder_and_its_bound_in_turn_child_can_release_the_exact_hold(fork_bus, caller):
     comms, _, _ = fork_bus
     current = comms.goals.todos.get("P40")
@@ -54,7 +54,7 @@ def test_holder_and_its_bound_in_turn_child_can_release_the_exact_hold(fork_bus,
 
 def test_raw_child_identity_does_not_inherit_a_parents_holder_consent(fork_bus):
     comms, _, _ = fork_bus
-    child = CommanderForkCaller("holder-child")
+    child = ForkCaller("holder-child")
     child.join(comms, "retained")
     current = comms.goals.todos.get("P40")
     actor = ThreadCaller(child.name).identity(comms)
@@ -96,7 +96,7 @@ def test_maintainer_cannot_change_holder_or_the_receiving_goal(fork_bus):
     comms, _, _ = fork_bus
     current = comms.goals.todos.get("P40")
     goal = comms.registry.require("worker").goal
-    actor = CommanderPeerCaller("lead").as_thread("retained").identity(comms)
+    actor = PeerCaller("lead").as_thread("retained").identity(comms)
     with pytest.raises(HolderConsentRequired):
         handoff(comms, current, actor)
     assert comms.goals.todos.get(current.id) == current
@@ -157,7 +157,7 @@ def incoming_work(comms):
 
 @pytest.mark.parametrize("caller", (
     ThreadCaller("lead"), ThreadCaller("other"),
-    CommanderPeerCaller("lead").as_thread("worker"),
+    PeerCaller("lead").as_thread("worker"),
 ))
 def test_fresh_goal_observation_and_shared_maintenance_are_not_receiving_consent(fork_bus, caller):
     comms, _, _ = fork_bus
@@ -208,9 +208,9 @@ def test_receiving_owner_or_genuine_child_can_accept_work_into_its_goal(fork_bus
     comms, _, _ = fork_bus
     current, action = incoming_work(comms)
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Choose the next repair."))
-    caller = CommanderPeerCaller("worker").as_thread("lead")
+    caller = PeerCaller("worker").as_thread("lead")
     if bound_child:
-        caller = CommanderForkCaller("goal-child")
+        caller = ForkCaller("goal-child")
         caller.join(comms, "worker")
     caller.invoke(CommsOrderTool(owner="worker", order=action), comms)
     worker = comms.registry.require("worker")
@@ -247,7 +247,7 @@ def test_raw_child_does_not_supply_receiving_goal_consent(fork_bus):
     comms, _, _ = fork_bus
     current, action = incoming_work(comms)
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Keep my independent work."))
-    CommanderForkCaller("goal-child").join(comms, "worker")
+    ForkCaller("goal-child").join(comms, "worker")
     with pytest.raises(GoalConsentRequired):
         ThreadCaller("goal-child").invoke(CommsOrderTool(owner="worker", order=action), comms)
     assert comms.registry.require("worker").goal == goal
@@ -261,7 +261,7 @@ def test_receiving_consent_does_not_resume_an_owner_pause(fork_bus):
     goal = comms.goals.update_goal(
         "worker", PausedGoalAction(), actor=OwnerInvocable)
     with pytest.raises(ValueError) as refused:
-        CommanderPeerCaller("worker").as_thread("lead").invoke(
+        PeerCaller("worker").as_thread("lead").invoke(
             CommsOrderTool(owner="worker", order=action), comms)
     assert str(refused.value) == goal.state.pause_source.instruction()
     assert comms.registry.require("worker").goal == goal

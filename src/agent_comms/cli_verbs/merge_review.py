@@ -44,7 +44,7 @@ class ReviewedMerge:
 
 @dataclass(frozen=True, kw_only=True)
 class MergeReviewCliCommand(ReviewedMerge, CliCommand[MergeReviewResult], declared_name="merge-review"):
-    """Read the existing exact-head verdict for a commander session's merge command."""
+    """Read the existing exact-head verdict for a teammate session's merge command."""
 
     help = "Read Core's recorded decision for the pinned admin/API merge head"
     session: Annotated[str, Argument(flags=("--session",))]
@@ -54,7 +54,7 @@ class MergeReviewCliCommand(ReviewedMerge, CliCommand[MergeReviewResult], declar
         bindings = tuple(binding for binding in WatchClaim(self.session).state().bindings()
                          if Path(binding.root) == ctx.root)
         if not bindings:
-            raise ToolRefusedError("The commander session has no recorded binding to this bus; no verdict can be read.")
+            raise ToolRefusedError("The teammate session has no recorded binding to this bus; no verdict can be read.")
         snapshot = ctx.registry.snapshot()
         actor, *others = (snapshot.require(binding.bus).incarnation.require_recorded()
                           for binding in bindings)

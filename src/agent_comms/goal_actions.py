@@ -61,7 +61,7 @@ from .attempt_resolution import ComplianceDecision, OrderDecision, RetryDecision
 
 if TYPE_CHECKING:
     from .goal_management import Goals
-    from .registry_document import CommanderProject
+    from .registry_document import TeamProject
     from .goal_presentation import GoalSnapshot
 
 
@@ -267,7 +267,7 @@ class ActiveGoalAction(
 
 @dataclass(frozen=True, kw_only=True)
 class CompliedGoalAction(TransitionGoalAction, OwnerInvocable):
-    """The commander complied, so a unit its chokehold paused works again. The compliant answer
+    """The teammate complied, so a unit its chokehold paused works again. The compliant answer
     is a witness the way an order is: a generation an interruption left unresolved continues
     as a fresh order continues it (continue_work), where a status-only resume is refused.
     Only Core's release takes it; no model or control surface can name a witness."""
@@ -486,7 +486,7 @@ class PausedGoalAction(
 
 @dataclass(frozen=True, kw_only=True)
 class ChokeholdPausedGoalAction(PausedGoalAction):
-    """The heartbeat holds a unit while its commander ignores a vibe check."""
+    """The heartbeat holds a unit while its teammate ignores a vibe check."""
 
     def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:
         return PausedGoal(ChokeholdPause())
@@ -589,7 +589,7 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
         ctx.goals.todos.owner_request(self.request).require_open(self.assigner)
         self.review_at.require_recorded("A review time")
 
-    def require_sendable(self, project: CommanderProject) -> None:
+    def require_sendable(self, project: TeamProject) -> None:
         """A new order's wording and source references hold at its declared revision."""
         self.order.require_wording()
         self.order.require_references(project)
@@ -604,7 +604,7 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
 
 @dataclass(frozen=True, kw_only=True)
 class OrderGoalAction(ProblemOrderGoalAction):
-    """The order's commander gives the problem, and the order's other open problems, to this
+    """The order's teammate gives the problem, and the order's other open problems, to this
     thread: one goal update and one Todo transaction for the whole group."""
 
     expected_revision: int
@@ -646,7 +646,7 @@ class ReissuedOrderGoalAction(OrderGoalAction):
             assigner=CoreWatcherIncarnation.watcher(),
             traced=order.owner)
 
-    def require_sendable(self, project: CommanderProject) -> None:
+    def require_sendable(self, project: TeamProject) -> None:
         pass
 
 
@@ -707,7 +707,7 @@ def required_block_reason(reason: str | None) -> str:
 
 @dataclass(frozen=True, kw_only=True)
 class RetryGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, RuntimeInvocable):
-    """Retry a blocked goal: the unit itself, its commander or the owner; authorize_retry fences
+    """Retry a blocked goal: the unit itself, its teammate or the owner; authorize_retry fences
     every attempt against the unresolved one."""
 
     @classmethod

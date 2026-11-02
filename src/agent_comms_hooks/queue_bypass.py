@@ -1,6 +1,6 @@
-"""Required checks and the commander's head verdict protect merges.
+"""Required checks and the teammate's head verdict protect merges.
 
-The owner's admin bypass stays. A commander session may bypass only with the head
+The owner's admin bypass stays. A teammate session may bypass only with the head
 pinned: one repository, one PR, the exact head. An admin merge owes no recorded
 verdict, since --admin is the merger saying it reviewed the head; an API merge still
 needs Core's recorded ok verdict on it. Other hook sessions cannot bypass the checks.
@@ -207,7 +207,7 @@ class ApiMerge(QueueBypass):
 class QueueBypassGuard(SessionHookProgram, BashRefusal):
     headline = "Merge bypass refused"
     advice = (
-        ". Use `gh pr merge N --auto --merge` for required checks and the commander's head verdict."
+        ". Use `gh pr merge N --auto --merge` for required checks and the teammate's head verdict."
     )
 
     @classmethod

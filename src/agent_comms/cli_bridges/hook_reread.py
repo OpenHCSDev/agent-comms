@@ -34,7 +34,7 @@ class SliceReminder(DeckStart):
 
 @dataclass(frozen=True)
 class DeafReminder(SliceReminder):
-    """Beside the deck's slice, the RE-ARM line while the commander session's bridge has no
+    """Beside the deck's slice, the RE-ARM line while the teammate session's bridge has no
     Monitor reading it. The line rides the next tool call, never the bridge it reports dead."""
 
     def taken(self, reader: DeckReader, number: int, comms: Comms,

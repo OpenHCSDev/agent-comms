@@ -78,8 +78,8 @@ from .connector_store import (
 )
 from .locked_store import DocumentChange
 from .messages import QuestionKind
-from .commander.standing import UnownedOrderWatch
-from .commander_heartbeat import CommanderHeartbeat
+from .team.standing import UnownedOrderWatch
+from .team_heartbeat import TeamHeartbeat
 from .closed_pull_requests import ClosedPullRequestWatch
 from .message_bus import Watch
 from .coordinator import Coordination
@@ -562,8 +562,8 @@ class Connector:
         await asyncio.gather(*(call for call, tool in pending), return_exceptions=True)
 
     @property
-    def heartbeat(self) -> CommanderHeartbeat:
-        return cast(CommanderHeartbeat, self.watches[CommanderHeartbeat])
+    def heartbeat(self) -> TeamHeartbeat:
+        return cast(TeamHeartbeat, self.watches[TeamHeartbeat])
 
     @property
     def resource_metadata_url(self) -> str:
@@ -644,7 +644,7 @@ class Connector:
             logging.info("%s %s %s %.3fs", request.method, template, status, elapsed)
 
     async def watch_orders(self, app: web.Application) -> AsyncIterator[None]:
-        """Core owns both order maintenance and the commander's changed-rule wakes."""
+        """Core owns both order maintenance and the teammate's changed-rule wakes."""
         passes = ServicePassStore.at(self.root)
         with OwnedGitOpening(self.git_children).bound():
             self.watch_tasks.update(

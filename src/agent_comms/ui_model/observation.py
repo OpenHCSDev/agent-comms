@@ -43,7 +43,7 @@ from agent_comms.active_route import CommsRoute
 from agent_comms.activity import ObservedActivity
 from agent_comms.bus_read import OwnerScopedRead, UiRead
 from agent_comms.child_process import join_retirement
-from agent_comms.commander_hud import CommanderFrame, CommanderHud
+from agent_comms.team_hud import TeamFrame, TeamHud
 from agent_comms.comms import Comms
 from agent_comms.coordinator import Coordination
 from agent_comms.coordination_errors import (
@@ -67,7 +67,7 @@ from agent_comms.presentation import CoordinationSnapshot, NoRevision, ReadState
 from agent_comms.registry_document import RosterVisibility
 from agent_comms.registry_provenance import DeletedThread
 from agent_comms.revision_views import (
-    CommanderFramesView,
+    TeamFramesView,
     NotificationsView,
     RegistrationsView,
     RevisionView,
@@ -713,31 +713,31 @@ class ObserveThreads(InterestRequest):
 
 
 @dataclass(frozen=True)
-class ObserveCommanderHud(InterestRequest):
-    """Each commander's newest heartbeat frame; Core derived it, a view only shows it."""
+class ObserveTeamHud(InterestRequest):
+    """Each teammate's newest heartbeat frame; Core derived it, a view only shows it."""
 
-    def observation(self) -> CommanderHudReading:
-        return CommanderHudReading(self)
+    def observation(self) -> TeamHudReading:
+        return TeamHudReading(self)
 
 
 @dataclass(frozen=True)
-class StopCommanderHud(ObservationRequest):
+class StopTeamHud(ObservationRequest):
     def receive(self, service: ObservationService) -> None:
-        service.interest.remove(CommanderHudReading)
+        service.interest.remove(TeamHudReading)
 
 
-class CommanderHudReading(ReadingObservation[ObserveCommanderHud]):
+class TeamHudReading(ReadingObservation[ObserveTeamHud]):
     """Reads the frame files only when the heartbeat replaced one of them."""
 
-    view = CommanderFramesView()
+    view = TeamFramesView()
 
     def read(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:
         yield UnreadableHistory.outcome(
-            lambda: CommanderHudObserved(revision, CommanderFrame.read_all(comms.root)),
+            lambda: TeamHudObserved(revision, TeamFrame.read_all(comms.root)),
         ).answer(
             lambda observed: observed,
             lambda error: ObservationPending(),  # Keep the interest until its source can be read.
-            lambda error: CommanderHudUnreadable(revision, error),
+            lambda error: TeamHudUnreadable(revision, error),
         )
 
 
@@ -1218,15 +1218,15 @@ class NotificationsUnreadable(Absorbs, NotificationAnswer):
 
 
 @dataclass(frozen=True)
-class CommanderHudObserved(Observed):
-    """Every beating commander's newest frame, by commander name."""
+class TeamHudObserved(Observed):
+    """Every beating teammate's newest frame, by teammate name."""
 
-    huds: tuple[CommanderHud, ...]
+    huds: tuple[TeamHud, ...]
 
 
 @dataclass(frozen=True)
-class CommanderHudUnreadable(Observed):
-    """The newest commander frame cannot be read; retain the last good frame."""
+class TeamHudUnreadable(Observed):
+    """The newest teammate frame cannot be read; retain the last good frame."""
 
     error: UnreadableHistory
 

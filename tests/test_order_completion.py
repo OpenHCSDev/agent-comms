@@ -8,11 +8,11 @@ from pathlib import Path
 import pytest
 
 from agent_comms.build_identity import RecordedBuildIdentity
-from agent_comms.commander.order import Commander, main
-from agent_comms.commander.standing import HolderGone
+from agent_comms.team.order import Team, main
+from agent_comms.team.standing import HolderGone
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.nominal.field_codec import RecordProblems
-from commander_heartbeat_fixture import capture_frame
+from team_heartbeat_fixture import capture_frame
 from agent_comms.repo import Checkout, DetachedStart
 from agent_comms.installer.runtime_resolution import CorePackage, RuntimeResolution
 from agent_comms.launch_runtime import LaunchRuntime
@@ -32,7 +32,7 @@ from agent_comms.todos import (
     ReportedProblemOrder,
     TriageScope,
 )
-from agent_comms.ui_model.unit_state import AwaitingApplicationRun, UnitObservation
+from agent_comms.ui_model.teammate_state import AwaitingApplicationRun, TeammateObservation
 from agent_comms.work_branches import WorkBranches
 
 pytest_plugins = ('test_todos', 'test_held_problem_orders')
@@ -40,7 +40,7 @@ pytest_plugins = ('test_todos', 'test_held_problem_orders')
 
 class TestOrderCompletion:
     @staticmethod
-    def record(ctx: Commander, order: ProblemOrder) -> Todo:
+    def record(ctx: Team, order: ProblemOrder) -> Todo:
         store = ctx.comms.goals.todos
         current = store.get('P1')
         with store.writing() as connection:
@@ -48,11 +48,11 @@ class TestOrderCompletion:
         return store.get('P1')
 
     def test_await_run_names_only_its_orders_and_yields_to_source_work(
-        self, held_commander, proof_build_checkouts,
+        self, held_team, proof_build_checkouts,
     ):
         """2026-10-25: "AWAIT RUN unit-backend P483 P739" named P739, sent with no commit,
         and hid that the unit was still writing it."""
-        ctx = held_commander
+        ctx = held_team
         repo = ctx.repos[0]
         graph = next(graph for graph in proof_build_checkouts if graph.repository.github == repo.github)
         pending = ctx.comms.goals.todos.get('P1')
@@ -63,7 +63,7 @@ class TestOrderCompletion:
         writing = replace(pending, id='P3')
 
         def orders(*todos):
-            unit = UnitObservation(ctx.comms, ctx.comms.registry.require('worker'), todos,
+            unit = TeammateObservation(ctx.comms, ctx.comms.registry.require('worker'), todos,
                                    capture_frame(ctx.comms, 'lead', ProgressRead()),
                                    (), time.time(),
                                    ctx.comms.registry.snapshot().status('worker'), False)
@@ -73,9 +73,9 @@ class TestOrderCompletion:
         assert orders(awaiting, delivered, writing) == []
 
     def test_merged_correction_and_done_use_the_current_check(
-        self, held_commander, proof_build_checkouts,
+        self, held_team, proof_build_checkouts,
     ):
-        ctx = held_commander
+        ctx = held_team
         repo = ctx.repos[0]
         graph = next(graph for graph in proof_build_checkouts if graph.repository.github == repo.github)
         original = ctx.comms.goals.todos.get('P1').order
@@ -99,8 +99,8 @@ class TestOrderCompletion:
             repo.checkout, 'rev-parse', f'{graph.installed}^1').strip()
         assert delivered.strike_count == corrected.strike_count
 
-    def test_open_correction_uses_main_and_keeps_the_order(self, held_commander):
-        ctx = held_commander
+    def test_open_correction_uses_main_and_keeps_the_order(self, held_team):
+        ctx = held_team
         original = ctx.comms.goals.todos.get('P1')
         repo = ctx.repos[0]
         main(['check', 'P1', '--check', f'{repo.checkout} :: printf 1 -> 0',
@@ -112,8 +112,8 @@ class TestOrderCompletion:
                 corrected.review_at, corrected.strike_count) == (
                     original.order.id, original.assignment, original.review_at, original.strike_count)
 
-    def test_triage_done_reads_the_report_without_a_sha(self, held_commander):
-        ctx = held_commander
+    def test_triage_done_reads_the_report_without_a_sha(self, held_team):
+        ctx = held_team
         self.record(ctx, replace(ctx.comms.goals.todos.get('P1').order, scope=TriageScope()))
         report = ctx.root / 'triage.txt'
         report.write_text(
@@ -126,9 +126,9 @@ class TestOrderCompletion:
         assert closed.assignment is None
 
     def test_done_reports_missing_run_and_existing_checkout_together(
-        self, held_commander: Commander,
+        self, held_team: Team,
     ) -> None:
-        ctx = held_commander
+        ctx = held_team
         original = ctx.comms.goals.todos.get('P1')
         current = self.record(ctx, replace(original.order, run=ApplicationOrderRun(
             'The application displays the completed work and keeps its evidence visible')))
@@ -152,8 +152,8 @@ class TestOrderCompletion:
         finally:
             checkout.retire()
 
-    def test_operation_done_keeps_its_existing_evidence(self, held_commander):
-        ctx = held_commander
+    def test_operation_done_keeps_its_existing_evidence(self, held_team):
+        ctx = held_team
         evidence = ctx.root / 'operation.txt'
         evidence.write_text('The copied operation completed through its current check.')
         main(['done', 'worker', 'P1', '--op', '--seen', str(evidence)], ctx)
@@ -162,9 +162,9 @@ class TestOrderCompletion:
         assert delivered.order.delivery.evidence.artifact() == str(evidence)
 
     def test_delivered_work_can_be_proved_again_on_a_newer_build(
-        self, held_commander, proof_build_checkouts,
+        self, held_team, proof_build_checkouts,
     ):
-        ctx = held_commander
+        ctx = held_team
         repo = ctx.repos[0]
         graph = next(graph for graph in proof_build_checkouts
                      if graph.repository.github == repo.github)
@@ -201,8 +201,8 @@ class TestOrderCompletion:
         with pytest.raises(ValueError, match=r'^The order already records a different delivery\.$'):
             current.delivered(ReportDelivery(report="A report is different delivered work."))
 
-    def test_triage_rejects_an_operation_without_recording(self, held_commander):
-        ctx = held_commander
+    def test_triage_rejects_an_operation_without_recording(self, held_team):
+        ctx = held_team
         original = self.record(
             ctx, replace(ctx.comms.goals.todos.get('P1').order, scope=TriageScope()))
         with pytest.raises(ValueError, match='Triage returns --seen REPORT'):
@@ -214,9 +214,9 @@ class TestOrderCompletion:
         lambda registry: (registry.unregister('worker'), registry.remove('worker')),
     ], ids=['registered', 'removed'])
     def test_merged_close_accepts_the_explicit_artifact(
-        self, held_commander, proof_build_checkouts, holder,
+        self, held_team, proof_build_checkouts, holder,
     ):
-        ctx = held_commander
+        ctx = held_team
         holder(ctx.comms.registry)
         graph = next(graph for graph in proof_build_checkouts
                      if graph.repository.github == ctx.repos[0].github)

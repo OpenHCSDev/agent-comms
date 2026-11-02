@@ -304,7 +304,7 @@ class OrderEditRead[Result](OrderRead[Result]):
         return self.when_readable(super().read)
 
     @classmethod
-    def for_commander(cls, comms: Comms, commander: str) -> Iterator[Self]:
+    def for_team(cls, comms: Comms, commander: str) -> Iterator[Self]:
         snapshot = comms.registry.snapshot()
         held = HeldOrders.of(comms.goals.todos, snapshot)
         history = comms.goals.todos.board_history()

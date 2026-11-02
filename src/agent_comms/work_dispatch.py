@@ -100,7 +100,7 @@ class ReusedWorkDispatch(WorkDispatch):
     unit: Thread
 
     @classmethod
-    def for_unit(cls, action: OrderGoalAction, unit: Thread) -> Self:
+    def for_teammate(cls, action: OrderGoalAction, unit: Thread) -> Self:
         bound = replace(
             action,
             expect=replace(action.expect, expected_checkpoint=unit.goal.captured),
@@ -124,7 +124,7 @@ class CheckedPhaseTask(PhaseTask):
     text: str
     order: PendingProblemOrder
     review_seconds: float
-    instruction = "Core assigns the declared checked task to a unit and starts it"
+    instruction = "Core assigns the declared checked task to a teammate and starts it"
 
     def __post_init__(self) -> None:
         if not math.isfinite(self.review_seconds) or self.review_seconds <= 0:

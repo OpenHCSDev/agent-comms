@@ -35,7 +35,7 @@ class Plan(DeclaredFamily, affix="Plan"):
     document: ClassVar[str]
 
 
-class CommanderNativePlan(Plan):
+class TeamNativePlan(Plan, declared_name="commander_native"):
     document = "plans/commander-native-plan.md"
 
 
@@ -132,8 +132,8 @@ class PlanPhase(OrderPhase, declared_name=None):
         return all(phase.done(reading) for phase in cls.after) and not cls.done(reading)
 
 
-class CommanderNativePhase(PlanPhase, declared_name=None):
-    plan = CommanderNativePlan
+class TeamNativePhase(PlanPhase, declared_name=None):
+    plan = TeamNativePlan
 
 
 class VirtualBusPhase(PlanPhase, declared_name=None):
@@ -186,25 +186,25 @@ class ToadAskPhase(OwnerAsksPhase, declared_name=None):
         )
 
 
-class RetainedStorePhase(CommanderNativePhase):
+class RetainedStorePhase(TeamNativePhase):
     evidence = CommitMerged("a75deaf04")
 
 
-class OneOrderOwnerPhase(CommanderNativePhase):
+class OneOrderOwnerPhase(TeamNativePhase):
     evidence = CommitMerged("9293095d9")
 
 
-class DesignReconciledPhase(CommanderNativePhase):
+class DesignReconciledPhase(TeamNativePhase):
     after = (OneOrderOwnerPhase,)
     evidence = CommitMerged("64fbd8bc1")
 
 
-class RecordPlanePhase(CommanderNativePhase):
+class RecordPlanePhase(TeamNativePhase):
     after = (RetainedStorePhase,)
     evidence = CommitMerged("465a27988")
 
 
-class ReviewQueuePhase(CommanderNativePhase):
+class ReviewQueuePhase(TeamNativePhase):
     """A verdict per PR head gates merging through main's required review status.
 
     QueueBypass declares each bypass's pin and recorded-verdict obligations.
@@ -219,10 +219,10 @@ class ReviewQueuePhase(CommanderNativePhase):
     ))
 
 
-COMMANDER = "src/agent_comms/commander/"
+COMMANDER = "src/agent_comms/team/"
 
 
-class ControlPlanePhase(CommanderNativePhase):
+class ControlPlanePhase(TeamNativePhase):
     """Phase 7's deletes: Core owns every signal these scripts raised."""
 
     after = (RecordPlanePhase,)
@@ -243,7 +243,7 @@ class ControlPlanePhase(CommanderNativePhase):
     )
 
 
-class StoryPhase(CommanderNativePhase):
+class StoryPhase(TeamNativePhase):
     """A view of the native records, not a prerequisite for their cutover: both story tools
     exist and the separate roast step is deleted."""
 
@@ -251,39 +251,39 @@ class StoryPhase(CommanderNativePhase):
     evidence = AllEvidence(
         (
             ClassDeclared("CommsOrderStoryTool", ("src/agent_comms/order_tools.py",)),
-            ClassDeclared("CommsFleetStoryTool", ("src/agent_comms/order_tools.py",)),
+            ClassDeclared("CommsTeamStoryTool", ("src/agent_comms/order_tools.py",)),
             PatternAbsent(r"^def roast\b", (COMMANDER + "judge.py",)),
         )
     )
 
 
-class CommanderPagePhase(CommanderNativePhase):
+class TeamPagePhase(TeamNativePhase, declared_name="commander_page"):
     """A view of the native records and control plane, independent of cutover."""
 
     after = (RecordPlanePhase, ControlPlanePhase)
     evidence = AllEvidence(
         (
-            ClassDeclared("CommanderHud", ("src",)),
+            ClassDeclared("TeamHud", ("src",)),
             PatternPresent(r"\bcomms_hud\b", ("src",)),
         )
     )
 
 
-class ParityPhase(CommanderNativePhase):
+class ParityPhase(TeamNativePhase):
     """The native capability owners, not a second matrix of demonstrations, decide completion."""
 
-    after = (RecordPlanePhase, ReviewQueuePhase, ControlPlanePhase, CommanderPagePhase)
+    after = (RecordPlanePhase, ReviewQueuePhase, ControlPlanePhase, TeamPagePhase)
     evidence = ParityEvidence(tuple(phase.phase_evidence() for phase in after))
 
 
-class CutoverPhase(CommanderNativePhase):
-    """The native evidence passes and the machine-wide commander configuration is gone."""
+class CutoverPhase(TeamNativePhase):
+    """The native evidence passes and the machine-wide teammate configuration is gone."""
 
     after = (ParityPhase,)
-    evidence = AllEvidence((ParityPhase.phase_evidence(), PatternAbsent(r"\bCommanderConfig\b")))
+    evidence = AllEvidence((ParityPhase.phase_evidence(), PatternAbsent(r"\bTeamConfig\b")))
 
 
-class SkillPhase(CommanderNativePhase):
+class SkillPhase(TeamNativePhase):
     """The skill names no script."""
 
     after = (CutoverPhase,)
@@ -405,7 +405,7 @@ class CodecFlagsPhase(MultipleInheritancePhase):
 
 
 class SmallFamilyFlagsPhase(MultipleInheritancePhase):
-    """1C. ``GoalDisplay.visible`` stays by the commander's decision, so ``visible`` is not read."""
+    """1C. ``GoalDisplay.visible`` stays by the teammate's decision, so ``visible`` is not read."""
 
     evidence = PatternAbsent(rf"^\s+({SMALL_FAMILY_FLAGS})" + FLAG)
 
@@ -654,7 +654,7 @@ class TransitionScaffoldingPhase(RemainingSlopPhase):
     after = (CutoverPhase,)
     evidence = PathsAbsent(
         (
-            "src/agent_comms/commander_parity",
+            "src/agent_comms/team_parity",
             "tools/carry_rts_orders.py",
             "tools/cutover/rts-launchers.patch",
         )
@@ -683,13 +683,13 @@ class AbsencePhase(RemainingSlopPhase):
 class TypeSwitchesPhase(RemainingSlopPhase):
     """2.4: the AST's own visitor replaces switches on its node types."""
 
-    evidence = PatternAbsent(r"isinstance\([^)]*ast\.", ("src/agent_comms/commander/order.py",))
+    evidence = PatternAbsent(r"isinstance\([^)]*ast\.", ("src/agent_comms/team/order.py",))
 
 
 class OrderSendPhase(RemainingSlopPhase):
     """2.5: ``send`` keeps only the dispatch; its parts move to the order types."""
 
-    evidence = NoGodFunction("src/agent_comms/commander/order.py", "send")
+    evidence = NoGodFunction("src/agent_comms/team/order.py", "send")
 
 
 class ExternalBoundariesPhase(RemainingSlopPhase):
@@ -758,7 +758,7 @@ class DeadToolsPhase(RemainingSlopPhase):
     """8: unreferenced tools."""
 
     evidence = PathsAbsent(
-        ("tools/codex_duplicate_execution_hook.py", "tools/prove_commander_dispatch.py")
+        ("tools/codex_duplicate_execution_hook.py", "tools/prove_team_dispatch.py")
     )
 
 
@@ -877,19 +877,19 @@ class RecordsPhase(RemainingSlopPhase):
     )
 
 
-class FleetAwarenessPhase(CommanderNativePhase, declared_name=None):
+class TeamAwarenessPhase(TeamNativePhase, declared_name=None):
     """Phase 10: fleet awareness (after the four plans)."""
 
     after = (SkillPhase, BusDeletionPhase, InheritanceCleanupPhase, TransitionScaffoldingPhase)
 
 
-class OneHolderPerWorktreePhase(FleetAwarenessPhase):
+class OneHolderPerWorktreePhase(TeamAwarenessPhase):
     """One holder per worktree, refused at order time."""
 
     evidence = ClassDeclared("SharedWorktreeRefusal", ("src/agent_comms",))
 
 
-class DriftOverlapRulesPhase(FleetAwarenessPhase):
+class DriftOverlapRulesPhase(TeamAwarenessPhase):
     """Drift and overlap as standing rules."""
 
     evidence = AllEvidence(
@@ -900,43 +900,43 @@ class DriftOverlapRulesPhase(FleetAwarenessPhase):
     )
 
 
-class SpinningUnitPhase(FleetAwarenessPhase):
-    """Spinning as a UnitState member."""
+class SpinningTeammatePhase(TeamAwarenessPhase, declared_name="spinning_unit"):
+    """Spinning as a TeammateState member."""
 
-    evidence = ClassDeclared("SpinningUnit", ("src/agent_comms",))
+    evidence = ClassDeclared("SpinningTeammate", ("src/agent_comms",))
 
 
-class UnpushedWorkPhase(FleetAwarenessPhase):
+class UnpushedWorkPhase(TeamAwarenessPhase):
     """Unpushed work as a standing rule."""
 
     evidence = ClassDeclared("UnpushedBranch", ("src/agent_comms",))
 
 
-class EmptyPullRequestPhase(FleetAwarenessPhase):
+class EmptyPullRequestPhase(TeamAwarenessPhase):
     """Empty PRs as a standing rule."""
 
     evidence = ClassDeclared("EmptyPullRequest", ("src/agent_comms",))
 
 
-class DeliveryReviewPhase(FleetAwarenessPhase):
+class DeliveryReviewPhase(TeamAwarenessPhase):
     """Review is triggered by delivery."""
 
     evidence = ClassDeclared("DeliveredHeadReview", ("src/agent_comms",))
 
 
-class LostToolsPhase(FleetAwarenessPhase):
+class LostToolsPhase(TeamAwarenessPhase):
     """Lost tools are a bus fact."""
 
     evidence = ClassDeclared("LostTools", ("src/agent_comms",))
 
 
-class FleetReplayPhase(FleetAwarenessPhase):
+class TeamReplayPhase(TeamAwarenessPhase, declared_name="fleet_replay"):
     """Replaying the copied fleet state raises each incident from Core alone, once each, with no script."""
 
     after = (
         OneHolderPerWorktreePhase,
         DriftOverlapRulesPhase,
-        SpinningUnitPhase,
+        SpinningTeammatePhase,
         UnpushedWorkPhase,
         EmptyPullRequestPhase,
         DeliveryReviewPhase,
@@ -1024,10 +1024,10 @@ class LoadingSpinnerPhase(ToadAskPhase):
     """The top loading spinner is back; both were removed instead of keeping it."""
 
 
-class CommanderLatencyPhase(OwnerAsksPhase):
-    """Each commander verb answers in under 5 s; they take about 30 s."""
+class TeamLatencyPhase(OwnerAsksPhase, declared_name="commander_latency"):
+    """Each teammate verb answers in under 5 s; they take about 30 s."""
 
-    evidence = FunctionDeclared("test_commander_verb_answers_under_five_seconds", ("tests",))
+    evidence = FunctionDeclared("test_team_verb_answers_under_five_seconds", ("tests",))
 
 
 class DeliveryLatencyPhase(OwnerAsksPhase):
@@ -1040,7 +1040,7 @@ class DeliveryLatencyPhase(OwnerAsksPhase):
 class RamBudgetPhase(OwnerAsksPhase):
     """The fleet's memory owner is found and capped; desktop free RAM fell to 2.2 GB."""
 
-    evidence = FunctionDeclared("test_fleet_memory_stays_under_its_cap", ("tests",))
+    evidence = FunctionDeclared("test_team_memory_stays_under_its_cap", ("tests",))
 
 
 class UnflattenModulesPhase(OwnerAsksPhase):
@@ -1099,7 +1099,7 @@ class BoardLineLockTextPhase(OwnerAsksPhase):
     evidence = AllEvidence(
         (
             PatternAbsent(r"LOCKS your writing verbs", ("src",)),
-            PatternAbsent(r"verb\.usage\(\)", ("src/agent_comms/commander/standing.py",)),
+            PatternAbsent(r"verb\.usage\(\)", ("src/agent_comms/team/standing.py",)),
         )
     )
 

@@ -63,8 +63,8 @@ class SenderReceipts(AnswerAuthority):
 
 
 @dataclass(frozen=True)
-class CommanderReceipts(AnswerAuthority):
-    """A commander verb answers what its actor received, and what each commander it acts
+class TeamReceipts(AnswerAuthority):
+    """A teammate verb answers what its actor received, and what each teammate it acts
     for received; ``ThreadIncarnation.commands`` decides which, as it does for orders."""
 
     actor: ThreadIncarnation
@@ -123,7 +123,7 @@ class Messaging:
         if unreceived:
             raise UnreceivedAnswerError(
                 f"{owner.name} never received {', '.join(r.message_id for r in unreceived)}"
-                " and acts for no commander who did, so it cannot answer it")
+                " and acts for no teammate who did, so it cannot answer it")
         message = Message(
             sender=owner.name,
             target=target,

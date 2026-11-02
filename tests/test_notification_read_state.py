@@ -18,7 +18,7 @@ from agent_comms.notification_reads import (
     LiveNotificationRead, NotificationRead, RecordedNotificationRead,
 )
 from agent_comms.order_tools import (
-    CommanderUnitRead, InputDeliveryRead, OwnerGoalRead, TranscriptPageRead,
+    TeammateRead, InputDeliveryRead, OwnerGoalRead, TranscriptPageRead,
 )
 from agent_comms.private_path import FileRevision
 from agent_comms.registry_provenance import DeletedThread
@@ -35,7 +35,7 @@ from agent_comms.tool_request import ToolRequest
 from agent_comms.tools import CommsMessageOutcomesTool
 from agent_comms.acp_extension import GoalSnapshotReply, TranscriptSnapshotUpdate
 from agent_comms.bus_read import OwnerScopedRead
-from agent_comms.commander_hud import CommanderUnitDetail
+from agent_comms.team_hud import TeammateDetail
 from agent_comms.nominal.field_codec import OrderId
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.transcripts import EarlierThan, NativeTranscriptCursor
@@ -303,13 +303,13 @@ LEAD, WORKER = RecordedThreadIncarnation("lead", 1.0), RecordedThreadIncarnation
 ORDERS = (OrderId.mint(),)
 UI_ONLY_FIELDS = {"root", "request_id", "previous", "owner", "identity"}
 SHARED_UI_READS = [
-    CommanderUnitRead(commander=LEAD, unit=WORKER, orders=ORDERS),
+    TeammateRead(commander=LEAD, unit=WORKER, orders=ORDERS),
     TranscriptPageRead(thread="worker", position=EarlierThan(NativeTranscriptCursor("session.jsonl", 7)),
                        page_source=RecordedPageSource(HistorySourceKey("archive"))),
 ]
 
 
-@pytest.mark.parametrize("operation", SHARED_UI_READS, ids=["commander_unit", "transcript_page"])
+@pytest.mark.parametrize("operation", SHARED_UI_READS, ids=["team_unit", "transcript_page"])
 def test_shared_ui_reads_are_root_free_family_records_in_one_generic_envelope(operation):
     encoded = FieldCodec.encode(operation)
     assert not UI_ONLY_FIELDS & set(encoded)
@@ -363,12 +363,12 @@ def test_the_three_public_reads_are_cataloged_once_with_their_original_results()
 
     tools = ToolRequest.members_with(ToolRequest)
     native = NativeRequestTools.members_with(NativeRequestTools)
-    results = {CommanderUnitRead: CommanderUnitDetail, OwnerGoalRead: GoalSnapshotReply,
+    results = {TeammateRead: TeammateDetail, OwnerGoalRead: GoalSnapshotReply,
                TranscriptPageRead: TranscriptSnapshotUpdate}
     for operation, result in results.items():
         assert tools.count(operation) == 1 and native.count(operation) == 1
         assert result_type(operation) is result
-    assert set(ToolRequest.members_with(UiRead)) == {CommanderUnitRead, TranscriptPageRead}
+    assert set(ToolRequest.members_with(UiRead)) == {TeammateRead, TranscriptPageRead}
     assert ToolRequest.members_with(OwnerScopedRead) == NativeRequestTools.members_with(OwnerScopedRead)
     lifecycle = (ReadOperation, ReadOwnerOperation, ReadNotifications, ReadTranscript,
                  SubscribeTranscript, ReadTranscriptUpdate, RefreshTranscript)

@@ -101,7 +101,7 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
         return None
 
     def blocked_reasons(self) -> tuple[str, ...]:
-        """Only a blocked state contributes a commander warning."""
+        """Only a blocked state contributes a teammate warning."""
         return ()
 
     @property
@@ -110,7 +110,7 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
 
     @property
     def lifts_on_compliance(self) -> bool:
-        """Held by the heartbeat until the commander complies."""
+        """Held by the heartbeat until the teammate complies."""
         return False
 
     @property

@@ -12,9 +12,9 @@ import pytest
 
 from agent_comms.activity import ActivityState
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
-from agent_comms.commander_hud import CommanderFrame, CommanderHud
-from commander_heartbeat_fixture import ObservedHeartbeat, capture_frame, current_hud, observe_commander
+from agent_comms.team_heartbeat import TeamHeartbeat, TeamObservation
+from agent_comms.team_hud import TeamFrame, TeamHud
+from team_heartbeat_fixture import ObservedHeartbeat, capture_frame, current_hud, observe_team
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.nominal.field_codec import OrderId, ToolCallId
 from agent_comms.goal_actions import CreateProblemGoalAction
@@ -28,14 +28,14 @@ from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.thread_text import ForkedParent
-from agent_comms.task_attachments.commander_pings import CommanderUpdate, UnitPing
+from agent_comms.task_attachments.team_pings import TeamUpdate, TeammatePing
 from agent_comms.todos import DeliverTodo, OperationDelivery, ProgressRead, UnreadProgress
-from agent_comms.heartbeat_frame import CommanderInputs
+from agent_comms.heartbeat_frame import TeamInputs
 from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
-from agent_comms.ui_model.unit_state import (
+from agent_comms.ui_model.teammate_state import (
     AwaitingApplicationRun,
-    AwaitingCommander,
+    AwaitingTeam,
     Blocked,
     DeliveredUnclosed,
     Detached,
@@ -45,13 +45,13 @@ from agent_comms.ui_model.unit_state import (
     Spinning,
     StalledOnNothing,
     Stuck,
-    UnitState,
+    TeammateState,
     Unreadable,
 )
 from agent_comms.work_branches import WorkBranchError
 from source_revision_fixture import SourceRepository
 from test_holder_standing_rules import blocked_holder, publish, state_cards
-from agent_comms.thread_execution import CommanderForkExecution
+from agent_comms.thread_execution import ForkExecution
 
 pytest_plugins = ("test_holder_standing_rules", "test_proof_build")
 
@@ -131,7 +131,7 @@ def unread_checkout(comms, tmp_path):
     comms.registry.register(replace(comms.registry.require("worker"), worktree=Checkout(checkout)))
 
 
-@pytest.mark.parametrize("member", UnitState.worst_first(), ids=lambda member: member.__name__)
+@pytest.mark.parametrize("member", TeammateState.worst_first(), ids=lambda member: member.__name__)
 def test_unit_state_family_uses_real_records(held_bus, tmp_path, request, member):
     comms = held_bus
     unit = "worker"
@@ -144,8 +144,8 @@ def test_unit_state_family_uses_real_records(held_bus, tmp_path, request, member
             blocked_holder(comms)
         elif member is Detached:
             comms.registry.register(comms.registry.require(unit), StoppedThreadStatus())
-        elif member is AwaitingCommander:
-            publish(comms, unit, "lead", time.time() - AwaitingCommander.seconds - 1)
+        elif member is AwaitingTeam:
+            publish(comms, unit, "lead", time.time() - AwaitingTeam.seconds - 1)
         elif member is Stuck:
             with comms.goals.todos.writing() as db:
                 for todo in comms.goals.todos.held_orders():
@@ -195,22 +195,22 @@ def test_unit_state_family_uses_real_records(held_bus, tmp_path, request, member
         elif member is Moving:
             pass  # Assigned work, before its first-call deadline.
         else:
-            pytest.fail(f"New UnitState needs its real-record scenario: {member}")
+            pytest.fail(f"New TeammateState needs its real-record scenario: {member}")
         frame = capture_frame(comms, "lead", ProgressRead())
         assert tuple(ReviewTimerUp.conditions(comms, frame)) == frame.review_timers
-        states = UnitState.current(comms, "lead", frame)
+        states = TeammateState.current(comms, "lead", frame)
         (state,) = (state for state in states if state.unit.name == unit)
         assert isinstance(state, member)
         assert state.unit == comms.registry.require(unit).incarnation
         assert state.default_action and state.unit.name in state.line()
         assert not any(
             isinstance(state, sibling)
-            for sibling in UnitState.worst_first()
+            for sibling in TeammateState.worst_first()
             if sibling is not member
         )
         assert states == tuple(
             state
-            for expected in UnitState.worst_first()
+            for expected in TeammateState.worst_first()
             for state in states
             if isinstance(state, expected)
         )
@@ -238,7 +238,7 @@ def test_started_turn_on_delivered_order_is_moving_not_stalled(held_bus):
         held_bus.agents.set_activity("worker", ActivityState.WORKING, "P1")
         (state,) = (
             state
-            for state in UnitState.current(
+            for state in TeammateState.current(
                 held_bus, "lead", capture_frame(held_bus, "lead", ProgressRead())
             )
             if state.unit.name == "worker"
@@ -246,11 +246,11 @@ def test_started_turn_on_delivered_order_is_moving_not_stalled(held_bus):
         assert isinstance(state, Moving)
 
 
-def test_claim_is_a_commander_question_not_a_verified_delivery(held_bus, claim_order):
+def test_claim_is_a_team_question_not_a_verified_delivery(held_bus, claim_order):
     comms = held_bus
     claim = claim_order("P1")
     with LaunchRoot.from_path(comms.root).selected():
-        (state,) = state_cards(comms, AwaitingCommander)
+        (state,) = state_cards(comms, AwaitingTeam)
         (question,) = state.owed
         assert question.message_id == claim.message.message_id
         assert question.seq > claim.message.answers[0].seq
@@ -263,15 +263,15 @@ def test_a_stopped_child_holding_no_order_is_no_unit(held_bus):
     child = replace(held_bus.registry.require("outsider"), parent=ForkedParent("lead"))
     held_bus.registry.register(child, StoppedThreadStatus())
     with LaunchRoot.from_path(held_bus.root).selected():
-        states = UnitState.current(
+        states = TeammateState.current(
             held_bus, "lead", capture_frame(held_bus, "lead", ProgressRead()))
     assert child.incarnation not in {state.unit for state in states}
 
 
-def test_commander_fork_gets_no_unit_card(held_bus):
-    fork = held_bus.registry.register_child("judge-fork", "lead", CommanderForkExecution, held_bus.goals)
+def test_fork_gets_no_unit_card(held_bus):
+    fork = held_bus.registry.register_child("judge-fork", "lead", ForkExecution, held_bus.goals)
     with LaunchRoot.from_path(held_bus.root).selected():
-        states = UnitState.current(
+        states = TeammateState.current(
             held_bus, "lead", capture_frame(held_bus, "lead", ProgressRead()))
     assert fork.incarnation not in {state.unit for state in states}
 
@@ -287,7 +287,7 @@ def test_only_the_same_call_failing_twice_is_spinning(held_bus, errors, paths, s
     """Repeating a call that worked, such as re-arming a watch, is not a failed approach."""
     with LaunchRoot.from_path(held_bus.root).selected():
         recorded_turn(held_bus, errors, paths)
-        states = UnitState.current(
+        states = TeammateState.current(
             held_bus, "lead", capture_frame(held_bus, "lead", ProgressRead()))
         (state,) = (state for state in states if state.unit.name == "worker")
         assert isinstance(state, Spinning) is spinning
@@ -318,13 +318,13 @@ def test_failed_object_preparation_is_canonical_unread_progress_not_a_normal_car
     Repo.git(directory, "update-ref", "refs/remotes/publication/main", head)
     Repo.git(directory, "config", f"branch.{branch}.remote", "publication")
     Repo.git(directory, "config", f"branch.{branch}.merge", "refs/heads/main")
-    plans = CommanderHeartbeat()
+    plans = TeamHeartbeat()
     with LaunchRoot.from_path(held_bus.root).selected():
-        prepared = CommanderInputs.prepare(held_bus, "lead", ProgressRead(), plans)
+        prepared = TeamInputs.prepare(held_bus, "lead", ProgressRead(), plans)
         progress = prepared.pulls.progress((todo,), held_bus.registry)[todo.id]
         assert isinstance(progress, UnreadProgress)
         assert str(directory) in progress.reason and str(missing) in progress.reason
-        observed = CommanderObservation.read(
+        observed = TeamObservation.read(
             held_bus, held_bus.registry.require("lead"), prepared, plans=plans)
     (unread,) = (state for state in observed.states if state.unit.name == todo.held().owner)
     assert isinstance(unread, Unreadable)
@@ -357,7 +357,7 @@ def test_heartbeat_keeps_every_unit_when_one_checkout_is_unreadable(
                       check=replace(checked.check, directory=outsider.project_path)),
     ))
     with LaunchRoot.from_path(held_bus.root).selected():
-        baseline = observe_commander(held_bus, lead, ProgressRead())
+        baseline = observe_team(held_bus, lead, ProgressRead())
         healthy, = (card for card in baseline.states if card.unit == outsider.incarnation)
         if primary:
             checkout = checked.check.directory
@@ -367,7 +367,7 @@ def test_heartbeat_keeps_every_unit_when_one_checkout_is_unreadable(
             unread_checkout(held_bus, tmp_path)
         if not broken_metadata:
             (held_bus.registry.require("worker").project_path / ".git").unlink()
-        observed = observe_commander(held_bus, lead, ProgressRead())
+        observed = observe_team(held_bus, lead, ProgressRead())
         cards = observed.states
         worker, = (card for card in cards if card.unit.name == "worker")
         assert {card.unit.name for card in cards} >= {"worker", "outsider"}
@@ -382,10 +382,10 @@ def test_heartbeat_keeps_every_unit_when_one_checkout_is_unreadable(
             assert not isinstance(worker, Unreadable)
         asyncio.run(ObservedHeartbeat((observed,)).run(lambda: nullcontext(held_bus)))
         expected = current_hud(held_bus, lead.name, observed.frame, cards)
-        published, = CommanderFrame.read_all(held_bus.root)
+        published, = TeamFrame.read_all(held_bus.root)
         assert published == expected
         assert tuple(unit.unit for unit in published.units) == tuple(card.unit for card in cards)
-        packets = CommanderUpdate.latest(held_bus, lead.incarnation)
+        packets = TeamUpdate.latest(held_bus, lead.incarnation)
         assert tuple(ping for packet in packets for ping in packet.handled
-                     if isinstance(ping, UnitPing)) == tuple(
-            UnitPing.capture(card) for card in cards if card.attention())
+                     if isinstance(ping, TeammatePing)) == tuple(
+            TeammatePing.capture(card) for card in cards if card.attention())

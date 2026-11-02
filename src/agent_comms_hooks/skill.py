@@ -21,8 +21,8 @@ from typing import ClassVar
 
 from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
 from agent_comms.class_fact import ClassFact
-from agent_comms.commander.package import CommanderPackage
-from agent_comms.commander.rule_file import RuleFile
+from agent_comms.team.package import TeamPackage
+from agent_comms.team.rule_file import RuleFile
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.held_orders import HeldOrders
 from agent_comms.pattern_sources import PostmortemFailure
@@ -59,12 +59,12 @@ class DeckReader(DealtSources):
     @classmethod
     def proofs(cls) -> tuple[Path, ...]:
         """The papers every rule is a consequence of, read before any rule."""
-        return CommanderPackage.paper()
+        return TeamPackage.paper()
 
     @classmethod
     def indictment(cls) -> tuple[Path, ...]:
         """The failure record every collaborator reads after the proofs and rules."""
-        return (CommanderPackage.indictment(),)
+        return (TeamPackage.indictment(),)
 
     @classmethod
     def rules(cls) -> tuple[RuleFile, ...]:
@@ -101,7 +101,7 @@ class DeckReader(DealtSources):
 
     @classmethod
     def voice(cls) -> tuple[str, ...]:
-        return cls.paragraphs(CommanderPackage.voice().read_text(encoding="utf-8"))
+        return cls.paragraphs(TeamPackage.voice().read_text(encoding="utf-8"))
 
     @classmethod
     def tells(cls) -> tuple[str, ...]:
@@ -122,9 +122,9 @@ class DeckReader(DealtSources):
         return (
             *cls.proofs(),
             *(rule.path for rule in cls.rules() if not rule.closes_deal),
-            CommanderPackage.voice(),
+            TeamPackage.voice(),
             Path(inspect.getfile(PostmortemFailure)),
-            CommanderPackage.skill(),
+            TeamPackage.skill(),
             Slop.catalog() / "README.md",
             *cls.indictment(),
         )
@@ -132,7 +132,7 @@ class DeckReader(DealtSources):
     @classmethod
     def answered(cls) -> frozenset[str]:
         """The shared skill is read and answered under the same audit contract."""
-        return super().answered() | {CommanderPackage.skill().stem}
+        return super().answered() | {TeamPackage.skill().stem}
 
     @classmethod
     def paragraphs(cls, text: str) -> tuple[str, ...]:
@@ -383,5 +383,5 @@ class DeckStart(DealtDeck):
 
 @dataclass(frozen=True)
 class SubagentDeckStart(DeckStart, ClaudeSubagentHook):
-    """A subagent's compaction deals the subagent's own deck: on 2026-10-30 a commander fork's
+    """A subagent's compaction deals the subagent's own deck: on 2026-10-30 a teammate fork's
     compaction dealt the main agent's stem, whose audit was then mid-answer."""

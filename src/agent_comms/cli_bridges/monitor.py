@@ -311,7 +311,7 @@ class AttachMonitor(CrossesRuntimes, SessionRequest[SessionReady], declared_name
 
 @dataclass(frozen=True)
 class ReadBoard(SessionRequest[BoardReply], declared_name=SessionBoard.request):
-    """The commander's tool-call hook asking for its board at the moment of the call."""
+    """The teammate's tool-call hook asking for its board at the moment of the call."""
 
     async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
         return BoardReply(await service.bridge.board())

@@ -47,7 +47,7 @@ A plan phase whose earlier phases are all done is not done itself, and no open o
 
 Checked by:
 
-- standing rule `plan_idle` (`agent_comms.commander.standing.PlanIdle`)
+- standing rule `plan_idle` (`agent_comms.team.standing.PlanIdle`)
 
 Learned from: P83 (34ba68c81)
 
@@ -57,7 +57,7 @@ A plan phase whose earlier phases are all done is held by a unit, and main still
 
 Checked by:
 
-- standing rule `plan_stalled` (`agent_comms.commander.standing.PlanStalled`)
+- standing rule `plan_stalled` (`agent_comms.team.standing.PlanStalled`)
 
 Learned from: Failure 23: October 21: every virtual bus step had a holder and none merged for 22 hours, because the steps only land together and nobody owned integrating them; Tristan caught it (claude-ai #comms 2dde16189509).
 
@@ -107,7 +107,7 @@ An order whose check line does not read `repo :: command -> integer`, prints no 
 
 Checked by:
 
-- check in `agent_comms.commander.order.CheckRequest.parse`
+- check in `agent_comms.team.order.CheckRequest.parse`
 - check in `agent_comms.child_process.NoIntegerPrinted.unproven`
 - check in `agent_comms.child_process.CountPrinted.unproven`
 

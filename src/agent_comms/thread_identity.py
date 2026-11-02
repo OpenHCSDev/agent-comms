@@ -174,7 +174,7 @@ class UnreportedTools(ObservedTools):
 class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
     value_flag: ClassVar[str] = "--thread-incarnation"
     hands_out_released_work: ClassVar[bool] = False
-    """Whether work this actor released goes to an idle unit without a commander turn."""
+    """Whether work this actor released goes to an idle unit without a teammate turn."""
     name: Annotated[str, DisclosureIdentity()]
 
     @property
@@ -225,18 +225,18 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
         return otherwise()
 
     @property
-    def commanding_identity(self) -> ThreadIncarnation:
+    def acting_identity(self) -> ThreadIncarnation:
         return self
 
     def acting_for(self, authority: ThreadIncarnation) -> ThreadIncarnation:
-        """This recorded assigner acting again under its order's commander.
+        """This recorded assigner acting again under its order's teammate.
 
         A birthless member (Core's watcher) carries its own authority."""
         return self
 
     def commands(self, creator: ThreadIncarnation) -> bool:
         """Shared work maintenance; this does not authorize taking its holder's work."""
-        return creator == self.commanding_identity
+        return creator == self.acting_identity
 
     def represents(self, owner: ThreadIncarnation) -> bool:
         """Only its own incarnation, unless a real in-turn caller binds a parent."""
@@ -317,11 +317,11 @@ class RecordedThreadIncarnation(ThreadIncarnation, ParticipantIdentity):
         return (self.lookup, *(owner.require_recorded().lookup
                                for owner in owners if self.commands(owner)))
 
-    def acting_for(self, authority: ThreadIncarnation) -> CommanderForkIdentity:
-        return CommanderForkIdentity(self.name, self.created_at, authority)
+    def acting_for(self, authority: ThreadIncarnation) -> ForkIdentity:
+        return ForkIdentity(self.name, self.created_at, authority)
 
-    def as_colleague(self) -> CommanderPeerIdentity:
-        return CommanderPeerIdentity(self.name, self.created_at)
+    def as_colleague(self) -> PeerIdentity:
+        return PeerIdentity(self.name, self.created_at)
 
     def renamed(self, name: str) -> RecordedThreadIncarnation:
         return RecordedThreadIncarnation(name, self.created_at)
@@ -340,7 +340,7 @@ class RecordedThreadIncarnation(ThreadIncarnation, ParticipantIdentity):
 
 
 @dataclass(frozen=True, eq=False)
-class CommanderForkIdentity(RecordedThreadIncarnation):
+class ForkIdentity(RecordedThreadIncarnation):
     """A registered actor's parent authority, resolved before any Todo transaction.
 
     The ordinary incarnation wire form records the actor, not a reusable authority.
@@ -349,11 +349,11 @@ class CommanderForkIdentity(RecordedThreadIncarnation):
     authority: ThreadIncarnation
 
     @property
-    def commanding_identity(self) -> ThreadIncarnation:
-        return self.authority.commanding_identity
+    def acting_identity(self) -> ThreadIncarnation:
+        return self.authority.acting_identity
 
     def commands(self, creator: ThreadIncarnation) -> bool:
-        """A fork acts with its parent's authority, a commander peer's included."""
+        """A fork acts with its parent's authority, a teammate peer's included."""
         return self.authority.commands(creator)
 
     def represents(self, owner: ThreadIncarnation) -> bool:
@@ -361,7 +361,7 @@ class CommanderForkIdentity(RecordedThreadIncarnation):
 
 
 @dataclass(frozen=True, eq=False)
-class CommanderPeerIdentity(RecordedThreadIncarnation):
+class PeerIdentity(RecordedThreadIncarnation):
     """An independent collaborator can maintain shared orders under its own identity.
 
     Channel tags confer no privilege, and a retired creator does not orphan shared work.

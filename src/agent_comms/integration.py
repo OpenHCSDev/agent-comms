@@ -16,7 +16,7 @@ from typing import Annotated, ClassVar, Self
 from .active_route import resolve_comms_route
 from .build_identity import RepositoryCommit
 from .child_process import STOP_GRACE_SECONDS, ResidentManager, SpawnedProcess
-from .commander.order import CommanderContext
+from .team.order import TeamContext
 from .nominal.declared_family import DeclaredFamily
 from agent_comms_hooks import ToolRefusedError
 from .nominal.field_codec import FieldCodec, GitCommitText, PathText, WireName, boundary_decoder
@@ -719,7 +719,7 @@ class IntegrationRun:
 
     def qualify(
         self,
-        context: CommanderContext,
+        context: TeamContext,
         problems: tuple[str, ...],
         *,
         carrier: PullRequestHead,
@@ -1119,7 +1119,7 @@ def run() -> int:
     if arguments.qualify:
         if pytest_arguments:
             parser.error("Qualification cannot run tests")
-        context = CommanderContext.read_root(resolve_comms_route(arguments.comms_root).root)
+        context = TeamContext.read_root(resolve_comms_route(arguments.comms_root).root)
         if arguments.carrier <= 0:
             parser.error("Qualification requires --carrier naming the actual separate combined PR")
         carrier = PullRequestHead.at(Repo.of(run.checkout.path).github, arguments.carrier)

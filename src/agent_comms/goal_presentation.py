@@ -41,7 +41,7 @@ class GoalWaitTarget(WireValue):
 
 
 class GoalExecution(DeclaredFamily, affix="Execution"):
-    """The complete execution family consumed by commands, views and the commander."""
+    """The complete execution family consumed by commands, views and the teammate."""
 
     toggle_label: ClassVar[str] = "Pause"
 

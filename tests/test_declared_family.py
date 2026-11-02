@@ -211,14 +211,14 @@ def test_attachment_names_decode_in_a_process_that_never_imported_their_module()
     probe = (
         "import sys\n"
         "from agent_comms.task_sources import TaskAttachment\n"
-        "assert 'agent_comms.task_attachments.commander_pings' not in sys.modules\n"
-        "print(TaskAttachment.member_named('commander_decisions').__module__)\n"
+        "assert 'agent_comms.task_attachments.team_pings' not in sys.modules\n"
+        "print(TaskAttachment.member_named('team_decisions').__module__)\n"
     )
     result = subprocess.run(
         [sys.executable, "-c", probe], capture_output=True, text=True, timeout=120, check=True,
     )
 
-    assert result.stdout.split() == ["agent_comms.task_attachments.commander_pings"]
+    assert result.stdout.split() == ["agent_comms.task_attachments.team_pings"]
 
 
 @pytest.mark.parametrize("table", ["HarnessDelivery", "HarnessObservedPart"])

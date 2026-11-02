@@ -1,0 +1,1098 @@
+"""The real SessionStart command works before a commander connects to the bus."""
+
+
+from agent_comms.repo import Checkout
+import inspect
+import io
+import json
+from datetime import UTC, datetime
+import os
+import socket
+import subprocess
+import sys
+import time
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
+from pathlib import Path
+
+import pytest
+
+from agent_comms.rule_deal import (CompactedDeal, OffDealMode, StartupDealMode, StartedDeal, Unengaged,
+                                   UnstampedCompactionDeal)
+
+from agent_comms.cli_bridges.monitor import BoardReply, ReadBoard, SessionRefused, SessionRequest
+from agent_comms.cli_bridges.shared import Binding, DeliveredBoardContent, GivenBinding
+from agent_comms.heartbeat_subjects import TeammateSubject
+from agent_comms.channel_targets import TeammatesTag
+from agent_comms.team.package import TeamPackage
+from agent_comms.team.rule_file import RuleFile
+from agent_comms.team.standing import PlanIdle
+from agent_comms.goal_actions import CreateProblemGoalAction
+from team_heartbeat_fixture import capture_frame
+from agent_comms.plan_phases import BusWriterPhase
+from agent_comms.repository_name import RepositoryName
+from agent_comms.comms import Comms, wire
+from agent_comms.nominal.field_codec import FieldCodec, OrderId
+from agent_comms.pattern_sources import PostmortemFailure, ReadThenRepeatedFailure
+from agent_comms.registry_document import RegisteredTeamProject
+from agent_comms.slop import Slop
+from agent_comms.team.spinning import SpinningTeammate
+from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.standing_rules import DirectiveUnacted, OrderlessUnreviewedHead, ReviewTimerUp
+from agent_comms.text_digest import TextDigest
+from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.task_attachments.team_pings import TeamDecisions, TeamUpdate, RulePing
+from agent_comms.thread_model import DeclaredModel
+from agent_comms.threads import Thread
+from agent_comms.ui_model.teammate_state import AwaitingTeam
+from agent_comms.todos import ProgressRead, ReviewedHeadVerdict
+from agent_comms_hooks.board import (
+    AbsentSessionSocket, BoardEntry, BoardSummary, SessionBoard, UnexpectedBoardReply,
+)
+from agent_comms.cli_bridges.hook_reread import BoardReminder, DeafReminder, SliceReminder
+from agent_comms.cli_bridges.hook_deferral import StopHook
+from agent_comms.cli_bridges.hook_forks import SubagentHook
+from agent_comms.rule_deal import AuditDue, OwnerWordsAnswer, ReadSpan, RuleAudit, SessionAudit
+from agent_comms.cli_bridges.hook_read_gate import GatedCall, MonitorInput
+from agent_comms_hooks.skill import (DeckReader, DeckStart, LightReader,
+                                     FullPrime, LightPrime, Prime, SessionSource)
+from agent_comms.cli_bridges.session_watch import DeafWatch, LiveWatch, WatchClaim, WatchRecord
+from conftest import engaged
+from test_team_notifications import beat
+from test_head_review import ACCEPTED, invoke
+
+from agent_comms.cli_bridges.hook_requests import (
+    HookRequest, PrimeRequest, SkillRequest, ReminderRequest, ResidentHookOutput,
+)
+from agent_comms_hooks.watch import HookBridgeUnavailable, SessionEndpoint
+from agent_comms_hooks.reread import ReminderProgram
+
+pytest_plugins = ("test_head_review", "test_team_notifications")
+
+
+def admitted_binding(comms: Comms, actor: str = "claude-code", session: str = "s") -> Binding:
+    """Admit fixture context through the binding owner, not a launcher record."""
+    with Binding.open(comms.root / "hook-fixture-bindings" / actor) as db:
+        return GivenBinding({"root": str(comms.root), "bus_thread": actor,
+                             "session": session}).bind(db).registered(comms).bind(db)
+
+
+@pytest.fixture
+def team_binding(team_bus: Comms) -> Binding:
+    return admitted_binding(team_bus)
+
+
+def evaluate(request, comms: Comms, binding: Binding):
+    output = ResidentHookOutput()
+    event = request.decode_event(comms, binding, output)
+    return request.evaluate(event, comms, output, binding)
+
+
+
+def session_start(transcript, source, comms: Comms, binding: Binding, **extra):
+    payload = {"hook_event_name": "SessionStart", "source": source, "session_id": binding.thread,
+               "transcript_path": str(transcript), **extra}
+    reply = evaluate(SkillRequest(payload=payload), comms, binding)
+    return subprocess.CompletedProcess("resident SessionStart", reply.status, reply.stdout, reply.stderr)
+
+
+@pytest.mark.parametrize("source", ["startup", "resume", "compact"])
+def test_session_wire_keeps_keyword_only_fields_and_resident_output(
+        tmp_path: Path, source: str) -> None:
+    transcript = tmp_path / "session.jsonl"
+    output = ResidentHookOutput()
+    start = DeckStart.of({
+        "session_id": "session", "hook_event_name": "SessionStart",
+        "transcript_path": str(transcript), "source": source, "agent_id": "child",
+        "output": "foreign input cannot replace resident context",
+    }, output=output)
+    assert start.source == SessionSource(source)
+    assert start.stem == transcript.with_suffix("") / "subagents" / "agent-child.jsonl"
+    assert start.output is output
+
+
+def test_light_prime_executes_through_the_resident_request(
+        tmp_path: Path, commanding_session: Comms, team_bus: Comms,
+        team_binding: Binding) -> None:
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    request = PrimeRequest(payload={
+        "session_id": team_binding.thread, "hook_event_name": "Prime",
+        "transcript_path": str(transcript),
+    }, prime=LightPrime)
+    reply = evaluate(request, team_bus, team_binding)
+    assert reply.status == 0, reply.stderr
+    start = DeckStart.decode(request.payload)
+    assert start.current().trigger == LightPrime.trigger()
+    assert start.current().paths == tuple(path.resolve() for path in LightReader.sources())
+    assert str(start.audit) in reply.stdout
+
+
+def unbound_session_start(transcript, source):
+    return subprocess.run(
+        [sys.executable, "-c", "from agent_comms_hooks.watch import SkillText; SkillText.main()"],
+        input=json.dumps({"hook_event_name": "SessionStart", "source": source, "session_id": "s",
+                          "transcript_path": str(transcript)}),
+        capture_output=True, text=True, timeout=30,
+    )
+
+
+@pytest.mark.parametrize("source", ["startup", "resume", "compact"])
+def test_an_unbound_session_start_gets_no_team_sources(tmp_path, monkeypatch, source):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    result = unbound_session_start(transcript, source)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == ""
+    assert not transcript.with_suffix(".deal.json").exists()
+
+
+@pytest.mark.parametrize("source", ["startup", "resume", "compact"])
+def test_the_team_session_start_reads_all_package_files(tmp_path, source, commanding_session, team_bus, team_binding):
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    result = session_start(transcript, source, comms=team_bus, binding=team_binding)
+    assert result.returncode == 0, result.stderr
+    context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
+    trigger = {"startup": StartedDeal(), "resume": StartedDeal(),
+               "compact": UnstampedCompactionDeal()}[source]
+    assert context.startswith(trigger.reason() + " Storage lead: claude-code.")
+    assert "WHAT TRISTAN ACTUALLY SAID LAST" in context
+    assert ("FUCK YOUR COMPACTION" in context) == (source == "compact")
+    dealt = dealt_sources(transcript)
+    assert all(str(path) in context for path in dealt)
+    expected = (
+        *TeamPackage.paper(),
+        TeamPackage.voice(),
+        TeamPackage.indictment(),
+        Path(inspect.getfile(PostmortemFailure)),
+        TeamPackage.skill(),
+        *(rule.path for rule in RuleFile.packaged()),
+        Slop.catalog() / "README.md",
+    )
+    assert len(dealt) == len(expected) and set(dealt) == {path.resolve() for path in expected}
+
+
+@pytest.mark.parametrize("mode", (StartupDealMode, OffDealMode))
+def test_configured_claude_compaction_keeps_the_deal_and_emits_no_read_order(
+    tmp_path, team_bus, team_binding, mode,
+):
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    start = DeckStart.decode(hook_record(transcript, "SessionStart"))
+    assert start.take(team_bus, team_binding)
+    start.audit.write_text("retained audit")
+    start.configure(mode)
+    before = start.current()
+
+    compacted = replace(start, source=SessionSource("compact"))
+    assert compacted.take(team_bus, team_binding) == ()
+    assert start.current() == before
+    assert start.audit.read_text() == "retained audit"
+
+
+def dealt_sources(transcript):
+    """The files the last deal named, read from its one record."""
+    return DeckStart.decode(hook_record(transcript, "SessionStart")).current().dealt
+
+
+def hook_record(transcript, event="PostToolUse"):
+    return {"hook_event_name": event, "session_id": "s", "transcript_path": str(transcript),
+            "tool_name": "Bash", "tool_input": {}}
+
+
+def unbound_reminders(transcript, monkeypatch, capsys):
+    for _ in range(SliceReminder.every * 2):
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(hook_record(transcript))))
+        ReminderProgram.main()
+        assert capsys.readouterr().out == ""
+
+
+def test_no_deck_no_slices_outside_a_team_session(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    transcript = tmp_path / "session.jsonl"
+    unbound_reminders(transcript, monkeypatch, capsys)
+    assert not transcript.with_suffix(".calls").exists()
+
+
+def test_a_slice_every_few_calls_rotating_and_dealt_again_at_compaction(tmp_path, commanding_session, team_bus, team_binding):
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    start = DeckStart.decode(hook_record(transcript, "SessionStart"))
+    assert start.take(team_bus, team_binding)
+    hook = SliceReminder.decode(hook_record(transcript))
+    slices = DeckReader.slices()
+    taken = [hook.take(team_bus, team_binding, hook.count_call()) for _ in range(SliceReminder.every * 3)]
+    assert taken[SliceReminder.every - 1::SliceReminder.every] == [(text,) for text in slices[:3]]
+    assert sum(map(len, taken)) == 3
+    assert start.take(team_bus, team_binding)  # compaction deals the deck again from its start
+    assert [hook.take(team_bus, team_binding, hook.count_call()) for _ in range(SliceReminder.every)][-1] == (slices[0],)
+
+
+@pytest.mark.parametrize("actor", ("claude-code", "unit-x"))
+def test_rearm_rides_every_tool_call_while_a_running_bridge_has_no_monitor(
+        tmp_path: Path, commanding_session, team_bus: Comms, actor: str):
+    """Both fleet and commander readers retain the common re-arm behavior."""
+    binding = admitted_binding(team_bus, actor)
+    hook = DeafReminder.decode(hook_record(tmp_path / "session.jsonl"))
+    claim = WatchClaim(hook.session_id)
+    deaf = DeafWatch("now (no Monitor holds its reader claim)").line()
+    assert deaf not in hook.take(team_bus, binding, hook.count_call())
+    with claim.claim.claimed():
+        assert deaf in hook.take(team_bus, binding, hook.count_call())
+        assert deaf in hook.take(team_bus, binding, hook.count_call())
+        with claim.reader_held():
+            assert deaf not in hook.take(team_bus, binding, hook.count_call())
+
+
+def test_an_unbound_session_is_never_told_to_rearm_a_team_watch(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    transcript = tmp_path / "session.jsonl"
+    unbound_reminders(transcript, monkeypatch, capsys)
+    hook = DeafReminder.decode(hook_record(transcript))
+    assert not hook.deck(DeckReader()).exists()
+
+
+@pytest.mark.parametrize(("command", "allowed"), (
+    ("agent-comms-claude-bridge watch", True),
+    ("/owned/bin/agent-comms-claude-bridge watch --state '/owned/state directory'", True),
+    ("echo unrelated", False),
+    ("agent-comms-claude-bridge connect", False),
+    ("agent-comms-claude-bridge watch; echo unrelated", False),
+    ("agent-comms-claude-bridge watch > output", False),
+    ("agent-comms-claude-bridge watch --root other", False),
+    ("agent-comms-claude-bridge watch --state", False),
+))
+def test_only_the_bus_monitor_may_cross_an_unfinished_deal(command: str, allowed: bool):
+    assert MonitorInput(command).watches_bus() is allowed
+
+
+def tool_call(hook, server, comms, db, now):
+    """One tool call's board lines: the hook asks over the session socket while this thread
+    answers as the bridge does, deriving the board from Core at the moment of asking. The
+    commander's deck slices ride the same call and are not the board."""
+    with ThreadPoolExecutor(1) as pool:
+        taken = pool.submit(hook.take, comms, admitted_binding(comms, "lead"), hook.count_call())
+        peer, _ = server.accept()
+        with peer, peer.makefile("rwb") as stream:
+            assert FieldCodec.decode(SessionRequest, FieldCodec.parse(stream.readline())) == ReadBoard()
+            entries = TeamUpdate.current_board(comms, "lead")
+            reply = BoardReply(DeliveredBoardContent.deliver(db, entries, now).lines)
+            stream.write(FieldCodec.compact(FieldCodec.encode(reply)).encode() + b"\n")
+        return tuple(line for line in taken.result(timeout=5) if line.startswith("BOARD"))
+
+
+def test_a_recorded_verdict_drops_its_board_line_on_the_next_tool_call(
+        head_bus, notification_bus, tmp_path, monkeypatch):
+    """2026-10-25: JUDGE #3311 and #3331 kept printing after `judge ok` until the next packet,
+    because the hook reprinted the lines the last packet stored. The board is now derived from
+    Core when the hook asks: the verdict drops the line on the next tool call, and a line two
+    packets carry prints once."""
+    comms, _, request = head_bus
+    # A relative HOME keeps the real AF_UNIX endpoint below its path-length limit.
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", "home")
+    hook = BoardReminder.decode(hook_record(tmp_path / "session.jsonl"))
+    claim = WatchClaim(hook.session_id)
+    claim.path.parent.mkdir(parents=True)
+    record = WatchRecord("lead", str(comms.root), ("watch",), tmp_path / "inbox")
+    worker = RecordedThreadIncarnation("worker", 1.0)
+    rules = (*OrderlessUnreviewedHead.scan_reviews(comms.goals, "lead", ProgressRead(())),
+             ReviewTimerUp("P1", worker, "order-P1", RecordedEventTime(1000.0)),
+             SpinningTeammate("P2", worker, 92))
+    beat(comms, rules)
+    beat(comms, rules)
+    with (claim.held(record), claim.reader_held(), Binding.open(tmp_path / "delivery") as db,
+          socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server):
+        server.bind(str(claim.socket_path))
+        server.listen()
+        server.settimeout(5)
+        assert DeckStart.decode(hook_record(tmp_path / "session.jsonl", "SessionStart")).take(comms, admitted_binding(comms, "lead"))
+        board = tool_call(hook, server, comms, db, time.time())
+        assert len(board) == len(rules)
+        invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
+        assert [line for line in tool_call(hook, server, comms, db, time.time())
+                if f"--pr {request.pr} --head {request.head}" in line] == []
+
+
+def test_board_decoder_names_a_refusal_instead_of_a_constructor_error():
+    refused = SessionRefused(error="The bridge cannot serve this request")
+    reply = json.loads(FieldCodec.compact(FieldCodec.encode(refused)))
+    with pytest.raises(UnexpectedBoardReply) as caught:
+        SessionBoard.replied(**reply)
+    assert refused.error in str(caught.value)
+
+
+def test_board_read_failure_is_a_typed_hook_failure(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(AbsentSessionSocket) as caught:
+        SessionBoard.asked(Path("missing.socket"))
+    assert caught.value.__cause__ is not None
+
+
+def test_a_held_claims_absent_socket_is_one_board_line_not_a_traceback(tmp_path, monkeypatch):
+    """2026-10-30: during an install every Read hook printed a traceback to the owner and
+    dropped its deck slice, while LiveWatch already declared that gap an install's swap."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", "home")
+    record = WatchRecord("lead", str(tmp_path), ("watch",), tmp_path / "inbox")
+    (line,) = LiveWatch(WatchClaim("swapping"), record).board()
+    assert line.startswith("BOARD:") and "swapping the session bridge" in line
+
+
+def test_board_start_line_disappears_when_its_phase_order_is_sent(notification_bus, tmp_path, monkeypatch):
+    comms = notification_bus
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", "home")
+    hook = BoardReminder.decode(hook_record(tmp_path / "session.jsonl"))
+    claim = WatchClaim(hook.session_id)
+    claim.path.parent.mkdir(parents=True)
+    record = WatchRecord("lead", str(comms.root), ("watch",), tmp_path / "inbox")
+    reading = capture_frame(comms, "lead", ProgressRead()).plan
+    beat(comms, (PlanIdle(BusWriterPhase, reading),))
+    phase_name = f"{BusWriterPhase.plan.declared_name}/{BusWriterPhase.declared_name}"
+    lead = comms.registry.require("lead").incarnation
+    request = comms.goals.todos.add_request(lead, "Start the ready bus writer phase").id
+    original = comms.goals.todos.get("P1").order.checked()
+    with (claim.held(record), claim.reader_held(), Binding.open(tmp_path / "delivery") as db,
+          socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server):
+        server.bind(str(claim.socket_path))
+        server.listen()
+        server.settimeout(5)
+        assert DeckStart.decode(hook_record(tmp_path / "session.jsonl", "SessionStart")).take(comms, admitted_binding(comms, "lead"))
+        before = tool_call(hook, server, comms, db, time.time())
+        assert sum(phase_name in line for line in before) == 1
+        # The worker holds P1 and P2 already; the idle outsider takes the phase order.
+        comms.goals.update_goal("outsider", CreateProblemGoalAction(
+            problem="P3", commander="lead", request=request, assigner=lead,
+            repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"),
+            text="Start the ready bus writer phase", review_at=RecordedEventTime(time.time() + 3600),
+            order=replace(original, id=OrderId.mint(), serves=BusWriterPhase,
+                          at=RecordedEventTime(time.time())),
+        ))
+        after = tool_call(hook, server, comms, db, time.time())
+        assert sum(phase_name in line for line in after) == 0
+        assert not after
+
+
+def unchanged_summary(pings, now):
+    return BoardSummary(tuple(ping.board_entry() for ping in pings), now).line()
+
+
+def test_the_summary_leads_with_tristans_lines_and_never_parks_on_one_row():
+    """2026-10-30: min(since) printed metaclass-registry#11 on every tool call for 1180 min."""
+    stale = BoardEntry("stale", "UNORDERED metaclass-registry#11", 0.0, 0.0)
+    other = BoardEntry("other", "JUDGE #3751", 600.0, 600.0)
+    his = (BoardEntry("a", "ACT owner directive a", 1200.0, 1200.0, True),
+           BoardEntry("b", "ADVANCE request b", 1800.0, 1800.0, True))
+    board = (stale, other, *his)
+    at = 6000.0
+    minutes = tuple(BoardSummary(board, at + 60 * step).shown for step in range(4))
+    assert set(minutes) == set(his)
+    assert "4 unchanged, 2 from Tristan: " in BoardSummary(board, at).line()
+    assert {BoardSummary((stale, other), at + 60 * step).shown for step in range(2)} == {stale, other}
+
+
+def test_rules_carrying_his_words_flag_their_board_lines():
+    since = RecordedEventTime(1.0)
+    worker = TeammateSubject(RecordedThreadIncarnation("worker", 1.0))
+    flagged = RulePing(DirectiveUnacted, TextDigest.of("d"), text="ACT", subjects=(worker,), since=since)
+    plain = RulePing(ReviewTimerUp, TextDigest.of("t"), text="Review", subjects=(worker,), since=since)
+    assert flagged.board_entry().owner_flagged and not plain.board_entry().owner_flagged
+
+
+def test_the_board_prints_changes_once_then_an_unchanged_count(notification_bus, tmp_path, monkeypatch):
+    """Retained observations, bridge delivery journal and socket; publication stays muted."""
+    from agent_comms.heartbeat_delivery import OffHeartbeatDelivery
+    from agent_comms.task_attachments.team_pings import TeamUpdateStore
+
+    comms = notification_bus
+    comms.threads.set_heartbeat_delivery("lead", OffHeartbeatDelivery)
+    assert comms.registry.require("lead").heartbeat_delivery is OffHeartbeatDelivery
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", "home")
+    hook = BoardReminder.decode(hook_record(tmp_path / "session.jsonl"))
+    claim = WatchClaim(hook.session_id)
+    claim.path.parent.mkdir(parents=True)
+    record = WatchRecord("lead", str(comms.root), ("watch",), tmp_path / "inbox")
+    lead = comms.registry.require("lead").incarnation
+    worker = comms.registry.require("worker").incarnation
+    began = time.time()
+    first = RulePing(SpinningTeammate, TextDigest.of("first"), text="Read worker P1",
+                     subjects=(TeammateSubject(worker),), since=RecordedEventTime(began))
+    second = RulePing(ReviewTimerUp, TextDigest.of("second"), text="Review worker P2",
+                      subjects=(TeammateSubject(worker),), since=RecordedEventTime(began))
+    TeamUpdateStore.record(comms.root, TeamDecisions(
+        lead, (first, second), (first, second), ()))
+    with (claim.held(record), claim.reader_held(), Binding.open(tmp_path / "delivery") as db,
+          socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server):
+        server.bind(str(claim.socket_path))
+        server.listen()
+        server.settimeout(5)
+        assert DeckStart.decode(hook_record(tmp_path / "session.jsonl", "SessionStart")).take(comms, admitted_binding(comms, "lead"))
+        assert tool_call(hook, server, comms, db, began + 90) == (
+            "BOARD: Read worker P1 (seen for 1 min)",
+            "BOARD: Review worker P2 (seen for 1 min)",
+        )
+        assert tool_call(hook, server, comms, db, began + 91) == (
+            unchanged_summary((first, second), began + 91),
+        )
+        changed = replace(first, observation=TextDigest.of("changed"), since=RecordedEventTime(began + 90))
+        TeamUpdateStore.record(comms.root, TeamDecisions(
+            lead, (changed, second), (changed,), ()))
+        assert tool_call(hook, server, comms, db, began + 92) == (
+            "BOARD: Read worker P1 (seen for 0 min)",
+            unchanged_summary((second,), began + 92),
+        )
+        # A fresh packet does not reset delivery, and the answer window rings only once.
+        TeamUpdateStore.record(comms.root, TeamDecisions(
+            lead, (changed, second), (), ()))
+        alarm = began + AwaitingTeam.seconds
+        assert tool_call(hook, server, comms, db, alarm + 1) == (
+            "BOARD: Review worker P2 (seen for 5 min)",
+            unchanged_summary((changed,), alarm + 1),
+        )
+        assert tool_call(hook, server, comms, db, alarm + 2) == (
+            unchanged_summary((changed, second), alarm + 2),
+        )
+        assert DeliveredBoardContent.count(db) == 2
+        TeamUpdateStore.record(comms.root, TeamDecisions(lead, (), (), ()))
+        assert tool_call(hook, server, comms, db, alarm + 3) == ()
+        assert DeliveredBoardContent.count(db) == 0
+
+
+def test_the_deck_carries_the_voice_every_fourth_slice_every_rule_reminder_and_every_failure():
+    slices = DeckReader.slices()
+    voice = DeckReader.paragraphs(TeamPackage.voice().read_text())
+    indictment = DeckReader.paragraphs(TeamPackage.indictment().read_text())
+    assert set(slices[0::4]) == set(voice)
+    assert set(slices[1::4]) == set(indictment)
+    assert set(slices[2::4]) == {rule.reminder for rule in RuleFile.packaged()}
+    assert set(slices[3::4]) == {
+        f"Recorded failure {line}" for line in PostmortemFailure.catalog().splitlines()}
+    assert all(len(text) <= DeckReader.slice_chars for text in slices)
+
+
+def run_resident(monkeypatch, capsys, transcript, comms: Comms, binding: Binding):
+    """Direct resident evaluation; root separately qualifies the actual installed socket."""
+    def run(program):
+        event, = program.events
+        reply = evaluate(program(payload=hook_record(transcript, event)), comms, binding)
+        assert reply.status == 0, reply.stderr
+        return reply.stdout
+    return run
+
+
+def test_the_resident_commands_order_the_reads_once_then_put_slices_inline(
+        tmp_path, monkeypatch, capsys, commanding_session, team_bus, team_binding):
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    run = run_resident(monkeypatch, capsys, transcript, comms=team_bus, binding=team_binding)
+    assert run(SkillRequest)
+    outputs = [run(ReminderRequest) for _ in range(SliceReminder.every)]
+    assert outputs[:-1] == [""] * (SliceReminder.every - 1)
+    context = json.loads(outputs[-1])["hookSpecificOutput"]["additionalContext"]
+    assert context == DeckReader.slices()[0]
+    assert "Read each of these" not in context
+
+
+def test_a_session_that_becomes_team_is_dealt_its_sources_on_its_next_tool_call(
+        tmp_path, monkeypatch, capsys, team_bus, team_binding):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    run = run_resident(monkeypatch, capsys, transcript, comms=team_bus, binding=team_binding)
+    assert unbound_session_start(transcript, "startup").stdout == ""
+    WatchClaim("s").enrol(WatchRecord("claude-code", str(team_bus.root), (), tmp_path / "state"))
+    assert "Read each of these" in run(ReminderRequest)
+    assert transcript.with_suffix(".deck.json").exists()
+
+
+@pytest.mark.parametrize("actor", ("claude-code", "unit-x"))
+def test_each_bound_peer_gets_the_shared_sources_and_reminders(
+        tmp_path, monkeypatch, capsys, team_bus, actor):
+    """Lead and untagged peer use one source list, audit and reminder deck."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    WatchClaim("s").enrol(WatchRecord(actor, str(team_bus.root), (), tmp_path / "state"))
+    run = run_resident(monkeypatch, capsys, transcript, comms=team_bus, binding=admitted_binding(team_bus, actor))
+    context = json.loads(run(SkillRequest))["hookSpecificOutput"]["additionalContext"]
+    assert "Read each of these" in context and "What the registered boards hold:" in context
+    assert "FUCK YOUR COMPACTION" not in context
+    assert "WHAT TRISTAN ACTUALLY SAID LAST" in context
+    assert "What your teammates actually hold" not in context
+    outputs = [run(ReminderRequest) for _ in range(SliceReminder.every)]
+    assert outputs[:-1] == [""] * (SliceReminder.every - 1)
+    context = json.loads(outputs[-1])["hookSpecificOutput"]["additionalContext"]
+    assert context == DeckReader.slices()[0]
+    assert transcript.with_suffix(".deck.json").exists()
+    assert set(dealt_sources(transcript)) == {path.resolve() for path in DeckReader.sources()}
+
+
+@pytest.mark.parametrize("path", TeamPackage.rules_files(), ids=lambda path: path.name)
+def test_package_rule_opens_with_its_wakeup_then_its_reason(path):
+    rule = RuleFile.read(path)
+    assert rule.why and rule.wakeup.startswith(">")
+    assert rule.render().startswith(rule.wakeup + "\n\n" + rule.summary)
+    assert rule.reminder.startswith(rule.wakeup) and rule.reminder.endswith(rule.drift)
+
+
+def test_rule_file_without_a_wakeup_is_refused(tmp_path):
+    source = TeamPackage.rules_files()[0].read_text(encoding="utf-8")
+    path = tmp_path / "asleep.md"
+    path.write_text("".join(line for line in source.splitlines(keepends=True)
+                            if not line.startswith(">")), encoding="utf-8")
+    with pytest.raises(ValueError, match="wake-up"):
+        RuleFile.read(path)
+
+
+def test_package_descriptions_do_not_repeat_rule_kind():
+    for path in TeamPackage.rules_files():
+        metadata, _ = RuleFile.document(path)
+        assert not metadata["description"].startswith("HARD RULE:"), path.name
+
+
+def test_failure_catalog_numbers_every_evidenced_member_once():
+    members = sorted(PostmortemFailure.members_with(PostmortemFailure), key=lambda member: member.number)
+    assert [member.number for member in members] == list(range(1, len(members) + 1))
+    assert all(member.evidence for member in members)
+
+
+
+
+def test_the_shared_reader_reads_every_packaged_rule():
+    assert DeckReader.rules() == RuleFile.packaged()
+
+
+def test_the_reading_order_names_exactly_the_packaged_rules_and_the_spine_leads():
+    names = tuple(RuleFile.read(path).name for path in TeamPackage.rules_files())
+    assert sorted(RuleFile.reading_order) == sorted(names)
+    assert tuple(rule.name for rule in RuleFile.packaged()) == RuleFile.reading_order
+    assert RuleFile.reading_order[0] == "spine"
+
+
+def test_every_full_deal_reads_the_paper_before_any_rule():
+    sources = DeckReader.sources()
+    paper = TeamPackage.paper()
+    assert paper and sources[:len(paper)] == paper
+    assert sources[len(paper)] == RuleFile.packaged()[0].path
+
+
+def test_the_prime_variants_cover_papers_and_indictment_once_each_with_the_indictment_last():
+    """/prime deals a selection of the one reader list: each variant keeps or drops the papers
+    and the commander's indictment, every rule stays, and a kept indictment stays last."""
+    paper = set(TeamPackage.paper())
+    indictment = TeamPackage.indictment()
+    kept = set()
+    for prime in Prime.members_with(Prime):
+        sources = prime.reader.sources()
+        assert all(rule.path in sources for rule in DeckReader.rules())
+        kept.add((paper <= set(sources), indictment in sources))
+        if indictment in sources:
+            assert prime.reader.leading()[-1] == indictment
+        assert prime.reader.slices()
+    assert kept == {(True, True), (True, False), (False, True), (False, False)}
+
+
+def test_every_prime_variant_says_it_was_primed_never_that_the_session_started():
+    for prime in Prime.members_with(Prime):
+        reason = prime.trigger().reason()
+        assert f"/prime ({prime.declared_name})" in reason
+        assert reason != StartedDeal().reason()
+
+
+def test_prime_in_a_session_no_bus_thread_holds_is_refused_out_loud(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    endpoint = SessionEndpoint("loose")
+    with pytest.raises(HookBridgeUnavailable, match="loose"):
+        endpoint.session().require_bound()
+    assert not transcript.with_suffix(".deal.json").exists()
+
+
+def test_the_team_session_gets_its_sources(tmp_path, monkeypatch, team_bus, team_binding):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    WatchClaim("s").enrol(WatchRecord("claude-code", str(team_bus.root), (), tmp_path))
+    assert DeckStart.decode(
+        {"hook_event_name": "SessionStart", "session_id": "s", "transcript_path": str(transcript)}).take(team_bus, team_binding)
+
+
+def test_changing_storage_lead_preserves_the_peer_deal_and_real_child_delegation(
+        tmp_path, capsys, commanding_session, team_bus, team_binding):
+    """Moving storage ownership neither demotes a peer nor changes its retained context."""
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    assert DeckStart.decode(hook_record(transcript, "SessionStart")).take(team_bus, team_binding)
+    assert transcript.with_suffix(".deck.json").exists()
+    commanding_session.registry.set_team_project(RegisteredTeamProject(
+        commanding_session.registry.require("unit-x").incarnation, ()))
+    dealt = transcript.with_suffix(".deal.json").read_bytes()
+    reminder = BoardReminder.decode(hook_record(transcript))
+    assert [reminder.take(team_bus, team_binding, reminder.count_call()) for _ in range(SliceReminder.every - 1)] == [()] * (SliceReminder.every - 1)
+    assert transcript.with_suffix(".deck.json").exists()
+    assert transcript.with_suffix(".deal.json").read_bytes() == dealt
+    StopHook.decode({"hook_event_name": "Stop", "session_id": "s",
+                     "transcript_path": str(transcript), "stop_hook_active": False}, comms=team_bus, binding=team_binding).guard()
+    assert capsys.readouterr().out == ""
+    SubagentHook.decode({"hook_event_name": "SubagentStart", "session_id": "s",
+                         "transcript_path": str(transcript), "agent_id": "a9",
+                         "agent_type": "Explore"}).register(team_bus, team_binding)
+    assert "in-turn fork claude-a9" in capsys.readouterr().out
+    child = commanding_session.registry.require("claude-a9")
+    child.execution.require_fork()
+    assert tuple(child.parent.names()) == ("claude-code",)
+    assert transcript.with_suffix(".deck.json").exists()
+
+
+def test_a_fork_registers_under_the_session_that_spawned_it(
+        tmp_path, capsys, commanding_session, team_bus, team_binding):
+    """No CLI subprocess: the hook declares the fork in its own process as a child of the
+    session's own bus thread, carrying every tag that thread carries (#commanders included),
+    even when that thread is a co-commander and not the registry's lead."""
+    commanding_session.registry.declare(Thread(
+        "claude-nra", frozenset({TeammatesTag.declared_name}), Checkout(tmp_path),
+        model=DeclaredModel("anthropic/claude-opus-4-6")))
+    WatchClaim("s2").enrol(WatchRecord(
+        "claude-nra", str(commanding_session.root), (), tmp_path / "state2"))
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    for session, agent, actor in (("s", "a7", "claude-code"), ("s2", "a8", "claude-nra")):
+        SubagentHook.decode({"hook_event_name": "SubagentStart", "session_id": session,
+                             "transcript_path": str(transcript), "agent_id": agent,
+                             "agent_type": "fork"}).register(
+                                 commanding_session, admitted_binding(commanding_session, actor, session))
+        assert f"in-turn fork claude-{agent}" in capsys.readouterr().out
+    snapshot = commanding_session.registry.snapshot()
+    for agent, parent in (("a7", "claude-code"), ("a8", "claude-nra")):
+        fork = snapshot.require(f"claude-{agent}")
+        fork.execution.require_fork()
+        assert tuple(fork.parent.names()) == (parent,)
+        assert fork.tags == snapshot.require(parent).tags
+    assert TeammatesTag.declared_name in snapshot.require("claude-a8").tags
+    assert {"claude-a7", "claude-a8"}.isdisjoint(
+        thread.name for thread in snapshot.commander_project.commanders(snapshot))
+
+
+def gated(transcript, tool, tool_input, *, comms: Comms, binding: Binding, **extra):
+    return GatedCall.of({"hook_event_name": "PreToolUse", "session_id": "s",
+                         "transcript_path": str(transcript), "tool_name": tool,
+                         "tool_input": tool_input, **extra}, comms=comms, binding=binding)
+
+
+def refused(capsys, call):
+    call.judge()
+    out = capsys.readouterr().out
+    return out and json.loads(out)["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def answered_audit(reader, read=None, owner_words=()):
+    """The audit answering every dealt file owed an answer among `read`, by default every one
+    the reader owes (its rules and, for a commander, its skill), as a session writes it."""
+    owed = reader.answered() if read is None else {rule.name for rule in read}
+    return json.dumps({"rules": [engaged(source.stem, source.resolve())
+                                 for source in reader.sources() if source.stem in owed],
+                       "owner_words": list(owner_words)})
+
+
+@pytest.fixture
+def dealt_session(tmp_path, commanding_session, team_bus, team_binding):
+    """A commander session just dealt its deck: its transcript and the deal."""
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    start = DeckStart.decode(hook_record(transcript, "SessionStart"))
+    assert start.take(team_bus, team_binding)
+    return transcript, start
+
+
+def read_whole(transcript, source, *, comms: Comms, binding: Binding):
+    gated(transcript, "Read", {"file_path": str(source)}, comms=comms, binding=binding).completed()
+
+
+def test_a_batch_of_read_rules_is_answered_before_the_next_unread_file_opens(capsys, dealt_session, team_bus, team_binding):
+    transcript, start = dealt_session
+    papers = TeamPackage.paper()
+    rules = DeckReader.rules()
+    for paper in papers:
+        read_whole(transcript, paper.resolve(), comms=team_bus, binding=team_binding)  # a paper carries no rule name: no entry owed
+    assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rules[0].path)}, comms=team_bus, binding=team_binding))
+    for rule in rules[:Unengaged.batch]:
+        assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rule.path)}, comms=team_bus, binding=team_binding))
+        read_whole(transcript, rule.path.resolve(), comms=team_bus, binding=team_binding)
+    following = {"file_path": str(rules[Unengaged.batch].path)}
+    assert refused(capsys, gated(transcript, "Read", following, comms=team_bus, binding=team_binding))
+    # Re-reading what was read stays open, and so does the audit, by Read, Write and Edit.
+    assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rules[0].path)}, comms=team_bus, binding=team_binding))
+    assert not refused(capsys, gated(transcript, "Read", {"file_path": str(papers[0])}, comms=team_bus, binding=team_binding))
+    for tool in ("Read", "Write", "Edit"):
+        assert not refused(capsys, gated(transcript, tool, {"file_path": str(start.audit)}, comms=team_bus, binding=team_binding))
+    start.audit.write_text(answered_audit(DeckReader, rules[:Unengaged.batch]))
+    assert not refused(capsys, gated(transcript, "Read", following, comms=team_bus, binding=team_binding))
+    assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}, comms=team_bus, binding=team_binding))  # the rest stay unread
+
+
+def test_a_parallel_batch_opens_a_batch_of_rules_and_refuses_the_next(capsys, dealt_session, team_bus, team_binding):
+    """A batch's reads are each judged before any one completes: a batch of rules opens, the
+    next waits for their answers instead of slipping through before they are recorded."""
+    transcript, start = dealt_session
+    for paper in TeamPackage.paper():
+        read_whole(transcript, paper.resolve(), comms=team_bus, binding=team_binding)
+    rules = DeckReader.rules()
+    batch, following = rules[:Unengaged.batch], rules[Unengaged.batch]
+    for rule in batch:
+        assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rule.path)}, comms=team_bus, binding=team_binding))
+    assert refused(capsys, gated(transcript, "Read", {"file_path": str(following.path)}, comms=team_bus, binding=team_binding))
+    # A rule whose read is in flight stays open; answering them opens the next.
+    assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rules[0].path)}, comms=team_bus, binding=team_binding))
+    start.audit.write_text(answered_audit(DeckReader, batch))
+    assert not refused(capsys, gated(transcript, "Read", {"file_path": str(following.path)}, comms=team_bus, binding=team_binding))
+
+
+def test_a_parallel_batch_opens_whichever_order_its_hooks_reach_the_lock(capsys, dealt_session, team_bus, team_binding):
+    """Each read of one call runs its own hook, and they reach the lock in any order: on
+    2026-10-30 a batch of four sent in dealt order was refused because read three got there
+    before read two, and Tristan was reduced to one read per call."""
+    transcript, start = dealt_session
+    for paper in TeamPackage.paper():
+        read_whole(transcript, paper.resolve(), comms=team_bus, binding=team_binding)
+    rules = DeckReader.rules()
+    batch = rules[:Unengaged.batch]
+    for rule in reversed(batch):
+        assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rule.path)}, comms=team_bus, binding=team_binding))
+    assert refused(capsys, gated(transcript, "Read", {"file_path": str(rules[Unengaged.batch].path)}, comms=team_bus, binding=team_binding))
+    start.audit.write_text(answered_audit(DeckReader, batch))
+    following = reversed(rules[Unengaged.batch:Unengaged.batch * 2])
+    for rule in following:
+        assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rule.path)}, comms=team_bus, binding=team_binding))
+
+
+def test_a_whole_paper_opens_in_one_parallel_batch(capsys, dealt_session, team_bus, team_binding):
+    """Every part of a paper is judged before any read of it completes, and none waits on an
+    audit answer, so the whole paper and the first rules read in one call."""
+    transcript, _ = dealt_session
+    papers = TeamPackage.paper()
+    for part in papers:
+        assert not refused(capsys, gated(transcript, "Read", {"file_path": str(part.resolve())}, comms=team_bus, binding=team_binding))
+    rules = DeckReader.rules()
+    for rule in rules[:Unengaged.batch]:
+        assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rule.path)}, comms=team_bus, binding=team_binding))
+    assert refused(capsys, gated(transcript, "Read", {"file_path": str(rules[Unengaged.batch].path)}, comms=team_bus, binding=team_binding))
+
+
+def test_dealt_files_open_in_order_with_the_indictment_last(capsys, dealt_session, team_bus, team_binding):
+    """On 2026-10-30 a session opened the indictment and two rules first and never read the
+    papers: the next batch of dealt files opens, any later one is refused and named the next."""
+    transcript, _ = dealt_session
+    dealt = DeckReader.sources()
+    assert [path.stem for path in dealt[-2:]] == ["indictment", "ally"]
+    papers = TeamPackage.paper()
+    past_batch = papers[Unengaged.batch]
+    for later in (TeamPackage.indictment(), DeckReader.rules()[0].path, past_batch):
+        call = gated(transcript, "Read", {"file_path": str(later.resolve())}, comms=team_bus, binding=team_binding)
+        call.judge()
+        reason = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
+        assert reason["permissionDecision"] == "deny"
+        assert f"batches of {Unengaged.batch}" in reason["permissionDecisionReason"]
+        assert "Next batch: " + ", ".join(
+            str(paper.resolve()) for paper in papers[:Unengaged.batch]
+        ) in reason["permissionDecisionReason"]
+    assert not refused(capsys, gated(transcript, "Read", {"file_path": str(papers[0].resolve())}, comms=team_bus, binding=team_binding))
+    read_whole(transcript, papers[0].resolve(), comms=team_bus, binding=team_binding)
+    assert not refused(capsys, gated(transcript, "Read", {"file_path": str(papers[1].resolve())}, comms=team_bus, binding=team_binding))
+
+
+def test_every_unanswered_rule_is_named_in_one_refusal(capsys, dealt_session, team_bus, team_binding):
+    transcript, start = dealt_session
+    rules = DeckReader.rules()
+    for rule in rules[:2]:
+        read_whole(transcript, rule.path.resolve(), comms=team_bus, binding=team_binding)
+    wrong = [{**engaged(rule.name, rule.path), "quote": "no rule file holds this line"}
+             for rule in rules[:2]]
+    start.audit.write_text(json.dumps({"rules": wrong, "owner_words": []}))
+    gated(transcript, "Read", {"file_path": str(rules[2].path)}, comms=team_bus, binding=team_binding).judge()
+    reason = json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecisionReason"]
+    assert all(f"entry for {rule.path.stem}" in reason for rule in rules[:2])
+
+
+@pytest.mark.parametrize("change, says", [
+    ({"quote": "no rule file holds this line"}, "not verbatim"),
+    ({"quote": "   "}, "blank"),
+    ({"quote": ""}, "blank"),
+    ({"does": " "}, "does and why"),
+    ({"why": ""}, "does and why"),
+])
+def test_an_answer_that_does_not_hold_keeps_the_next_file_shut(capsys, dealt_session, change, says, team_bus, team_binding):
+    transcript, start = dealt_session
+    rules = DeckReader.rules()
+    read_whole(transcript, rules[0].path.resolve(), comms=team_bus, binding=team_binding)
+    written = {**engaged(rules[0].name, rules[0].path), **change}
+    start.audit.write_text(json.dumps({"rules": [written], "owner_words": []}))
+    gated(transcript, "Read", {"file_path": str(rules[1].path)}, comms=team_bus, binding=team_binding).judge()
+    reason = json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecisionReason"]
+    assert says in reason
+    assert str(start.audit) in reason
+
+
+def test_a_quote_past_the_line_cap_is_refused(tmp_path):
+    source = tmp_path / "rule.md"
+    source.write_text("\n".join(f"> line {number}" for number in range(9)))
+    capped = source.read_text().splitlines()
+    assert "past 8 lines" in RuleAudit("rule", quote="\n".join(capped), does="d", why="w").unengaged(source)
+    assert RuleAudit("rule", quote="\n".join(capped[:8]), does="d", why="w").unengaged(source) == ""
+
+
+@pytest.mark.parametrize("quote", [
+    "- A bullet the agent finds comfortable.",
+    "> N`) is a target",
+    "> the greentext\n- A bullet the agent finds comfortable.",
+])
+def test_a_quote_outside_the_greentext_is_refused(tmp_path, quote):
+    source = tmp_path / "rule.md"
+    source.write_text("> the greentext\n- A bullet the agent finds comfortable.\n- check (`-> N`) is a target\n")
+    assert "greentext" in RuleAudit("rule", quote=quote, does="d", why="w").unengaged(source)
+    assert RuleAudit("rule", quote="> the greentext", does="d", why="w").unengaged(source) == ""
+
+
+def test_the_full_audit_and_the_owners_words_open_the_gate(capsys, tmp_path, commanding_session, team_bus, team_binding):
+    transcript = tmp_path / "session.jsonl"
+    words = ("fix the gate",)
+    transcript.write_text(json.dumps({"type": "user", "message": {"content": words[0]}}) + "\n")
+    start = DeckStart.decode(hook_record(transcript, "SessionStart"))
+    start.take(team_bus, team_binding)
+    start.prepare(DeckReader(), words, StartedDeal())
+    for source in DeckReader.sources():
+        read_whole(transcript, source.resolve(), comms=team_bus, binding=team_binding)
+    start.audit.write_text(answered_audit(DeckReader))
+    assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}, comms=team_bus, binding=team_binding))  # his words unanswered
+    answers = ({"words": words[0], "doing": "editing rule_deal"},)
+    start.audit.write_text(answered_audit(DeckReader, owner_words=answers))
+    assert not refused(capsys, gated(transcript, "Bash", {"command": "ls"}, comms=team_bus, binding=team_binding))
+
+
+def test_the_deal_teaches_the_three_fields_by_a_real_answer_once(
+        tmp_path, capsys, commanding_session, team_bus, team_binding):
+    """The hook's order prints the one template; the first refusal does not print it again."""
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    said = DeckStart.decode(hook_record(transcript, "SessionStart")).take(team_bus, team_binding)
+    template = next(part for part in said if "{\n" in part)
+    example = AuditDue.worked_answer
+    assert json.dumps(FieldCodec.encode(example), ensure_ascii=False) in template
+    spine = next(rule for rule in DeckReader.rules() if rule.name == example.rule)
+    assert example.unengaged(spine.path) == ""
+    assert {"quote", "does", "why"} <= json.loads(template[template.index("{\n"):])["rules"][0].keys()
+    gated(transcript, "Bash", {}, comms=team_bus, binding=team_binding).judge()
+    assert "{\n" not in json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_every_tool_but_read_waits_for_each_dealt_rule_file_then_its_audit(
+        tmp_path, capsys, commanding_session, team_bus, team_binding):
+    """The deal names the packaged rule files themselves; PreToolUse only judges, and a file
+    counts as read only when a Read covering all of it completes (PostToolUse). Then only the
+    audit may be written until it answers every dealt rule."""
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    assert DeckStart.decode(hook_record(transcript, "SessionStart")).take(team_bus, team_binding)
+    parts = list(dealt_sources(transcript))
+    assert set(parts) == {source.resolve() for source in DeckReader.sources()}
+    assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}, comms=team_bus, binding=team_binding))
+    whole = {"file_path": str(parts[0])}
+    assert not refused(capsys, gated(transcript, "Read", whole, comms=team_bus, binding=team_binding))
+    assert refused(capsys, gated(transcript, "Read", {"file_path": str(transcript)}, comms=team_bus, binding=team_binding))  # not dealt
+    assert refused(capsys, gated(transcript, "Edit", {"file_path": str(transcript)}, comms=team_bus, binding=team_binding))  # a Read that never completed
+    gated(transcript, "Read", {**whole, "limit": 5}, comms=team_bus, binding=team_binding).completed()
+    assert refused(capsys, gated(transcript, "Edit", {"file_path": str(transcript)}, comms=team_bus, binding=team_binding))  # a partial read is not a reading
+    for part in parts:
+        gated(transcript, "Read", {"file_path": str(part)}, comms=team_bus, binding=team_binding).completed()
+    audit = transcript.with_suffix(".audit.json")
+    assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}, comms=team_bus, binding=team_binding))  # no audit yet
+    assert not refused(capsys, gated(transcript, "Write", {"file_path": str(audit)}, comms=team_bus, binding=team_binding))
+    audit.write_text(json.dumps({"rules": [{"rule": rule.name} for rule in DeckReader.rules()],
+                                 "owner_words": []}))
+    assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}, comms=team_bus, binding=team_binding))  # read, never answered
+    audit.write_text(answered_audit(DeckReader))
+    assert not refused(capsys, gated(transcript, "Bash", {"command": "ls"}, comms=team_bus, binding=team_binding))
+    assert DeckStart.decode(hook_record(transcript, "SessionStart")).take(team_bus, team_binding)  # compaction
+    assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}, comms=team_bus, binding=team_binding))
+
+
+def test_refusal_counts_names_tool_and_prefills_the_owned_audit(
+        tmp_path: Path, capsys: pytest.CaptureFixture[str], team_bus, team_binding) -> None:
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    start = DeckStart.decode(hook_record(transcript, "SessionStart"))
+    words = ("Read the rules.\nThen write the audit.",)
+    start.prepare(DeckReader(), words, StartedDeal())
+    reasons = []
+    for attempt, tool in enumerate(("Bash", "Edit"), 1):
+        gated(transcript, tool, {"file_path": str(transcript)}, comms=team_bus, binding=team_binding).judge()
+        output = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
+        assert output["permissionDecision"] == "deny"
+        reason = output["permissionDecisionReason"]
+        assert f"You just tried {tool} before reading. Call #{attempt} since this deal, refused." in reason
+        assert f"Tristan told you, verbatim:\n{words[0]}\nYou did not." in reason
+        assert ReadThenRepeatedFailure().cite() in reason
+        assert ReadThenRepeatedFailure.title in reason
+        reasons.append(reason)
+    assert "{\n" not in reasons[1]  # the template prints once per deal, the words every time
+    template = FieldCodec.decode(SessionAudit, json.loads(reasons[0][reasons[0].index("{\n"):]))
+    for source in DeckReader.sources():
+        gated(transcript, "Read", {"file_path": str(source)}, comms=team_bus, binding=team_binding).completed()
+    due = start.current().due
+    assert {entry.rule for entry in template.rules} == due.rules
+    assert tuple(answer.words for answer in template.owner_words) == words
+    assert all(not answer.doing for answer in template.owner_words)
+    assert due.refusal(template)  # the blank template cannot count as the completed audit
+    for invalid in ("not JSON", '{"rules": [], "owner_words": []}'):
+        start.audit.write_text(invalid)
+        gated(transcript, "Bash", {}, comms=team_bus, binding=team_binding).judge()
+        output = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
+        assert output["permissionDecision"] == "deny"
+        assert str(start.audit) in output["permissionDecisionReason"]
+    start.prepare(DeckReader(), words, StartedDeal())
+    gated(transcript, "Bash", {}, comms=team_bus, binding=team_binding).judge()
+    assert "Call #1 since this deal, refused." in capsys.readouterr().out
+
+
+def test_the_audit_answers_each_shown_prompt_by_its_own_words_with_an_action():
+    due = AuditDue(frozenset({"voice"}), ("fix the gate", "land the queue"))
+    audited = (RuleAudit("voice"),)
+    duplicated = SessionAudit(audited, (OwnerWordsAnswer("fix the gate", "editing read_gate"),) * 2)
+    assert "land the queue" in due.refusal(duplicated)
+    idle = SessionAudit(audited, (OwnerWordsAnswer("fix the gate", "editing read_gate"),
+                                  OwnerWordsAnswer("land the queue", "  ")))
+    assert "no action" in due.refusal(idle)
+    answered = SessionAudit(audited, (OwnerWordsAnswer("fix the gate", "editing read_gate"),
+                                      OwnerWordsAnswer("land the queue", "merging #3572")))
+    assert due.refusal(answered) == ""
+    assert "voice" in due.refusal(SessionAudit((), answered.owner_words))
+
+
+def test_a_subagent_and_an_unbound_session_are_never_gated(
+        tmp_path, monkeypatch, capsys, commanding_session, team_bus, team_binding):
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    assert DeckStart.decode(hook_record(transcript, "SessionStart")).take(team_bus, team_binding)
+    # Claude's SubagentStart registers the child before PreToolUse reports its activity.
+    from agent_comms.thread_execution import ForkExecution
+
+    commanding_session.registry.register_child(
+        "claude-a9", "claude-code", ForkExecution, commanding_session.goals)
+    assert not refused(capsys, gated(transcript, "Bash", {"command": "ls"}, agent_id="a9", comms=team_bus, binding=team_binding))
+    elsewhere = tmp_path / "other.jsonl"
+    elsewhere.write_text("")
+    assert not refused(capsys, gated(elsewhere, "Bash", {"command": "ls"}, comms=team_bus, binding=team_binding))
+
+
+def test_two_agents_on_one_session_keep_separate_deals(
+        tmp_path, capsys, commanding_session, team_bus, team_binding):
+    """A subagent shares its session's id and transcript path; its reads never count for the
+    main agent, it may not write the main agent's audit, and its own deal is its own."""
+    from agent_comms.thread_execution import ForkExecution
+
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    assert DeckStart.decode(hook_record(transcript, "SessionStart")).take(team_bus, team_binding)
+    commanding_session.registry.register_child(
+        "claude-a9", "claude-code", ForkExecution, commanding_session.goals)
+    for part in dealt_sources(transcript):
+        gated(transcript, "Read", {"file_path": str(part)}, agent_id="a9", comms=team_bus, binding=team_binding).completed()
+    assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}, comms=team_bus, binding=team_binding))  # main still unread
+    main_audit = transcript.with_suffix(".audit.json")
+    assert refused(capsys, gated(transcript, "Write", {"file_path": str(main_audit)},
+                                 agent_id="a9", comms=team_bus, binding=team_binding))
+    sub = gated(transcript, "Bash", {}, agent_id="a9", comms=team_bus, binding=team_binding)
+    assert sub.audit != main_audit and sub.audit.parent == transcript.with_suffix("") / "subagents"
+    assert not refused(capsys, sub)  # the subagent was dealt nothing of its own
+    assert not refused(capsys, gated(transcript, "Write", {"file_path": str(sub.audit)},
+                                     agent_id="a9", comms=team_bus, binding=team_binding))
+
+
+@pytest.mark.parametrize("retired", [False, True])
+def test_a_resume_keeps_the_deal_its_session_is_answering(tmp_path, commanding_session, retired, team_bus, team_binding):
+    """A resume keeps the context it had: the reads made and the audit written stay, where a
+    re-deal on 2026-10-30 unlinked claude-code's audit mid-gate and demanded 23 reads again."""
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    assert session_start(transcript, "compact", comms=team_bus, binding=team_binding).returncode == 0
+    start = DeckStart.decode(hook_record(transcript, "SessionStart"))
+    first = start.current().paths[0]
+    start.record_read(first, ReadSpan(1, sys.maxsize, sys.maxsize))
+    start.audit.write_text('{"rules": [], "owner_words": []}', encoding="utf-8")
+    if retired:
+        old = start.current()
+        start.publish(replace(old, dealt=(first.with_name("retired-source.md"), *old.dealt[1:])))
+    result = session_start(transcript, "resume", comms=team_bus, binding=team_binding)
+    assert result.returncode == 0, result.stderr
+    assert start.audit.exists() is not retired
+    assert start.current().read_by(start) == (() if retired else (first,))
+    assert session_start(transcript, "compact", comms=team_bus, binding=team_binding).returncode == 0
+    assert not start.audit.exists()  # a compaction owes a fresh confession, never a carried one
+    assert start.current().read_by(start) == ()
+
+
+def test_a_subagent_compaction_deals_the_subagent_not_its_session(tmp_path, commanding_session, team_bus, team_binding):
+    """A subagent's events name its session's transcript; on 2026-10-30 a commander fork's
+    compaction dealt the main agent's stem, whose audit was mid-answer."""
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    assert session_start(transcript, "compact", comms=team_bus, binding=team_binding).returncode == 0
+    main = DeckStart.decode(hook_record(transcript, "SessionStart"))
+    main.audit.write_text('{"rules": [], "owner_words": []}', encoding="utf-8")
+    dealt = main.record.read_bytes()
+    result = session_start(transcript, "compact", agent_id="a9", comms=team_bus, binding=team_binding)
+    assert result.returncode == 0, result.stderr
+    assert main.audit.exists() and main.record.read_bytes() == dealt
+    sub = DeckStart.of({**hook_record(transcript, "SessionStart"), "agent_id": "a9"})
+    assert sub.record.exists() and str(sub.audit) in result.stdout
+
+
+def test_a_compaction_deal_opens_with_when_it_compacted(tmp_path, commanding_session, team_bus, team_binding):
+    """A fresh context cannot remember compacting, so the deal says when, from the transcript's
+    own compact boundary: claude-code called real compactions a gate bug four times."""
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text(json.dumps({
+        "type": "system", "subtype": "compact_boundary", "content": "Conversation compacted",
+        "uuid": "0460bd61-a862-449d-8421-4452811929fa", "timestamp": "2026-10-30T17:29:04.391Z",
+    }) + "\n")
+    start = DeckStart.decode({**hook_record(transcript, "SessionStart"), "source": "compact"})
+    said = start.take(team_bus, team_binding)
+    at = datetime(2026, 10, 30, 17, 29, 4, 391000, UTC).astimezone().isoformat(timespec="seconds")
+    assert said[0].startswith(CompactedDeal(at).reason())
+    assert start.current().trigger == CompactedDeal(at)
+
+
+def test_turns_that_changed_nothing_are_held_up_against_what_the_session_wrote(
+        tmp_path, capsys, team_bus, team_binding):
+    """A yes opens the deal; the proof comes at the turn's end, with the session's own endings
+    and what it wrote read back as Tristan asking, once per stop."""
+    record = {"uuid": "00000000-0000-4000-8000-000000000001", "timestamp": "2026-10-31T04:00:00.000Z", "cwd": "/w", "version": "1"}
+    ended = json.dumps({**record, "type": "system", "subtype": "turn_duration", "durationMs": 1})
+    said = lambda words: json.dumps({**record, "type": "assistant", "message": {
+        "role": "assistant", "content": [{"type": "text", "text": words}]}})
+    called = lambda tool: json.dumps({**record, "type": "assistant", "message": {
+        "role": "assistant", "content": [{"type": "tool_use", "id": "toolu_1", "name": tool, "input": {}}]}})
+    result = json.dumps({**record, "type": "user", "promptId": "p", "message": {"role": "user", "content": [
+        {"type": "tool_result", "tool_use_id": "toolu_1", "content": [{"type": "text", "text": "r"}]}]}})
+    transcript = tmp_path / "session.jsonl"
+    transcript.with_suffix(".audit.json").write_text(json.dumps({"rules": [
+        {"rule": "spine", "does": "I clear his board first."}], "owner_words": []}))
+
+    def stopped(*lines, active=False):
+        transcript.write_text("\n".join(lines) + "\n")
+        StopHook.decode({"hook_event_name": "Stop", "session_id": "s", "transcript_path": str(transcript),
+                         "stop_hook_active": active}, comms=team_bus, binding=team_binding).guard()
+        return capsys.readouterr().out
+
+    idle = (said("Skipped"), ended) * 3
+    asked = json.loads(stopped(*idle))["reason"]
+    assert "Tristan is asking you:" in asked and "> I clear his board first." in asked
+    assert "> Skipped" in asked and "did you mean it?" in asked
+    assert stopped(*idle, active=True) == ""  # never loops
+    assert stopped(said("Skipped"), ended, said("Skipped"), ended) == ""  # two is not a pattern
+    assert stopped(said("Skipped"), ended, called("Bash"), result, said("done"), ended,
+                   said("Skipped"), ended, said("Skipped"), ended) == ""  # a call ran

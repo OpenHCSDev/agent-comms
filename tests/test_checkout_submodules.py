@@ -19,7 +19,7 @@ from agent_comms.goals import OrderCheck
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.registry_document import RegisteredCommanderProject
+from agent_comms.registry_document import RegisteredTeamProject
 from agent_comms.repo import Checkout, CheckoutHoldsWorkError, DetachedStart, GitCommandError, LaunchCheckout, NewBranchStart, Repo, RepositoryReads, ScratchCheckout
 from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import StorageDenied, StorageRule
@@ -88,7 +88,7 @@ def checkout_command_bus(repository, tmp_path, monkeypatch, installed_runtime, r
         "lead", frozenset(), Checkout(tmp_path / "lead"), execution=ExternalThreadExecution))
     worker = comms.registry.declare(Thread(
         "worker", frozenset(), Checkout(repository), execution=request.param))
-    comms.registry.set_commander_project(RegisteredCommanderProject(
+    comms.registry.set_team_project(RegisteredTeamProject(
         lead.incarnation, (Repo(checkout=repository, github=identity),)))
     request_id = comms.goals.todos.add_request(lead.incarnation, "Prepare the pinned checkout").id
     now = time.time()
@@ -220,7 +220,7 @@ def test_checkout_remove_retires_the_order_checkout_with_its_submodule(
     current = comms.goals.todos.get("P1")
     closed = comms.goals.todos.apply("P1", WithdrawTodo(
         current.revision, comms.registry.require("lead").incarnation, current.held(),
-        "The order is closed before its unit retires the checkout it worked in."))
+        "The order is closed before its teammate retires the checkout it worked in."))
     assert closed.assignment is None
     (path / "owner.py").write_text("an unpushed edit\n")
     held = core_process("--root", str(comms.root), "checkout", "--from", "worker", "remove", "P1")
@@ -242,7 +242,7 @@ def test_checkout_add_reopens_retired_order_branch_with_its_commits(checkout_com
     assert added.returncode == 0, added.stderr
     (path / "unit-change.py").write_text("kept work\n")
     git(path, "add", "unit-change.py")
-    git(path, "commit", "-q", "-m", "Keep the unit's work")
+    git(path, "commit", "-q", "-m", "Keep the teammate's work")
     commit = git(path, "rev-parse", "HEAD").strip()
     branch = git(path, "branch", "--show-current").strip()
 
@@ -263,7 +263,7 @@ def test_checkout_add_allocates_a_declared_sibling_repository_before_it_exists(
     comms = checkout_command_bus
     sibling = SourceRepository.create(tmp_path / "paired", RepositoryName("OpenHCSDev", "toad"))
     project = comms.registry.snapshot().commander_project.require()
-    comms.registry.set_commander_project(RegisteredCommanderProject(
+    comms.registry.set_team_project(RegisteredTeamProject(
         project.commander, (*project.repos, sibling)))
     rule = comms.registry.storage_rule
     worker = comms.registry.require("worker")

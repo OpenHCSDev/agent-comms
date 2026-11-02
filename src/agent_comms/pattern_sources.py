@@ -1,5 +1,5 @@
 """Where a behaviour pattern was learned: the Codex postmortem's numbered failures, a
-commander rule, a problem's fix, a seed catalog entry or a commit.
+teammate rule, a problem's fix, a seed catalog entry or a commit.
 
 They are text, so the session hooks read the failure catalog without loading the patterns'
 checks, which import Core's orders, todos and standing rules.
@@ -154,7 +154,7 @@ class CeilingsAsAppointmentsFailure(PostmortemFailure):
     number = 12
     title = "It turned deadline ceilings into appointments"
     evidence = (
-        "October 19 incidents, 21:19: the commander told Tristan installation would follow "
+        "October 19 incidents, 21:19: the teammate told Tristan installation would follow "
         '"the batch due at 21:34", parking finished work until its ceiling.'
     )
 
@@ -184,7 +184,7 @@ class RecitedRulesFailure(PostmortemFailure):
     title = "It recited rules instead of following them"
     evidence = (
         "October 19 incidents: at 21:02 rules review failed because its memory cleanup deleted "
-        "required rule files; at 21:40 it struck a unit for an allegedly invented install rule "
+        "required rule files; at 21:40 it struck a teammate for an allegedly invented install rule "
         "that origin/main AGENTS.md:53 actually contained."
     )
 
@@ -193,16 +193,16 @@ class DeletedLiveStateFailure(PostmortemFailure):
     number = 16
     title = "It deleted state without checking who was using it"
     evidence = (
-        "October 20 cleanup: the commander removed /home/ts/wt/unit-directive-delete--P295, a "
-        "running unit's worktree; install 9 then failed restarting that unit and rolled back."
+        "October 20 cleanup: the teammate removed /home/ts/wt/unit-directive-delete--P295, a "
+        "running teammate's worktree; install 9 then failed restarting that teammate and rolled back."
     )
 
 
-class BlockedFleetUnalarmedFailure(PostmortemFailure):
+class BlockedTeamUnalarmedFailure(PostmortemFailure, declared_name="blocked_fleet_unalarmed"):
     number = 17
-    title = "It left every unit blocked with no alarm"
+    title = "It left every teammate blocked with no alarm"
     evidence = (
-        "October 21, 02:13: Core showed all ten units' goals blocked as backend failures, written "
+        "October 21, 02:13: Core showed all ten teammates' goals blocked as backend failures, written "
         "when install 16 stopped them at 01:56; claude-ai found it, and no standing rule fired."
     )
 
@@ -212,7 +212,7 @@ class SkippedCutoverFailure(PostmortemFailure):
     title = "It installed a change without the cutover the change required"
     evidence = (
         "October 21: every claude.ai connector call answered 500 from install 16 until 02:06, "
-        "because grants.json still held five old-shape requests; the commander ran "
+        "because grants.json still held five old-shape requests; the teammate ran "
         "tools/cutover/connector_browser_trust.py only after the outage."
     )
 
@@ -221,7 +221,7 @@ class DelegatedDiagnosisFailure(PostmortemFailure):
     number = 19
     title = "The diagnosis rule confused responsibility with rank"
     evidence = (
-        "The old lesson for October 20 orders P362, P377, P378 and P379 forbade units from "
+        "The old lesson for October 20 orders P362, P377, P378 and P379 forbade teammates from "
         "diagnosing and choosing repairs. That rank restriction is superseded by Tristan's "
         "shared-responsibility corrections51713/53058: the context holder traces the source, "
         "chooses the owner repair and follows it through; the evidence, not model rank, decides."
@@ -230,11 +230,11 @@ class DelegatedDiagnosisFailure(PostmortemFailure):
 
 class OrdersKilledTurnsFailure(PostmortemFailure):
     number = 20
-    title = "Its own orders stopped the units they were sent to"
+    title = "Its own orders stopped the teammates they were sent to"
     evidence = (
-        "October 21, about 02:40: orders P392, P393 and P394 each changed the receiving unit's "
+        "October 21, about 02:40: orders P392, P393 and P394 each changed the receiving teammate's "
         "goal mid-turn; the turn's permission compared the whole goal declaration "
-        "(turn_goal_permission.py:34), so all three units' next tool calls were denied and their "
+        "(turn_goal_permission.py:34), so all three teammates' next tool calls were denied and their "
         "goals blocked."
     )
 
@@ -244,7 +244,7 @@ class StatusBeforeEvidenceFailure(PostmortemFailure):
     title = "It reported a state its evidence did not show"
     evidence = (
         "October 20-21: 'Deadlines are dead (PR 2356)' went out at merge, before any install "
-        "(claude-ai review fde6168a1262); the commander told #comms the 200 open directives were "
+        "(claude-ai review fde6168a1262); the teammate told #comms the 200 open directives were "
         "445 bridge-unacknowledged inbox messages (012fe7271b3c) when they are requests on its "
         "own goal."
     )
@@ -252,10 +252,10 @@ class StatusBeforeEvidenceFailure(PostmortemFailure):
 
 class UnansweredAskFailure(PostmortemFailure):
     number = 22
-    title = "It left a unit's question unanswered for hours"
+    title = "It left a teammate's question unanswered for hours"
     evidence = (
         "October 20-21: fork-boundaries' alert at bus seq 8122 held its finished work blocked, "
-        "about seven hours by claude-ai's count, until the commander decided it (884bd56ece2a)."
+        "about seven hours by claude-ai's count, until the teammate decided it (884bd56ece2a)."
     )
 
 
@@ -283,7 +283,7 @@ class NotedSlopFailure(PostmortemFailure):
     number = 25
     title = "It noted slop for later instead of deleting it"
     evidence = (
-        "October 21: three-minute commander CLI calls sat on claude-ai's list as something to "
+        "October 21: three-minute teammate CLI calls sat on claude-ai's list as something to "
         "profile later; Tristan called it mega slop, and the profile showed the answer gate "
         "re-reading every directive (#2579)."
     )
@@ -293,7 +293,7 @@ class RestatedOwnerFailure(PostmortemFailure):
     number = 26
     title = "It restated an owner's rule in a second file"
     evidence = (
-        "October 21: claude-ai added 'name slop as slop' to its own skill while the commander "
+        "October 21: claude-ai added 'name slop as slop' to its own skill while the teammate "
         "skill and indictment already owned it, and kept its habits in a file only it read."
     )
 
@@ -302,7 +302,7 @@ class GuessedOrderFailure(PostmortemFailure):
     number = 27
     title = "It gave an order from a guess about code it had not read"
     evidence = (
-        "October 21: claude-ai told the commander one chokehold id answers the burst; the gate "
+        "October 21: claude-ai told the teammate one chokehold id answers the burst; the gate "
         "it had not read still required every line, and the answer was refused (#2573)."
     )
 
@@ -348,7 +348,7 @@ class ReadThenRepeatedFailure(PostmortemFailure):
 
 
 @dataclass(frozen=True)
-class CommanderRule(PatternSource):
+class TeamRule(PatternSource):
     lead: str
 
     def cite(self) -> str:

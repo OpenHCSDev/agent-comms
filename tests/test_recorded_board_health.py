@@ -7,15 +7,15 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
+from agent_comms.team_heartbeat import TeamHeartbeat, TeamObservation
 from agent_comms.coordinator import Coordination
-from agent_comms.commander_hud import CommanderFrame
+from agent_comms.team_hud import TeamFrame
 from agent_comms_hooks import ToolRefusedError
 from agent_comms.nominal.field_codec import ToolCallId
 from agent_comms.locked_store import DocumentChange
 from agent_comms.order_tools import (
-    CommanderUnitRead,
-    CommsCommanderLoadTool,
+    TeammateRead,
+    CommsTeamLoadTool,
     CommsHudTool,
     CommsUnjudgedTool,
 )
@@ -24,21 +24,21 @@ from agent_comms.service_passes import ServicePassStore
 from agent_comms.todos import ProgressRead
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.ui_model.observation import ReadOperation
-from agent_comms.ui_model.unit_state import UnitState
-from commander_heartbeat_fixture import ObservedHeartbeat, capture_frame
+from agent_comms.ui_model.teammate_state import TeammateState
+from team_heartbeat_fixture import ObservedHeartbeat, capture_frame
 
-pytest_plugins = ('test_commander_forks',)
+pytest_plugins = ('test_forks',)
 
 
 @pytest.fixture
 def published_board(fork_bus, installed_runtime):
     comms, source, _ = fork_bus
-    from test_commander_forks import record_edits
+    from test_forks import record_edits
     record_edits(comms, source, 1)
     parent = comms.registry.require('lead')
     frame = capture_frame(comms, parent.name, ProgressRead())
-    states = UnitState.current(comms, parent.name, frame)
-    observation = CommanderObservation(parent, frame, (), states)
+    states = TeammateState.current(comms, parent.name, frame)
+    observation = TeamObservation(parent, frame, (), states)
     asyncio.run(ObservedHeartbeat((observation,)).run(lambda: nullcontext(comms)))
     return comms
 
@@ -47,14 +47,14 @@ def test_recorded_failure_precedes_stale_board_and_load_without_changing_retaine
     comms = published_board
     owner = comms.registry.require('lead').incarnation.require_recorded()
     services = ServicePassStore.at(comms.root)
-    original = CommanderFrame.current(comms, 'lead')
+    original = TeamFrame.current(comms, 'lead')
     old_completion = time.time() - 3600
     services.update(lambda passes: DocumentChange.to(replace(
         passes, commander_completed=passes.commander_completed | {owner: old_completion})))
-    services.failed('CommanderHeartbeat', KeyError('original branch read failed'))
-    failure = services.read().failing['CommanderHeartbeat']
+    services.failed('TeamHeartbeat', KeyError('original branch read failed'))
+    failure = services.read().failing['TeamHeartbeat']
     hud = ThreadCaller('lead').invoke(CommsHudTool(), comms)
-    load = ThreadCaller('lead').invoke(CommsCommanderLoadTool(), comms)
+    load = ThreadCaller('lead').invoke(CommsTeamLoadTool(), comms)
     assert hud.units == original.units and hud.load == original.load
     assert hud.heartbeat == RecordedEventTime(old_completion)
     assert load.load == original.load and load.heartbeat == hud.heartbeat
@@ -67,19 +67,19 @@ def test_recorded_failure_precedes_stale_board_and_load_without_changing_retaine
     assert 'original branch read failed' in edits.service_status[0]
     assert edits.complete and edits.unavailable == ()
     assert len(edits.edits) == 1 and edits.edits[0].id == ToolCallId('parent-edit-0')
-    assert services.read().failing['CommanderHeartbeat'] == failure
+    assert services.read().failing['TeamHeartbeat'] == failure
     assert services.read().commander_completed[owner] == old_completion
-    services.failed('CommanderHeartbeat', ValueError('newest failure'))
-    assert services.read().failing['CommanderHeartbeat'].since == failure.since
-    assert 'newest failure' in CommanderFrame.current(comms, 'lead').frame[0]
-    published_before = tuple((path, path.read_bytes()) for path in CommanderFrame.matching_in(comms.root))
+    services.failed('TeamHeartbeat', ValueError('newest failure'))
+    assert services.read().failing['TeamHeartbeat'].since == failure.since
+    assert 'newest failure' in TeamFrame.current(comms, 'lead').frame[0]
+    published_before = tuple((path, path.read_bytes()) for path in TeamFrame.matching_in(comms.root))
 
     async def recover():
         task = asyncio.create_task(Coordination.watch_worker(
-            CommanderHeartbeat(), lambda: nullcontext(comms), services))
+            TeamHeartbeat(), lambda: nullcontext(comms), services))
         try:
             async with asyncio.timeout(15):
-                while 'CommanderHeartbeat' in services.read().failing:
+                while 'TeamHeartbeat' in services.read().failing:
                     await asyncio.sleep(0.01)
         finally:
             task.cancel()
@@ -87,7 +87,7 @@ def test_recorded_failure_precedes_stale_board_and_load_without_changing_retaine
                 await task
 
     asyncio.run(recover())
-    recovered = CommanderFrame.current(comms, 'lead')
+    recovered = TeamFrame.current(comms, 'lead')
     assert recovered.services.failing == {}
     assert recovered.heartbeat.since(old_completion)
     assert any(path.read_bytes() != before for path, before in published_before)
@@ -100,12 +100,12 @@ def test_stopped_heartbeat_without_failure_explains_stale_board_and_refuses_deta
     services = ServicePassStore.at(comms.root)
     services.update(lambda passes: DocumentChange.to(replace(
         passes, commander_completed=passes.commander_completed | {owner: time.time() - 3600})))
-    hud = CommanderFrame.current(comms, 'lead')
+    hud = TeamFrame.current(comms, 'lead')
     assert not hud.services.failing
     assert hud.header[0] == 'no failure recorded, so no heartbeat is running'
     assert 'STALE retained' in hud.retained_status()
     card = hud.units[0]
-    request = ReadOperation(str(comms.root), CommanderUnitRead(
+    request = ReadOperation(str(comms.root), TeammateRead(
         commander=owner, unit=card.unit,
         orders=tuple(dict.fromkeys(order.order for order in card.orders))))
     with pytest.raises(ToolRefusedError, match='no failure recorded, so no heartbeat is running'):
@@ -118,8 +118,8 @@ def test_a_pass_still_inside_its_declared_duration_is_not_called_dead(published_
     owner = comms.registry.require('lead').incarnation.require_recorded()
     services.update(lambda passes: DocumentChange.to(replace(
         passes, commander_completed=passes.commander_completed | {
-            owner: time.time() - CommanderHeartbeat.pass_duration})))
-    hud = CommanderFrame.current(comms, 'lead')
+            owner: time.time() - TeamHeartbeat.pass_duration})))
+    hud = TeamFrame.current(comms, 'lead')
     assert hud.header[0] != 'no failure recorded, so no heartbeat is running'
     assert hud.retained_status() == 'Retained board rows and load:'
     hud.require_current()
@@ -131,7 +131,7 @@ def test_failing_watch_does_not_make_a_fresh_heartbeat_stale(published_board):
     owner = comms.registry.require('lead').incarnation.require_recorded()
     services.heartbeat_passed((owner,), (owner,))
     services.failed('another-watch', OSError('independent watch failed'))
-    hud = CommanderFrame.current(comms, 'lead')
+    hud = TeamFrame.current(comms, 'lead')
     assert 'independent watch failed' in hud.header[0]
     assert hud.retained_status() == 'Retained board rows and load:'
     hud.require_current()
@@ -140,15 +140,15 @@ def test_failing_watch_does_not_make_a_fresh_heartbeat_stale(published_board):
 def test_missing_frame_reports_recorded_failure_without_fabricating_a_board(fork_bus):
     comms, _, _ = fork_bus
     services = ServicePassStore.at(comms.root)
-    services.failed('CommanderHeartbeat', KeyError('no readable publication'))
+    services.failed('TeamHeartbeat', KeyError('no readable publication'))
     with pytest.raises(ToolRefusedError) as refused:
-        CommanderFrame.current(comms, 'lead')
+        TeamFrame.current(comms, 'lead')
     lines = str(refused.value).splitlines()
     assert 'no readable publication' in lines[0]
     assert 'Board unavailable:' in lines[-1]
-    assert not CommanderFrame.matching_in(comms.root)
+    assert not TeamFrame.matching_in(comms.root)
     with pytest.raises(ToolRefusedError, match='no readable publication'):
-        CommanderFrame.read_all(comms.root)
+        TeamFrame.read_all(comms.root)
 
 
 def test_one_unreadable_source_preserves_the_other_original_edit(published_board, fork_bus, tmp_path):

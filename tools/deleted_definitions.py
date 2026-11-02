@@ -1,7 +1,7 @@
 """A commit that deletes a definition names it in its message, or main goes red.
 
-On 2026-10-30 a string rewrite of commander_pings.py cut AlarmSection.tables, the
-commit message never said so, an install shipped it, and every commander's board
+On 2026-10-30 a string rewrite of team_pings.py cut AlarmSection.tables, the
+commit message never said so, an install shipped it, and every teammate's board
 went dark until the restore. A deletion the author meant is named in the message;
 one the author did not mean is the bug. Direct pushes and admin merges skip every
 pull-request gate, so this runs on each push to main, over each commit it brings.

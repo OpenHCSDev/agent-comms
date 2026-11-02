@@ -203,7 +203,7 @@ The fix is one derived model with four renderers. **Core is the engine, Toad is 
 - Forks stayed invisible (`capacity` read 0 live forks at load 240), so several forks gave one unit three orders in minutes. Forks are registered threads as this phase already says, and unit assignment takes one lock.
 - Every heartbeat line is owed, like a unit's unanswered ask. On 2026-10-21 the commander read past twelve stopped units holding orders, PLAN IDLE and HUNT DUE for over an hour, because only asks gate the order verbs. The owner is `StandingRule` (`src/agent_comms/standing_rules.py:32`): each violation is owed a disposition, and `OwedAnswer` (#2532) becomes the member whose disposition is a reply.
   - A disposition is the order, strike, release or hunt that names the line, or a deferral with a reason of 8+ plain words.
-  - `DirectiveVerb.gate` (`src/agent_comms/commander/order.py:795`) refuses while any current line has none, as it does for owed asks.
+  - `DirectiveVerb.gate` (`src/agent_comms/team/order.py:795`) refuses while any current line has none, as it does for owed asks.
   - A line that fires unchanged for 3 beats goes to the owner.
 - Rule review: every rule bullet names the standing rule, refusal or check that enforces it, and `rules review` flags a bullet with none. A prose rule nothing enforces is a fact restated outside its owner; on 2026-10-21 the commander followed the voice block to the letter and skipped every attention rule.
 

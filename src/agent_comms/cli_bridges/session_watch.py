@@ -189,7 +189,7 @@ class WatchState(SocketWatch, ABC):
         return ()
 
     def commands(self) -> bool:
-        """An unbound session commands nothing: the registry names the commander, and only
+        """An unbound session commands nothing: the registry names the teammate, and only
         a binding can point at it."""
         return False
 

@@ -24,7 +24,7 @@ from .bus import DisplayUnread
 from .channel_targets import CommandTarget
 from .channels import Channel, ChannelMemberIndex, Channels
 from .cli_result import CliResult
-from .commander_frame_file import CommanderFrameFile
+from .team_frame_file import TeamFrameFile
 from .coordination_errors import DMPaintedBoundChanged, StaleRevision
 from .nominal.declared_family import DeclaredFamily
 from .display_order import ChannelSort, NameChannelSort
@@ -77,7 +77,7 @@ from .registry_document import DEFAULT_ROSTER, RosterVisibility
 from .revision_views import (
     ActivityView,
     BusSourceView,
-    CommanderFramesView,
+    TeamFramesView,
     ExternalTranscriptsView,
     NotificationEvidenceView,
     NotificationsView,
@@ -554,8 +554,8 @@ def external_transcript_paths(views: HistoryViews) -> tuple[Path, ...]:
     return ExternalTranscript.source_paths(views.root)
 
 
-def commander_frame_paths(views: HistoryViews) -> tuple[Path, ...]:
-    return CommanderFrameFile.source_paths(views.root)
+def team_frame_paths(views: HistoryViews) -> tuple[Path, ...]:
+    return TeamFrameFile.source_paths(views.root)
 
 
 def expiry_period_changed(before: int, now: int) -> bool:
@@ -645,12 +645,12 @@ class WireRevision(ReadState):
     ]
     commander_frames: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(commander_frame_paths, CommanderFramesView),
+        *revision_source(team_frame_paths, TeamFramesView),
     ]
     # Activity-derived views change once per expiry period, not per tick.
     expiry_tick: Annotated[
         int,
-        WatchViews((ActivityView, CommanderFramesView)),
+        WatchViews((ActivityView, TeamFramesView)),
         Differs(expiry_period_changed),
     ]
 

@@ -23,7 +23,7 @@ from .session_watch import WatchClaim
 from .shared import Binding
 from ..comms import Comms
 from ..nominal.declared_family import DeclaredFamily
-from ..commander.standing import UnownedWheelSpin
+from ..team.standing import UnownedWheelSpin
 from ..rule_deal import MeantStore, RuleDeal, SessionAudit
 
 
@@ -144,7 +144,7 @@ class Later(Deferral):
 class FutureOrder(Deferral):
     phrases = (
         r"will (?:order|assign|dispatch)",
-        r"goes? to a unit",
+        r"goes? to a teammate",
         r"I['’]?ll (?:order|assign|dispatch|hand)",
         r"to be ordered",
         r"(?:has|have) no owner",
@@ -162,7 +162,7 @@ class Waiting(Deferral):
 
     @classmethod
     def reasons(cls, deferred: tuple[str, ...], stop: StopHook) -> Iterator[str]:
-        yield (f"You ended on {quoted(deferred)}; every wait is prep: read the next unit's "
+        yield (f"You ended on {quoted(deferred)}; every wait is prep: read the next teammate's "
                "trajectory or hunt a hot path now")
 
 

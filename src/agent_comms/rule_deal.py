@@ -36,7 +36,7 @@ from .pattern_sources import ReadThenRepeatedFailure
 from .locked_store import DocumentChange, LockedStore
 from .store_files import AtomicFile, DependentStateTier, SingleFileStore
 
-from .commander.rule_file import RuleFile
+from .team.rule_file import RuleFile
 from .context_reading import ContextUsage
 
 
@@ -160,7 +160,7 @@ class MeantRecord:
     def covering(self, answered: frozenset[str]) -> MeantRecord:
         """An open question covers every rule answered while it stands: nothing new opens until
         it is answered, so those rules were read in its batch. Asking again would replace it,
-        and the session's answer must name the question it read. On 2026-11-02 pi-commander
+        and the session's answer must name the question it read. On 2026-11-02 pi-teammate
         answered "Yes" four times while each audit edit replaced the question it named."""
         return replace(self, asked=self.asked | answered) if self.open else self
 

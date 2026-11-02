@@ -6,7 +6,7 @@ from dataclasses import replace
 from agent_comms.recorded_time import RecordedEventTime
 
 from agent_comms.todos import MeasuredReview, TodoStore
-from test_commander_problem_orders import order
+from test_team_problem_orders import order
 
 
 @pytest.mark.parametrize('rates', ((), (15.0,)))

@@ -28,7 +28,7 @@ class OrderRun(DeclaredFamily, affix="OrderRun"):
         return f"Merged, {state}"
 
     def holder_runs(self) -> bool:
-        """Whether, once installed, the next action is the holder's run, not the commander's."""
+        """Whether, once installed, the next action is the holder's run, not the teammate's."""
         return False
 
     @abstractmethod

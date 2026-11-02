@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent_comms.commander.judge import Edit
+from agent_comms.team.judge import Edit
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.tool_calls import CliToolArguments, ToolCall

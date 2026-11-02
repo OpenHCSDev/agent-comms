@@ -2,7 +2,7 @@
 
 Ordinary actions dispose only of lines that began before them. Exact-head supersession
 retires that lost head itself, even when an older observation is published later. Nothing
-the commander says about a line counts unless Core recorded the relevant subject action.
+the teammate says about a line counts unless Core recorded the relevant subject action.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class CommanderHistory:
+class TeamHistory:
     """One reader's actors, shared by every subject it evaluates; each subject reads only the
     record that disposes of it."""
 
@@ -67,20 +67,20 @@ class CommanderHistory:
 @dataclass(frozen=True)
 class HeartbeatSubject(DeclaredFamily, affix="Subject"):
 
-    def action_at(self, history: CommanderHistory) -> EventTime:
+    def action_at(self, history: TeamHistory) -> EventTime:
         """Subjects without a disposing action never invent one."""
         return UnrecordedEventTime()
 
-    def disposed(self, history: CommanderHistory, since: float) -> bool:
+    def disposed(self, history: TeamHistory, since: float) -> bool:
         """Original action evidence is shared, while each line retains its own start."""
         return history.action_at(self).since(since)
 
 
 @dataclass(frozen=True)
-class UnitSubject(HeartbeatSubject):
+class TeammateSubject(HeartbeatSubject, declared_name="unit"):
     unit: ThreadIncarnation
 
-    def action_at(self, history: CommanderHistory) -> EventTime:
+    def action_at(self, history: TeamHistory) -> EventTime:
         return max((RecordedEventTime(message.timestamp)
                     for message in history.comms.bus.bus.latest_addressed(
                         history.actors, history.snapshot.names_for(self.unit.name))),
@@ -94,7 +94,7 @@ class HeadSubject(HeartbeatSubject):
     def clears(self, verdict: HeadVerdict) -> bool:
         return verdict.decides()
 
-    def action_at(self, history: CommanderHistory) -> EventTime:
+    def action_at(self, history: TeamHistory) -> EventTime:
         return max((review.at for review in StoredHeadReview.head_reviews(
                         history.comms.goals.todos, self.request) if self.clears(review.verdict)),
                    key=lambda at: at.latest_with(float('-inf')), default=UnrecordedEventTime())
@@ -107,17 +107,17 @@ class UnlandedHeadSubject(HeadSubject):
     def clears(self, verdict: HeadVerdict) -> bool:
         return verdict.supersedes()
 
-    def disposed(self, history: CommanderHistory, since: float) -> bool:
+    def disposed(self, history: TeamHistory, since: float) -> bool:
         return history.action_at(self).occurred()
 
 
 @dataclass(frozen=True)
 class PassSubject(HeartbeatSubject):
-    """The commander's heartbeat pass: a pass that completes after the line answers it."""
+    """The teammate's heartbeat pass: a pass that completes after the line answers it."""
 
     commander: RecordedThreadIncarnation
 
-    def action_at(self, history: CommanderHistory) -> EventTime:
+    def action_at(self, history: TeamHistory) -> EventTime:
         return history.passes.heartbeat_completed_at(self.commander)
 
 
@@ -142,5 +142,5 @@ class PhaseSubject(HeartbeatSubject):
 
     phase: type[PlanPhase]
 
-    def disposed(self, history: CommanderHistory, since: float) -> bool:
+    def disposed(self, history: TeamHistory, since: float) -> bool:
         return history.phases_checked.get(self.phase, UnrecordedEventTime()).since(since)

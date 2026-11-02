@@ -8,11 +8,11 @@ import pytest
 
 from agent_comms.build_identity import RecordedBuildIdentity
 from agent_comms.change_report import FileLine
-from agent_comms.commander.order import OrderFile
+from agent_comms.team.order import OrderFile
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.progress_claims import MergedClaim
 from agent_comms.slop import CreatedLine, DeclarationDerivation, ExistingLine, OwnerLine, Slop
-from agent_comms.thread_execution import CommanderForkExecution
+from agent_comms.thread_execution import ForkExecution
 from agent_comms.threads import Thread
 from agent_comms.errors import TodoError
 from agent_comms.todos import (
@@ -80,9 +80,9 @@ def test_done_is_refused_until_the_delivered_tree_declares_the_created_line(
     assert verified(source_repository.branch_commit).commit == source_repository.branch_commit
 
 
-def test_a_commander_fork_is_never_a_unit_that_could_take_an_order(tmp_path):
+def test_a_fork_is_never_a_unit_that_could_take_an_order(tmp_path):
     unit = Thread('unit-a', frozenset(), Checkout(tmp_path))
     fork = replace(Thread('shape-next', frozenset(), Checkout(tmp_path)),
-                   execution=CommanderForkExecution)
+                   execution=ForkExecution)
     assert unit.execution.order_candidates(unit) == (unit,)
     assert fork.execution.order_candidates(fork) == ()

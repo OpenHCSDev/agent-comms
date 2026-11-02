@@ -80,7 +80,7 @@ class OrderStory(ToolResult):
 
 
 @dataclass(frozen=True)
-class FleetStory(ToolResult):
+class TeamStory(ToolResult):
     """What each held order is doing now: one line per order a registered unit holds, then one
     line naming the orders whose holder is no longer registered. A held order's past verdicts
     are its order story."""
@@ -94,7 +94,7 @@ class FleetStory(ToolResult):
                  for hold in held.live]
         if held.orphaned:
             lines.append(
-                f"{len(held.orphaned)} orders held by units no longer registered: "
+                f"{len(held.orphaned)} orders held by teammates no longer registered: "
                 + ", ".join(f"{todo.id} {todo.held().owner}" for todo in held.orphaned)
             )
         return cls(tuple(lines))

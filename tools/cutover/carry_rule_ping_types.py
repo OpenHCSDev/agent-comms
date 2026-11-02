@@ -14,11 +14,11 @@ from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import RootFile
 from agent_comms.messages import Message
-from agent_comms.task_attachments.commander_pings import RulePing
-from cutover.carry_commander_update_lines import CommanderUpdateLines
+from agent_comms.task_attachments.team_pings import RulePing
+from cutover.carry_team_update_lines import TeamUpdateLines
 
 class RulePingTypes(Carry):
-    precedes = (CommanderUpdateLines,)
+    precedes = (TeamUpdateLines,)
     opened_files: ClassVar[tuple[type[RootFile], ...]] = (Bus,)
     predicate: ClassVar[str] = "json_type(value, :rule) IS NULL"
 

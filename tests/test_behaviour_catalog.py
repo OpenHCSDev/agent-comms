@@ -22,7 +22,7 @@ def test_behaviour_catalog_members_name_existing_checks_and_generate_the_file():
     assert (ROOT / "docs/agents/behaviour-catalog.md").read_text() == BehaviourPattern.catalog()
 
 
-def test_catalog_command_needs_no_commander_installation_or_bus(tmp_path):
+def test_catalog_command_needs_no_team_installation_or_bus(tmp_path):
     generated = subprocess.run(
         [sys.executable, "-X", "faulthandler", "-m", "agent_comms.behaviour_patterns"],
         cwd=tmp_path,

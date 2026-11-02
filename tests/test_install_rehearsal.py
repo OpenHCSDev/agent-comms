@@ -42,7 +42,7 @@ from agent_comms.installer.upgrade import (
 )
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.maintenance_barrier import MaintenanceBarrier
-from agent_comms.messages import CommanderUpdatePosition, Message
+from agent_comms.messages import TeamUpdatePosition, Message
 from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import ScratchCheckout
 from agent_comms.root_runtime import RootRuntime
@@ -159,7 +159,7 @@ print(json.dumps({'source': agent_comms.__file__, 'stamp': type(STAMP).__name__,
     assert Path(reviewed["source"]).is_relative_to(foreign)
     assert reviewed["computed"] == reviewed["read"]
     assert {name for name, digest in own["read"].items()
-            if reviewed["read"][name] != digest} == {CommanderUpdatePosition.declared_name}
+            if reviewed["read"][name] != digest} == {TeamUpdatePosition.declared_name}
     assert path.read_bytes() == original
     print(json.dumps({"runtime": own, "review": reviewed, "file_unchanged": True}))
 

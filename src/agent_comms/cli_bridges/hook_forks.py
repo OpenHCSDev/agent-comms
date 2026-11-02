@@ -9,7 +9,7 @@ from agent_comms_hooks import ClaudeSubagentHook, ClaudeTranscriptHook, Subagent
 
 from .shared import Binding
 from ..comms import Comms
-from ..tool_caller import CommanderForkCaller
+from ..tool_caller import ForkCaller
 from ..turn_phase import ModelWaitPhase, TurnPhase
 
 
@@ -31,7 +31,7 @@ class SubagentHook(SubagentActivity):
     def register(self, comms: Comms, binding: Binding) -> None:
         actor = comms.registry.snapshot().born(binding.owner.require_recorded().lookup)
         fork = self.agent_id.fork
-        CommanderForkCaller(fork).join(comms, actor.name)
+        ForkCaller(fork).join(comms, actor.name)
         self.warn(f"Core registered you as in-turn fork {fork}: pass `--fork {fork}`"
                   " on every agent-comms-commander verb; the action keeps your parent authority"
                   " and records your own incarnation. Record what you found before stopping.")
@@ -46,7 +46,7 @@ class SubagentStopHook(SubagentHook):
 
     def retire(self, comms: Comms, binding: Binding) -> None:
         comms.registry.snapshot().born(binding.owner.require_recorded().lookup)
-        actor = CommanderForkCaller(self.agent_id.fork)
+        actor = ForkCaller(self.agent_id.fork)
         if self.stop_hook_active:
             actor.end(comms)
             return
@@ -67,8 +67,8 @@ class SessionSubagents(ClaudeTranscriptHook):
     def end_subagents(self, comms: Comms, binding: Binding) -> tuple[str, ...]:
         comms.registry.snapshot().born(binding.owner.require_recorded().lookup)
         try:
-            CommanderForkCaller.end_session(
-                comms, tuple(CommanderForkCaller(agent.fork) for agent in self.subagents()))
+            ForkCaller.end_session(
+                comms, tuple(ForkCaller(agent.fork) for agent in self.subagents()))
         except ToolRefusedError as refused:
             return (str(refused),)
         return ()

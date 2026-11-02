@@ -18,8 +18,8 @@ from agent_comms_hooks.skill import DeckReader
 from conftest import answer_deal
 
 
-def test_identical_content_under_a_new_runtime_needs_no_reread(commander_bus):
-    deal = PiRedeal.of(commander_bus, commander_bus.registry.require("unit-x"))
+def test_identical_content_under_a_new_runtime_needs_no_reread(team_bus):
+    deal = PiRedeal.of(team_bus, team_bus.registry.require("unit-x"))
     deal.redeal(StartedDeal())
     answer_deal(deal)
     record = deal.current()
@@ -32,8 +32,8 @@ def test_identical_content_under_a_new_runtime_needs_no_reread(commander_bus):
     assert isinstance(deal.state(), Open)
 
 
-def test_answers_and_reads_outlive_everything_but_lost_context(commander_bus):
-    deal = PiRedeal.of(commander_bus, commander_bus.registry.require("unit-x"))
+def test_answers_and_reads_outlive_everything_but_lost_context(team_bus):
+    deal = PiRedeal.of(team_bus, team_bus.registry.require("unit-x"))
     deal.redeal(StartedDeal())
     answer_deal(deal)
     read = deal.current().read_by(deal)
@@ -43,8 +43,8 @@ def test_answers_and_reads_outlive_everything_but_lost_context(commander_bus):
     assert not deal.audit.exists() and deal.current().read_by(deal) == ()  # a fresh confession
 
 
-def test_a_changed_file_is_owed_again_and_only_that_file(commander_bus):
-    deal = PiRedeal.of(commander_bus, commander_bus.registry.require("unit-x"))
+def test_a_changed_file_is_owed_again_and_only_that_file(team_bus):
+    deal = PiRedeal.of(team_bus, team_bus.registry.require("unit-x"))
     deal.redeal(StartedDeal())
     record = deal.current()
     changed, *kept = record.paths
@@ -56,10 +56,10 @@ def test_a_changed_file_is_owed_again_and_only_that_file(commander_bus):
     assert next(Unread.owed_by(deal, record, OpenedReads())).remaining == (changed,)
 
 
-def test_a_refresh_passed_while_reading_the_deal_is_answered_by_it(commander_bus):
+def test_a_refresh_passed_while_reading_the_deal_is_answered_by_it(team_bus):
     """bus 45261: the first tool call after a Pi unit finished its deal (a comms_send) dealt 16
     files again, because reading them had filled the context past the 66%-left refresh."""
-    deal = PiRedeal.of(commander_bus, commander_bus.registry.require("unit-x"))
+    deal = PiRedeal.of(team_bus, team_bus.registry.require("unit-x"))
     deal.redeal(StartedDeal())
     deal.observe_context(ContextUsage(40, 100))
     answer_deal(deal)
@@ -75,10 +75,10 @@ def test_his_question_quotes_the_written_audit_statement():
     from agent_comms.rule_deal import MeantRecord, RuleAudit, SessionAudit
     from agent_comms.session_receipts import SessionReceipts
 
-    wrote = RuleAudit("spine", does="I end turns on a unit's state, not on a wait.\nSecond line")
+    wrote = RuleAudit("spine", does="I end turns on a teammate's state, not on a wait.\nSecond line")
     audit = SessionAudit((wrote, RuleAudit("ally"), RuleAudit("owner-authority", does="I take his plan as the work.")), ())
     asked = audit.batch(frozenset({"spine", "ally"})).his_question(SessionReceipts())
-    assert asked == f"> I end turns on a unit's state, not on a wait.\n\nyou wrote that.\n\n{MeantRecord.question}"
+    assert asked == f"> I end turns on a teammate's state, not on a wait.\n\nyou wrote that.\n\n{MeantRecord.question}"
     assert audit.batch(frozenset({"owner-authority"})).his_question(SessionReceipts()).startswith(
         "> I take his plan as the work.")  # a batch quotes its own rules, not an older line
     assert SessionAudit((), ()).his_question(SessionReceipts()) == MeantRecord.question

@@ -56,7 +56,7 @@ class HookRecord:
 
 class SubagentId(str):
     """Claude Code's name for one subagent, kept across its resumes; Core knows the subagent
-    as the commander fork this id names."""
+    as the teammate fork this id names."""
 
     @property
     def fork(self) -> str:
@@ -214,7 +214,7 @@ class ClaudeHookProgram(ABC):
 
     @classmethod
     def unbound(cls, record: Mapping[str, object]) -> None:
-        """A session with no bus has no commander or fleet behavior to run."""
+        """A session with no bus has no teammate or fleet behavior to run."""
 
     @classmethod
     def absent(cls, record: Mapping[str, object], error: BaseException) -> None:

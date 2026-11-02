@@ -55,14 +55,14 @@ from agent_comms.typed_table import TypedTable
 from agent_comms.native_entries import NativeEvidenceScope
 from agent_comms.cursor_publication import CursorDelivery
 from agent_comms.native_package import VerifiedNativePackage
-from agent_comms.commander.order import Commander
+from agent_comms.team.order import Team
 from agent_comms.repo import Repo
 from agent_comms.launch_runtime import LaunchRuntime
 from source_programs import SourcePrograms
 from source_revision_fixture import SourceRepository
 from agent_comms.threads import Thread
 from agent_comms.thread_model import DeclaredModel
-from agent_comms.registry_document import RegisteredCommanderProject
+from agent_comms.registry_document import RegisteredTeamProject
 
 pytest_plugins = (goal_owner_fixture.__name__, "github_fixture", "owner_socket_fixture", "pytest_session")
 
@@ -428,16 +428,16 @@ def root(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def configured_repository(durable_home: Path, github_cli) -> Callable[[Comms, *tuple[Repo, ...]], Commander]:
+def configured_repository(durable_home: Path, github_cli) -> Callable[[Comms, *tuple[Repo, ...]], Team]:
     """Declare the temporary commander on its bus and use its real plan-bearing checkout."""
-    from agent_comms.commander.order import Commander
+    from agent_comms.team.order import Team
     from agent_comms.repo import Repo
 
     repository = Repo.of(Path(__file__).resolve().parents[1])
 
-    def configure(bus: Comms, *check_repositories: Repo) -> Commander:
+    def configure(bus: Comms, *check_repositories: Repo) -> Team:
         github_cli.configure(*(repo.github for repo in (*check_repositories, repository)))
-        return Commander.on_root(
+        return Team.on_root(
             'lead', (*check_repositories, repository), bus.root,
         )
 
@@ -569,11 +569,11 @@ def wired(comms: Comms) -> Comms:
 
 
 
-def declare_fleet(comms: Comms, commander: Thread) -> Comms:
+def declare_team(comms: Comms, commander: Thread) -> Comms:
     """The bus's commander project, naming `commander`: the one test owner of a fleet, for a
     test whose goals need a commander to assign them."""
     comms.registry.declare(commander)
-    comms.registry.set_commander_project(RegisteredCommanderProject(
+    comms.registry.set_team_project(RegisteredTeamProject(
         comms.registry.require(commander.name).incarnation, ()))
     return comms
 
@@ -609,11 +609,11 @@ def answer_deal(deal: PiRedeal) -> None:
 
 
 @pytest.fixture
-def commander_bus(tmp_path):
+def team_bus(tmp_path):
     """A bus whose registry names `claude-code` its commander, beside a unit `unit-x`. Its
     storage rule keeps scratch under the bus root, so no deal reaches the developer's home
     whatever HOME holds when the bus is built."""
-    bus = declare_fleet(installed_comms(tmp_path / "bus"), Thread(
+    bus = declare_team(installed_comms(tmp_path / "bus"), Thread(
         "claude-code", frozenset(), Checkout(tmp_path),
         model=DeclaredModel("anthropic/claude-opus-4-6")))
     bus.registry.declare(Thread(
@@ -623,9 +623,9 @@ def commander_bus(tmp_path):
 
 
 @pytest.fixture
-def commanding_session(tmp_path, monkeypatch, commander_bus):
+def commanding_session(tmp_path, monkeypatch, team_bus):
     """Claude session `s` bound to the thread the registry names commander: the only way a
     session commands, so hooks see the same answer the registry gives."""
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    WatchClaim("s").enrol(WatchRecord("claude-code", str(commander_bus.root), (), tmp_path / "state"))
-    return commander_bus
+    WatchClaim("s").enrol(WatchRecord("claude-code", str(team_bus.root), (), tmp_path / "state"))
+    return team_bus

@@ -18,10 +18,10 @@ from agent_comms.nominal.field_codec import (
 )
 from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
 from agent_comms.installer.backup import StoreBackup
-from agent_comms.order_story import FleetStory, OrderStory
+from agent_comms.order_story import TeamStory, OrderStory
 from agent_comms.order_tools import (
     CommsChangeProblemTool,
-    CommsFleetStoryTool,
+    CommsTeamStoryTool,
     CommsOrderStoryTool,
     CommsOrderTool,
     CommsTodoCreateTool,
@@ -29,7 +29,7 @@ from agent_comms.order_tools import (
     CommsVerdictTool,
 )
 from agent_comms.recorded_time import EventTime, RecordedEventTime
-from agent_comms.registry_document import RegisteredCommanderProject
+from agent_comms.registry_document import RegisteredTeamProject
 from agent_comms.repository_name import RepositoryName
 from agent_comms.threads import Thread
 from agent_comms.todos import (
@@ -46,7 +46,7 @@ from agent_comms.todos import (
     UnorderedProblemOrder,
     WithdrawTodo,
 )
-from agent_comms.tool_caller import CommanderPeerCaller, NoThreadCaller, ThreadCaller
+from agent_comms.tool_caller import PeerCaller, NoThreadCaller, ThreadCaller
 from source_revision_fixture import SourceRepository
 from test_todos import order
 
@@ -93,7 +93,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     assert comms.bus.bus.revision() == before_send_back + 1
     todo = comms.goals.todos.get("P1")
     resent_id = OrderId.mint()
-    worker = CommanderPeerCaller("worker")
+    worker = PeerCaller("worker")
     worker.invoke(CommsOrderTool(owner="worker", order=OrderGoalAction(
         problem="P1", expected_revision=todo.revision,
         assigner=comms.registry.require("worker").acting_identity, commander="lead",
@@ -124,7 +124,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     assert "strike recorded" in story.line
     assert len(saved.history.events(saved.id, StrikeTodo)) == len(saved.history.events(saved.id, OrderVerdict)) == 2
     assert CommsOrderStoryTool.invoke(copied, {"order_id": str(resent_id)}, caller=caller) == result
-    fleet = FieldCodec.decode(FleetStory, board_read(CommsFleetStoryTool, copied, NoThreadCaller()))
+    fleet = FieldCodec.decode(TeamStory, board_read(CommsTeamStoryTool, copied, NoThreadCaller()))
     assert fleet.lines == (f"P1 worker: {saved.order.line}",)
     assert copied.goals.todos.get("P1") == saved == comms.goals.todos.get("P1")
     assert copied.goals.todos.path.stat().st_mtime_ns == stored_at
@@ -137,8 +137,8 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     assert tuple(problem.problem for problem in linked.problems) == ("P1", "P2")
     assert linked.problems[0] == story.problems[0]
     assert linked.line.count(reason) == linked.line.count(standalone) == 1
-    linked_fleet = FieldCodec.decode(FleetStory, board_read(CommsFleetStoryTool, copied, caller))
-    assert linked_fleet.lines == (
+    linked_team = FieldCodec.decode(TeamStory, board_read(CommsTeamStoryTool, copied, caller))
+    assert linked_team.lines == (
         *fleet.lines, f"P2 worker: {copied.goals.todos.get('P2').order.line}")
     current = copied.goals.todos.get(saved.id)
     previous = current.held()
@@ -152,7 +152,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     ))
     assert withdrawn.state is DoneTodoState
     assert FieldCodec.decode(
-        FleetStory, board_read(CommsFleetStoryTool, copied, caller)).lines == linked_fleet.lines[1:]
+        TeamStory, board_read(CommsTeamStoryTool, copied, caller)).lines == linked_team.lines[1:]
     with pytest.raises(TodoError):
         CommsOrderStoryTool.invoke(copied, {"order_id": str(OrderId.mint())}, caller=caller)
 
@@ -171,7 +171,7 @@ def edit_order(comms, tmp_path):
         request=request, review_at=RecordedEventTime(1000),
         commander="lead", assigner=lead, repo=source.github, text="Repair the worker")), comms)
     # Registered after the order is sent: the edit's repository is found among these.
-    comms.registry.set_commander_project(RegisteredCommanderProject(lead, (source, other)))
+    comms.registry.set_team_project(RegisteredTeamProject(lead, (source, other)))
     (other.checkout / "other_module.py").write_text("first\nsecond\n")
     return caller, other
 

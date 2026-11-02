@@ -7,8 +7,8 @@ import time
 
 import pytest
 
-from agent_comms.commander.order import OrderFile, forwarders_added, main, overrides
-from agent_comms.commander.request import RequestAddVerb
+from agent_comms.team.order import OrderFile, forwarders_added, main, overrides
+from agent_comms.team.request import RequestAddVerb
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.goals import OrderCheck
 from agent_comms.recorded_time import RecordedEventTime
@@ -46,9 +46,9 @@ def test_override_scan_excludes_nested_and_qualified_names():
     assert forwarders_added('+    def answer(self): return self.peer.answer()\n', (source,))
 
 
-def test_problem_and_send_share_field_refusals_and_record_only_valid_documents(pr_commander):
-    ctx = pr_commander.model_copy(update={
-        'repos': (*pr_commander.repos, Repo.of(Path(__file__).resolve().parents[1])),
+def test_problem_and_send_share_field_refusals_and_record_only_valid_documents(pr_team):
+    ctx = pr_team.model_copy(update={
+        'repos': (*pr_team.repos, Repo.of(Path(__file__).resolve().parents[1])),
     })
     ctx.comms.registry.register(thread('worker', ctx.root, 2.0))
     ctx.comms.channels.create_tag('comms')

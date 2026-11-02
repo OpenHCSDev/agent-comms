@@ -38,13 +38,13 @@ TOOL: dict[str, JsonValue] = {"type": "tool_use", "id": "t1", "name": "Bash", "i
 RESULT: dict[str, JsonValue] = {
     "type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t1"}]}}
 
-DEFERRING = [RESULT, assistant(text("The six failing tests have no owner. They go to a unit next."))]
+DEFERRING = [RESULT, assistant(text("The six failing tests have no owner. They go to a teammate next."))]
 
 
 @pytest.fixture
-def stop_binding(durable_home: Path, commander_bus: Comms, tmp_path: Path) -> Iterator[ClaudeBridge]:
-    commander = commander_bus.registry.snapshot().commander_project.require().commander
-    with resident_session(commander_bus, tmp_path / "state", commander.name, "s") as bridge:
+def stop_binding(durable_home: Path, team_bus: Comms, tmp_path: Path) -> Iterator[ClaudeBridge]:
+    commander = team_bus.registry.snapshot().commander_project.require().commander
+    with resident_session(team_bus, tmp_path / "state", commander.name, "s") as bridge:
         yield bridge
 
 
@@ -68,7 +68,7 @@ def test_deferral_while_a_unit_is_idle_blocks_with_the_phrase_and_units(stop_bin
     assert result.status == 0, result.stderr
     decision = json.loads(result.stdout)
     assert decision["decision"] == "block"
-    assert "go to a unit next" in decision["reason"]
+    assert "go to a teammate next" in decision["reason"]
     assert "pi-story-tool, unit-hygiene" in decision["reason"]
 
 
@@ -113,7 +113,7 @@ def test_a_stop_already_sent_back_passes(stop_binding, tmp_path):
 
 
 @pytest.mark.parametrize(("shape", "reply"), [
-    (NextTick, "They go to a unit next."),
+    (NextTick, "They go to a teammate next."),
     (Later, "I will look at it later."),
     (FutureOrder, "I'll assign it once this lands."),
 ])
@@ -121,8 +121,8 @@ def test_each_deferral_shape_recognises_its_phrase(shape, reply):
     assert tuple(shape.found(reply))
 
 
-def test_a_bound_unit_session_stops_freely(durable_home: Path, commander_bus: Comms, tmp_path: Path):
-    with resident_session(commander_bus, tmp_path / "state", "unit-x", "s") as bridge:
+def test_a_bound_unit_session_stops_freely(durable_home: Path, team_bus: Comms, tmp_path: Path):
+    with resident_session(team_bus, tmp_path / "state", "unit-x", "s") as bridge:
         result = stop(bridge, tmp_path, DEFERRING, idle=("pi-story-tool",))
         assert (result.status, result.stdout) == (0, "")
 
@@ -139,10 +139,10 @@ def test_an_unbound_session_stops_freely(
 
 @pytest.mark.parametrize("actor", ("claude-code", "unit-x"))
 def test_a_stop_with_no_monitor_on_a_running_bridge_is_sent_back_once(
-        durable_home: Path, commander_bus: Comms, tmp_path: Path, actor: str):
+        durable_home: Path, team_bus: Comms, tmp_path: Path, actor: str):
     """Every bound role keeps its Monitor; only deferral judging is commander-specific."""
     quiet = [RESULT, assistant(text("Ordered P362 to pi-story-tool."))]
-    with resident_session(commander_bus, tmp_path / "state", actor, "s") as bridge:
+    with resident_session(team_bus, tmp_path / "state", actor, "s") as bridge:
         claim = WatchClaim(bridge.binding.thread)
         assert stop(bridge, tmp_path, quiet).stdout == ""
         record = WatchRecord(bridge.binding.bus, bridge.binding.root, (), bridge.options.base_state)

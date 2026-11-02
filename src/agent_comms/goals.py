@@ -390,7 +390,7 @@ class OrderCheck(CheckCommand):
 
     def require_writable(self) -> None:
         """A relative directory means the cwd of whoever reads it next: the connector's
-        heartbeat, a unit's checkout, a commander in another shell. New checks bind it first."""
+        heartbeat, a unit's checkout, a teammate in another shell. New checks bind it first."""
         super().require_writable()
         if not self.directory.is_absolute():
             raise ValueError(f"The order check directory {str(self.directory)!r} is relative; "
@@ -560,7 +560,7 @@ class ProblemGoalOrder(GoalOrder):
         return "\n".join(todo.progress_line() for todo in todos)
 
     def require_model_block(self) -> None:
-        raise GoalRefused("A problem goal is not blocked by text: ask the commander to block the "
+        raise GoalRefused("A problem goal is not blocked by text: ask the teammate to block the "
                           "problem's Todo, or standby with wait_for naming the decider.")
 
 

@@ -19,24 +19,24 @@ from agent_comms import agent_events as events
 from agent_comms.bus_publication import AgentOrigin, HumanOrigin
 from agent_comms.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.channel_targets import CommandersTag, CommsTag
-from agent_comms.messaging import CommanderReceipts
+from agent_comms.channel_targets import TeammatesTag, CommsTag
+from agent_comms.messaging import TeamReceipts
 from agent_comms.errors import RelationViolationError
 from agent_comms.owner_requests import NewestOpenRequest
 from agent_comms.todos import DoneTodoState
-from agent_comms.commander.order import Commander, ListedProblems, OrderFile, SayVerb, SendVerb
-from agent_comms.commander.questions import UnansweredUnitAsks
-from agent_comms.commander.standing import (
+from agent_comms.team.order import Team, ListedProblems, OrderFile, SayVerb, SendVerb
+from agent_comms.team.questions import UnansweredTeammateAsks
+from agent_comms.team.standing import (
     HeartbeatNotStarted,
     HeartbeatSilent,
     HolderGone,
     MissedHeartbeat,
     UnitAskUnanswered,
 )
-from agent_comms.commander_heartbeat import CommanderHeartbeat
-from agent_comms.commander.vibe_check import ChokeholdUnanswered, VibeCheckUnanswered
-from agent_comms.commander_hud import CommanderFrame
-from agent_comms.task_attachments.commander_pings import CommanderUpdate
+from agent_comms.team_heartbeat import TeamHeartbeat
+from agent_comms.team.vibe_check import ChokeholdUnanswered, VibeCheckUnanswered
+from agent_comms.team_hud import TeamFrame
+from agent_comms.task_attachments.team_pings import TeamUpdate
 from agent_comms.task_attachments.owner_notices import ChokeholdNotice, VibeCheckNotice
 from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
@@ -52,7 +52,7 @@ from agent_comms.goal_actions import (
 from agent_comms.goal_presentation import RunnableExecution
 from agent_comms.goal_states import ActiveGoal
 from agent_comms.goals import CountCheckResult, OrderCheck
-from commander_heartbeat_fixture import capture_frame
+from team_heartbeat_fixture import capture_frame
 from agent_comms.held_orders import HeldOrders
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_key import AcpInputKey
@@ -63,8 +63,8 @@ from agent_comms.message_reference import MessageReference
 from agent_comms.messages import ConversationRole, InfoKind, Message, NoticeRole, QuestionKind
 from agent_comms.native_arguments import GivenBinary
 from agent_comms.order_runs import MechanicalOrderRun
-from agent_comms.order_story import FleetStory
-from agent_comms.order_tools import CommsFleetStoryTool, CommsTodoListTool, TodoList
+from agent_comms.order_story import TeamStory
+from agent_comms.order_tools import CommsTeamStoryTool, CommsTodoListTool, TodoList
 from agent_comms.owner_requests import NewestOpenRequest, RequestDirective
 from agent_comms.read_basis import DMDisplayScope, RepliesDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
@@ -93,7 +93,7 @@ from agent_comms.todos import (
 )
 from agent_comms.tool_caller import NoThreadCaller
 from agent_comms.turn_digests import OrderEditCountRead
-from agent_comms.ui_model.unit_state import AwaitingCommander, Blocked, Detached, UnitState
+from agent_comms.ui_model.teammate_state import AwaitingTeam, Blocked, Detached, TeammateState
 from cli_command import commander
 from conftest import declare_test_bus
 from native_backend_fixture import native_backend_fixture, wait_for
@@ -183,7 +183,7 @@ def claim_order(held_bus):
                                       "Review the published repair", original.reference,
                                       store=held_bus.goals.todos)
         claimed = replace(claimed, message=replace(
-            claimed.message, timestamp=time.time() - AwaitingCommander.seconds - 1))
+            claimed.message, timestamp=time.time() - AwaitingTeam.seconds - 1))
         ClaimOrder(todo.revision, worker, todo.held().generation, claimed).record(
             held_bus.goals, todo.id)
         return claimed
@@ -192,7 +192,7 @@ def claim_order(held_bus):
 
 def state_cards(comms, member):
     frame = capture_frame(comms, "lead", ProgressRead())
-    return tuple(state for state in UnitState.current(comms, "lead", frame)
+    return tuple(state for state in TeammateState.current(comms, "lead", frame)
                  if isinstance(state, member))
 
 
@@ -200,7 +200,7 @@ def state_cards(comms, member):
     ("rename", False), ("rename_holder", False), ("remove", False), ("recreate", False),
     ("rename", True),
 ])
-def test_order_claim_publishes_only_to_its_retained_commander_birth(
+def test_order_claim_publishes_only_to_its_retained_team_birth(
     held_bus, change, notification_fails,
 ):
     comms = held_bus
@@ -251,7 +251,7 @@ def test_order_claim_publishes_only_to_its_retained_commander_birth(
                 assert failed.value.record.seq == before + 1
                 marker.rmdir()
                 marker.touch()
-                retained, = changed.order.commander_claims()
+                retained, = changed.order.team_claims()
                 ResumeClaimOrder(changed.revision, worker, changed.held().generation,
                                  retained).record(comms.goals, todo.id)
                 assert comms.bus.bus.revision() == before + 1
@@ -265,7 +265,7 @@ def test_order_claim_publishes_only_to_its_retained_commander_birth(
         assert [(row.canonical_thread, row.recipient_lookup) for row in delivery.recipients] == [
             (recipient, lead.require_recorded().lookup)]
         assert comms.goals.todos.get(todo.id) == changed
-        retained = comms.goals.todos.get(todo.id).order.commander_claims()[0]
+        retained = comms.goals.todos.get(todo.id).order.team_claims()[0]
         # The retained claim is the publication's content; the bus adds its sequence and the
         # mentions it resolved.
         assert retained.message.publication_snapshot == delivery.message.publication_snapshot
@@ -280,7 +280,7 @@ def test_order_claim_publishes_only_to_its_retained_commander_birth(
 def unanswered(comms):
     frame = capture_frame(comms, "lead", ProgressRead())
     return UnitAskUnanswered.broken(
-        comms, "lead", observed=UnitState.current(comms, "lead", frame), frame=frame)
+        comms, "lead", observed=TeammateState.current(comms, "lead", frame), frame=frame)
 
 
 def blocked_holder(comms):
@@ -336,20 +336,20 @@ def test_holds_whose_holder_was_deleted_or_registered_again_are_reported_by_ever
 
     frame = capture_frame(comms, "lead", ProgressRead())
     broken = StandingRule.broken(
-        comms, "lead", observed=UnitState.current(comms, "lead", frame), frame=frame)
+        comms, "lead", observed=TeammateState.current(comms, "lead", frame), frame=frame)
     gone = {rule.todo.id: rule.line() for rule in broken if isinstance(rule, HolderGone)}
     assert set(gone) == {"P1", "P2", "P3"}
     assert "order withdraw P1" in gone["P1"] and "order close P2" in gone["P2"]
     assert {rule.todo.id for rule in HolderGone.violations(comms, "lead")} == set(gone)
     assert frame.todos == ()
     fleet, = FieldCodec.decode(
-        FleetStory, board_read(CommsFleetStoryTool, comms, NoThreadCaller())).lines
+        TeamStory, board_read(CommsTeamStoryTool, comms, NoThreadCaller())).lines
     count, named = fleet.split(": ")
-    assert count == "3 orders held by units no longer registered"
+    assert count == "3 orders held by teammates no longer registered"
     assert set(named.split(", ")) == {"P1 worker", "P2 worker", "P3 outsider"}
     listed = FieldCodec.decode(TodoList, board_read(CommsTodoListTool, comms, NoThreadCaller()))
     assert {"P1", "P2", "P3"} <= {todo.id for todo in listed.todos} and listed.progress == {}
-    assert tuple(OrderEditCountRead.for_commander(comms, "lead")) == ()
+    assert tuple(OrderEditCountRead.for_team(comms, "lead")) == ()
     with pytest.raises(ValueError, match="pass --artifact FILE"):
         comms.goals.todos.get("P2").order.closing_artifact()
 
@@ -357,7 +357,7 @@ def test_holds_whose_holder_was_deleted_or_registered_again_are_reported_by_ever
 def order_file(comms, tmp_path):
     """A well-formed order for the worker, so a send reaches the answer gate."""
     order = replace(comms.goals.todos.get("P1").order.checked(), id=OrderId.mint())
-    document = OrderFile(order, "The worker's next step waits on the commander's answer.",
+    document = OrderFile(order, "The worker's next step waits on the teammate's answer.",
                          "This is stupid because an owed answer stalls the worker.")
     path = tmp_path / "order.json"
     path.write_text(json.dumps(FieldCodec.encode(document)))
@@ -561,7 +561,7 @@ def test_unlink_takes_another_orders_pull_request_off_a_held_order(held_bus, dur
 def test_unanswered_uses_age_direct_target_and_later_answer_references(held_bus):
     now = time.time()
     publish(held_bus, "worker", "lead", now - 7200)  # before every held order
-    publish(held_bus, "worker", "lead", now - AwaitingCommander.seconds + 30)
+    publish(held_bus, "worker", "lead", now - AwaitingTeam.seconds + 30)
     publish(held_bus, "outsider", "lead", now - 1800)  # not a holder
     publish(held_bus, "worker", "outsider", now - 1800)  # not its commander
     question = publish(held_bus, "worker", "lead", now - 901)
@@ -594,7 +594,7 @@ def test_unanswered_pages_match_the_complete_answer_reference(held_bus):
     )
 
 
-def test_answering_an_unrelated_peer_leaves_the_commander_question_open(held_bus):
+def test_answering_an_unrelated_peer_leaves_the_team_question_open(held_bus):
     now = time.time()
     owed = publish(held_bus, "worker", "lead", now - 30)
     unrelated = publish(held_bus, "worker", "outsider", now - 20)
@@ -642,14 +642,14 @@ def test_unanswered_page_retains_the_original_response_eligibility(
     ('lead', 'The worker needs an answer'),
     ('#comms', '@lead The worker needs an answer'),
 ])
-def test_commander_say_answers_an_unanswered_unit_message(held_bus, target, body, tmp_path):
+def test_team_say_answers_an_unanswered_unit_message(held_bus, target, body, tmp_path):
     question = held_bus.bus.publisher.publish_ordinary(
         Message(sender='worker', target=target, type=QuestionKind, body=body,
-                timestamp=time.time() - AwaitingCommander.seconds - 1), destination=CommandTarget.named(target), origin=AgentOrigin(),
+                timestamp=time.time() - AwaitingTeam.seconds - 1), destination=CommandTarget.named(target), origin=AgentOrigin(),
     )
-    ctx = Commander.read_root(held_bus.root)
+    ctx = Team.read_root(held_bus.root)
     reply = tmp_path / 'reply.txt'
-    reply.write_text('Responding to the worker with the actual commander command')
+    reply.write_text('Responding to the worker with the actual teammate command')
     say = SayVerb(units="worker", body_file=str(reply), answers=(question.message_id,))
     say.apply(ctx)
     assert unanswered(held_bus) == ()
@@ -667,8 +667,8 @@ def test_commander_say_answers_an_unanswered_unit_message(held_bus, target, body
 
 
 def test_an_unanswered_unit_message_gates_send_until_a_say_answers_it(held_bus, tmp_path):
-    question = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 1)
-    ctx = Commander.read_root(held_bus.root)
+    question = publish(held_bus, "worker", "lead", time.time() - AwaitingTeam.seconds - 1)
+    ctx = Team.read_root(held_bus.root)
     reply = tmp_path / "reply.txt"
     reply.write_text("Waiting on the merge queue, owner unit-goalblock")
     with pytest.raises(RecordProblems, match=question.message_id):
@@ -686,7 +686,7 @@ def test_an_unanswered_unit_message_gates_send_until_a_say_answers_it(held_bus, 
 
 def test_an_order_to_an_archived_thread_records_nothing(held_bus, tmp_path):
     held_bus.registry.archive("outsider")
-    ctx = Commander.read_root(held_bus.root)
+    ctx = Team.read_root(held_bus.root)
     before = {todo.id for todo in ctx.todos()}
     order = replace(held_bus.goals.todos.get("P1").order.checked(), id=OrderId.mint())
     document = OrderFile(order, "An order for a thread nobody can start.",
@@ -698,7 +698,7 @@ def test_an_order_to_an_archived_thread_records_nothing(held_bus, tmp_path):
 
 def test_withdrawing_from_an_archived_holder_releases_the_order_in_the_channel(held_bus):
     held_bus.registry.archive("worker")
-    Commander.read_root(held_bus.root).withdraw(
+    Team.read_root(held_bus.root).withdraw(
         "P1", "This order went to a thread that was archived and can never start it.")
     assert held_bus.goals.todos.get("P1").state is DoneTodoState
     posted = held_bus.bus.bus.lookup(held_bus.bus.bus.revision())
@@ -707,9 +707,9 @@ def test_withdrawing_from_an_archived_holder_releases_the_order_in_the_channel(h
 
 def test_answering_one_owed_message_leaves_another_owed(held_bus, tmp_path, capsys):
     """An answer is never refused for the debts it leaves: they warn and stay owed."""
-    first = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 2)
-    second = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 1)
-    ctx = Commander.read_root(held_bus.root)
+    first = publish(held_bus, "worker", "lead", time.time() - AwaitingTeam.seconds - 2)
+    second = publish(held_bus, "worker", "lead", time.time() - AwaitingTeam.seconds - 1)
+    ctx = Team.read_root(held_bus.root)
     reply = tmp_path / "reply.txt"
     reply.write_text("Waiting on the merge queue, owner unit-goalblock")
     capsys.readouterr()
@@ -725,9 +725,9 @@ def test_answering_one_owed_message_leaves_another_owed(held_bus, tmp_path, caps
 
 def test_a_refusal_lists_the_asks_still_inside_their_answer_window(held_bus, tmp_path):
     """A retry costs a call, so the refusal names the asks that fall due before it lands too."""
-    owed = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 1)
+    owed = publish(held_bus, "worker", "lead", time.time() - AwaitingTeam.seconds - 1)
     ripening = publish(held_bus, "worker", "lead", time.time() - 60)
-    ctx = Commander.read_root(held_bus.root)
+    ctx = Team.read_root(held_bus.root)
     with pytest.raises(RecordProblems) as refused:
         SendVerb(unit="worker", body_file=order_file(held_bus, tmp_path)).apply(ctx)
     assert {owed.message_id, ripening.message_id} <= set(
@@ -737,9 +737,9 @@ def test_a_refusal_lists_the_asks_still_inside_their_answer_window(held_bus, tmp
 def test_an_owed_answer_is_a_heartbeat_line_and_never_a_vibe_check(held_bus):
     """The board already states an owed answer and locks the verbs on it; a vibe check saying it
     again on a second channel restated one fact, so no degraded sign carries it."""
-    from agent_comms.commander.vibe_check import VibeCheck
+    from agent_comms.team.vibe_check import VibeCheck
 
-    ask = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 1)
+    ask = publish(held_bus, "worker", "lead", time.time() - AwaitingTeam.seconds - 1)
     frame = capture_frame(held_bus, "lead", ProgressRead())
     assert [rule.message.message_id for rule in OwedAnswer.scan_observed(
         held_bus, "lead", (), frame)] == [ask.message_id]
@@ -749,8 +749,8 @@ def test_an_owed_answer_is_a_heartbeat_line_and_never_a_vibe_check(held_bus):
 def test_an_owed_vibe_check_refuses_only_verbs_that_answer_nothing(held_bus, tmp_path):
     """The vibe check waits like any owed message: a reply naming a unit's ask still lands."""
     check = escalate(held_bus, VibeCheckNotice, time.time() - 3600)
-    ask = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 1)
-    ctx = Commander.read_root(held_bus.root)
+    ask = publish(held_bus, "worker", "lead", time.time() - AwaitingTeam.seconds - 1)
+    ctx = Team.read_root(held_bus.root)
     reply = tmp_path / "reply.txt"
     reply.write_text("Waiting on the merge queue, owner unit-goalblock")
     with pytest.raises(RecordProblems, match=check.message_id):
@@ -759,14 +759,14 @@ def test_an_owed_vibe_check_refuses_only_verbs_that_answer_nothing(held_bus, tmp
     assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == (ask.reference,)
 
 
-def test_a_peer_commanders_answer_clears_the_vibe_check_for_the_seat(held_bus):
+def test_a_peer_teammates_answer_clears_the_vibe_check_for_the_seat(held_bus):
     """Answering a burst sent to the seat opens the gate: the reply author is any commander."""
     check = escalate(held_bus, VibeCheckNotice, time.time() - 3600)
-    held_bus.registry.declare(Thread("peer", frozenset({CommandersTag.declared_name}),
+    held_bus.registry.declare(Thread("peer", frozenset({TeammatesTag.declared_name}),
                                      Checkout(Path.cwd())), StoppedThreadStatus())
     peer, lead = (held_bus.registry.require(name) for name in ("peer", "lead"))
     held_bus.messaging.send("peer", "lead", "Answered.", answers=(check.reference,),
-                            answerer=CommanderReceipts(peer.acting_identity,
+                            answerer=TeamReceipts(peer.acting_identity,
                                                        (peer.incarnation, lead.incarnation)))
     with held_bus.bus.bus.reading() as source:
         assert VibeCheckNotice.unanswered(
@@ -774,8 +774,8 @@ def test_a_peer_commanders_answer_clears_the_vibe_check_for_the_seat(held_bus):
 
 
 def test_an_answer_sent_to_another_unit_is_refused_and_leaves_the_ask_owed(held_bus, tmp_path):
-    question = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 1)
-    ctx = Commander.read_root(held_bus.root)
+    question = publish(held_bus, "worker", "lead", time.time() - AwaitingTeam.seconds - 1)
+    ctx = Team.read_root(held_bus.root)
     reply = tmp_path / "reply.txt"
     reply.write_text("Waiting on the merge queue, owner unit-goalblock")
     revision = held_bus.bus.bus.revision()
@@ -795,7 +795,7 @@ def test_an_overdue_owner_directive_gates_until_answered(held_bus, tmp_path):
     selected = NewestOpenRequest().select(store, held_bus.registry.require('lead').incarnation)
     store.record_directive(selected[0].id, RequestDirective(
         directive.seq, directive.timestamp + RequestDirective.window))
-    ctx = Commander.read_root(held_bus.root)
+    ctx = Team.read_root(held_bus.root)
     reply = tmp_path / "reply.txt"
     reply.write_text("Installing now")
     with pytest.raises(RecordProblems, match=re.escape(
@@ -809,10 +809,10 @@ def test_an_overdue_owner_directive_gates_until_answered(held_bus, tmp_path):
 
 
 @pytest.mark.parametrize('body', ['@outsider This question is yours', 'The worker broadcasts its result'])
-def test_channel_messages_without_a_commander_addressee_are_not_a_question(held_bus, body):
+def test_channel_messages_without_a_team_addressee_are_not_a_question(held_bus, body):
     held_bus.messaging.send('worker', '#comms', body, type=QuestionKind)
     with held_bus.bus.bus.reading() as source:
-        questions = UnansweredUnitAsks.for_orders(
+        questions = UnansweredTeammateAsks.for_orders(
             source, held_bus.registry.snapshot(), 'lead',
             HeldOrders.read(held_bus).holders, time.time(),
         )
@@ -854,7 +854,7 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(
 
     # The idle outsider takes it: the worker already holds P1 and P2, and the allocation
     # policy refuses a third order to a holder while a running unit holds none.
-    # Problem creates the first order through Commander.send, including its message link.
+    # Problem creates the first order through Team.send, including its message link.
     cli('problem', str(order_file), '--to', 'outsider', '--where', 'owner.py:2', '--as', 'outsider')
     first = held_bus.goals.todos.get('P3')
     assert first.latest_message.message_id
@@ -890,7 +890,7 @@ def test_one_state_per_unit_even_when_blocked_and_detached(held_bus):
     blocked_holder(held_bus)
     blocked, = state_cards(held_bus, Blocked)
     frame = capture_frame(held_bus, "lead", ProgressRead())
-    states = UnitState.current(held_bus, "lead", frame)
+    states = TeammateState.current(held_bus, "lead", frame)
     assert tuple(state for state in states if state.unit == blocked.unit) == (blocked,)
     assert blocked not in StandingRule.broken(
         held_bus, "lead", observed=states, frame=frame)
@@ -902,11 +902,11 @@ def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus):
     expected = tuple(rule.line() for rule in (
         *state_cards(held_bus, Blocked), *unanswered(held_bus),
     ))
-    heartbeat = CommanderHeartbeat()
+    heartbeat = TeamHeartbeat()
     commander = held_bus.registry.require("lead")
     held_bus.registry.register(replace(commander, process_identity=ProcessIdentity.capture(os.getpid())))
     asyncio.run(heartbeat.run(lambda: nullcontext(held_bus)))
-    saved, = CommanderUpdate.latest(held_bus, commander.incarnation)
+    saved, = TeamUpdate.latest(held_bus, commander.incarnation)
     assert saved.handled
     assert isinstance(held_bus.registry.require("worker").goal.require().state, ActiveGoal)
     owner = held_bus.messaging.user_identity(Checkout(held_bus.root)).name
@@ -925,7 +925,7 @@ def test_successful_pass_health_does_not_depend_on_messages(held_bus, monkeypatc
     commander = held_bus.registry.require("lead")
     held_bus.registry.register(replace(commander, process_identity=ProcessIdentity.capture(os.getpid())))
     passes = ServicePassStore.at(held_bus.root)
-    passes.passed(CommanderHeartbeat.__name__)
+    passes.passed(TeamHeartbeat.__name__)
     assert not passes.read().commander_completed
     worker = held_bus.registry.require("worker").incarnation
     observed = (commander.incarnation, worker)
@@ -934,7 +934,7 @@ def test_successful_pass_health_does_not_depend_on_messages(held_bus, monkeypatc
     completed = passes.read().commander_completed[commander.incarnation]
     assert HeartbeatSilent.violations(held_bus, "lead") == ()
     # The longest normal pass is quiet, not silent.
-    monkeypatch.setattr(time, "time", lambda: completed + CommanderHeartbeat.pass_duration)
+    monkeypatch.setattr(time, "time", lambda: completed + TeamHeartbeat.pass_duration)
     assert HeartbeatSilent.violations(held_bus, "lead") == ()
     before = held_bus.bus.bus.revision()
     later = completed + HeartbeatSilent.seconds + 1
@@ -951,18 +951,18 @@ def test_successful_pass_health_does_not_depend_on_messages(held_bus, monkeypatc
     assert held_bus.bus.bus.revision() == before
 
 
-def test_pass_missing_a_restarting_commander_keeps_its_completion(held_bus):
+def test_pass_missing_a_restarting_team_keeps_its_completion(held_bus):
     """An install leaves the commander's process dead for one pass, which retires nothing."""
     commander = held_bus.registry.require("lead")
     alive = replace(commander, process_identity=ProcessIdentity.capture(os.getpid()))
-    heartbeat = CommanderHeartbeat()
+    heartbeat = TeamHeartbeat()
     held_bus.registry.register(alive)
     asyncio.run(heartbeat.run(lambda: nullcontext(held_bus)))
     passes = ServicePassStore.at(held_bus.root)
     completed = passes.read().commander_completed[commander.incarnation]
     held_bus.registry.register(commander)
     asyncio.run(heartbeat.run(lambda: nullcontext(held_bus)))
-    assert CommanderFrame.read_all(held_bus.root) == ()
+    assert TeamFrame.read_all(held_bus.root) == ()
     held_bus.registry.register(alive)
     assert passes.read().commander_completed[commander.incarnation] == completed
     assert HeartbeatSilent.violations(held_bus, "lead") == ()
@@ -971,7 +971,7 @@ def test_pass_missing_a_restarting_commander_keeps_its_completion(held_bus):
 def test_first_pass_is_owed_from_oldest_request_and_survives_renames(held_bus, monkeypatch):
     commander = held_bus.registry.require("lead")
     held_bus.registry.register(replace(commander, process_identity=ProcessIdentity.capture(os.getpid())))
-    request, = CommanderHeartbeat.requested_by(held_bus.registry.require("lead"), held_bus.goals)
+    request, = TeamHeartbeat.requested_by(held_bus.registry.require("lead"), held_bus.goals)
     due = request.created_at + HeartbeatSilent.seconds
     monkeypatch.setattr(time, "time", lambda: due + 1)
     never, = HeartbeatSilent.violations(held_bus, "lead")

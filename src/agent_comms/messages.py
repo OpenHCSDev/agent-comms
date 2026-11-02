@@ -123,8 +123,8 @@ class BusRow(BusTables):
 
 
 @dataclass(frozen=True)
-class CommanderUpdatePosition(BusProjectionTables):
-    """Where each typed commander packet sits, by the commander birth it addresses. A rebuildable
+class TeamUpdatePosition(BusProjectionTables, declared_name="commander_update_position"):
+    """Where each typed teammate packet sits, by the teammate birth it addresses. A rebuildable
     search projection: the packet's content stays on its original message's task."""
 
     seq: Annotated[int, Column(primary_key=True, references=TableReference(BusRow, ("seq",)))]
@@ -133,8 +133,8 @@ class CommanderUpdatePosition(BusProjectionTables):
 
     @classmethod
     def latest(cls, db: sqlite3.Connection, commander: ThreadLookup) -> tuple[BusRecord, ...]:
-        """The newest packet for that commander through the covering index, decoded from its one
-        original record; a commander with no packet has none."""
+        """The newest packet for that teammate through the covering index, decoded from its one
+        original record; a teammate with no packet has none."""
         positions = db.execute(
             cls._sql(f'SELECT {{seq}} FROM "{cls.declared_name}" WHERE {{commander_lookup}}=? '
                      'ORDER BY {seq} DESC LIMIT 1'),
@@ -145,7 +145,7 @@ class CommanderUpdatePosition(BusProjectionTables):
 
 @dataclass(frozen=True)
 class EscalationPosition(BusProjectionTables):
-    """Where each escalation line sits, by the commander birth it addresses and when it was sent.
+    """Where each escalation line sits, by the teammate birth it addresses and when it was sent.
     It shares the owner's thread with every message he types, so this rebuildable projection, not
     the sender, finds a burst; which burst a line belongs to stays on its original message's task."""
 
@@ -157,7 +157,7 @@ class EscalationPosition(BusProjectionTables):
     @classmethod
     def sent(cls, db: sqlite3.Connection, commander: ThreadLookup, since: float,
              before: float) -> tuple[BusRecord, ...]:
-        """Every escalation line to that commander birth in [since, before], newest first."""
+        """Every escalation line to that teammate birth in [since, before], newest first."""
         positions = db.execute(
             cls._sql(f'SELECT {{seq}} FROM "{cls.declared_name}" WHERE {{commander_lookup}}=? '
                      'AND {at} >= ? AND {at} <= ? ORDER BY {seq} DESC'),

@@ -230,7 +230,7 @@ its limit triggers the fork.
 
 ## Alignment with the native commander (checked 2026-10-18 14:20)
 
-Core already has the commander: `src/agent_comms/commander/` (order, judge,
+Core already has the commander: `src/agent_comms/team/` (order, judge,
 rotate, rules, capacity, growth_watch, cli, rules/*.md), installed in the
 current runtime. Design: `docs/design/commander-in-core.md`. Problems are Core
 Todos and orders are Goals (#934/P51, merged 2026-10-17); a wrong strike is

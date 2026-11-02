@@ -89,7 +89,7 @@ class GoalExecutionSource:
 
 class Goals(GoalRecords):
     def fork_goal(self, parent: Thread, child: Thread) -> Goal:
-        """Create a commander's child goal from its parent's active work."""
+        """Create a teammate's child goal from its parent's active work."""
         text = ('\n'.join(goal.text for goal in parent.goal.active())
                 or f'Coordinate assigned work for {parent.name}.')
         return SetGoalAction(text=text).create(GoalActionContext(self, child))

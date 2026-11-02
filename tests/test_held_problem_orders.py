@@ -9,8 +9,8 @@ import pytest
 
 from test_todos import order, thread
 
-from agent_comms.commander.order import OrderFile, main
-from agent_comms.commander.request import RequestAddVerb
+from agent_comms.team.order import OrderFile, main
+from agent_comms.team.request import RequestAddVerb
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.locked_store import RootFile
@@ -22,7 +22,7 @@ from agent_comms.owner_protocol import OwnerFailure, OwnerLine
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (
     DeliveredProblemOrder, MergedListedPullRequest, OrderMessage, PullRequestCommit,
-    PullRequestLink, StrikeTodo, UnitOccupied,
+    PullRequestLink, StrikeTodo, TeammateOccupied,
 )
 from agent_comms.work_branches import WorkBranches
 from agent_comms.owner_requests import NewestOpenRequest
@@ -35,17 +35,17 @@ pytest_plugins = ("test_todos",)
 
 
 @pytest.fixture
-def cited_source(pr_commander, proof_build_checkouts):
+def cited_source(pr_team, proof_build_checkouts):
     """The source the proof fixture built. The commander declares its repos as plain Repo,
     and the practice copy decodes them as such, so the source is selected by GitHub name."""
     return next(graph.repository for graph in proof_build_checkouts
-                if graph.repository.github == pr_commander.repos[0].github)
+                if graph.repository.github == pr_team.repos[0].github)
 
 
 @pytest.fixture
-def held_commander(pr_commander, cited_source):
+def held_team(pr_team, cited_source):
     initial_order_goal_id = GoalId.mint()
-    source = pr_commander
+    source = pr_team
     worker = thread("worker", source.root, 2.0)
     source.comms.registry.register(worker)
     RequestAddVerb(text="Repair the copied order workflow without changing original retained state").run(source)
@@ -68,8 +68,8 @@ def held_commander(pr_commander, cited_source):
     assert source.comms.goals.todos.get(todo.id) == original
 
 
-def test_held_goal_replacement_is_a_preserved_refusal_without_writes(held_commander):
-    ctx = held_commander
+def test_held_goal_replacement_is_a_preserved_refusal_without_writes(held_team):
+    ctx = held_team
     comms = ctx.comms
     todo = comms.goals.todos.get("P1")
     goal = comms.goals.update_goal("worker", SetGoalAction(
@@ -129,8 +129,8 @@ def merge_two_commit_fix(source, binaries, number, merge_style: str = '--no-ff')
     return base, commits[-1], merge
 
 
-def test_clean_resend_keeps_three_strikes_and_the_existing_holder(held_commander, cited_source):
-    ctx = held_commander
+def test_clean_resend_keeps_three_strikes_and_the_existing_holder(held_team, cited_source):
+    ctx = held_team
     original = ctx.comms.goals.todos.get("P1")
     for ordinal in range(3):
         original = ctx.comms.goals.todos.apply(original.id, StrikeTodo(
@@ -166,9 +166,9 @@ def test_clean_resend_keeps_three_strikes_and_the_existing_holder(held_commander
     ThreadCaller("worker").invoke(CommsChannelsTool(), ctx.comms)
 
 
-def test_second_unplanned_order_is_refused_without_recording(held_commander, cited_source):
+def test_second_unplanned_order_is_refused_without_recording(held_team, cited_source):
     second_workflow_goal_id = GoalId.mint()
-    ctx = held_commander
+    ctx = held_team
     original = ctx.comms.goals.todos.get("P1")
     marker = ctx.root / "unfinished"
     marker.touch()
@@ -192,10 +192,10 @@ def test_second_unplanned_order_is_refused_without_recording(held_commander, cit
     goal = ctx.comms.registry.require("worker").goal
     # The busy-unit decision is the Todo transaction's own: --reassign passes the preflight's
     # owner check, so the refusal comes from the write that would have given worker P2.
-    with pytest.raises(UnitOccupied) as refused:
+    with pytest.raises(TeammateOccupied) as refused:
         main(["send", "worker", str(path), "--reassign",
-              "lead holds P2 only as its creator and must hand it to a unit"], ctx)
-    assert ("worker already holds orders P1 (assigned by lead); running units holding no order:"
+              "lead holds P2 only as its creator and must hand it to a teammate"], ctx)
+    assert ("worker already holds orders P1 (assigned by lead); running teammates holding no order:"
             in str(refused.value))
     assert ctx.comms.goals.todos.board() == before
     assert ctx.comms.goals.todos.get("P1") == original
@@ -204,10 +204,10 @@ def test_second_unplanned_order_is_refused_without_recording(held_commander, cit
 
 
 def test_an_order_waiting_on_install_frees_its_holder_for_the_next_order(
-    held_commander, cited_source, tmp_path,
+    held_team, cited_source, tmp_path,
 ):
     """Delivered work waits only on its run; its holder takes the next order."""
-    ctx = held_commander
+    ctx = held_team
     merge_two_commit_fix(cited_source, tmp_path / 'bin', 4)
     current = ctx.comms.goals.todos.get('P1')
     check = OrderCheck(cited_source.checkout, 'cat count.txt', CountCheckResult(0))
@@ -244,10 +244,10 @@ def test_an_order_waiting_on_install_frees_its_holder_for_the_next_order(
 
 @pytest.mark.parametrize('merge_style', ('--no-ff', '--squash'))
 def test_done_checks_the_merge_and_records_its_pr_head(
-    held_commander, cited_source, tmp_path, merge_style: str,
+    held_team, cited_source, tmp_path, merge_style: str,
 ):
     """Merge and squash share the PR-owned source/merge relation, not an ancestry test."""
-    ctx = held_commander
+    ctx = held_team
     base, head, merge = merge_two_commit_fix(cited_source, tmp_path / 'bin', 4, merge_style)
     current = ctx.comms.goals.todos.get('P1')
     check = OrderCheck(cited_source.checkout, 'cat count.txt', CountCheckResult(0))
@@ -266,16 +266,16 @@ def test_done_checks_the_merge_and_records_its_pr_head(
     assert saved.order.check_base(cited_source.checkout) == base
 
 
-def test_done_without_a_merged_pull_request_records_nothing(held_commander):
-    ctx = held_commander
+def test_done_without_a_merged_pull_request_records_nothing(held_team):
+    ctx = held_team
     original = ctx.comms.goals.todos.get("P1")
     with pytest.raises(ValueError, match="P1 has no merged pull request"):
         main(["done", "worker", "P1"], ctx)
     assert ctx.comms.goals.todos.get("P1") == original
 
 
-def test_a_problem_not_held_by_the_unit_is_refused(held_commander):
-    ctx = held_commander
+def test_a_problem_not_held_by_the_unit_is_refused(held_team):
+    ctx = held_team
     original = ctx.comms.goals.todos.get("P1")
     with pytest.raises(ValueError, match="worker holds no order on P2"):
         main(["done", "worker", "P2"], ctx)

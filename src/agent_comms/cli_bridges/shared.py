@@ -74,7 +74,7 @@ from agent_comms.turn_item import NoSourceTurn, SourceTurn
 from agent_comms.send_result import SendResult
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.task_attachments.commander_pings import CommanderUpdate
+from agent_comms.task_attachments.team_pings import TeamUpdate
 from agent_comms.thread_status import ThreadStatus
 from agent_comms.thread_text import AbsentText, GivenText, TextChoice
 from agent_comms.repo import Checkout
@@ -1319,7 +1319,7 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
     async def prepare_delivery(self) -> None:
         """A transport may prepare its harness after the operation bound its reader."""
 
-    async def deliver_board(self, update: CommanderUpdate, message: messages.Message) -> type[Outcome]:
+    async def deliver_board(self, update: TeamUpdate, message: messages.Message) -> type[Outcome]:
         """Every transport honors the packet's wake decision; passive display is not input."""
         return await update.wake(self, message)
 
@@ -1810,9 +1810,9 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
             self.comms.registry.require(self.binding.bus), status))
 
     async def board(self) -> tuple[str, ...]:
-        """The commander board this session's tool calls print, derived from Core when asked."""
+        """The team board this session's tool calls print, derived from Core when asked."""
         entries = await self.comms.bus.when_open(partial(
-            CommanderUpdate.current_board, self.comms, self.binding.bus))
+            TeamUpdate.current_board, self.comms, self.binding.bus))
         return DeliveredBoardContent.deliver(self.db, entries, time.time()).lines
 
     def watch_record(self, binding: SessionBinding) -> WatchRecord:
