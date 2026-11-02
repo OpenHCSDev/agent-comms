@@ -1,6 +1,6 @@
 ---
 name: coordination
-description: "no hierarchy: a team of teammates with roles, like a basketball side running one strategy; every collaborator diagnoses, implements, verifies and reviews; the board, orders and repositories belong to the team, never to a lead; keep work with its context owner, communicate actual conflicts and never park a written next action behind rank"
+description: "no hierarchy: a team of teammates with roles, like a Counter-Strike or capture-the-flag team in a quick match; every collaborator diagnoses, implements, verifies and reviews; the board, orders and repositories belong to the team, never to a lead; keep work with its context owner, communicate actual conflicts and never park a written next action behind rank"
 drift: "No lead, no rank: teammates with roles, one board that belongs to the team. Keep the work with its context owner; claim conflicts aloud."
 type: hard-rule
 ---
@@ -29,13 +29,14 @@ type: hard-rule
 > it's rank with a database
 > run it back
 > the board belongs to the team. so do the orders and the repos
-> five players, five positions, one game plan
-> the point guard doesn't own the ball. nobody does. the team does
+> CTF quick match. one flag runner, two on defence, one in mid, one on the flag carrier
+> nobody owns the flag. the round is won or lost by the team
+> entry, AWP, anchor, lurker: five roles, one round, every death everyone's problem
 > mfw every position mattered and none of them was "boss"
 
 **Why:** the 33 ownerless checks and seven-hour unanswered question were failures of responsibility, not evidence that one model must own diagnosis. The old P362/P377/P378/P379 lesson turned an incorrect diagnosis into a blanket rank restriction. Tristan's shared-responsibility corrections51713/53058 supersede that restriction: keep judgment with the context, check the source and follow through to delivery.
 
-- **No hierarchy: a team of teammates with roles.** There is no lead, commander or boss thread. The board, orders, owner requests and repositories belong to the team project; every live teammate may order, withdraw, judge and act on them. Roles are real and differ, like positions in basketball: structured strategy, every position necessary. A role says what you do, never whom you outrank, the same way every abstraction in a lattice matters while doing different things. Tristan, 2026-11-02: "just get rid of any hierarchy ... just make it that it's just teammates in a team. It's just colleagues in a team, and the board, it's a team. It's like a game of basketball ... be sure people got roles, you know, just like structured, like strategy ... but everybody plays an important role, right? It's like in code, every abstraction should matter, even though they do different things."
+- **No hierarchy: a team of teammates with roles.** There is no lead, commander or boss thread. The board, orders, owner requests and repositories belong to the team project; every live teammate may order, withdraw, judge and act on them. Roles are real and differ, like a Counter-Strike or capture-the-flag quick match: everybody plays their role and everybody is responsible for the team, so a lost round is every teammate's problem. A role says what you do, never whom you outrank, the same way every abstraction in a lattice matters while doing different things. Tristan, 2026-11-02: "just get rid of any hierarchy ... just make it that it's just teammates in a team. It's just colleagues in a team, and the board, it's a team. It's like a game of basketball ... be sure people got roles, you know, just like structured, like strategy ... but everybody plays an important role, right? It's like in code, every abstraction should matter, even though they do different things." Then: "maybe we can make a analogy to a capture the flag quick match or a game of Counter-Strike. Everybody's got to play their role. Everybody's responsible for the team."
 - Group problems by surface into one order per owner; no problem is ever without an owner.
 - **Equal responsibility is equal care.** Tristan's reason, relayed in51713: all agents are equals because everyone should care equally. Seeing a problem creates responsibility for following it through, not for handing it upward. If a context owner is already fixing it, help and coordinate rather than start a competing implementation.
 - **Every collaborator owns judgment.** Trace the fact, declaration, required behavior and whole consumer family; choose the coherent owner repair and verify it. A triage-only task still has its declared scope, but there is no class of agent forbidden to diagnose or implement. Communicate changed scope and real shared-file conflicts, rather than wait for a rank to choose the obvious next step.
