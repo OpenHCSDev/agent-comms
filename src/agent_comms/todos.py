@@ -2349,7 +2349,7 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
         raise TodoError("Check the delivered order before recording installation.")
 
     def require_withdrawal(self) -> None:
-        raise TodoError("Only an undelivered order can be withdrawn.")
+        raise TodoError("Only an open order can be withdrawn.")
 
     def withdrawals(self, todo: Todo) -> tuple[str, ...]:
         return ()
@@ -2912,6 +2912,11 @@ class OpenProblemOrder(CheckedProblemOrder, declared_name=None):
         if self.id != order_id:
             raise TodoError("The order changed; refresh its state before delivering it.")
 
+    def require_withdrawal(self) -> None:
+        """Any open order can be retired with its reason, delivered or not: a delivered order
+        whose holder is gone and whose run will never come otherwise sits on the board forever
+        (2026-11-02: about 45 such orders hid the team's real state)."""
+
 
 @dataclass(frozen=True, kw_only=True)
 class AwaitingInstallationProblemOrder(OpenProblemOrder, declared_name=None):
@@ -3164,9 +3169,6 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
     def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
         """An undelivered order waits on install once its PR merged."""
         return read[todo.id].waiting_on_install(todo)
-
-    def require_withdrawal(self) -> None:
-        pass
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -3451,7 +3453,8 @@ class MeasuredReview:
 
 @dataclass(frozen=True, kw_only=True)
 class WithdrawnProblemOrder(CheckedProblemOrder):
-    """An order the teammate sent in error and retired before delivery; it strikes no one."""
+    """An order the team retired with its reason, delivered or not; it strikes no one, and its
+    history keeps whatever it delivered."""
 
     previous: Assignment
     why: str
@@ -5564,7 +5567,7 @@ class InstallTodo(CloseOrderTodo):
 
 @dataclass(frozen=True)
 class WithdrawTodo(ReleasesHold, CloseOrderTodo):
-    """An undelivered order sent in error leaves its problem with its reason and no strike."""
+    """An open order retired with its reason leaves its problem with no strike."""
     previous: Assignment
     why: str
     superseded_by: Successor = NoSuccessor()
