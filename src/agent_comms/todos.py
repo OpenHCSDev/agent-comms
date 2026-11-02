@@ -1084,7 +1084,7 @@ class PullRequests(RepositoryReads):
                      'orderBy: {field: UPDATED_AT, direction: DESC}, first: 100'
                      f'{after}) {{ pageInfo {{ hasNextPage endCursor }} nodes {{ '
                      'number updated: updatedAt } } } }')
-            found = repo.api('graphql', '-f', 'query=' + query, '--jq',
+            found = repo.graphql(query, '--jq',
                 '.data.repository.pullRequests as $page | '
                 f'{{rows: [$page.nodes[] | select(.updated >= {json.dumps(stamp)})], '
                 'page_info: ($page.pageInfo '
@@ -1214,8 +1214,8 @@ class PullRequests(RepositoryReads):
             for number in numbers]
         query = (f'query {{ repository(owner: {json.dumps(repo.owner)}, '
                  f'name: {json.dumps(repo.name)}) {{ {" ".join(selections)} }} }}')
-        listed = repo.api(
-            "graphql", "-f", "query=" + query,
+        listed = repo.graphql(
+            query,
             "--jq", '.data.repository | map_values((if .merged == null then '
             '(if .closed then '
             f'del(.merge,.merged) + {{kind: "{ClosedListedPullRequest.declared_name}"}} else '

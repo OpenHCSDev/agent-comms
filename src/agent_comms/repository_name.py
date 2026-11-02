@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 from dataclasses import dataclass
@@ -39,13 +40,20 @@ class RepositoryName(WireValue):
         return "/".join(self.key)
 
     @staticmethod
-    def command(*arguments: str) -> subprocess.CompletedProcess[str]:
+    def command(*arguments: str, input: str = "") -> subprocess.CompletedProcess[str]:
         """The GitHub process boundary shared by API reads and normal merge requests."""
-        return subprocess.run(("gh", *arguments), capture_output=True, text=True, timeout=60)
+        return subprocess.run(("gh", *arguments), input=input,
+                              capture_output=True, text=True, timeout=60)
 
-    def api(self, *arguments: str) -> subprocess.CompletedProcess[str]:
+    def api(self, *arguments: str, input: str = "") -> subprocess.CompletedProcess[str]:
         """GitHub's API protocol; callers judge its response."""
-        return self.command("api", *arguments)
+        return self.command("api", *arguments, input=input)
+
+    def graphql(self, query: str, *arguments: str,
+                **variables: str) -> subprocess.CompletedProcess[str]:
+        """Send the complete request body on stdin, outside exec's argument-size limit."""
+        return self.api("graphql", "--input", "-", *arguments,
+                        input=json.dumps({"query": query, "variables": variables}))
 
     def rest(self, path: str, *arguments: str) -> subprocess.CompletedProcess[str]:
         """``path`` under this repository's REST root."""
