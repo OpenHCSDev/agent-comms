@@ -13,6 +13,16 @@ from agent_comms.launch_root import LaunchRoot
 from agent_comms.coordinator import Coordination
 from agent_comms.owner_launch import RetainedOwnerLaunch
 
+import pytest
+from agent_comms.native_arguments import GivenBinary
+from agent_comms.native_package import VerifiedNativePackage
+
+
+@pytest.fixture
+def qualified_owner_launch(native_runtime_package: VerifiedNativePackage) -> RetainedOwnerLaunch:
+    """The admitted original command comes from the fixture's actual pinned package."""
+    return RetainedOwnerLaunch.configured(GivenBinary(str(native_runtime_package.cli)))
+
 
 class FakeClient(SessionUpdateSink):
     async def publish_update(self, **kwargs):
