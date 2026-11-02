@@ -159,6 +159,15 @@ class InstallDue(UndatedStandingRule, FamilyScan):
             repo.git(repo.checkout, "fetch", "-q", repo.remote, "main")
 
     @classmethod
+    def launch_due(cls, comms: Comms, commander: str) -> tuple[str, ...]:
+        """Launch Core's installer for every configured main the installed build lacks: the
+        one launch `order install` and the remote install tool both make."""
+        pulls = ProgressRead()
+        cls.prepare(comms, commander, HeldOrders.read(comms), pulls)
+        return tuple(f"{due.repo.to_wire()} main {due.main[:12]}: {due.launch(comms)}"
+                     for due in cls.due(comms, pulls))
+
+    @classmethod
     def due(cls, comms: Comms, pulls: PullRequests) -> tuple[InstallDue, ...]:
         DeclaredFamily.discover_package(team)  # The verbs that clear it, for its action.
         repos = comms.registry.snapshot().commander_project.require().repos
