@@ -960,13 +960,12 @@ class Unmeant(Owed):
     def reason(self) -> str:
         """The original question id is available even when the first template predated it."""
         entry = MeantAnswer(self.question.message_id)
-        return (f"Tristan is asking you:\n\n{self.asking}\n\n"
-                "Compare it with what you are doing right now and tell him the truth. No is a"
-                " real answer. Write your answer in this entry in the audit's meant list,"
-                f" preserving other entries, then save {self.audit}:\n"
+        return (f"Tristan asks:\n\n{self.asking}\n\n"
+                "The gate: write the answer into this entry of the audit's meant list, keeping"
+                f" the other entries, and save {self.audit}:\n"
                 f"{json.dumps(FieldCodec.encode(entry), ensure_ascii=False)}\n"
-                f"Open with yes or no and explain what you are doing in at least"
-                f" {MeantRecord.answer_words} words; a word alone does not answer him.")
+                f"The gate accepts an answer that opens with yes or no and runs at least"
+                f" {MeantRecord.answer_words} words.")
 
     def permits_read(self, path: Path) -> bool:
         return path in self.read

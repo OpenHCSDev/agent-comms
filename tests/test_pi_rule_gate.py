@@ -344,7 +344,7 @@ def test_pi_question_settles_only_on_its_exact_successful_audit_write(
 
     [line] = owner_lines(team_bus, "unit-p")
     assert line.endswith("did you mean it?")
-    with pytest.raises(RulesUnread, match="Tristan is asking you"):
+    with pytest.raises(RulesUnread, match="Tristan asks:"):
         call("bash", {"command": "ls"}).judge_under(deal)
     pending = deal.meant.read()
     with session.open("a", encoding="utf-8") as transcript:
@@ -352,7 +352,7 @@ def test_pi_question_settles_only_on_its_exact_successful_audit_write(
             {"type": "text", "text": f"User follow-up:\n{line}"}]}))
         transcript.write(assistant(
             "Yes, I meant it: I am reading the next batch of rules now and answering each one."))
-    with pytest.raises(RulesUnread, match="Tristan is asking you"):
+    with pytest.raises(RulesUnread, match="Tristan asks:"):
         call("bash", {"command": "ls"}).judge_under(deal)
     assert deal.meant.read() == pending
     assert owner_lines(team_bus, "unit-p") == [line]
