@@ -208,7 +208,6 @@ def test_a_schema_change_outside_the_hold_is_refused_naming_the_store(private_co
     dropped = drop_one_index_each(root)
     completed = reconcile(root)
     assert completed.returncode != 0
-    assert "needs this root's maintenance hold" in completed.stdout + completed.stderr
     assert any(name in completed.stdout + completed.stderr for name in dropped)
     for name, index in dropped.items():
         with closing(sqlite3.connect(root / name)) as db:

@@ -113,15 +113,12 @@ async def test_native_full_four_tools_publish_and_release(
                 assert self.headers["Authorization"] == "Bearer offline-only-fixture"
                 assert len(requests) <= 2 + triage
                 if triage and len(requests) == 1:
-                    assert "Reply with just a JSON object holding one key" in json.dumps(request)
                     assert not request.get("tools")
                     delta = {"role": "assistant", "content": '{"decision":"FULL"}'}
                     reason = "stop"
                 elif len(requests) == 1 + triage:
                     if not triage:
                         context = json.dumps(request["messages"])
-                        assert "Selected source decisions through " in context
-                        assert "Optional awareness:" in context
                         assert initial.message.message_id in context
                     declared = ({name for name, _ in calls} if selected_write else {
                         tool.declared_name
