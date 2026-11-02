@@ -1215,8 +1215,7 @@ class PullRequestVerb(OrderVerb, declared_name="pr"):
         source = Repo.of(Path.cwd())
         holder = ctx.comms.registry.require(todo.held().owner)
         storage = ctx.comms.registry.storage_rule
-        if not storage.owns_checkout(holder, source.checkout, source.github, RepositoryReads()):
-            raise ValueError(f"Run order pr from a source checkout owned by {holder.name}.")
+        storage.require_owned_checkout(holder, source.checkout, source.github, RepositoryReads())
         print(self.existing.run(ctx, todo, source, self.title, self.body_file))
 
 

@@ -36,6 +36,15 @@ class MutualSources:
     github: GitHubFixture
     carrier_number: int = 101
 
+    @staticmethod
+    def owned_checkout(context: TeamContext, repository: SourceRepository,
+                       owner: str, problem: str) -> IntegrationCheckout:
+        """Create at the real storage declaration, never patch checkout ownership."""
+        holder = context.comms.registry.require(owner)
+        storage = context.comms.registry.storage_rule
+        path = storage.repository_checkout(storage.roots_of(holder), problem, repository.github)
+        return IntegrationCheckout.create(repository, path, repository.main_commit)
+
     def publish_carrier(self, github: GitHubFixture) -> PullRequestHead:
         """Publish the separate combined PR; source-member refs and Todo links stay intact."""
         commit = self.core.git(self.checkout.path, "rev-parse", "HEAD").strip()
@@ -46,15 +55,17 @@ class MutualSources:
         ))
         return PullRequestHead(self.core.github, self.carrier_number, commit)
 
-    def starting_publication(self, reply_refusal: str) -> Self:
+    def starting_publication(self, reply_refusal: str, *, checkout_owner: str = "worker") -> Self:
         """The forge follows the pushed carrier branch, including an actually lost reply."""
-        self.core.git(self.checkout.path, "switch", "-c", "publish-carrier")
+        context = self.context.model_copy(update={"actor": PeerCaller("worker")})
+        checkout = self.owned_checkout(context, self.core, checkout_owner, "P3")
+        self.core.git(checkout.path, "switch", "-c", "publish-carrier")
         stamp = "2026-10-24T00:00:00Z"
         self.github.create_next(self.core.github, DraftListedPullRequest(
             self.carrier_number, "publish-carrier", self.core.main_commit, stamp, "main",
             reviewable_times=(stamp,)), remotes=(self.core.remote_path,),
             reply_refusal=reply_refusal)
-        return replace(self, context=self.context.model_copy(update={"actor": PeerCaller("worker")}))
+        return replace(self, context=context, checkout=checkout)
 
     def publish(self, output: Path) -> CombinedInput:
         return IntegrationRun(self.checkout, output, "Actual companion-only first publication").publish(
@@ -128,7 +139,7 @@ def source_pair(
         github_cli.put(source.github, DraftListedPullRequest(
             source.number, "feature", source.branch_commit, stamp, "main", reviewable_times=(stamp,),
         ))
-    checkout = IntegrationCheckout.create(core, tmp_path / "qualification", core.main_commit)
+    checkout = MutualSources.owned_checkout(context, core, "lead", "P2")
     return MutualSources(context, core, client, checkout, tmp_path / "qualified-inputs", github_cli)
 
 

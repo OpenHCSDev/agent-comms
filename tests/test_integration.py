@@ -26,6 +26,8 @@ from agent_comms.todos import (
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.test_lease import TestLease
+from agent_comms.shell_effects import StorageDenied
+from agent_comms.errors import TodoConflict
 from agent_comms.order_tools import CommsTodoCreateTool
 from agent_comms.tool_caller import PeerCaller
 from agent_comms.recorded_time import RecordedEventTime
@@ -507,6 +509,51 @@ def test_qualification_captures_actual_orders_without_reviewing_or_arming_source
     assert pair.core.git(pair.checkout.path, "rev-parse", "HEAD^").strip() == inputs.carrier.head
     assert all(not head.same_pull_request(inputs.carrier) for source in inputs.sources for head in source.heads)
     assert not any(call[:2] == ("pr", "merge") or "POST" in call for call in github_cli.calls())
+
+
+def test_first_publication_requires_the_actual_holder_not_creator_authority(
+    mutual_sources: MutualSources,
+) -> None:
+    pair = mutual_sources.starting_publication("", checkout_owner="lead")
+    pair = replace(pair, context=pair.context.model_copy(update={"actor": PeerCaller("lead")}))
+    primary = pair.context.comms.goals.todos.get("P3")
+    primary.require_actor(pair.context.actor_identity, primary.held().generation)
+    before = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
+    with pytest.raises(TodoConflict):
+        pair.publish(pair.output)
+    assert pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip() == before
+    assert not pair.output.exists()
+    assert sum(call[:2] == ("pr", "create") for call in pair.github.calls()) == 0
+
+
+def test_publication_refuses_sibling_checkout_before_commit_push_or_creation(
+    mutual_sources: MutualSources,
+) -> None:
+    pair = mutual_sources.starting_publication("", checkout_owner="lead")
+    before = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
+    refs = pair.core.git(pair.core.remote_path, "show-ref")
+    with pytest.raises(StorageDenied):
+        pair.publish(pair.output)
+    assert pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip() == before
+    assert pair.core.git(pair.core.remote_path, "show-ref") == refs
+    assert pair.core.git(pair.checkout.path, "status", "--porcelain") == ""
+    assert not pair.output.exists()
+    assert sum(call[:2] == ("pr", "create") for call in pair.github.calls()) == 0
+
+
+def test_existing_carrier_capture_refuses_sibling_checkout_before_mutation(
+    mutual_sources: MutualSources,
+) -> None:
+    pair = mutual_sources.starting_publication("", checkout_owner="lead")
+    carrier = pair.publish_carrier(pair.github)
+    before = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
+    refs = pair.core.git(pair.core.remote_path, "show-ref")
+    with pytest.raises(StorageDenied):
+        integration.IntegrationRun(pair.checkout, pair.output, "Refuse foreign capture").qualify(
+            pair.context, ("P3",), carrier=carrier)
+    assert pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip() == before
+    assert pair.core.git(pair.core.remote_path, "show-ref") == refs
+    assert not pair.output.exists()
 
 
 @pytest.mark.parametrize("reply_refusal", ("", "Connection lost after actual PR creation"))

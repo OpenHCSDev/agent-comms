@@ -41,7 +41,7 @@ from .head_review import (
 )
 from .launch_runtime import CheckoutSource, RestoredRuntime
 from .native_build_inputs import DetachedChildStdio
-from .repo import DetachedStart, GitCommandError, Repo
+from .repo import DetachedStart, GitCommandError, Repo, RepositoryReads
 from .repository_name import RepositoryName
 from .systemd_unit import AgentsSlice
 from .test_lease import LeaseStart, TestLease
@@ -181,6 +181,14 @@ class IntegrationCheckout(SourceCheckout):
         checkout = cls.create(repository, path, source.candidate_commit)
         source.prepare_candidate(checkout)
         return checkout
+
+    def owned_repository(self, context: TeamContext) -> Repo:
+        """Admit this actor's actual allocation before creating source output or writing Git."""
+        repository = Repo.of(self.path)
+        owner = context.comms.registry.require(context.actor_name)
+        context.comms.registry.storage_rule.require_owned_checkout(
+            owner, repository.checkout, repository.github, RepositoryReads())
+        return repository
 
     def publication_branch(self) -> str:
         """First publication and recovery require an isolated attached non-main branch."""
@@ -742,7 +750,7 @@ class IntegrationRun:
         self.failure.require_qualification()
         if not problems or len(set(problems)) != len(problems):
             raise IntegrationFailed("Qualification requires unique actual problem selectors")
-        core = Repo.of(self.checkout.path)
+        core = self.checkout.owned_repository(context)
         snapshot = context.comms.registry.snapshot()
         actor = context.actor_identity
         project = snapshot.commander_project
@@ -890,9 +898,9 @@ class IntegrationRun:
         store = context.comms.goals.todos
         primary = store.get(problems[0])
         generation = primary.held().generation
-        primary.require_actor(actor, generation)
+        primary.require_assignee(actor, generation)
+        repository = self.checkout.owned_repository(context)
         branch = self.checkout.publication_branch()
-        repository = Repo.of(self.checkout.path)
         message = WorkBranches(self.checkout.path).commit_message("HEAD")
         recorded = (*IntegrationInput.from_message(message), *UnpublishedInput.from_message(message))
         existing = tuple(row for row in PullRequests().open(repository.github)
@@ -911,18 +919,22 @@ class IntegrationRun:
                                  excluded_carriers=(carrier, *companions))
             if saved.sources != fresh.sources:
                 raise IntegrationFailed("The prepared source cut changed; preserve and recapture explicitly")
+            primary = store.get(primary.id)
+            primary.require_assignee(actor, generation)
             inputs = saved.resume_publication(self, context, carrier)
         else:
             if existing:
                 raise IntegrationFailed("An existing source PR cannot be reused as a new carrier")
             prepared = self.prepare(context, problems, companions=companions,
                                     excluded_carriers=companions)
+            primary = store.get(primary.id)
+            primary.require_assignee(actor, generation)
             prepared.write(self.output)
             Repo.git(self.checkout.path, "commit", "--allow-empty", "-m",
                      f"Prepare the actual source cut\n\n{prepared.trailer}")
             Repo.git(self.checkout.path, "push", "-u", "origin", branch)
             primary = store.get(primary.id)
-            primary.require_actor(actor, generation)
+            primary.require_assignee(actor, generation)
             link = primary.order.checked().open_pull_request(
                 primary, repository, title,
                 f"{body}\n\nPrepared source identities (not execution):\n{prepared.canonical}\n",
@@ -930,7 +942,7 @@ class IntegrationRun:
             carrier = PullRequestHead.at(link.repo, link.number)
             inputs = prepared.resume_publication(self, context, carrier)
         primary = store.get(primary.id)
-        primary.require_actor(actor, generation)
+        primary.require_assignee(actor, generation)
         link = PullRequestLink(repository.github, carrier.pr)
         store.apply(primary.id, RecordPullRequest.for_order(primary, actor, link))
         Repo.git(self.checkout.path, "push", "origin", branch)
@@ -970,7 +982,7 @@ class IntegrationRun:
         self, context: TeamContext, prepared: UnpublishedInput, carrier: PullRequestHead
     ) -> CombinedInput:
         """Finish the same frozen cut after actual first publication or explicit resumption."""
-        core = Repo.of(self.checkout.path)
+        core = self.checkout.owned_repository(context)
         current = carrier.current()
         candidate_commit = Repo.git(self.checkout.path, "rev-parse", "HEAD").strip()
         if (current.repo != core.github or current.base != WorkBranches.main

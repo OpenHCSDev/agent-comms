@@ -470,6 +470,12 @@ class StorageRule(RoomAllocation, DurableFile):
         return any(allocation.owns_declared(self, owner, path, repository, reads)
                    for allocation in CheckoutAllocation.for_path(self, owner, path))
 
+    def require_owned_checkout(self, owner: Thread, path: Path,
+                               repository: RepositoryName, reads: RepositoryReads) -> None:
+        """Admit a mutating checkout operation through the same allocation rule."""
+        if not self.owns_checkout(owner, path, repository, reads):
+            raise StorageDenied(f"Source checkout {path} is not owned by {owner.name}")
+
     def owns_present_checkout(self, owner: Thread, path: Path, reads: RepositoryReads) -> bool:
         """Only a repository-suffixed allocation needs this pass's captured origin."""
         return any(allocation.owns_present(self, owner, path, reads)
