@@ -16,6 +16,8 @@ from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Generic, TypeVar
 
+from agent_comms_hooks import ToolRefusedError
+
 from .child_process import join_retirement
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
@@ -405,7 +407,7 @@ class ToolTransport(Generic[Call]):
         except SelectedToolBusy as error:
             response = error.socket_response()
             answer = "refused"
-        except (SelectedToolDenied, MalformedRecord) as error:
+        except (ToolRefusedError, MalformedRecord) as error:
             # Only declared denials and malformed child input become a refusal.
             # Owner defects propagate; they never become a successful answer.
             response = self.failure_response(error)

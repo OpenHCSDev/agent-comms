@@ -10,6 +10,8 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
+from agent_comms_hooks import ToolRefusedError
+
 from .class_fact import ClassFact
 from .coordination_errors import IdentityConflict
 from .nominal.field_codec import (
@@ -48,6 +50,10 @@ class ClaimTransitionError(ValueError):
     """An invalid request or unverified/corrupt projection input."""
 
 
+class FileClaimDenied(ClaimTransitionError, ToolRefusedError):
+    """Invalid file input is both a claim error and an explicit tool refusal."""
+
+
 class ClaimConflict(ClaimTransitionError):  # noqa: N818 - domain-specific losing result
     """A synchronous losing transition; never queue or retry it automatically."""
 
@@ -71,27 +77,27 @@ class FileClaimPath(ABC):
         try:
             physical = base.resolve(strict=True) == base and base.is_dir()
         except (OSError, RuntimeError) as error:
-            raise ClaimTransitionError("Worktree must be a physical existing directory.") from error
+            raise FileClaimDenied("Worktree must be a physical existing directory.") from error
         if not physical:
-            raise ClaimTransitionError("Worktree must be a physical existing directory.")
+            raise FileClaimDenied("Worktree must be a physical existing directory.")
         requested = self.resource
         if ".." in requested.parts:
-            raise ClaimTransitionError("Parent traversal is not a resource identifier.")
+            raise FileClaimDenied("Parent traversal is not a resource identifier.")
         candidate = requested if requested.is_absolute() else base / requested
         try:
             resolved = candidate.resolve(strict=False)
         except (OSError, RuntimeError, ValueError) as error:
-            raise ClaimTransitionError(f"Cannot resolve file path {candidate}: {error}") from error
+            raise FileClaimDenied(f"Cannot resolve file path {candidate}: {error}") from error
         if resolved != candidate:
-            raise ClaimTransitionError("Symlink aliases are not supported.")
+            raise FileClaimDenied("Symlink aliases are not supported.")
         if resolved == base:
-            raise ClaimTransitionError("Worktree directories cannot be claimed.")
+            raise FileClaimDenied("Worktree directories cannot be claimed.")
         try:
             self.validate_leaf(resolved)
         except FileNotFoundError as error:
-            raise ClaimTransitionError(f"File does not exist: {resolved}") from error
+            raise FileClaimDenied(f"File does not exist: {resolved}") from error
         except OSError as error:
-            raise ClaimTransitionError(f"Cannot inspect file {resolved}: {error}") from error
+            raise FileClaimDenied(f"Cannot inspect file {resolved}: {error}") from error
         return str(resolved)
 
     @abstractmethod
@@ -101,7 +107,7 @@ class FileClaimPath(ABC):
     @staticmethod
     def validate_regular(info) -> None:
         if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
-            raise ClaimTransitionError("Only regular singly-linked files can be claimed.")
+            raise FileClaimDenied("Only regular singly-linked files can be claimed.")
 
 
 class ExistingFileClaim(FileClaimPath):
