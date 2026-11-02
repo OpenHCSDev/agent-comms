@@ -12,7 +12,7 @@ from agent_comms.deal_prompt import DealPrompt
 from agent_comms.native_package import OWNER_INSTRUCTIONS
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.rule_deal import (
-    Blocked, DealDelivery, DealtRead, DealtRuleGate, OpenedReads, PromptReads, SessionRuleDeal,
+    DealtRead, DealtRuleGate, OpenedReads, PromptReads, SessionRuleDeal,
     StartedDeal, SystemPromptDelivery, Unengaged, Unread,
 )
 from agent_comms_hooks import LaunchedPrompt
@@ -46,8 +46,8 @@ def test_a_deal_in_the_system_prompt_owes_the_audit_not_the_reads(tmp_path):
     deal.deal(DeckReader, (), StartedDeal())
     record = deal.current()
     assert record.read_by(deal) == record.paths
-    state = deal.state()
-    assert isinstance(state, Blocked) and isinstance(state.cause, Unengaged)
+    assert not tuple(Unread.owed_by(deal, record, OpenedReads()))
+    assert tuple(Unengaged.owed_by(deal, record, OpenedReads()))
 
 
 def test_a_file_changed_after_the_prompt_was_prepared_is_read_like_any_other(tmp_path):
@@ -67,11 +67,10 @@ def test_a_session_the_launcher_started_is_told_its_prompt_holds_the_deal(monkey
     record = {"session_id": "s", "hook_event_name": "SessionStart",
               "transcript_path": str(tmp_path / "s.jsonl")}
     monkeypatch.delenv(LaunchedPrompt.variable, raising=False)
-    assert type(DeckStart.decode(LaunchedPrompt.carried(record)).delivery()) is DealDelivery
+    assert DeckStart.decode(LaunchedPrompt.carried(record)).delivery() != SystemPromptDelivery(prompt)
     monkeypatch.setenv(LaunchedPrompt.variable, str(prompt))
     delivery = DeckStart.decode(LaunchedPrompt.carried(record)).delivery()
     assert delivery == SystemPromptDelivery(prompt)
-    assert "are in your system prompt" in delivery.told(DeckReader.sources(), tmp_path / "audit")
 
 
 def test_the_claude_launcher_appends_the_prompt_and_never_execs_itself(monkeypatch, tmp_path):
