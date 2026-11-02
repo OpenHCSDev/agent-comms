@@ -189,6 +189,8 @@ class IntegrationCheckout(SourceCheckout):
         owner = context.comms.registry.require(context.actor_name)
         context.comms.registry.storage_rule.require_owned_checkout(
             owner, repository.checkout, repository.github, RepositoryReads())
+        snapshot = context.comms.registry.snapshot()
+        snapshot.commander_project.require_scope(snapshot, context.actor_identity, repository.github)
         return repository
 
     def publication_branch(self) -> str:

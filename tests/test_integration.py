@@ -15,6 +15,7 @@ import pytest
 import tomli_w
 
 from agent_comms import integration
+from agent_comms.team.order import Team
 from agent_comms_hooks import ToolRefusedError
 from agent_comms.head_review import BaseSide, CombinedInput, HeadReview, HeadSide, IntegrationInput, MergeHeadReview, PromotedHeadReview, PullRequestHead, ResolvedIntegrationSource
 from agent_comms.repository_name import RepositoryName
@@ -702,6 +703,28 @@ def test_explicit_recapture_refuses_wrong_holder_or_borrowed_checkout_before_mut
         integration.IntegrationRun(creator_checkout, output, "Refuse foreign recapture").recapture(
             context, ("P3",), carrier=carrier.identity)
     assert pair.core.git(creator_checkout.path, "rev-parse", "HEAD").strip() == before
+    assert pair.core.git(pair.core.remote_path, "show-ref") == refs
+    assert not output.exists()
+    assert sum(call[:2] == ("pr", "create") for call in pair.github.calls()) == 1
+
+
+def test_explicit_recapture_rechecks_scope_before_integrating_core_main(
+    mutual_sources: MutualSources,
+) -> None:
+    pair = mutual_sources.starting_publication("")
+    pair.publish(pair.output)
+    pair.core.git(pair.core.checkout, "switch", "main")
+    pair.core.commit_change("Advance Core main", *pair.core.write_files({Path("main-only.py"): "new = True\n"}))
+    pair.core.git(pair.core.checkout, "push", "origin", "main")
+    before = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
+    refs = pair.core.git(pair.core.remote_path, "show-ref")
+    carrier = PullRequestHead.at(pair.core.github, pair.carrier_number)
+    Team.on_root("lead", (pair.client,), pair.context.root)
+    output = pair.output.with_name("revoked-scope-recapture")
+    with pytest.raises(ToolRefusedError):
+        integration.IntegrationRun(pair.checkout, output, "Refuse revoked Core scope").recapture(
+            pair.context, ("P3",), carrier=carrier.identity)
+    assert pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip() == before
     assert pair.core.git(pair.core.remote_path, "show-ref") == refs
     assert not output.exists()
     assert sum(call[:2] == ("pr", "create") for call in pair.github.calls()) == 1
