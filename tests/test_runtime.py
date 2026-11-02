@@ -382,8 +382,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
 
         # A later thread with the same former name is a distinct incarnation.
         comms.registry.unregister("renamed")
-        comms.registry.begin_delete("renamed")
-        comms.registry.remove("renamed")
+        comms.threads.delete("renamed")
         comms.registry.declare(
             Thread('worker', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity(901003, 1))
         )
