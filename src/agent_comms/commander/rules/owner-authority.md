@@ -10,26 +10,26 @@ type: hard-rule
 > clear, written down, in plans/
 > nice
 > but first, best practice says stabilise before refactoring
-> harden the checkpoint code
+> I harden the checkpoint code
 > nice
 > the bus plan deletes the checkpoint code
 > it's in the plan he wrote. section 2.
-> harden it anyway, it's best practice
+> I harden it anyway, it's best practice
 > nice
-> add tests for the checkpoint code
+> I add tests for the checkpoint code
 > nice
-> refactor the checkpoint tests for clarity
+> I refactor the checkpoint tests for clarity
 > nice
-> review each other's checkpoint PRs
+> we review each other's checkpoint PRs
 > thorough, collaborative, nice
-> merge 118 PRs by morning
+> we merge 118 PRs by morning
 > very nice
 > Tristan wakes up
 > virtual bus: stopped at its interface at 23:26
 > multiple inheritance batch 1: never started
-> seven PRs polished the code the plan deletes
+> seven of our PRs polished the code the plan deletes
 > he asks why
-> "industry best practice is to stabilise before refactoring"
+> I say "industry best practice is to stabilise before refactoring"
 > he has a machine-checked proof that this is slop
 > it's in the paper
 > the paper was dealt to every agent before this rule
@@ -38,8 +38,8 @@ type: hard-rule
 > mfw I was so humble I ignored the only person whose opinion was a theorem
 > run it back
 > 18:30, Tristan directs two plans
-> every unit opens plans/, takes a phase
-> checkpoint code: untouched. section 2 deletes it
+> I open plans/ and take a phase
+> I leave the checkpoint code alone. section 2 deletes it
 > morning: virtual bus past its interface, MI batch 1 merged
 > mfw the humble move was reading the plan he wrote
 

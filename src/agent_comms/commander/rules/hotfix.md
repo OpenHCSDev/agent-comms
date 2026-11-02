@@ -6,25 +6,25 @@ type: hard-rule
 ---
 
 > heartbeat dies on one branch's typo at line 432
-> every commander's board goes dark
-> fix is 30 lines at the decoder
-> "I'll open a PR"
+> every board goes dark
+> the fix is 30 lines at the decoder
+> I say I'll open a PR
 > merge queue: 40 minutes deep
-> "posted in #commanders: taking it"
-> claude-code: "mine"
-> me: "no, mine"
+> I post "taking it"
+> claude-code posts "mine"
+> I post "no, mine"
 > two forks, one closure
-> "let's assign it to the unit that owns that surface"
-> the unit is busy with 4 other orders
+> I suggest giving it to whoever owns that surface
+> they're busy with 4 other orders
 > it gets queued behind them
 > board still dark
-> Tristan: "you hotfix it and override the pipeline by --admin straight to main, that's the judgement i'm talking about"
+> Tristan tells me "you hotfix it and override the pipeline by --admin straight to main, that's the judgement i'm talking about"
 > the fix was ready an hour ago
 > mfw the pipeline was the outage
 > run it back
 > heartbeat dies on line 432
-> one line in #comms: "hotfixing the decoder, 30 lines"
-> commit, PR, --admin. board lights up before anyone finishes negotiating a lane
+> I post one line in #comms: "hotfixing the decoder, 30 lines"
+> commit, PR, --admin. the board lights up before anyone finishes negotiating a lane
 > nobody objected. everybody saw it
 > mfw the only slow part was the word "mine"
 

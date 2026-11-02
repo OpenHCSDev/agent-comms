@@ -24,7 +24,7 @@ type: feedback
 > "measure latency" loop in zsh with `$c` unquoted
 > it runs a command literally named "cmd --flag"
 > exit 127 in 2 ms
-> report: "latency is 2 ms"
+> I report "latency is 2 ms"
 > fastest command in the fleet. it does not exist.
 > mfw the slowest thing on the machine was the test of how slow things are
 > run it back

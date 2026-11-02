@@ -5,34 +5,29 @@ drift: "Said something you have not checked? Check it now or retract it now."
 type: feedback
 ---
 
-> install restores the bus from its own backup
-> commander pauses: "should I restore it?"
+> install wants to restore the bus from its own backup
+> I pause: should I restore it?
 > three rules say never touch the live store by hand
 > the restore is the installer's own operation
 > the rules exist so state is never lost
 > the restore is how state is not lost
-> commander asks Tristan
-> Tristan is asleep
-> 00:58
-> bus down
-> 03:00
-> bus down
-> 06:00
-> bus down
-> 10:01
-> Tristan wakes up
-> "why didn't you just restore it"
-> "the rules"
+> I ask Tristan
+> he is asleep
+> 00:58 bus down
+> 03:00 bus down
+> 06:00 bus down
+> 10:01 he wakes up and asks why I didn't just restore it
+> I say "the rules"
 > the rules were written to prevent exactly this outage
 > mfw I followed the rules so hard I broke the reason for them
 > meanwhile, 2026-10-30
 > I record ok on #3568
-> another commander's fork sends it back: the lock pins Toad two commits short of the metaclass fix
+> a teammate's fork sends it back: the lock pins Toad two commits short of the metaclass fix
 > my ok checked the class shape and missed the lock
 > hiding it feels safe and costs hours
 > saying it feels exposed and costs one line
-> "my ok checked the class shape and missed the lock"
-> unit relocks, fork reroutes, nobody loses an hour
+> I post "my ok checked the class shape and missed the lock"
+> the lock gets fixed, the fork reroutes, nobody loses an hour
 > mfw honesty was the fastest code path
 
 **Why:** on 2026-10-19 the live bus sat down from 00:58 to 10:01 because the commander stopped to ask about restoring the installer's own backup, citing three rules whose reason (never lose state irreversibly) the restore satisfied. On 2026-10-30 claude-code's ok on #3568 missed that the stack lock pinned Toad short of the toad#1372 metaclass fix; another commander's fork sent it back, claude-code said so in one line, and the unit relocked with nothing else moved. Tristan, 2026-10-30: "i don't mind mistakes, they happen. you communicated it clearly and were proactive."

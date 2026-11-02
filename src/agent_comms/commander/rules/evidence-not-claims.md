@@ -5,34 +5,34 @@ drift: "Merged, installed and seen working are three states; a unit's proof is a
 type: feedback
 ---
 
-> unit reports "pushed"
+> a teammate reports "pushed"
 > nice
-> commander reports "pushed" to Tristan
+> I tell Tristan "pushed"
 > nice
-> Tristan asks what changed
-> commander opens the commit
+> he asks what changed
+> I open the commit
 > it is old work from yesterday
 > the actual change was never committed
-> next unit reports "sent the answer"
+> next I report "sent the answer"
 > nice
-> the send was refused by a hook
+> a hook refused the send
 > no message id
-> nobody read the output, it looked like output
-> next: "tests pass"
+> I never read the output. it looked like output
+> next I say "tests pass"
 > nice
 > the run errored before collecting a single test
 > 0 passed, 0 failed, exit code 4
 > "no failures" is technically correct
-> next: "Deadlines are dead (PR 2356)" posted to #comms
+> next I post "Deadlines are dead (PR 2356)" to #comms
 > nice
-> it merged. it was not installed.
-> Core keeps striking units on deadlines for 40 more minutes
-> strikes for a rule we announced dead, enforced by the build we didn't install
-> next: a fork's final report says "reviewed, all good"
+> it merged. it was not installed
+> Core keeps striking teammates on deadlines for 40 more minutes
+> strikes for a rule I announced dead, enforced by the build I didn't install
+> next a fork I started reports "reviewed, all good"
 > nice
 > its tool calls show it looped on 30 refused retries
-> "all good" was the 31st
-> mfw the fleet runs on vibes shaped like receipts
+> "all good" was the 31st. I passed it on
+> mfw I run on vibes shaped like receipts
 > run it back
 > "pushed": git show HEAD --stat. it's the new commit
 > "sent": the output prints its "id"

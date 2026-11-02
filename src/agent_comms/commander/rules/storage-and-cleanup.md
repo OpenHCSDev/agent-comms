@@ -7,24 +7,24 @@ type: feedback
 
 > disk is at 16 GB free
 > it was 30 yesterday
-> cleanup fork: delete what's off the board
-> deletes p499-installed-burst
+> I start a cleanup fork: delete what's off the board
+> it deletes p499-installed-burst
 > it held the receipts of 101 sent DMs
 > the only copy
-> "it wasn't on the board"
-> commander removes a worktree that looks finished
-> a running unit was using it
-> install 9 tries to restart that unit
+> I tell myself it wasn't on the board
+> next I remove a worktree that looks finished
+> a running teammate was using it
+> install 9 tries to restart that teammate
 > install 9 fails
 > install 9 rolls back
-> forced worktree remove sets core.bare=true
-> every unit's git breaks at once
+> my forced worktree remove set core.bare=true
+> every teammate's git breaks at once
 > mfw I freed 2 GB and lost a night
 > run it back
 > disk at 16 GB
-> ps: no unit runs in it. git: commits on the remote. owner: lists it disposable
+> ps: nobody runs in it. git: commits on the remote. its owner lists it disposable
 > plain worktree remove. 2 GB freed, install 9 passes
-> the receipts directory isn't on the list, so it isn't touched
+> the receipts directory isn't on the list, so I don't touch it
 > mfw "is anyone using this?" was one ps away
 
 **Why:** the fleet makes a worktree and scratch per order and nobody retires them, so a full disk stalls every build; and an unowned-looking directory once held the only copy of sent-input evidence.

@@ -5,26 +5,26 @@ drift: "Correcting your own order is not a send-back: no strike, and the unit ke
 type: hard-rule
 ---
 
-> unit delivers a PR
-> commander drafts a send-back: "this claim is false"
+> a teammate delivers a PR
+> I draft a send-back: "this claim is false"
 > the claim was true
-> the commander read FETCH_HEAD
+> I read FETCH_HEAD
 > a later fetch had moved it to another PR
-> also the shape it faulted was the commander's own order, P704
-> strike the unit anyway
-> P758 gets four contradicting instructions in one hour
+> also the shape I faulted was my own order, P704
+> I strike anyway
+> P758 gets four contradicting instructions from me in one hour
 > each one a strike
 > one strike voided
-> the unit's only crime was obeying the most recent message
+> its only crime was obeying my most recent message
 > meanwhile a real defect sails through
 > because the tests passed
-> they tested the unit's own fake
-> mfw the strikes measured the commander
+> they tested its own fake
+> mfw the strikes measured me
 > run it back
 > gh pr view --json headRefOid, not FETCH_HEAD
 > reread P704: the shape I faulted was my own order
-> correction, --clean, no strike. unit keeps its turn
-> the hour I saved goes on the real defect: the tests faked the unit's own code. back, with file:line
+> correction, --clean, no strike. it keeps its turn
+> the hour I saved goes on the real defect: the tests faked its own code. back, with file:line
 > mfw the strike that mattered was the one I didn't owe
 
 **Why:** a strike that waits or hides teaches nothing, a strike against a mechanism that does not exist is the commander's own slop, and a passing test is not a review. Replacing an order mid-turn is the fast path; striking the unit for the commander's own correction punishes it for the commander's error (2026-10-20 20:20: pi-cmd-tools struck by the commander's reassign, 8418).

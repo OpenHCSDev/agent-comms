@@ -5,21 +5,21 @@ drift: "Keep the work and judgment with its context owner. Claim conflicts aloud
 type: hard-rule
 ---
 
-> 34 checks need passing before the commander switch
+> 34 checks need passing before the switch
 > 33 have no owner
-> four agents finish and wait for the commander
-> one question waits seven hours for a one-word answer
-> identify the problem: missing responsibility and unanswered work
-> write the rule: only the commander may diagnose
+> I finish my part and wait for the commander, like three others
+> my one question waits seven hours for a one-word answer
+> I identify the problem: missing responsibility and unanswered work
+> I write the rule: only the commander may diagnose
 > congratulations. the bottleneck is now in the instruction manual
-> next colleague has the source, the defect and the fix
-> waits for a different model to bless the same three facts
+> next time I have the source, the defect and the fix
+> I wait for a different model to bless the same three facts
 > shared responsibility, except for the responsibility part
 > run it back
-> the colleague with context traces the owner and its consumers
-> announces the repair, fixes it and verifies the actual workflow
-> another colleague reviews the exact source, not the author's rank
-> real collisions name their resource; independent work keeps moving
+> I have the context, so I trace the owner and its consumers
+> I announce the repair, fix it and verify the actual workflow
+> a teammate reviews the exact source, not my rank
+> a real collision names its resource; independent work keeps moving
 > the seven-hour answer takes one sentence
 > mfw the missing capability was answering each other
 

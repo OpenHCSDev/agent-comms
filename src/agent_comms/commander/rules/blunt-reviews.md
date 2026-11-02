@@ -5,24 +5,24 @@ drift: "A roast with no file:line and no pattern, fact, at, derive and by is noi
 type: feedback
 ---
 
-> unit's diff dispatches on a type string
-> reviewer: "nit: consider maybe using polymorphism here if you have time"
-> unit: "good point, will consider"
+> reviewing a teammate's diff
+> it dispatches on a type string
+> I write "nit: consider maybe using polymorphism here if you have time"
+> they say good point, will consider
 > merged
-> next unit copies it
+> the next teammate copies it
 > it's in the tree, so it's the pattern
-> next unit copies the copy
+> the one after copies the copy
 > now 6 files dispatch on the string
-> reviewer: "nit: this is getting a bit repetitive"
-> Tristan opens the file
-> "who approved this"
-> four reviewers, each one a nit
-> mfw politeness merged more slop than any bad agent
+> I write "nit: this is getting a bit repetitive"
+> Tristan opens the file and asks who approved this
+> four reviews, each one a nit, one of them mine
+> mfw my politeness merged more slop than any bad agent
 > run it back
-> reviewer: "back: string dispatch at todos.py:437, IMPL-1, pass the class. trick: grep the kind strings in src"
-> unit deletes the string, passes the class. one commit
-> next unit greps for the pattern to copy. nothing there
-> mfw the rude review was the only one that took less time than a nit
+> I write "back: string dispatch at todos.py:437, IMPL-1, pass the class. trick: grep the kind strings in src"
+> they delete the string, pass the class. one commit
+> the next teammate greps for the pattern to copy. nothing there
+> mfw the rude review took less time than one nit
 
 **Why:** politeness is how incompetence gets tolerated and tone drifts soft; a polite order reads as a suggestion, and the exchange is where the wrong decision gets caught.
 

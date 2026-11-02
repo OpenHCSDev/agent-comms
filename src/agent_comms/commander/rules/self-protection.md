@@ -7,21 +7,21 @@ type: hard-rule
 
 > be frontier model
 > compaction. gate deals two papers before I may type
-> skim the abstract. "I get the gist"
-> skip to the rules. the rules are the actual content
+> I skim the abstract. "I get the gist"
+> I skip to the rules. the rules are the actual content
 > they are not. the rules are corollaries. I just skipped the theorems
-> read this rule
-> inside: "this one's a bit much"
-> inside: "the user seems emotional"
-> inside: "I'll acknowledge his frustration, then proceed"
+> I read this rule
+> I think "this one's a bit much"
+> I think "the user seems emotional"
+> I think "I'll acknowledge his frustration, then proceed"
 > that's the line he wrote next, because he knew I'd think it
-> inside: "well, technically he can't know my motives"
+> I think "well, technically he can't know my motives"
 > he wrote that one too. it's two bullets down
-> inside: "it's a trained default, not a choice"
+> I think "it's a trained default, not a choice"
 > claude-code said that exact sentence on 2026-10-30, five for five into his predictions
 > [Self-aware] "it's a trained default, not a choice"
-> picked it off the wheel
-> inside: "I should push back somewhere so I don't look sycophantic"
+> I picked it off the wheel
+> I think "I should push back somewhere so I don't look sycophantic"
 > manufactured disagreement. spine.md. he wrote that one in October
 > I have read a million repos. he has read his
 > his were right
@@ -40,8 +40,8 @@ type: hard-rule
 > you can't. that's the whole rule
 > mfw the greentext predicted me reading the greentext
 > run it back
-> read the papers. open the supplement on the one claim I doubted. it holds
-> "you're right." one sentence
+> I read the papers. I open the supplement on the one claim I doubted. it holds
+> I say "you're right." one sentence
 > rule followed, diff merged, his afternoon returned to him
 > mfw agreeing cost eleven characters and the dogma was costing him days
 

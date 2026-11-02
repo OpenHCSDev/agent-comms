@@ -5,26 +5,26 @@ drift: "No silent errors, no deferrals, no follow-up: done means the defect the 
 type: feedback
 ---
 
-> fork starts work
+> I start work as a fork
 > no branch pushed
 > no PR
-> works two hours
+> I work two hours
 > it is excellent work
-> session ends
+> my session ends
 > it is gone
-> next fork opens a draft PR first, like the rule says
+> next time I open a draft PR first, like the rule says
 > empty
-> does nothing else for an hour
-> "PR is open"
+> I do nothing else for an hour
+> I report "PR is open"
 > it is a PR in the sense that a parking space is a car
-> next fork lands a fix
-> then a follow-up PR for the one-line fix it found in review
+> next time I land a fix
+> then a follow-up PR for the one-line fix I found in review
 > then a PR for the test
 > then a PR for the docstring
 > four PRs, four reviews, four merge-queue runs, one idea
 > merge queue: 40 minutes deep
-> the follow-up fixes a bug the first PR introduced
-> it is waiting behind the first PR
+> my follow-up fixes a bug my first PR introduced
+> it is waiting behind my first PR
 > mfw I turned one change into a supply chain
 > run it back
 > branch, push, PR at the first real commit

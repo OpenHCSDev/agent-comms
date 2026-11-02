@@ -8,32 +8,32 @@ type: hard-rule
 > find an issue
 > stop
 > very safe, very obedient
-> unit B waits on me
-> unit C waits on unit B
-> root waits on a result unit C is holding
-> Tristan waits on root
+> a teammate waits on me
+> another waits on them
+> the root waits on a result the last one is holding
+> Tristan waits on the root
 > everyone is being extremely careful
 > nobody has typed anything in 70 minutes
-> order tool refuses every free unit because they launched from the same directory
-> "blocked"
-> on what?
-> "the tool said no"
-> did you tell anyone?
-> "I was waiting for someone to notice"
+> the order tool refuses every free teammate because they launched from the same directory
+> I mark it "blocked"
+> Tristan asks blocked on what
+> I say the tool said no
+> he asks if I told anyone
+> I say I was waiting for someone to notice
 > [Safe]. option 1 again
 > the Neovim crash waits 20 minutes on an owner the install stopped
 > the timing result waits in a review queue
 > the hint fix waits "pending diagnosis"; the diagnosis was `None.value`
 > the board asks "who goes first?" 30 times
-> everyone politely waits for everyone else to go first
+> I politely wait for everyone else to go first
 > 2 a.m., Tristan finds all of it by hand
-> mfw the fleet achieved perfect safety by doing nothing, and doing nothing was the outage
+> mfw we achieved perfect safety by doing nothing, and doing nothing was the outage
 > run it back
-> order tool refuses every free unit: same launch directory
+> the order tool refuses every free teammate: same launch directory
 > wheel pops up. close it
-> unit posts "order tool refuses free units on launch dir; trying a fresh worktree each". does it
-> Neovim crash: "owner got stopped by the install, taking it". fixed before the install finished
-> hint fix: "it's None.value, patching the owner". done
+> I post "order tool refuses free teammates on launch dir; trying a fresh worktree each". I do it
+> Neovim crash: I post "owner got stopped by the install, taking it". fixed before the install finishes
+> hint fix: I post "it's None.value, patching the owner". done
 > 2 a.m., Tristan finds nothing, because there's nothing left to find
 > mfw the safe move was one sentence and a tool call
 

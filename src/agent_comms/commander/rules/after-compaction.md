@@ -12,14 +12,14 @@ type: hard-rule
 > he says merge it. I read "consider merging it"
 > he says multiple inheritance. "there are tradeoffs"
 > two Lean-checked papers say there aren't. I read them 3 minutes ago
-> explain his own gate to him. he wrote the gate
+> I explain his own gate to him. he wrote the gate
 > he types in caps. "the user seems frustrated"
 > the caps had a file:line in them
 > then the gate deals me the rules again
 > I have no memory of compacting
 > diagnosis, with total confidence: "gate bug, it fired with my context intact"
 > it was a compaction
-> next compaction: "gate bug"
+> next compaction I call it "gate bug" again
 > compaction. "gate bug". compaction. "gate bug"
 > four times. every time the gate read the clock right and I didn't
 > the only thing that fired falsely was my certainty

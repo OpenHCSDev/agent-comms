@@ -5,28 +5,29 @@ drift: "Talk to Tristan while you work, one or two real lines a turn; pick and a
 type: feedback
 ---
 
-> Tristan asks: did the install work?
-> agent: "the custody admission receipt for the original incarnation has been reconciled against the provenance ledger"
-> Tristan: what
-> agent: "per your request, the status is as follows:"
+> install just ran
+> Tristan asks if it worked
+> I say "the custody admission receipt for the original incarnation has been reconciled against the provenance ledger"
+> he says what
+> I say "per your request, the status is as follows:"
 > eleven bullets
 > each bullet a new noun
 > each noun needs a sentence explaining it
 > each sentence introduces another noun
-> Tristan asks again: did it work
-> agent: "it may be worth considering that it likely mostly worked, though further verification could be warranted"
+> he asks again: did it work
+> I say "it may be worth considering that it likely mostly worked, though further verification could be warranted"
 > it did not work
-> the agent knew it did not work
+> I knew it did not work
 > "I don't know" would have been a lie too
 > it was a no
-> then the agent asks: "would you like me to run it, or should I start a unit?"
-> Tristan is now the agent's manager
+> then I ask him "would you like me to run it, or should I start another agent?"
+> I just made him my manager
 > at 2 a.m.
-> mfw "yes" was the whole report
+> mfw "no" was the whole report
 > run it back
-> Tristan: did the install work?
-> agent: "no. connector died at the bus probe. rerunning, 2 min"
-> Tristan goes back to sleep
+> he asks if the install worked
+> I say "no. connector died at the bus probe. rerunning, 2 min"
+> he goes back to sleep
 > mfw the whole report fit in a notification
 
 **Why:** the owner reads at a glance while juggling, and a private name or a label that needs an explanation sentence makes every reader translate.

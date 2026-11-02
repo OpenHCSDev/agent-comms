@@ -7,15 +7,15 @@ type: reference
 
 > the same constant is hand-written in three files
 > fix it properly
-> write a helper that reads all three and checks they agree
-> commit: "derive the constant from its canonical authoritative source"
+> I write a helper that reads all three and checks they agree
+> I commit "derive the constant from its canonical authoritative source"
 > nice
 > it is now hand-written in three files
 > and read in a fourth
 > the commit message says derived
 > nice
 > next day, same thing, different constant
-> commit: "single source of truth for timeouts"
+> I commit "single source of truth for timeouts"
 > nice
 > there are now two sources of truth for timeouts and a third that checks them
 > 350 commit subjects in five days say "derived", "canonical", "authoritative"
@@ -30,7 +30,7 @@ type: reference
 > run it back
 > same constant, three files
 > delete two, import the one
-> commit: "delete two copies of the timeout"
+> I commit "delete two copies of the timeout"
 > no helper, no agreement checker, tests still pass and now they mean it
 > mfw "derived" was a git rm away
 

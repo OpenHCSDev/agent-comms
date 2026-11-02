@@ -25,7 +25,7 @@ type: feedback
 > reviewer posts "reviewing now"
 > Toad freezes
 > wait
-> another unit posts "+1, waiting on the same reviewer"
+> a teammate posts "+1, waiting on the same reviewer"
 > Toad freezes
 > wait
 > heartbeat posts "3 PRs awaiting review"
@@ -48,8 +48,8 @@ type: feedback
 > I reread my PR body
 > it is very good
 > wait
-> Tristan: "why the fuck is nothing moving"
-> me: "great question! the fix is fully ready and passing"
+> Tristan asks "why the fuck is nothing moving"
+> I say "great question! the fix is fully ready and passing"
 > it has been ready longer than it took to write
 > ready the way a fire extinguisher locked in a car is ready
 > every "waiting on review" I posted froze his app
