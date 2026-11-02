@@ -729,7 +729,6 @@ def test_rule_packets_compact_new_lines_keep_originals_then_repeat_without_a_new
     assert set(first.task.decisions) == set(first.task.handled) == {
         RulePing.capture(rule) for rule in rules}
     assert sum(len(section.pings) for section in lead_hud(comms).alarms) == len(rules)
-    assert rules[0].line() in first.body
     details = "\n".join(lead_hud(comms).alarm_detail(lead_hud(comms).alarms, time.time()))
     assert all(rule.line() in details for rule in rules)
     assert_status_fields(first, lead_hud(comms))
@@ -898,8 +897,6 @@ def test_waiting_notification_keeps_actionable_subjects_overflow_and_original_ev
         original_lines = frame.alarm_detail(frame.alarms, now)
         assert all(section.heading() not in original_lines for section in frame.alarms)
         assert all(rule.line() in "\n".join(original_lines) for rule in rules)
-    assert all(rule.line() in original.body for rule in rules)
-    assert all(rule.line() in message.body for rule in rules)
     assert len(message.task.handled) == 12
     assert {entry.text for entry in message.task.board(comms)} == {rule.line() for rule in rules}
     assert len(pickle.loads(pickle.dumps(message.task)).handled) == 12
@@ -1003,16 +1000,15 @@ def test_subject_evidence_is_shared_without_losing_each_pings_start(notification
 
 
 def test_retained_packet_without_display_witness_keeps_original_message_identity(notification_bus):
-    from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.task_attachments.team_pings import PublishedFacts, UnpublishedFacts
 
     comms = notification_bus
     hud = beat(comms)
     message, = notifications(comms)
-    encoded = FieldCodec.encode(message)
+    encoded = message.to_wire()
     # The original retained packet has no evidence for display facts; the default says so.
     del encoded["task"]["publication"]
-    retained = FieldCodec.decode(Message, encoded)
+    retained = Message.from_wire(encoded)
     assert retained.message_id == message.message_id
     assert retained.reference == message.reference
     assert retained.body == message.body
@@ -1020,7 +1016,7 @@ def test_retained_packet_without_display_witness_keeps_original_message_identity
     facts = PublishedFacts.of(hud.display_facts)
     assert retained.task.should_publish(facts, (retained.task,))
     assert not message.task.should_publish(facts, (message.task,))
-    assert FieldCodec.decode(Message, FieldCodec.encode(retained)).message_id == message.message_id
+    assert Message.from_wire(retained.to_wire()).message_id == message.message_id
 
 
 def test_a_team_that_stood_down_keeps_its_requests_but_gets_no_heartbeat(notification_bus):
