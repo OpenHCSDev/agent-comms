@@ -58,12 +58,11 @@ def test_reported_turn_states_preserve_existing_wire_values():
     assert FieldCodec.decode(Goal, FieldCodec.encode(reported)) == reported
 
 
-def test_goal_survives_rename_and_reregistration(comms, tmp_path, monkeypatch):
+def test_goal_survives_rename_and_reregistration(comms, tmp_path):
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Verify the release"))
     comms.threads.set_thread_configuration(
             comms.registry.require('worker'), NextTurnConfiguration(model=ChosenModel('test/model')))
     comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=Checkout(tmp_path)))
-    monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     comms.threads.rename_self("renamed", caller=ThreadCaller("worker"))
     restored = wire(tmp_path).registry.require("worker")
     assert restored.goal == goal
@@ -131,8 +130,7 @@ def test_no_goal_set_goal_and_cleared_goal_each_answer_from_the_member(comms, tm
         scope.require_context(stored())
 
 
-def test_explicit_resume_tool_keeps_goal_id_and_rejects_stale_calls(comms, monkeypatch):
-    monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
+def test_explicit_resume_tool_keeps_goal_id_and_rejects_stale_calls(comms):
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Finish the release"))
     comms.goals.update_goal("worker", PausedGoalAction(progress="Paused after an uncertain turn"))
     resume = ToolRequest.member_named("comms_resume_goal")
@@ -156,8 +154,7 @@ def test_explicit_resume_tool_keeps_goal_id_and_rejects_stale_calls(comms, monke
         resume.invoke(comms, {"goal_id": goal.id, "progress": "stale replaced goal"}, caller=ThreadCaller("worker"))
 
 
-def test_agent_can_set_its_own_persistent_goal(comms, monkeypatch):
-    monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
+def test_agent_can_set_its_own_persistent_goal(comms):
     tool = ToolRequest.member_named("comms_set_goal")
 
     result = tool.invoke(comms, {"text": "Verify the autonomous workflow"}, caller=ThreadCaller("worker"))
