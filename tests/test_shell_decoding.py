@@ -31,6 +31,11 @@ class ShellDecoding(unittest.TestCase):
             (r'echo \{ \}', ('echo', '{', '}')),
             ('echo { }', ('echo', '{', '}')),
             ("'{' literal", ('{', 'literal')),
+            ("'{'\\\n literal", ('{', 'literal')),
+            ('"\\\n{" literal', ('{', 'literal')),
+            ('echo ">\\\n>"', ('echo', '>>')),
+            ("echo '>\\\n>'", ('echo', '>\\\n>')),
+            ('echo \\>\\\n\\>', ('echo', '>>')),
             ('echo file{brace}', ('echo', 'file{brace}')),
         )
         for text, expected in cases:
@@ -158,9 +163,48 @@ class ShellDecoding(unittest.TestCase):
                 with self.assertRaises(StorageDenied):
                     shell_storage_effects(text, CWD)
 
+    def test_assignments_use_logical_spelling_without_erasing_real_quoting(self):
+        for prefix in (
+            'FO\\\nO=value',
+            'FOO=va\\\nlue',
+            'FO\\\nO="va\\\nlue"',
+            "FO\\\nO='va\\\nlue'",
+            '\\\nFOO=value',
+            "FOO=va''lue",
+        ):
+            text = prefix + ' mkdir target'
+            with self.subTest(text=text):
+                command, = ShellCommand.parsed(text)
+                self.assertEqual(command.words, ('mkdir', 'target'))
+                self.assertEqual(shell_storage_effects(text, CWD), (WriteStorageEffect(CWD / 'target'),))
+        for prefix in (r'F\OO=value', r'FOO\=value', "'FOO'=value", "FOO''=value"):
+            text = prefix + ' mkdir target'
+            with self.subTest(text=text):
+                command, = ShellCommand.parsed(text)
+                self.assertEqual(command.words, ('FOO=value', 'mkdir', 'target'))
+
+    def test_continued_operators_keep_one_physical_source_boundary(self):
+        for text in (
+            'echo value >\\\n> target',
+            'echo value &\\\n> target',
+            'echo value &>\\\n> target',
+            'echo value >\\\n| target',
+        ):
+            with self.subTest(text=text):
+                command, = ShellCommand.parsed(text)
+                self.assertEqual(command.words, ('echo', 'value'))
+                self.assertEqual(shell_storage_effects(text, CWD), (WriteStorageEffect(CWD / 'target'),))
+        text = 'cat <\\\n<\\\n-EOF\n\tliteral\n\tEOF\nmkdir target'
+        self.assertEqual(tuple(command.words for command in ShellCommand.parsed(text)),
+                         (('cat',), ('mkdir', 'target')))
+        self.assertEqual(shell_storage_effects(text, CWD), (WriteStorageEffect(CWD / 'target'),))
+
     def test_reserved_brace_groups_cannot_hide_the_first_executable(self):
         for text in (
             '{ mkdir target; }',
+            '\\\n{ mkdir target; \\\n}',
+            '{\\\n mkdir target; }',
+            'A=literal \\\n{ mkdir target; }',
             '{ python -m venv env; }',
             'mkdir before && { (mkdir inner) & printf ready; }',
             'A=literal { mkdir target; }',
@@ -197,12 +241,15 @@ class ShellDecoding(unittest.TestCase):
             ('echo &>> target', ('echo',), ('target',)),
         )
         for number in ('2', '700'):
-            retained = (f"'{number}'", f'"{number}"', '\\' + number, number + ' ')
+            continued = number[:1] + '\\\n' + number[1:]
+            retained = (f"'{number}'", f'"{number}"', '\\' + number, number + ' ',
+                        f"'{number}'\\\n", number[:1] + "''\\\n" + number[1:])
             for operator in ('&>', '&>>'):
                 cases += tuple((f'mkdir {prefix}{operator}/owned/log', ('mkdir', number),
-                                ('/owned/log', number)) for prefix in (number, *retained))
+                                ('/owned/log', number)) for prefix in (number, continued, *retained))
             for operator in ('>', '>>', '>|', '<>'):
-                cases += ((f'mkdir {number}{operator}/owned/log', ('mkdir',), ('/owned/log',)),)
+                cases += tuple((f'mkdir {prefix}{operator}/owned/log', ('mkdir',), ('/owned/log',))
+                               for prefix in (number, continued))
                 cases += tuple((f'mkdir {prefix}{operator}/owned/log', ('mkdir', number),
                                 ('/owned/log', number)) for prefix in retained)
         for text, words, paths in cases:
@@ -261,7 +308,8 @@ class ShellDecoding(unittest.TestCase):
         command, = ShellCommand.standalone(valid)
         self.assertEqual(command.args[-1], 'quoted;path')
         for text in ('echo ok; echo no', 'echo "$HOME"', 'echo `date`', 'echo ok > file',
-                     'echo ok\necho no', '(echo ok)'):
+                     'echo ok\necho no', '(echo ok)', '\\\n' + valid,
+                     valid.replace('watch', 'wa\\\ntch')):
             with self.subTest(text=text):
                 self.assertEqual(tuple(ShellCommand.standalone(text)), ())
         self.assertTrue(ConnectCommand.permits('agent-comms-claude-bridge connect'))
