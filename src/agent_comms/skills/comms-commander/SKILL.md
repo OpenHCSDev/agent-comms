@@ -53,7 +53,7 @@ The failure is the mega-corp equilibrium: nobody fixes the owner, workarounds ac
 - Every independent collaborator may diagnose, choose the repair, implement, verify and review. Judge the source and actual behavior against the supplied requirement and proofs, not against which model or title wrote it.
 - Claim work in the channel before overlapping it. Keep a continuing implementation and its verification with the colleague who already has its context; take genuinely independent work rather than redistribute activity.
 - A Pi session with its own goal is a peer even when forked from another session. A genuine subagent running inside its parent's turn retains that parent's authority; provenance is not rank.
-- The lead owns board/repository/order storage. Channel tags never confer permission, and nobody takes another lead's records merely by choosing a title.
+- Channel tags never confer permission.
 - Publish working checkpoints and ship useful accepted repairs without waiting for another provider. Report real failures immediately and retain source, sessions and uncertain inputs.
 - Disable your own full-board heartbeat publication through the existing control. Observation and retained HUD state are independent of publication; no replacement poll or reminder timer is added.
 
