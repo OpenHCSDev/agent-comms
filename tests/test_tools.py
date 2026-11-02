@@ -18,14 +18,11 @@ from agent_comms_hooks import ToolRefusedError
 
 class TestToolCatalog:
     def test_native_launch_carries_the_existing_catalog_and_thread_tier(self, comms, tmp_path, monkeypatch):
-        from pathlib import Path
-
         from agent_comms.cli_verbs.tools import ToolsCliCommand
         from agent_comms.native_arguments import NativeArguments
         from agent_comms.pi_vocabulary import ServiceTier
         from agent_comms.thread_catalog import ThreadCatalog
         from agent_comms.threads import ChosenServiceTier, NextTurnConfiguration
-        from agent_comms.tool_caller import ThreadCaller
 
         monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(tmp_path / "config"))
 
@@ -65,8 +62,7 @@ class TestToolCatalog:
                 repeated.st_mtime_ns, repeated.st_size,
             )
 
-    def test_collaboration_tools_share_one_mutual_contact(self, comms, monkeypatch):
-        monkeypatch.setenv("AGENT_COMMS_THREAD", "a")
+    def test_collaboration_tools_share_one_mutual_contact(self, comms):
         comms.registry.declare(Thread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         comms.registry.declare(Thread(name='b', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         before = comms.registry.snapshot()
@@ -76,35 +72,26 @@ class TestToolCatalog:
         assert invoke_tool(comms, "comms_collaborations", {}, caller=ThreadCaller("a"))["collaborations"] == [
             result["collaboration"]
         ]
-        monkeypatch.setenv("AGENT_COMMS_THREAD", "b")
         mirrored = invoke_tool(comms, "comms_collaborations", {}, caller=ThreadCaller("b"))["collaborations"]
         assert len(mirrored) == 1
         assert (mirrored[0]["owner"], mirrored[0]["peer"]) == ("b", "a")
         invoke_tool(
             comms, "comms_collaboration", {"action": "update", "peer": "a", "note": "Shared work"}, caller=ThreadCaller("b")
         )
-        monkeypatch.setenv("AGENT_COMMS_THREAD", "a")
         collaborations = invoke_tool(comms, "comms_collaborations", {}, caller=ThreadCaller("a"))["collaborations"]
         assert collaborations[0]["note"] == "Shared work"
-        monkeypatch.setenv("AGENT_COMMS_THREAD", "b")
         invoke_tool(comms, "comms_collaboration", {"action": "remove", "peer": "a"}, caller=ThreadCaller("b"))
-        monkeypatch.setenv("AGENT_COMMS_THREAD", "a")
         assert invoke_tool(comms, "comms_collaborations", {}, caller=ThreadCaller("a")) == {"collaborations": []}
-        monkeypatch.setenv("AGENT_COMMS_THREAD", "b")
         invoke_tool(comms, "comms_collaboration", {"action": "add", "peer": "a"}, caller=ThreadCaller("b"))
-        monkeypatch.setenv("AGENT_COMMS_THREAD", "a")
         assert invoke_tool(comms, "comms_collaborations", {}, caller=ThreadCaller("a"))["collaborations"][0]["peer"] == "b"
         invoke_tool(comms, "comms_collaboration", {"action": "remove", "peer": "b"}, caller=ThreadCaller("a"))
         assert comms.registry.snapshot() == before
         assert not list(comms.views.history_page(AnyChannel.target()).messages)
 
-    def test_collaboration_tool_rejects_bad_arguments_before_writes(self, comms, monkeypatch):
-        monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
+    def test_collaboration_tool_rejects_bad_arguments_before_writes(self, comms):
         with pytest.raises(ValueError):
             invoke_tool(comms, "comms_collaborations", {}, caller=NoThreadCaller())
-        with pytest.raises(
-            ValueError,
-        ):
+        with pytest.raises(ValueError):
             invoke_tool(comms, "comms_collaboration", {"action": "start", "peer": "b"}, caller=NoThreadCaller())
         with pytest.raises(ValueError):
             invoke_tool(comms, "comms_collaboration", {"action": "add", "peer": "b", "owner": "c"}, caller=NoThreadCaller())
@@ -125,7 +112,7 @@ class TestToolCatalog:
     def test_inbox_read_records_nothing(self, comms):
         comms.registry.declare(Thread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         comms.registry.declare(Thread(name='b', tags=frozenset(), worktree=Checkout(Path('/wt'))))
-        comms.messaging.send("a", "b", "hello").message.message_id
+        comms.messaging.send("a", "b", "hello")
 
         result = invoke_tool(comms, "comms_inbox", {"thread": "b"}, caller=NoThreadCaller())
 
@@ -133,19 +120,16 @@ class TestToolCatalog:
         assert comms.bus.pending_count("b") == 1
 
     def test_arguments_are_validated_before_dispatch(self, comms):
-        with pytest.raises(
-            ValueError,
-        ):
+        with pytest.raises(ValueError):
             invoke_tool(comms, "comms_stop", {}, caller=NoThreadCaller())
         with pytest.raises(ValueError):
             invoke_tool(comms, "comms_stop", {"name": "a", "force": True}, caller=NoThreadCaller())
         with pytest.raises(ValueError):
             invoke_tool(comms, "comms_threads", {"active_only": "yes"}, caller=NoThreadCaller())
 
-    def test_operator_threads_query_does_not_weaken_actions(self, comms, monkeypatch):
+    def test_operator_threads_query_does_not_weaken_actions(self, comms):
         from agent_comms.launch_runtime import CallingThreadUnavailable
 
-        monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
         comms.registry.declare(Thread(name='listed', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         result = invoke_tool(comms, "comms_threads", {"active_only": True}, caller=NoThreadCaller())
         assert [thread["name"] for thread in result["threads"]] == ["listed"]
@@ -160,7 +144,7 @@ class TestToolCatalog:
         comms.registry.declare(Thread(name='recipient', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         sent = comms.messaging.send("sender", "recipient", "track me").message
         for index in range(6):
-            comms.messaging.send("recipient", "sender", f"incoming {index}").message
+            comms.messaging.send("recipient", "sender", f"incoming {index}")
 
         presentation = comms.views.thread_presentations(("sender",)).require("sender")
         assert all(row.message.reference != sent.reference for row in presentation.notifications)
@@ -234,8 +218,8 @@ class TestToolCatalog:
         comms.registry.declare(Thread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         comms.registry.declare(Thread(name='b', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         comms.registry.declare(Thread(name='c', tags=frozenset(), worktree=Checkout(Path('/wt'))))
-        comms.messaging.send("a", "b", "from a").message.message_id
-        comms.messaging.send("c", "b", "from c").message.message_id
+        comms.messaging.send("a", "b", "from a")
+        comms.messaging.send("c", "b", "from c")
 
         result = invoke_tool(
             comms, "comms_inbox", {"thread": "b", "target": "a"}, caller=NoThreadCaller()
