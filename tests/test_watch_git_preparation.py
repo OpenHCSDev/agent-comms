@@ -150,6 +150,26 @@ def test_a_detached_head_counts_its_unpublished_commits_instead_of_failing_the_r
     assert (difference.branch, unpublished.head, unpublished.commits) == ("HEAD", head, 1)
 
 
+
+def test_head_moving_mid_pass_keeps_the_snapshot_branch_and_commit_together(git_preparation):
+    """The pass's HEAD snapshot owns branch and commit; a later move is the next pass's."""
+    repo = git_preparation.repository
+    SourceRepository.git(repo.checkout, "commit", "--allow-empty", "-m", "Snapshot work")
+    snapshot = Repo.git(repo.checkout, "rev-parse", "HEAD").strip()
+    reader = WorkBranches(repo.checkout)
+    reader.prepare_upstreams()
+    assert (reader.head.branch, reader.head.revision()) == ("main", snapshot)
+    arrived = float(Repo.git(repo.checkout, "reflog", "show", "-1", "--date=unix", "--format=%gD",
+                             "HEAD").strip().rsplit("@{", 1)[1].removesuffix("}"))
+    Repo.git(repo.checkout, "switch", "-q", "-c", "moved-after-the-cut")
+    SourceRepository.git(repo.checkout, "commit", "--allow-empty", "-m", "Later work")
+    assert Repo.git(repo.checkout, "rev-parse", "HEAD").strip() != snapshot
+    difference = reader.difference(reader.origin_main)
+    assert (difference.branch, difference.head, difference.moved_at) == ("main", snapshot, arrived)
+    (unpublished,) = difference.unpublished
+    assert unpublished.head == snapshot
+
+
 def test_upstream_preparation_batches_only_required_heads_per_remote(
     git_preparation: GitPreparation, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:

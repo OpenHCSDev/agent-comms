@@ -555,23 +555,11 @@ query($owner: String!, $name: String!, $after: String) {
         return self.history.resolve(f"refs/remotes/{Repo.remote}/{self.main}")
 
     def difference(self, main: str) -> BranchDifference:
-        """Git owns ancestry and changed paths; pin both commits before comparing."""
-        movement = self._git(
-            "reflog",
-            "show",
-            "-1",
-            "--date=unix",
-            "--format=%H%x00%gD",
-            "HEAD",
-        ).strip()
-        try:
-            head, selector = movement.split("\0")
-            moved_at = float(selector.rsplit("@{", 1)[1].removesuffix("}"))
-        except (ValueError, IndexError) as unread:
-            raise WorkBranchError(
-                f"HEAD reflog in {self.checkout} has no readable movement time"
-            ) from unread
+        """Git owns ancestry and changed paths; pin both commits before comparing. The pass's
+        HEAD snapshot owns branch and commit together; HEAD moving later is the next pass's."""
+        head = self.head.revision()
         branch = self.head.branch
+        moved_at = self.arrived_at(head)
         bases = self.history.merge_base(main, head)
         if not bases:
             raise WorkBranchError(f"Unrelated main and HEAD in {self.checkout}")
@@ -583,6 +571,21 @@ query($owner: String!, $name: String!, $after: String) {
             SourceGrowth.capture(self.checkout, base, head, files, timeout=self.timeout),
             self.unpushed(branch, head),
         )
+
+    def arrived_at(self, head: str) -> float:
+        """When HEAD last arrived at the snapshot's commit, from its reflog. The reflog only
+        dates the snapshot; a newer entry is a later move this pass does not read."""
+        movements = self._git("reflog", "show", "--date=unix", "--format=%H%x00%gD", "HEAD")
+        for movement in movements.splitlines():
+            try:
+                commit, selector = movement.split("\0")
+                if commit == head:
+                    return float(selector.rsplit("@{", 1)[1].removesuffix("}"))
+            except (ValueError, IndexError) as unread:
+                raise WorkBranchError(
+                    f"HEAD reflog in {self.checkout} has no readable movement time"
+                ) from unread
+        raise WorkBranchError(f"HEAD reflog in {self.checkout} never reached {head}")
 
     def changed(self, base: str, head: str) -> frozenset[str]:
         """A commit differs from itself in nothing, so an idle worktree launches no diff."""
