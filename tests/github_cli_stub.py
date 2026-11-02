@@ -14,10 +14,13 @@ def follow_git(request):
     """The foreign forge's branch head and PR ref follow the actual Git push."""
     for remote in request.get("remotes", ()):
         row = request["listed"]
+        previous = row["head"]
         row["head"] = subprocess.run(
             ("git", "--git-dir", remote, "rev-parse", f"refs/heads/{row['branch']}"),
             capture_output=True, text=True, check=True,
         ).stdout.strip()
+        if row["head"] != previous:
+            request["observations"] = [previous] * request.get("lag_reads", 0)
         subprocess.run(("git", "--git-dir", remote, "update-ref",
                         f"refs/pull/{row['number']}/head", row["head"]), check=True)
 
@@ -36,6 +39,7 @@ def main():
     for repository in repositories.values():
         for request in repository["requests"].values():
             follow_git(request)
+    (directory / "pull_requests.json").write_text(json.dumps(repositories))
     with (directory / "calls.jsonl").open("a") as calls:
         calls.write(json.dumps(arguments) + "\n")
     if arguments[:2] == ["pr", "create"]:
@@ -46,6 +50,7 @@ def main():
         assert "--draft" in arguments and arguments[-2:] == ["--body-file", "-"]
         request = {"body": sys.stdin.read(), "listed": row, "remotes": creation["remotes"]}
         follow_git(request)
+        request["lag_reads"] = creation["lag_reads"]
         data["requests"][str(row["number"])] = request
         (directory / "pull_requests.json").write_text(json.dumps(repositories))
         if creation["reply_refusal"]:
@@ -72,9 +77,13 @@ def main():
         elif parts[:1] == ["pulls"] and len(parts) == 2:
             assert arguments[arguments.index("--jq") + 1] == (
                 '.head.sha + " " + .base.ref + " " + (.draft | tostring) + " " + .state')
-            listed = data["requests"][parts[1]]["listed"]
+            request = data["requests"][parts[1]]
+            listed = request["listed"]
+            observations = request.get("observations", [])
+            observed = observations.pop(0) if observations else listed["head"]
+            (directory / "pull_requests.json").write_text(json.dumps(repositories))
             state = "open" if listed["kind"] in data["open_kinds"] else "closed"
-            print(listed["head"], listed["base"], str(listed["kind"] == "draft").lower(), state)
+            print(observed, listed["base"], str(listed["kind"] == "draft").lower(), state)
         elif len(parts) == 3 and parts[0] == "commits" and parts[2] == "pulls":
             assert arguments[arguments.index("--jq") + 1] == "map(.number)"
             print(json.dumps([entry["listed"]["number"] for entry in data["requests"].values()

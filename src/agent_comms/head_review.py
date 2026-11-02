@@ -11,6 +11,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from time import monotonic, sleep
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from agent_comms_hooks import ToolRefusedError
@@ -132,6 +133,23 @@ class PullRequestHead:
                 f"#{self.pr} moved to {current.head[:9]} since {self.head} was reviewed; "
                 "review again."
             )
+        return current
+
+    def published_after(self, previous: PullRequestHead) -> OpenPullRequestHead:
+        """Observe a known successful push; only its previous head may lag briefly."""
+        if not self.same_pull_request(previous):
+            raise ToolRefusedError("Publication observations must name the same pull request")
+        deadline = monotonic() + 5
+        current = self.at(self.repo, self.pr)
+        while not current.holds(self.head):
+            if not current.holds(previous.head) or monotonic() >= deadline:
+                raise ToolRefusedError(
+                    f"Published #{self.pr} expected {self.head}; forge observed {current.head}; "
+                    f"previous head {previous.head}. Preserve this attempt and resume it; "
+                    "do not repeat creation."
+                )
+            sleep(min(0.1, max(0, deadline - monotonic())))
+            current = self.at(self.repo, self.pr)
         return current
 
     def closed_or_open(self) -> ReadPullRequestHead:
@@ -465,8 +483,14 @@ class IntegrationInput(DeclaredFamily, affix="Input"):
 
     def validate(self, repositories: tuple[Repo, ...], carrier: PullRequestHead) -> None:
         """Git and forge prove this frozen input; Todo and verdict owners decide permission."""
+        self._validate_current(repositories, carrier, carrier.current())
+
+    def _validate_current(
+        self, repositories: tuple[Repo, ...], carrier: PullRequestHead,
+        current: OpenPullRequestHead,
+    ) -> None:
+        """One observed forge cut and the expected immutable capture answer different questions."""
         core = Repo.selected(repositories, carrier.repo.to_wire())
-        current = carrier.current()
         if current.base != WorkBranches.main:
             raise ToolRefusedError("The integration carrier no longer targets main")
         self.require_carrier(core, carrier)
@@ -487,6 +511,10 @@ class IntegrationInput(DeclaredFamily, affix="Input"):
     ) -> CombinedInput:
         """An ordinary source record cannot become a combined publication."""
         raise ToolRefusedError("This input is not a resumable combined publication")
+
+    def require_recapture(self, core: Repo, carrier: PullRequestHead) -> None:
+        """A completed capture supplies the default recapture proof."""
+        self.require_carrier(core, carrier)
 
     def require_source_reviews(self) -> None:
         """Native promotion and the hosted gate require these same exact source decisions."""
@@ -628,6 +656,15 @@ class UnpublishedInput(SubstantiveInput):
     ) -> CombinedInput:
         return run.capture(context, self, carrier)
 
+    def require_recapture(self, core: Repo, carrier: PullRequestHead) -> None:
+        """A known published prospective cut may be replaced explicitly, never recreated."""
+        self.require_repositories(
+            self.declared_repositories(core, self.local.baseline.commit, carrier.head)
+        )
+        self.bind(core, carrier)
+        if self.from_message(WorkBranches(core.checkout).commit_message(carrier.head)) != (self,):
+            raise ToolRefusedError("The published prospective cut does not contain this exact input")
+
     def bind(self, repository: Repo, carrier: PullRequestHead) -> CombinedInput:
         """Bind the actual publication without substituting another source tree or history."""
         if carrier.repo != self.predecessor.repository:
@@ -679,6 +716,9 @@ class CombinedInput(SubstantiveInput):
         self.require_carrier(core, PullRequestHead(core.github, carrier.pr, commit))
         run.retain_capture(self, commit)
         return self
+
+    def validate_published(self, repositories: tuple[Repo, ...], carrier: PullRequestHead) -> None:
+        self._validate_current(repositories, carrier, carrier.published_after(self.carrier))
 
     def require_local_candidate(self, core: Repo, carrier: PullRequestHead) -> None:
         self.local.require_origin(core)
