@@ -136,4 +136,3 @@ def test_storage_family_renders_each_broken_fact(
     rule = comms.registry.storage_rule
     assert str(rule.order_checkout(rule.initial_roots(worker.name), "P<n>")) in text
     assert str(worker.storage_roots.scratch) in text
-    print("\n".join(rule.line() for rule in found))
