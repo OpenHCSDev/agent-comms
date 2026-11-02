@@ -228,7 +228,6 @@ def test_new_mutation_inherits_revision_admission(tmp_path, source_repository):
 
 def test_withdraw_retires_a_released_problem(tmp_path, source_repository):
     first_goal_id = GoalId.mint()
-    wrong_goal_id = GoalId.mint()
     store = TodoStore(tmp_path)
     lead = thread("lead", tmp_path, 1.0)
     worker = thread("worker", tmp_path, 2.0)
@@ -242,11 +241,7 @@ def test_withdraw_retires_a_released_problem(tmp_path, source_repository):
     previous = released.holder_state.previous_assignment()
     assert previous == todo.held()
     why = "The requested repair already merged into main through another problem."
-    with pytest.raises(TodoConflict):
-        store.apply(todo.id, WithdrawTodo(released.revision, lead.incarnation,
-            replace(previous, generation=wrong_goal_id), why))
-    withdrawn = store.apply(todo.id, WithdrawTodo(released.revision, lead.incarnation,
-        previous, why))
+    withdrawn = store.apply(todo.id, WithdrawTodo(released.revision, lead.incarnation, why))
     assert store.board() == ()
     assert withdrawn.state is DoneTodoState and not withdrawn.pending
     assert withdrawn.order.previous == todo.held()
@@ -266,7 +261,7 @@ def test_withdrawn_order_is_not_a_recurrence(tmp_path, source_repository):
         request=request, review_at=RecordedEventTime(1000), order=order(source_repository),
     )
     store.apply(original.id, WithdrawTodo(
-        original.revision, lead.incarnation, original.held(),
+        original.revision, lead.incarnation,
         "The teammate sent this order in error before any repair.",
     ))
     replacement = replace(order(source_repository), id=OrderId.mint(), at=RecordedEventTime(30))
@@ -308,7 +303,7 @@ def test_withdraw_retires_a_delivered_problem(tmp_path, released, source_reposit
         delivered = store.apply(todo.id, ReleaseTodo(delivered.revision, todo.held().owner_identity,
             todo.held(), StrikeReason("The worker finished its delivery and no longer needs this assignment.")))
     withdrawn = store.apply(todo.id, WithdrawTodo(delivered.revision, lead.incarnation,
-        delivered.holder_state.previous_assignment(), "Its holder retired; no run will come."))
+        "Its holder retired; no run will come."))
     assert withdrawn.state is DoneTodoState and withdrawn.strike_count == 0
     assert withdrawn.history.events(withdrawn.id, DeliverTodo) == delivered.history.events(
         delivered.id, DeliverTodo)  # the delivery stays on record

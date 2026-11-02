@@ -5585,14 +5585,14 @@ class InstallTodo(CloseOrderTodo):
 
 @dataclass(frozen=True)
 class WithdrawTodo(ReleasesHold, CloseOrderTodo):
-    """An open order retired with its reason leaves its problem with no strike."""
-    previous: Assignment
+    """An open order retired with its reason leaves its problem with no strike. The order
+    already records who held it; the caller names only the order and why."""
     why: str
     superseded_by: Successor = NoSuccessor()
 
     def closed(self, current: Todo) -> ProblemOrder:
-        order = current.order.withdrawn(self.previous, self.why, self.superseded_by)
-        current.require_previous_assignment(self.previous)
+        order = current.order.withdrawn(
+            current.holder_state.previous_assignment(), self.why, self.superseded_by)
         _text(self.why, "Withdrawal reason", 2000)
         return order
 

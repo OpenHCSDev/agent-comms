@@ -242,7 +242,6 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
         WithdrawTodo(
             todo.revision,
             worker.incarnation,
-            todo.held(),
             "The isolated request check is complete.",
         ),
     )
