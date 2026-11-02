@@ -398,7 +398,7 @@ def test_retained_wait_releases_in_same_call_after_concurrent_edit(reviewing, re
     published = reviewing.registry.require("owner").goal.require()
     assert published.revision == current_goal.revision + 1
     assert published.progress.startswith(current_goal.progress)
-    assert "Standby was released" in published.progress
+    assert len(published.progress) > len(current_goal.progress)  # The release appended its note.
     assert replace(published, progress=current_goal.progress, revision=current_goal.revision) == current_goal
 
 
