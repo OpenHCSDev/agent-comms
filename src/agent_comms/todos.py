@@ -5036,10 +5036,10 @@ class SupersededVerdict(ToolCallVerdict):
 
 @dataclass(frozen=True)
 class WaivedVerdict(ToolCallVerdict):
-    """Tristan's emergency release takes the edit out of the unjudged count without judging
-    it: no approval, no strike, and every later edit counts again."""
+    """An emergency release takes the edit out of the unjudged count without judging it: no
+    approval, no strike, and every later edit counts again."""
 
-    line = "Waived by Tristan's emergency release"
+    line = "Waived by an emergency release"
 
     def judged(self, current: Todo) -> Todo:
         return current
