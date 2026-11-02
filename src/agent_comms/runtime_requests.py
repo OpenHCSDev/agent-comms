@@ -161,7 +161,9 @@ class SubscribeRuntimeRequest(AttachedRuntimeRequest):
         agent = ctx.server.agent
         ctx.server.clients.setdefault(ctx.session, set()).add(ctx.client)
         await agent.emit_session_identity(ctx.session, ctx.name, client=ctx.client)
-        async with agent.sessions.transcript.subscribe(self.thread, client=ctx.client):
+        async with agent.sessions.transcript.subscribe(
+            ctx.name, session_id=ctx.session, client=ctx.client,
+        ):
             await agent.turns.publish_turn_state(
                 AcpEventConsumer(agent, ctx.session, ctx.client)
             )

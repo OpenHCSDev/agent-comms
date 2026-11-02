@@ -167,8 +167,9 @@ class TestHandlers:
         assert "\x1b" not in backend.compaction_summary("\x1b[2J\nSafe")
 
     @pytest.mark.parametrize("renamed", [False, True])
+    @pytest.mark.parametrize("subscribed", [False, True])
     async def test_snapshot_capability_replays_one_bounded_update(
-        self, tmp_path, renamed, native_runtime_package
+        self, tmp_path, renamed, subscribed, native_runtime_package
     ):
         agent = self._agent(tmp_path)
         await agent.initialize(1)
@@ -194,17 +195,30 @@ class TestHandlers:
         if renamed:
             agent._comms.threads.rename_managed_thread("proj", "renamed", owner=ProcessIdentity.capture(os.getpid()))
         sent = []
+        destinations = []
+        destination = AcpSessionId("snapshot-destination")
+        thread = agent._comms.registry.require("proj")
 
         class Client(SessionUpdateSink):
-            async def publish_update(self, **kwargs):
-                sent.append(kwargs["update"])
+            async def publish_update(self, *, session_id, update):
+                destinations.append(session_id)
+                sent.append(update)
                 return True
 
         try:
-            await agent.sessions.transcript.replay("proj", client=Client())
+            if subscribed:
+                async with agent.sessions.transcript.subscribe(
+                    thread.name, session_id=destination, client=Client(),
+                ):
+                    assert len(sent) == 1
+            else:
+                await agent.sessions.transcript.replay(
+                    thread.name, session_id=destination, client=Client(),
+                )
+            assert destinations == [destination]
             assert len(sent) == 1
             update = facts(sent[0].field_meta, TranscriptSnapshotUpdate)[0]
-            assert update.identity.requested_name == "proj"
+            assert update.identity.requested_name == thread.name
             assert update.identity.thread.incarnation == agent._comms.registry.require("proj").incarnation
             page = update.page
             events = page.events

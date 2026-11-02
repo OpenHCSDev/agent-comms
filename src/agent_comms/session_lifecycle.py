@@ -245,7 +245,9 @@ class SessionLifecycle:
         if not thread.process_identity.runs_here():
             return await self.attach_owner(thread, session_id)
         await self._bind_loaded(thread, session_id)
-        await self.transcript.replay(session_id, self.runtime)
+        await self.transcript.replay(
+            thread.name, session_id=session_id, client=self.runtime,
+        )
         self.effects.inputs.ensure_live_drain(session_id)
         response = LoadSessionResponse(
             field_meta=await self.metadata(thread.name, session_id=session_id),
@@ -351,7 +353,9 @@ class SessionLifecycle:
                 self.proxies[session_id] = proxy
             except IncompatibleOwnerError as error:
                 # History is Core's own store; only owner requests need the owner's Core.
-                await self.transcript.replay(session_id, self.runtime)
+                await self.transcript.replay(
+                    thread.name, session_id=session_id, client=self.runtime,
+                )
                 self.proxies[session_id] = error.owner
                 return LoadSessionResponse(field_meta={
                     **await self.metadata(thread.name, session_id=session_id),

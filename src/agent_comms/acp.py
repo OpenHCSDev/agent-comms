@@ -76,7 +76,7 @@ from .coordination_cohort import next_sealed_assignment
 from .coordination_database import CoordinationStore
 from .cursor_owner import CursorOwner
 from .cursor_publication import CursorPublication
-from .nominal.field_codec import AcpSessionId, ClaimId, FieldCodec, RootId
+from .nominal.field_codec import AcpSessionId, AcpSessionIdText, ClaimId, FieldCodec, RootId
 from .image_inputs import prompt_images
 from .input_drain import InputDrain
 from .config_options import ConfigOptions
@@ -192,7 +192,7 @@ class SdkSessionConnection(AgentSideConnection, Controller, SessionUpdateSink):
     """The SDK connection and controller publish one Core acceptance answer."""
 
     async def publish_update(self, *, session_id: AcpSessionId, update: BaseModel) -> bool:
-        await self.session_update(session_id=session_id, update=update)
+        await self.session_update(session_id=AcpSessionIdText.encode(session_id), update=update)
         return True
 
 
