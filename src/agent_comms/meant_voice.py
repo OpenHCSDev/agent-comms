@@ -28,6 +28,6 @@ class BusVoice(Speaking):
         """The session's own audit answer replies to his question, so he reads it where he
         asked. Tristan, 2026-11-02: "are agents answering the do you mean it after compaction?
         I don't see them answering"."""
-        reference = self.comms.bus.message_reference(question.message_id)
+        reference = self.comms.bus.bus.message_reference(question.message_id)
         for human in self.comms.registry.snapshot().user_thread().existing():
             self.comms.messaging.send(self.speaker(), human.name, answer, answers=(reference,))
