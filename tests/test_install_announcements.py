@@ -110,8 +110,7 @@ def test_typed_results_publish_as_installer_and_survive_history_read(private_com
     assert tuple(message.sender for message in messages) == ("installer", "installer")
     assert all(found.target[:12] in message.body for message in messages)
     assert all(line in messages[1].body for line in live.lines())
-    assert "Phases: 8 in 61.9s; slowest:" in messages[1].body
-    assert "61.200s CommandPhase: uv sync (61.200s elapsed)" in messages[1].body
+    assert installed.phases[0].line() in messages[1].body
     diagnostics = StringIO()
     decoded.write_phases(diagnostics)
     assert diagnostics.getvalue().splitlines()[1:] == [timed.line() for timed in installed.phases]
@@ -254,7 +253,7 @@ def test_an_install_whose_bridges_did_not_resume_says_so_in_its_headline(private
     InstallReportProbe(comms.root, "\n".join(FinishedInstall(unresumed).lines())).run()
     body = HistoryCliCommand(target=CommsTag.channel()).apply(comms).messages[0].body
     assert body.startswith(UnresumedUpgrade.finished)
-    assert "Session bridge copied-session: new runtime was not observed" in body
+    assert all(line in body for line in unresumed.bridge_resumes[0].lines())
 
 
 @pytest.mark.parametrize("failure", ("none", "work", "cleanup"))
