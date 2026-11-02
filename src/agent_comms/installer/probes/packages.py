@@ -2,20 +2,23 @@
 
 from __future__ import annotations
 
-import json
-import sys
+import hashlib
 from dataclasses import dataclass
-from importlib.metadata import distributions
-from pathlib import Path
-from typing import Self
+from importlib.metadata import Distribution, distributions
+from pathlib import Path, PurePosixPath
+from urllib.parse import unquote, urlsplit
+from zipfile import ZipExtFile, ZipFile
+from typing import ClassVar, Self
 
-from pydantic import BaseModel, JsonValue, RootModel
+from packaging.utils import canonicalize_name
+from pydantic import BaseModel, Field, JsonValue, RootModel
 from pydantic.json_schema import DEFAULT_REF_TEMPLATE
 
-import agent_comms
-from agent_comms.nominal.field_codec import WireValue
+from agent_comms.build_artifact import BuildArtifact
+from agent_comms.nominal.field_codec import Sha256Text, WireValue
+from agent_comms.private_path import FileRevision
+from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.installer.interpreter_operation import RuntimeProbe, TargetProbe
-from agent_comms.package_stamp import STAMP
 from agent_comms.runtime_preparation import RuntimePreparation
 
 
@@ -42,22 +45,111 @@ class GitPin(PackagePin):
 @dataclass(frozen=True)
 class ArchivePin(PackagePin):
     url: str
+    hashes: tuple[tuple[str, str], ...] = ()
 
 
 class CommitRecord(BaseModel):
     commit_id: str
 
 
-class SourceRecord(BaseModel):
+class WheelSource:
+    """Only an archive source can prove installed bytes against a supplied wheel."""
+
+    def verified_wheel(
+        self, wheel: Path, distribution: Distribution, runtime: LaunchRuntime
+    ) -> ArchiveRecord:
+        raise ValueError("A supplied wheel requires an archive installation origin")
+
+    def wheel_inputs(self) -> tuple[Path, ...]:
+        return ()
+
+
+class SourceRecord(BaseModel, WheelSource):
     url: str
 
     def revision(self) -> str:
         raise ValueError("The installed package does not record a Git revision")
 
 
+class ArchiveInfo(BaseModel):
+    """PEP610's algorithm-to-digest map; an empty map supplies no content proof."""
+
+    hashes: dict[str, str] = Field(default_factory=dict)
+
+    def verified(self, artifact: BuildArtifact) -> Self:
+        """A missing PEP610 hash supplies no constraint; an existing one must match."""
+        if self.hashes.get("sha256", artifact.sha256) != artifact.sha256:
+            raise ValueError(f"Archive content differs from its recorded hash: {artifact.path}")
+        verified = self.model_copy()
+        verified.hashes = {**self.hashes, "sha256": artifact.sha256}
+        return verified
+
 class ArchiveRecord(SourceRecord):
+    """PEP610 archive metadata and its local-wheel URL boundary."""
+
+    archive_info: ArchiveInfo = Field(default_factory=ArchiveInfo)
+    file_scheme: ClassVar[str] = "file"
+    local_hosts: ClassVar[tuple[str, ...]] = ("", "localhost")
+    wheel_suffix: ClassVar[str] = ".whl"
+
     def pin(self, version: str) -> PackagePin:
-        return ArchivePin(version, self.url)
+        return ArchivePin(version, self.url, tuple(sorted(self.archive_info.hashes.items())))
+
+    def wheel_inputs(self) -> tuple[Path, ...]:
+        if "sha256" not in self.archive_info.hashes:
+            return ()
+        Sha256Text.decode(self.archive_info.hashes["sha256"])
+        source = urlsplit(self.url)
+        # A remote archive retains its PEP610 hash without fetching its URL.
+        if (source.scheme != self.file_scheme
+                or Path(source.path).suffix != self.wheel_suffix):
+            return ()
+        if source.netloc not in self.local_hosts:
+            raise ValueError("Runtime wheel input names a foreign file host")
+        wheel = Path(unquote(source.path))
+        if not wheel.is_absolute():
+            raise ValueError("Verified runtime archive is not an absolute wheel input")
+        return (wheel,)
+
+    def verified_wheel(
+        self, wheel: Path, distribution: Distribution, runtime: LaunchRuntime
+    ) -> ArchiveRecord:
+        artifact = BuildArtifact.capture(wheel)
+        if self.url != artifact.path.as_uri():
+            raise ValueError(f"Installed archive origin differs from supplied wheel: {wheel}")
+        with ZipFile(artifact.path) as archive:
+            entries = archive.infolist()
+            names = tuple(entry.filename for entry in entries)
+            records = tuple(name for name in names if name.endswith(".dist-info/RECORD"))
+            if len(set(names)) != len(names) or len(records) != 1:
+                raise ValueError("A runtime wheel requires unique entries and one RECORD")
+            (record,) = records
+            for entry in entries:
+                relative = PurePosixPath(entry.filename)
+                if (relative.is_absolute() or ".." in relative.parts
+                        or relative.as_posix() != entry.filename.rstrip("/")):
+                    raise ValueError(f"Unsafe wheel member: {entry.filename}")
+                if relative.parts[0].endswith(".data"):
+                    raise ValueError("Exact runtime inputs require root-layout wheels")
+                if entry.is_dir() or entry.filename == record:
+                    continue
+                location = distribution.locate_file(entry.filename)
+                if not isinstance(location, Path):
+                    raise ValueError(f"Installed wheel member is not a filesystem path: {location}")
+                installed = location.resolve(strict=True)
+                if not installed.is_relative_to(runtime.prefix):
+                    raise ValueError(f"Installed wheel member escapes its runtime: {installed}")
+                with archive.open(entry) as source:
+                    if not isinstance(source, ZipExtFile):
+                        raise ValueError("Wheel member is not a readable ZIP entry")
+                    expected = hashlib.file_digest(source, "sha256").hexdigest()
+                if BuildArtifact.capture(installed).sha256 != expected:
+                    raise ValueError(f"Installed bytes differ from supplied wheel: {installed}")
+        if FileRevision.capture(artifact.path) != artifact.revision:
+            raise ValueError(f"Supplied wheel changed during verification: {wheel}")
+        verified = self.model_copy()
+        verified.archive_info = self.archive_info.verified(artifact)
+        return verified
 
 
 class GitRecord(SourceRecord):
@@ -70,7 +162,7 @@ class GitRecord(SourceRecord):
         return GitPin(version, self.vcs_info.commit_id)
 
 
-class RegistryRecord(RootModel[None]):
+class RegistryRecord(RootModel[None], WheelSource):
     """null is the build record's declared registry-package representation."""
 
     def revision(self) -> str:
@@ -101,38 +193,20 @@ class PackageRecord(BaseModel, WireValue):
         return cls.model_json_schema(by_alias=by_alias, ref_template=ref_template)
 
 
-class DistributionVersionsProbe(TargetProbe, RuntimeProbe[dict[str, str]]):
-    def run(self) -> dict[str, str]:
-        from packaging.utils import canonicalize_name
+class DistributionProbe(TargetProbe):
+    """The selected interpreter's distribution inventory, rejecting duplicate identities."""
 
-        return {canonicalize_name(dist.metadata["Name"]): dist.version for dist in distributions()}
-
-
-@dataclass(frozen=True)
-class InstalledPackagesProbe(TargetProbe, RuntimeProbe[dict[str, PackageRecord]]):
-    core: str
-
-    def run(self) -> dict[str, PackageRecord]:
-        from packaging.utils import canonicalize_name
-
-        if not Path(agent_comms.__file__).resolve().is_relative_to(Path(sys.prefix).resolve()):
-            raise ValueError("Core is editable, not a built runtime package")
-        actual = STAMP.commit()
-        if actual != self.core:
-            raise ValueError(
-                "The wheel stamp does not name the selected source: "
-                f"installed {actual}, requested {self.core}"
-            )
-        return {
-            canonicalize_name(dist.name): PackageRecord.from_wire(
-                {
-                    "version": dist.version,
-                    "source": (
-                        json.loads(source)
-                        if (source := dist.read_text("direct_url.json"))
-                        else None
-                    ),
-                }
-            )
-            for dist in distributions()
+    @staticmethod
+    def distributions() -> dict[str, Distribution]:
+        installed = tuple(distributions())
+        selected: dict[str, Distribution] = {
+            canonicalize_name(dist.name): dist for dist in installed
         }
+        if len(selected) != len(installed):
+            raise ValueError("The runtime contains duplicate distribution identities")
+        return selected
+
+
+class DistributionVersionsProbe(DistributionProbe, RuntimeProbe[dict[str, str]]):
+    def run(self) -> dict[str, str]:
+        return {name: dist.version for name, dist in self.distributions().items()}

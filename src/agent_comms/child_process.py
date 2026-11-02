@@ -37,9 +37,10 @@ from contextlib import (
 from contextvars import copy_context
 from dataclasses import dataclass
 from functools import cache, cached_property, partial
+from io import BufferedReader
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import IO, TYPE_CHECKING, Annotated, Any, ClassVar, NoReturn, Self
+from typing import IO, TYPE_CHECKING, Annotated, Any, BinaryIO, ClassVar, NoReturn, Self
 
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -529,6 +530,28 @@ class Platform(DeclaredFamily, affix="Platform"):
         finally:
             os.close(descriptor)
 
+    class NativeImage(ctypes.Structure):
+        """The POSIX loader's native symbol-image ABI."""
+
+        _fields_ = (
+            ("filename", ctypes.c_char_p),
+            ("base", ctypes.c_void_p),
+            ("symbol", ctypes.c_char_p),
+            ("address", ctypes.c_void_p),
+        )
+
+    @contextmanager
+    def native_image(self, address: ctypes.c_void_p) -> Generator[BufferedReader]:
+        """Open the native file providing a symbol; the caller consumes this handle."""
+        lookup = ctypes.CDLL(None).dladdr
+        lookup.argtypes = (ctypes.c_void_p, ctypes.POINTER(self.NativeImage))
+        lookup.restype = ctypes.c_int
+        image = self.NativeImage()
+        if not lookup(address, ctypes.byref(image)) or not image.filename:
+            raise ValueError("The loader did not identify the native symbol image")
+        with Path(os.fsdecode(image.filename)).resolve(strict=True).open("rb") as stream:
+            yield stream
+
     @abstractmethod
     def require_watched_procfs(self, refusal: Exception) -> None: ...
 
@@ -657,6 +680,30 @@ class LinuxProcessRecord:
 
 
 class LinuxPlatform(PidfdHandles, Platform):
+    @contextmanager
+    def native_image(self, address: ctypes.c_void_p) -> Generator[BufferedReader]:
+        # glibc's main-image filename aliases argv[0]; setproctitle changes it.
+        # Resolve the actual symbol mapping instead, including shared libpython.
+        # ctypes represents C null as None; kernel mapping addresses are integers.
+        pointer = address.value or 0
+        if pointer == 0:
+            raise ValueError("A null address has no native image")
+        with Path("/proc/self/maps").open() as mappings:
+            for line in mappings:
+                extent, _permissions, _offset, device, inode, *_name = line.split(maxsplit=5)
+                first, stop = (int(value, 16) for value in extent.split("-"))
+                if first <= pointer < stop:
+                    link = Path("/proc/self/map_files") / f"{first:x}-{stop:x}"
+                    with link.resolve(strict=True).open("rb") as stream:
+                        observed = os.fstat(stream.fileno())
+                        major, minor = (int(value, 16) for value in device.split(":"))
+                        # Decode kernel metadata once at this native boundary.
+                        if (observed.st_dev, observed.st_ino) != (os.makedev(major, minor), int(inode)):
+                            raise ValueError("The native image file no longer matches its mapping")
+                        yield stream
+                    return
+        raise ValueError("The kernel did not identify the native symbol image")
+
     def require_watched_procfs(self, refusal: Exception) -> None:
         return None
 

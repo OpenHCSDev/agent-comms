@@ -25,7 +25,8 @@ from agent_comms.installer.interpreter_operation import (
 )
 from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, StartedOwner
 from agent_comms.installer.probes.commands import CliCommandProbe, CliOutput, CliRefusedError
-from agent_comms.installer.probes.packages import DistributionVersionsProbe, InstalledPackagesProbe
+from agent_comms.installer.probes.packages import DistributionVersionsProbe
+from agent_comms.installer.probes.resolution import InstalledPackagesProbe
 from agent_comms.installer.refusals import InterpreterWorkerDied, UpgradeRefused
 from agent_comms.installer.upgrade import Stack
 from agent_comms.launch_root import LaunchRoot

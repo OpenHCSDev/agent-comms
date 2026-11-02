@@ -14,6 +14,7 @@ from agent_comms.build_identity import (
     ProofBuildMismatchError,
     RecordedBuildIdentity,
     UninstalledRepositoryError,
+    UnrecordedBuildIdentity,
 )
 from agent_comms.check_root import CheckRoot
 from agent_comms.team.order import Team
@@ -22,6 +23,8 @@ from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck
+from agent_comms.held_orders import HeldOrders
+from agent_comms.installer.probes.interpreter import RecordedInterpreterBuild
 from agent_comms.installer.probes.packages import ArchiveRecord, CommitRecord, GitRecord, PackageRecord
 from agent_comms.installer.runtime_resolution import CorePackage, RuntimePackage, RuntimeResolution
 from agent_comms.installer.logs import InstallLogs
@@ -68,7 +71,7 @@ class ProofBuildCheckout:
 
 @pytest.fixture
 def proof_build_checkouts(
-    tmp_path: Path, durable_home: Path
+    tmp_path: Path, durable_home: Path, interpreter_build: RecordedInterpreterBuild,
 ) -> tuple[ProofBuildCheckout, ...]:
     """Own each package's distinct commit graph and the installed manifest; durable_home is the
     HOME the installation records under."""
@@ -112,7 +115,9 @@ def proof_build_checkouts(
         version="1", source=ArchiveRecord(url="file:///owned/core-wheel.whl")
     )
     record_installed_runtime(
-        tmp_path / "runtime", RuntimeResolution(core_commit=core.installed, packages=packages))
+        tmp_path / "runtime", RuntimeResolution(
+            core_commit=core.installed, packages=packages, interpreter=interpreter_build,
+        ))
     return tuple(checkouts)
 
 
@@ -163,7 +168,7 @@ def test_merge_in_head_cannot_close_until_the_recorded_build_contains_it(
 
     runtime = LaunchRuntime.installed()
     resolution = RuntimeResolution.at(runtime.prefix)
-    RuntimeResolution(core_commit=graph.newer, packages=resolution.packages).save(runtime.prefix)
+    resolution.model_copy(update={"core_commit": graph.newer}).save(runtime.prefix)
     accepted = run.after_merge(todo, merged)
     assert accepted.state is after_install
     # P553: bf328ceb5 sat in the installed build under "Merged, waiting on install".
@@ -191,7 +196,48 @@ def test_runtime_package_family_owns_installed_commits(proof_build_checkouts):
         )
         assert recorded.repository == package.repository
         assert recorded.commit == graph.installed
+    assert installed.interpreter == RuntimeResolution.at(LaunchRuntime.installed().prefix).interpreter
     assert FieldCodec.decode(RecordedBuildIdentity, FieldCodec.encode(installed)) == installed
+
+
+def test_same_commits_do_not_reuse_a_proof_from_another_interpreter(proof_build_checkouts):
+    original = RecordedBuildIdentity.installed().recorded()
+    runtime = LaunchRuntime.installed()
+    resolution = RuntimeResolution.at(runtime.prefix)
+    interpreter = resolution.interpreter.require_recorded()
+    changed_image = interpreter.artifacts[0].model_copy(update={"sha256": "0" * 64})
+    changed = interpreter.model_copy(update={
+        "artifacts": (changed_image, *interpreter.artifacts[1:]),
+    })
+    resolution.model_copy(update={"interpreter": changed}).save(runtime.prefix)
+    current = RecordedBuildIdentity.installed().recorded()
+    assert original.commits == current.commits
+    assert original != current
+    assert FieldCodec.decode(RecordedBuildIdentity, FieldCodec.encode(current)) == current
+    graph = proof_build_checkouts[0]
+    with pytest.raises(ProofBuildMismatchError, match="differs from installed"):
+        original.installation((), graph.repository.checkout)
+    # Ancestry still answers its own question; it is not an interpreter proof.
+    assert original.contains(graph.installed, graph.repository.checkout)
+    assert current.contains(graph.installed, graph.repository.checkout)
+
+
+def test_missing_interpreter_evidence_is_readable_but_cannot_certify_a_proof(proof_build_checkouts):
+    installed = RecordedBuildIdentity.installed().recorded()
+    unobserved = RecordedBuildIdentity(installed.commits)
+    retained = FieldCodec.decode(RecordedBuildIdentity, FieldCodec.encode(unobserved))
+    assert retained.commits == installed.commits
+    with pytest.raises(ProofBuildMismatchError, match="no interpreter observation"):
+        retained.recorded()
+    with pytest.raises(ProofBuildMismatchError, match="no interpreter observation"):
+        retained.installation((), proof_build_checkouts[0].repository.checkout)
+    runtime = LaunchRuntime.installed()
+    resolution = RuntimeResolution.at(runtime.prefix)
+    resolution.model_copy(update={"interpreter": retained.interpreter}).save(runtime.prefix)
+    with pytest.raises(ProofBuildMismatchError, match="no interpreter observation"):
+        UnrecordedBuildIdentity().recorded()
+    with pytest.raises(ProofBuildMismatchError, match="no interpreter observation"):
+        installed.installation((), proof_build_checkouts[0].repository.checkout)
 
 
 @pytest.mark.parametrize("package", RuntimePackage.members_with(RuntimePackage))
@@ -249,18 +295,22 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
     checked, contained, missing = graph.installed, graph.installed, graph.newer
     github_cli.configure(graph.repository.github)
     for number, commit in ((1, checked), (2, checked), (3, contained), (4, missing)):
-        github_cli.put(graph.repository.github, MergedListedPullRequest(
+        row = MergedListedPullRequest(
             number, f'fix/{number}', commit, updated='2026-10-25T12:00:00Z', base=WorkBranches.main,
             reviewable_times=('2026-10-25T12:00:00Z',), merge=PullRequestCommit(commit),
-            merged='2026-10-25T12:00:00Z'))
+            merged='2026-10-25T12:00:00Z')
+        graph.repository.git(checkout, 'push', 'origin',
+                             f'{row.head}:refs/pull/{row.number}/head')
+        github_cli.put(graph.repository.github, row)
     caller = ThreadCaller("lead")
+    holder = ThreadCaller("worker")
     works = "Open the installed application and confirm the copied goal keeps its source location."
     artifact = tmp_path / "proof.txt"
     artifact.write_text(works)
     source.registry.storage_rule = replace(source.registry.storage_rule, scratch_base=tmp_path)
     with CheckRoot(source, ("lead", "worker"), tmp_path / "proof" / "copied").open() as copied:
         request = copied.goals.todos.add_request(
-            copied.registry.require("lead").incarnation, "Record the copied application proof",
+            holder.identity(copied), "Record the copied application proof",
         ).id
         cases = (
             ("P1", OperationDelivery(proof_build=installed), None),
@@ -276,7 +326,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
                 DeliveredCommitNotInstalledError,
             ),
         )
-        for problem, delivery, expected_error in cases:
+        for number, (problem, delivery, expected_error) in enumerate(cases, 1):
             build = delivery.proof_build
             order = PendingProblemOrder(
                 scope=FIX_SCOPE,
@@ -288,7 +338,9 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
                 report="Report the actual close result.",
                 run=ApplicationOrderRun(works),
             )
-            caller.invoke(
+            # The holder accepts each scenario; this tests proof binding, not
+            # permission for a peer to replace the preceding active goal.
+            holder.invoke(
                 CommsTodoCreateTool(
                     owner="worker",
                     order=CreateProblemGoalAction(
@@ -296,7 +348,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
                         order=order,
                         request=request,
                         review_at=RecordedEventTime(4102444800),
-                        commander="lead", assigner=caller.identity(copied),
+                        commander="lead", assigner=holder.identity(copied),
                         repo=graph.repository.github,
                         text="Bind proof to its build",
                     ),
@@ -370,7 +422,9 @@ def test_install_due_compares_fetched_main_to_installed_build(
     Team.on_root("lead", registered, bus.root)
 
     github_cli.configure(graph.repository.github)
-    due = InstallDue.due(bus, ProgressRead())
+    pulls = ProgressRead()
+    InstallDue.prepare(bus, "lead", HeldOrders.read(bus), pulls)
+    due = InstallDue.due(bus, pulls)
 
     assert Repo.git(checkout, "rev-parse", "HEAD") == before
     assert Repo.git(checkout, "rev-parse", "origin/main").strip() == (
@@ -389,8 +443,10 @@ def test_install_due_compares_fetched_main_to_installed_build(
     # An install advances the canonical manifest, not a clock or bus schedule.
     runtime = LaunchRuntime.installed().prefix
     resolution = RuntimeResolution.at(runtime)
-    RuntimeResolution(core_commit=graph.newer, packages=resolution.packages).save(runtime)
-    after_install = InstallDue.due(bus, ProgressRead())
+    resolution.model_copy(update={"core_commit": graph.newer}).save(runtime)
+    pulls = ProgressRead()
+    InstallDue.prepare(bus, "lead", HeldOrders.read(bus), pulls)
+    after_install = InstallDue.due(bus, pulls)
     assert after_install == ()
     assert Repo.git(checkout, "rev-parse", "HEAD") == before
     configured = bus.registry.snapshot().commander_project.require().repos
@@ -431,7 +487,9 @@ def test_a_one_minute_old_merge_is_due_and_names_its_request_without_launching(
     merged = int(Repo.git(checkout, "log", "-1", "--format=%ct", merge))
     monkeypatch.setattr(time, "time", lambda: merged + 60)
 
-    (due,) = InstallDue.due(bus, ProgressRead())
+    pulls = ProgressRead()
+    InstallDue.prepare(bus, "lead", HeldOrders.read(bus), pulls)
+    (due,) = InstallDue.due(bus, pulls)
     assert due.main == merge
     assert "#41 Install what merged" in due.line() and "#42 fix/next" in due.line()
     assert "order install" in due.line().rsplit(" -> ", 1)[1]
