@@ -58,7 +58,6 @@ from .repo import Checkout
 from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from .errors import (
     RelationViolationError,
-    UnregisteredThreadError,
 )
 from .coordination_errors import CoordinationError, Refused
 from .work_branches import WorkBranchError
@@ -69,12 +68,14 @@ from .nominal.field_codec import (
 from agent_comms.channel_targets import NamedTarget
 from agent_comms.owner_requests import NewestOpenRequest, RequestSelection
 from .host_services import HostService
-from .connector_caller import CALLER, ConnectorCaller, ConnectorTool
+from .connector_caller import CALLER, ConnectorCaller, ConnectorTool, GrantRefusedError
+from .connector_profile import HttpsMcpEndpoint, UiGrantId
+from .registry_store import RegistryStore
 from .connector_store import (
     CODE_SECONDS, ApprovalQueueFull, ApprovalRefused, AuthorizationQuery,
     AuthorizationRequest, ClaudeCallback,
-    ConnectorGrants, ConnectorStore, GrantRefusedError, IssuedTokens,
-    RegisteredClient, TrustedBrowser, digest,
+    ConnectorGrants, ConnectorStore, IssuedTokens,
+    RegisteredClient, TrustedBrowser, UiReadAccess, digest,
 )
 from .locked_store import DocumentChange
 from .messages import QuestionKind
@@ -571,9 +572,8 @@ class Connector:
 
     @contextmanager
     def opened_wire(self) -> Iterator[Comms]:
-        """The connector's caller must exist at startup and at each later call."""
+        """Open data at the served root; each caller checks its own access."""
         with client_wire(self.root) as comms:
-            comms.registry.require(CALLER.name)
             yield comms
 
     @contextmanager
@@ -592,7 +592,7 @@ class Connector:
         tool.require_entry_open(self.root)
         with self.opened_wire() as comms:
             acting, rest = caller.acting(arguments)
-            acting.join(comms, caller.own_thread())
+            caller.prepare_call(comms, acting)
             return tool.invoke(comms, rest, caller=acting)
 
     def application(self) -> web.Application:
@@ -819,11 +819,16 @@ class Connector:
         logging.warning("MCP request refused (%s): %s", type(error).__name__, error.message)
         return web.json_response(FieldCodec.encode(McpErrorReply.refusing(data, error)))
 
+    def caller_for(self, token: str) -> ConnectorCaller:
+        """Resolve the bearer and its root authority before reading any MCP message."""
+        caller = self.store.read().caller_for(token)
+        caller.require_root(self.root)
+        return caller
+
     async def mcp(self, request: web.Request) -> web.Response:
         token = request.headers.get("Authorization", "").removeprefix("Bearer ")
-        grants = await asyncio.to_thread(self.store.read)
         try:
-            caller = grants.caller_for(token)
+            caller = await asyncio.to_thread(self.caller_for, token)
         except GrantRefusedError:
             raise web.HTTPUnauthorized(
                 headers={
@@ -864,14 +869,18 @@ class ConnectorVerb(
 
 
 @dataclass(frozen=True, kw_only=True)
-class ConnectorOptions(ConnectorVerb, declared_name=None):
-    """The endpoint's CLI fields and their declared argument spelling."""
-
+class ConnectorRootOptions(ConnectorVerb, declared_name=None):
     root: Annotated[
         Path,
         PathText,
-        Argument(flags=("--root",), options={"help": "Explicit Comms root to serve"}),
+        Argument(flags=("--root",), options={"help": "Explicit Comms root"}),
     ]
+
+
+@dataclass(frozen=True, kw_only=True)
+class ConnectorOptions(ConnectorRootOptions, declared_name=None):
+    """The endpoint's CLI fields and their declared argument spelling."""
+
     port: Annotated[
         int,
         Argument(
@@ -897,10 +906,7 @@ class ServeVerb(ConnectorOptions):
 
     def apply(self, ctx: ConnectorStore) -> int | str:
         connector = Connector(ctx, self.issuer.rstrip("/"), self.root)
-        try:
-            app = connector.application()
-        except UnregisteredThreadError:
-            return f"First run agent-comms register --name {CALLER.name} --worktree DIR"
+        app = connector.application()
         logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
         asyncio.run(self.serve(app, connector))
         return 0
@@ -919,6 +925,43 @@ class ServeVerb(ConnectorOptions):
             connector.log_pending()
         finally:
             await runner.cleanup()
+
+
+@dataclass(frozen=True, kw_only=True)
+class GrantUiVerb(ConnectorRootOptions, declared_name="grant-ui"):
+    help = "Provision a private, expiring read-only UI profile for this original native root"
+
+    endpoint: Annotated[
+        HttpsMcpEndpoint,
+        Argument(flags=("--endpoint",), options={"help": "Public HTTPS MCP resource URL"}),
+    ]
+    profile: Annotated[
+        Path, PathText,
+        Argument(flags=("--profile",), options={"help": "New private profile; never overwritten"}),
+    ]
+    seconds: Annotated[
+        int, Argument(flags=("--seconds",), options={
+            "help": f"Lifetime, at most {UiReadAccess.maximum_seconds} seconds"}),
+    ] = UiReadAccess.maximum_seconds
+
+    def apply(self, ctx: ConnectorStore) -> str:
+        namespace = RegistryStore.at(self.root).privacy().namespace
+        profile = ctx.publish_ui_profile(
+            namespace, self.endpoint, self.profile, self.seconds)
+        return FieldCodec.compact(FieldCodec.encode(profile), allow_nan=False)
+
+
+@dataclass(frozen=True, kw_only=True)
+class RevokeUiVerb(ConnectorVerb, declared_name="revoke-ui"):
+    help = "Revoke one UI grant by public ID, leaving other grants untouched"
+
+    grant_id: Annotated[
+        UiGrantId, Argument(flags=("--grant",), options={"help": "Public UI grant ID, not its secret"}),
+    ]
+
+    def apply(self, ctx: ConnectorStore) -> int | str:
+        ctx.revoke_ui(self.grant_id)
+        return 0
 
 
 @dataclass(frozen=True, kw_only=True)

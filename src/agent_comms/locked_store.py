@@ -34,6 +34,7 @@ from .store_files import (
     AtomicFile,
     DEFAULT_ISOLATION,
     DEFAULT_STORE_CONTENTION,
+    DrainedWriters,
     SqliteStore,
     StoreContention,
     StoreLock,
@@ -582,7 +583,7 @@ class RetainedCopyRequest(FilesRequest):
         return path.relative_to(self.root)
 
 
-class LockedFile(RootFile, StoreLockOwner, declared_name=None):
+class LockedFile(DrainedWriters, RootFile, StoreLockOwner, declared_name=None):
     """A declared file whose writers hold its store lock, so its copy shares that lock."""
 
     __slots__ = ()
@@ -591,13 +592,6 @@ class LockedFile(RootFile, StoreLockOwner, declared_name=None):
     def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
         with cls.read_guard(source):
             return super().copy_group(source, target)
-
-    @classmethod
-    @contextmanager
-    def writers_drained(cls, path: Path) -> Iterator[None]:
-        """Its writers ask maintenance under this lock, so holding it waits out the last."""
-        with cls.write_guard(path):
-            yield
 
 
 @dataclass(frozen=True, slots=True, eq=False, repr=False)

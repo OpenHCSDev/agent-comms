@@ -10,9 +10,9 @@ from agent_comms.cli_bridges.session_watch import WatchClaim
 
 from .bus_publication import AgentOrigin
 from .cli_result import ThreadToolCatalogResult, ToolCatalogResult
-from .nominal.field_codec import WireForm
+from .nominal.field_codec import FieldCodec, WireForm
 from .launch_root import LaunchRoot
-from .read_basis import OperatorOutcomes, ReadAuthority
+from .read_basis import DisplayViewer, OperatorOutcomes, ReadAuthority
 from .registration import Registration
 from .notification_evidence import OutcomeViewer, OwnerOutcomes
 from .presentation import SentMessageSummary, ThreadRecord
@@ -87,6 +87,10 @@ class ToolCaller(ReadAuthority):
 
 @dataclass(frozen=True)
 class NoThreadCaller(OperatorOutcomes, ToolCaller):
+    def history_viewer(self, named: str) -> DisplayViewer:
+        """Omitted participant means an anonymous channel read, not an agent identity."""
+        return FieldCodec.decode(DisplayViewer, named or None)
+
     def acting_caller(self, grant: ToolCaller) -> ToolCaller:
         return grant
 

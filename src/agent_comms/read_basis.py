@@ -151,6 +151,10 @@ class ReadAuthority(ABC):
     def subject(self, named: str) -> str:
         return named or self.own_thread()
 
+    def history_viewer(self, named: str) -> DisplayViewer:
+        """A thread reader defaults to itself; unscoped callers own their default."""
+        return NamedViewer(self.subject(named))
+
     def own_thread(self) -> str:
         return self.refuse_thread()
 

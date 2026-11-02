@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import secrets
 import time
 from collections.abc import Iterator
@@ -11,18 +12,21 @@ from pathlib import Path
 from typing import ClassVar, Literal, Self, get_args
 from urllib.parse import urlencode
 
-from agent_comms_hooks import ToolRefusedError
-
-from .connector_caller import CALLER, ConnectorCaller, ForkingCaller
-from .nominal.field_codec import FieldCodec
-from .locked_store import DocumentChange
+from .connector_caller import CALLER, ConnectorCaller, ForkingCaller, GrantRefusedError, UiReadCaller
+from .connector_profile import (
+    BearerSecret, HttpsMcpEndpoint, UiConnectionProfile, UiCredential, UiGrantId, UiGrantSummary,
+)
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import FieldCodec, NominalSpelling, NominalText, RootId
+from .locked_store import DocumentChange, FilesRequest
 from .maintenance_barrier import CarriedDocument
-from .store_files import DependentStateTier, SingleFileStore
+from .store_files import DependentStateTier, DrainedWriters, SingleFileStore
+from .typed_table import GuardedExternalStore
 
 ACCESS_SECONDS = 3600
 CODE_SECONDS = 300
 ClaudeCallback = Literal["https://claude.ai/api/mcp/auth_callback"]
-CALLBACK: str = get_args(ClaudeCallback)[0]
+CALLBACK: ClaudeCallback = get_args(ClaudeCallback)[0]
 
 
 def digest(secret: str) -> str:
@@ -40,25 +44,28 @@ class ApprovalQueueFull(ValueError):
     """Unknown browsers have filled the bounded waiting queue."""
 
 
-class GrantRefusedError(ToolRefusedError):
-    """The bearer token identifies no live connector caller."""
-
-
 @dataclass(frozen=True)
 class RegisteredClient:
     name: str
 
 
-@dataclass(frozen=True, kw_only=True)
-class ExpiringGrant:
-    expires_at: float
+class GrantLifetime:
+    """Permanent grants and expiring grants share the same retention question."""
 
     def live(self, now: float) -> bool:
-        return self.expires_at > now
+        return True
 
     @classmethod
     def retained(cls, records: dict[str, Self], now: float) -> dict[str, Self]:
         return {key: grant for key, grant in records.items() if grant.live(now)}
+
+
+@dataclass(frozen=True, kw_only=True)
+class ExpiringGrant(GrantLifetime):
+    expires_at: float
+
+    def live(self, now: float) -> bool:
+        return self.expires_at > now
 
 
 @dataclass(frozen=True)
@@ -102,20 +109,90 @@ class IssuedCode(ExpiringGrant):
     code_challenge: str
 
 
-@dataclass(frozen=True)
-class IssuedAccess(ExpiringGrant):
-    client_id: str
+class ConnectorAccess(GrantLifetime, DeclaredFamily, affix=""):
+    """One bearer digest resolves to one declared authority, never a store-name policy."""
 
     def caller(self) -> ConnectorCaller:
+        if not self.live(time.time()):
+            raise GrantRefusedError("Unknown or expired connector grant.")
+        return self.authorized_caller()
+
+    def authorized_caller(self) -> ConnectorCaller:
+        raise GrantRefusedError("Unknown or expired connector grant.")
+
+    def holds_thread(self, thread: str) -> bool:
+        return False
+
+    def holds_ui_grant(self, grant_id: UiGrantId) -> bool:
+        return False
+
+
+@dataclass(frozen=True)
+class UnissuedAccess(ConnectorAccess):
+    """An absent bearer has no caller authority."""
+
+
+class ExpiringDirectorAccess(ExpiringGrant, ConnectorAccess, declared_name=None):
+    def authorized_caller(self) -> ConnectorCaller:
         return CALLER
 
 
+class AccessLabel(NominalText):
+    """The recorded label of a bearer with an unattributed producer."""
+
+
+class AccessLabelText(NominalSpelling[AccessLabel]):
+    # Retain every spelling recorded in the old document, including an empty label.
+    spelling = re.compile(r"[\s\S]*")
+
+
 @dataclass(frozen=True)
-class ThreadGrant:
+class ExistingDirectorAccess(ExpiringDirectorAccess):
+    """A retained Director bearer whose OAuth/service producer was not recorded."""
+
+    label: AccessLabel
+
+
+@dataclass(frozen=True)
+class IssuedAccess(ExpiringDirectorAccess):
+    """An access token issued from the registered OAuth client's code or refresh."""
+
+    client_id: str
+
+
+@dataclass(frozen=True)
+class ServiceAccess(ExpiringDirectorAccess):
+    """A temporary local service proof, not a registered OAuth client identity."""
+
+    purpose: str
+
+
+@dataclass(frozen=True)
+class ThreadGrant(ConnectorAccess):
     thread: str
 
-    def caller(self) -> ConnectorCaller:
+    def authorized_caller(self) -> ConnectorCaller:
         return ForkingCaller(self.thread)
+
+    def holds_thread(self, thread: str) -> bool:
+        return self.thread == thread
+
+
+@dataclass(frozen=True)
+class UiReadAccess(ExpiringGrant, ConnectorAccess):
+    maximum_seconds: ClassVar[int] = ACCESS_SECONDS
+
+    grant_id: UiGrantId
+    namespace: RootId
+
+    def authorized_caller(self) -> ConnectorCaller:
+        return UiReadCaller(self.namespace)
+
+    def holds_ui_grant(self, grant_id: UiGrantId) -> bool:
+        return self.grant_id == grant_id
+
+    def credential(self, token: BearerSecret) -> UiCredential:
+        return UiCredential(self.grant_id, self.namespace, self.expires_at, token)
 
 
 @dataclass(frozen=True)
@@ -135,8 +212,7 @@ class ConnectorGrants:
     clients: dict[str, RegisteredClient] = field(default_factory=dict)
     requests: dict[str, AuthorizationRequest] = field(default_factory=dict)
     codes: dict[str, IssuedCode] = field(default_factory=dict)
-    access: dict[str, IssuedAccess] = field(default_factory=dict)
-    threads: dict[str, ThreadGrant] = field(default_factory=dict)
+    access: dict[str, ConnectorAccess] = field(default_factory=dict)
     refresh: dict[str, str] = field(default_factory=dict)
     trusted_browsers: dict[str, TrustedBrowser] = field(default_factory=dict)
     waiting_limit: ClassVar[int] = 8
@@ -165,7 +241,7 @@ class ConnectorGrants:
             self,
             requests=AuthorizationRequest.retained(self.requests, now),
             codes=IssuedCode.retained(self.codes, now),
-            access=IssuedAccess.retained(self.access, now),
+            access=ConnectorAccess.retained(self.access, now),
         )
 
     def trusts(self, browser_secret: str) -> bool:
@@ -196,26 +272,63 @@ class ConnectorGrants:
         return DocumentChange(grants, IssuedTokens(access, refresh))
 
     def caller_for(self, token: str) -> ConnectorCaller:
-        key = digest(token)
-        if key in self.access and self.access[key].live(time.time()):
-            return self.access[key].caller()
-        if key in self.threads:
-            return self.threads[key].caller()
-        raise GrantRefusedError("Unknown or expired connector grant.")
+        return self.access.get(digest(token), UnissuedAccess()).caller()
 
     def thread_held(self, thread: str) -> bool:
-        return any(grant.thread == thread for grant in self.threads.values())
+        return any(grant.holds_thread(thread) for grant in self.access.values())
+
+    def ui_issued(
+        self, namespace: RootId, seconds: int,
+    ) -> DocumentChange[ConnectorGrants, UiCredential]:
+        if not 0 < seconds <= UiReadAccess.maximum_seconds:
+            raise ValueError(
+                f"A UI grant lasts between one and {UiReadAccess.maximum_seconds} seconds")
+        now = time.time()
+        token = BearerSecret(secrets.token_urlsafe(32))
+        held = UiReadAccess(UiGrantId.mint(), namespace, expires_at=now + seconds)
+        current = self.unexpired(now)
+        return DocumentChange(
+            replace(current, access=current.access | {digest(token): held}),
+            held.credential(token),
+        )
+
+    def ui_revoked(self, grant_id: UiGrantId) -> ConnectorGrants:
+        return replace(self, access={
+            key: grant for key, grant in self.access.items()
+            if not grant.holds_ui_grant(grant_id)
+        })
+
+
+class ConnectorCredentialsFile(DrainedWriters, GuardedExternalStore):
+    """The canonical external credential resource retained by the installer.
+
+    Its declaration names the global file; ConnectorStore instances read a selected
+    live or retained file, rather than lending the carry their live location.
+    """
+
+    filename = "grants.json"
+
+    @classmethod
+    def path(cls) -> Path:
+        return cls.path_in(Path.home() / ".local/state/agent-comms/connector")
+
+    @classmethod
+    def practice_opening(cls, files: FilesRequest, directory: Path) -> None:
+        for resource in cls.resources(files):
+            path = files.location(resource)
+            if path.is_file():
+                ConnectorStore(path).read()
 
 
 @dataclass(frozen=True, slots=True)
 class ConnectorStore(SingleFileStore, CarriedDocument[ConnectorGrants], DependentStateTier):
-    filename: ClassVar[str] = "grants.json"
+    filename: ClassVar[str] = ConnectorCredentialsFile.filename
 
     @classmethod
     def owned(cls) -> ConnectorStore:
-        directory = Path.home() / ".local/state/agent-comms/connector"
-        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
-        return cls(cls.path_in(directory))
+        path = ConnectorCredentialsFile.path()
+        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        return cls(path)
 
     record_type = ConnectorGrants
 
@@ -225,17 +338,39 @@ class ConnectorStore(SingleFileStore, CarriedDocument[ConnectorGrants], Dependen
     def thread_granted(self, thread: str) -> str:
         token = secrets.token_urlsafe(32)
         return self.update(lambda grants: DocumentChange(
-            replace(grants, threads={
-                key: grant for key, grant in grants.threads.items() if grant.thread != thread
+            replace(grants, access={
+                key: grant for key, grant in grants.access.items() if not grant.holds_thread(thread)
             } | {digest(token): ThreadGrant(thread)}),
             token,
         ))
 
+    def publish_ui_profile(
+        self, namespace: RootId, endpoint: HttpsMcpEndpoint, path: Path,
+        seconds: int = UiReadAccess.maximum_seconds,
+    ) -> UiGrantSummary:
+        """Publish the private profile before activating its bearer, in one owned edit.
+
+        DocumentTransactions applies this transition once under the current writer
+        cut. A failed profile publication never commits a grant. If the later store
+        commit fails, its existing atomic rollback owns recovery. The profile itself
+        never grants authority; only the committed server record does.
+        """
+        def publish(grants: ConnectorGrants) -> DocumentChange[ConnectorGrants, UiGrantSummary]:
+            changed = grants.ui_issued(namespace, seconds)
+            credential = changed.result
+            profile = UiConnectionProfile(endpoint, credential).write_new(path)
+            return DocumentChange(changed.document, UiGrantSummary(
+                credential.grant_id, namespace, credential.expires_at, profile))
+        return self.update(publish)
+
+    def revoke_ui(self, grant_id: UiGrantId) -> None:
+        self.update(lambda grants: DocumentChange.to(grants.ui_revoked(grant_id)))
+
     @contextmanager
-    def granted(self, client_id: str) -> Iterator[str]:
-        """An access token for a caller on this machine, revoked when its call is done."""
+    def granted(self, purpose: str) -> Iterator[str]:
+        """A local service token, revoked when its proof is done; purpose is not a client ID."""
         token = secrets.token_urlsafe(32)
-        held = IssuedAccess(client_id, expires_at=time.time() + CODE_SECONDS)
+        held = ServiceAccess(purpose, expires_at=time.time() + CODE_SECONDS)
         key = digest(token)
         self.update(lambda grants: DocumentChange.to(replace(grants, access=grants.access | {key: held})))
         try:
