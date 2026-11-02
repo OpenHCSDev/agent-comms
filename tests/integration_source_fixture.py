@@ -77,7 +77,10 @@ def source_pair(
             Path("src/workflow.py"): 'from agent_comms.api import old_api\n\ndef run() -> str:\n    return old_api()\n',
         })
     core = SourceRepository.create(tmp_path / "matched-core", held_bus.goals.todos.get("P2").repo, baseline_files={
-        Path("pyproject.toml"): SourceRepository.package_project("agent-comms"),
+        Path("pyproject.toml"): (
+            SourceRepository.package_project("agent-comms")
+            + '\n[tool.pytest.ini_options]\ntestpaths = ["tests"]\npython_files = ["test_*.py"]\n'
+        ),
         Path("stack/pyproject.toml"): (
             '[project]\nname = "fixture-stack"\nversion = "0.0.1"\ndependencies = ["agent-comms", "source-client"]\n'
             '[tool.uv]\npackage = false\noverride-dependencies = ["packaging==26.0"]\n'

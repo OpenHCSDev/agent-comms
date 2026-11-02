@@ -732,14 +732,14 @@ class IntegrationRun:
         self.failure.require_qualification()
         if not problems or len(set(problems)) != len(problems):
             raise IntegrationFailed("Qualification requires unique actual problem selectors")
+        core = Repo.of(self.checkout.path)
         snapshot = context.comms.registry.snapshot()
         actor = context.actor_identity
         project = snapshot.commander_project
-        project.require_scope(snapshot, actor, carrier.repo)
+        project.require_scope(snapshot, actor, core.github)
         todos = tuple(context.comms.goals.todos.get(problem) for problem in problems)
         for todo in todos:
             project.require_scope(snapshot, actor, todo.repo)
-        core = Repo.of(self.checkout.path)
         Repo.selected(context.repos, core.github.to_wire())
         base = IntegrationSource.main_head(core)
         candidate_commit = Repo.git(self.checkout.path, "rev-parse", "HEAD").strip()

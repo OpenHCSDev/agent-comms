@@ -23,6 +23,7 @@ from agent_comms.todos import (
 )
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction
+from agent_comms.test_lease import TestLease
 from agent_comms.order_tools import CommsTodoCreateTool
 from agent_comms.tool_caller import PeerCaller
 from agent_comms.recorded_time import RecordedEventTime
@@ -537,6 +538,9 @@ def test_companion_only_capture_preserves_native_review_and_empty_test_selection
     with pytest.raises(ToolRefusedError, match="no accepted exact-head source review"):
         MergeHeadReview.require_combined(carrier, pair.context.repos)
     assert pair.checkout.test_files(inputs.local.baseline.commit, inputs.local.heads) == ()
+    with pytest.raises(integration.IntegrationFailed, match="touched-test union is empty"):
+        integration.IntegrationRun(pair.checkout, pair.output, "An empty union cannot run a suite").test(
+            inputs.local.baseline.commit, inputs.local.heads, TestLease.default_start, 1)
 
 
 def test_qualification_refuses_an_entirely_unchanged_source_set(
