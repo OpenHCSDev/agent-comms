@@ -142,7 +142,7 @@ class AccessLabel(NominalText):
 
 
 class AccessLabelText(NominalSpelling[AccessLabel]):
-    # Retain every spelling the old document admitted, including an empty label.
+    # Retain every spelling recorded in the old document, including an empty label.
     spelling = re.compile(r"[\s\S]*")
 
 
