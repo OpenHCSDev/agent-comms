@@ -49,14 +49,14 @@ def held_team(pr_team, cited_source):
     worker = thread("worker", source.root, 2.0)
     source.comms.registry.register(worker)
     RequestAddVerb(text="Repair the copied order workflow without changing original retained state").run(source)
-    lead = source.comms.registry.require(source.commander)
+    lead = source.comms.registry.require(source.actor_name)
     todo = source.comms.goals.todos.create(
         "P1", source.repos[0].github, "Repair the held workflow", creator=lead, assigner=lead.incarnation,
         owner=worker, generation=initial_order_goal_id,
         request=NewestOpenRequest().for_order(source.comms.goals.todos, lead.incarnation),
         review_at=RecordedEventTime(time.time() + 1000), order=order(cited_source),
     )
-    published = source.comms.messaging.send(source.commander, worker.name, "Repair the held workflow through its existing declaration.")
+    published = source.comms.messaging.send(source.actor_name, worker.name, "Repair the held workflow through its existing declaration.")
     source.comms.goals.todos.apply(todo.id, OrderMessage(todo.revision, lead.incarnation, published.message.message_id,
                                                       at=RecordedEventTime(time.time())))
     original = source.comms.goals.todos.get(todo.id)
@@ -180,7 +180,7 @@ def test_second_unplanned_order_is_refused_without_recording(held_team, cited_so
         unplanned_reason="This isolated workflow verifies refusal rather than advancing the production plan.",
         problems=("P2",),
     )
-    lead = ctx.comms.registry.require(ctx.commander)
+    lead = ctx.comms.registry.require(ctx.actor_name)
     ctx.comms.goals.todos.create(
         "P2", ctx.repos[0].github, "Repair the second workflow", creator=lead, assigner=lead.incarnation, owner=lead,
         generation=second_workflow_goal_id, request=original.request.require(),

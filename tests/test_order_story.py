@@ -66,7 +66,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     caller.invoke(CommsTodoCreateTool(owner="worker", order=CreateProblemGoalAction(
         problem="P1", order=replace(order(source), edits=("Repair the existing record owner",)),
         request=request, review_at=RecordedEventTime(1000),
-        commander="lead", assigner=comms.registry.require('lead').incarnation,
+        assigner=comms.registry.require('lead').incarnation,
         repo=RepositoryName.from_wire("org/repo"), text="Repair the worker")), comms)
     todo = comms.goals.todos.get("P1")
     first_order_id = todo.order.checked().id
@@ -96,8 +96,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     worker = PeerCaller("worker")
     worker.invoke(CommsOrderTool(owner="worker", order=OrderGoalAction(
         problem="P1", expected_revision=todo.revision,
-        assigner=comms.registry.require("worker").acting_identity, commander="lead",
-        request=request, review_at=RecordedEventTime(2000),
+        assigner=comms.registry.require("worker").acting_identity, request=request, review_at=RecordedEventTime(2000),
         order=replace(order(source), id=resent_id))), comms)
     current = comms.goals.todos.get("P1")
     with pytest.raises(ValueError):
@@ -169,7 +168,7 @@ def edit_order(comms, tmp_path):
     caller.invoke(CommsTodoCreateTool(owner="worker", order=CreateProblemGoalAction(
         problem="P1", order=replace(order(source), edits=("Repair the existing record owner",)),
         request=request, review_at=RecordedEventTime(1000),
-        commander="lead", assigner=lead, repo=source.github, text="Repair the worker")), comms)
+        assigner=lead, repo=source.github, text="Repair the worker")), comms)
     # Registered after the order is sent: the edit's repository is found among these.
     comms.registry.set_team_project(RegisteredTeamProject(lead, (source, other)))
     (other.checkout / "other_module.py").write_text("first\nsecond\n")

@@ -582,7 +582,7 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule, FamilyScan)
             if idle:
                 unit = idle.pop(0)
                 found.append(ReassignedWheelSpin(todo, ReusedWorkDispatch.for_teammate(
-                    ReissuedOrderGoalAction.for_todo(todo, commander), unit)))
+                    ReissuedOrderGoalAction.for_todo(todo), unit)))
         covered = {rule.todo.id for rule in (*retained, *found)}
         return (*retained, *found,
                 *(WaitingUnownedWheelSpin(todo) for todo in rows if todo.id not in covered))

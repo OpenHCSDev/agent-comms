@@ -172,13 +172,13 @@ def mutual_sources(source_pair: MutualSources) -> MutualSources:
     comms = source_pair.context.comms
     primary = comms.goals.todos.get("P2")
     creation = CreateProblemGoalAction(
-        problem="P3", commander="lead", request=primary.request,
+        problem="P3", request=primary.request,
         assigner=comms.registry.require("lead").incarnation,
         repo=source_pair.client.github, text="Migrate the paired source client",
         order=replace(primary.order.checked(), pull_requests=(source_pair.client.link,),
                       check=replace(primary.order.check, directory=source_pair.client.checkout)),
         review_at=RecordedEventTime(time.time() + 3600),
     )
-    PeerCaller("worker").as_thread("lead").invoke(
+    PeerCaller("worker").invoke(
         CommsTodoCreateTool(owner="worker", order=creation), comms)
     return source_pair

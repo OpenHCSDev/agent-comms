@@ -230,4 +230,4 @@ class TestOrderCompletion:
         assert closed.state is DoneTodoState
         assert isinstance(closed.order, InstalledMergedProblemOrder)
         assert closed.order.artifact == str(artifact)
-        assert HolderGone.violations(ctx.comms, ctx.commander) == ()
+        assert HolderGone.violations(ctx.comms, ctx.actor_name) == ()

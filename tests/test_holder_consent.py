@@ -28,7 +28,7 @@ def test_shared_maintenance_and_storage_selection_do_not_release_another_holder(
     comms, _, _ = fork_bus
     store = comms.goals.todos
     current = store.get("P40")
-    caller = PeerCaller(name).as_thread("retained")
+    caller = PeerCaller(name)
     actor = caller.identity(comms)
     assert actor.commands(current.creator_identity)
     assert actor.acting_identity == comms.registry.require(name).incarnation
@@ -102,7 +102,7 @@ def test_consent_cannot_release_a_different_assignment_generation(fork_bus):
 def handoff(comms, current, actor):
     return comms.goals.update_goal("worker", OrderGoalAction(
         problem=current.id, expected_revision=current.revision,
-        assigner=actor, commander="lead", request=current.request.require(),
+        assigner=actor, request=current.request.require(),
         review_at=RecordedEventTime(time.time() + 600),
         order=replace(current.order, id=OrderId.mint())))
 
@@ -111,7 +111,7 @@ def test_maintainer_cannot_change_holder_or_the_receiving_goal(fork_bus):
     comms, _, _ = fork_bus
     current = comms.goals.todos.get("P40")
     goal = comms.registry.require("worker").goal
-    actor = PeerCaller("lead").as_thread("retained").identity(comms)
+    actor = PeerCaller("lead").identity(comms)
     with pytest.raises(HolderConsentRequired):
         handoff(comms, current, actor)
     assert comms.goals.todos.get(current.id) == current
@@ -164,15 +164,14 @@ def incoming_work(comms):
         comms.goals, current.id)
     action = OrderGoalAction(
         problem=released.id, expected_revision=released.revision,
-        assigner=comms.registry.require("lead").acting_identity, commander="lead",
-        request=released.request.require(), review_at=RecordedEventTime(time.time() + 600),
+        assigner=comms.registry.require("lead").acting_identity, request=released.request.require(), review_at=RecordedEventTime(time.time() + 600),
         order=replace(released.order, id=OrderId.mint()))
     return released, action
 
 
 @pytest.mark.parametrize("caller", (
     ThreadCaller("lead"), ThreadCaller("other"),
-    PeerCaller("lead").as_thread("worker"),
+    PeerCaller("lead"),
 ))
 def test_fresh_goal_observation_and_shared_maintenance_are_not_receiving_consent(fork_bus, caller):
     comms, _, _ = fork_bus
@@ -208,7 +207,7 @@ def test_creating_a_problem_does_not_replace_an_independent_goal(fork_bus):
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Keep my independent work."))
     creation = CreateProblemGoalAction(
         problem="P41", repo=source.github, text="Another declared repair",
-        assigner=action.assigner, commander=action.commander, request=action.request,
+        assigner=action.assigner, request=action.request,
         review_at=action.review_at, order=action.order)
     rows = comms.goals.todos.board()
     with pytest.raises(GoalConsentRequired):
@@ -223,7 +222,7 @@ def test_receiving_owner_or_genuine_child_can_accept_work_into_its_goal(fork_bus
     comms, _, _ = fork_bus
     current, action = incoming_work(comms)
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Choose the next repair."))
-    caller = PeerCaller("worker").as_thread("lead")
+    caller = PeerCaller("worker")
     if bound_child:
         caller = ForkCaller("goal-child")
         caller.join(comms, "worker")
@@ -276,7 +275,7 @@ def test_receiving_consent_does_not_resume_an_owner_pause(fork_bus):
     goal = comms.goals.update_goal(
         "worker", PausedGoalAction(), actor=OwnerInvocable)
     with pytest.raises(ValueError) as refused:
-        PeerCaller("worker").as_thread("lead").invoke(
+        PeerCaller("worker").invoke(
             CommsOrderTool(owner="worker", order=action), comms)
     assert str(refused.value) == goal.state.pause_source.instruction()
     assert comms.registry.require("worker").goal == goal

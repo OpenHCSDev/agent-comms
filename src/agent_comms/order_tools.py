@@ -379,7 +379,7 @@ class CommsOrderTool(ThreadToolRequest):
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> ProblemOrdered:
         goal = comms.goals.update_goal(self.owner, self.order.bound_to(
-            caller.identity(comms), caller.commander(comms).incarnation))
+            caller.identity(comms)))
         return ProblemOrdered(goal, tuple(comms.goals.todos.get(problem)
                                           for problem in self.order.problems()))
 

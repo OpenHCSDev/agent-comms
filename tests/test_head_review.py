@@ -1042,7 +1042,7 @@ def test_overdue_linked_head_stays_visible_without_refusing_new_orders(head_bus)
     comms, _, request = head_bus
     todo = comms.goals.todos.get("P2")
     action = CreateProblemGoalAction(
-        problem="P3", commander="lead", request=todo.request,
+        problem="P3", request=todo.request,
         assigner=comms.registry.require("outsider").acting_identity,
         repo=todo.repo, text="Repair the next owner", order=todo.order.checked(),
         review_at=RecordedEventTime(time.time() + 3600),
@@ -1066,7 +1066,7 @@ def test_review_timer_up_with_open_head_builds(held_bus, github_cli, reviewed_so
     comms = held_bus
     original = comms.goals.todos.get("P2")
     comms.goals.update_goal("worker", CreateProblemGoalAction(
-        problem="P3", commander="lead", request=original.request,
+        problem="P3", request=original.request,
         assigner=comms.registry.require("worker").acting_identity,
         repo=original.repo, text="Repair the overdue order", order=original.order.checked(),
         review_at=RecordedEventTime(time.time() - 1),

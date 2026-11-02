@@ -593,13 +593,11 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
     order: PendingProblemOrder
     request: OwnerRequestId
     review_at: EventTime
-    commander: str
     assigner: ThreadIncarnation
+    """The teammate sending the order; a created problem records it as its creator."""
 
-    def bound_to(
-        self, actor: ThreadIncarnation, commander: ThreadIncarnation,
-    ) -> ProblemOrderGoalAction:
-        return replace(self, commander=commander.name, assigner=actor)
+    def bound_to(self, actor: ThreadIncarnation) -> ProblemOrderGoalAction:
+        return replace(self, assigner=actor)
 
     @abstractmethod
     def reserve(self, ctx: GoalActionContext, generation: GoalId) -> None:
@@ -627,7 +625,6 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
         """Recheck goal consent and local request facts before reserving work or a child."""
         ctx.thread.goal.require_work(self.assigner, ctx.thread)
         self.require_sendable(ctx.goals.registry.snapshot().commander_project)
-        ctx.goals.registry.require(self.commander)
         ctx.goals.todos.owner_request(self.request).require_open(self.assigner)
         self.review_at.require_recorded("A review time")
 
@@ -677,14 +674,14 @@ class ReissuedOrderGoalAction(OrderGoalAction):
     """
 
     @classmethod
-    def for_todo(cls, todo: Todo, commander: str) -> Self:
+    def for_todo(cls, todo: Todo) -> Self:
         """Core reissues accepted unheld work, recording itself rather than an invented actor."""
         now = time.time()
         order = todo.order.reissued(now)
         return cls(
             problem=todo.id, expected_revision=todo.revision,
             order=order, request=todo.request.require(),
-            review_at=todo.reissued_review(now), commander=commander,
+            review_at=todo.reissued_review(now),
             assigner=CoreWatcherIncarnation.watcher(),
             traced=order.owner)
 
@@ -699,7 +696,7 @@ class CreateProblemGoalAction(ProblemOrderGoalAction):
 
     def reserve(self, ctx: GoalActionContext, generation: GoalId) -> None:
         ctx.goals.todos.create(self.problem, self.repo, self.text,
-            creator=ctx.goals.registry.require(self.commander), owner=ctx.thread,
+            creator=ctx.goals.registry.require(self.assigner.name), owner=ctx.thread,
             assigner=self.assigner, generation=generation, request=self.request,
             review_at=self.review_at, order=self.order)
 

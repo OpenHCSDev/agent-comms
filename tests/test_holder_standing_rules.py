@@ -329,7 +329,7 @@ def test_holds_whose_holder_was_deleted_or_registered_again_are_reported_by_ever
     comms = held_bus
     original = comms.goals.todos.get("P1")
     comms.goals.update_goal("outsider", CreateProblemGoalAction(
-        problem="P3", commander="lead", request=original.request,
+        problem="P3", request=original.request,
         assigner=comms.registry.require("lead").incarnation, repo=original.repo,
         text="Repair P3", review_at=original.review_at,
         order=replace(original.order, id=OrderId.mint()),

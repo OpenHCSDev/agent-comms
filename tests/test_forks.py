@@ -259,15 +259,15 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     states = TeammateState.current(comms, parent.name, frame)
     observed = TeamObservation(parent, frame, (), states)
     asyncio.run(ObservedHeartbeat((observed,)).run(lambda: nullcontext(comms)))
-    hud = ctx.call(CommsHudTool(thread=ctx.commander))
+    hud = ctx.call(CommsHudTool(thread=ctx.actor_name))
     assert hud.commander == parent.incarnation
     assert [(unit.unit, tuple(order.problem for order in unit.orders)) for unit in hud.units] == [
         (saved.held().owner_identity, ("P40",))
     ]
     assert set(ctx.model_copy(deep=True).progress()) == {"P40"}
     assert ctx.held_orders() == (saved,)
-    assert ctx.call(CommsTodoListTool(thread=ctx.commander)).todos == (saved,)
-    load = ctx.call(CommsTeamLoadTool(thread=ctx.commander))
+    assert ctx.call(CommsTodoListTool(thread=ctx.actor_name)).todos == (saved,)
+    load = ctx.call(CommsTeamLoadTool(thread=ctx.actor_name))
     assert load.load.owed == 1 and load.load.timers_up == 0 and load.load.unjudged == 0
     refused = command(comms, "order", "send", "worker", body, "--fork", "fork-two")
     assert refused.returncode != 0 and consent_refused(comms, "fork-two") in refused.stderr
@@ -765,8 +765,7 @@ def test_one_order_takes_a_new_problem_and_one_the_holder_holds_in_either_order(
     comms.goals.update_goal(worker.name, OrderGoalAction(
         problem=group[0], expected_revision=revisions[group[0]],
         together=(ExpectedProblem(group[1], revisions[group[1]]),),
-        assigner=worker.acting_identity, commander="lead",
-        request=held.request.require(), review_at=RecordedEventTime(time.time() + 600),
+        assigner=worker.acting_identity, request=held.request.require(), review_at=RecordedEventTime(time.time() + 600),
         order=sent))
     for pid in group:
         todo = store.get(pid)
@@ -823,8 +822,7 @@ def test_a_stale_later_member_rolls_back_the_written_first_member(fork_bus, tmp_
         comms.goals.update_goal("worker", OrderGoalAction(
             problem=first.id, expected_revision=first.revision,
             together=(ExpectedProblem(stale.id, stale.revision - 1),),
-            assigner=lead.incarnation, commander=lead.name,
-            request=first.request.require(), review_at=RecordedEventTime(time.time() + 600),
+            assigner=lead.incarnation, request=first.request.require(), review_at=RecordedEventTime(time.time() + 600),
             order=replace(order, id=OrderId.mint())))
     assert (store.get(first.id), store.get(stale.id)) == (first, stale)
     assert comms.registry.require("worker").goal == goal

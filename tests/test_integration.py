@@ -261,7 +261,7 @@ def test_resolved_companion_keeps_multiple_original_links_and_the_published_carr
     comms = pair.context.comms
     primary = comms.goals.todos.get("P2")
     comms.goals.update_goal("worker", CreateProblemGoalAction(
-        problem="P4", commander="lead", request=primary.request,
+        problem="P4", request=primary.request,
         assigner=comms.registry.require("lead").incarnation,
         repo=peer.github, text="Include the second existing companion source",
         order=replace(primary.order.checked(), pull_requests=(peer.link,),
@@ -317,7 +317,7 @@ def test_actual_main_cli_keeps_merged_local_members_exact_and_refuses_later_head
         peer.number, "second-local-source", peer_head, stamp, "main", reviewable_times=(stamp,)))
     primary = pair.context.comms.goals.todos.get("P2")
     pair.context.comms.goals.update_goal("worker", CreateProblemGoalAction(
-        problem="P4", commander="lead", request=primary.request,
+        problem="P4", request=primary.request,
         assigner=pair.context.comms.registry.require("lead").incarnation,
         repo=peer.github, text="Include the existing local source",
         order=replace(primary.order.checked(), pull_requests=(peer.link,),
@@ -898,12 +898,12 @@ def test_qualification_refuses_an_entirely_unchanged_source_set(
     pair = mutual_sources
     primary = pair.context.comms.goals.todos.get("P2")
     creation = CreateProblemGoalAction(
-        problem="P4", commander="lead", request=primary.request,
+        problem="P4", request=primary.request,
         assigner=pair.context.comms.registry.require("lead").incarnation,
         repo=pair.core.github, text="Check a source selection without changed members",
         order=replace(primary.order.checked(), pull_requests=()),
         review_at=RecordedEventTime(9999999999.0))
-    PeerCaller("worker").as_thread("lead").invoke(
+    PeerCaller("worker").invoke(
         CommsTodoCreateTool(owner="worker", order=creation), pair.context.comms)
     with pytest.raises(ToolRefusedError, match="captured sources have no substantive change"):
         pair.capture(("P4",), "unchanged sources must not acquire a capture")

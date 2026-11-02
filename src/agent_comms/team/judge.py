@@ -151,7 +151,7 @@ def show(ctx, pending: list[Edit]) -> None:
 
 def alarm(ctx):
     while True:
-        late = [edit for edit in Edit.unjudged(ctx.comms, ctx.commander)
+        late = [edit for edit in Edit.unjudged(ctx.comms, ctx.actor_name)
                 if edit.at.before(time.time() - 300)]
         if late:
             counts: dict[str, int] = {}
@@ -178,7 +178,7 @@ class ShowVerb(JudgeVerb):
         return not self.thread or edit.thread == self.thread
 
     def run(self, ctx: order.Team) -> None:
-        show(ctx, [edit for edit in Edit.unjudged(ctx.comms, ctx.commander) if self.selects(edit)])
+        show(ctx, [edit for edit in Edit.unjudged(ctx.comms, ctx.actor_name) if self.selects(edit)])
 
 
 class AlarmVerb(JudgeVerb):
@@ -252,7 +252,7 @@ class EditReview(ReviewSubject):
         return cls(options.ids)
 
     def run(self, options: VerdictVerb, ctx: order.Team) -> None:
-        unjudged = Edit.unjudged(ctx.comms, ctx.commander)
+        unjudged = Edit.unjudged(ctx.comms, ctx.actor_name)
         record(ctx, options, self.verdicts(options, ctx, unjudged), len(unjudged))
 
     def verdicts(self, options: VerdictVerb, ctx: order.Team,
@@ -481,7 +481,7 @@ class HeadVerdictVerb(VerdictVerb, declared_name=None):
             request=request,
             operation=self.head_operation(),
             order=linked,
-        ).apply(ctx.comms, ctx.actor.as_thread(ctx.commander))
+        ).apply(ctx.comms, ctx.actor.teammate())
 
     @abstractmethod
     def head_operation(self) -> HeadVerdict: ...
@@ -787,7 +787,7 @@ class BatchVerb(JudgeVerb):
 
     def run(self, ctx: order.Team) -> None:
         entries = FieldCodec.decode(tuple[VerdictVerb, ...], FieldCodec.parse(self.file.read_bytes()))
-        unjudged = Edit.unjudged(ctx.comms, ctx.commander)
+        unjudged = Edit.unjudged(ctx.comms, ctx.actor_name)
         verdicts: list[JudgedCall] = []
         refusals: dict[str, str] = {}
         for number, entry in enumerate(entries, 1):
@@ -815,7 +815,7 @@ class RewrittenVerb(ReasonedVerb):
 
     def run(self, ctx: order.Team) -> None:
         orders = {todo.id: todo for todo in ctx.held_by(self.unit)}
-        unjudged = Edit.unjudged(ctx.comms, ctx.commander)
+        unjudged = Edit.unjudged(ctx.comms, ctx.actor_name)
         verdicts: list[JudgedCall] = []
         live: dict[str, str] = {}
         for edit in (edit for edit in unjudged if edit.problem in orders):
