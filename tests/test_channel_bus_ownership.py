@@ -8,7 +8,6 @@ from dataclasses import replace
 from agent_comms.channel_targets import CommandTarget
 from conftest import accept_initial
 from agent_comms.coordinator import Coordination
-from agent_comms.native_arguments import GivenBinary
 from agent_comms.notification_progress import SentProgress
 from agent_comms.turn_input_source import NoTurnAcceptance
 from agent_comms.wake_policy import BoundedTriageWake
@@ -69,26 +68,22 @@ def test_channel_observer_keeps_bounded_pointers_after_ui_ack(tmp_path):  # noqa
     assert comms.bus.awareness_segments(replace(observer, created_at=observer.created_at + 1), ()) == ()
 
 
-async def test_natural_owned_turn_prepares_observer_pointer_without_native_start(tmp_path):  # noqa: F811
+async def test_natural_owned_turn_prepares_observer_pointer_without_native_start(
+    tmp_path, native_runtime_package,
+):  # noqa: F811
     from agent_comms.acp import CommsAgent
     from agent_comms.owned_turn import OwnedTurn
     from agent_comms.nominal.field_codec import AcpSessionId
     
     root, root_id, comms, initial, _people = _root(tmp_path, mentioned=True)
-    agent = CommsAgent(
-        comms,
-        agent_bin=GivenBinary("pi"),
-        auto_wake=False,
-    )
-    # OwnedTurn.acquire syncs a published session's identity (owned_turn.py:515); the
-    # session is published here without a native start. SessionLifecycle.publish replaces
-    # this write once it lands on main.
-    agent.sessions.publish(AcpSessionId("alpha"), comms.registry.require("alpha"))
+    agent = CommsAgent(comms, auto_wake=False)
     turn = OwnedTurn(
         agent.turns, "alpha", "alpha", "Independently authorized task",
         acceptance=NoTurnAcceptance(),
     )
     try:
+        # Binding acquires real session authority; context preparation sends no model input.
+        await agent.sessions.bind_owned(comms.registry.require("alpha"), AcpSessionId("alpha"))
         async with AsyncExitStack() as resources:
             async with AsyncExitStack() as permits:
                 assert await turn.acquire(resources, permits)
