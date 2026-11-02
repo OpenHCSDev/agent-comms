@@ -2,14 +2,14 @@
 from abc import abstractmethod
 from collections.abc import Awaitable, Callable
 from functools import partial
-from .coordinator import Coordination
+import agent_comms.coordinator as coordinator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .nominal.field_codec import FieldCodec
-from .thread_presentation import LiveThreadOwnerBinding, ThreadOwnerBinding
+import agent_comms.thread_presentation as thread_presentation
 from .native_arguments import GivenArguments
 
 if TYPE_CHECKING:
@@ -33,12 +33,12 @@ class SessionLoadPlan(DeclaredFamily, affix='SessionLoadPlan'):
         return (EnsuringSessionLoadPlan() if witness is None
                 else FieldCodec.decode(ExistingSessionLoadPlan, witness))
 
-    def superseded_by(self, binding: ThreadOwnerBinding) -> bool:
+    def superseded_by(self, binding: thread_presentation.ThreadOwnerBinding) -> bool:
         return False
 
     async def reload_if_superseded(
-        self, binding: LiveThreadOwnerBinding,
-        reload: Callable[['SessionLoadPlan'], Awaitable[None]],
+        self, binding: thread_presentation.LiveThreadOwnerBinding,
+        reload: Callable[[SessionLoadPlan], Awaitable[None]],
     ) -> None:
         """A plan without an owner witness cannot request an observed reload."""
 
@@ -49,7 +49,7 @@ class SessionLoadPlan(DeclaredFamily, affix='SessionLoadPlan'):
 @dataclass(frozen=True, slots=True)
 class EnsuringSessionLoadPlan(SessionLoadPlan):
     async def resolve(self, lifecycle: "AttachedSessionLifecycle", thread: "Thread") -> "Thread":
-        return await Coordination.run_worker(partial(
+        return await coordinator.Coordination.run_worker(partial(
             lifecycle.comms.owners.ensure_owner, thread.name,
             agent_bin=lifecycle.effects.inputs.configuration.launch.binary,
             agent_args=GivenArguments(lifecycle.effects.inputs.configuration.agent_args.argv),
@@ -60,13 +60,13 @@ class EnsuringSessionLoadPlan(SessionLoadPlan):
 class WitnessedSessionLoadPlan(SessionLoadPlan):
     """Original load command/response evidence, never current registry state."""
 
-    binding: ThreadOwnerBinding
+    binding: thread_presentation.ThreadOwnerBinding
 
-    def superseded_by(self, binding: ThreadOwnerBinding) -> bool:
+    def superseded_by(self, binding: thread_presentation.ThreadOwnerBinding) -> bool:
         return self.binding.superseded_by(binding)
 
     async def reload_if_superseded(
-        self, binding: LiveThreadOwnerBinding,
+        self, binding: thread_presentation.LiveThreadOwnerBinding,
         reload: Callable[[SessionLoadPlan], Awaitable[None]],
     ) -> None:
         if self.superseded_by(binding):
@@ -75,10 +75,10 @@ class WitnessedSessionLoadPlan(SessionLoadPlan):
 
 @dataclass(frozen=True, slots=True)
 class ExistingSessionLoadPlan(WitnessedSessionLoadPlan):
-    binding: LiveThreadOwnerBinding
+    binding: thread_presentation.LiveThreadOwnerBinding
 
     async def resolve(self, lifecycle: "AttachedSessionLifecycle", thread: "Thread") -> "Thread":
-        entry = (await Coordination.run_worker(partial(
+        entry = (await coordinator.Coordination.run_worker(partial(
             lifecycle.comms.registry.entry, thread.name,
         ))).entry
         if thread.incarnation != self.binding.owner.incarnation:
