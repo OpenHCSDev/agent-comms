@@ -31,9 +31,9 @@ from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.locked_store import (
     DeclaredFile,
     FilesRequest,
+    InstallationFiles,
     LiveFilesRequest,
     LockedStore,
-    RootFile,
     RollbackRetained,
     RuntimeFile,
     UndeclaredFile,
@@ -129,7 +129,7 @@ def bus_paths(files: FilesRequest, external: tuple[type[ExternalStore], ...]) ->
 def bus_resources(files: FilesRequest, external: tuple[type[ExternalStore], ...] = ()
                   ) -> tuple[DeclaredFile | UndeclaredFile, ...]:
     """One declaration-derived inventory for bus and writer-owned resources."""
-    return RootFile.owned_files(files, bus_paths(files, external))
+    return InstallationFiles(files).owned_files(bus_paths(files, external))
 
 
 def pinned_bus_files(files: FilesRequest, resources: tuple[DeclaredFile | UndeclaredFile, ...]) -> ExitStack:
@@ -326,7 +326,7 @@ class StoreBackup:
         files = tuple(dict.fromkeys((*files, *RollbackRetained.retained_in(root))))
         path = spill_dir / BackupName.now(root).value
         backup = cls(root, route, path)
-        resources = RootFile.owned_files(LiveFilesRequest(root), files)
+        resources = InstallationFiles(LiveFilesRequest(root)).owned_files(files)
         selected = tuple(sorted(resource.path for resource in resources))
         if path.exists():
             if backup.selected_files() != selected:
@@ -383,7 +383,7 @@ class StoreBackup:
         paths = tuple(path for path in source.rglob("*")
                       if path.is_file() and not path.is_symlink())
         owners = {resource.live(source): resource.owner
-                  for resource in RootFile.owned_files(LiveFilesRequest(source), paths)}
+                  for resource in InstallationFiles(LiveFilesRequest(source)).owned_files(paths)}
         omitted = set(paths) - owners.keys() | set(excluded)
         omitted.update(member for path, owner in owners.items()
                        for member in owner.files(path) if member != path)
@@ -416,14 +416,14 @@ class StoreBackup:
             return False
         saved = self.files()
         return all(resource.owner.file_matches(resource.live(self.root), resource.path, saved)
-                   for resource in RootFile.named_files(
-                       LiveFilesRequest(self.root), self.selected_files()))
+                   for resource in InstallationFiles(LiveFilesRequest(self.root)).named_files(
+                       self.selected_files()))
 
     def restore[Restored](self, rebuild: Callable[[], Restored]) -> Restored:
         """Restore selected bytes, then rebuild omitted projections before marking complete."""
         saved = self.files()
-        selected = {resource.path: resource for resource in RootFile.named_files(
-            LiveFilesRequest(self.root), self.selected_files())}
+        selected = {resource.path: resource for resource in InstallationFiles(
+            LiveFilesRequest(self.root)).named_files(self.selected_files())}
         registry = tuple(path.relative_to(self.root) for path in RegistryStore.at(self.root).written)
         # The registry owns this ordering: restore its snapshot before publishing
         # the matching guard, after every unrelated selected file.

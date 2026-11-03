@@ -138,7 +138,7 @@ from agent_comms.installer.target_tree import TargetTree
 from agent_comms.installer.refusals import RuntimeWireChanged
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.locked_store import (
-    BusFile, DeclaredFile, FilesRequest, LiveFilesRequest, RootFile, UndeclaredFile,
+    BusFile, DeclaredFile, FilesRequest, InstallationFiles, LiveFilesRequest, UndeclaredFile,
 )
 from agent_comms.maintenance_barrier import (
     MaintenanceBarrier,
@@ -1142,7 +1142,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
         files = LiveFilesRequest(self.root)
         pending = tuple(replace(step, files=files) for step in self.pending)
         expected = frozenset(rehearsal.files.names) | frozenset(rehearsal.inputs)
-        resources = RootFile.named_files(files, expected)
+        resources = InstallationFiles(files).named_files(expected)
         selected = tuple(files.location(resource) for resource in resources)
         with RestoreSpaceBackupPhase().running(self.staged.commands.clock):
             restore = RestoreSpace.measure(max(
@@ -1172,7 +1172,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                             f"Reconcile would rewrite files the rehearsal did not: {unrehearsed}")
                     carry_files = frozenset(
                         resource.path for step in pending
-                        for resource in RootFile.owned_files(files, step.input_files()))
+                        for resource in InstallationFiles(files).owned_files(step.input_files()))
                     omitted = (frozenset(planned.rewritten)
                                - frozenset(planned.backup_files) - carry_files)
                     selected = tuple(files.location(resource) for resource in resources

@@ -26,8 +26,8 @@ from agent_comms.registry_store import RegistryCut, RegistryStore
 from agent_comms.installer.declared_uv import DeclaredUv
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.locked_store import (
-    CompleteInputReader, DeclaredFile, InputCaptureFile, LiveFilesRequest, RegistryFile,
-    RetainedCopyRequest, RootFile, UndeclaredFile,
+    CompleteInputReader, DeclaredFile, InputCaptureFile, InstallationFiles,
+    LiveFilesRequest, RegistryFile, RetainedCopyRequest, RootFile, UndeclaredFile,
 )
 from agent_comms.maintenance_barrier import MaintenanceBarrier, NoMaintenanceHolder
 from agent_comms.storage_rules import StorageRule
@@ -205,7 +205,7 @@ class PracticeCopy:
             raise UpgradeRefused("Selected input capture requires a separate destination")
         barrier = MaintenanceBarrier(RegistryFile.path_in(self.root))
         files = LiveFilesRequest(self.root)
-        resources = RootFile.owned_files(files, tuple(
+        resources = InstallationFiles(files).owned_files(tuple(
             owner.path_in(directory)
             for owner, directory in InputCaptureFile.declarations_in(self.root)
         ))
@@ -242,7 +242,7 @@ class PracticeCopy:
             paths = tuple(owner.path_in(directory) for owner, directory
                           in CompleteInputReader.declarations_in(self.root))
             files = LiveFilesRequest(self.root)
-            readers = saved_bus_files(files, RootFile.owned_files(files, paths))
+            readers = saved_bus_files(files, InstallationFiles(files).owned_files(paths))
             required = sum(member.size for group in readers.values() for member in group.values())
             if required > self.remaining_bytes(maximum_bytes):
                 raise UpgradeRefused("Complete input readers exceed the selected copy allowance")
@@ -310,7 +310,7 @@ class PracticeCopy:
             raise UpgradeRefused("Select contexts before finalizing coordinator input evidence")
         self.prepare()
         source = ContextStore(self.root)
-        resource, = RootFile.owned_files(LiveFilesRequest(self.root), (source.path,))
+        resource, = InstallationFiles(LiveFilesRequest(self.root)).owned_files((source.path,))
         source.retain_contexts(
             ContextStore(self.path), identities, requests=requests,
             maximum_bytes=self.remaining_bytes(maximum_bytes),
@@ -340,7 +340,7 @@ class PracticeCopy:
         if contexts.path.exists() and source_contexts not in self.copied:
             raise UpgradeRefused("Copied contexts have no captured original reader source")
         source = CoordinationStore.path_in(self.root)
-        resource, = RootFile.owned_files(LiveFilesRequest(self.root), (source,))
+        resource, = InstallationFiles(LiveFilesRequest(self.root)).owned_files((source,))
         segments = contexts.original_segments() if source_contexts in self.copied else ()
         with CoordinationStore.retaining_rows(
             source, CoordinationStore.path_in(self.path),
@@ -359,7 +359,7 @@ class PracticeCopy:
     def include(self, paths: tuple[Path, ...]) -> None:
         self.prepare()
         witnesses = set(MaintenanceBarrier(RegistryFile.path_in(self.root)).witness_paths)
-        for resource in RootFile.owned_files(LiveFilesRequest(self.root), paths):
+        for resource in InstallationFiles(LiveFilesRequest(self.root)).owned_files(paths):
             source = resource.live(self.root)
             if source in self.copied or source in witnesses or not source.exists():
                 continue
@@ -369,7 +369,7 @@ class PracticeCopy:
 
     def retain(self, paths: tuple[Path, ...]) -> None:
         """Discard inputs used only to establish that an earlier carry was finished."""
-        selected = RootFile.owned_files(LiveFilesRequest(self.root), paths)
+        selected = InstallationFiles(LiveFilesRequest(self.root)).owned_files(paths)
         discarded = tuple(source for source, resource in self.copied.items() if resource not in selected)
         for source in discarded:
             resource = self.copied[source]
