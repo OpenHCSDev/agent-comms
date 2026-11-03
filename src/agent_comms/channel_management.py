@@ -13,7 +13,7 @@ from agent_comms.channel_targets import CommandTarget
 from .bus_publication import AgentOrigin
 from .channel_targets import ChannelTarget, Tag
 from .channels import Channel, SavedView
-from .cli_result import CliResult, TargetEditResult
+from .cli_result import TargetEditResult
 from .nominal.field_codec import RecordMember
 from .nominal.declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class TagChangeResult(CliResult, RecordMember, TargetEditResult):
+class TagChangeResult(RecordMember, TargetEditResult):
     tag: str
     removed_tag: bool
     removed_threads: tuple[ThreadIncarnation, ...] = ()

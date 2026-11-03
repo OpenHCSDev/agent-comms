@@ -23,7 +23,7 @@ from agent_comms_hooks.process_claim import (
 )
 
 
-from .cli_result import CliResult, ResultShower, TargetEditResult
+from .cli_result import ResultShower, TargetEditResult
 from .child_process import OutlivesLauncherLifetime, Platform, ProcessIdentity, SpawnedProcess
 from .comms import Comms, wire
 from .coordination_errors import CoordinationError
@@ -215,7 +215,7 @@ class QueuedRestart(RecordMember, RestartRows, TypedTable):
 
 
 @dataclass(frozen=True)
-class RestartQueued(CliResult, RecordMember, TargetEditResult):
+class RestartQueued(RecordMember, TargetEditResult):
     restart: QueuedRestart
 
     def show(self, shower: ResultShower, label: str, title: str) -> None:

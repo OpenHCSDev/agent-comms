@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from agent_comms.channels import Channel
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
@@ -409,7 +410,7 @@ class TargetFailed(TargetOutcome):
 
 
 @dataclass(frozen=True)
-class TargetBatchResult(CliResult, RecordMember, TargetEditResult):
+class TargetBatchResult(RecordMember, TargetEditResult):
     outcomes: tuple[TargetCompleted | TargetFailed, ...]
 
     def show(self, shower: ResultShower, label: str, title: str) -> None:
@@ -600,6 +601,12 @@ class TargetEdit(Command[Comms, CliResult]):
         arguments = self.declaration.editor_arguments(self.arguments)
         return self.declaration.execute_target(ctx, self.target, arguments,
                                               confirmed=self.confirmed, channel=self.channel, project=self.project)
+
+
+@dataclass(frozen=True, kw_only=True)
+class TargetActionCommand[Result: TargetEditResult | Channel](CliCommand[Result], declared_name=None):
+    """A command a thread or channel menu offers. Its answer is one a remote UI decodes, and
+    the menu's catalog lists exactly these members."""
 
 
 class MultipleTargets:

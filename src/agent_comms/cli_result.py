@@ -62,6 +62,6 @@ class ThreadToolCatalogResult(ToolCatalogResult):
     launch_arguments: tuple[str, ...]
 
 
-class TargetEditResult(ToolResult, SubclassUnion, affix="TargetEditResult"):
+class TargetEditResult(CliResult, ToolResult, SubclassUnion, affix="TargetEditResult"):
     """What a thread or channel action answers. A remote UI receives it from Core and decodes
     it by shape: each member is also the CLI result it already was, with its CLI form."""

@@ -88,17 +88,17 @@ def _message_reference(value: str) -> dict[str, object]:
 
 
 @dataclass(frozen=True)
-class ThreadStoppedResult(CliResult, RecordMember, TargetEditResult):
+class ThreadStoppedResult(RecordMember, TargetEditResult):
     stopped: str
 
 
 @dataclass(frozen=True)
-class ThreadArchivedResult(CliResult, RecordMember, TargetEditResult):
+class ThreadArchivedResult(RecordMember, TargetEditResult):
     archived: str
 
 
 @dataclass(frozen=True)
-class ThreadCreatedResult(CliResult, RecordMember, TargetEditResult):
+class ThreadCreatedResult(RecordMember, TargetEditResult):
     created: str
     process_identity: ProcessState
 
@@ -107,7 +107,7 @@ class ThreadCreatedResult(CliResult, RecordMember, TargetEditResult):
 
 
 @dataclass(frozen=True)
-class ThreadTagsResult(CliResult, RecordMember, TargetEditResult):
+class ThreadTagsResult(RecordMember, TargetEditResult):
     thread: str
     tags: frozenset[str]
 
@@ -119,23 +119,23 @@ class TeammatesResult(CliResult):
 
 
 @dataclass(frozen=True)
-class TagRenamedResult(CliResult, RecordMember, TargetEditResult):
+class TagRenamedResult(RecordMember, TargetEditResult):
     renamed: str
     name: str
 
 
 @dataclass(frozen=True)
-class ViewDeletedResult(CliResult, RecordMember, TargetEditResult):
+class ViewDeletedResult(RecordMember, TargetEditResult):
     deleted_view: str
 
 
 @dataclass(frozen=True)
-class TargetReadResult(CliResult, RecordMember, TargetEditResult):
+class TargetReadResult(RecordMember, TargetEditResult):
     read: str
 
 
 @dataclass(frozen=True)
-class ThreadPinnedResult(CliResult, RecordMember, TargetEditResult):
+class ThreadPinnedResult(RecordMember, TargetEditResult):
     thread: str
     pinned: bool
 
@@ -282,7 +282,7 @@ class ActivitySetResult(CliResult):
 
 
 @dataclass(frozen=True)
-class OwnersRestartedResult(CliResult, RecordMember, TargetEditResult):
+class OwnersRestartedResult(RecordMember, TargetEditResult):
     restarted: tuple[OwnerRestartResult, ...]
 
 

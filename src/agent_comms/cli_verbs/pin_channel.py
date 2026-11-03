@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from agent_comms.cli_command import TargetActionCommand
 from agent_comms.repo import Checkout
 
 from agent_comms.cli_command import CliCommand
@@ -21,7 +22,8 @@ from typing import Annotated
 
 
 @dataclass(frozen=True, kw_only=True)
-class PinChannelCliCommand(MultipleTargets, NamedCliCommand, declared_name="pin-channel"):
+class PinChannelCliCommand(MultipleTargets, NamedCliCommand, TargetActionCommand[Channel],
+                           declared_name="pin-channel"):
     help = "Set channel pin"
     pinned: Annotated[
         bool, TargetBound(), Argument(flags=("--pinned",))

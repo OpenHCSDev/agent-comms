@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from agent_comms.cli_command import TargetActionCommand
 from agent_comms.cli_command import AppliedTogether
 from agent_comms.cli_commands import ThreadStoppedResult
 from agent_comms.cli_support.thread_lifecycle import ThreadLifecycleCliCommand
@@ -12,7 +13,7 @@ from typing import Self
 
 @dataclass(frozen=True, kw_only=True)
 class StopCliCommand(AppliedTogether[ThreadStoppedResult], NativeOwnerCommand, OwnerLifecycleControl,
-                     ThreadLifecycleCliCommand):
+                     ThreadLifecycleCliCommand, TargetActionCommand[ThreadStoppedResult]):
     help = "Stop process"
 
     @classmethod

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from agent_comms.cli_command import TargetActionCommand
 from agent_comms.channel_targets import SurroundingChannel
 
 from agent_comms.catalog_document import CatalogAccess
@@ -17,7 +18,8 @@ from typing import Self
 
 
 @dataclass(frozen=True, kw_only=True)
-class PinThreadCliCommand(MultipleTargets, NamedCliCommand, declared_name="pin-thread"):
+class PinThreadCliCommand(MultipleTargets, NamedCliCommand, TargetActionCommand[ThreadPinnedResult],
+                          declared_name="pin-thread"):
     help = "Toggle thread pin in channel"
     channel: Annotated[
         str, ChannelBound(), Argument(flags=("--channel",))
