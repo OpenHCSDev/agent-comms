@@ -8,6 +8,8 @@ from cutover.carry_team_project_lead import TeamProjectLead
 from agent_comms.comms import wire
 from agent_comms.locked_store import LiveFilesRequest, RegistryFile
 from agent_comms.registry_document import NoTeamProject, RegisteredTeamProject
+from agent_comms.repo import Checkout
+from agent_comms.threads import Thread
 from conftest import maintenance_held
 
 
@@ -28,6 +30,7 @@ def version_one(root, *, lead: bool) -> None:
 ], ids=["team-with-lead", "no-team"])
 def test_carry_stamps_version_two_and_the_project_stays_the_teams(tmp_path, project, lead):
     comms = wire(tmp_path)
+    comms.registry.declare(Thread("worker", frozenset(), Checkout(tmp_path)))  # a stored registry
     comms.registry.set_team_project(project)
     version_one(tmp_path, lead=lead)
     path = RegistryFile.path_in(tmp_path)
