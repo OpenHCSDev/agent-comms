@@ -81,7 +81,7 @@ class TaggedPayload(PiPayload):
     def envelope_keys(cls) -> frozenset[str]:
         return frozenset({cls.wire_tag})
 
-    def to_wire(self) -> dict[str, object]:
+    def to_wire(self) -> object:
         data = FieldCodec.encode_fields(self)
         if DeclaredFamily.record_tag(self):
             data[self.wire_tag] = self.wire_discriminator()
