@@ -56,10 +56,13 @@ class ConnectorObservationPeer(ObservationPeer):
         try:
             self.loop.run_until_complete(self.task)
         except asyncio.CancelledError:
-            # join cancels the relay: the UI retired this observation.
+            # retire cancels the relay: the UI retired this observation.
             self.ending = "the UI retired the observation"
         finally:
             with self.lifetime:
+                # The relay closed its local side, so no worker thread stays blocked on it;
+                # they all finish before the loop does.
+                self.loop.run_until_complete(self.loop.shutdown_default_executor())
                 self.loop.close()
 
     async def carry(self, local: Connection, access: ConnectorClient) -> None:
@@ -78,15 +81,21 @@ class ConnectorObservationPeer(ObservationPeer):
             local.close()
 
     def join(self, timeout: float | None = None) -> None:
-        """Retiring the peer ends its relay now, even while the connector is still connecting."""
+        self.thread.join(timeout)
+
+    def retire(self) -> None:
+        """End the relay now, even while the connector is still connecting, then wait."""
         with self.lifetime:
             if not self.loop.is_closed():
                 self.loop.call_soon_threadsafe(self.task.cancel)
-        self.thread.join(timeout)
+        self.join()
 
-    def died(self, error: str | None) -> ObserverDied:
-        """The relay records why it ended before it closes the local side, so that reason is
-        the cause; a local read or write that then fails only shows the relay has ended."""
+    def service_failed(self, traceback: str) -> ObserverDied:
+        return ConnectorObserverClosed(self.url, traceback)
+
+    def connection_closed(self) -> ObserverDied:
+        """carry records the relay's end before it closes the local side, so the viewer's
+        end-of-stream always finds that reason recorded."""
         return ConnectorObserverClosed(self.url, self.ending)
 
 
