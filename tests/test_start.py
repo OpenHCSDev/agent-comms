@@ -13,7 +13,7 @@ from agent_comms.tools import invoke_tool
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner fixture")
-async def test_real_stopped_owner_with_large_checkout_starts_through_shared_agent_tool(tmp_path, monkeypatch):
+async def test_real_stopped_owner_with_large_checkout_starts_through_shared_agent_tool(tmp_path, monkeypatch, pinned_native):
     from agent_comms.owner_connection import socket_path
 
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
