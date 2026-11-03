@@ -32,6 +32,7 @@ from conftest import transcript_records
 
 from agent_comms.bus import Bus
 from agent_comms.comms import Comms, wire
+from agent_comms.exporting import WireExportObserver
 from agent_comms.connector import (
     ApprovalLink,
     InitializeResult,
@@ -481,7 +482,8 @@ def test_fresh_connector_publication_refuses_before_entering_held_stores(connect
         barrier.begin(MaintenanceOperator.current()), PausedPhase), InstallingPhase)
     try:
         with pytest.raises(MaintenanceHeldError):
-            connector.invoke(ConnectorSendTool, {"to": "worker", "body": "Held send"}, CALLER)
+            connector.invoke(
+                ConnectorSendTool, {"to": "worker", "body": "Held send"}, CALLER, WireExportObserver())
     finally:
         barrier.advance(held, ReadyPhase)
     assert comms.bus.bus.revision() == before
@@ -1170,3 +1172,46 @@ async def test_connector_reports_the_root_its_core_serves(client, comms):
     result = (await response.json())["result"]
     assert result["isError"] is False
     assert result["structuredContent"]["root"] == str(comms.root.resolve())
+
+
+async def test_a_call_that_asks_for_progress_streams_it_then_its_reply(client, comms, tmp_path):
+    """MCP progress: a tools/call carrying a progress token is answered as server-sent events,
+    the export's progress notices first and its reply last."""
+    from agent_comms.connector import ProgressNotice, StreamedLine, ToolsCallReply
+
+    token = await approved_token(client, comms)
+    destination = tmp_path / "export.jsonl"
+    response = await client.post("/mcp", headers={
+        "Authorization": f"Bearer {token}", "Accept": "text/event-stream"}, json={
+        "jsonrpc": "2.0", "id": "export-1", "method": "tools/call",
+        "params": {"name": "comms_export_wire", "_meta": {"progressToken": "export-1"},
+                   "arguments": {"destination": str(destination), "format": "jsonl",
+                                 "scope": "all", "limit": "all"}}})
+    assert response.headers["Content-Type"].startswith("text/event-stream")
+
+    class Recorded(WireExportObserver):
+        def __init__(self):
+            self.progress = []
+
+        def advanced(self, progress):
+            self.progress.append(progress)
+
+    observer, replies = Recorded(), []
+    async for line in response.content:
+        StreamedLine(line).delivered(observer, replies)
+    (reply,) = replies
+    assert reply.structured()["destination"] == str(destination)
+    assert destination.exists()
+
+
+async def test_a_cancel_reaches_the_running_call_it_names(connector):
+    """notifications/cancelled stops the observed call with that request id and no other."""
+    from agent_comms.connector import CancelledMessage
+    from agent_comms.exporting import CancellableWireExport
+
+    named, other = CancellableWireExport(), CancellableWireExport()
+    connector.observed["export-1"] = named
+    connector.observed["export-2"] = other
+    message = CancelledMessage(jsonrpc="2.0", params={"requestId": "export-1"})
+    assert (await message.answer(connector, None, None)).status == 202
+    assert named.cancelled() and not other.cancelled()

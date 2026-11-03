@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import get_original_bases
-from typing import Annotated, ClassVar, NoReturn, cast, get_args, get_origin
+from typing import TYPE_CHECKING, Self, Annotated, ClassVar, NoReturn, cast, get_args, get_origin
 
 from agent_comms_hooks import ToolRefusedError
 from pydantic import JsonValue
@@ -39,6 +39,10 @@ from .thread_execution import ThreadCommandAvailability
 from .tool_caller import NoThreadCaller, ThreadCaller, ToolCaller
 from .tool_declaration import NativeRequestTools, ToolDeclaration
 from .tool_result import ToolResult
+
+if TYPE_CHECKING:
+    from .exporting import WireExportObserver
+    from .remote_core import RemoteCoreAccess
 
 
 class ToolArgumentsRefusedError(MalformedRecord, ToolRefusedError):
@@ -152,19 +156,34 @@ class ToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResu
         cls, comms: Comms, arguments: Mapping[str, object], *, caller: ToolCaller
     ) -> dict[str, JsonValue]:
         """The reply every adapter receives: the encoding of the tool's declared result."""
+        return cls.decoded(comms, arguments).replied(comms, caller)
+
+    @classmethod
+    def decoded(cls, comms: Comms, arguments: Mapping[str, object]) -> Self:
+        """This tool's request as the wire's arguments declare it."""
         if cls.family_discriminator in arguments:
             raise ToolArgumentsRefusedError(f"Unknown tool argument: {cls.family_discriminator}")
         try:
-            request = FieldCodec.decode_record(
+            return FieldCodec.decode_record(
                 cls, dict(arguments), field_types=cls.context_types(comms, arguments))
         except MalformedRecord as error:
             raise ToolArgumentsRefusedError(
                 f"Invalid {cls.declared_name} arguments: {error}"
             ) from error
+
+    def bound(self, observer: WireExportObserver) -> Self:
+        """A request that reports no progress runs the same whatever observes it."""
+        return self
+
+    def posted(self, remote: RemoteCoreAccess) -> dict[str, JsonValue]:
+        """How a remote access sends this request: one posted call and its reply."""
+        return remote.post(self)
+
+    def replied(self, comms: Comms, caller: ToolCaller) -> dict[str, JsonValue]:
         # A request decoded from the wire meets whichever caller arrived; the caller's own
         # invoke checks at runtime that it may apply this request (thread-only refusals).
-        applied = caller.invoke(cast(ToolRequest, request), comms)
-        return request.reply(FieldCodec.encode(applied.to_wire()), caller)
+        applied = caller.invoke(cast(ToolRequest, self), comms)
+        return self.reply(FieldCodec.encode(applied.to_wire()), caller)
 
     def require_read_only(self) -> None:
         """Mutating declarations cannot run under a read-only connector principal."""

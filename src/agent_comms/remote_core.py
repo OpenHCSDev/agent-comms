@@ -2,25 +2,36 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import asyncio
 import json
 import socket
 import ssl
 import threading
 import urllib.request
+from dataclasses import replace
+from uuid import uuid4
+
+import aiohttp
+from pydantic import JsonValue
 from multiprocessing.connection import Connection
 
 from yarl import URL
 
-from .connector import ToolsCallMessage, ToolsCallReply
+from .connector import CancelledMessage, StreamedLine, ToolsCallMessage, ToolsCallReply
 from .connector_profile import HttpsMcpEndpoint, UiConnectionProfile, UiCredential
 from .core_access import CoreAccess
 from .errors import RelationViolationError
+from .exporting import WireExportCancelled
 from .nominal.field_codec import FieldCodec
 from .tool_caller import ToolCaller
 from .tool_request import ToolRequest
 from .tool_result import ToolResult
 from .ui_model.observation import ObservationPeer, ObservationSource, ObserverDied, RelayConnection, ViewerEnd, relay_frames
+
+if TYPE_CHECKING:
+    from .tools import ObservedToolRequest
 
 
 class ConnectorObserverClosed(ObserverDied):
@@ -122,18 +133,67 @@ class RemoteCoreAccess(UiConnectionProfile, CoreAccess, ConnectorClient):
 
     timeout_seconds = 30
 
+    cancel_poll_seconds = 0.2
+
     def call[R: ToolResult](self, request: ToolRequest[ToolCaller, R]) -> R:
+        return FieldCodec.decode(request.result_type(), request.posted(self))
+
+    @property
+    def headers(self) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self.credential.token}", "Content-Type": "application/json"}
+
+    def post[C: ToolCaller, R: ToolResult](self, request: ToolRequest[C, R]) -> dict[str, JsonValue]:
+        """One posted tools/call and its reply."""
         envelope = ToolsCallMessage(jsonrpc="2.0", id=1, params=request.called())
         posted = urllib.request.Request(
-            str(self.endpoint.url),
-            data=FieldCodec.compact(FieldCodec.encode(envelope)).encode(),
-            headers={
-                "Authorization": f"Bearer {self.credential.token}",
-                "Content-Type": "application/json",
-            },
+            str(self.endpoint.url), data=FieldCodec.compact(FieldCodec.encode(envelope)).encode(),
+            headers=self.headers,
         )
         with urllib.request.urlopen(posted, timeout=self.timeout_seconds, context=self.tls()) as response:
-            reply = FieldCodec.decode(ToolsCallReply, json.load(response))
-        if reply.result.is_error:
-            raise RelationViolationError(" ".join(content.text for content in reply.result.content))
-        return FieldCodec.decode(request.result_type(), reply.result.structured_content)
+            return FieldCodec.decode(ToolsCallReply, json.load(response)).structured()
+
+    def post_observed[C: ToolCaller, R: ToolResult](self, request: ObservedToolRequest[C, R]) -> dict[str, JsonValue]:
+        """A call the client asked progress for: its events reach the request's observer, and a
+        cancel there reaches the running call on Core."""
+        return asyncio.run(self.streamed(request))
+
+    async def streamed[C: ToolCaller, R: ToolResult](
+        self, request: ObservedToolRequest[C, R],
+    ) -> dict[str, JsonValue]:
+        call_id = uuid4().hex
+        called = request.called()
+        envelope = ToolsCallMessage(jsonrpc="2.0", id=call_id, params=replace(
+            called, meta={**called.meta, "progressToken": call_id}))
+        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=self.tls())) as session:
+            cancelled = asyncio.Event()
+            watcher = asyncio.create_task(self.cancel_when_checked(session, request, call_id, cancelled))
+            try:
+                async with session.post(
+                    str(self.endpoint.url), data=FieldCodec.compact(FieldCodec.encode(envelope)),
+                    headers={**self.headers, "Accept": "text/event-stream"},
+                ) as response:
+                    replies: list[ToolsCallReply] = []
+                    async for line in response.content:
+                        StreamedLine(line).delivered(request.observer, replies)
+            finally:
+                watcher.cancel()
+        (reply,) = replies
+        if cancelled.is_set():
+            raise WireExportCancelled("Wire export cancelled")
+        return reply.structured()
+
+    async def cancel_when_checked[C: ToolCaller, R: ToolResult](
+        self, session: aiohttp.ClientSession, request: ObservedToolRequest[C, R], call_id: str,
+        cancelled: asyncio.Event,
+    ) -> None:
+        """The observer's own check decides when to stop; one cancel then reaches Core."""
+        while True:
+            try:
+                request.observer.check()
+            except WireExportCancelled:
+                cancelled.set()
+                notice = CancelledMessage(jsonrpc="2.0", params={"requestId": call_id})
+                async with session.post(str(self.endpoint.url), data=FieldCodec.compact(
+                        FieldCodec.encode(notice)), headers=self.headers):
+                    return
+            await asyncio.sleep(self.cancel_poll_seconds)

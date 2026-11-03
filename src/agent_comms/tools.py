@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 
 from agent_comms_hooks import ToolRefusedError
-from agent_comms.nominal.field_codec import WireExclude
+from agent_comms.nominal.field_codec import WireExclude, WireTransient
 
 from .input_key import InputKeyText
 from .agent_inbox import InboxWait, NoWait, TakenInputPosition, TakenInputStart
@@ -34,9 +34,9 @@ import dataclasses
 import threading
 from abc import abstractmethod
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Type
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self, Type
 
 from pydantic import JsonValue
 
@@ -95,7 +95,9 @@ from .owner_connection import OwnerConnection
 from .context_store import (
     LATEST_CONTEXT, CapturedContext, ContextManifestCursor, ContextManifestPage, ContextManifestReference,
 )
+from .turn_context import ContextManifest
 from .importing import ImportedSessionMetadata, ThreadImported
+from .exporting import WireExportFormat, WireExportLimit, WireExportObserver, WireExportProvenance, WireExportScope
 from .historical_views import AllHistoricalSenders, HistoricalSenders, HistoricalThread
 from .cli_bridges.history import ExpectedSession, OfflineHistory
 from .harness_install import Harness
@@ -147,6 +149,7 @@ from .notification_reads import LiveNotificationRead
 from .work_branches import WorkBranch, WorkBranches
 
 if TYPE_CHECKING:
+    from .remote_core import RemoteCoreAccess
     from .comms import Comms
 
 
@@ -463,6 +466,46 @@ class CommsHistoricalThreadsTool(ReadTool, ToolRequest[ToolCaller, HistoricalThr
 
 
 @dataclass(frozen=True, kw_only=True)
+class ObservedToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResult](
+    ToolRequest[Caller, Result], declared_name=None,
+):
+    """A tool whose run reports progress to an observer and stops when it is cancelled. The
+    observer never crosses the wire: each end binds its own, and a remote call streams the
+    progress between them and carries a cancel back."""
+
+    observer: Annotated[WireExportObserver, WireTransient()] = field(
+        default_factory=WireExportObserver, compare=False)
+
+    def observed_by(self, observer: WireExportObserver) -> Self:
+        return replace(self, observer=observer)
+
+    def bound(self, observer: WireExportObserver) -> Self:
+        return self.observed_by(observer)
+
+    def posted(self, remote: RemoteCoreAccess) -> dict[str, JsonValue]:
+        return remote.post_observed(self)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsExportWireTool(ObservedToolRequest[ToolCaller, WireExportProvenance]):
+    """A UI exports wire history to a file on Core's host, with progress and cancellation.
+    Requires a human caller."""
+
+    label = "Export wire"
+    description = ("Export wire history to a file on Core's host, reporting progress and stopping "
+                   "when cancelled; requires a human UI caller.")
+    destination: Annotated[Path, *tool_field("Destination file on Core's host")]
+    format: Annotated[WireExportFormat, *tool_field("Export format")]
+    scope: Annotated[WireExportScope, *tool_field("What to export")]
+    limit: Annotated[WireExportLimit, *tool_field("How much to export")]
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> WireExportProvenance:
+        caller.require_human()
+        return comms.views.export_wire(self.destination, format=self.format, scope=self.scope,
+                                       limit=self.limit, observer=self.observer)
+
+
+@dataclass(frozen=True, kw_only=True)
 class CommsImportThreadTool(ToolRequest[ToolCaller, ThreadImported]):
     """A UI imports a harness session as a stopped thread; Core's host reads the source file.
     Requires a human caller."""
@@ -535,7 +578,7 @@ class SavedManifestRead(ReadTool, ToolRequest[ToolCaller, ToolResult], declared_
     reference: Annotated[ContextManifestReference, *tool_field("The retained manifest")]
     position: Annotated[int, *tool_field("Segment position")]
 
-    def manifest(self, comms: Comms):
+    def manifest(self, comms: Comms) -> ContextManifest:
         return self.reference.read(comms.contexts, self.owner, comms.registry)
 
 
@@ -584,7 +627,8 @@ class CommsOwnerRequestTool(ToolRequest[ToolCaller, OwnerAnswered]):
         thread = comms.registry.require(self.owner.name)
         if thread.incarnation != self.owner:
             raise ValueError("Selected thread incarnation changed")
-        return OwnerAnswered(OwnerConnection.exchange(comms.root, thread.require_process(), self.request))
+        return OwnerAnswered(FieldCodec.decode(JsonValue, OwnerConnection.exchange(
+            comms.root, thread.require_process(), self.request)))
 
 
 @dataclass(frozen=True)

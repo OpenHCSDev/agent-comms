@@ -18,6 +18,7 @@ from typing import BinaryIO, ClassVar
 
 from .channels import Channel
 from .cli_result import CliResult
+from .tool_result import ToolResult
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
 from .message_reference import MessageReference
@@ -383,7 +384,7 @@ class WireExportBoundary:
 
 
 @dataclass(frozen=True, slots=True)
-class WireExportProvenance(CliResult):
+class WireExportProvenance(CliResult, ToolResult):
     """Artifact provenance, never a delivery or source-session acknowledgement."""
 
     destination: str

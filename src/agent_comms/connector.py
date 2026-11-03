@@ -34,7 +34,7 @@ import signal
 import socket
 import sys
 import time
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field, replace
@@ -65,9 +65,10 @@ from .errors import (
 from .coordination_errors import CoordinationError, Refused
 from .work_branches import WorkBranchError
 from .nominal.field_codec import (
-    Argument, FieldCodec, GitCommitText, MalformedRecord, PathText, WireName, WireOmitDefault,
-    RecordMember, boundary_decoder, projected,
+    Argument, FieldCodec, GitCommitText, MalformedRecord, NullMember, PathText, SingleFieldValue,
+    SubclassUnion, WireName, WireOmitDefault, RecordMember, boundary_decoder, projected,
 )
+from .exporting import CancellableWireExport, WireExportCancelled, WireExportObserver, WireExportProgress
 from agent_comms.channel_targets import NamedTarget
 from agent_comms.owner_requests import NewestOpenRequest, RequestSelection
 from .host_services import HostService
@@ -392,7 +393,9 @@ class McpMessage(DeclaredFamily, affix="Message"):
         return self.declared_name
 
     @abstractmethod
-    async def answer(self, connector: Connector, caller: ConnectorCaller) -> web.Response: ...
+    async def answer(
+        self, connector: Connector, caller: ConnectorCaller, http: web.Request,
+    ) -> web.StreamResponse: ...
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -401,7 +404,9 @@ class McpNotification(McpMessage, declared_name=None):
 
     params: dict[str, object] = field(default_factory=dict)
 
-    async def answer(self, connector: Connector, caller: ConnectorCaller) -> web.Response:
+    async def answer(
+        self, connector: Connector, caller: ConnectorCaller, http: web.Request,
+    ) -> web.StreamResponse:
         return web.Response(status=202)
 
 
@@ -410,16 +415,29 @@ class InitializedMessage(McpNotification, declared_name="notifications/initializ
     pass
 
 
+@dataclass(frozen=True)
+class CancelledParams:
+    request_id: Annotated[int | str, WireName("requestId")]
+
+
 @dataclass(frozen=True, kw_only=True)
 class CancelledMessage(McpNotification, declared_name="notifications/cancelled"):
-    pass
+    """The client stops one of its running calls; a call that cannot stop finishes as usual."""
+
+    async def answer(
+        self, connector: Connector, caller: ConnectorCaller, http: web.Request,
+    ) -> web.StreamResponse:
+        connector.cancel_call(FieldCodec.decode(CancelledParams, self.params).request_id)
+        return web.Response(status=202)
 
 
 @dataclass(frozen=True, kw_only=True)
 class McpRequest(McpMessage):
     id: int | str
 
-    async def answer(self, connector: Connector, caller: ConnectorCaller) -> web.Response:
+    async def answer(
+        self, connector: Connector, caller: ConnectorCaller, http: web.Request,
+    ) -> web.StreamResponse:
         return web.json_response(
             FieldCodec.encode(McpReply(self.id, await self.result(connector, caller)))
         )
@@ -454,6 +472,113 @@ class ToolsListMessage(McpRequest, declared_name="tools/list"):
         ))
 
 
+class ProgressRequest(SubclassUnion, affix="Progress"):
+    """Whether a tools/call asked for progress: no token (null) or the client's token."""
+
+    @abstractmethod
+    async def answered(
+        self, message: ToolsCallMessage, connector: Connector, caller: ConnectorCaller,
+        http: web.Request,
+    ) -> web.StreamResponse: ...
+
+
+@dataclass(frozen=True)
+class NoProgress(NullMember, ProgressRequest):
+    async def answered(
+        self, message: ToolsCallMessage, connector: Connector, caller: ConnectorCaller,
+        http: web.Request,
+    ) -> web.StreamResponse:
+        return web.json_response(FieldCodec.encode(
+            ToolsCallReply(message.id, await message.result(connector, caller, WireExportObserver()))))
+
+
+@dataclass(frozen=True)
+class ProgressToken(SingleFieldValue, ProgressRequest):
+    token: str
+
+    async def answered(
+        self, message: ToolsCallMessage, connector: Connector, caller: ConnectorCaller,
+        http: web.Request,
+    ) -> web.StreamResponse:
+        """Stream progress events while the call runs, then its reply, as server-sent events."""
+        stream = web.StreamResponse(headers={"Content-Type": "text/event-stream", "Cache-Control": "no-cache"})
+        await stream.prepare(http)
+        observer = StreamedProgress(asyncio.get_running_loop())
+        connector.observed[message.id] = observer
+        try:
+            call = asyncio.create_task(message.result(connector, caller, observer))
+            while True:
+                progressed = asyncio.create_task(observer.events.get())
+                await asyncio.wait((call, progressed), return_when=asyncio.FIRST_COMPLETED)
+                if not progressed.done():
+                    progressed.cancel()
+                    break
+                await stream.write(ProgressNotice.sent(self.token, progressed.result()))
+            while not observer.events.empty():
+                await stream.write(ProgressNotice.sent(self.token, observer.events.get_nowait()))
+            await stream.write(StreamedEvent.framed(FieldCodec.encode(ToolsCallReply(message.id, call.result()))))
+        finally:
+            connector.observed.pop(message.id, None)
+        await stream.write_eof()
+        return stream
+
+
+class StreamedProgress(CancellableWireExport):
+    """A connector-side export observer: each advance becomes one streamed event."""
+
+    def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
+        super().__init__()
+        self.loop = loop
+        self.events: asyncio.Queue[WireExportProgress] = asyncio.Queue()
+
+    def advanced(self, progress: WireExportProgress) -> None:
+        self.loop.call_soon_threadsafe(self.events.put_nowait, progress)
+
+
+@dataclass(frozen=True)
+class ToolCallMeta:
+    progress: Annotated[ProgressRequest, WireName("progressToken")] = NoProgress()
+
+
+class StreamedEvent(ABC):
+    """One server-sent event of a streamed call: a progress notice or the final reply."""
+
+    @abstractmethod
+    def delivered(self, observer: WireExportObserver, replies: list[ToolsCallReply]) -> None: ...
+
+    @staticmethod
+    def framed(encoded: object) -> bytes:
+        return f"data: {FieldCodec.compact(encoded)}\n\n".encode()
+
+
+@dataclass(frozen=True)
+class ExportProgressMeta:
+    export: Annotated[WireExportProgress, WireName("agent_comms/export")]
+
+
+@dataclass(frozen=True)
+class ProgressParams:
+    token: Annotated[str, WireName("progressToken")]
+    progress: int
+    meta: Annotated[ExportProgressMeta, WireName("_meta")]
+
+
+@dataclass(frozen=True)
+class ProgressNotice(StreamedEvent):
+    jsonrpc: Literal["2.0"]
+    method: Literal["notifications/progress"]
+    params: ProgressParams
+
+    def delivered(self, observer: WireExportObserver, replies: list[ToolsCallReply]) -> None:
+        observer.advanced(self.params.meta.export)
+
+    @classmethod
+    def sent(cls, token: str, progress: WireExportProgress) -> bytes:
+        notice = cls("2.0", "notifications/progress",
+                     ProgressParams(token, progress.messages_written, ExportProgressMeta(progress)))
+        return cls.framed(FieldCodec.encode(notice))
+
+
 @dataclass(frozen=True, kw_only=True)
 class ToolsCallMessage(McpMessage, declared_name="tools/call"):
     id: int | str
@@ -463,23 +588,27 @@ class ToolsCallMessage(McpMessage, declared_name="tools/call"):
     def log_name(self) -> str:
         return f"{super().log_name} {self.params.name}"
 
-    async def answer(self, connector: Connector, caller: ConnectorCaller) -> web.Response:
-        return web.json_response(
-            FieldCodec.encode(ToolsCallReply(self.id, await self.result(connector, caller)))
-        )
+    async def answer(
+        self, connector: Connector, caller: ConnectorCaller, http: web.Request,
+    ) -> web.StreamResponse:
+        """The call's own meta says whether the client asked for progress."""
+        meta = FieldCodec.decode(ToolCallMeta, self.params.meta)
+        return await meta.progress.answered(self, connector, caller, http)
 
-    async def result(self, connector: Connector, caller: ConnectorCaller) -> ToolsCallResult:
+    async def result(
+        self, connector: Connector, caller: ConnectorCaller, observer: WireExportObserver,
+    ) -> ToolsCallResult:
         tool = caller.exposed().get(self.params.name)
         if tool is None:
             return ToolsCallResult.failed(
                 ToolRefusedError(f"The connector exposes no tool {self.params.name!r}.")
             )
         try:
-            reply = await connector.call(tool, self.params.arguments, caller)
+            reply = await connector.call(tool, self.params.arguments, caller, observer)
             return ToolsCallResult((TextContent(json.dumps(reply)),), False, reply)
         except (
             ToolRefusedError, RelationViolationError, CoordinationError, WorkBranchError,
-            MalformedRecord, Refused, ConnectionError, TimeoutError,
+            MalformedRecord, Refused, ConnectionError, TimeoutError, WireExportCancelled,
         ) as error:
             logging.exception("Connector tool %s failed", self.params.name)
             return ToolsCallResult.failed(error)
@@ -509,8 +638,31 @@ class ToolsCallResult(McpResult):
 
 
 @dataclass(frozen=True)
-class ToolsCallReply(McpReply):
+class ToolsCallReply(McpReply, StreamedEvent):
     result: ToolsCallResult
+
+    def structured(self) -> dict[str, JsonValue]:
+        """The tool's declared reply, or its declared failure raised."""
+        if self.result.is_error:
+            raise RelationViolationError(" ".join(content.text for content in self.result.content))
+        return self.result.structured_content
+
+    def delivered(self, observer: WireExportObserver, replies: list[ToolsCallReply]) -> None:
+        replies.append(self)
+
+
+@dataclass(frozen=True)
+class StreamedLine:
+    """One line of a streamed call; only server-sent `data:` lines carry an event."""
+
+    line: bytes
+
+    @boundary_decoder
+    def delivered(self, observer: WireExportObserver, replies: list[ToolsCallReply]) -> None:
+        text = self.line.decode().strip()
+        if text.startswith("data: "):
+            event = FieldCodec.decode(ProgressNotice | ToolsCallReply, json.loads(text[len("data: "):]))
+            event.delivered(observer, replies)
 
 
 @dataclass(frozen=True)
@@ -530,6 +682,9 @@ class Connector:
     ] = field(
         default_factory=dict, init=False, repr=False, compare=False,
     )
+    observed: dict[int | str, CancellableWireExport] = field(
+        default_factory=dict, init=False, repr=False, compare=False,
+    )
     git_children: GitChildren = field(default_factory=GitChildren, init=False, repr=False, compare=False)
 
     watch_tasks: set[asyncio.Task[None]] = field(
@@ -546,13 +701,13 @@ class Connector:
 
     async def call(
         self, tool: type[ToolRequest] | type[ConnectorTool],
-        arguments: Mapping[str, object], caller: ConnectorCaller,
+        arguments: Mapping[str, object], caller: ConnectorCaller, observer: WireExportObserver,
     ) -> dict[str, JsonValue]:
         """Start once; a disconnected HTTP client cannot abandon its write."""
         if self.git_children.closing.is_set():
             raise web.HTTPServiceUnavailable(text="Connector is stopping")
         with OwnedGitOpening(self.git_children).bound():
-            pending = asyncio.create_task(tool.run_async(partial(self.invoke, tool, arguments, caller)))
+            pending = asyncio.create_task(tool.run_async(partial(self.invoke, tool, arguments, caller, observer)))
         self.calls[pending] = tool
         pending.add_done_callback(self.calls.pop)
         return await asyncio.shield(pending)
@@ -596,13 +751,17 @@ class Connector:
 
     def invoke(
         self, tool: type[ToolRequest] | type[ConnectorTool], arguments: Mapping[str, object],
-        caller: ConnectorCaller,
+        caller: ConnectorCaller, observer: WireExportObserver,
     ) -> dict[str, JsonValue]:
         tool.require_entry_open(self.root)
         with self.opened_wire() as comms:
             acting, rest = caller.acting(arguments)
             caller.prepare_call(comms, acting)
-            return tool.invoke(comms, rest, caller=acting)
+            return tool.decoded(comms, rest).bound(observer).replied(comms, acting)
+
+    def cancel_call(self, request_id: int | str) -> None:
+        """A cancel names a running observed call by its request id; any other call runs on."""
+        self.observed.get(request_id, CancellableWireExport()).cancel()
 
     def application(self) -> web.Application:
         self.store.read()  # Refuse an unreadable store before binding any port.
@@ -859,7 +1018,7 @@ class Connector:
         await ObservationRelay(resolve_comms_route(self.root)).carry(viewer)
         return viewer
 
-    async def mcp(self, request: web.Request) -> web.Response:
+    async def mcp(self, request: web.Request) -> web.StreamResponse:
         caller = await self.bearer_caller(request)
         try:
             data = await request.json()
@@ -872,7 +1031,7 @@ class Connector:
         except MalformedRecord as error:
             return self.refused(data, InvalidRequestError(str(error)))
         started = time.monotonic()
-        response = await message.answer(self, caller)
+        response = await message.answer(self, caller, request)
         logging.info("MCP %s answered in %.3fs", message.log_name, time.monotonic() - started)
         return response
 
