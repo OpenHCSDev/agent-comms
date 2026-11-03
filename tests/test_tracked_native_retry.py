@@ -57,7 +57,7 @@ async def test_recovered_native_request_replaces_prior_refusal_terminal():
     assert isinstance(turn.terminal, PendingTrackedTerminal)
 
 
-@pytest.mark.parametrize("previous", [None, ModelRequestFailed("prior refusal")])
+@pytest.mark.parametrize("previous", [NoTurnFailure(), ModelRequestFailed("prior refusal")])
 async def test_exhausted_native_request_records_required_final_error(previous):
     turn = tracked_turn(TurnOutput(failure=previous), PendingTrackedTerminal())
     event = NativeRetryEnd.from_wire({
