@@ -166,7 +166,7 @@ def test_viewer_reset_with_unread_observations_ends_the_service(comms):
 async def test_peer_write_failure_retires_once_and_cancels_owner_reads(comms):
     import multiprocessing
 
-    from agent_comms.ui_model.observation import ObservationService, ReadAnswered
+    from agent_comms.ui_model.observation import NothingAnswered, ObservationService, ReadRefused
 
     connection, viewer = multiprocessing.get_context("spawn").Pipe()
     with connection, viewer:
@@ -175,11 +175,11 @@ async def test_peer_write_failure_retires_once_and_cancels_owner_reads(comms):
         service.owner_reads[7] = asking
         viewer.close()
         # The real Connection pickler exports a BytesIO memoryview for this payload.
-        service.send(ReadAnswered(1, "x" * 20_000))
+        service.send(ReadRefused(1, RuntimeError("large"), "x" * 20_000))
         assert service.closed and service.changed.is_set()
         assert asking.cancelling() == 1
         service.retire()
-        service.send(ReadAnswered(2, "unreachable"))
+        service.send(NothingAnswered(2))
         service.receive()
         assert asking.cancelling() == 1
         with pytest.raises(asyncio.CancelledError):
@@ -219,14 +219,14 @@ async def test_awaited_notifications_then_immediate_close_retires_successfully(c
 def test_local_pipe_corruption_is_not_peer_retirement(comms):
     import multiprocessing
 
-    from agent_comms.ui_model.observation import ObservationService, ReadAnswered
+    from agent_comms.ui_model.observation import NothingAnswered, ObservationService, ReadRefused
 
     connection, viewer = multiprocessing.get_context("spawn").Pipe()
     with connection, viewer:
         service = ObservationService(comms, connection)
         connection.close()
         with pytest.raises(OSError):
-            service.send(ReadAnswered(1, None))
+            service.send(NothingAnswered(1))
         assert not service.closed
 
 

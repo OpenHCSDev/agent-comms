@@ -40,6 +40,7 @@ from agent_comms_hooks import ToolRefusedError
 from metaclass_registry.mro_dispatch import MroDispatch, handles
 
 from agent_comms.acp_extension import (
+    GoalSnapshotReply,
     TranscriptDraftUpdate,
     TranscriptSnapshotUpdate,
 )
@@ -47,7 +48,8 @@ from agent_comms.active_route import CommsRoute
 from agent_comms.activity import ObservedActivity
 from agent_comms.bus_read import OwnerScopedRead, UiRead
 from agent_comms.child_process import join_retirement
-from agent_comms.team_hud import TeamFrame, TeamHud
+from agent_comms.input_disposition import DeliveryOverview
+from agent_comms.team_hud import TeamFrame, TeamHud, TeammateDetail
 from agent_comms.comms import Comms
 from agent_comms.coordinator import Coordination
 from agent_comms.coordination_errors import (
@@ -447,7 +449,7 @@ class ReadRequest(AwaitedRead, declared_name=None):
                 raise
             except self.deferred_reads:
                 return ReadBusy(self.request_id)
-            return ReadAnswered(self.request_id, value)
+            return ReadAnswered.of(self.request_id, value)
         except self.refusal_errors as error:
             return self.refused(error)
 
@@ -497,7 +499,7 @@ class OwnerRead(AwaitedRead, declared_name=None):
     async def answer(self, comms: Comms) -> ReadOutcome:
         try:
             self.require_root(comms)
-            return ReadAnswered(self.request_id, await self.ask(comms))
+            return ReadAnswered.of(self.request_id, await self.ask(comms))
         except self.refusal_errors as error:
             return self.refused(error)
 
@@ -1038,13 +1040,65 @@ class Observed(TaggedRecordMember, ObservationStep, ServiceResult, declared_name
 
 
 @dataclass(frozen=True)
-class ReadAnswered(ReadOutcome):
+class ReadAnswered(ReadOutcome, declared_name=None):
+    """A read's answer. Each member carries one declared answer type, so a remote UI decodes
+    the answer as itself."""
+
+    answers: ClassVar[dict[type, type[ReadAnswered]]] = {}
+
     request_id: int
     value: object
+
+    def __init_subclass__(cls, *, answers: type, **kwargs: object) -> None:
+        super().__init_subclass__(**kwargs)
+        ReadAnswered.answers[answers] = cls
+
+    @staticmethod
+    def of(request_id: int, value: object) -> ReadAnswered:
+        """The boundary: a read's result reaches the wire through its declared answer member."""
+        for kind in type(value).__mro__:
+            if kind in ReadAnswered.answers:
+                return ReadAnswered.answers[kind](request_id, value)
+        raise TypeError(f"No read answer is declared for {type(value).__qualname__}")
 
     async def received(self, process: ObservationProcess, observed: Callable[[Observed], None]) -> None:
         if (waiter := process.reads.pop(self.request_id, None)) is not None and not waiter.done():
             waiter.set_result(self.value)
+
+
+@dataclass(frozen=True)
+class NothingAnswered(ReadAnswered, answers=type(None)):
+    value: None = None
+
+
+@dataclass(frozen=True)
+class TranscriptAnswered(ReadAnswered, answers=TranscriptSnapshotUpdate):
+    value: TranscriptSnapshotUpdate
+
+
+@dataclass(frozen=True)
+class DraftAnswered(ReadAnswered, answers=TranscriptDraftUpdate):
+    value: TranscriptDraftUpdate
+
+
+@dataclass(frozen=True)
+class NotificationsAnswered(ReadAnswered, answers=NotificationWindow):
+    value: NotificationWindow
+
+
+@dataclass(frozen=True)
+class TeammateAnswered(ReadAnswered, answers=TeammateDetail):
+    value: TeammateDetail
+
+
+@dataclass(frozen=True)
+class GoalAnswered(ReadAnswered, answers=GoalSnapshotReply):
+    value: GoalSnapshotReply
+
+
+@dataclass(frozen=True)
+class DeliveryAnswered(ReadAnswered, answers=DeliveryOverview):
+    value: DeliveryOverview
 
 
 @dataclass(frozen=True)
