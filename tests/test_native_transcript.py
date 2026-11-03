@@ -18,6 +18,7 @@ from agent_comms.nominal.field_codec import (
 from agent_comms.native_entries import MessageEntry, NativeEntry, NativeEvidenceScope, TranscriptProjection, UnknownEntry
 from agent_comms.native_transcript import NativeTranscript, RetainedNativeTranscript
 from agent_comms.native_output import NativeRecordLocation
+from agent_comms.agent_backend import RuntimeLocation
 from agent_comms.coordination_errors import TranscriptChanged
 from agent_comms.errors import RelationViolationError
 from agent_comms.native_failures import NativePiUnavailable
@@ -43,7 +44,7 @@ from conftest import installed_comms, transcript_records
 from agent_comms.comms import wire
 from agent_comms.transcripts import NativeTranscriptCursor
 from agent_comms.ui_model.unread import ReplyUnread
-from agent_comms.view_unread import TranscriptReadKeys
+from agent_comms.view_unread import TranscriptReadKeys, TranscriptReadState
 from native_unread_fixture import completed_counts
 
 STAMPED = 1790812800.0  # "2026-10-01T00:00:00.000Z", the time every fixture row records
@@ -202,6 +203,59 @@ def test_retained_cut_validates_descriptor_before_translating_original_coordinat
     copyfile(path, other)
     with other.open("rb") as stream, pytest.raises(TranscriptChanged):
         reader.session_cut(FileRevision.from_file(stream), location.revision.size)
+
+
+@pytest.mark.parametrize("read", [
+    pytest.param(lambda runtime, reads, size: runtime.read_cut(), id="cut"),
+    pytest.param(
+        lambda runtime, reads, size: NativeTranscriptCursor(runtime.read_key, size).mark_read(
+            reads, "viewer", runtime),
+        id="nonzero-acknowledgement",
+    ),
+])
+def test_retained_failed_cut_acquisition_refuses_after_parent_returns(
+    retained_native_location: tuple[Path, RetainedSessionLocation],
+    monkeypatch: pytest.MonkeyPatch,
+    read: Callable[[RuntimeLocation, TranscriptReadState, int], object],
+) -> None:
+    root, location = retained_native_location
+    runtime = location.bound_to(root).location(PiNativeBackend)
+    reads = wire(root).views.transcript_reads
+    size = runtime.read_cut().offset
+    assert size > 0
+    path = location.storage.resolve(root)
+    parked = root / "temporarily-unavailable"
+    physical_open = Path.open
+    attempts: list[Path] = []
+
+    def failed_second_open(candidate: Path, mode: Literal["rb"]) -> BinaryIO:
+        if candidate != path:
+            return physical_open(candidate, mode)
+        attempts.append(candidate)
+        # Construction opens A successfully. Its subsequent cut cannot acquire
+        # any descriptor; A returns before the reader's final pathname fence.
+        if len(attempts) == 2:
+            path.parent.rename(parked)
+            try:
+                return physical_open(candidate, mode)
+            finally:
+                parked.rename(path.parent)
+        return physical_open(candidate, mode)
+
+    monkeypatch.setattr(Path, "open", failed_second_open)
+    with pytest.raises(TranscriptChanged) as refused:
+        read(runtime, reads, size)
+    assert isinstance(refused.value.__cause__, FileNotFoundError)
+    assert len(attempts) == 2
+    assert FileRevision.capture(path) == location.revision
+    assert reads.reads.transcript_seen(
+        "viewer", runtime.read_key, location.identity.revision.identity.inode) == 0
+
+
+def test_unstarted_native_journal_may_have_an_empty_cut(tmp_path: Path) -> None:
+    cut = NativeTranscript(tmp_path / "not-written-yet.jsonl").cut()
+    assert cut.offset == 0
+    assert cut.holds(cut, 0)
 
 
 @pytest.mark.parametrize("already_read", [False, True])

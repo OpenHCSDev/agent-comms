@@ -317,14 +317,18 @@ class NativeTranscript(TranscriptSource):
     def session_cut(self, revision: FileRevision, offset: int) -> PresentSessionCut:
         return PresentSessionCut(revision, offset)
 
+    def missing_cut(self, error: FileNotFoundError) -> SessionCut:
+        """An ordinary journal can belong to a session that has not written it yet."""
+        return MissingSessionCut()
+
     def cut(self) -> SessionCut:
         try:
             # One bound descriptor supplies the revision and last record boundary.
             with self.opened() as stream:
                 revision = FileRevision.from_file(stream)
                 return self.session_cut(revision, record_end(stream, revision.size))
-        except FileNotFoundError:
-            return MissingSessionCut()
+        except FileNotFoundError as error:
+            return self.missing_cut(error)
 
     def committed_output_cut(self, location: NativeRecordLocation) -> SessionCut:
         """Corroborate one indexed output against its original header and row."""
@@ -549,6 +553,9 @@ class RetainedNativeTranscript(NativeTranscript):
 
     def require_retained(self) -> None:
         self.require_revision(FileRevision.capture(self.path))
+
+    def missing_cut(self, error: FileNotFoundError) -> SessionCut:
+        raise TranscriptChanged("Bound retained native journal could not be opened") from error
 
     def require_opened(self, stream: BinaryIO) -> None:
         self.require_revision(FileRevision.from_file(stream))
