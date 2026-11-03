@@ -184,6 +184,20 @@ class CloneShape(ABC):
     def read_options(self, program: Path) -> tuple[str, ...]:
         """The Git options every read of this repository passes."""
 
+    promisor_settings: ClassVar[str] = r"^(remote\..+\.promisor|extensions\.partialclone)$"
+
+    @classmethod
+    @cache
+    def of(cls, checkout: Path) -> CloneShape:
+        """Git reads a repository as partial when a remote is a promisor or extensions.partialClone
+        names one; `clone --filter` writes the first. Git answers 1 when no setting matches."""
+        probe = GitLaunch._run(checkout, "config", "--type=bool-or-str", "--get-regexp",
+                               cls.promisor_settings)
+        if probe.returncode not in (0, 1):
+            probe.check_returncode()
+        settings = (line.split(maxsplit=1) for line in probe.stdout.decode().splitlines())
+        return PartialClone() if any(value != "false" for _, value in settings) else FullClone()
+
 
 class FullClone(CloneShape):
     """Every object is local, so a read can never fetch: reads pass nothing, on any Git."""
