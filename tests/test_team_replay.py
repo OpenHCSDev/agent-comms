@@ -154,7 +154,6 @@ class Team:
             name,
             CreateProblemGoalAction(
                 problem=problem,
-                commander=self.commander,
                 request=self.request,
                 assigner=self.thread(self.commander).incarnation,
                 repo=self.repository,
@@ -470,6 +469,27 @@ def test_a_queued_request_is_not_told_to_merge_main_into_its_locked_branch(fleet
     told = {rule.problem for rule in built.observe().rules if isinstance(rule, BranchBehindMain)}
     assert unqueued.id in told
     assert queued.id not in told
+
+
+@pytest.mark.parametrize("outstanding", (False, True))
+def test_rebase_notice_requires_outstanding_branch_changes(fleet, outstanding):
+    built, _ = fleet
+    home = built.worktree("retained-history", base=built.old_main)
+    if outstanding:
+        built.commit(home, "repair.py", "repair = 1\n")
+    built.push(home)
+    todo = built.unit("history-worker", home)
+    storage = built.comms.registry.storage_rule
+    checkout = storage.order_checkout(storage.initial_roots("history-worker"), todo.id)
+    original = built.git(checkout, "rev-parse", "HEAD")
+
+    for index in range(2):
+        built.commit(built.source.checkout, "main.py", f"count = {index + 1}\n")
+        built.git(built.source.checkout, "push", "-q", "origin", "main")
+        told = {rule.problem for rule in built.observe().rules
+                if isinstance(rule, BranchBehindMain)}
+        assert (todo.id in told) is outstanding
+        assert built.git(checkout, "rev-parse", "HEAD") == original
 
 
 def test_branch_rules_read_the_order_checkout_instead_of_the_behind_home(fleet):

@@ -593,8 +593,8 @@ class HeldBranchRule(HolderLine, UndatedStandingRule, FamilyScan, declared_name=
 
 @dataclass(frozen=True)
 class BranchBehindMain(CoreActsStandingRule, HeldBranchRule):
-    """A held branch needs a new base the moment main passes it. Syncing is the holder's
-    reflex, so Core tells the holder itself instead of waiting on a teammate relay."""
+    """Outstanding branch changes need a new base when main passes them. Core tells
+    the holder directly; an empty historical checkout owes no new publication."""
 
     problem: str
     holder: ThreadIncarnation
@@ -620,7 +620,7 @@ class BranchBehindMain(CoreActsStandingRule, HeldBranchRule):
         return tuple(cls(problem=held.problem, holder=held.holder,
                          repository=held.difference.repository,
                          branch=held.difference.branch, behind=held.difference.behind)
-                     for held in branches if held.difference.behind and not held.queued)
+                     for held in branches if held.difference.needs_rebase and not held.queued)
 
     def line(self) -> str:
         return (f"REBASE {self.repository.to_wire()}:{self.branch} ({self.holder.name} {self.problem}) is"
