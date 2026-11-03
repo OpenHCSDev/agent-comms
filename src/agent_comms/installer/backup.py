@@ -34,7 +34,6 @@ from agent_comms.locked_store import (
     InstallationFiles,
     LiveFilesRequest,
     LockedStore,
-    RootFile,
     RollbackRetained,
     RuntimeFile,
     UndeclaredFile,
