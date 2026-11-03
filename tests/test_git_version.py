@@ -2,11 +2,14 @@
 
 from pathlib import Path
 
+import subprocess
+
 import pytest
 
 from agent_comms.native_build_inputs import (
-    FullClone, GitLaunch, GitVersion, GitVersionUnsupported, PartialClone,
+    CloneShape, FullClone, GitLaunch, GitVersion, GitVersionUnsupported, PartialClone,
 )
+from agent_comms.repo import GitCommandError, Repo
 
 
 def reporting_git(directory: Path, report: str) -> Path:
@@ -47,3 +50,15 @@ def test_a_partial_clone_on_a_recent_git_refuses_lazy_fetches(tmp_path: Path, re
 def test_an_unreadable_version_report_is_refused(report: str) -> None:
     with pytest.raises(ValueError):
         GitVersion.reported(report)
+
+
+def test_an_unreadable_checkout_fails_its_read_and_is_probed_again(tmp_path: Path) -> None:
+    subprocess.run(("git", "init", "-q", str(tmp_path)), check=True)
+    config = tmp_path / ".git" / "config"
+    readable = config.read_text()
+    config.write_text(readable + "[unterminated\n")
+    with pytest.raises(GitCommandError):
+        Repo.git(tmp_path, "rev-parse", "--git-dir")
+    config.write_text(readable)
+    assert Repo.git(tmp_path, "rev-parse", "--git-dir").strip() == ".git"
+    assert CloneShape.of(tmp_path) is CloneShape.shapes[tmp_path]
