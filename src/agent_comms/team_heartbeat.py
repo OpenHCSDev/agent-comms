@@ -98,10 +98,12 @@ class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
                 for thread in self.boards(comms.registry, comms.goals)}
 
     def observe(self, comms: Comms, prepared: Mapping[Thread, TeamInputs]) -> tuple[TeamObservation, ...]:
-        return tuple(
+        observed = tuple(
             TeamObservation.read(comms, thread, inputs, plans=self)
             for thread, inputs in prepared.items()
         )
+        self.finish_pass()
+        return observed
 
     def pass_body(self, comms: Comms, observed: tuple[TeamObservation, ...]) -> None:
         """Retain one shared observation per recipient before optional publication."""

@@ -29,7 +29,9 @@ def capture_frame(comms: Comms, lead: str, pulls: ProgressRead,
                   plans: PlanReadings = LIVE_PLAN_READINGS) -> HeartbeatFrame:
     """Direct consumers acquire inputs before entering the actual frame read."""
     inputs = TeamInputs.prepare(comms, lead, pulls, plans)
-    return HeartbeatFrame.capture(comms, lead, inputs, plans)
+    frame = HeartbeatFrame.capture(comms, lead, inputs, plans)
+    plans.finish_pass()
+    return frame
 
 
 def current_hud(comms: Comms, lead: str, frame: HeartbeatFrame,
@@ -47,7 +49,9 @@ def current_hud(comms: Comms, lead: str, frame: HeartbeatFrame,
 def observe_team(comms: Comms, thread: Thread, pulls: ProgressRead,
                  plans: PlanReadings = LIVE_PLAN_READINGS) -> TeamObservation:
     inputs = TeamInputs.prepare(comms, thread.name, pulls, plans)
-    return TeamObservation.read(comms, thread, inputs, plans=plans)
+    observation = TeamObservation.read(comms, thread, inputs, plans=plans)
+    plans.finish_pass()
+    return observation
 
 
 class ObservedHeartbeat(TeamHeartbeat, declared_name=None):

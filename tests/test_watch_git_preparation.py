@@ -271,12 +271,14 @@ def test_failed_plan_acquisition_is_unknown_and_retries_without_main_moving(git_
     assert isinstance(failed.read(evidence), EvidenceUnread)
     assert head in failed.describe(evidence) and "origin" in failed.describe(evidence)
     plans.observe_reading(failed, (evidence,))
+    plans.finish_pass()
     Repo.git(repo.checkout, "remote", "set-url", "origin", str(case.source.remote_path))
     recovered = plans.prepare_reading(repo, (), (evidence,), history=Checkout(repo.checkout).read())
     assert recovered.main.commit == failed.main.commit
     assert repo.has_commit(head)
     prepared = case.snapshot()
     plans.observe_reading(recovered, (evidence,))
+    plans.finish_pass()
     assert recovered.read(evidence) == EvidenceFound(False)
     assert case.snapshot() == prepared
 
@@ -304,11 +306,13 @@ def test_one_pass_answers_each_evidence_once_for_every_served_teammate(git_prepa
     readings = tuple(plans.prepare_reading(repo, (), (evidence,), history=history) for _ in range(3))
     for reading in readings:
         plans.observe_reading(reading, (evidence,))
+    plans.finish_pass()
     assert all(reading.holds(evidence) for reading in readings)
     assert evidence.evaluations == 1
     plans.begin_pass()
     following = plans.prepare_reading(repo, (), (evidence,), history=history)
     plans.observe_reading(following, (evidence,))
+    plans.finish_pass()
     assert evidence.evaluations == 1
 
 
@@ -373,6 +377,7 @@ def test_promised_content_is_unreadable_not_absent_and_never_lazily_acquired(
     plans = RetainedNominalPlanReadings()
     failed = plans.prepare_reading(repo, (), (evidence,), history=Checkout(repo.checkout).read())
     plans.observe_reading(failed, (evidence,))
+    plans.finish_pass()
     assert isinstance(failed.read(evidence), EvidenceUnread)
     assert "required blob unavailable" in failed.describe(evidence)
     assert not failed.holds(PathsAbsent(("src/promised.py",)))
@@ -387,6 +392,7 @@ def test_promised_content_is_unreadable_not_absent_and_never_lazily_acquired(
     prepared = case.snapshot()
     recovered = plans.prepare_reading(repo, (), (evidence,), history=Checkout(repo.checkout).read())
     plans.observe_reading(recovered, (evidence,))
+    plans.finish_pass()
     assert recovered.main.commit == failed.main.commit == head
     assert recovered.read(evidence) == EvidenceFound(True)
     assert dict(SourceGrowth.capture(

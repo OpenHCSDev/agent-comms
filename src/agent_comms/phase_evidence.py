@@ -184,7 +184,10 @@ class MainTree:
             yield self.bindings[roots, name]
 
     def following(self, current: MainTree) -> MainTree:
-        """Carry only facts whose source blob the next tree still holds."""
+        """Carry only facts whose source blob the next tree still holds; the same commit holds
+        every blob, so its facts carry without listing the tree again."""
+        if current == self:
+            return replace(current, bindings=dict(self.bindings))
         return replace(current, bindings={
             key: bindings for key, bindings in self.bindings.items()
             if bindings.retained(current)

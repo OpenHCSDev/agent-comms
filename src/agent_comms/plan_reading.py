@@ -91,7 +91,6 @@ class PlanReadings:
     def observe_reading(self, reading: PlanReading, evidence: tuple[PhaseEvidence, ...]) -> PlanReading:
         for declared in evidence:
             declared.recorded(reading)
-        self.retain(reading)
         return reading
 
     def read(self, repo: Repo, todos: tuple[Todo, ...],
@@ -99,9 +98,8 @@ class PlanReadings:
         return self.observe_reading(self.prepare_reading(
             repo, todos, evidence, history=Checkout(repo.checkout).read()), evidence)
 
-    def retain(self, reading: PlanReading) -> None:
+    def finish_pass(self) -> None:
         """An ordinary command releases its reading when its caller does."""
-        pass
 
 
 class RetainedPlanReadings(PlanReadings):
@@ -133,12 +131,19 @@ class RetainedPlanReadings(PlanReadings):
             self.prepared = (*(plan for plan in self.prepared if plan.main.repo != repo), reading)
         return reading
 
-    def retain(self, reading: PlanReading) -> None:
-        # Keep the pinned commit, compact blob facts and stable answers, not syntax or the graph.
-        retained = reading.following(reading.todos, replace(
-            reading.main, history=Checkout(reading.main.repo.checkout).read()))
+    def finish_pass(self) -> None:
+        """Retain each repository's one shared reading of this pass, once, however many
+        teammates observed it; the next pass prepares from what was retained."""
         with self.lock:
-            self.plans = (*(plan for plan in self.plans
-                            if plan.main.repo != retained.main.repo), retained)
-            self.prepared = tuple(plan for plan in self.prepared
-                                  if plan.main.repo != retained.main.repo)
+            prepared, self.prepared = self.prepared, ()
+        retained = tuple(
+            # Keep the pinned commit, compact blob facts and stable answers, not syntax or
+            # the graph.
+            reading.following(reading.todos, replace(
+                reading.main, history=Checkout(reading.main.repo.checkout).read()))
+            for reading in prepared
+        )
+        repos = {reading.main.repo for reading in retained}
+        with self.lock:
+            self.plans = (*(plan for plan in self.plans if plan.main.repo not in repos),
+                          *retained)
