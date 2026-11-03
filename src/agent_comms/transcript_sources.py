@@ -44,8 +44,6 @@ from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .transcript_events import (
     IncomingTranscript,
     SentTranscript,
-    ToolEndTranscript,
-    ToolStartTranscript,
     TurnDigest,
 )
 from .turn_item import NativeTurnId
@@ -175,12 +173,20 @@ class TranscriptTraversal(ABC):
         A saved tool round is its call record together with its result record;
         a page window never stops between them.
         """
-        opening = ToolEndTranscript if self.descending_rounds else ToolStartTranscript
-        closing = ToolStartTranscript if self.descending_rounds else ToolEndTranscript
-        return (
-            {event.tool_call_id for event in batch if isinstance(event, opening)},
-            {event.tool_call_id for event in batch if isinstance(event, closing)},
+        return self.oriented(
+            {call for event in batch for call in event.started_calls()},
+            {call for event in batch for call in event.ended_calls()},
         )
+
+    def oriented(self, started: set[str], ended: set[str]) -> tuple[set[str], set[str]]:
+        """Reading newest-first meets a round's result before its call."""
+        return ended, started
+
+    def exhausted_offset(self, frontier: TranscriptCursor, reader: TranscriptSource) -> int:
+        return reader.start
+
+    def exhausted_sequence(self, frontier: TranscriptCursor) -> int:
+        return 0
 
     def read_records(
         self,
@@ -240,9 +246,9 @@ class TranscriptTraversal(ABC):
                     consumed = consumed.at_sequence(self.receipt_position(message.message))
                     message = next(source_rows, None)
             if record is None:
-                consumed = consumed.at_offset(frontier.offset if self.ascending else reader.start)
+                consumed = consumed.at_offset(self.exhausted_offset(frontier, reader))
             if message is None:
-                consumed = consumed.at_sequence(frontier.wire.sequence if self.ascending else 0)
+                consumed = consumed.at_sequence(self.exhausted_sequence(frontier))
             return consumed, records
         finally:
             projected.close()
@@ -251,9 +257,6 @@ class TranscriptTraversal(ABC):
     def request_earlier(self, records: TranscriptSource, offset: int) -> bool:
         return records.request_earlier(offset)
 
-    ascending = False
-    # Reading newest-first meets a round's result before its call.
-    descending_rounds = True
     round_grace_limit = 16
 
 
@@ -292,8 +295,14 @@ class LaterTranscript(TranscriptTraversal):
     def request_earlier(self, records: TranscriptSource, offset: int) -> bool:
         return False
 
-    ascending = True
-    descending_rounds = False
+    def oriented(self, started: set[str], ended: set[str]) -> tuple[set[str], set[str]]:
+        return started, ended
+
+    def exhausted_offset(self, frontier: TranscriptCursor, reader: TranscriptSource) -> int:
+        return frontier.offset
+
+    def exhausted_sequence(self, frontier: TranscriptCursor) -> int:
+        return frontier.wire.sequence
 
     def native(self, reader: TranscriptSource, cursor: TranscriptCursor, through: TranscriptCursor) -> Generator[TranscriptRecord, None, None]:
         return reader.forward(cursor.offset, through.offset)

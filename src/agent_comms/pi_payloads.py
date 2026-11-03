@@ -44,7 +44,7 @@ from .native_failures import NativePiUnavailable
 from .native_file_artifact import NativeFileArtifact
 from .native_output import AssistantOutput, NativeOutputScope, ToolOutput
 from .native_session_reopen import NativeSessionIdentity, PiSessionId
-from .pi_wire import McpCallPolicy, McpServerState, Opaque, OpenPayload, PiDiagnostic, PiField, PiOmitted, PiPayload, PiReported, PiUsage, UnknownPayload
+from .pi_wire import McpCallPolicy, McpServerState, Opaque, OpenPayload, PiDiagnostic, PiField, PiOmitted, PiPayload, PiReported, PiUsage, TaggedPayload, UnknownPayload
 from . import agent_events as events
 from .acp_failure import ExhaustedRetry, FailureSource, RecoveredRetry
 from .pi_counts import NonnegativePiCount, PiCount, TotalPiCount, UnreportedCount
@@ -139,7 +139,7 @@ class StrictFields(PiPayload):
         cls, value: dict[str, JsonValue], decoded: dict[str, object],
     ) -> dict[str, object]:
         names = {key for _, key in FieldCodec.record_fields(cls)}
-        if set(value) - names - {cls.wire_tag}:
+        if set(value) - names - cls.envelope_keys():
             raise MalformedRecord(f"Unexpected {cls.__name__} fields")
         return super().decode_fields(value, decoded)
 
@@ -602,10 +602,6 @@ class PiMessage(WithheldAnnotations, ExternalNull, OpenPayload, affix="Message")
     ] = PiOmitted()
     diagnostics: tuple[PiDiagnostic, ...] = ()
     timestamp: Annotated[PiField[EventTime], EventMilliseconds] = UnrecordedEventTime()
-
-    def __post_init__(self):
-        if isinstance(self.stop_reason, str):
-            object.__setattr__(self, "stop_reason", PiStopReason.from_external(self.stop_reason))
 
     @property
     def measured_tokens(self) -> PiCount:
@@ -1265,7 +1261,7 @@ class NativeEditDetails(PiPayload):
 
 
 @dataclass(frozen=True)
-class NativeToolDetails(ExternalNull, PiPayload, DeclaredFamily, affix="ToolDetails"):
+class NativeToolDetails(ExternalNull, TaggedPayload, DeclaredFamily, affix="ToolDetails"):
     """Decode the original owned result once; other extension details stay opaque."""
     wire_tag = "agentCommsKind"
 

@@ -118,9 +118,6 @@ class ToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResu
     bus_effect: ClassVar[str] = (
         "Changes the bus. Tristan has authorized claude-ai to call this without asking him."
     )
-    context: ClassVar[str | None] = None
-    action_label: ClassVar[str | None] = None
-
     @classmethod
     def context_bindings(cls) -> dict[str, type[ContextBinding]]:
         return {
@@ -142,15 +139,6 @@ class ToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResu
             "description": cls.description,
             "parameters": FieldCodec.record_schema(cls),
         }
-        if cls.context is not None:
-            result.update(
-                context=cls.context,
-                action_label=cls.action_label or cls.label,
-                action_order=cls.declared_position(),
-                context_bindings={
-                    key: binding.declared_name for key, binding in cls.context_bindings().items()
-                },
-            )
         return result
 
     @classmethod
@@ -259,3 +247,27 @@ class ThreadToolRequest(ToolRequest[ThreadCaller]):
 
     def apply_without_thread(self, comms: Comms, caller: NoThreadCaller) -> NoReturn:
         return caller.refuse_thread()
+
+
+class ThreadContextAction[Caller: ToolCaller = ToolCaller](
+    ToolRequest[Caller], declared_name=None,
+):
+    """A tool the UI offers as an action in a thread's context menu, listed in its declared
+    order with the arguments the selected thread binds."""
+
+    context: ClassVar[str] = "thread"
+    action_label: ClassVar[str]
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        result = super().schema()
+        result.update(
+            context=cls.context,
+            action_label=cls.action_label,
+            action_order=cls.declared_position(),
+            context_bindings={
+                key: binding.declared_name
+                for key, binding in cls.context_bindings().items()
+            },
+        )
+        return result

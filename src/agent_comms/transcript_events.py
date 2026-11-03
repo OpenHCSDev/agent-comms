@@ -126,6 +126,13 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     def append_to(self, events: list[TranscriptEvent]) -> None:
         events.append(self)
 
+    def started_calls(self) -> tuple[ToolCallId, ...]:
+        """The tool rounds this event opens in reading order; most open none."""
+        return ()
+
+    def ended_calls(self) -> tuple[ToolCallId, ...]:
+        return ()
+
     def followed_by_assistant(self, text: AssistantTranscript) -> TranscriptEvent | None:
         return None
 
@@ -496,6 +503,9 @@ class ToolTranscript(ModelOutput, SilentTranscript, RecordedTranscript):
 
 @dataclass(frozen=True, kw_only=True)
 class ToolStartTranscript(ToolTranscript):
+    def started_calls(self) -> tuple[ToolCallId, ...]:
+        return (self.tool_call_id,)
+
     def edit_calls(self, thread: str, problem: str, since: float) -> tuple[tool_declaration.EditCall, ...]:
         if self.before(since):
             return ()
@@ -527,6 +537,9 @@ class ToolStartTranscript(ToolTranscript):
 
 @dataclass(frozen=True, kw_only=True)
 class ToolEndTranscript(ToolTranscript):
+    def ended_calls(self) -> tuple[ToolCallId, ...]:
+        return (self.tool_call_id,)
+
     @staticmethod
     def parts_for(text, diff=NoToolDiff(), sent_message=NoSentMessage()):
         """The result owner selects its contents once, before transport or paint."""

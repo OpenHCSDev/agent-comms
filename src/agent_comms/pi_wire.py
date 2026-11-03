@@ -25,8 +25,6 @@ if TYPE_CHECKING:
 
 
 class PiPayload(ExternalField):
-    wire_tag: ClassVar[str | None] = None
-
     @classmethod
     def decode_external_value(cls, value: object, record: Mapping[str, object]) -> object:
         if not isinstance(value, dict):
@@ -65,18 +63,36 @@ class PiPayload(ExternalField):
     def from_wire(cls, value):
         return FieldCodec.decode_external(cls, value, {})
 
-    def to_wire(self):
+    def to_wire(self) -> object:
+        return FieldCodec.encode_fields(self)
+
+    @classmethod
+    def envelope_keys(cls) -> frozenset[str]:
+        """External keys this payload's record carries beyond its declared fields."""
+        return frozenset()
+
+
+class TaggedPayload(PiPayload):
+    """A payload whose external record names its member under a declared key."""
+
+    wire_tag: ClassVar[str]
+
+    @classmethod
+    def envelope_keys(cls) -> frozenset[str]:
+        return frozenset({cls.wire_tag})
+
+    def to_wire(self) -> object:
         data = FieldCodec.encode_fields(self)
-        if self.wire_tag is not None and DeclaredFamily.record_tag(self):
+        if DeclaredFamily.record_tag(self):
             data[self.wire_tag] = self.wire_discriminator()
         return data
 
-    def wire_discriminator(self):
+    def wire_discriminator(self) -> object:
         """Refined internal members borrow their original external declaration."""
         return FieldCodec.encode(type(self))
 
 
-class OpenPayload(PiPayload, DeclaredFamily):
+class OpenPayload(TaggedPayload, DeclaredFamily):
     """An external tag selects its member or the family's declared unknown payload."""
 
     wire_tag = "type"

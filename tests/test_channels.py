@@ -128,7 +128,7 @@ def test_tag_cohort_refuses_active_owners_before_any_registry_publication(tmp_pa
     for disposition in (ArchiveThreadsTagDisposition(), DeleteThreadsTagDisposition()):
         with pytest.raises(ValueError) as refusal:
             comms.channels.delete_tag('cohort', disposition=disposition)
-        assert str(refusal.value) == disposition.confirmation('cohort')
+        assert str(refusal.value) == disposition.confirmation(('cohort',))
         with pytest.raises(RelationViolationError):
             comms.channels.delete_tag('cohort', disposition=disposition, confirmed=True)
         assert comms.registry.snapshot() == original

@@ -4,6 +4,7 @@ from agent_comms.repo import Checkout
 import pytest
 
 from agent_comms.acp_extension import (
+    TextNoticeUpdate,
     AgentCommsUpdate,
     AvailableQueueProjection,
     CompactionChangedUpdate,
@@ -82,6 +83,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
         ),
         RequestFailedUpdate(ACPFailure.from_detail(-32603, "The usage limit has been reached")),
         PromptCancelledUpdate(None),
+        TextNoticeUpdate(),
         SelectedWriteAcceptedUpdate(ClaimId("c" * 32), 1, AssignmentId("d" * 32)),
         CursorAdvancedUpdate(
             CursorEnvelope(
@@ -104,7 +106,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
             owner.incarnation,
             "/home/ts/wt/pilot",
             ProcessIdentity(123, 1),
-            "/home/ts/wt/pilot",
+            Checkout(tmp_path),
             "openai-codex/gpt-6.1-sol",
             None,
             "Pilot",
