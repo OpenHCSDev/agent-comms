@@ -34,7 +34,6 @@ import signal
 import socket
 import sys
 import time
-from multiprocessing.connection import Connection
 from abc import abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
@@ -57,7 +56,7 @@ from .command import Command
 from .child_process import GitChildren, OwnedGitOpening, join_retirement
 from .active_route import CommsRoute, resolve_comms_route
 from .comms import Comms, client_wire, wire
-from .ui_model.observation import serve_encoded
+from .ui_model.observation import RelayConnection, serve_encoded
 from .repo import Checkout
 from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from .errors import (
@@ -883,7 +882,7 @@ class ObservationRelay:
                 target=serve_encoded, args=(route, service), daemon=False,
                 name="agent-comms-remote-observation")
             self.process.start()
-        self.connection = Connection(relay.detach())
+        self.connection = RelayConnection(relay.detach())
 
     async def carry(self, viewer: web.WebSocketResponse) -> None:
         """Relay frames both ways until either side ends, then retire the process."""

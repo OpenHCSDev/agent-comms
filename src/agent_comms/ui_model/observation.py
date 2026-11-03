@@ -20,6 +20,7 @@ from agent_comms.repo import Checkout
 import asyncio
 import itertools
 import multiprocessing
+import os
 import socket
 import signal
 import sys
@@ -1479,6 +1480,18 @@ class ObservationService:
                 retrying.cancel()
                 self.pending.clear()
                 self.comms.views.transcript_reads.close()
+
+
+class RelayConnection(Connection):
+    """One side of a relay socket. A relay blocks a worker thread in recv_bytes; closing
+    the descriptor from another thread does not wake it, so close shuts the socket down
+    first, which ends that read with EOF."""
+
+    def close(self) -> None:
+        if not self.closed:
+            with socket.socket(fileno=os.dup(self.fileno())) as peer:
+                peer.shutdown(socket.SHUT_RDWR)
+        super().close()
 
 
 class EncodedConnection(Connection):

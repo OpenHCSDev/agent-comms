@@ -19,7 +19,7 @@ from .nominal.field_codec import FieldCodec
 from .tool_caller import ToolCaller
 from .tool_request import ToolRequest
 from .tool_result import ToolResult
-from .ui_model.observation import ObservationPeer, ObservationSource, ObserverDied, ViewerEnd
+from .ui_model.observation import ObservationPeer, ObservationSource, ObserverDied, RelayConnection, ViewerEnd
 
 
 class ConnectorObserverClosed(ObserverDied):
@@ -42,7 +42,7 @@ class ConnectorObservationPeer(ObservationPeer):
         self.connection = ViewerEnd(viewer.detach())
         self.error: str | None = None
         self.thread = threading.Thread(
-            target=asyncio.run, args=(self.carry(Connection(relay.detach()), access.credential.token),),
+            target=asyncio.run, args=(self.carry(RelayConnection(relay.detach()), access.credential.token),),
             name="agent-comms-remote-observation", daemon=True)
         self.thread.start()
 
