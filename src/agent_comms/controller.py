@@ -50,13 +50,13 @@ class Controller(ABC):
 
 
 class UncontrolledController(Controller):
-    """No transport answers for this turn, so no UI permission is ever granted."""
+    """No transport answers for this turn, so every UI permission is cancelled."""
 
     async def request_ui_permission(
         self, runner: TurnRunner, session_id: AcpSessionId,
         request: tuple[ToolCallUpdate, list[PermissionOption]],
-    ) -> dict[str, object] | None:
-        return None
+    ) -> dict[str, object]:
+        return {"outcome": "cancelled"}
 
 
 class UnboundController(UncontrolledController):
