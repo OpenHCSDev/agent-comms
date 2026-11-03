@@ -6,6 +6,8 @@ from contextlib import contextmanager
 from copyreg import __newobj__
 from typing import ClassVar, Never, Self
 
+from .nominal.field_codec import ReportedError
+
 
 class DrainDeferred(Exception):  # noqa: N818 - capability, not an outcome
     """A failure an inbox drain records and retries later instead of stopping on."""
@@ -61,6 +63,12 @@ class CoordinationError(RuntimeError, DrainUnavailable, CommandFailure):
 
 class DeferredRead(Exception):  # noqa: N818 - capability, not an outcome
     """A read refused only for now, for currentness or contention; retrying may answer it."""
+
+
+class ReportedDeferredRead(ReportedError, DeferredRead):  # noqa: N818 - reported capability
+    """A deferred read reported across a boundary: still deferred, so retrying may answer it."""
+
+    reports = DeferredRead
 
 
 class CoordinationReadUnavailable(CoordinationError, DeferredRead):

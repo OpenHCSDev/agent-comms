@@ -1449,18 +1449,6 @@ class StructuralRepresentation(FieldRepresentation):
             }
         if origin in (list, tuple, frozenset):
             return {"type": "array", "items": FieldCodec.value_schema(args[0])}
-        if origin in (dict, Mapping):
-            if args[0] is str:
-                return {"type": "object", "additionalProperties": FieldCodec.value_schema(args[1])}
-            return {
-                "type": "array",
-                "items": {
-                    "type": "array",
-                    "prefixItems": [FieldCodec.value_schema(arg) for arg in args],
-                    "minItems": 2,
-                    "maxItems": 2,
-                },
-            }
         if origin is type and args and issubclass(args[0], DeclaredFamily):
             return {
                 "type": "string",
@@ -1588,22 +1576,20 @@ class DeclaredWireType(ExternalJsonShape, WireValue):
 
 class CapabilityUnion(ExternalJsonShape, WireValue):
     """A capability shared by members of several declared families. Its wire value is the
-    member it holds; its members are each family's members with this capability, found
-    from the families its concrete subclasses belong to, so none is listed by hand."""
+    member it holds; it names the families, and each family's members with this
+    capability are its members, so no member is listed by hand."""
 
     __slots__ = ()
 
     @classmethod
+    @abstractmethod
+    def capability_families(cls) -> tuple[type[DeclaredFamily], ...]:
+        """The declared families whose members can hold this capability."""
+
+    @classmethod
     def capability_members(cls) -> tuple[type, ...]:
-        pending: list[type] = list(cls.__subclasses__())
-        roots: dict[type[DeclaredFamily], None] = {}
-        while pending:
-            member = pending.pop()
-            pending.extend(member.__subclasses__())
-            if issubclass(member, DeclaredFamily):
-                roots[member.family_root] = None
         return tuple(dict.fromkeys(
-            member for root in roots for member in root.members_with(cls)))
+            member for family in cls.capability_families() for member in family.members_with(cls)))
 
     @classmethod
     def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
@@ -2775,12 +2761,10 @@ class FieldCodec(MroDispatch, Sealed):
     def _tagged_model_schema(
         cls, member: type, selector: dict[str, JsonValue], tag: str,
     ) -> dict[str, JsonValue]:
-        schema = dict(compile_decoder(member).value_schema())
+        schema = compile_decoder(member).value_schema()
         properties = FieldCodec.decode(dict[str, JsonValue], schema.get("properties", {}))
         required = FieldCodec.decode(list[str], schema.get("required", []))
-        schema["properties"] = {**selector, **properties}
-        schema["required"] = [tag, *required]
-        return schema
+        return {**schema, "properties": {**selector, **properties}, "required": [tag, *required]}
 
     @classmethod
     def record_schema(cls, *targets: type) -> dict[str, JsonValue]:
@@ -3510,6 +3494,7 @@ def _object_or_pair_entries(data: object) -> Iterable[tuple[object, object]]:
 class _DictDecoder[K, V](ValueDecoder[dict[K, V]]):
     key: ValueDecoder[K]
     value: ValueDecoder[V]
+    arguments: tuple[object, object]
     origins = (dict, Mapping)
 
     def field_paths(self, key: str, seen: frozenset[type] = frozenset()) -> tuple[tuple[str, ...], ...]:
@@ -3526,7 +3511,7 @@ class _DictDecoder[K, V](ValueDecoder[dict[K, V]]):
     def from_annotation(cls, target, args):
         key, value = args or (str, None)
         plan = _StringKeyDictDecoder if key is str else _PairKeyDictDecoder
-        return plan(target, compile_decoder(key), compile_decoder(value))
+        return plan(target, compile_decoder(key), compile_decoder(value), (key, value))
 
     @classmethod
     def representation_plan(
@@ -3575,6 +3560,9 @@ class _DictDecoder[K, V](ValueDecoder[dict[K, V]]):
 
 
 class _StringKeyDictDecoder[V](_DictDecoder[str, V]):
+    def value_schema(self) -> dict[str, JsonValue]:
+        return {"type": "object", "additionalProperties": FieldCodec.value_schema(self.arguments[1])}
+
     entries = staticmethod(_object_entries)
 
     def fits_wire(self, data: object) -> bool:
@@ -3596,6 +3584,13 @@ class _StringKeyDictDecoder[V](_DictDecoder[str, V]):
 
 
 class _PairKeyDictDecoder[K, V](_DictDecoder[K, V]):
+    def value_schema(self) -> dict[str, JsonValue]:
+        return {"type": "array", "items": {
+            "type": "array",
+            "prefixItems": [FieldCodec.value_schema(argument) for argument in self.arguments],
+            "minItems": 2, "maxItems": 2,
+        }}
+
     entries = staticmethod(_object_or_pair_entries)
 
     def fits_wire(self, data: object) -> bool:
@@ -3894,51 +3889,58 @@ class _PydanticDecoder(ValueDecoder[object]):
         return value.model_dump(mode="json", by_alias=True, exclude_none=True)
 
 
+class ReportedError(Exception):
+    """An error raised on the other side of a boundary, reported by its class and message.
+    Its arguments are not its constructor's inputs or its whole state, so the original is
+    never rebuilt; a field typed with an error class receives the reported error that also
+    inherits that class (declared beside it), or the decode is refused."""
+
+    reports: ClassVar[type[BaseException]] = Exception
+    reporting: ClassVar[dict[type[BaseException], type[ReportedError]]] = {}
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        super().__init_subclass__(**kwargs)
+        ReportedError.reporting[cls.reports] = cls
+
+    def __init__(self, kind: str, message: str):
+        super().__init__(kind, message)
+        self.kind, self.message = kind, message
+
+    def __str__(self) -> str:
+        return f"{self.kind}: {self.message}"
+
+
 class _ExceptionDecoder(ValueDecoder[BaseException]):
-    """A raised error crosses the wire as its class and arguments, so a remote caller
-    receives the same class it would locally. Decoding resolves only error classes declared
-    in this package (or built in) beneath the field's type, found through the class
-    hierarchy; nothing is imported or unpickled from the wire."""
+    """An error without its own declared wire form crosses as its class name and message
+    and arrives as the ReportedError that inherits the field's error type."""
 
     origins = (BaseException,)
     target: type[BaseException]
-    trusted_modules: ClassVar[tuple[str, ...]] = ("agent_comms", "builtins")
 
-    @staticmethod
-    def kind_of(error_class: type[BaseException]) -> str:
-        return f"{error_class.__module__}.{error_class.__qualname__}"
-
-    def declared(self, kind: str) -> type[BaseException]:
-        pending, seen = [self.target], set()
-        while pending:
-            candidate = pending.pop()
-            if candidate in seen:
-                continue
-            seen.add(candidate)
-            if self.kind_of(candidate) == kind and candidate.__module__.split(".")[0] in self.trusted_modules:
-                return candidate
-            pending.extend(candidate.__subclasses__())
-        raise MalformedRecord(f"{kind!r} is not a declared {self.target.__name__}")
+    def reported(self) -> type[ReportedError]:
+        try:
+            return {Exception: ReportedError, **ReportedError.reporting}[self.target]
+        except KeyError:
+            raise MalformedRecord(f"No reported error is declared for {self.target.__name__}") from None
 
     def value_schema(self) -> dict[str, JsonValue]:
         return {
             "type": "object",
-            "properties": {"kind": {"type": "string"}, "args": {"type": "array"}},
-            "required": ["kind", "args"],
+            "properties": {"kind": {"type": "string"}, "message": {"type": "string"}},
+            "required": ["kind", "message"],
         }
 
     @boundary_decoder
     def decode(self, data: object) -> BaseException:
-        record = FieldCodec.decode(dict[str, JsonValue], data)
-        error_class = self.declared(FieldCodec.decode(str, record.get("kind")))
-        arguments = FieldCodec.decode(list[JsonValue], record.get("args"))
-        with MalformedRecord.refusing(f"Invalid {error_class.__name__} arguments"):
-            return error_class(*arguments)
+        record = FieldCodec.decode(dict[str, str], data)
+        with MalformedRecord.refusing("A reported error needs its kind and message"):
+            return self.reported()(record["kind"], record["message"])
 
     def encode(self, value: object) -> object:
         if not isinstance(value, self.target):
             raise TypeError(f"Expected {self.target.__name__}, received {type(value).__name__}")
-        return {"kind": self.kind_of(type(value)), "args": FieldCodec.encode(list(value.args))}
+        error_class = type(value)
+        return {"kind": f"{error_class.__module__}.{error_class.__qualname__}", "message": str(value)}
 
 
 class _MemberDecoders(dict[object, ValueDecoder[object]]):

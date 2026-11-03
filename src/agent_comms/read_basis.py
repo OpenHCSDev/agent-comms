@@ -178,6 +178,10 @@ class DisplayCut(OperatorOutcomes, CapabilityUnion, ABC):
 
     __slots__ = ()
 
+    @classmethod
+    def capability_families(cls) -> tuple[type[DeclaredFamily], ...]:
+        return (DisplayIdentity, SelectedDisplay)
+
     @property
     @abstractmethod
     def notification_identity(self) -> DisplayCut: ...
