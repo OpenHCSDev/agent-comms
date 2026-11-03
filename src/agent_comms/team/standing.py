@@ -739,13 +739,15 @@ class TeamDeaf(InboxUnavailable, declared_name="commander_deaf"):
     the pause. Every running teammate is watched, never one lead; a closed session is stopped,
     not deaf."""
 
-    teammate: str
+    teammate: RecordedThreadIncarnation
+    """Whose deafness this is, by birth: a rename keeps the occurrence (and its age), a thread
+    replaced under the same name is a new one. The pause time is not identity (compare=False)."""
 
     @classmethod
     def paused(cls, comms: Comms) -> tuple[Self, ...]:
         snapshot = comms.registry.snapshot()
         return tuple(
-            cls(paused + cls.seconds, teammate.name)
+            cls(paused + cls.seconds, teammate.incarnation.require_recorded())
             for teammate in TeamService.running(snapshot)
             for paused in snapshot.status(teammate.name).paused_since(
                 snapshot.seen_at(teammate.name))
@@ -756,7 +758,7 @@ class TeamDeaf(InboxUnavailable, declared_name="commander_deaf"):
 
     def enforce(self, comms: Comms) -> None:
         """The teammate's own inbox is the dead path, so #comms hears it instead."""
-        TeamNotice().announce(comms.messaging, f"{self.teammate}: {self.line()}")
+        TeamNotice().announce(comms.messaging, f"{self.teammate.name}: {self.line()}")
 
 
 @dataclass(frozen=True)
