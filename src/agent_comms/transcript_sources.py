@@ -83,10 +83,10 @@ class WireFrontier(DeclaredFamily, affix="WireFrontier"):
 
     def resolve_sent_messages(
         self, reports: Iterable[SentTranscript],
-    ) -> dict[int, SentTranscript | PublishedSentMessage]:
-        """Index these exact reports using this source's publication evidence."""
+    ) -> dict[SentTranscript, SentTranscript | PublishedSentMessage]:
+        """Each report, keyed by itself, with this source's publication evidence for it."""
         reports = tuple(reports)
-        return dict(zip(map(id, reports), self.resolve_sent(reports), strict=True))
+        return dict(zip(reports, self.resolve_sent(reports), strict=True))
 
 
 @dataclass(frozen=True)
