@@ -8,6 +8,7 @@ call. One script owns the whole gate so its pieces cannot drift:
   rule_gate.py gate    PreToolUse:   while reading is owed, allow only Reads of listed files
   rule_gate.py record  PostToolUse:  a successful Read marks the lines it returned
   rule_gate.py fg      PreToolUse:   refuse a foreground Bash call that asks for over 15 s
+  rule_gate.py idle    Stop:         refuse to end a turn while this session's background job runs
   rule_gate.py install               write these hooks into ~/.claude/settings.json (cloud setup)
 
 Claude Code's JSON is decoded once, at the top, into a HookEvent and its ToolCall; everything
@@ -257,7 +258,34 @@ def foreground(event: HookEvent) -> None:
              "Rerun with run_in_background: true.")
 
 
-VERBS = {"deal": deal, "gate": gate, "record": record, "fg": foreground}
+def own_background_jobs() -> int:
+    """Background Bash jobs of this session still running. Claude Code runs each in a shell
+    sourced from a shell snapshot, a child of the session's own process: count the snapshot
+    shells whose parent is one of this hook's ancestors and that are not ancestors themselves."""
+    import subprocess
+
+    rows = [line.split(None, 2) for line in
+            subprocess.run(["ps", "-eo", "pid=,ppid=,args="], capture_output=True, text=True).stdout.splitlines()]
+    parents = {int(row[0]): int(row[1]) for row in rows if len(row) >= 2}
+    ancestors, pid = set(), os.getpid()
+    while pid in parents and pid not in ancestors:
+        ancestors.add(pid)
+        pid = parents[pid]
+    return sum(1 for row in rows if len(row) == 3 and "shell-snapshots/snapshot-" in row[2]
+               and int(row[1]) in ancestors and int(row[0]) not in ancestors)
+
+
+def idle(event: HookEvent) -> None:
+    if event.subagent:
+        return
+    if own_background_jobs():
+        print(json.dumps({"decision": "block", "reason": (
+            "A background job of this session is still running. Waiting time is tracing time "
+            "(tests-and-commands.md): trace the paths it will exercise and act on what you find; "
+            "its notification resumes you.")}))
+
+
+VERBS = {"deal": deal, "gate": gate, "record": record, "fg": foreground, "idle": idle}
 USER_FLAG = "--user"
 
 
