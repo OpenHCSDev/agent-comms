@@ -221,7 +221,7 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
     @abstractmethod
     def historical_proof(
         self, record: NativeRuntimeInput, *, lifecycle: AssignmentState, **source,
-    ) -> HistoricalNativeInput | None:
+    ) -> HistoricalNativeInput:
         """Acquire the declared recorded-proof member from the original SQL row."""
         raise NotImplementedError
 
@@ -282,7 +282,7 @@ class TriageNativeExecution(NativeInputExecution):
 
     def historical_proof(
         self, record: NativeRuntimeInput, *, lifecycle: AssignmentState, **source,
-    ) -> HistoricalNativeInput | None:
+    ) -> HistoricalNativeInput:
         return record.verdict.historical_proof(record, lifecycle, self, **source)
 
 
@@ -362,7 +362,7 @@ class FullNativeExecution(NativeInputExecution):
 
     def historical_proof(
         self, record: NativeRuntimeInput, *, lifecycle: AssignmentState, **source,
-    ) -> HistoricalNativeInput | None:
+    ) -> HistoricalNativeInput:
         from .historical_native_inputs import FullHistoricalNativeInput
 
         record.verdict.require_undecided()
