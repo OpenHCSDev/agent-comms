@@ -51,10 +51,7 @@ from .exporting import (
     WireTranscriptExporter,
 )
 from .goal_management import Goals
-from .historical_views import (
-    ChannelDisplayHistory, ChannelHistory, ConversationObservation, ConversationRevision,
-    DMDisplayHistory, DMHistory,
-)
+from .historical_views import ChannelDisplayHistory, ChannelHistory, DMDisplayHistory, DMHistory
 from .message_bus import MessageBus
 from .message_page import NEWEST_PAGE, MessagePage, PageBounds
 from .message_reference import MessageReference
@@ -253,18 +250,18 @@ class HistoryViews:
     def dm_display_page(
         self, peer: ThreadTarget, *, worktree: Checkout, bounds: PageBounds = NEWEST_PAGE
     ) -> MessagePage:
-        viewer = self.messaging.user_identity(worktree)
-        return DMDisplayHistory(viewer.name, peer, worktree).page(self.presentation, bounds)
+        return self.dm_history(peer, worktree=worktree).page(self.presentation, bounds)
 
-    def dm_revision(
-        self, peer: ThreadTarget, seen: ConversationObservation, *, worktree: Checkout
-    ) -> ConversationRevision:
-        return DMDisplayHistory.revision(self, peer, seen, worktree=worktree)
+    def dm_history(self, peer: ThreadTarget, *, worktree: Checkout) -> DMDisplayHistory:
+        """A DM as the human user of `worktree` reads it."""
+        return DMDisplayHistory(self.messaging.user_identity(worktree).name, peer, worktree)
 
-    def channel_revision(
-        self, channel: ChannelTarget, seen: ConversationObservation, *, worktree: Checkout
-    ) -> ConversationRevision:
-        return ChannelDisplayHistory.revision(self, channel, seen, worktree=worktree)
+    def channel_history(
+        self, channel: ChannelTarget, *, worktree: Checkout
+    ) -> ChannelDisplayHistory:
+        """A channel as the human user of `worktree` reads it."""
+        return ChannelDisplayHistory(
+            self.bus.require_channel(channel.name), self.display_viewer(worktree))
 
     def display_viewer(self, worktree: Checkout) -> NamedViewer:
         """Select the human reader; page capture resolves it in its own snapshot."""

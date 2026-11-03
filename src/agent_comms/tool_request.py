@@ -200,9 +200,9 @@ class ToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResu
     def apply(self, comms: Comms, caller: Caller) -> Result:
         """Each tool declares its own result record; invoke alone encodes it."""
 
-    def apply_without_thread(
-        self: ToolRequest[ToolCaller, Result], comms: Comms, caller: NoThreadCaller
-    ) -> Result:
+    def apply_without_thread[R: ToolResult](
+        self: ToolRequest[ToolCaller, R], comms: Comms, caller: NoThreadCaller
+    ) -> R:
         return self.apply(comms, caller)
 
 

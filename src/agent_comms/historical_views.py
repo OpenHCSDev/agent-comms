@@ -196,7 +196,7 @@ class ConversationRevision(RecordMember, ConversationObservation, ToolResult):
                 or later.stores.changed_since(BusSourceView(), self.stores))
 
 
-class ConversationHistoryView:
+class ConversationHistoryView(HistoryView):
     """Historical views that present conversation content, not owner state."""
 
     @classmethod

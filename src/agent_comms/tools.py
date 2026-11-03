@@ -466,7 +466,8 @@ class CommsConversationPageTool(ReadTool, ToolRequest[ToolCaller, MessagePage]):
     )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> MessagePage:
-        return self.conversation.display_page(comms.views, self.project, self.bounds)
+        history = self.conversation.display_history(comms.views, self.project)
+        return history.page(comms.views.presentation, self.bounds)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -486,7 +487,8 @@ class CommsConversationRevisionTool(ReadTool, ToolRequest[ToolCaller, Conversati
     ] = UnobservedConversation()
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ConversationRevision:
-        return self.conversation.revision(comms.views, self.seen, self.project)
+        history = self.conversation.display_history(comms.views, self.project)
+        return history.revision(comms.views, self.conversation, self.seen, worktree=self.project)
 
 
 @dataclass(frozen=True, kw_only=True)

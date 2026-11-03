@@ -31,4 +31,4 @@ class LocalCoreAccess(CoreAccess):
     comms: Comms
 
     def call[R: ToolResult](self, request: ToolRequest[ToolCaller, R]) -> R:
-        return HumanCaller().invoke(request, self.comms)
+        return request.apply_without_thread(self.comms, HumanCaller())

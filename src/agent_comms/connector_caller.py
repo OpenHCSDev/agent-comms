@@ -64,7 +64,7 @@ class ReadOnlyConnectorCaller(ConnectorCaller, NoThreadCaller):
     def exposed(self) -> dict[str, type[ToolRequest] | type[ConnectorTool]]:
         return {tool.declared_name: tool for tool in ToolRequest.members_with(ReadTool)}
 
-    def invoke[R: ToolResult](self, request: ToolRequest[ToolCaller, R], comms: Comms) -> R:
+    def invoke(self, request: ToolRequest, comms: Comms) -> ToolResult:
         request.require_read_only()
         return super().invoke(request, comms)
 
@@ -85,7 +85,7 @@ class ScopedUiCaller(ConnectorCaller, NoThreadCaller):
         self.require_root(comms.root)
         super().prepare_call(comms, acting)
 
-    def invoke[R: ToolResult](self, request: ToolRequest[ToolCaller, R], comms: Comms) -> R:
+    def invoke(self, request: ToolRequest, comms: Comms) -> ToolResult:
         """Direct and connector invocation use the same namespace guard."""
         self.require_root(comms.root)
         return super().invoke(request, comms)
