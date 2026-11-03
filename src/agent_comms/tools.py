@@ -335,6 +335,18 @@ def _tag_set(value: str) -> frozenset[str]:
 
 
 @dataclass(frozen=True, kw_only=True)
+class CommsChannelTool(ReadTool, ToolRequest[ToolCaller, Channel]):
+    """One channel as Core declares it; a UI asks it whether the channel takes input."""
+
+    label = "Channel"
+    description = "One channel's declaration: its kind, members and whether it is read-only."
+    name: Annotated[str, *tool_field("Channel name")]
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> Channel:
+        return comms.bus.require_channel(self.name)
+
+
+@dataclass(frozen=True, kw_only=True)
 class CommsPinChannelTool(ToolRequest):
     label = "Pin Channel"
     description = (

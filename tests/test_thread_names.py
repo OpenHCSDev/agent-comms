@@ -71,3 +71,18 @@ def test_a_remote_ui_reads_the_registry_with_its_renames(tmp_path):
     assert received.snapshot.session_thread(tmp_path, "worker").name_or("worker") == "renamed"
     assert received.snapshot.session_thread(tmp_path / "elsewhere", "worker").name_or("kept") == "kept"
     assert comms.registry.session_thread(tmp_path, "worker").name_or("worker") == "renamed"
+
+
+def test_a_ui_reads_whether_a_channel_takes_input_through_core(tmp_path):
+    """A channel answers as its own family member across the codec, so a remote composer reads
+    the same read_only a local one does."""
+    from agent_comms.channels import Channel
+    from agent_comms.core_access import LocalCoreAccess
+    from agent_comms.nominal.field_codec import FieldCodec
+    from agent_comms.tools import CommsChannelTool
+
+    comms = wire(tmp_path / "wire")
+    for name in ("#all", "#any"):
+        answer = LocalCoreAccess(comms).call(CommsChannelTool(name=name))
+        assert FieldCodec.decode(Channel, FieldCodec.encode(answer)) == answer
+        assert answer.read_only is False
