@@ -138,7 +138,8 @@ class InstallDue(UndatedStandingRule, FamilyScan):
     def action(self) -> str: ...
 
     @classmethod
-    def scan_observed(cls, comms: Comms, observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[InstallDue, ...]:
+    def scan_observed(cls, comms: Comms,
+                      observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[InstallDue, ...]:
         return cls.due(comms, frame.pulls)
 
     @staticmethod
@@ -294,7 +295,8 @@ class PlanRule(UndatedStandingRule, FamilyScan, declared_name=None):
     """Rules read from the heartbeat's one look at the plans and the teammate's orders."""
 
     @classmethod
-    def scan_observed(cls, comms: Comms, observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+    def scan_observed(cls, comms: Comms,
+                      observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
         return tuple(rule for member in cls.members_with(cls) for rule in member.found(frame.plan))
 
     @classmethod
@@ -496,7 +498,8 @@ class HolderGone(IndependentStandingRule, UndatedStandingRule):
         return cls.in_scan(HeldOrders.read(comms))
 
     @classmethod
-    def scan_observed(cls, comms: Comms, observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+    def scan_observed(cls, comms: Comms,
+                      observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
         return cls.in_scan(frame)
 
     @classmethod
@@ -551,11 +554,13 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule, FamilyScan)
         return cls.scan_orders(comms, HeldOrders.read(comms), PullRequests())
 
     @classmethod
-    def scan_observed(cls, comms: Comms, observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[UnownedWheelSpin, ...]:
+    def scan_observed(cls, comms: Comms,
+                      observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[UnownedWheelSpin, ...]:
         return cls.scan_orders(comms, frame, frame.pulls)
 
     @classmethod
-    def scan_orders(cls, comms: Comms, scan: HeldOrders, pulls: PullRequests) -> tuple[UnownedWheelSpin, ...]:
+    def scan_orders(cls, comms: Comms,
+                    scan: HeldOrders, pulls: PullRequests) -> tuple[UnownedWheelSpin, ...]:
         return cls.paired(comms, comms.goals.todos.board(), scan, pulls)
 
     @classmethod
@@ -637,7 +642,8 @@ class UnownedOrderWatch(WatchPass[tuple[UnownedWheelSpin, ...]]):
 
     def observe(self, comms: Comms, prepared: None) -> tuple[UnownedWheelSpin, ...]:
         available = comms.goals.todos.reassignable()
-        return UnownedWheelSpin.paired(comms, available, HeldOrders.read(comms), PullRequests(available))
+        return UnownedWheelSpin.paired(
+            comms, available, HeldOrders.read(comms), PullRequests(available))
 
     def pass_body(self, comms: Comms, observed: tuple[UnownedWheelSpin, ...]) -> None:
         for rule, error in StandingRule.enforce_all(comms, observed).items():
@@ -672,7 +678,8 @@ class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, FamilyScan, de
             completed = passes.commander_completed.get(incarnation)
             for request in TeamService.requested_by(owner, comms.goals):
                 if completed is None or completed < request.created_at:
-                    rule = HeartbeatNotStarted(request.created_at + cls.seconds, incarnation, request.id)
+                    rule = HeartbeatNotStarted(
+                        request.created_at + cls.seconds, incarnation, request.id)
                 else:
                     rule = MissedHeartbeat(completed + cls.seconds, incarnation)
                 if rule.since < now:
@@ -739,7 +746,8 @@ class TeamDeaf(InboxUnavailable, declared_name="commander_deaf"):
         return tuple(
             cls(paused + cls.seconds, teammate.name)
             for teammate in TeamService.teammates(snapshot)
-            for paused in snapshot.status(teammate.name).paused_since(snapshot.seen_at(teammate.name))
+            for paused in snapshot.status(teammate.name).paused_since(
+                snapshot.seen_at(teammate.name))
         )
 
     def line(self) -> str:
@@ -800,7 +808,8 @@ class ForkStalled(IndependentStandingRule, DatedStandingRule):
             for bridge in Serve.running(Path.home()) if bridge.observed.owner.alive()
             for record in bridge.claim.state().bindings() if record.bus in teammates
             for forks in ({thread.name: thread for thread in snapshot.visible_threads(
-                DEFAULT_ROSTER, names=(fork.name for fork in TeamService.forks(snapshot, (teammates[record.bus],))))},)
+                DEFAULT_ROSTER, names=(fork.name for fork in TeamService.forks(
+                    snapshot, (teammates[record.bus],))))},)
             for path in ClaudeTranscript.subagents(bridge.observed.transcript)
             for name in (SubagentId.of_transcript(path).fork,) if name in forks
             for fork in (forks[name],)

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
@@ -21,7 +21,6 @@ from agent_comms.nominal_census import NominalPlanReadings
 from agent_comms.plan_reading import PlanReadings, RetainedPlanReadings
 from agent_comms.service_passes import TeamPass, ServicePassStore
 from agent_comms.standing_rules import ServicePassFailing, StandingRule
-from agent_comms.threads import Thread
 from agent_comms.todos import ProgressRead, Todo
 from agent_comms.ui_model.teammate_state import TeammateState
 
@@ -62,7 +61,8 @@ class TeamObservation:
 
 class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamService,
                          TeamPass,
-                         PreparedWatchPass[tuple[TeamInputs, ...], tuple[TeamObservation, ...]], declared_name="commander_heartbeat"):
+                         PreparedWatchPass[tuple[TeamInputs, ...], tuple[TeamObservation, ...]],
+                         declared_name="commander_heartbeat"):
 
     def failed(self, opened_wire: Callable[[], AbstractContextManager[Comms]],
                error: Exception) -> None:
@@ -96,7 +96,8 @@ class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
         return tuple(TeamInputs.prepare(comms, project, ProgressRead(), self)
                      for project in comms.registry.snapshot().commander_project.boards())
 
-    def observe(self, comms: Comms, prepared: tuple[TeamInputs, ...]) -> tuple[TeamObservation, ...]:
+    def observe(self, comms: Comms,
+                prepared: tuple[TeamInputs, ...]) -> tuple[TeamObservation, ...]:
         observed = tuple(TeamObservation.read(comms, inputs, plans=self) for inputs in prepared)
         self.finish_pass()
         return observed
@@ -139,7 +140,8 @@ class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
                 ) for recipient, latest in held.items())
                 if not deliveries:
                     continue  # No live teammate: enforced, and nobody to write a board for.
-                board = TeamHud.of(comms, observed.frame, observed.states, delivery=deliveries[0], usage=usage)
+                board = TeamHud.of(comms, observed.frame, observed.states,
+                                   delivery=deliveries[0], usage=usage)
                 for delivery in deliveries:
                     hud = board.for_delivery(delivery)
                     recipient = delivery.packet.commander

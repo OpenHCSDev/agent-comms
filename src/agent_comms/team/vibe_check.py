@@ -134,7 +134,8 @@ class VibeCheck(UndatedStandingRule):
         )
 
     def enforce(self, comms: Comms) -> None:
-        """The degraded team is everyone's: each live teammate gets the burst and owes its answer."""
+        """The degraded team is everyone's: each live teammate gets the burst and owes its
+        answer."""
         burst = self.burst()
         for teammate in TeamService.teammates(comms.registry.snapshot()):
             VibeCheckNotice.burst_once(comms, teammate.name, burst, burst[0])
@@ -177,7 +178,8 @@ class VibeCheckUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
 
     def line(self) -> str:
         return (f"vibe check {self.cited} to {self.message.target} from"
-                f" {RecordedEventTime(self.message.timestamp).stamp()}. still ignoring it? -> answer it")
+                f" {RecordedEventTime(self.message.timestamp).stamp()}."
+                " still ignoring it? -> answer it")
 
 
 class PatternCatalog:
@@ -250,7 +252,8 @@ class Chokehold(IndependentStandingRule, UndatedStandingRule):
     def line(self) -> str:
         return (
             f"{self.teammate} ignored vibe check {self.check.seq}:{self.check.message_id}, so its"
-            f" goal is paused. happy now? -> answer the {ChokeholdNotice.title} burst by its protocol"
+            f" goal is paused. happy now? -> answer the {ChokeholdNotice.title} burst"
+            " by its protocol"
         )
 
 
@@ -297,7 +300,8 @@ class ChokeholdAnswer(UndatedStandingRule, FamilyScan, declared_name=None):
 
     @classmethod
     @abstractmethod
-    def judged(cls, teammate: str, answer: Message, blocking: tuple[Sign, ...]) -> tuple[Self, ...]: ...
+    def judged(cls, teammate: str, answer: Message,
+               blocking: tuple[Sign, ...]) -> tuple[Self, ...]: ...
 
     @staticmethod
     def newest(comms: Comms, teammate: str) -> tuple[Message, ...]:
@@ -306,7 +310,8 @@ class ChokeholdAnswer(UndatedStandingRule, FamilyScan, declared_name=None):
             if ChokeholdNotice.unanswered(source, snapshot, teammate, time.time()):
                 return ()
             return ChokeholdNotice.newest_answer(
-                source, snapshot, teammate, ChokeholdNotice.lines(source, snapshot, teammate, time.time()))
+                source, snapshot, teammate,
+                ChokeholdNotice.lines(source, snapshot, teammate, time.time()))
 
     @staticmethod
     def blocking_signs(comms: Comms, frame: HeartbeatFrame) -> tuple[Sign, ...]:
@@ -352,7 +357,8 @@ class ChokeholdHeld(ChokeholdAnswer):
 
     @classmethod
     def judged(cls, teammate: str, answer: Message, blocking: tuple[Sign, ...]) -> tuple[Self, ...]:
-        return (cls(teammate, answer, blocking),) if blocking and PatternCatalog.quoted(answer.body) else ()
+        return ((cls(teammate, answer, blocking),)
+                if blocking and PatternCatalog.quoted(answer.body) else ())
 
     def enforce(self, comms: Comms) -> None:
         verdict = f"Quoted, and still degraded: {self.answer.seq}:{self.answer.message_id}."

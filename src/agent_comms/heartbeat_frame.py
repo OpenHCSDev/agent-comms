@@ -14,6 +14,7 @@ from agent_comms.plan_reading import PlanReading, PlanReadings
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.repo import Repo
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.registry_document import RegisteredTeamProject
 from agent_comms.standing_rules import OwedAnswer, StandingRule
 from agent_comms.team_service import TeamService
 from agent_comms.thread_identity import ThreadIncarnation
@@ -27,7 +28,6 @@ from agent_comms.todos import (
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
-    from agent_comms.registry_document import RegisteredTeamProject
 
 
 @dataclass(frozen=True)
@@ -117,8 +117,10 @@ class HeartbeatFrame(TeamInputs):
             inputs.orphaned,
             inputs.pulls,
             plan,
-            tuple({answer.observation_key(): answer for teammate in TeamService.teammates(snapshot)
-                   for answer in OwedAnswer.read_scan(comms, teammate.incarnation, inputs)}.values()),
+            tuple({answer.observation_key(): answer
+                   for teammate in TeamService.teammates(snapshot)
+                   for answer in OwedAnswer.read_scan(comms, teammate.incarnation, inputs)
+                   }.values()),
             closed,
             reviews,
             EditWorkplaces.capture(comms, snapshot, inputs.live, inputs.pulls),

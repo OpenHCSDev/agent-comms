@@ -86,7 +86,8 @@ class ClosedUnmergedPullRequest(HeadLine, DatedStandingRule):
     base: CommitBase
 
     @classmethod
-    def scan_observed(cls, comms: Comms, observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+    def scan_observed(cls, comms: Comms,
+                      observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
         return tuple(cls(request=head.request, closed_at=head.closed_at, commits=head.missing,
                          base=head.base)
                      for head in frame.closed.lost if head.missing
@@ -116,7 +117,8 @@ class ClosedPullRequestScanPending(UndatedStandingRule):
     repo: RepositoryName
 
     @classmethod
-    def scan_observed(cls, comms: Comms, observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+    def scan_observed(cls, comms: Comms,
+                      observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
         return tuple(cls(repo) for repo in frame.closed.unscanned)
 
     def line(self) -> str:
