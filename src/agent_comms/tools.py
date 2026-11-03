@@ -8,7 +8,20 @@ from agent_comms.nominal.field_codec import WireExclude
 from .input_key import InputKeyText
 from .agent_inbox import TakenInputStart
 
-from .tool_request import ListedNames, LiveOwnerTool, OmittedNames, PublishingTool, PublishingToolRequest, ReadTool, SubjectBinding, ThreadReadTool, ThreadContextAction, ThreadToolRequest, ToolRequest, tool_field
+from .tool_request import (
+    ListedNames,
+    LiveOwnerTool,
+    OmittedNames,
+    PublishingTool,
+    PublishingToolRequest,
+    ReadTool,
+    SubjectBinding,
+    ThreadReadTool,
+    ThreadContextAction,
+    ThreadToolRequest,
+    ToolRequest,
+    tool_field,
+)
 from .order_tools import MessagePublished
 from .native_tools import CommunicationCall
 
@@ -1310,7 +1323,9 @@ class CommsStartTool(LiveOwnerTool, NativeOwnerCommand, StartOwnerControl, Threa
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsQueueRestartTool(LiveOwnerTool, NativeOwnerCommand, OwnerLifecycleControl, ThreadContextAction):
+class CommsQueueRestartTool(
+    LiveOwnerTool, NativeOwnerCommand, OwnerLifecycleControl, ThreadContextAction,
+):
     label = "Queue Idle Owner Restart"
     description = (
         "Queue an exact live owner incarnation for restart when idle. Never interrupt an active "

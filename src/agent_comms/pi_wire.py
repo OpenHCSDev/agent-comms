@@ -63,7 +63,7 @@ class PiPayload(ExternalField):
     def from_wire(cls, value):
         return FieldCodec.decode_external(cls, value, {})
 
-    def to_wire(self):
+    def to_wire(self) -> object:
         return FieldCodec.encode_fields(self)
 
     @classmethod
@@ -81,13 +81,13 @@ class TaggedPayload(PiPayload):
     def envelope_keys(cls) -> frozenset[str]:
         return frozenset({cls.wire_tag})
 
-    def to_wire(self):
-        data = super().to_wire()
+    def to_wire(self) -> dict[str, object]:
+        data = FieldCodec.encode_fields(self)
         if DeclaredFamily.record_tag(self):
             data[self.wire_tag] = self.wire_discriminator()
         return data
 
-    def wire_discriminator(self):
+    def wire_discriminator(self) -> object:
         """Refined internal members borrow their original external declaration."""
         return FieldCodec.encode(type(self))
 
