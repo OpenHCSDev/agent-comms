@@ -22,7 +22,7 @@ test('native branch summary consumes the store range and preserves its budget', 
     const {entries,commonAncestorId} = collectEntriesForBranchSummary(manager,tip,right);
     assert.equal(commonAncestorId,root);
     assert.deepEqual([...entries].map(entry=>entry.id),[left,tip]);
-    assert.deepEqual([...entries.reverse()].map(entry=>entry.id),[tip,left]);
+    assert.deepEqual([...entries.newestFirst()].map(entry=>entry.id),[tip,left]);
     assert.deepEqual(prepareBranchEntries(entries,1000).messages.map(message=>message.content),['left','tip']);
     assert.equal(collectEntriesForBranchSummary(manager,null,right).entries.isEmpty(),true);
     assert.equal(collectEntriesForBranchSummary(manager,root,tip).entries.isEmpty(),true);
