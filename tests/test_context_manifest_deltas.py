@@ -163,7 +163,7 @@ def test_forty_turns_use_direct_sources_and_fixed_transcript_keyframes(tmp_path)
         rows = ContextRequest.select(db, order_by=('id',))
         for turn in (1, 32, 33, 40):
             row = rows[turn - 1]
-            result = comms.contexts.resolve(db, source, row)
+            result, = comms.contexts.resolve(db, source, (row,))
             assert result.value.segments[:2] == expected[turn - 1].segments[:2]
             assert result.value.segments[2].contributors == expected[turn - 1].segments[2].contributors
             recorded = result.recorded
@@ -178,7 +178,7 @@ def test_forty_turns_use_direct_sources_and_fixed_transcript_keyframes(tmp_path)
                 decoded.append(frame.f_locals['self'].id)
         try:
             sys.setprofile(observe)
-            comms.contexts.resolve(db, source, rows[-1])
+            tuple(comms.contexts.resolve(db, source, (rows[-1],)))
         finally:
             sys.setprofile(previous_profile)
         assert len(decoded) == len(set(decoded)) == 3
@@ -186,6 +186,67 @@ def test_forty_turns_use_direct_sources_and_fixed_transcript_keyframes(tmp_path)
         with pytest.raises(ValueError):
             replace(last.segments[2], previous=RecordedContextPredecessor(rows[32].id)).restore(
                 {}, {rows[32].id: delta}, position=2)
+
+
+def test_context_batch_decodes_shared_entries_once(tmp_path: Path) -> None:
+    comms = context_comms(tmp_path)
+    owner = comms.registry.require('Alice')
+    expected = tuple(context(owner, tmp_path, count, turn)
+                     for turn, count in enumerate((3, 4, 5), start=1))
+    prior = UNREAD_CONTEXT
+    for manifest in expected:
+        prior = comms.contexts.record_after(prior, manifest)
+    decoded = []
+    with comms.contexts.snapshot() as db:
+        source = ContextStoreInfo.require(db, singleton=1).source
+        rows = ContextRequest.select(db, order_by=('id',))
+        previous_profile = sys.getprofile()
+        def observe(frame, event, argument):
+            if event == 'call' and frame.f_code is ContextEntry.original.__func__.__code__:
+                decoded.append(frame.f_locals['reference'])
+        try:
+            sys.setprofile(observe)
+            actual = tuple(comms.contexts.resolve(db, source, rows))
+        finally:
+            sys.setprofile(previous_profile)
+    assert len(decoded) == len(set(decoded)) == 5
+    for original, restored in zip(expected, actual, strict=True):
+        assert restored.value.segments == original.segments
+
+
+@pytest.mark.parametrize('preloaded', (False, True))
+def test_context_batch_refuses_foreign_predecessor_even_when_preloaded(
+    tmp_path: Path, preloaded: bool,
+) -> None:
+    comms = context_comms(tmp_path)
+    alice, bob = (comms.registry.require(name) for name in ('Alice', 'Bob'))
+    foreign = comms.contexts.record_after(UNREAD_CONTEXT, context(bob, tmp_path, 1, 1))
+    original = comms.contexts.record_after(UNREAD_CONTEXT, context(alice, tmp_path, 1, 1))
+    record = replace(original.recorded, segments=(
+        replace(original.recorded.segments[0], previous=RecordedContextPredecessor(foreign.record_id)),
+        *original.recorded.segments[1:],
+    ))
+    with comms.contexts.writing() as db:
+        forged = ContextRequest.append(db, record)
+    with comms.contexts.snapshot() as db:
+        selected = ContextRequest.require(db, id=forged)
+        rows = ((ContextRequest.require(db, id=foreign.record_id), selected)
+                if preloaded else (selected,))
+        with pytest.raises(RelationViolationError, match='predecessor is missing or foreign'):
+            tuple(comms.contexts.resolve(db, original.source, rows))
+
+
+def test_context_batch_keeps_same_session_and_entry_on_different_paths(tmp_path: Path) -> None:
+    comms = context_comms(tmp_path)
+    owner = comms.registry.require('Alice')
+    originals = tuple(comms.contexts.record_after(
+        UNREAD_CONTEXT, context(owner, tmp_path / path, 1, turn),
+    ) for turn, path in enumerate(('one', 'two'), start=1))
+    with comms.contexts.snapshot() as db:
+        rows = ContextRequest.select(db, order_by=('id',))
+        actual = tuple(comms.contexts.resolve(db, originals[0].source, rows))
+    for original, restored in zip(originals, actual, strict=True):
+        assert restored == original
 
 
 def test_missing_store_identity_refuses_reads_and_further_records(tmp_path):
@@ -230,8 +291,8 @@ def test_selected_context_copy_preserves_closure_and_original_sequences(tmp_path
     selected = originals[1]
     reference = ContextManifestReference(selected.source, selected.record_id)
     with comms.contexts.snapshot() as db:
-        expected = comms.contexts.resolve(
-            db, reference.source, ContextRequest.require(db, id=reference.record_id),
+        expected, = comms.contexts.resolve(
+            db, reference.source, (ContextRequest.require(db, id=reference.record_id),),
         )
     before = ContextStore.digest(comms.contexts.path)
     copy = PracticeCopy(comms.root, tmp_path / 'retained')
@@ -244,7 +305,8 @@ def test_selected_context_copy_preserves_closure_and_original_sequences(tmp_path
         assert info.source == selected.source
         rows = ContextRequest.select(db, order_by=('id',))
         assert tuple(row.id for row in rows) == tuple(row.record_id for row in originals[:2])
-        assert retained.resolve(db, info.source, rows[-1]) == expected
+        actual, = retained.resolve(db, info.source, (rows[-1],))
+        assert actual == expected
         assert ContextEntry.count(db) == 2
         retained_version = max(row.id for row in ContextSegmentVersion.select(db))
     with comms.contexts.snapshot() as db:
