@@ -1146,3 +1146,15 @@ async def test_an_inbox_read_after_its_place_the_same_locally_and_remotely(
     remote = await remote_answer(client, await approved_token(client, comms), request)
     assert [m.body for m in remote.messages] == [m.body for m in local.messages] == ["second"]
 
+
+
+async def test_connector_reports_the_root_its_core_serves(client, comms):
+    """A remote UI keys its observation by the served root, read through the same tools/call."""
+    headers = {"Authorization": f"Bearer {await approved_token(client, comms)}"}
+    response = await client.post("/mcp", headers=headers, json={
+        "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+        "params": {"name": "comms_served_root", "arguments": {}},
+    })
+    result = (await response.json())["result"]
+    assert result["isError"] is False
+    assert result["structuredContent"]["root"] == str(comms.root.resolve())
