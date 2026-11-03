@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import socket
+import ssl
 import threading
 import urllib.request
 from multiprocessing.connection import Connection
@@ -12,7 +13,7 @@ from multiprocessing.connection import Connection
 from yarl import URL
 
 from .connector import ToolsCallMessage, ToolsCallReply
-from .connector_profile import BearerSecret, UiConnectionProfile
+from .connector_profile import HttpsMcpEndpoint, UiConnectionProfile, UiCredential
 from .core_access import CoreAccess
 from .errors import RelationViolationError
 from .nominal.field_codec import FieldCodec
@@ -36,7 +37,7 @@ class ConnectorObservationPeer(ObservationPeer):
     UI's ViewerEnd and the connector's /observe socket from a thread with its own event
     loop, so the UI's loop is never borrowed; the frames are declared records both ways."""
 
-    def __init__(self, access: RemoteCoreAccess) -> None:
+    def __init__(self, access: ConnectorAccess) -> None:
         self.url = access.endpoint.url.with_path("/observe")
         viewer, relay = socket.socketpair()
         self.connection = ViewerEnd(viewer.detach())
@@ -46,7 +47,7 @@ class ConnectorObservationPeer(ObservationPeer):
         self.loop = asyncio.new_event_loop()
         self.lifetime = threading.Lock()
         self.task = self.loop.create_task(
-            self.carry(RelayConnection(relay.detach()), access.credential.token))
+            self.carry(RelayConnection(relay.detach()), access))
         self.thread = threading.Thread(
             target=self.run, name="agent-comms-remote-observation", daemon=True)
         self.thread.start()
@@ -61,12 +62,13 @@ class ConnectorObservationPeer(ObservationPeer):
             with self.lifetime:
                 self.loop.close()
 
-    async def carry(self, local: Connection, token: BearerSecret) -> None:
+    async def carry(self, local: Connection, access: ConnectorAccess) -> None:
         import aiohttp
 
         try:
             async with aiohttp.ClientSession() as session, session.ws_connect(
-                self.url, headers={"Authorization": f"Bearer {token}"},
+                self.url, headers={"Authorization": f"Bearer {access.credential.token}"},
+                ssl=access.tls(),
             ) as remote:
                 self.ending = await relay_frames(local, remote)
         except (OSError, aiohttp.ClientError) as error:
@@ -83,17 +85,33 @@ class ConnectorObservationPeer(ObservationPeer):
         self.thread.join(timeout)
 
     def died(self, error: str | None) -> ObserverDied:
-        return ConnectorObserverClosed(self.url, error or self.ending)
+        """The relay records why it ended before it closes the local side, so that reason is
+        the cause; a local read or write that then fails only shows the relay has ended."""
+        return ConnectorObserverClosed(self.url, self.ending)
 
 
-class RemoteCoreAccess(UiConnectionProfile, CoreAccess, ObservationSource):
+class ConnectorAccess(ObservationSource):
+    """Reaching one connector: its endpoint, the credential it accepts, and the TLS trust
+    both the calls and the observation use."""
+
+    endpoint: HttpsMcpEndpoint
+    credential: UiCredential
+
+    def tls(self) -> ssl.SSLContext:
+        """One context for every connection to this connector, built when connecting, so the
+        trust the owner configures (``SSL_CERT_FILE`` included) applies to calls and
+        observation alike."""
+        return ssl.create_default_context()
+
+    def observation_peer(self) -> ConnectorObservationPeer:
+        return ConnectorObservationPeer(self)
+
+
+class RemoteCoreAccess(UiConnectionProfile, CoreAccess, ConnectorAccess):
     """The owner's UI profile is the remote access: its endpoint and credential are all a
     call needs, and the server still decides scope, expiry and revocation."""
 
     timeout_seconds = 30
-
-    def observation_peer(self) -> ConnectorObservationPeer:
-        return ConnectorObservationPeer(self)
 
     def call[R: ToolResult](self, request: ToolRequest[ToolCaller, R]) -> R:
         envelope = ToolsCallMessage(jsonrpc="2.0", id=1, params=request.called())
@@ -105,7 +123,7 @@ class RemoteCoreAccess(UiConnectionProfile, CoreAccess, ObservationSource):
                 "Content-Type": "application/json",
             },
         )
-        with urllib.request.urlopen(posted, timeout=self.timeout_seconds) as response:
+        with urllib.request.urlopen(posted, timeout=self.timeout_seconds, context=self.tls()) as response:
             reply = FieldCodec.decode(ToolsCallReply, json.load(response))
         if reply.result.is_error:
             raise RelationViolationError(" ".join(content.text for content in reply.result.content))
