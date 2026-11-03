@@ -65,3 +65,47 @@ async def test_a_local_side_that_stops_reading_never_blocks_the_loop() -> None:
         far.close()
         message = await asyncio.wait_for(viewer.receive(), 10)
         assert message.type in (WSMsgType.CLOSE, WSMsgType.CLOSED)
+
+
+class CountedConnection(RelayConnection):
+    """Counts socket calls that entered and that returned, in the relay's worker threads.
+    Its write deadline is short, so a test needs not wait the production 30 seconds."""
+
+    write_timeout_seconds = 1
+
+    def __init__(self, handle: int) -> None:
+        super().__init__(handle)
+        self.entered = self.returned = 0
+
+    def recv_bytes(self, maxlength=None):
+        self.entered += 1
+        try:
+            return super().recv_bytes(maxlength)
+        finally:
+            self.returned += 1
+
+    def send_bytes(self, buf, offset=0, size=None):
+        self.entered += 1
+        try:
+            return super().send_bytes(buf, offset, size)
+        finally:
+            self.returned += 1
+
+
+async def test_ending_retires_a_write_blocked_on_a_full_socket() -> None:
+    """The relay's end returns every worker thread, including one blocked in send_bytes."""
+    near, far = socket.socketpair()
+    local = CountedConnection(near.detach())
+    async with relaying(local) as server, TestClient(server) as client:
+        viewer = await client.ws_connect("/observe")
+        for _ in range(64):
+            await viewer.send_bytes(b"x" * 65536)
+        await asyncio.sleep(0.3)
+        assert local.entered > local.returned, "no socket call was blocked"
+        await viewer.close()
+        for _ in range(100):
+            if local.entered == local.returned:
+                break
+            await asyncio.sleep(0.05)
+        assert local.entered == local.returned, "a worker thread is still inside a socket call"
+    far.close()

@@ -22,6 +22,7 @@ import itertools
 import multiprocessing
 import os
 import socket
+import struct
 import signal
 import sys
 import time
@@ -1542,7 +1543,17 @@ class ObservationService:
 class RelayConnection(Connection):
     """One side of a relay socket. A relay blocks a worker thread in recv_bytes; closing
     the descriptor from another thread does not wake it, so close shuts the socket down
-    first, which ends that read with EOF."""
+    first, which ends that read with EOF. A write the other side never takes fails after
+    write_timeout_seconds, so a reader that stopped ends the relay instead of pinning it
+    and its threads forever."""
+
+    write_timeout_seconds: ClassVar[int] = 30
+
+    def __init__(self, handle: int, readable: bool = True, writable: bool = True) -> None:
+        super().__init__(handle, readable, writable)
+        with socket.socket(fileno=os.dup(handle)) as peer:
+            peer.setsockopt(socket.SOL_SOCKET, socket.SO_SNDTIMEO,
+                            struct.pack("ll", self.write_timeout_seconds, 0))
 
     def close(self) -> None:
         if not self.closed:
@@ -1567,10 +1578,14 @@ async def relay_frames(connection: Connection, peer: WebSocketFrames) -> str:
             return f"the local side ended ({type(error).__name__})"
 
     async def inward() -> str:
-        async for message in peer:
-            if message.type is not WSMsgType.BINARY:
-                return f"the peer sent a {message.type.name} frame"
-            await asyncio.to_thread(connection.send_bytes, message.data)
+        try:
+            async for message in peer:
+                if message.type is not WSMsgType.BINARY:
+                    return f"the peer sent a {message.type.name} frame"
+                await asyncio.to_thread(connection.send_bytes, message.data)
+        except OSError as error:
+            # The local socket's write deadline: the local side stopped reading.
+            return f"the local side stopped reading ({type(error).__name__})"
         return "the peer closed its socket"
 
     directions = (asyncio.create_task(outward()), asyncio.create_task(inward()))
