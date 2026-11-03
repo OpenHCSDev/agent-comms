@@ -32,7 +32,9 @@ if TYPE_CHECKING:
     from .agent_activity import RecipientActivity
     from .bus import Bus
     from .bus_publication import Delivered
+    from .read_ledger import ReadDocument
     from .registration import Registration
+    from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
     from .comms import Comms
     from .presentation import WireRevision
@@ -66,27 +68,61 @@ class NotificationWindow(ABC):
                          for item in items for name in item.activity_names())
 
     @abstractmethod
-    def changed(self, comms: Comms, revision: WireRevision, earlier: WireRevision) -> bool: ...
+    def changed(self, evidence: CapturedNotificationEvidence) -> bool: ...
 
 
 class NoNotificationWindow(NotificationWindow):
     def __init__(self) -> None:
         super().__init__({}, ())
 
-    def changed(self, comms: Comms, revision: WireRevision, earlier: WireRevision) -> bool:
+    def changed(self, evidence: CapturedNotificationEvidence) -> bool:
         return False
 
 
 @dataclass(frozen=True)
 class CapturedNotificationWindow(NotificationWindow):
-    def changed(self, comms: Comms, revision: WireRevision, earlier: WireRevision) -> bool:
-        if not revision.changed_since(NotificationEvidenceView(), earlier):
-            return False
+    def changed(self, evidence: CapturedNotificationEvidence) -> bool:
         return bool(
-            (self.read_marks and comms.bus.reads.changed_notifications(
-                self.read_marks, comms.registry.snapshot(),
-            )) or NotificationAssignment.changed(self.reads, comms.root)
+            (self.read_marks and evidence.changed_marks(self.read_marks))
+            or NotificationAssignment.changed(self.reads, evidence.root)
         )
+
+
+class NotificationEvidence:
+    """One refresh pass's answer to whether notification evidence changed: the revision
+    question is asked once, and the read ledger and registry are decoded once for every
+    window the pass checks."""
+
+    @classmethod
+    def since(cls, comms: Comms, revision: WireRevision, earlier: WireRevision) -> NotificationEvidence:
+        if not revision.changed_since(NotificationEvidenceView(), earlier):
+            return cls()
+        reads = comms.bus.reads
+        return CapturedNotificationEvidence(
+            comms.root, reads, reads.read(), comms.registry.snapshot())
+
+    def changed(self, window: NotificationWindow) -> bool:
+        """No assignment or read evidence moved, so no window changed."""
+        return False
+
+
+@dataclass(frozen=True)
+class CapturedNotificationEvidence(NotificationEvidence):
+    root: Path
+    ledger: ReadLedger
+    document: ReadDocument
+    snapshot: RegistrySnapshot
+
+    def changed(self, window: NotificationWindow) -> bool:
+        return window.changed(self)
+
+    def changed_marks(
+        self, marks: Iterable[NotificationReadMark],
+    ) -> tuple[NotificationReadMark, ...]:
+        """Compare only the source/recipient display facts a window actually used."""
+        return tuple(mark for mark in marks if mark.displayed_to != self.ledger.displayed_recipient(
+            mark.source, mark.recipient, self.snapshot, document=self.document,
+        ))
 
 
 @dataclass(frozen=True, slots=True)

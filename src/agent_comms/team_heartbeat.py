@@ -92,6 +92,7 @@ class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
                     )))
 
     def prepare(self, comms: Comms) -> Mapping[Thread, TeamInputs]:
+        self.begin_pass()
         pulls = ProgressRead()
         return {thread: TeamInputs.prepare(comms, thread.name, pulls, self)
                 for thread in self.boards(comms.registry, comms.goals)}

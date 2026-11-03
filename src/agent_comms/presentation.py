@@ -57,7 +57,7 @@ from .message_reference import MessageReference
 from .messages import Message
 from .notification_assignment import NotificationAssignment
 from agent_comms.notification_progress import AssignmentResponse
-from agent_comms.message_notification import NotificationWindow
+from agent_comms.message_notification import NotificationEvidence, NotificationWindow
 from agent_comms.notification_assignment import NotificationAssignmentRead, NotificationReadMark
 from .notification_evidence import FirstRecipient, OutcomeViewer, RecipientCursor, RecipientLimit
 from .notification_progress import (
@@ -722,9 +722,10 @@ class WireRevision(ReadState):
             changed.update(name for name in status_names
                            if not previous.results[name].same_status(status_batch.view(name)))
         remaining = {name: view for name, view in readable.items() if name not in changed}
+        evidence = NotificationEvidence.since(comms, self, earlier)
         changed.update(name for name, view in remaining.items()
                        if view.notification_window.activity_names() & activity_changed
-                       or view.notification_window.changed(comms, self, earlier))
+                       or evidence.changed(view.notification_window))
         return frozenset(changed & names)
 
     @property

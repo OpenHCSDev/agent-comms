@@ -11,7 +11,7 @@ from agent_comms.comms import Comms, wire
 from agent_comms.historical_views import HistorySource
 from agent_comms.message_page import MessagePage
 from agent_comms.messages import Message
-from agent_comms.message_notification import NotificationWindow
+from agent_comms.message_notification import CapturedNotificationEvidence, NotificationWindow
 from agent_comms.notification_progress import DeliveryProgress
 from agent_comms.notification_evidence import AllOutcomes, OutcomeViewer, OwnerOutcomes
 from agent_comms.message_notification import MessageNotification
@@ -161,6 +161,9 @@ def test_direct_human_self_row_disappears_without_read_or_unread_mutation(comms:
     assert shown.outcomes[key] == ()
     assert MessageNotification.summary(shown.outcomes[key]) == DeliveryProgress.label
     assert shown.read_marks == full.read_marks
-    assert not comms.bus.reads.changed_notifications(shown.read_marks, comms.registry.snapshot())
+    reads = comms.bus.reads
+    assert not CapturedNotificationEvidence(
+        comms.root, reads, reads.read(), comms.registry.snapshot(),
+    ).changed_marks(shown.read_marks)
     assert comms.bus.reads.read() == document
     assert comms.views.viewer_snapshot(worktree).unread == unread

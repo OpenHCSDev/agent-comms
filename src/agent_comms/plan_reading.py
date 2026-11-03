@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
+from itertools import chain
 from threading import Lock
 from subprocess import TimeoutExpired
 from typing import ClassVar
@@ -48,6 +49,13 @@ class PlanReading:
             with self.source(evidence):
                 self.reads[evidence] = EvidenceFound(evidence.holds(self))
         return self.reads[evidence]
+
+    def current(self, todos: tuple[Todo, ...], main: MainTree) -> PlanReading:
+        """Within one pass the same commit shares this reading's answers and parsed facts;
+        a moved main carries only what the new commit still supports."""
+        if main == self.main:
+            return replace(self, todos=todos)
+        return self.following(todos, main)
 
     def following(self, todos: tuple[Todo, ...], main: MainTree) -> PlanReading:
         main = self.main.following(main)
@@ -97,23 +105,33 @@ class PlanReadings:
 
 
 class RetainedPlanReadings(PlanReadings):
-    """Keep completed private snapshots; consumers may extend their own readings."""
+    """Keep completed private snapshots; every reading prepared in one pass shares one answer
+    per repository commit, so served teammates never re-parse or re-evaluate it."""
 
     def __init__(self) -> None:
         super().__init__()
         self.plans: tuple[PlanReading, ...] = ()
+        self.prepared: tuple[PlanReading, ...] = ()
         self.lock = Lock()
+
+    def begin_pass(self) -> None:
+        """A new pass asks every source again; an unread answer is never carried into it."""
+        with self.lock:
+            self.prepared = ()
 
     def observed(
         self, repo: Repo, todos: tuple[Todo, ...], history: CheckoutHistory,
     ) -> PlanReading:
         current = super().observed(repo, todos, history)
         with self.lock:
-            plans = self.plans
-        for previous in plans:
-            if previous.main.repo == repo:
-                return previous.following(todos, current.main)
-        return current
+            prepared, plans = self.prepared, self.plans
+        reading = next(chain(
+            (plan.current(todos, current.main) for plan in prepared if plan.main.repo == repo),
+            (plan.following(todos, current.main) for plan in plans if plan.main.repo == repo),
+        ), current)
+        with self.lock:
+            self.prepared = (*(plan for plan in self.prepared if plan.main.repo != repo), reading)
+        return reading
 
     def retain(self, reading: PlanReading) -> None:
         # Keep the pinned commit, compact blob facts and stable answers, not syntax or the graph.
@@ -122,3 +140,5 @@ class RetainedPlanReadings(PlanReadings):
         with self.lock:
             self.plans = (*(plan for plan in self.plans
                             if plan.main.repo != retained.main.repo), retained)
+            self.prepared = tuple(plan for plan in self.prepared
+                                  if plan.main.repo != retained.main.repo)

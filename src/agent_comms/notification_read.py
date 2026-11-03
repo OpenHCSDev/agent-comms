@@ -9,7 +9,9 @@ from typing import TYPE_CHECKING
 
 from .activity import ObservedActivity
 from .notification_assignment import NotificationAssignment
-from agent_comms.message_notification import NoNotificationWindow, NotificationWindow
+from agent_comms.message_notification import (
+    NoNotificationWindow, NotificationEvidence, NotificationWindow,
+)
 from .registry_provenance import DeletedThread
 from .revision_views import ActivityView, NotificationEvidenceView
 
@@ -47,7 +49,8 @@ class NotificationsRead:
             revision.changed_since(ActivityView(), self.revision)
             and comms.views.observed_activity(revision, self.notification_window.activity_names())
             != self.activity
-        ) or self.notification_window.changed(comms, revision, self.revision)
+        ) or NotificationEvidence.since(comms, revision, self.revision).changed(
+            self.notification_window)
 
 
 class UnreadableNotificationsRead(NotificationsRead):
