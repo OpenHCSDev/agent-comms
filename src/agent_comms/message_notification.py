@@ -8,7 +8,8 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from .agent_activity import AgentActivity, RecordedRecipientActivity
-from .read_ledger import ReadLedger
+from .read_ledger import ReadDocument, ReadLedger
+from .registry_document import RegistrySnapshot
 from .frozen_recipient import FrozenRecipient
 from .channel_targets import CommandTarget
 from .nominal.field_codec import MessageId, ThreadLookup
@@ -32,9 +33,7 @@ if TYPE_CHECKING:
     from .agent_activity import RecipientActivity
     from .bus import Bus
     from .bus_publication import Delivered
-    from .read_ledger import ReadDocument
     from .registration import Registration
-    from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
     from .comms import Comms
     from .presentation import WireRevision
@@ -94,7 +93,9 @@ class NotificationEvidence:
     window the pass checks."""
 
     @classmethod
-    def since(cls, comms: Comms, revision: WireRevision, earlier: WireRevision) -> NotificationEvidence:
+    def since(
+        cls, comms: Comms, revision: WireRevision, earlier: WireRevision,
+    ) -> NotificationEvidence:
         if not revision.changed_since(NotificationEvidenceView(), earlier):
             return cls()
         reads = comms.bus.reads
