@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from agent_comms_hooks import ToolRefusedError
 from agent_comms.nominal.field_codec import WireExclude
 
@@ -42,7 +44,7 @@ from agent_comms.lifecycle_capability import Active
 
 from .change_report import NoChangeReport, ReportEvidence
 from .channel_management import ListTagEdit, TagEdit
-from agent_comms.channel_targets import ChannelTarget, CommandTarget, NamedTarget
+from agent_comms.channel_targets import ChannelSelection, ChannelTarget, CommandTarget, NamedTarget, NoChannel
 from .channels import AnyChannel, Channel, SavedView, ViewMatch, ViewPredicate
 from agent_comms.cli_verbs.archive import ArchiveCliCommand
 from agent_comms.cli_verbs.delete_view import DeleteViewCliCommand
@@ -55,7 +57,9 @@ from agent_comms.cli_verbs.start import StartCliCommand
 from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.cli_commands import ThreadArchivedResult, ThreadCreatedResult, ThreadStoppedResult
 from agent_comms.cli_verbs.threads import ThreadsCliCommand
-from .cli_result import CliResult
+from .config_options import ConfigOptions
+from .cli_command import PreparedTargetAction, TargetAction, TargetActionCommand, TargetEdit
+from .cli_result import CliResult, TargetEditResult
 from .coordination_tables.refusals import SendRefusal
 from .display_order import ChannelSort, ThreadSort
 from .errors import RelationViolationError
@@ -420,6 +424,49 @@ class RetiredViewsRead(ToolResult):
     """Which of a UI's open views no longer have a source, as Core decides."""
 
     retired: RetiredViews
+
+
+@dataclass(frozen=True)
+class TargetActionsRead(ToolResult):
+    actions: tuple[PreparedTargetAction, ...]
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsTargetActionsTool(ReadTool, ToolRequest[ToolCaller, TargetActionsRead]):
+    """A UI's thread or channel menu: the actions its selection offers, prepared on Core's
+    host, where their configuration lives."""
+
+    label = "Target actions"
+    description = ("The actions a thread or channel menu offers for these targets, each with its "
+                   "editable fields and the choices Core's configuration offers them.")
+    project: Annotated[Checkout, *tool_field("Project the menu was opened in")]
+    targets: Annotated[tuple[CommandTarget, ...], *tool_field("Selected threads or channels")]
+    channel: Annotated[ChannelSelection, *tool_field("Surrounding channel")] = NoChannel()
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> TargetActionsRead:
+        actions = TargetActionCommand.target_catalog(
+            comms, TargetActionCommand.selected_targets(self.targets), self.channel, project=self.project)
+        return TargetActionsRead(asyncio.run(self.prepared(actions, ConfigOptions.for_route(comms.route))))
+
+    @staticmethod
+    async def prepared(
+        actions: tuple[TargetAction, ...], catalogs: ConfigOptions,
+    ) -> tuple[PreparedTargetAction, ...]:
+        return tuple([await action.prepared(catalogs) for action in actions])
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsTargetEditTool(ToolRequest[ToolCaller, TargetEditResult | Channel]):
+    """A UI applies one menu action, as the owner, locally or across the connector."""
+
+    label = "Apply target action"
+    description = ("Apply a thread or channel menu action with the values its editor accepted; "
+                   "requires a human UI caller.")
+    edit: Annotated[TargetEdit, *tool_field("The accepted action and its values")]
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> TargetEditResult | Channel:
+        caller.require_human()
+        return self.edit.apply(comms)
 
 
 @dataclass(frozen=True, kw_only=True)

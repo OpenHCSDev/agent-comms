@@ -1,6 +1,5 @@
 """A thread's context menu crosses the connector as its own records."""
 
-import asyncio
 from pathlib import Path
 
 import pytest
@@ -47,7 +46,7 @@ def test_a_prepared_action_offers_the_choices_it_was_prepared_with():
                                     offered=offered)
     received = FieldCodec.decode(PreparedTargetAction, FieldCodec.encode(prepared, PreparedTargetAction))
     assert received == prepared
-    fields = asyncio.run(received.prepare_fields())
+    fields = received.fields
     assert tuple(item.name for item in fields) == tuple(item.name for item in action.editable_fields)
 
 
@@ -70,3 +69,28 @@ def test_every_action_result_crosses_by_shape_and_keeps_its_cli_form():
         encoded = FieldCodec.encode(result, answer)
         assert encoded == result.to_wire()
         assert FieldCodec.decode(answer, encoded) == result
+
+
+def test_a_ui_lists_and_applies_a_menu_action_through_core(tmp_path):
+    """A channel's menu and its edit go through the same core.call a remote UI sends, and both
+    answers arrive as themselves."""
+    from agent_comms.channels import Channel
+    from agent_comms.cli_result import TargetEditResult
+    from agent_comms.cli_verbs.read_target import ReadTargetCliCommand
+    from agent_comms.comms import wire
+    from agent_comms.core_access import LocalCoreAccess
+    from agent_comms.tools import CommsTargetActionsTool, CommsTargetEditTool, TargetActionsRead
+
+    comms = wire(tmp_path / "wire")
+    project = Checkout(tmp_path)
+    targets = CommandTarget.arguments(("#all",), project)
+    core = LocalCoreAccess(comms)
+
+    menu = core.call(CommsTargetActionsTool(project=project, targets=targets))
+    assert FieldCodec.decode(TargetActionsRead, FieldCodec.encode(menu)) == menu
+    assert [action.declaration.declared_name for action in menu.actions] == ["read-target"]
+
+    edit = TargetEdit(ReadTargetCliCommand, ReadTargetCliCommand.selected_targets(targets), {}, project=project)
+    answer = core.call(CommsTargetEditTool(edit=edit))
+    received = FieldCodec.decode(TargetEditResult | Channel, FieldCodec.encode(answer, TargetEditResult | Channel))
+    assert received == answer

@@ -211,9 +211,7 @@ class CliCommand(
             if not entry.setting(TargetBound, False)
         )
 
-    async def prepare_fields(self) -> tuple[TargetField, ...]:
-
-        catalogs = ConfigOptions.configured()
+    async def prepare_fields(self, catalogs: ConfigOptions) -> tuple[TargetField, ...]:
         return tuple([await item.prepare(catalogs, self) for item in self.editable_fields])
 
     def describe(self, comms: Comms, target: CommandTarget, project: Checkout) -> TargetAction:
@@ -302,12 +300,9 @@ class TargetAction:
     def editable_fields(self) -> tuple[TargetField, ...]:
         return self.bound[0].editable_fields
 
-    async def prepare_fields(self) -> tuple[TargetField, ...]:
-        return await self.bound[0].prepare_fields()
-
-    async def prepared(self) -> PreparedTargetAction:
+    async def prepared(self, catalogs: ConfigOptions) -> PreparedTargetAction:
         """Core's host prepares the fields; a remote editor receives what it offered."""
-        fields = await self.prepare_fields()
+        fields = await self.bound[0].prepare_fields(catalogs)
         return PreparedTargetAction(self.bound, self.targets, self.declaration, self.channels,
                                     offered=tuple(item.offered() for item in fields))
 
@@ -347,7 +342,8 @@ class PreparedTargetAction(TargetAction):
     offered choices per editable field, in their declared order."""
     offered: tuple[tuple[CatalogChoice, ...], ...] = field(default=(), kw_only=True)
 
-    async def prepare_fields(self) -> tuple[TargetField, ...]:
+    @property
+    def fields(self) -> tuple[TargetField, ...]:
         return tuple(item.with_offered(options)
                      for item, options in zip(self.editable_fields, self.offered, strict=True))
 
