@@ -1125,3 +1125,24 @@ async def test_a_ui_checks_a_conversation_for_changes_the_same_locally_and_remot
     latest = CommsLatestSequenceTool()
     assert await remote_answer(client, token, latest) == local_core.call(latest)
     assert local_core.call(latest).cursor.sequence == comms.views.latest_sequence()
+
+
+async def test_a_remote_watcher_reads_an_inbox_after_its_place_the_same_locally_and_remotely(
+    client, comms
+):
+    """The live bridge's inbox read crosses the connector with its place and its wait, and
+    answers what a local read answers."""
+    from agent_comms.agent_inbox import SecondsWait, TakenInputAfter
+    from agent_comms.core_access import LocalCoreAccess
+    from agent_comms.tools import CommsInboxTool
+
+    comms.registry.declare(Thread(CALLER.name, frozenset(), Checkout(comms.root)))
+    first = comms.messaging.send(CALLER.name, "worker", "first").message
+    comms.messaging.send(CALLER.name, "worker", "second")
+    request = CommsInboxTool(
+        thread="worker", after=TakenInputAfter(first.reference), wait=SecondsWait(1))
+
+    local = LocalCoreAccess(comms).call(request)
+    remote = await remote_answer(client, await approved_token(client, comms), request)
+    assert [m.body for m in remote.messages] == [m.body for m in local.messages] == ["second"]
+

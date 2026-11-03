@@ -119,6 +119,55 @@ class TestToolCatalog:
         assert result["messages"][0]["text"] == "hello"
         assert comms.bus.pending_count("b") == 1
 
+    def test_inbox_continues_after_a_message_and_waits_for_the_next(self, comms):
+        """A remote session's watcher keeps its place and waits on the bus's commit signal:
+        a waiting read wakes on the send, not at its timeout."""
+        import threading
+        import time
+
+        from agent_comms.agent_inbox import TakenInputAfter
+        from agent_comms.nominal.field_codec import FieldCodec
+
+        for name in ("a", "b"):
+            comms.registry.declare(Thread(name=name, tags=frozenset(), worktree=Checkout(Path('/wt'))))
+        first = comms.messaging.send("a", "b", "first").message
+        after = FieldCodec.encode(TakenInputAfter(first.reference))
+        read = {"thread": "b", "after": after}
+        assert invoke_tool(comms, "comms_inbox", read, caller=NoThreadCaller())["messages"] == []
+
+        answered: dict[str, object] = {}
+        waiter = threading.Thread(target=lambda: answered.update(invoke_tool(
+            comms, "comms_inbox", {**read, "wait": 20}, caller=NoThreadCaller())))
+        started = time.monotonic()
+        waiter.start()
+        time.sleep(0.5)
+        comms.messaging.send("a", "b", "second")
+        waiter.join(20)
+        assert [message["text"] for message in answered["messages"]] == ["second"]
+        assert time.monotonic() - started < 10
+
+    def test_remote_watch_starts_from_now_and_wakes_on_the_next_message(self, comms):
+        """The live bridge's watcher skips what was already waiting and yields the next
+        message as soon as it is sent, through the same core access a remote session uses."""
+        import threading
+        import time
+
+        from agent_comms.agent_inbox import SecondsWait
+        from agent_comms.core_access import LocalCoreAccess
+        from agent_comms.remote_watch import RemoteInboxWatch
+
+        for name in ("a", "b"):
+            comms.registry.declare(Thread(name=name, tags=frozenset(), worktree=Checkout(Path('/wt'))))
+        comms.messaging.send("a", "b", "already waiting")
+        messages = RemoteInboxWatch(LocalCoreAccess(comms), "b", wait=SecondsWait(20)).messages()
+        threading.Timer(0.5, lambda: comms.messaging.send("a", "b", "new\nsecond line")).start()
+        started = time.monotonic()
+        message = next(messages)
+        assert message.body == "new\nsecond line"
+        assert time.monotonic() - started < 10
+        assert RemoteInboxWatch.line(message).startswith("a -> b [")
+        assert RemoteInboxWatch.line(message).endswith(": new …")
+
     def test_arguments_are_validated_before_dispatch(self, comms):
         with pytest.raises(ValueError):
             invoke_tool(comms, "comms_stop", {}, caller=NoThreadCaller())

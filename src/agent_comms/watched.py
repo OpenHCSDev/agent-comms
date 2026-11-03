@@ -300,6 +300,11 @@ class ChangedSources(ExitStack):
         self._dirty.clear()
         return changed
 
+    def wait(self, seconds: float) -> None:
+        """Block until the kernel reports a change to a registered source or `seconds` pass;
+        changed_paths then says which."""
+        self._readiness.poll(max(0, round(seconds * 1000)))
+
     def changed_paths(self) -> frozenset[Path]:
         self._drain()
         if any(registration.pending_retirement() for registration in self._registrations.values()):
@@ -425,8 +430,13 @@ class Watched(WireWakeFile, ABC):
                 yield changes
                 await changes.wait()
 
+    def wake_sources(self) -> tuple[FileSource, ...]:
+        """The files this store's commits wake its watchers through."""
+        return tuple(FileSource(path) for path in WireWakeFile.watched_paths_in(self.path.parent))
+
     def watch(self, *sources: ChangeSource) -> AsyncGenerator[ChangeSignal]:
-        return self.watch_sources(
-            *(FileSource(path) for path in WireWakeFile.watched_paths_in(self.path.parent)),
-            *sources,
-        )
+        return self.watch_sources(*self.wake_sources(), *sources)
+
+    def changes(self, *sources: ChangeSource) -> ChangedSources:
+        """The synchronous registration of the same sources watch follows."""
+        return self.register_sources(*self.wake_sources(), *sources)
