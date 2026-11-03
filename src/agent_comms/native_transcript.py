@@ -38,7 +38,7 @@ from .native_entries import (
 )
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .native_session_reopen import NativeSessionIdentity, NativeSessionSnapshot
-from .private_path import FileRevision
+from .private_path import FileObservation, FileRevision
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .transcript_sources import TranscriptRecord, TranscriptSource
 from .turn_item import FreshNativeId, NativeItemId
@@ -280,6 +280,20 @@ class NativeTranscript(TranscriptSource):
         """Keep the native record owner bound across one page projection."""
         yield self
 
+    def require_opened(self, stream: BinaryIO) -> None:
+        """Ordinary journals may append; retained members bind the actual descriptor."""
+        pass
+
+    @contextmanager
+    def opened(self) -> Generator[BinaryIO]:
+        """Own every native file open and fence the descriptor consumers actually read."""
+        with self.reading(), self.path.open("rb") as stream:
+            self.require_opened(stream)
+            try:
+                yield stream
+            finally:
+                self.require_opened(stream)
+
     def imported_sources(self):
         """Read original metadata before conversation, including native configuration.
 
@@ -287,16 +301,15 @@ class NativeTranscript(TranscriptSource):
         producer may also prepend model/settings records. Stop at conversation;
         never scan the remaining history or claim this was a model request.
         """
-        with self.reading():
-            revision = FileRevision.from_stat(self.path.stat())
-            with self.path.open("rb") as stream:
-                SessionEntry.read(stream.readline())
-                sources = []
-                for raw in stream:
-                    entry = NativeEntry.read(raw)
-                    if entry.is_message:
-                        break
-                    sources.extend(entry.imported_sources())
+        with self.opened() as stream:
+            revision = FileRevision.from_file(stream)
+            SessionEntry.read(stream.readline())
+            sources = []
+            for raw in stream:
+                entry = NativeEntry.read(raw)
+                if entry.is_message:
+                    break
+                sources.extend(entry.imported_sources())
             if FileRevision.from_stat(self.path.stat()) != revision:
                 raise ValueError("Imported context saved source changed while reading")
             return tuple(sources)
@@ -306,19 +319,18 @@ class NativeTranscript(TranscriptSource):
 
     def cut(self) -> SessionCut:
         try:
-            stream = self.path.open("rb")
+            # One bound descriptor supplies the revision and last record boundary.
+            with self.opened() as stream:
+                revision = FileRevision.from_file(stream)
+                return self.session_cut(revision, record_end(stream, revision.size))
         except FileNotFoundError:
             return MissingSessionCut()
-        # One open file supplies both the revision and its last record boundary.
-        with stream:
-            revision = FileRevision.from_file(stream)
-            return self.session_cut(revision, record_end(stream, revision.size))
 
     def committed_output_cut(self, location: NativeRecordLocation) -> SessionCut:
         """Corroborate one indexed output against its original header and row."""
         if self.source_path.absolute() != location.path:
             raise TranscriptChanged()
-        with self.reading(), self.path.open("rb") as stream:
+        with self.opened() as stream:
             revision = FileRevision.from_file(stream)
             header = SessionEntry.read(stream.readline())
             if header.id != location.session_id or revision.size < location.session_entry_end:
@@ -372,7 +384,7 @@ class NativeTranscript(TranscriptSource):
 
     @property
     def session_id(self):
-        with self.path.open("rb") as stream:
+        with self.opened() as stream:
             try:
                 entry = SessionEntry.read(stream.readline())
             except MalformedRecord:
@@ -398,7 +410,7 @@ class NativeTranscript(TranscriptSource):
         this bounded indexed lookup does not guess a request kind or options.
         """
         files.require_private_directory(self.path.parent)
-        with self.path.open("rb") as stream:
+        with self.opened() as stream:
             header = SessionEntry.read(stream.readline())
         with NativeContextJournal.open_evidence(files.input_proof) as db:
             try:
@@ -484,16 +496,16 @@ class NativeTranscript(TranscriptSource):
         return deal
 
     def tail(self, *, max_bytes: int | None = None):
-        with self.reading():
-            end = self.path.stat().st_size
+        with self.opened() as stream:
+            end = FileRevision.from_file(stream).size
             floor = max(0, end - max_bytes) if max_bytes is not None else 0
-            for _, _, raw in reverse_records(self.path, end, floor=floor):
+            for _, _, raw in reverse_records(self.path, end, floor=floor, stream=stream):
                 # Skip only the record still being appended; corrupt history raises.
                 if raw.endswith(b"\n"):
                     yield NativeEntry.read(raw)
 
     def forward(self, after: int, through: int):
-        with self.reading(), self.path.open("rb") as stream:
+        with self.opened() as stream:
             stream.seek(after)
             while stream.tell() < through:
                 start = stream.tell()
@@ -503,8 +515,8 @@ class NativeTranscript(TranscriptSource):
                 yield NativeRecord.read(start, stream.tell(), raw)
 
     def reverse(self, before: int, *, floor: int = 0) -> Generator[NativeRecord]:
-        with self.reading():
-            for start, end, raw in reverse_records(self.path, before, floor=floor):
+        with self.opened() as stream:
+            for start, end, raw in reverse_records(self.path, before, floor=floor, stream=stream):
                 yield NativeRecord.read(start, end, raw)
 
 
@@ -520,7 +532,8 @@ class RetainedNativeTranscript(NativeTranscript):
         self.original = identity
         self.revision = revision
         identity.require_retained(revision)
-        self.require_retained()
+        with self.opened():
+            pass
 
     @property
     def source_path(self) -> Path:
@@ -530,10 +543,24 @@ class RetainedNativeTranscript(NativeTranscript):
     def session_id(self):
         return self.original.session_id
 
-    def require_retained(self) -> None:
-        if (FileRevision.capture(self.path) != self.revision
-                or super().session_id != self.original.session_id):
+    def require_revision(self, revision: FileObservation) -> None:
+        if revision != self.revision:
             raise TranscriptChanged("Retained native journal differs from its binding")
+
+    def require_retained(self) -> None:
+        self.require_revision(FileRevision.capture(self.path))
+
+    def require_opened(self, stream: BinaryIO) -> None:
+        self.require_revision(FileRevision.from_file(stream))
+        position = stream.tell()
+        try:
+            stream.seek(0)
+            if SessionEntry.read(stream.readline()).id != self.original.session_id:
+                raise TranscriptChanged("Retained native journal header differs from its binding")
+        except MalformedRecord as error:
+            raise TranscriptChanged("Retained native journal header differs from its binding") from error
+        finally:
+            stream.seek(position)
 
     @contextmanager
     def reading(self):
@@ -544,10 +571,6 @@ class RetainedNativeTranscript(NativeTranscript):
             self.require_retained()
 
     def session_cut(self, revision: FileRevision, offset: int) -> PresentSessionCut:
-        # The physical revision is fenced by reading(); positions and marks still
-        # belong to the original acquired inode, including committed-output cuts.
+        # Translation is legal only after the actual opened descriptor was checked.
+        self.require_revision(revision)
         return PresentSessionCut(self.original.revision, offset)
-
-    def cut(self) -> SessionCut:
-        with self.reading():
-            return super().cut()

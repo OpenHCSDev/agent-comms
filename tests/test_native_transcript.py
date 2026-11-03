@@ -1,9 +1,11 @@
 """Saved Pi boundary, bounded readers and presentation roundtrips."""
 
 import json
+from collections.abc import Callable
 from dataclasses import fields, replace
 from pathlib import Path
 from shutil import copyfile
+from typing import BinaryIO, Literal
 
 import pytest
 
@@ -15,6 +17,7 @@ from agent_comms.nominal.field_codec import (
 )
 from agent_comms.native_entries import MessageEntry, NativeEntry, NativeEvidenceScope, TranscriptProjection, UnknownEntry
 from agent_comms.native_transcript import NativeTranscript, RetainedNativeTranscript
+from agent_comms.native_output import NativeRecordLocation
 from agent_comms.coordination_errors import TranscriptChanged
 from agent_comms.errors import RelationViolationError
 from agent_comms.native_failures import NativePiUnavailable
@@ -131,6 +134,74 @@ def test_retained_reader_rejects_changed_bytes_during_its_read(
                 output.write(b"\n")
     with pytest.raises(TranscriptChanged):
         reader.cut()
+
+
+@pytest.mark.parametrize("read", [
+    pytest.param(lambda reader, size, output: reader.cut(), id="cut"),
+    pytest.param(lambda reader, size, output: reader.committed_output_cut(output), id="committed-cut"),
+    pytest.param(lambda reader, size, output: reader.imported_sources(), id="imported-sources"),
+    pytest.param(lambda reader, size, output: tuple(reader.tail()), id="tail"),
+    pytest.param(lambda reader, size, output: tuple(reader.forward(0, size)), id="forward"),
+    pytest.param(lambda reader, size, output: tuple(reader.reverse(size)), id="reverse"),
+])
+def test_retained_reader_rejects_descriptor_from_directory_aba(
+    retained_native_location: tuple[Path, RetainedSessionLocation],
+    monkeypatch: pytest.MonkeyPatch,
+    read: Callable[[NativeTranscript, int, NativeRecordLocation], object],
+) -> None:
+    root, location = retained_native_location
+    path = location.storage.resolve(root)
+    reader = RetainedNativeTranscript(path, location.identity, location.revision)
+    size = reader.cut().offset
+    last = tuple(reader.forward(0, size))[-1]
+    output = NativeRecordLocation(
+        session_id=location.identity.session_id,
+        session_file=location.identity.session_file,
+        session_entry_id=NativeItemId("original-entry"),
+        session_entry_start=last.start,
+        session_entry_end=last.end,
+    )
+    replacement = root / "other-retained"
+    replacement.mkdir()
+    other = replacement / path.name
+    other.write_bytes(path.read_bytes().replace(b'"saved"', b'"other"'))
+    parked = root / "parked-retained"
+    physical_open = Path.open
+    opened: list[FileRevision] = []
+
+    def open_after_directory_swap(candidate: Path, mode: Literal["rb"]) -> BinaryIO:
+        if candidate != path:
+            return physical_open(candidate, mode)
+        # The foreign IO boundary opens real B, then restores A before returning
+        # the descriptor. No product reader or revision method is replaced.
+        path.parent.rename(parked)
+        replacement.rename(path.parent)
+        try:
+            stream = physical_open(candidate, mode)
+            opened.append(FileRevision.from_file(stream))
+        finally:
+            path.parent.rename(replacement)
+            parked.rename(path.parent)
+        return stream
+
+    monkeypatch.setattr(Path, "open", open_after_directory_swap)
+    with pytest.raises(TranscriptChanged):
+        read(reader, size, output)
+    assert len(opened) == 1
+    assert opened[0].identity != location.revision.identity
+    assert FileRevision.capture(path) == location.revision
+
+
+def test_retained_cut_validates_descriptor_before_translating_original_coordinates(
+    retained_native_location: tuple[Path, RetainedSessionLocation],
+) -> None:
+    root, location = retained_native_location
+    path = location.storage.resolve(root)
+    reader = RetainedNativeTranscript(path, location.identity, location.revision)
+    other = root / "same-header.jsonl"
+    copyfile(path, other)
+    with other.open("rb") as stream, pytest.raises(TranscriptChanged):
+        reader.session_cut(FileRevision.from_file(stream), location.revision.size)
 
 
 @pytest.mark.parametrize("already_read", [False, True])
