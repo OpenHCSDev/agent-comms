@@ -94,9 +94,9 @@ class TakenInputAfter(RecordMember, AfterMessageStart, TakenInputPosition):
 
 
 class InboxWait(SubclassUnion, affix="Wait"):
-    """How long an inbox read may wait for its first message. A UI or a remote session's
-    watcher waits on the bus's own commit signal instead of polling, through the same
-    request locally and over the connector."""
+    """How long an inbox read may wait for its first message. A bridge waits on the bus's
+    own commit signal instead of polling, through the same request locally and over the
+    connector."""
 
     @abstractmethod
     def read(self, bus: Watched, page: Callable[[], InboxPage]) -> InboxPage: ...

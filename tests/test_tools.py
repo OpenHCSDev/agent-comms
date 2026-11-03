@@ -146,28 +146,6 @@ class TestToolCatalog:
         assert [message["text"] for message in answered["messages"]] == ["second"]
         assert time.monotonic() - started < 10
 
-    def test_remote_watch_starts_from_now_and_wakes_on_the_next_message(self, comms):
-        """The live bridge's watcher skips what was already waiting and yields the next
-        message as soon as it is sent, through the same core access a remote session uses."""
-        import threading
-        import time
-
-        from agent_comms.agent_inbox import SecondsWait
-        from agent_comms.core_access import LocalCoreAccess
-        from agent_comms.remote_watch import RemoteInboxWatch
-
-        for name in ("a", "b"):
-            comms.registry.declare(Thread(name=name, tags=frozenset(), worktree=Checkout(Path('/wt'))))
-        comms.messaging.send("a", "b", "already waiting")
-        messages = RemoteInboxWatch(LocalCoreAccess(comms), "b", wait=SecondsWait(20)).messages()
-        threading.Timer(0.5, lambda: comms.messaging.send("a", "b", "new\nsecond line")).start()
-        started = time.monotonic()
-        message = next(messages)
-        assert message.body == "new\nsecond line"
-        assert time.monotonic() - started < 10
-        assert RemoteInboxWatch.line(message).startswith("a -> b [")
-        assert RemoteInboxWatch.line(message).endswith(": new …")
-
     def test_arguments_are_validated_before_dispatch(self, comms):
         with pytest.raises(ValueError):
             invoke_tool(comms, "comms_stop", {}, caller=NoThreadCaller())

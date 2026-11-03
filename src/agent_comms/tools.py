@@ -269,8 +269,9 @@ class TaskPublished(ToolResult):
 
 @dataclass(frozen=True)
 class InboxPageRead(ToolResult):
-    """One page of messages nothing took yet; reading it records nothing. A remote session's
-    watcher decodes it, so its messages are declared as messages, like a MessagePage's."""
+    """One page of messages nothing took yet; reading it records nothing. A reader on the
+    other side of the connector decodes it, so its messages are declared as messages, like a
+    MessagePage's."""
 
     messages: tuple[Message, ...]
     remaining: int

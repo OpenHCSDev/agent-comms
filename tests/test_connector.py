@@ -1127,10 +1127,10 @@ async def test_a_ui_checks_a_conversation_for_changes_the_same_locally_and_remot
     assert local_core.call(latest).cursor.sequence == comms.views.latest_sequence()
 
 
-async def test_a_remote_watcher_reads_an_inbox_after_its_place_the_same_locally_and_remotely(
+async def test_an_inbox_read_after_its_place_the_same_locally_and_remotely(
     client, comms
 ):
-    """The live bridge's inbox read crosses the connector with its place and its wait, and
+    """An inbox read crosses the connector with its place and its wait, and
     answers what a local read answers."""
     from agent_comms.agent_inbox import SecondsWait, TakenInputAfter
     from agent_comms.core_access import LocalCoreAccess
