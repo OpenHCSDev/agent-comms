@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, replace

@@ -458,7 +458,9 @@ class CommsConversationPageTool(ReadTool, ToolRequest):
     label = "Conversation page"
     description = "Read one bounded display page of a channel or a DM as the owner's UI shows it."
     conversation: Annotated[NamedTarget, *tool_field("The channel or the DM's thread")]
-    bounds: Annotated[PageBounds, *tool_field("Which page: direction and size; default newest")] = NEWEST_PAGE
+    bounds: Annotated[PageBounds, *tool_field("Which page: direction, size; default newest")] = (
+        NEWEST_PAGE
+    )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> MessagePage:
         return self.conversation.display_page(comms.views, self.bounds)

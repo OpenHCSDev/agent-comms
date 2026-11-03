@@ -985,7 +985,7 @@ async def test_ui_mcp_uses_granted_capability_without_an_agent(
             listing = await client.post("/mcp", json=LIST, headers=headers)
             assert listing.status == 200
             call = ToolsCallMessage(
-                jsonrpc="2.0", id=2, params=CommsChannelsTool.called())
+                jsonrpc="2.0", id=2, params=CommsChannelsTool().called())
             response = await client.post("/mcp", json=FieldCodec.encode(call), headers=headers)
             reply = FieldCodec.decode(ToolsCallReply, await response.json()).result
             assert reply.is_error is False
@@ -1070,7 +1070,6 @@ async def test_a_ui_reads_one_conversation_page_the_same_locally_and_remotely(cl
     decodes it."""
     from agent_comms.connector import ToolsCallMessage, ToolsCallReply
     from agent_comms.core_access import LocalCoreAccess
-    from agent_comms.tool_request import ToolCall
     from agent_comms.tools import CommsConversationPageTool
 
     comms.registry.declare(Thread(CALLER.name, frozenset(), Checkout(comms.root)))
@@ -1082,7 +1081,7 @@ async def test_a_ui_reads_one_conversation_page_the_same_locally_and_remotely(cl
     assert sent.message_id in [message.message_id for message in local.messages]
 
     envelope = ToolsCallMessage(jsonrpc="2.0", id=3,
-                                params=ToolCall(request.declared_name, request.arguments()))
+                                params=request.called())
     headers = {"Authorization": f"Bearer {await approved_token(client, comms)}"}
     reply = FieldCodec.decode(ToolsCallReply, await (await client.post(
         "/mcp", headers=headers, json=FieldCodec.encode(envelope))).json())

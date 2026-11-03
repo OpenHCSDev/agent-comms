@@ -8,7 +8,9 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .activity_clocks import ActivityClocks
 from .class_fact import ClassFact
+from .cli_result import CliResult
 from .nominal.declared_family import DeclaredFamily
+from .frozen_recipient import FrozenRecipient
 from .errors import HumanSendRefusedError, RelationViolationError, UnregisteredThreadError
 from .nominal.field_codec import NullMember, SingleFieldValue, SubclassUnion
 from .projection_source import ProducedRow, ProjectionSource
@@ -21,11 +23,9 @@ from .wake_policy import BoundedTriageWake, FullWake, MessageAudience, WakePolic
 if TYPE_CHECKING:
     from .history_result import HistoryPageResult
     from .audience_manifest import AudiencedMessage
-    from .frozen_recipient import FrozenRecipient
     from .catalog_document import CatalogAccess, CatalogDocument
     from .channels import Channel
     from .cli_command import CliCommand
-    from .cli_result import CliResult
     from .comms import Comms
     from .goal_management import Goals
     from .historical_views import ChannelHistory, DMHistory, HistoryView

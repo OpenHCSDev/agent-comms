@@ -6,6 +6,7 @@ import annotationlib
 
 from abc import abstractmethod
 from collections.abc import Mapping
+from inspect import signature
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, ClassVar, NoReturn
@@ -129,10 +130,10 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
             for binding in ContextSource.single(plan.annotation)
         }
 
-    @classmethod
-    def called(cls) -> ToolCall:
-        """A connector call of this tool; the connector exposes it under its declared name."""
-        return ToolCall(cls.declared_name)
+    def called(self) -> ToolCall:
+        """This request as a connector call: its declared name and the arguments invoke
+        decodes back into it."""
+        return ToolCall(self.declared_name, self.arguments)
 
     @classmethod
     def schema(cls) -> dict[str, object]:
@@ -153,17 +154,17 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
             )
         return result
 
-    def arguments(self) -> dict[str, JsonValue]:
-        """This request as tools/call arguments: what invoke decodes back into it."""
-        encoded = FieldCodec.encode(self)
-        encoded.pop(self.family_discriminator, None)
-        return encoded
-
     @classmethod
     def result_type(cls) -> type[ToolResult]:
         """The result apply declares; a remote reply decodes into it."""
-        declared = annotationlib.get_annotations(cls.apply, format=annotationlib.Format.STRING)["return"]
-        return annotationlib.ForwardRef(declared, module=cls.apply.__module__).evaluate()
+        declared = signature(cls.apply, annotation_format=annotationlib.Format.STRING)
+        match annotationlib.ForwardRef(
+            declared.return_annotation, module=cls.apply.__module__
+        ).evaluate():
+            case type() as result if issubclass(result, ToolResult):
+                return result
+            case other:
+                raise TypeError(f"{cls.__name__}.apply declares {other!r}, not a ToolResult")
 
     @classmethod
     def invoke(

@@ -10,14 +10,11 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
+from .comms import Comms
 from .tool_caller import HumanCaller
-
-if TYPE_CHECKING:
-    from .comms import Comms
-    from .tool_request import ToolRequest
-    from .tool_result import ToolResult
+from .tool_request import ToolRequest
+from .tool_result import ToolResult
 
 
 class CoreAccess(ABC):
