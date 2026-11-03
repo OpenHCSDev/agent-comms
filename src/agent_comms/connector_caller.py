@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Annotated
 from pathlib import Path
 
 from agent_comms_hooks import ToolRefusedError
@@ -16,7 +17,7 @@ from .registry_store import RegistryStore
 from .todos import DirectiveText
 from .read_basis import OperatorOutcomes
 from .tool_caller import ForkCaller, HumanCaller, NoThreadCaller, ThreadCaller, ToolCaller
-from .tool_request import ReadTool, ToolArgumentsRefusedError, ToolRequest
+from .tool_request import ReadTool, ToolArgumentsRefusedError, ToolRequest, tool_field
 from .tool_result import ToolResult
 
 
@@ -26,7 +27,11 @@ class GrantRefusedError(ToolRefusedError):
 
 @dataclass(frozen=True, kw_only=True)
 class ActingFork:
-    fork: ForkCaller | NoThreadCaller = NoThreadCaller()
+    fork: Annotated[ForkCaller | NoThreadCaller, *tool_field(
+        "Your own name on the bus, as {\"name\": \"...\"}. Several sessions share this grant, "
+        "so take one distinct name and pass it on every call: what you send is from that name, "
+        "and its inbox holds what is sent to it. Omitted, you act as the shared grant itself."
+    )] = NoThreadCaller()
 
 
 class ConnectorCaller(ToolCaller):

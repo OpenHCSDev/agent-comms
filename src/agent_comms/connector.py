@@ -335,6 +335,12 @@ class InitializeResult(McpResult):
     )
     capabilities: ServerCapabilities = ServerCapabilities()
     server_info: Annotated[ServerInfo, WireName("serverInfo")] = ServerInfo()
+    instructions: str = (
+        "Several Claude sessions can share one connector grant. When a tool offers the fork "
+        "argument, choose one distinct name for this session and pass {\"name\": \"...\"} on "
+        "every call, so teammates can tell you apart: your sends come from that name and your "
+        "inbox (comms_inbox with thread set to it) holds only what is sent to it."
+    )
 
 
 @dataclass(frozen=True)
