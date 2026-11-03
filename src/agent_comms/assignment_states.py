@@ -120,7 +120,7 @@ class AssignmentState(CoordinatorVocabulary, LifecycleState, affix="Assignment")
     def extend_selection(cls, predicate: str, alias: str) -> str:
         return predicate
 
-    def rejected_triage_history(self, execution: TriageNativeExecution, **source) -> FailedTriageHistoricalNativeInput | None:
+    def rejected_triage_history(self, execution: TriageNativeExecution, **source) -> FailedTriageHistoricalNativeInput:
         raise ValueError("Recorded triage lacks a decision or a terminal failed claim")
 
     def wake_frame(self, source: Delivered, obligation: ResponseObligation | None) -> tuple[str, str]:
@@ -564,7 +564,7 @@ class FailedAssignment(Failed, Terminal, InterruptedAssignment):
         )
         return replace(notification, state=FailedProgress(notification.state))
 
-    def rejected_triage_history(self, execution: TriageNativeExecution, **source) -> FailedTriageHistoricalNativeInput | None:
+    def rejected_triage_history(self, execution: TriageNativeExecution, **source) -> FailedTriageHistoricalNativeInput:
         """A proved rejected result is delivered source, never an IGNORE decision."""
         from .historical_native_inputs import FailedTriageHistoricalNativeInput
 

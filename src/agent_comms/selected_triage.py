@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
     from .assignment_states import AssignmentState
     from .coordinated_runtime import SelectedExecution
-    from .historical_native_inputs import HistoricalNativeInput, TriageHistoricalNativeInput
+    from .historical_native_inputs import HistoricalNativeInput
     from .native_input_proof import NativeContextProof
     from .native_input_record import TriageNativeExecution
     from .native_runtime_input import NativeRuntimeInput
@@ -209,7 +209,7 @@ class TriageDecisionRecord(DeclaredFamily, JsonShapeFamily, affix="TriageDecisio
     decided: ClassVar[bool] = True
 
     @abstractmethod
-    def historical_proof(self, record: NativeRuntimeInput, lifecycle: AssignmentState, execution: TriageNativeExecution, **source) -> TriageHistoricalNativeInput | None: ...
+    def historical_proof(self, record: NativeRuntimeInput, lifecycle: AssignmentState, execution: TriageNativeExecution, **source) -> HistoricalNativeInput: ...
 
     def require_undecided(self) -> None:
         raise MalformedRecord("A full native input records no triage verdict")
@@ -223,7 +223,7 @@ class TriageDecisionText(TriageDecisionRecord, JsonShapeMember):
     def from_json_value(cls, value: str) -> DecidedTriageRecord:
         return DecidedTriageRecord(RecordedTriageText.from_text(value))
 
-    def historical_proof(self, record: NativeRuntimeInput, lifecycle: AssignmentState, execution: TriageNativeExecution, **source) -> TriageHistoricalNativeInput | None:
+    def historical_proof(self, record: NativeRuntimeInput, lifecycle: AssignmentState, execution: TriageNativeExecution, **source) -> HistoricalNativeInput:
         raise TypeError("Triage decision text must be decoded at ingress")
 
 
@@ -234,7 +234,7 @@ class DecidedTriageRecord(TriageDecisionRecord):
     def to_wire(self) -> str:
         return RecordedTriageText.encode(self.decision)
 
-    def historical_proof(self, record: NativeRuntimeInput, lifecycle: AssignmentState, execution: TriageNativeExecution, **source) -> TriageHistoricalNativeInput | None:
+    def historical_proof(self, record: NativeRuntimeInput, lifecycle: AssignmentState, execution: TriageNativeExecution, **source) -> HistoricalNativeInput:
         from .historical_native_inputs import TriageHistoricalNativeInput
 
         return TriageHistoricalNativeInput(execution=execution, decision=self.decision, **source)
@@ -248,7 +248,7 @@ class AbsentTriageDecisionRecord(TriageDecisionRecord, JsonShapeMember):
     def require_undecided(self) -> None:
         pass
 
-    def historical_proof(self, record: NativeRuntimeInput, lifecycle: AssignmentState, execution: TriageNativeExecution, **source) -> TriageHistoricalNativeInput | None:
+    def historical_proof(self, record: NativeRuntimeInput, lifecycle: AssignmentState, execution: TriageNativeExecution, **source) -> HistoricalNativeInput:
         return lifecycle.rejected_triage_history(execution, **source)
 
 
