@@ -53,7 +53,7 @@ class ConnectorService:
         return RoundTripResult(f"{CommsChannelsTool.declared_name} answered on port {self.port}")
 
     def serves(self) -> None:
-        read = CommsChannelsTool.called()
+        read = CommsChannelsTool().called()
         call = ToolsCallMessage(jsonrpc="2.0", id=0, params=read)
         try:
             with self.store.granted("upgrade round trip") as token:

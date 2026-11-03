@@ -8,7 +8,9 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .activity_clocks import ActivityClocks
 from .class_fact import ClassFact
+from .cli_result import CliResult
 from .nominal.declared_family import DeclaredFamily
+from .frozen_recipient import FrozenRecipient
 from .errors import HumanSendRefusedError, RelationViolationError, UnregisteredThreadError
 from .nominal.field_codec import NullMember, SingleFieldValue, SubclassUnion
 from .projection_source import ProducedRow, ProjectionSource
@@ -21,15 +23,14 @@ from .wake_policy import BoundedTriageWake, FullWake, MessageAudience, WakePolic
 if TYPE_CHECKING:
     from .history_result import HistoryPageResult
     from .audience_manifest import AudiencedMessage
-    from .frozen_recipient import FrozenRecipient
     from .catalog_document import CatalogAccess, CatalogDocument
     from .channels import Channel
     from .cli_command import CliCommand
-    from .cli_result import CliResult
     from .comms import Comms
     from .goal_management import Goals
     from .historical_views import ChannelHistory, DMHistory, HistoryView
     from .history_views import HistoryViews
+    from .message_page import MessagePage, PageBounds
     from .messages import Message, MessageInput
     from .read_basis import (
         ChannelConversation,
@@ -242,6 +243,12 @@ class NamedTarget(CommandTarget):
     guidance_scope = ""
     default_audience = MessageAudience.DIRECT
 
+    @abstractmethod
+    def display_page(
+        self, views: HistoryViews, project: Checkout, bounds: PageBounds
+    ) -> MessagePage:
+        """This conversation's display page as the human user of `project` reads it."""
+
     @classmethod
     def address(cls, name: str) -> str:
         """The target name an address of this kind names once its sigil is read."""
@@ -364,6 +371,11 @@ class NamedTarget(CommandTarget):
 class ThreadTarget(NamedTarget):
     def automatic_reply_targets(self, sender: str) -> tuple[str, ...]:
         return (self.reply_target(sender),)
+
+    def display_page(
+        self, views: HistoryViews, project: Checkout, bounds: PageBounds
+    ) -> MessagePage:
+        return views.dm_display_page(self, worktree=project, bounds=bounds)
 
     sigil = "@"
     route: ClassVar[ReplyRoute] = SenderReply()
@@ -495,6 +507,12 @@ class IncarnationThreadTarget(ThreadTarget):
 
 
 class ChannelTarget(NamedTarget):
+    def display_page(
+        self, views: HistoryViews, project: Checkout, bounds: PageBounds
+    ) -> MessagePage:
+        return views.channel_display_page(
+            self.name, viewer=views.display_viewer(project), bounds=bounds)
+
     needs_channel_state = True
     batchable = True
     kind = "channel"

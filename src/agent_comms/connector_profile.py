@@ -6,7 +6,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Self
 
 from yarl import URL
 
@@ -92,7 +92,7 @@ class UiConnectionProfile:
         return path
 
     @classmethod
-    def read(cls, path: Path) -> UiConnectionProfile:
+    def read(cls, path: Path) -> Self:
         """Decode once from a private regular file, without following a leaf symlink."""
         descriptor = PrivateFileRole.read(
             path.expanduser(), ValueError("The UI profile is not a private credential file"))

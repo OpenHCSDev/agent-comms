@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, replace
@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .nominal.field_codec import (
     NominalSpelling, NominalText, NullMember, RecordMember, SingleFieldValue, SubclassUnion,
+    TaggedRecordMember,
 )
 
 if TYPE_CHECKING:
@@ -121,8 +122,13 @@ class HistoryCursor(RecordMember, SequenceCursor):
         return True
 
 
-class PageTraversal(ABC):
-    """Traversal order and edge meaning retain their original nominal cursor."""
+class PageTraversal(SubclassUnion, affix="Traversal"):
+    """Traversal order and edge meaning retain their original nominal cursor. Older and newer
+    have the same shape, so each record carries its declared direction."""
+
+    @classmethod
+    def decodes_tagged_records(cls) -> bool:
+        return True
 
     cursor: PageCursor
     # The bus sequence order this traversal reads rows in.
@@ -179,7 +185,7 @@ class PageTraversal(ABC):
 
 
 @dataclass(frozen=True, slots=True)
-class OlderTraversal(PageTraversal):
+class OlderTraversal(TaggedRecordMember, PageTraversal):
     cursor: PageCursor = NewestCursor()
     seq_order = "DESC"
 
@@ -214,7 +220,7 @@ class OlderTraversal(PageTraversal):
 
 
 @dataclass(frozen=True, slots=True)
-class NewerTraversal(PageTraversal):
+class NewerTraversal(TaggedRecordMember, PageTraversal):
     cursor: PageCursor = NewestCursor()
     seq_order = "ASC"
 

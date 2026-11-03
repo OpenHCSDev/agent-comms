@@ -56,7 +56,7 @@ from .goal_waits import NoStandbyReview, StandbyReview
 from .goals import GoalDeclaration
 from .history_result import HistoryPageResult
 from .input_attempt import UnresolvedInput
-from .message_page import PageBounds
+from .message_page import NEWEST_PAGE, MessagePage, PageBounds
 from .message_reference import MessageReference
 from .messages import InfoKind, Message, MessageKind, NoticeRole, SendableMessageKind
 from .owner_lifecycle import OwnerStartResult
@@ -449,6 +449,22 @@ class CommsChannelsTool(ReadTool, ToolRequest):
         catalog = comms.channels.catalog.read()
         return ChannelListing(comms.views.channel_views(), tuple(catalog.saved_views.values()),
                               catalog.list_order)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsConversationPageTool(ReadTool, ToolRequest):
+    """The UI's conversation read: the same request locally and through the connector."""
+
+    label = "Conversation page"
+    description = "Read one bounded display page of a channel or a DM as the owner's UI shows it."
+    conversation: Annotated[NamedTarget, *tool_field("The channel or the DM's thread")]
+    project: Annotated[Checkout, *tool_field("The project whose human user reads the page")]
+    bounds: Annotated[PageBounds, *tool_field("Which page: direction, size; default newest")] = (
+        NEWEST_PAGE
+    )
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> MessagePage:
+        return self.conversation.display_page(comms.views, self.project, self.bounds)
 
 
 @dataclass(frozen=True, kw_only=True)

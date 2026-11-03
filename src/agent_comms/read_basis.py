@@ -30,6 +30,7 @@ from .nominal.field_codec import (
     PathText,
     SingleFieldValue,
     SubclassUnion,
+    TaggedRecordMember,
 )
 from .launch_runtime import CallingThreadUnavailable
 from .mentions import ThreadMention
@@ -217,8 +218,13 @@ class DMDisplayIdentity(DisplayIdentity):
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class SelectedDisplay(ABC):
-    """The builder's declared read proof; never recovered from a page's fields."""
+class SelectedDisplay(SubclassUnion, affix="Selection"):
+    """The builder's declared read proof; never recovered from a page's fields. It travels
+    with its page to a remote UI and back with the read mark, so each record carries its kind."""
+
+    @classmethod
+    def decodes_tagged_records(cls) -> bool:
+        return True
 
     history_revision: FileObservation = MissingFile()
     has_evidence: ClassVar[bool] = True
@@ -248,7 +254,7 @@ class SelectedDisplay(ABC):
 
 
 @dataclass(frozen=True, slots=True)
-class NoDisplaySelection(SelectedDisplay, DisplayCut):
+class NoDisplaySelection(TaggedRecordMember, SelectedDisplay, DisplayCut):
     has_evidence: ClassVar[bool] = False
 
     @property
@@ -267,7 +273,7 @@ class NoDisplaySelection(SelectedDisplay, DisplayCut):
 
 
 @dataclass(frozen=True, slots=True)
-class ChannelSelection(SelectedDisplay):
+class ChannelSelection(TaggedRecordMember, SelectedDisplay):
     scope: ChannelDisplayScope
 
     @property
@@ -288,7 +294,7 @@ class ChannelSelection(SelectedDisplay):
 
 
 @dataclass(frozen=True, slots=True)
-class DMSelection(SelectedDisplay):
+class DMSelection(TaggedRecordMember, SelectedDisplay):
     basis: DMDisplayBasis
 
     @property
