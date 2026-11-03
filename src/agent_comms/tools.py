@@ -111,6 +111,7 @@ from .thread_model import ThreadModel
 from .threads import NextTurnConfiguration
 from .tool_caller import ThreadCaller, ThreadListing, ToolCaller
 from .registry_document import RegistrySnapshot
+from .transcripts import TranscriptCursor
 from .tool_result import ToolResult
 from .notification_reads import LiveNotificationRead
 from .work_branches import WorkBranch, WorkBranches
@@ -1074,6 +1075,30 @@ class CommsUserSendTool(PublishingToolRequest):
         message = comms.messaging.send_user_message(
             CommandTarget.named(self.target), self.body, worktree=Checkout(comms.root))
         return MessagePublished.from_send(SendResult(message, CorrectionComplete()))
+
+
+@dataclass(frozen=True)
+class ThreadViewMarked(ToolResult):
+    """The thread whose displayed position the owner acknowledged."""
+
+    thread: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsMarkThreadViewReadTool(ToolRequest[ToolCaller, ThreadViewMarked]):
+    """A UI acknowledges what it displayed of one thread, as the owner, locally or across
+    the connector; requires a human UI caller."""
+
+    label = "Mark thread view read"
+    description = ("Acknowledge the transcript position a UI displayed for one thread, through "
+                   "the thread's receiving contract, as the owner; requires a human UI caller.")
+    thread: Annotated[str, *tool_field("Thread name")]
+    through: Annotated[TranscriptCursor, *tool_field("Displayed transcript position")]
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> ThreadViewMarked:
+        caller.require_human()
+        comms.views.mark_thread_view_read(self.thread, worktree=Checkout(comms.root), through=self.through)
+        return ThreadViewMarked(self.thread)
 
 
 @dataclass(frozen=True, kw_only=True)

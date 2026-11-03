@@ -219,3 +219,21 @@ def test_a_closed_reader_is_not_reused_and_other_views_keep_their_marks(tmp_path
     assert completed_counts(fresh, 'two').counts == {'worker': ReplyUnread(1)}
     with pytest.raises(RuntimeError):
         state.counts('one', registry=comms.registry.snapshot(), document=state.reads.read(), visibility=DEFAULT_ROSTER)
+
+
+def test_a_ui_marks_a_thread_read_through_core(tmp_path):
+    """The owner's acknowledgement crosses the wire as a request and lands as the local one."""
+    from agent_comms.core_access import LocalCoreAccess
+    from agent_comms.nominal.field_codec import FieldCodec
+    from agent_comms.tools import CommsMarkThreadViewReadTool
+
+    comms, source = setup_thread(tmp_path)
+    append(source)
+    state = comms.views.transcript_reads
+    viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
+    assert completed_counts(state, viewer).counts == {'worker': ReplyUnread(1)}
+    request = CommsMarkThreadViewReadTool(
+        thread='worker', through=comms.transcripts.transcript_checkpoint('worker'))
+    LocalCoreAccess(comms).call(
+        FieldCodec.decode(CommsMarkThreadViewReadTool, FieldCodec.encode(request)))
+    assert completed_counts(state, viewer).counts == {'worker': ReplyUnread(0)}
