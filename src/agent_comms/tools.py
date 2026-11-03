@@ -90,6 +90,17 @@ from .notification_evidence import AfterRecipient, FirstRecipient, RecipientCurs
 from .message_notification import MessageNotification
 from .presentation import ChannelView, WireRevision
 from .runtime_requests import QueueActionRuntimeRequest
+from .runtime_server import RuntimeRequest
+from .owner_connection import OwnerConnection
+from .context_store import (
+    LATEST_CONTEXT, CapturedContext, ContextManifestCursor, ContextManifestPage, ContextManifestReference,
+)
+from .importing import ImportedSessionMetadata
+from .registry_document import RegistryEntry
+from .session_revision import SessionObservation
+from .turn_context import CodexRolloutProvenance, ContextSourceText, Provenance, SegmentManifest
+from .working_memory_annotations import WorkingMemoryAnnotations
+from .working_memory_labels import JevClassifier, ModelLabel
 from .nominal.field_codec import ThreadLookup
 from .notification_evidence import RecipientLimit
 from .progress_claims import ProgressClaim
@@ -120,7 +131,7 @@ from .thread_execution import ArchiveOwnerControl, NativeOwnerCommand, OwnerLife
 from .thread_management import InheritedTags, RenameThreadResult, TagChoice
 from .thread_identity import ToolName
 from .thread_model import ThreadModel
-from .threads import NextTurnConfiguration
+from .threads import NextTurnConfiguration, Thread
 from .tool_caller import ThreadCaller, ThreadListing, ToolCaller
 from .acp_extension import CoordinationChangedUpdate
 from .history_views import RetiredViews
@@ -428,6 +439,111 @@ class RetiredViewsRead(ToolResult):
     """Which of a UI's open views no longer have a source, as Core decides."""
 
     retired: RetiredViews
+
+
+@dataclass(frozen=True)
+class ContextInspectionRead(ToolResult):
+    entry: RegistryEntry
+    page: ContextManifestPage
+    source: SessionObservation
+    annotations: tuple[ModelLabel, ...]
+    imported: tuple[CodexRolloutProvenance, ...]
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsContextInspectionTool(ReadTool, ToolRequest[ToolCaller, ContextInspectionRead]):
+    """One thread's recorded context page, with its annotations and imported sources, as a
+    context explorer shows it."""
+
+    label = "Context inspection"
+    description = "One thread's recorded context manifests, working-memory annotations and imported sources."
+    owner: Annotated[str, *tool_field("Thread whose context to read")]
+    cursor: Annotated[ContextManifestCursor, *tool_field("Where the page starts")] = LATEST_CONTEXT
+    previous: Annotated[tuple[CapturedContext, ...], *tool_field("Contexts the reader already holds")] = ()
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> ContextInspectionRead:
+        entry = comms.registry.entry(self.owner).entry
+        thread = entry.thread
+        page = comms.contexts.page(self.owner, comms.registry, cursor=self.cursor, previous=self.previous)
+        annotations = WorkingMemoryAnnotations.for_context(
+            comms.registry.store.coordinator_reader,
+            tuple(resource.value for resource in page.resources), JevClassifier.version())
+        return ContextInspectionRead(
+            entry, page, thread.runtime.session_observation(comms.root, thread), annotations,
+            ImportedSessionMetadata.sources_for_owner(comms.registry, thread))
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsImportedSourceTool(ReadTool, ToolRequest[ToolCaller, ContextSourceText]):
+    """The public text of one source an imported thread's snapshot retained."""
+
+    label = "Imported source"
+    description = "The public text of one source in an imported thread's original snapshot."
+    owner: Annotated[Thread, *tool_field("The imported thread as the reader saw it")]
+    source: Annotated[Provenance, *tool_field("The retained source")]
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> ContextSourceText:
+        return ImportedSessionMetadata.public_source_text(comms.registry, self.owner, self.source, comms)
+
+
+@dataclass(frozen=True, kw_only=True)
+class SavedManifestRead(ReadTool, ToolRequest[ToolCaller, ToolResult], declared_name=None):
+    """A read of one retained context manifest of a stopped thread."""
+
+    owner: Annotated[str, *tool_field("Thread whose retained manifest to read")]
+    reference: Annotated[ContextManifestReference, *tool_field("The retained manifest")]
+    position: Annotated[int, *tool_field("Segment position")]
+
+    def manifest(self, comms: Comms):
+        return self.reference.read(comms.contexts, self.owner, comms.registry)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsSavedSourceTool(SavedManifestRead, ToolRequest[ToolCaller, ContextSourceText]):
+    """The public text of one source in a stopped thread's retained manifest."""
+
+    label = "Saved context source"
+    description = "The public text of one source in a stopped thread's retained context manifest."
+    source: Annotated[Provenance, *tool_field("The retained source")]
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> ContextSourceText:
+        return self.manifest(comms).public_source_text(comms, self.position, self.source)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsSavedSegmentTool(SavedManifestRead, ToolRequest[ToolCaller, SegmentManifest]):
+    """One segment of a stopped thread's retained manifest, with its selected contributors."""
+
+    label = "Saved context segment"
+    description = "One segment of a stopped thread's retained context manifest."
+    contributors: Annotated[tuple[int, ...], *tool_field("Contributor positions")] = ()
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> SegmentManifest:
+        return self.manifest(comms).selected_segment(self.position, self.contributors)
+
+
+@dataclass(frozen=True)
+class OwnerAnswered(ToolResult):
+    payload: JsonValue
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsOwnerRequestTool(ToolRequest[ToolCaller, OwnerAnswered]):
+    """A UI asks one running owner incarnation a declared runtime request, such as its
+    context; Core's host reaches the owner's socket. Requires a human caller."""
+
+    label = "Owner request"
+    description = ("Send a declared runtime request to one running thread incarnation's owner "
+                   "and return its reply; requires a human UI caller.")
+    owner: Annotated[ThreadIncarnation, *tool_field("The owner incarnation the UI holds")]
+    request: Annotated[RuntimeRequest, *tool_field("The declared runtime request")]
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> OwnerAnswered:
+        caller.require_human()
+        thread = comms.registry.require(self.owner.name)
+        if thread.incarnation != self.owner:
+            raise ValueError("Selected thread incarnation changed")
+        return OwnerAnswered(OwnerConnection.exchange(comms.root, thread.require_process(), self.request))
 
 
 @dataclass(frozen=True)

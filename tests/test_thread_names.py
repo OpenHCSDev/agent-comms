@@ -186,3 +186,23 @@ def test_a_queue_action_request_crosses_as_itself():
     for action in (SendNowRuntimeRequest, ClearQueueRuntimeRequest):
         request = CommsQueueActionTool(lookup=lookup, action=action)
         assert FieldCodec.decode(CommsQueueActionTool, FieldCodec.encode(request)) == request
+
+
+def test_a_ui_reads_a_threads_context_through_core(tmp_path):
+    """A context explorer's reads cross as themselves; the owner and saved reads are declared."""
+    from agent_comms.context_store import BeforeContextManifest, ContextManifestCursor, ContextStoreIdentity
+    from agent_comms.core_access import LocalCoreAccess
+    from agent_comms.nominal.field_codec import ContextStoreId, FieldCodec
+    import agent_comms.runtime_requests as runtime
+    from agent_comms.tools import CommsContextInspectionTool, CommsOwnerRequestTool, ContextInspectionRead
+
+    comms = wire(tmp_path / "wire")
+    _declare(comms, "worker", str(tmp_path))
+    read = LocalCoreAccess(comms).call(CommsContextInspectionTool(owner="worker"))
+    assert FieldCodec.decode(ContextInspectionRead, FieldCodec.encode(read)) == read
+    assert read.entry.thread.name == "worker"
+    cursor = BeforeContextManifest(ContextStoreIdentity(ContextStoreId.mint()), 4)
+    assert FieldCodec.decode(ContextManifestCursor, FieldCodec.encode(cursor, ContextManifestCursor)) == cursor
+    request = CommsOwnerRequestTool(owner=read.entry.thread.incarnation,
+                                    request=runtime.ContextCoreRuntimeRequest(thread="worker"))
+    assert FieldCodec.decode(CommsOwnerRequestTool, FieldCodec.encode(request)) == request
