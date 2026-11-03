@@ -37,7 +37,7 @@ class ConnectorObservationPeer(ObservationPeer):
     UI's ViewerEnd and the connector's /observe socket from a thread with its own event
     loop, so the UI's loop is never borrowed; the frames are declared records both ways."""
 
-    def __init__(self, access: ConnectorAccess) -> None:
+    def __init__(self, access: ConnectorClient) -> None:
         self.url = access.endpoint.url.with_path("/observe")
         viewer, relay = socket.socketpair()
         self.connection = ViewerEnd(viewer.detach())
@@ -62,7 +62,7 @@ class ConnectorObservationPeer(ObservationPeer):
             with self.lifetime:
                 self.loop.close()
 
-    async def carry(self, local: Connection, access: ConnectorAccess) -> None:
+    async def carry(self, local: Connection, access: ConnectorClient) -> None:
         import aiohttp
 
         try:
@@ -90,7 +90,7 @@ class ConnectorObservationPeer(ObservationPeer):
         return ConnectorObserverClosed(self.url, self.ending)
 
 
-class ConnectorAccess(ObservationSource):
+class ConnectorClient(ObservationSource):
     """Reaching one connector: its endpoint, the credential it accepts, and the TLS trust
     both the calls and the observation use."""
 
@@ -107,7 +107,7 @@ class ConnectorAccess(ObservationSource):
         return ConnectorObservationPeer(self)
 
 
-class RemoteCoreAccess(UiConnectionProfile, CoreAccess, ConnectorAccess):
+class RemoteCoreAccess(UiConnectionProfile, CoreAccess, ConnectorClient):
     """The owner's UI profile is the remote access: its endpoint and credential are all a
     call needs, and the server still decides scope, expiry and revocation."""
 
