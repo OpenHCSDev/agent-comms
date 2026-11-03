@@ -284,6 +284,25 @@ class CommsTeamLoadTool(BoardReadTool, declared_name="comms_commander_load"):
         return TeamHud.read(comms, caller.subject(self.thread)).load_reading()
 
 
+@dataclass(frozen=True)
+class TeamBoard(ToolResult):
+    """The team board as Tristan reads it: the rendered text, without the records under it."""
+
+    lines: tuple[str, ...]
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsBoardTool(BoardReadTool):
+    label = "Team board"
+    description = (
+        "Read the team board as text: what needs action, stalls, PRs nobody owns, idle work "
+        "and each teammate's card. comms_hud returns the records under it."
+    )
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> TeamBoard:
+        return TeamBoard(TeamHud.read(comms, caller.subject(self.thread)).frame)
+
+
 @dataclass(frozen=True, kw_only=True)
 class CommsHudTool(ThreadReadTool):
     label = "Team HUD"

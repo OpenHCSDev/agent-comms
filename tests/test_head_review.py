@@ -1468,3 +1468,26 @@ def test_only_a_discarding_verdict_may_decide_a_closed_head(head_bus):
     reviewed, = StoredHeadReview.head_reviews(comms.goals.todos, request)
     assert reviewed.verdict.supersedes()
     invoke(comms, request, SupersededHeadVerdict(ACCEPTED, 'P2'))
+
+
+def test_a_request_still_red_a_day_after_it_opened_churns_however_often_it_moved():
+    """Pushes restart the idle window, so a request that keeps moving and never goes green
+    was never a board line (Toad #1389: red for four days, pushed every hour). The churn rule
+    reads its age from when it opened, and only a red required check counts."""
+    import math
+
+    from agent_comms.standing_rules import ChurningPullRequest
+    from agent_comms.todos import FailedCheckMergeBlock
+
+    now = time.time()
+    pushed = datetime.fromtimestamp(now - 60, UTC).strftime('%Y-%m-%dT%H:%M:%SZ')
+    red = (FailedCheckMergeBlock(at=pushed, name="NRA gate"),)
+    churning = ChurningPullRequest(
+        request=PullRequestHead(RepositoryName("openhcsdev", "toad"), 1389, "4bb783ccc" + "0" * 31),
+        holders=(), blocks=red, moved=now - 60, opened=now - 4 * 86400)
+
+    assert churning.began() <= now
+    assert "CHURNING openhcsdev/toad#1389" in churning.line()
+    assert "required check NRA gate failed" in churning.line()
+    assert replace(churning, opened=now - 3600).began() > now
+    assert replace(churning, blocks=()).began() == math.inf
