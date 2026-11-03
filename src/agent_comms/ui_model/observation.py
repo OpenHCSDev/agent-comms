@@ -1287,7 +1287,7 @@ class ObservationFailed(TaggedRecordMember, ServiceResult):
     error: str
 
     async def received(self, process: ObservationProcess, observed: Callable[[Observed], None]) -> None:
-        await Coordination.run_worker(partial(process.process.join, timeout=2))
+        await Coordination.run_worker(partial(process.peer.join, 2))
         raise process.ended(self.error)
 
 
