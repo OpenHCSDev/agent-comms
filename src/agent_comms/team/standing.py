@@ -785,7 +785,7 @@ class UnitDeaf(InboxUnavailable):
 
 @dataclass(frozen=True)
 class ForkStalled(IndependentStandingRule, DatedStandingRule):
-    """A Claude fork of a live commander session wrote nothing to its transcript for the quiet
+    """A Claude fork of a live teammate session wrote nothing to its transcript for the quiet
     window and still owes a next record: its newest deciding record is a tool call or a
     prompt, never an answer. A bus unit's silence shows on its card; a fork has no card, so
     its own transcript, beside its parent session's, is the measure."""
@@ -799,8 +799,8 @@ class ForkStalled(IndependentStandingRule, DatedStandingRule):
 
     @classmethod
     def violations(cls, comms: Comms) -> tuple[Self, ...]:
-        """Each live commander session's registered, unarchived forks. Claude runs a fork
-        inside its session's process, so only a session whose process is alive has any."""
+        """Each teammate session's registered, unarchived forks. Claude runs a fork inside its
+        session's process, so only a session whose bridge process is alive has any."""
         snapshot = comms.registry.snapshot()
         teammates = {thread.name: thread for thread in TeamService.teammates(snapshot)}
         now = time.time()
