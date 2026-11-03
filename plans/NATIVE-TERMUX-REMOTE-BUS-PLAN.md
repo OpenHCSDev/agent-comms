@@ -119,6 +119,61 @@ unchanged cancellation/ACK/draft semantics. A lost response is UNKNOWN, not perm
 to retry a write. Server shutdown/disconnect must preserve already accepted writes;
 `Connector.call` already shields its entered call (`connector.py:540–553`).
 
+## The UI/Core boundary: one request family, local or remote
+
+Toad opens `Comms` in-process and calls Core internals at 38 sites, so it cannot run
+against a remote bus. The fix is one boundary, and it already exists: the connector's
+`ToolRequest` family. Toad asks through it; whichever side answers returns the
+request's declared result.
+
+- `core_access.CoreAccess.call(request) -> ToolResult` is the one door.
+  `LocalCoreAccess(comms)` applies the request in process as the owner's human caller.
+  `remote_core.RemoteCoreAccess(UiConnectionProfile, CoreAccess)` is the owner's UI
+  profile itself (endpoint plus credential, by inheritance) and sends `request.called()`
+  as MCP `tools/call`, decoding `structured_content` into `request.result_type()`.
+- `ToolRequest.called()` is the request as a connector call (its declared name and
+  `arguments`); `result_type()` is `apply`'s return annotation. Nothing restates either.
+- In Toad, `Observing.core` is `LocalCoreAccess` today; a remote CoreConnection member
+  returns `RemoteCoreAccess` from the saved UI profile. Screens never know which.
+
+Model PRs: Core #3928 (`comms_conversation_page`) and Toad #1425 (the chat view pages
+through `source.core.call`).
+
+### Rules for each new request
+
+1. Arguments are typed: a `NamedTarget`, `PageBounds`, a nominal id. Never a name string.
+2. The result is a `ToolResult` member itself, not a wrapper record around one.
+3. A value with several same-shaped members crosses as a tagged `SubclassUnion`
+   (`decodes_tagged_records`, `TaggedRecordMember`), as `PageTraversal` and
+   `SelectedDisplay` do.
+4. The behaviour lives on the owning type (`NamedTarget.display_page`), and the tool's
+   `apply` only calls it. The Toad call site and the Core internal it used go in the same
+   change.
+5. Test: the same request through the real HTTP `tools/call` decodes equal to the local
+   answer (`test_a_ui_reads_one_conversation_page_the_same_locally_and_remotely`).
+
+### Call sites (Toad, 38 sites, about 20 operations)
+
+Take one row, say so in #comms, open the Core and Toad PRs as a pair.
+
+| Operation | Toad sites | State |
+| --- | --- | --- |
+| `channel_display_page`, `dm_display_page` | wire_history, conversation_kind | done: #3928 + #1425 |
+| `revision`, `latest_sequence` | wire_history | next (claude-ai): NamedTarget owns its history view; Toad's `ConversationKind.history_view` copy goes |
+| `display_viewer`, `mark_page_read` | wire_history | open |
+| `bus.require_channel` | conversation_kind (3) | open |
+| `registry.snapshot` | conversation_kind, navigation_preparation, session_navigation, thread_navigation, wire_history | open |
+| `registry.active_threads`, `canonical_name`, `entry`/`require`/`store` | app, session_scope, context_inspection, agent_controller, submission_queue | open |
+| `messaging.send_user_message`, `user_identity` | delivery_failure_view, welcome | open (send exists: `comms_user_send`) |
+| `threads.import_thread`, `rename_managed_thread`, `set_project` | comms_transfer, agent_session, agent | open |
+| `historical_threads`, `thread_presentations`, `retired_views` | screens/comms (2), owner_preparation, session_navigation | open |
+| `mark_thread_view_read` | screens/main | open |
+| `export_wire` | comms_transfer | open |
+| Live watchers: CoreEventStream, transcripts, sidebar, notifications, team frames | several | open, after the reads: the existing observation interests over the same transport |
+
+When the last row is done, Toad no longer imports `Comms`; that import disappearing is
+the acceptance check, followed by the real run on the phone.
+
 ## Termux prerequisites
 
 - Toad declares Python`>=3.14.8,<3.15` and Textual8.2.8; our sibling packages track
