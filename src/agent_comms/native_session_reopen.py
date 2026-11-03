@@ -7,7 +7,7 @@ from .native_failures import NativePiUnavailable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, TYPE_CHECKING
-from .nominal.field_codec import FieldCodec, MalformedRecord, NullMember, PresentMember, boundary_decoder, WireName
+from .nominal.field_codec import FieldCodec, MalformedRecord, NullMember, PresentMember, WireName
 from abc import ABC, abstractmethod
 from .private_path import FileRevision
 from .turn_item import FreshNativeId
@@ -53,17 +53,31 @@ class NoPiSessionId(NullMember, NativeSessionSelection):
 class SessionRetention(ABC):
     """Only an attested saved identity can return a child to its session owner."""
 
-    @classmethod
-    @boundary_decoder
-    def from_optional(cls, identity: NativeSessionIdentity | None) -> SessionRetention:
-        return NoSessionRetention() if identity is None else identity
-
     @abstractmethod
     def retain(self, child: PiSessionChild, session: PersistentPiSession) -> bool: ...
+
+    @abstractmethod
+    def require_identity(self) -> NativeSessionIdentity: ...
+
+    @abstractmethod
+    def allows_extension_input(self, inputs) -> bool: ...
+
+    @abstractmethod
+    def conflicts_with(self, observed: SessionRetention) -> bool:
+        """Whether an observed identity contradicts the one this turn expected."""
 
 
 class NoSessionRetention(NullMember, SessionRetention):
     def retain(self, child: PiSessionChild, session: PersistentPiSession) -> bool:
+        return False
+
+    def require_identity(self) -> NativeSessionIdentity:
+        raise ValueError("Native child has not attested an original session identity")
+
+    def allows_extension_input(self, inputs) -> bool:
+        return False
+
+    def conflicts_with(self, observed: SessionRetention) -> bool:
         return False
 
 
@@ -73,6 +87,15 @@ class NativeSessionIdentity(PresentMember, SessionRetention):
 
     session_id: Annotated[PiSessionId, WireName("sessionId")]
     session_file: Annotated[str, WireName("sessionFile")]
+
+    def require_identity(self) -> NativeSessionIdentity:
+        return self
+
+    def allows_extension_input(self, inputs) -> bool:
+        return inputs.permits_interaction
+
+    def conflicts_with(self, observed: SessionRetention) -> bool:
+        return observed != self
 
     def __post_init__(self):
         if not self.session_id or not Path(self.session_file).is_absolute():

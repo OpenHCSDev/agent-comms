@@ -43,7 +43,7 @@ from .lifecycle_capability import Successful
 from .native_failures import NativePiUnavailable
 from .native_file_artifact import NativeFileArtifact
 from .native_output import AssistantOutput, NativeOutputScope, ToolOutput
-from .native_session_reopen import NativeSessionIdentity, PiSessionId
+from .native_session_reopen import NativeSessionIdentity, NoSessionRetention, PiSessionId
 from .pi_wire import McpCallPolicy, McpServerState, Opaque, OpenPayload, PiDiagnostic, PiField, PiOmitted, PiPayload, PiReported, PiUsage, ReportedInputId, TaggedPayload, UnknownPayload
 from . import agent_events as events
 from .acp_failure import ExhaustedRetry, FailureSource, RecoveredRetry
@@ -1047,10 +1047,10 @@ class NativeSessionSnapshot(PiPayload):
         }
 
     @property
-    def identity(self) -> NativeSessionIdentity | None:
+    def identity(self) -> NativeSessionIdentity | NoSessionRetention:
         known = self._known_identity()
         if len(known) != len(fields(NativeSessionIdentity)):
-            return None
+            return NoSessionRetention()
         return NativeSessionIdentity(
             FieldCodec.decode(PiSessionId, self.session_id.text_or("")),
             self.session_file.text_or(""),

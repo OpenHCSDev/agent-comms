@@ -83,12 +83,13 @@ class SelectedParticipant(MroDispatch):
         receives its returned snapshot; input checks use this SAME context,
         rather than maintaining another independently refreshed owner snapshot.
         """
-        identity = event.identity
-        if identity is None:
+        for identity in event.identity.present():
+            self.owner = await Coordination.run_worker(partial(
+                self.comms.registry.attach_native_session, self.owner, identity.session_file
+            ))
+            break
+        else:
             raise IdentityConflict("Native source publication lacks its attested identity")
-        self.owner = await Coordination.run_worker(partial(
-            self.comms.registry.attach_native_session, self.owner, identity.session_file
-        ))
 
     async def fail_before_send(self, max_attempts: int) -> None:
         """Settle captured originals when acquisition fails before any native send."""

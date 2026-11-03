@@ -13,7 +13,7 @@ from agent_comms.errors import TodoError
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, InputId
 from agent_comms.input_drain import DrainedSession
 from agent_comms.native_child import NoInputForwarder
-from agent_comms.native_session_reopen import SessionRetention
+from agent_comms.native_session_reopen import NoSessionRetention
 from agent_comms.native_startup import MeasuredSessionLoad, SessionLoad, UnmeasuredSessionLoad
 from agent_comms.pi_commands import GetState
 from agent_comms.pi_wire import AnonymousRequest, RequestId
@@ -120,7 +120,7 @@ async def test_unobserved_private_state_and_unmeasured_session_have_no_authority
     await state.turn.finish_original(None)
     state.open_inbox()
     await state.turn.finish_original(None)
-    assert not SessionRetention.from_optional(None).retain(None, None)
+    assert not NoSessionRetention().retain(None, None)
     missing = SessionLoad.capture(str(tmp_path / "missing.jsonl"))
     assert isinstance(missing, UnmeasuredSessionLoad)
     assert missing.diagnostic == {}

@@ -61,7 +61,7 @@ from .native_input_proof import NativeContextProof, NativeInputCommit
 from .native_package import VerifiedNativePackage
 from .native_pi import NativePiRpcLaunch, read_tracked_input_commitment
 from .native_session_files import NativeSessionFiles
-from .native_session_reopen import PiSessionId, SessionRetention
+from .native_session_reopen import PiSessionId
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartup
 from .native_tool_call import NativeToolMode
 from .native_tool_transport import ToolTransport, UnboundToolTransport
@@ -576,7 +576,7 @@ class NativeSession(MroDispatch, ABC):
     async def retain_or_close(self) -> None:
         self.tool_socket.assert_complete()
         await self.finish_input()
-        retention = SessionRetention.from_optional(self.native.attestation.identity)
+        retention = self.native.attestation.identity
         if self.prompt_state.permits_retention(self):
             self.native.sensitive_diagnostics = self.output.sensitive
             retention.retain(self.native, self.native_session)
