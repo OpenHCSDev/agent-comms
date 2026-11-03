@@ -41,10 +41,25 @@ class ConnectorObservationPeer(ObservationPeer):
         viewer, relay = socket.socketpair()
         self.connection = ViewerEnd(viewer.detach())
         self.ending = "the connector closed the observation"
+        # The relay's loop and task exist before its thread starts, so retiring the peer can
+        # cancel it at any point, connection setup included.
+        self.loop = asyncio.new_event_loop()
+        self.lifetime = threading.Lock()
+        self.task = self.loop.create_task(
+            self.carry(RelayConnection(relay.detach()), access.credential.token))
         self.thread = threading.Thread(
-            target=asyncio.run, args=(self.carry(RelayConnection(relay.detach()), access.credential.token),),
-            name="agent-comms-remote-observation", daemon=True)
+            target=self.run, name="agent-comms-remote-observation", daemon=True)
         self.thread.start()
+
+    def run(self) -> None:
+        try:
+            self.loop.run_until_complete(self.task)
+        except asyncio.CancelledError:
+            # join cancels the relay: the UI retired this observation.
+            self.ending = "the UI retired the observation"
+        finally:
+            with self.lifetime:
+                self.loop.close()
 
     async def carry(self, local: Connection, token: BearerSecret) -> None:
         import aiohttp
@@ -61,6 +76,10 @@ class ConnectorObservationPeer(ObservationPeer):
             local.close()
 
     def join(self, timeout: float | None = None) -> None:
+        """Retiring the peer ends its relay now, even while the connector is still connecting."""
+        with self.lifetime:
+            if not self.loop.is_closed():
+                self.loop.call_soon_threadsafe(self.task.cancel)
         self.thread.join(timeout)
 
     def died(self, error: str | None) -> ObserverDied:

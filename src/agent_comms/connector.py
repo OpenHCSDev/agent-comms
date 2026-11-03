@@ -889,7 +889,17 @@ class ObservationRelay:
         try:
             await relay_frames(self.connection, viewer)
         finally:
-            await asyncio.to_thread(self.process.join, 5)
+            await asyncio.to_thread(self.retire)
+
+    exit_seconds: ClassVar[float] = 5
+
+    def retire(self) -> None:
+        """The service exits once its connection closes; one that has not is hung, and is
+        killed so no observation process outlives its viewer."""
+        self.process.join(self.exit_seconds)
+        if self.process.exitcode is None:
+            self.process.kill()
+            self.process.join()
 
 
 @dataclass(frozen=True, kw_only=True)

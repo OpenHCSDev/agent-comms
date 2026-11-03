@@ -47,3 +47,17 @@ async def test_the_observe_socket_challenges_a_missing_bearer(tmp_path, comms: C
         response = await client.get("/observe")
         assert response.status == 401
         assert "resource_metadata" in response.headers["WWW-Authenticate"]
+
+
+def test_a_relay_kills_a_service_that_does_not_exit() -> None:
+    import multiprocessing
+    import time
+
+    from agent_comms.connector import ObservationRelay
+
+    relay = ObservationRelay.__new__(ObservationRelay)
+    relay.process = multiprocessing.get_context("spawn").Process(target=time.sleep, args=(60,))
+    relay.process.start()
+    relay.exit_seconds = 0.2
+    relay.retire()
+    assert relay.process.exitcode is not None

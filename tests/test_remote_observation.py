@@ -67,3 +67,23 @@ async def test_an_observation_process_receives_its_sidebar_from_a_remote_core(tm
             process.request(wanted)
             answered = await asyncio.wait_for(sidebar, timeout=60)
         assert answered.request == wanted
+
+
+def test_retiring_a_peer_ends_its_relay_while_the_connector_is_still_connecting() -> None:
+    """A listener that accepts but never answers the upgrade: retiring the peer must not wait."""
+    import socket
+    import time
+
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        port = listener.getsockname()[1]
+        peer = TestConnectorSource(Endpoint(URL(f"http://127.0.0.1:{port}")), Credential("t")).observation_peer()
+        accepted, _ = listener.accept()
+        with accepted:
+            started = time.monotonic()
+            peer.connection.close()
+            peer.join(5)
+            assert not peer.thread.is_alive()
+            assert time.monotonic() - started < 5
+            assert peer.died(None).error == "the UI retired the observation"
