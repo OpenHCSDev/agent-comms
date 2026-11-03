@@ -746,7 +746,7 @@ class TeamHudReading(ReadingObservation[ObserveTeamHud]):
 class ObserveViews(InterestRequest):
     """The thread incarnations and channel views open in the UI, to learn when one is retired."""
 
-    threads: frozenset
+    threads: frozenset[ThreadIncarnation]
     channels: frozenset[str]
 
     def observation(self) -> ViewReading:

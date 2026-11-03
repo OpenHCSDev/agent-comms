@@ -1448,7 +1448,7 @@ class StructuralRepresentation(FieldRepresentation):
             }
         if origin in (list, tuple, frozenset):
             return {"type": "array", "items": FieldCodec.value_schema(args[0])}
-        if origin is dict:
+        if origin in (dict, Mapping):
             if args[0] is str:
                 return {"type": "object", "additionalProperties": FieldCodec.value_schema(args[1])}
             return {
@@ -3451,7 +3451,7 @@ def _object_or_pair_entries(data: object) -> Iterable[tuple[object, object]]:
 class _DictDecoder[K, V](ValueDecoder[dict[K, V]]):
     key: ValueDecoder[K]
     value: ValueDecoder[V]
-    origins = (dict,)
+    origins = (dict, Mapping)
 
     def field_paths(self, key: str, seen: frozenset[type] = frozenset()) -> tuple[tuple[str, ...], ...]:
         return tuple(('*', *path) for path in self.value.field_paths(key, seen))
