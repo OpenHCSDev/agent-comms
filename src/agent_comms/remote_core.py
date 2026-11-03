@@ -19,7 +19,7 @@ from .nominal.field_codec import FieldCodec
 from .tool_caller import ToolCaller
 from .tool_request import ToolRequest
 from .tool_result import ToolResult
-from .ui_model.observation import ObservationPeer, ObservationSource, ObserverDied, RelayConnection, ViewerEnd
+from .ui_model.observation import ObservationPeer, ObservationSource, ObserverDied, RelayConnection, ViewerEnd, relay_frames
 
 
 class ConnectorObserverClosed(ObserverDied):
@@ -40,7 +40,7 @@ class ConnectorObservationPeer(ObservationPeer):
         self.url = access.endpoint.url.with_path("/observe")
         viewer, relay = socket.socketpair()
         self.connection = ViewerEnd(viewer.detach())
-        self.error: str | None = None
+        self.ending = "the connector closed the observation"
         self.thread = threading.Thread(
             target=asyncio.run, args=(self.carry(RelayConnection(relay.detach()), access.credential.token),),
             name="agent-comms-remote-observation", daemon=True)
@@ -53,23 +53,10 @@ class ConnectorObservationPeer(ObservationPeer):
             async with aiohttp.ClientSession() as session, session.ws_connect(
                 self.url, headers={"Authorization": f"Bearer {token}"},
             ) as remote:
-                async def results() -> None:
-                    async for message in remote:
-                        if message.type is not aiohttp.WSMsgType.BINARY:
-                            break
-                        local.send_bytes(message.data)
-
-                inbound = asyncio.create_task(results())
-                try:
-                    while not inbound.done():
-                        frame = await asyncio.to_thread(local.recv_bytes)
-                        await remote.send_bytes(frame)
-                finally:
-                    local.close()
-                    inbound.cancel()
-                    await asyncio.gather(inbound, return_exceptions=True)
-        except (EOFError, OSError, aiohttp.ClientError) as error:
-            self.error = f"{type(error).__name__}: {error}"
+                self.ending = await relay_frames(local, remote)
+        except (OSError, aiohttp.ClientError) as error:
+            # Connecting is the boundary: the connector refused or could not be reached.
+            self.ending = f"{type(error).__name__}: {error}"
         finally:
             local.close()
 
@@ -77,7 +64,7 @@ class ConnectorObservationPeer(ObservationPeer):
         self.thread.join(timeout)
 
     def died(self, error: str | None) -> ObserverDied:
-        return ConnectorObserverClosed(self.url, error or self.error)
+        return ConnectorObserverClosed(self.url, error or self.ending)
 
 
 class RemoteCoreAccess(UiConnectionProfile, CoreAccess, ObservationSource):

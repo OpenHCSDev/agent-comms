@@ -56,7 +56,7 @@ from .command import Command
 from .child_process import GitChildren, OwnedGitOpening, join_retirement
 from .active_route import CommsRoute, resolve_comms_route
 from .comms import Comms, client_wire, wire
-from .ui_model.observation import RelayConnection, serve_encoded
+from .ui_model.observation import RelayConnection, relay_frames, serve_encoded
 from .repo import Checkout
 from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from .errors import (
@@ -886,23 +886,9 @@ class ObservationRelay:
 
     async def carry(self, viewer: web.WebSocketResponse) -> None:
         """Relay frames both ways until either side ends, then retire the process."""
-        async def results() -> None:
-            while True:
-                frame = await asyncio.to_thread(self.connection.recv_bytes)
-                await viewer.send_bytes(frame)
-
-        outbound = asyncio.create_task(results())
         try:
-            async for message in viewer:
-                if message.type is not WSMsgType.BINARY:
-                    break
-                self.connection.send_bytes(message.data)
+            await relay_frames(self.connection, viewer)
         finally:
-            # Close before any await: a cancelled handler may not get past one, and the
-            # close is what ends the reader blocked in recv_bytes.
-            self.connection.close()
-            outbound.cancel()
-            await asyncio.gather(outbound, return_exceptions=True)
             await asyncio.to_thread(self.process.join, 5)
 
 

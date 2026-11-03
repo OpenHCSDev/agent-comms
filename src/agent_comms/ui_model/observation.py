@@ -101,6 +101,9 @@ from agent_comms.work_branches import WorkBranchError
 from multiprocessing.connection import Connection
 
 if TYPE_CHECKING:
+    from aiohttp import ClientWebSocketResponse, web
+
+    type WebSocketFrames = ClientWebSocketResponse | web.WebSocketResponse
     from concurrent.futures import Future
 
     from agent_comms.tool_result import ToolResult
@@ -1546,6 +1549,41 @@ class RelayConnection(Connection):
             with socket.socket(fileno=os.dup(self.fileno())) as peer:
                 peer.shutdown(socket.SHUT_RDWR)
         super().close()
+
+
+async def relay_frames(connection: Connection, peer: WebSocketFrames) -> str:
+    """Carry frames both ways between a local connection and a WebSocket until either side
+    ends, then end both, and say which side ended. Socket reads and writes run in worker
+    threads, so a peer that stops reading never blocks this loop; closing the connection
+    wakes a thread blocked in either."""
+    from aiohttp import WSMsgType
+
+    async def outward() -> str:
+        try:
+            while True:
+                await peer.send_bytes(await asyncio.to_thread(connection.recv_bytes))
+        except (EOFError, OSError) as error:
+            # The local socket's own end-of-stream: this is how its side ends.
+            return f"the local side ended ({type(error).__name__})"
+
+    async def inward() -> str:
+        async for message in peer:
+            if message.type is not WSMsgType.BINARY:
+                return f"the peer sent a {message.type.name} frame"
+            await asyncio.to_thread(connection.send_bytes, message.data)
+        return "the peer closed its socket"
+
+    directions = (asyncio.create_task(outward()), asyncio.create_task(inward()))
+    try:
+        finished, _ = await asyncio.wait(directions, return_when=asyncio.FIRST_COMPLETED)
+    finally:
+        # Close before any await: a cancelled caller may not get past one.
+        connection.close()
+        for direction in directions:
+            direction.cancel()
+        await peer.close()
+        await asyncio.gather(*directions, return_exceptions=True)
+    return next(iter(finished)).result()
 
 
 class EncodedConnection(Connection):
