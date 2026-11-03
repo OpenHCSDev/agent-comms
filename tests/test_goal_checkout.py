@@ -87,7 +87,7 @@ class RemoteGoalCheckout:
 
     @property
     def donor(self) -> Path:
-        return self.rule.repository_donor(self.worker, self.goal.id, self.repository.github)
+        return self.rule.repository_donor(self.worker, self.repository.github)
 
     def run(self, operation: str = 'add') -> subprocess.CompletedProcess[str]:
         return core_process('--root', str(self.comms.root), 'goal-checkout', '--from',
@@ -282,7 +282,7 @@ def test_acquisition_cannot_publish_for_a_changed_goal_or_incarnation(
     captured = case.worker
     if changed == 'incarnation':
         captured = replace(captured, created_at=RecordedCreationTime(captured.created_at + 1))
-    grant = GoalCheckoutGrant(captured, case.goal, case.source)
+    grant = GoalCheckoutGrant(captured, case.goal)
     if changed == 'goal':
         AcquireRepositoryStorageEffect(case.path, case.source).check(
             StorageProjection(case.rule, case.worker, case.comms))
@@ -312,14 +312,15 @@ def test_remote_goal_checkout_keeps_independent_owners_separate(
         StorageProjection(case.rule, peer, case.comms).require_write(case.path / 'foreign.py')
 
 
-def test_remote_goal_checkout_runs_below_the_pressure_warning(remote_goal_checkout: RemoteGoalCheckout) -> None:
+def test_remote_goal_checkout_checks_disk_before_clone(remote_goal_checkout: RemoteGoalCheckout) -> None:
     case = remote_goal_checkout
     strict = replace(case.rule, floor_gib=2**40)
     StorageRule.path_in(case.comms.root).write_text(FieldCodec.compact(FieldCodec.encode(strict)))
-    created = case.run()
-    assert created.returncode == 0, created.stdout + created.stderr
-    assert case.donor.exists()
-    assert case.path.exists()
+    refused = case.run()
+    assert refused.returncode != 0
+    assert 'GiB free' in refused.stdout + refused.stderr
+    assert not case.donor.exists()
+    assert not case.path.exists()
 
 
 def test_explicit_remote_spelling_does_not_capture_relative_local_paths(
@@ -331,3 +332,23 @@ def test_explicit_remote_spelling_does_not_capture_relative_local_paths(
     assert local.github == case.repository.github
     assert local.to_wire() == str(case.repository.checkout)
     assert FieldCodec.decode(RepositorySource, 'github:OpenHCSDev/unregistered-remote').to_wire() == case.source.to_wire()
+
+
+def test_new_goal_reuses_existing_repository_tree_and_donor(remote_goal_checkout):
+    case = remote_goal_checkout
+    created = case.run()
+    assert created.returncode == 0, created.stdout + created.stderr
+    original, donor = case.path, case.donor
+    (original / 'kept-draft.py').write_text('untouched draft\n')
+    branch = case.repository.git(original, 'branch', '--show-current')
+    next_goal = case.comms.goals.update_goal(case.worker.name, SetGoalAction(text='Next revision'))
+    fresh = case.rule.repository_checkout(case.rule.roots_of(case.worker), next_goal.id,
+                                         case.repository.github)
+    reused = case.run()
+    assert reused.returncode == 0, reused.stdout + reused.stderr
+    assert not fresh.exists()
+    assert (original / 'kept-draft.py').read_text() == 'untouched draft\n'
+    assert case.repository.git(original, 'branch', '--show-current') == branch
+    current = case.comms.registry.require(case.worker.name)
+    assert case.rule.repository_donor(current, case.repository.github) == donor
+    StorageProjection(case.rule, current, case.comms).require_write(original / 'next-change.py')

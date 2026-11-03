@@ -10,7 +10,7 @@ from agent_comms.nominal.field_codec import Argument
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.nominal.field_codec import Normalize
 from agent_comms.nominal.field_codec import PathText
-from agent_comms.repo import RepositorySource
+from agent_comms.repo import RepositorySource, RepositoryReads
 from agent_comms.storage_rules import StorageRule
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
@@ -33,19 +33,23 @@ class PreparedCheckoutCliCommand(CliCommand):
     source_checkout: Annotated[
         tuple[Annotated[Path, PathText], ...],
         Argument(flags=("--source",), options={"nargs": 1,
-                 "help": "Existing isolated checkout to transfer; required for transfer"}),
+                 "help": "Exact owned checkout to transfer or retire; required for transfer"}),
     ] = ()
 
     @abstractmethod
-    def destination(self, rule: StorageRule, thread: Thread) -> Path: ...
+    def declared_destination(self, rule: StorageRule, thread: Thread) -> Path: ...
+
+    def destination(self, ctx: Comms, thread: Thread) -> Path:
+        rule = ctx.registry.storage_rule
+        return rule.reused_checkout(thread, self.source(ctx, thread).github,
+                                    self.declared_destination(rule, thread), RepositoryReads())
 
     @abstractmethod
     def grant(self, ctx: Comms, thread: Thread) -> CheckoutGrant: ...
 
-    def source(self, ctx: Comms, grant: CheckoutGrant) -> RepositorySource:
-        return grant.source()
+    @abstractmethod
+    def source(self, ctx: Comms, thread: Thread) -> RepositorySource: ...
 
     def apply(self, ctx: Comms) -> CliResult:
         thread = ctx.registry.require(self.caller.own_thread())
-        destination = self.destination(ctx.registry.storage_rule, thread)
-        return self.operation.apply(self, ctx, thread, destination)
+        return self.operation.apply(self, ctx, thread)

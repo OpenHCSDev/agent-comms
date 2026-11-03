@@ -421,9 +421,6 @@ class CheckoutGrant(DeclaredFamily, affix="CheckoutGrant"):
     @abstractmethod
     def require(self) -> None: ...
 
-    @abstractmethod
-    def source(self) -> RepositorySource: ...
-
     def revalidate(self, ctx: Comms) -> None:
         """A long acquisition cannot spend a retired caller or a changed goal."""
         current = ctx.registry.require(self.thread.name)
@@ -441,9 +438,6 @@ class OrderCheckoutGrant(CheckoutGrant):
 
     def require(self) -> None:
         self.todo.require_assignee(self.thread.incarnation, self.todo.held().generation)
-
-    def source(self) -> RepositorySource:
-        return LocalRepositorySource(self.todo.repository)
 
     def revalidate(self, ctx: Comms) -> None:
         super().revalidate(ctx)
@@ -463,15 +457,11 @@ class OrderCheckoutGrant(CheckoutGrant):
 @dataclass(frozen=True)
 class GoalCheckoutGrant(CheckoutGrant):
     goal: Goal
-    repository: RepositorySource
 
     def require(self) -> None:
         current = self.thread.goal.require().require_id(self.goal.id)
         if current.state.items_with(Complete, current):
             raise ValueError("A completed goal cannot allocate a checkout.")
-
-    def source(self) -> RepositorySource:
-        return self.repository
 
 
 class CheckoutOperation(DeclaredFamily, affix="CheckoutOperation"):
@@ -481,8 +471,7 @@ class CheckoutOperation(DeclaredFamily, affix="CheckoutOperation"):
 
     @classmethod
     @abstractmethod
-    def apply(cls, command: PreparedCheckoutCliCommand, ctx: Comms, thread: Thread,
-              destination: Path) -> CheckoutResult: ...
+    def apply(cls, command: PreparedCheckoutCliCommand, ctx: Comms, thread: Thread) -> CheckoutResult: ...
 
 
 class AddCheckoutOperation(CheckoutOperation):
@@ -490,11 +479,11 @@ class AddCheckoutOperation(CheckoutOperation):
     the caller's order or goal grants the allocation."""
 
     @classmethod
-    def apply(cls, command: PreparedCheckoutCliCommand, ctx: Comms, thread: Thread,
-              destination: Path) -> CheckoutResult:
+    def apply(cls, command: PreparedCheckoutCliCommand, ctx: Comms, thread: Thread) -> CheckoutResult:
+        destination = command.destination(ctx, thread)
         grant = command.grant(ctx, thread)
         grant.revalidate(ctx)
-        source = command.source(ctx, grant)
+        source = command.source(ctx, thread)
         rule = ctx.registry.storage_rule
         projection = StorageProjection(rule, thread, ctx)
         AcquireRepositoryStorageEffect(destination, source).check(projection)
@@ -520,12 +509,12 @@ class TransferCheckoutOperation(CheckoutOperation):
     """Relocate the caller's retained work into its current held allocation."""
 
     @classmethod
-    def apply(cls, command: PreparedCheckoutCliCommand, ctx: Comms, thread: Thread,
-              destination: Path) -> CheckoutResult:
+    def apply(cls, command: PreparedCheckoutCliCommand, ctx: Comms, thread: Thread) -> CheckoutResult:
+        destination = command.declared_destination(ctx.registry.storage_rule, thread)
         source, = command.source_checkout
         source = source.expanduser().absolute()
         grant = command.grant(ctx, thread)
-        requested = command.source(ctx, grant)
+        requested = command.source(ctx, thread)
         registered = ctx.registry.snapshot().commander_project.require().repos
         matching = tuple(entry for entry in registered if entry.github == requested.github)
         if len(matching) != 1:
@@ -544,10 +533,15 @@ class RemoveCheckoutOperation(CheckoutOperation):
     Checkout owner refuses uncommitted work."""
 
     @classmethod
-    def apply(cls, command: PreparedCheckoutCliCommand, ctx: Comms, thread: Thread,
-              destination: Path) -> CheckoutResult:
-        RemoveCheckoutStorageEffect(destination).check(
-            StorageProjection(ctx.registry.storage_rule, thread, ctx))
+    def apply(cls, command: PreparedCheckoutCliCommand, ctx: Comms, thread: Thread) -> CheckoutResult:
+        destination = next(iter(command.source_checkout), None)
+        destination = (destination.expanduser().absolute() if destination is not None
+                       else command.destination(ctx, thread))
+        projection = StorageProjection(ctx.registry.storage_rule, thread, ctx)
+        RemoveCheckoutStorageEffect(destination).check(projection)
+        repository = command.source(ctx, thread)
+        if projection.reads.repository(destination).github != repository.github:
+            raise ValueError(f'{destination} is not a checkout of {repository.github}')
         Checkout(destination).retire()
         return CheckoutResult(destination)
 

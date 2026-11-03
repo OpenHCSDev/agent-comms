@@ -60,8 +60,9 @@ class StorageEffect(ABC):
     def require_order_check(self) -> None:
         """Ordinary storage effects remain valid in an order check."""
 
+    @abstractmethod
     def check(self, projection: StorageProjection) -> None:
-        """Effects without a path restriction only declare their measured work."""
+        """Refuse this operation if the thread's storage cannot take it."""
 
 
 @dataclass(frozen=True)
@@ -84,6 +85,9 @@ class ForbiddenStorageEffect(StorageEffect):
 class AllocateStorageEffect(StorageEffect):
     work: ClassVar[tuple[type[RoomWork], ...]] = (AllocationRoomWork,)
 
+    def check(self, projection: StorageProjection) -> None:
+        projection.rule.require_floor()
+
 
 class BuildStorageEffect(AllocateStorageEffect):
     work: ClassVar[tuple[type[RoomWork], ...]] = (BuildRoomWork,)
@@ -101,7 +105,7 @@ class TestGateStorageEffect(AllocateStorageEffect):
 
 @dataclass(frozen=True)
 class CheckoutStorageEffect(AllocateStorageEffect):
-    """Shared checkout ownership and allocation measurement."""
+    """Shared checkout ownership and free-space admission."""
 
     path: Path
     repository: RepositorySource
@@ -116,6 +120,10 @@ class CheckoutStorageEffect(AllocateStorageEffect):
         if not rule.owns_checkout(thread, self.path, self.repository.github, projection.reads):
             destination = rule.order_checkout(rule.roots_of(thread), "P<number>")
             rule.deny(f'checkout destination must be {destination}')
+        selected = rule.reused_checkout(thread, self.repository.github, self.path, projection.reads)
+        if selected != self.path:
+            rule.deny(f'Reuse {selected}; this agent already has a checkout of '
+                      f'{self.repository.github}. Do not create another for a new goal/order.')
         projection.storage = self.project(projection.storage)
         super().check(projection)
 
@@ -128,7 +136,7 @@ class AcquireRepositoryStorageEffect(CheckoutStorageEffect):
         super().check(projection)
         rule, thread = projection.rule, projection.thread
         for donor in self.repository.allocations(rule, thread):
-            rule.require_repository_donor(thread, thread.goal.require().id, self.repository.github, donor)
+            rule.require_repository_donor(thread, self.repository.github, donor)
 
 
 @dataclass(frozen=True)
@@ -143,6 +151,11 @@ class RemoveCheckoutStorageEffect(StorageEffect):
     def check(self, projection: StorageProjection) -> None:
         if self.path == projection.thread.project_path:
             projection.rule.deny(f'{self.path} is where {projection.thread.name} runs; choose another existing project first: agent-comms set-project {projection.thread.name} <existing-project>')
+        if any(repository.checkout.resolve() == self.path
+               for repository in projection.snapshot.commander_project.unique_repositories()):
+            projection.rule.deny(f'{self.path} is a registered repository, not a disposable checkout')
+        projection.rule.require_isolated_checkout(
+            projection.thread, self.path, projection.snapshot.threads.values(), projection.reads)
         projection.storage = projection.storage.removing(Checkout(self.path))
 
 

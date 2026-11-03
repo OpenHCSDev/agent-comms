@@ -5,6 +5,7 @@ from agent_comms.cli_commands import OrderCheckoutGrant
 from agent_comms.cli_support.prepared_checkout import PreparedCheckoutCliCommand
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument
+from agent_comms.repo import LocalRepositorySource, RepositorySource
 from agent_comms.storage_rules import OrderCheckoutAllocation
 from agent_comms.storage_rules import StorageRule
 from agent_comms.threads import Thread
@@ -22,5 +23,8 @@ class CheckoutCliCommand(PreparedCheckoutCliCommand,
     def grant(self, ctx: Comms, thread: Thread) -> CheckoutGrant:
         return OrderCheckoutGrant(thread, ctx.goals.todos.get(self.problem))
 
-    def destination(self, rule: StorageRule, thread: Thread) -> Path:
+    def source(self, ctx: Comms, thread: Thread) -> RepositorySource:
+        return LocalRepositorySource(ctx.goals.todos.get(self.problem).repository)
+
+    def declared_destination(self, rule: StorageRule, thread: Thread) -> Path:
         return rule.order_checkout(rule.roots_of(thread), self.problem)

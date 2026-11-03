@@ -127,7 +127,7 @@ from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Checkout, GitCommandError, Repo, RepositoryReads
 from agent_comms.repository_name import RepositoryName
 from agent_comms.slop import DeclarationDerivation, Slop
-from agent_comms.storage_rules import CheckoutAllocation, StorageRule, UnitStorage
+from agent_comms.storage_rules import CheckoutAllocation, StorageRule
 from agent_comms.thread_identity import (
     CoreWatcherIncarnation,
     RecordedThreadIncarnation,
@@ -299,15 +299,6 @@ class OrderCompletion(DeclaredFamily, affix="Delivery"):
         order = todo.order.checked()
         order.require_delivery(order_id)
         problems = self.preparation_problems(todo)
-        holder = todo.holder_state.previous_assignment().owner
-        with RecordProblems.collecting(
-            problems, 'checkout',
-            f'remove the order checkout with agent-comms checkout --from {holder} remove {todo.id}'):
-            UnitStorage.read(
-                comms.registry.storage_rule,
-                comms.registry.require(holder),
-                RepositoryReads(),
-            ).require_retired(todo.id)
         if problems:
             raise TodoProblems(problems)
         delivery = self.resolved_delivery(todo)
@@ -5070,8 +5061,10 @@ class EditVerdict(ToolCallVerdict, declared_name=None):
         roots = rule.roots_of(goals.registry.require(self.previous.owner))
         edited = Path(self.path).absolute()
         for repo in goals.registry.snapshot().commander_project.require().repos:
-            allocated = (rule.order_checkout(roots, current.id) if repo.github == current.repo
-                         else rule.repository_checkout(roots, current.id, repo.github))
+            fresh = (rule.order_checkout(roots, current.id) if repo.github == current.repo
+                     else rule.repository_checkout(roots, current.id, repo.github))
+            allocated = rule.reused_checkout(goals.registry.require(self.previous.owner),
+                                             repo.github, fresh, RepositoryReads())
             for checkout in (allocated, repo.checkout.absolute()):
                 if edited.is_relative_to(checkout):
                     return repo, checkout

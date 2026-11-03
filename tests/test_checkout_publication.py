@@ -20,7 +20,7 @@ from source_revision_fixture import SourceRepository
 def test_canonical_sync_and_publication_preserve_source_and_prior_release(private_comms, tmp_path):
     comms = private_comms
     comms.registry.storage_rule = StorageRule(
-        volume=tmp_path, floor_gib=2**40, checkout_base=tmp_path / "checkouts",
+        volume=tmp_path, floor_gib=0, checkout_base=tmp_path / "checkouts",
         scratch_base=tmp_path / "scratch",
     )
     repository = SourceRepository.create(tmp_path / "git", baseline_files={Path(".gitignore"): "release/\ncurrent\nliteral*\n"})

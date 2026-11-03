@@ -182,7 +182,7 @@ def test_remote_goal_checkout_uses_the_existing_submodule_prepare_and_retire_own
     retired = core_process(*command, 'remove', source)
     assert retired.returncode == 0, retired.stdout + retired.stderr
     assert not path.exists()
-    donor = rule.repository_donor(worker, goal.id, name)
+    donor = rule.repository_donor(worker, name)
     assert Repo.qualified_github(donor, name).default_branch() == 'master'
 
 
@@ -220,9 +220,8 @@ def test_checkout_remove_retires_the_order_checkout_with_its_submodule(
     # The holder may close the problem before retiring its checkout.
     current = comms.goals.todos.get("P1")
     closed = comms.goals.todos.apply("P1", WithdrawTodo(
-        current.revision, comms.registry.require("worker").incarnation, current.held(),
+        current.revision, comms.registry.require("worker").incarnation,
         "The order is closed before its teammate retires the checkout it worked in."))
-    assert closed.assignment is None
     (path / "owner.py").write_text("an unpushed edit\n")
     held = core_process("--root", str(comms.root), "checkout", "--from", "worker", "remove", "P1")
     assert held.returncode != 0
@@ -620,3 +619,33 @@ def test_transfer_restores_original_tree_and_modules_after_actual_git_failure(re
     assert (source.path / 'pinned' / 'catalog.md').read_text() == 'keep module after failure\n'
     assert git(source.path / 'pinned', 'rev-parse', '--show-toplevel').strip() == str(source.path / 'pinned')
     assert (repository / '.git' / 'config').read_bytes() == config
+
+
+def test_exact_historical_retirement_needs_ownership_not_a_current_goal(checkout_command_bus, repository):
+    comms = checkout_command_bus
+    rule = comms.registry.storage_rule
+    owner = comms.registry.require('worker')
+    path = rule.checkout_base / 'retained-historical-source'
+    path.parent.mkdir(parents=True, exist_ok=True)
+    Checkout.add(repository, path, NewBranchStart('retained-old-source', 'HEAD'))
+    assert comms.threads.set_project(owner.incarnation, str(path)).changed
+    assert comms.threads.set_project(owner.incarnation, str(repository)).changed
+    owner = comms.registry.require(owner.name)
+    assert Checkout(path) in owner.earlier_projects
+    assert path not in rule.checkouts_of(owner, RepositoryReads())
+    foreign = core_process('--root', str(comms.root), 'goal-checkout', '--from', 'lead',
+                           '--source', str(path), 'remove', str(repository))
+    assert foreign.returncode != 0 and path.exists()
+    module_source = path / 'pinned' / 'catalog.md'
+    module_source.write_text('unpublished module edit\n')
+    blocked = core_process('--root', str(comms.root), 'goal-checkout', '--from', owner.name,
+                           '--source', str(path), 'remove', str(repository))
+    assert blocked.returncode != 0 and module_source.read_text() == 'unpublished module edit\n'
+    git(module_source.parent, 'restore', 'catalog.md')
+    # Retirement remains available even when new allocations are refused by disk pressure.
+    strict = replace(rule, floor_gib=2**40)
+    StorageRule.path_in(comms.root).write_text(FieldCodec.compact(FieldCodec.encode(strict)))
+    retired = core_process('--root', str(comms.root), 'goal-checkout', '--from', owner.name,
+                           '--source', str(path), 'remove', str(repository))
+    assert retired.returncode == 0, retired.stdout + retired.stderr
+    assert not path.exists()

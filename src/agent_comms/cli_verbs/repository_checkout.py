@@ -20,10 +20,10 @@ class RepositoryCheckoutCliCommand(CheckoutCliCommand,
     help = "Create, repair, transfer or remove an owned problem checkout of a registered OWNER/REPO"
     repository: Annotated[RepositoryName, Argument(flags=("repository",))]
 
-    def destination(self, rule: StorageRule, thread: Thread) -> Path:
+    def declared_destination(self, rule: StorageRule, thread: Thread) -> Path:
         return rule.repository_checkout(rule.roots_of(thread), self.problem, self.repository)
 
-    def source(self, ctx: Comms, grant: CheckoutGrant) -> RepositorySource:
+    def source(self, ctx: Comms, thread: Thread) -> RepositorySource:
         repositories = ctx.registry.snapshot().commander_project.require().repos
         selected = [repository for repository in repositories
                     if repository.github == self.repository]

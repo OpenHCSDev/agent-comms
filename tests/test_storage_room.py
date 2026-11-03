@@ -61,7 +61,7 @@ def copied_root(tmp_path):
     root = tmp_path / 'copied'
     shutil.copytree(original.root, root)
     comms = wire(root)
-    comms.registry.storage_rule = StorageRule(volume=tmp_path, floor_gib=2**40, memory_gib=0,
+    comms.registry.storage_rule = StorageRule(volume=tmp_path, floor_gib=0, memory_gib=0,
         checkout_base=tmp_path, scratch_base=tmp_path / 'scratch')
     return comms
 
