@@ -94,15 +94,15 @@ class SessionLifecycle:
         self.runtime, self.runtime_enabled, self.effects = runtime, runtime_enabled, effects
         self.published: dict[AcpSessionId, PublishedSession] = {}
         self.client: SdkSessionConnection | None = None
-
-    def bound_controller(self) -> Controller:
-        """The attached ACP client as a controller; before one attaches there is none."""
-        return NO_CONTROLLER if self.client is None else self.client
         self.proxies: dict[AcpSessionId, RuntimeProxy | IncompatibleOwner] = {}
         self._attachment_lock = asyncio.Lock()
         self._identity_lock = asyncio.Lock()
         self.transcript = TranscriptReplay(comms)
         self.config = SessionConfigOptions(comms, runtime, self, effects)
+
+    def bound_controller(self) -> Controller:
+        """The attached ACP client as a controller; before one attaches there is none."""
+        return NO_CONTROLLER if self.client is None else self.client
 
     async def initialize(
         self,
