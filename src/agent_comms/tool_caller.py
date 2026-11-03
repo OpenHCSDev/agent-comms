@@ -53,7 +53,6 @@ class ToolCaller(ReadAuthority):
     def catalog(self, comms: Comms, tools: tuple[dict[str, object], ...]) -> ToolCatalogResult: ...
 
     @abstractmethod
-    def acting_name(self, default: str) -> str: ...
 
     @abstractmethod
     def from_flag(self) -> tuple[str, ...]:
@@ -74,7 +73,8 @@ class ToolCaller(ReadAuthority):
         raise ToolRefusedError('Only a teammate fork can retire through this verb.')
 
     @abstractmethod
-    def as_thread(self, commander: str) -> ThreadCaller: ...
+    def teammate(self) -> ThreadCaller:
+        """The teammate a team verb acts and is recorded as; there is no lead to fall back on."""
 
     @abstractmethod
     def require_directive(self, comms: Comms, body: str) -> None:
@@ -98,8 +98,10 @@ class NoThreadCaller(OperatorOutcomes, ToolCaller):
     def acting_caller(self, grant: ToolCaller) -> ToolCaller:
         return grant
 
-    def as_thread(self, commander: str) -> ThreadCaller:
-        return ThreadCaller(commander)
+    def teammate(self) -> ThreadCaller:
+        raise ToolRefusedError(
+            "Team verbs act as the teammate running them: pass --from NAME or run from a "
+            "session bound to the bus. There is no lead to act as.")
 
     def invoke(self, request: ToolRequest, comms: Comms) -> ToolResult:
         return request.apply_without_thread(comms, self)
@@ -110,8 +112,6 @@ class NoThreadCaller(OperatorOutcomes, ToolCaller):
     def catalog(self, comms: Comms, tools: tuple[dict[str, object], ...]) -> ToolCatalogResult:
         return ToolCatalogResult(tools)
 
-    def acting_name(self, default: str) -> str:
-        return default
 
     def from_flag(self) -> tuple[str, ...]:
         return ()
@@ -132,7 +132,7 @@ class HumanCaller(NoThreadCaller):
 class ThreadCaller(ToolCaller):
     name: str
 
-    def as_thread(self, commander: str) -> ThreadCaller:
+    def teammate(self) -> ThreadCaller:
         return self
 
     def commander(self, comms: Comms) -> Thread:
@@ -164,8 +164,6 @@ class ThreadCaller(ToolCaller):
             LaunchRoot.from_path(comms.root).arguments(),
         )
 
-    def acting_name(self, default: str) -> str:
-        return self.name
 
     def from_flag(self) -> tuple[str, ...]:
         return ("--from", self.name)

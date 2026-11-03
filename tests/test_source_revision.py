@@ -107,7 +107,6 @@ def test_order_derives_its_only_source_revision_from_its_pull_request(tmp_path):
         order=declaration,
         request=OwnerRequestId(OwnerRequestKey.mint()),
         review_at=RecordedEventTime(1000),
-        commander="lead",
         expected_revision=1,
         assigner=RecordedThreadIncarnation("lead", 1.0),
     )

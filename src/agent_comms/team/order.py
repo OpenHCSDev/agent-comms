@@ -365,16 +365,11 @@ class TeamContext(BaseModel):
         context.comms.registry.set_team_project(
             RegisteredTeamProject(thread.incarnation, repos)
         )
-        return context
+        return context.model_copy(update={'actor': PeerCaller(commander)})
 
     @property
     def project(self) -> RegisteredTeamProject:
         return self.comms.registry.snapshot().commander_project.require()
-
-    @property
-    def commander(self) -> str:
-        snapshot = self.comms.registry.snapshot()
-        return snapshot.commander_project.require().lead(snapshot).name
 
     @property
     def repos(self) -> tuple[Repo, ...]:
@@ -417,11 +412,11 @@ class TeamContext(BaseModel):
 
     @property
     def actor_name(self) -> str:
-        return self.actor.acting_name(self.commander)
+        return self.actor.teammate().name
 
     @property
     def actor_identity(self) -> ThreadIncarnation:
-        return self.actor.as_thread(self.commander).identity(self.comms)
+        return self.actor.teammate().identity(self.comms)
 
     def post(self, audience: VerdictAudience, body: str,
              answers: tuple[MessageReference, ...] = ()) -> MessageId:
@@ -454,7 +449,7 @@ class TeamContext(BaseModel):
         return MessageNotification.summary(outcomes.outcomes.get((reference.seq, reference.message_id), ()))
 
     def call(self, tool):
-        return self.actor.as_thread(self.commander).invoke(tool, self.comms)
+        return self.actor.teammate().invoke(tool, self.comms)
 
     def todos(self):
         return self.comms.goals.todos.board()
@@ -478,7 +473,7 @@ class TeamContext(BaseModel):
                          for thread in snapshot.threads_for(unit.require_recorded()))
 
     def progress(self) -> dict[str, OrderProgress]:
-        listed: TodoList = self.call(CommsTodoListTool(thread=self.commander))
+        listed: TodoList = self.call(CommsTodoListTool(thread=self.actor_name))
         return listed.progress
 
     def importers(self, modules: set[str], check: OrderCheck) -> list[str]:
@@ -547,7 +542,7 @@ class NewProblem(OrderedProblems):
         context.call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
             problem=self.problem, repo=Repo.of(order.check.directory).github,
             text=self.text, order=order, request=request, review_at=review_at,
-            commander=context.commander, assigner=context.actor_identity)))
+            assigner=context.actor_identity)))
 
 
 @dataclass(frozen=True, slots=True)
@@ -584,7 +579,7 @@ class ListedProblems(OrderedProblems):
         context.call(CommsOrderTool(owner=unit, order=OrderGoalAction(
             problem=first.problem, expected_revision=first.expected_revision,
             together=tuple(others), assigner=context.actor_identity, traced=traced, order=order,
-            request=request, review_at=review_at, commander=context.commander)))
+            request=request, review_at=review_at)))
 
 
 class Reassignment(SubclassUnion, affix="Reassignment"):
@@ -743,10 +738,10 @@ class Team(TeamContext):
                answers: tuple[MessageReference, ...] = ()) -> None:
         """HARD RULE: every failure goes on the public record, in plain words, damning and exact, so no
         failure stays private and none is described in words that hide what happened."""
-        caught = f'{self.commander} at {caught}' if caught in STAGES else caught
+        caught = f'{self.actor_name} at {caught}' if caught in STAGES else caught
         # What matters is how a mistake happened, how often, and how and when it was caught.
         if not any(stage in caught for stage in STAGES):
-            sys.exit(f'Refused: --caught must say who caught it and at which stage {STAGES}, e.g. "{self.commander} at review".')
+            sys.exit(f'Refused: --caught must say who caught it and at which stage {STAGES}, e.g. "{self.actor_name} at review".')
         todo = self.comms.goals.todos.get(task)
         if todo.held().owner != unit:
             sys.exit(f'Refused: {unit} does not hold {task}; strike the teammate that holds it.')
@@ -1488,7 +1483,7 @@ class NextHuntVerb(OrderVerb, declared_name="next-hunt"):
     help = "print the next place to hunt"
 
     def run(self, ctx: Team) -> None:
-        for path in HuntDue.next_hunt(ctx.comms, ctx.commander,
+        for path in HuntDue.next_hunt(ctx.comms,
                                       HeldOrders.read(ctx.comms).todos):
             print(path)
 
@@ -1498,7 +1493,7 @@ class InstallVerb(OrderVerb):
     clears = (InstallDue,)
 
     def run(self, ctx: Team) -> None:
-        for launch in InstallDue.launch_due(ctx.comms, ctx.commander):
+        for launch in InstallDue.launch_due(ctx.comms, ctx.actor_name):
             print(launch)
 
 

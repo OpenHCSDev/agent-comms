@@ -6464,9 +6464,10 @@ class TodoStore(OwnerRequestStore, TodoHistory):
             recorded.upsert(db)
         return recorded
 
-    def hunts_for_team(self, commander: ThreadIncarnation) -> tuple[Hunt, ...]:
+    def hunts(self) -> tuple[Hunt, ...]:
+        """Every hunt the team recorded: hunts belong to the team, not to whoever ran them."""
         with self.snapshot() as db:
-            return tuple(record.hunt for record in HuntRecord.select(db, commander=commander))
+            return tuple(record.hunt for record in HuntRecord.select(db))
 
     def resolve_order(self, commander: ThreadIncarnation, unit: str, problem: str) -> Todo:
         found = self._select('id=?', (problem,), reader=self._open)

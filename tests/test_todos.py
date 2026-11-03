@@ -447,7 +447,7 @@ def pr_order(
 ):
     pr_work_goal_id = goal_id if goal_id is not None else GoalId.mint()
     source = ctx.repos[0]
-    lead = ctx.comms.registry.require(ctx.commander)
+    lead = ctx.comms.registry.require(ctx.actor_name)
     return ctx.comms.goals.todos.create(
         pid, source.github, "Fix the sidebar", creator=lead, assigner=lead.incarnation,
         owner=owner if owner is not None else lead,
@@ -578,19 +578,19 @@ def test_released_open_work_restores_its_own_holder_never_swaps(released_publish
     goals = {row.holder: c.registry.require(row.holder).goal for row in originals.values()}
     with LaunchRoot.from_path(ctx.root).selected():
         rules = UnownedWheelSpin.paired(
-            c, ctx.commander, c.goals.todos.reassignable(), HeldOrders.read(c),
+            c, ctx.actor_name, c.goals.todos.reassignable(), HeldOrders.read(c),
             ProgressRead(tuple(c.goals.todos.get(pid) for pid in originals)))
         assert {rule.todo.id for rule in rules} == set(originals)
         assert all(isinstance(rule, RetainedHolderWheelSpin) for rule in rules)
         # 2026-10-25: Core restores the holder itself; KEEP lines locked the verbs for 169 min.
         assert all(not RulePing.capture(rule).team_disposes for rule in rules)
-        assert StandingRule.enforce_all(c, ctx.commander, rules) == {}
+        assert StandingRule.enforce_all(c, ctx.actor_name, rules) == {}
         for problem, before in originals.items():
             after = c.goals.todos.get(problem)
             assert after.held() == before.held()
             assert (after.order, after.review_at) == (before.order, before.review_at)
             assert c.registry.require(before.holder).goal == goals[before.holder]
-        assert UnownedWheelSpin.violations(c, ctx.commander) == ()
+        assert UnownedWheelSpin.violations(c, ctx.actor_name) == ()
 
 
 @pytest.mark.parametrize('disposition', ('retired', 'closed'))
@@ -607,7 +607,7 @@ def test_only_retired_holder_or_closed_pr_allows_cross_holder_dispatch(
                                                       'rev-parse', 'HEAD').strip(),
             updated=now, base='main', reviewable_times=(now,), closed_at=now))
     with LaunchRoot.from_path(ctx.root).selected():
-        rules = UnownedWheelSpin.violations(c, ctx.commander)
+        rules = UnownedWheelSpin.violations(c, ctx.actor_name)
         by_problem = {rule.todo.id: rule for rule in rules}
         assert by_problem['P615'].unit == 'aaa-idle'
         assert all(isinstance(by_problem[pid], RetainedHolderWheelSpin) for pid in ('P637', 'P667'))
@@ -718,10 +718,10 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_team, monkeypatch):
     source = ctx.repos[0]
     with LaunchRoot.from_path(ctx.root).selected():
         c = ctx.comms
-        c.goals.update_goal(ctx.commander, SetGoalAction(
+        c.goals.update_goal(ctx.actor_name, SetGoalAction(
             text="Keep the teammate request active for both watcher passes",
             goal_id=pr_work_goal_id))
-        lead = c.registry.require(ctx.commander)
+        lead = c.registry.require(ctx.actor_name)
         c.registry.register(replace(lead, process_identity=ProcessIdentity.capture(os.getpid())))
         worker_checkout = ctx.root.parent / "worker-checkout"
         source.git(source.checkout, "worktree", "add", "-q", "--detach", str(worker_checkout))
@@ -733,7 +733,7 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_team, monkeypatch):
         merged = PullRequests((original,)).listed(
             source.github, MergedListedPullRequest, original,
         )[0].merge
-        sent = c.messaging.send(ctx.commander, worker.name, original.order.instructions(original)).message
+        sent = c.messaging.send(ctx.actor_name, worker.name, original.order.instructions(original)).message
         original = c.goals.todos.apply(original.id, OrderMessage(
             original.revision, lead.incarnation, sent.message_id, at=RecordedEventTime(time.time())))
         claim = OrderClaim.for_order(
@@ -763,7 +763,7 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_team, monkeypatch):
         with LaunchRoot.from_path(root).selected():
             # A practice copy retires every process; this test's process holds the copied lead.
             copied.registry.register(replace(
-                copied.registry.require(ctx.commander),
+                copied.registry.require(ctx.actor_name),
                 process_identity=ProcessIdentity.capture(os.getpid())))
             probe = shlex.join((sys.executable, "-c",
                 "import sqlite3,sys\n"

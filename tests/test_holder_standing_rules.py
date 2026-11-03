@@ -329,7 +329,7 @@ def test_holds_whose_holder_was_deleted_or_registered_again_are_reported_by_ever
     comms = held_bus
     original = comms.goals.todos.get("P1")
     comms.goals.update_goal("outsider", CreateProblemGoalAction(
-        problem="P3", commander="lead", request=original.request,
+        problem="P3", request=original.request,
         assigner=comms.registry.require("lead").incarnation, repo=original.repo,
         text="Repair P3", review_at=original.review_at,
         order=replace(original.order, id=OrderId.mint()),
@@ -424,7 +424,7 @@ def test_an_owner_approved_order_to_a_blocked_goal_activates_it_and_keeps_its_gr
     other = held_bus.goals.todos.get("P2")
     # P2 shares P1's order, so the reissue carries it: a holder holds one order at a time.
     held_bus.goals.update_goal("worker", replace(
-        ReissuedOrderGoalAction.for_todo(todo, "lead"),
+        ReissuedOrderGoalAction.for_todo(todo),
         assigner=held_bus.registry.require("worker").acting_identity,
         together=(ExpectedProblem(other.id, other.revision),)))
     current = held_bus.registry.require("worker").goal.require()

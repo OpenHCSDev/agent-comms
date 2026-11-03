@@ -161,7 +161,7 @@ def current_parent_order(ctx: TeamContext) -> Todo:
     comms.registry.register(holder)
     todo = comms.goals.todos.create(
         "P2", original.repo, "Repair the workflow under its current teammate",
-        creator=comms.registry.require(ctx.commander), assigner=parent.incarnation,
+        creator=comms.registry.require(ctx.actor_name), assigner=parent.incarnation,
         owner=holder, generation=GoalId.mint(),
         request=original.request.require(), review_at=RecordedEventTime(time.time() + 1000),
         order=replace(original.order.checked(), id=OrderId.mint()),
@@ -179,7 +179,7 @@ def test_claim_uses_current_parent_not_retired_request_author(held_team, histori
     ctx = held_team
     comms = ctx.comms
     original = current_parent_order(ctx)
-    historical = ctx.commander
+    historical = ctx.actor_name
     comms.registry.unregister(historical)
     comms.registry.remove(historical)
     if historical_state == "reborn":
@@ -250,7 +250,7 @@ def test_self_assigned_claim_selects_a_reviewer_and_retains_its_choice(held_team
         ThreadCaller(todo.holder).invoke(request, comms)
     assert comms.goals.todos.get(todo.id) == todo
     assert comms.bus.bus.revision() == before
-    reviewer = SelectedClaimReviewer(comms.registry.require(ctx.commander).incarnation)
+    reviewer = SelectedClaimReviewer(comms.registry.require(ctx.actor_name).incarnation)
     request = replace(request, reviewer=reviewer)
     # The same declared request shape reaches the native boundary and the retained record.
     request = FieldCodec.decode(CommsOrderDeliverTool, FieldCodec.encode(request))
@@ -260,7 +260,7 @@ def test_self_assigned_claim_selects_a_reviewer_and_retains_its_choice(held_team
     assert claim.reviewer == reviewer
     assert FieldCodec.decode(Todo, FieldCodec.encode(claimed)) == claimed
     published = comms.bus.bus.lookup_message(claim.message.message_id).message
-    assert published.target == ctx.commander
+    assert published.target == ctx.actor_name
     after = comms.bus.bus.revision()
     ThreadCaller(todo.holder).invoke(request, comms)
     assert comms.bus.bus.revision() == after
@@ -308,7 +308,7 @@ def test_claim_verdict_family_on_retained_copy(held_team):
     report.write_text("Killed the broken count copy; inspect its actual diff before accepting it.")
     request = delivery(ctx, report.read_text())
     with pytest.raises(TodoConflict):
-        ThreadCaller(ctx.commander).invoke(request, comms)
+        ThreadCaller(ctx.actor_name).invoke(request, comms)
     assert comms.goals.todos.get("P1") == original
 
     ThreadCaller("worker").invoke(request, comms)
@@ -318,15 +318,15 @@ def test_claim_verdict_family_on_retained_copy(held_team):
     assert FieldCodec.decode(Todo, FieldCodec.encode(claimed)) == claimed
     assert claimed.order.claim.head == request.head
     assert claimed.order.claim.message.body == report.read_text()
-    history = ThreadCaller(ctx.commander).invoke(CommsHistoryTool(peer="worker"), comms)
+    history = ThreadCaller(ctx.actor_name).invoke(CommsHistoryTool(peer="worker"), comms)
     sent = next(message for message in history.messages
                 if message.message_id == claimed.order.claim.message.message_id)
-    assert sent.sender == "worker" and sent.target == ctx.commander
+    assert sent.sender == "worker" and sent.target == ctx.actor_name
     assert sent.answers and sent.answers == claimed.order.claim.message.answers
     # The identical call resumes the retained claim's publication: the same Todo, one original.
     ThreadCaller("worker").invoke(request, comms)
     assert comms.goals.todos.get("P1") == claimed
-    history = ThreadCaller(ctx.commander).invoke(CommsHistoryTool(peer="worker"), comms)
+    history = ThreadCaller(ctx.actor_name).invoke(CommsHistoryTool(peer="worker"), comms)
     assert [message.message_id for message in history.messages].count(
         claimed.order.claim.message.message_id) == 1
     other = replace(request, report=DeliveryReport(
@@ -338,7 +338,7 @@ def test_claim_verdict_family_on_retained_copy(held_team):
     why = StrikeReason(
         "This is stupid because the claimed change leaves the original duplicated decision in place."
     )
-    ThreadCaller(ctx.commander).invoke(CommsVerdictTool(
+    ThreadCaller(ctx.actor_name).invoke(CommsVerdictTool(
         problem="P1", operation=SendBackVerdict(
             claimed.revision, ctx.incarnation, claimed.held(), ToolCallId("fixture-call"), why,
             evidence=(claimed.order.owner,),
@@ -440,7 +440,7 @@ def test_a_resume_publishes_only_the_order_s_current_claim(held_team):
     why = StrikeReason(
         "This is stupid because the claimed change leaves the original duplicated decision in place."
     )
-    ThreadCaller(ctx.commander).invoke(CommsVerdictTool(
+    ThreadCaller(ctx.actor_name).invoke(CommsVerdictTool(
         problem="P1", operation=SendBackVerdict(
             claimed.revision, ctx.incarnation, claimed.held(), ToolCallId("fixture-call"), why,
             evidence=(claimed.order.owner,),
@@ -482,7 +482,7 @@ def test_an_unsent_claim_is_never_resent_under_a_renamed_team(held_team):
     ctx = held_team
     comms = ctx.comms
     request, claimed, before = unsent_claim(ctx)
-    comms.registry.rename(ctx.commander, "renamed-lead")
+    comms.registry.rename(ctx.actor_name, "renamed-lead")
     with pytest.raises(TodoError, match="retained claim was addressed"):
         ThreadCaller("worker").invoke(request, comms)
     assert comms.bus.bus.revision() == before
@@ -557,7 +557,7 @@ def test_third_strike_keeps_holder_and_order_and_requests_scrutiny(held_team):
         assert todo.order == original.order
     assert todo.strikes_against(ctx.comms.registry.require("worker").incarnation) == 3
     assert not todo.history.events(todo.id, ReleaseTodo)
-    scrutiny, = Scrutinize.violations(ctx.comms, ctx.commander)
+    scrutiny, = Scrutinize.violations(ctx.comms, ctx.actor_name)
     assert scrutiny.holder == todo.held()
     assert scrutiny.todo == todo
     assert scrutiny.count == 3
@@ -641,7 +641,7 @@ def test_two_delivery_claims_warn_without_deadlocking_other_orders(
     other = thread("other", checkout, 3.0)
     comms.registry.register(other)
     comms.registry.register(thread("third", ctx.root.parent / "third", 4.0))
-    lead = comms.registry.require(ctx.commander)
+    lead = comms.registry.require(ctx.actor_name)
     original = store.get("P1")
     second = store.create(
         "P2", original.repo, "Repair the other held workflow", creator=lead,
@@ -654,7 +654,7 @@ def test_two_delivery_claims_warn_without_deadlocking_other_orders(
     for todo in (original, second):
         holder = comms.registry.require(todo.holder)
         sent = comms.messaging.send(
-            ctx.commander, holder.name, todo.order.instructions(todo),
+            ctx.actor_name, holder.name, todo.order.instructions(todo),
         ).message
         claim = OrderClaim.for_order(
             todo, holder.incarnation, PullRequestLink(todo.repo, 1), head, "The source repair is published for review.",
@@ -681,7 +681,7 @@ def test_two_delivery_claims_warn_without_deadlocking_other_orders(
     assert owed[claims[0].order.claim.message.message_id].cited in refused.value.problems
     assert store.get("P1") == claims[0]
     ask = comms.messaging.send(
-        "worker", ctx.commander, "Which owner do I wait on?", type=QuestionKind,
+        "worker", ctx.actor_name, "Which owner do I wait on?", type=QuestionKind,
     ).message
     main(["say", "worker", str(reply), "--answers", ask.message_id], ctx)
     assert store.get("P1") == claims[0]
@@ -762,16 +762,16 @@ def test_say_without_answers_answers_the_targets_open_asks(held_team, capsys):
     comms = ctx.comms
     reply = ctx.root / "answer.txt"
     reply.write_text("Take the owner fix at the declaration and push it.")
-    named = publish(comms, "worker", ctx.commander, time.time() - 960)
+    named = publish(comms, "worker", ctx.actor_name, time.time() - 960)
     capsys.readouterr()
     main(["say", "worker", str(reply), "--answers", named.message_id], ctx)
     assert "answers:" not in capsys.readouterr().out  # an explicit list overrides
-    unnamed = publish(comms, "worker", ctx.commander, time.time() - 930)
+    unnamed = publish(comms, "worker", ctx.actor_name, time.time() - 930)
     main(["say", "worker", str(reply)], ctx)
     assert f"answers: {unnamed.message_id}" in capsys.readouterr().out
-    history = ThreadCaller(ctx.commander).invoke(CommsHistoryTool(peer="worker"), comms)
+    history = ThreadCaller(ctx.actor_name).invoke(CommsHistoryTool(peer="worker"), comms)
     assert [message.answers for message in history.messages
-            if message.sender == ctx.commander][:2] == [(unnamed.reference,), (named.reference,)]
+            if message.sender == ctx.actor_name][:2] == [(unnamed.reference,), (named.reference,)]
 
 
 def test_a_measuring_order_owes_no_restated_fact(held_team, cited_source):

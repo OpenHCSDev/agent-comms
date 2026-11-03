@@ -38,7 +38,7 @@ def issue(comms, source, template, name, problem):
         problem=problem, repo=source.github, text='Repair actual allocated source edit ownership',
         order=replace(template, id=OrderId.mint()),
         request=comms.goals.todos.get('P40').request.require(),
-        review_at=template.at, commander=lead.name, assigner=lead)
+        review_at=template.at, assigner=lead)
     ThreadCaller('lead').invoke(CommsTodoCreateTool(order=action, owner=name), comms)
     return comms.goals.todos.get(problem)
 
