@@ -20,6 +20,7 @@ from agent_comms.goals import OrderCheck
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.owner_requests import NewestOpenRequest
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.registry_document import RegisteredTeamProject
 from agent_comms.repo import Checkout, Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.thread_status import StoppedThreadStatus
@@ -49,6 +50,8 @@ def test_retired_team_requests_follow_peer_authority(
         comms.registry.declare(
             Thread(name, tags, Checkout(repository.checkout)), StoppedThreadStatus(),
         )
+    # Standing rules read the team; a bus without a team project has no board to stall on.
+    comms.registry.set_team_project(RegisteredTeamProject((repository,)))
     store = comms.goals.todos
     author = comms.registry.require("request-author")
     peer = comms.registry.require("request-peer")

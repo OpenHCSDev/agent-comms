@@ -860,8 +860,10 @@ class TeamVerb(ClearingVerb, affix="Verb"):
         return ctx.actor_name
 
     def apply(self, ctx: Team) -> None:
-        self.actor.commanding(ctx.comms)
-        ctx = ctx.model_copy(update={'actor': self.actor})
+        # A verb naming no --fork or --as acts as the context's own teammate.
+        actor = self.actor.acting_caller(ctx.actor)
+        actor.commanding(ctx.comms)
+        ctx = ctx.model_copy(update={'actor': actor})
         self.act(ctx)
 
     def act(self, ctx: Team) -> None:
@@ -1315,7 +1317,7 @@ class EndsForkVerb(OrderVerb):
     registry write lock for a whole registration, past every unit's 5 s lock budget."""
 
     def apply(self, ctx: Team) -> None:
-        ctx = ctx.model_copy(update={'actor': self.actor})
+        ctx = ctx.model_copy(update={'actor': self.actor.acting_caller(ctx.actor)})
         if ctx.actor_name not in ctx.comms.registry:
             print(f'{ctx.actor_name} never joined; nothing to end')
             return
