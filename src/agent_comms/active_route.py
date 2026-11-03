@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import os
 import time
-from abc import ABC
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, replace
@@ -135,7 +135,7 @@ class CommsRoute(ABC):
     @classmethod
     def current(cls, path: Path | None = None) -> CommsRoute:
         """The published route, independent of any client root override."""
-        return read_active_route(path) or LocalRoute.default()
+        return read_active_route(path).or_default()
 
     def observe_root(self) -> Path:
         return self.root.resolve()
@@ -176,8 +176,41 @@ class AbsoluteRoutePathText(PathText):
         return text
 
 
+class PublishedRoute(ABC):
+    """What the default route file publishes: a route, or no route at all. Each consumer's
+    question has its answer on the member, so no caller decides what absence means."""
+
+    __slots__ = ()
+
+    @abstractmethod
+    def or_default(self) -> CommsRoute: ...
+
+    @abstractmethod
+    def published_launch_root(self) -> LaunchRoot: ...
+
+    @abstractmethod
+    def route_file(self) -> RouteFile: ...
+
+
+class NoActiveRoute(PublishedRoute):
+    """No default route file is published."""
+
+    __slots__ = ()
+
+    def or_default(self) -> CommsRoute:
+        return LocalRoute.default()
+
+    def published_launch_root(self) -> LaunchRoot:
+        raise RelationViolationError(
+            "No active Comms route is published; --comms-root or --root is required."
+        )
+
+    def route_file(self) -> RouteFile:
+        return AbsentRoute()
+
+
 @dataclass(frozen=True, slots=True)
-class ActiveRoute(CommsRoute):
+class ActiveRoute(CommsRoute, PublishedRoute):
     """The default private root; each installation launches its own pinned native package."""
     root: Annotated[Path, AbsoluteRoutePathText]
     bus_identity: RecordedBusIdentity
@@ -188,16 +221,19 @@ class ActiveRoute(CommsRoute):
 
     @classmethod
     def published_launch(cls) -> LaunchRoot:
-        match read_active_route():
-            case ActiveRoute() as route:
-                if not route.root.is_dir():
-                    raise ValueError("active comms route root is missing")
-                route.observe_root()
-                return LaunchRoot.from_path(route.root)
-            case _:
-                raise RelationViolationError(
-                    "No active Comms route is published; --comms-root or --root is required."
-                )
+        return read_active_route().published_launch_root()
+
+    def or_default(self) -> CommsRoute:
+        return self
+
+    def published_launch_root(self) -> LaunchRoot:
+        if not self.root.is_dir():
+            raise ValueError("active comms route root is missing")
+        self.observe_root()
+        return LaunchRoot.from_path(self.root)
+
+    def route_file(self) -> RouteFile:
+        return SelectingRoute(self) if self.selects_its_root() else ReplaceableRoute()
 
     def to_record(self) -> dict[str, object]:
         return {"version": self.version, **FieldCodec.encode(self)}
@@ -272,12 +308,12 @@ class RouteFileNotPrivate(ValueError):
         super().__init__("active comms route must be one owner-only regular file")
 
 
-def read_active_route(path: Path | None = None) -> ActiveRoute | None:
+def read_active_route(path: Path | None = None) -> PublishedRoute:
     """Decode the one trusted default route; explicit roots bypass this file."""
     path = active_route_path() if path is None else path
     source = ActiveRouteFile(path).capture()
     return source.revision.either(
-        lambda present: ActiveRoute.from_bytes(source.content, path), lambda: None)
+        lambda present: ActiveRoute.from_bytes(source.content, path), NoActiveRoute)
 
 
 def route_new_bus(route: ActiveRoute, path: Path) -> str:
@@ -326,12 +362,7 @@ class RouteFile(ABC):
             current = read_active_route(path)
         except MalformedRecord:
             return ReplaceableRoute()
-        match current:
-            case ActiveRoute() as selected if selected.selects_its_root():
-                return SelectingRoute(selected)
-            case ActiveRoute():
-                return ReplaceableRoute()
-        return AbsentRoute()
+        return current.route_file()
 
     def selection(self) -> RouteFileSelection:
         return NoRouteSelection()
