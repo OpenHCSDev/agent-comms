@@ -4028,11 +4028,13 @@ class ErrorRecord(SubclassUnion, affix=""):
 
     @staticmethod
     def of(value: BaseException) -> ErrorRecord:
-        """The boundary: an outgoing error is foreign until it is recorded here."""
-        error_class = f"{type(value).__module__}.{type(value).__qualname__}"
-        if isinstance(value, DeclaredError):
-            return DeclaredErrorRecord(error_class, value.to_wire())
-        return ReportedErrorRecord(error_class, str(value))
+        """The boundary: an outgoing error is foreign until its class's recorder records it."""
+        record: ErrorRecord = ErrorRecorder.handler_for(type(value))(value)
+        return record
+
+    @staticmethod
+    def class_of(value: object) -> str:
+        return f"{type(value).__module__}.{type(value).__qualname__}"
 
     @abstractmethod
     def error(self, target: type[BaseException]) -> BaseException: ...
@@ -4056,6 +4058,24 @@ class ReportedErrorRecord(TaggedRecordMember, ErrorRecord):
 
     def error(self, target: type[BaseException]) -> BaseException:
         return ReportedError.reporting_for(target)(self.error_class, self.message)
+
+
+class ErrorRecorder(MroDispatch):
+    """Each error kind declares how it crosses: the first handler along its MRO records it.
+
+    DeclaredError is a mixin listed after its exception base, so BaseException precedes it in
+    a declared error's MRO; the reported form is therefore declared on ``object``, which every
+    MRO ends with."""
+
+    @handles(DeclaredError)
+    @classmethod
+    def declared(cls, value: DeclaredError) -> ErrorRecord:
+        return DeclaredErrorRecord(ErrorRecord.class_of(value), value.to_wire())
+
+    @handles(object)
+    @classmethod
+    def reported(cls, value: BaseException) -> ErrorRecord:
+        return ReportedErrorRecord(ErrorRecord.class_of(value), str(value))
 
 
 class _ExceptionDecoder(ValueDecoder[BaseException]):
