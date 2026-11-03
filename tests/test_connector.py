@@ -1174,19 +1174,24 @@ async def test_connector_reports_the_root_its_core_serves(client, comms):
     assert result["structuredContent"]["root"] == str(comms.root.resolve())
 
 
-async def test_a_call_that_asks_for_progress_streams_it_then_its_reply(client, comms, tmp_path):
+async def test_a_call_that_asks_for_progress_streams_it_then_its_reply(client, store, comms, tmp_path):
     """MCP progress: a tools/call carrying a progress token is answered as server-sent events,
     the export's progress notices first and its reply last."""
     from agent_comms.connector import ProgressNotice, StreamedLine, ToolsCallReply
+    from agent_comms.exporting import EverythingScope, FullLimit, JsonlFormat
+    from agent_comms.tools import CommsExportWireTool
 
-    token = await approved_token(client, comms)
+    prepare_native_comms(comms)
+    namespace = comms.registry.store.privacy().namespace
+    token = store.update(lambda grants: grants.ui_issued(namespace, 60, UiAccess)).token
     destination = tmp_path / "export.jsonl"
     response = await client.post("/mcp", headers={
         "Authorization": f"Bearer {token}", "Accept": "text/event-stream"}, json={
         "jsonrpc": "2.0", "id": "export-1", "method": "tools/call",
         "params": {"name": "comms_export_wire", "_meta": {"progressToken": "export-1"},
-                   "arguments": {"destination": str(destination), "format": "jsonl",
-                                 "scope": "all", "limit": "all"}}})
+                   "arguments": CommsExportWireTool(
+                       destination=destination, format=JsonlFormat(), scope=EverythingScope(),
+                       limit=FullLimit()).called().arguments}})
     assert response.headers["Content-Type"].startswith("text/event-stream")
 
     class Recorded(WireExportObserver):
