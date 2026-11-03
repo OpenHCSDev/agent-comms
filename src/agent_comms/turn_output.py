@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from . import agent_events as events
 from . import turn_failure as failures
 from agent_comms.pi_payloads import NativeMessageFailureSource
-from .acp_failure import FailureSource, ProviderRetryResult, UnrecordedFailureSource
+from .acp_failure import FailureSource, NoRetry, ProviderRetryResult, UnrecordedFailureSource
 from .native_arguments import SelectedModel
 
 if TYPE_CHECKING:
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 @dataclass
 class TurnOutput:
     sensitive: bool = False
-    failure: failures.TurnFailure | None = None
+    failure: failures.TurnFailure = field(default_factory=failures.NoTurnFailure)
     error_message: str | None = None
     _failed_message_source: FailureSource = field(
         default_factory=UnrecordedFailureSource, init=False, repr=False)
@@ -29,7 +29,7 @@ class TurnOutput:
     diagnostic: dict[str, int] = field(default_factory=dict)
     # The live turn owns the one privacy-safe decoded retry result. Completion
     # and failure presentation retain this immutable value; they do not decode it.
-    retry_result: ProviderRetryResult | None = None
+    retry_result: ProviderRetryResult = field(default_factory=NoRetry)
     # The text since the last tool round or later input, and the current message's text.
     text_parts: list[str] = field(default_factory=list, repr=False)
     message_parts: list[str] = field(default_factory=list, repr=False)
@@ -66,8 +66,8 @@ class TurnOutput:
 
     def _end_request_failure(self) -> None:
         """The refused request's failure no longer decides the turn."""
-        if self.failure is not None and self.failure.ends_with_request_retry:
-            self.failure = None
+        if self.failure.ends_with_request_retry:
+            self.failure = failures.NoTurnFailure()
 
     def request_retried(self) -> None:
         """Pi re-sends the refused request; that refusal no longer decides the turn."""
@@ -81,25 +81,19 @@ class TurnOutput:
         self.record_failure(failure)
 
     def raise_if_failed(self, proof, model: SelectedModel) -> None:
-        if self.failure is not None:
-            self.declared_failure.raise_native(proof, model)
+        self.declared_failure.raise_native(proof, model)
 
     @property
     def declared_failure(self) -> failures.TurnFailure:
-        failure = self.failure
-        if failure is None:
-            raise ValueError("Failed native terminal lacks its declared failure")
-        if self.retry_result is None:
-            return failure
-        return self.retry_result.refine_failure(failure)
+        return self.retry_result.refine_failure(self.failure)
 
     @property
     def failure_text(self) -> str:
-        return self.failure.text if self.failure else ""
+        return self.failure.text
 
     @property
     def clean(self) -> bool:
-        return self.failure is None and self.error_message is None
+        return self.failure.clean and self.error_message is None
 
     def redact(self, text: str) -> str:
         return "Image prompt failed; backend diagnostics withheld." if self.sensitive else text
@@ -115,7 +109,7 @@ class TurnOutput:
         )
 
     def startup_error(self, stderr: str) -> None:
-        if self.failure and stderr.strip() and not self.sensitive:
+        if stderr.strip() and not self.sensitive:
             self.failure = self.failure.with_startup_diagnostics(stderr.strip())
 
     def done(self, session: NativeSession, stderr: str) -> Iterator[events.AgentEvent]:
@@ -128,7 +122,7 @@ class TurnOutput:
         terminal = events.Done(
             text=self.terminal_text(success, stderr, session.native.proc.returncode),
             ok=success and session.native.attestation.trustworthy,
-            failure=self.declared_failure if self.failure else None,
+            failure=self.declared_failure,
             retry_result=self.retry_result,
             diagnostic={
                 **self.diagnostic,
@@ -153,8 +147,10 @@ class TurnOutput:
         return self.clean
 
     def terminal_text(self, success: bool, stderr: str, returncode: int | None) -> str:
-        if self.failure is not None:
-            return self.failure.text
+        return self.failure.terminal_text(
+            lambda: self.unfailed_text(success, stderr, returncode))
+
+    def unfailed_text(self, success: bool, stderr: str, returncode: int | None) -> str:
         if success:
             return "".join(self.text_parts).strip()
         return (

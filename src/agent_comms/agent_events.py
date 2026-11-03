@@ -22,6 +22,7 @@ from .acp_failure import (
     FailedNativeTurnOutcome,
     FailureSource,
     NativeTurnOutcome,
+    NoRetry,
     ProviderRetryResult,
     SuccessfulNativeTurnOutcome,
     UnrecordedFailureSource,
@@ -50,7 +51,7 @@ from .pi_vocabulary import (
 from .thread_model import ThreadModel, UndeclaredModel
 from .tool_declaration import OtherAction, ToolAction, ToolDeclaration
 from .tool_results import NoSentMessage, NoToolDiff, ToolDiff
-from .turn_failure import BackendFailed, TurnFailure
+from .turn_failure import BackendFailed, NoTurnFailure, TurnFailure
 from .turn_goal_account import OriginGoalSettlement, VerifiedGoalSettlement
 from .turn_item import UsageChargeId
 from .turn_terminal import FailedGoalTurn
@@ -296,11 +297,11 @@ class CompactionEnd(CompactionFinish):
 class Done(AgentEvent, FailedGoalTurn):
     text: str
     ok: bool
-    failure: TurnFailure | None = None
+    failure: TurnFailure = field(default_factory=NoTurnFailure)
     diagnostic: dict[str, int] | None = None
     outcome: NativeTurnOutcome = field(default_factory=UnresolvedNativeTurnOutcome)
     # Immutable completion snapshot of TurnOutput's already decoded result.
-    retry_result: ProviderRetryResult | None = None
+    retry_result: ProviderRetryResult = field(default_factory=NoRetry)
 
     def require_preparation_success(self) -> None:
         if not self.ok:
@@ -319,7 +320,7 @@ class Done(AgentEvent, FailedGoalTurn):
     @property
     def turn_failure(self) -> TurnFailure:
         """A failure the backend reported without a declared kind keeps the text it ended with."""
-        return BackendFailed(self.text) if self.failure is None else self.failure
+        return self.failure.declared_or(BackendFailed(self.text))
 
     @property
     def reason_code(self) -> str | None:

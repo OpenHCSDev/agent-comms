@@ -2,6 +2,8 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.acp_failure import NoRetry
+from agent_comms.turn_failure import NoTurnFailure
 from agent_comms.turn_inbox import SteerInputPolicy
 from agent_comms.nominal.field_codec import InputId, TurnId
 from agent_comms.input_disposition import InputDispositions
@@ -49,9 +51,9 @@ async def test_recovered_native_request_replaces_prior_refusal_terminal():
     }
     await turn.apply_native_event(event)
 
-    assert turn.output.failure is None
+    assert turn.output.failure == NoTurnFailure()
     assert not turn.finished
-    assert turn.output.retry_result is None
+    assert turn.output.retry_result == NoRetry()
     assert isinstance(turn.terminal, PendingTrackedTerminal)
 
 
@@ -164,6 +166,6 @@ async def test_successful_provider_recovery_does_not_discard_retained_requested_
     await turn.apply_native_event(NativeRetryEnd.from_wire({
         "type": "native_retry_end", "success": True, "attempt": 1,
     }))
-    assert turn.output.failure is None
+    assert turn.output.failure == NoTurnFailure()
     turn.terminal = turn.terminal.append("")
     assert turn.terminal.require_response([]) == "Requested answer"

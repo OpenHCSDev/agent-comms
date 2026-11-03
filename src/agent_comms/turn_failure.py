@@ -6,6 +6,7 @@ import signal
 from abc import abstractmethod
 from contextlib import suppress
 from dataclasses import dataclass, replace
+from collections.abc import Callable
 from typing import TYPE_CHECKING, ClassVar
 
 from .attempt_resolution import RecordedResolution
@@ -27,6 +28,8 @@ class TurnFailure(DeclaredFamily):
     text: str
     # A failure of the model request itself; Pi re-sending that request ends it.
     ends_with_request_retry: ClassVar[bool] = False
+    # Whether a turn ending with this failure is clean; only the absent failure is.
+    clean: ClassVar[bool] = False
 
     def with_text(self, text: str) -> TurnFailure:
         return replace(self, text=text)
@@ -34,8 +37,18 @@ class TurnFailure(DeclaredFamily):
     def with_startup_diagnostics(self, stderr: str) -> TurnFailure:
         return self
 
-    def supersedes(self, previous: TurnFailure | None) -> bool:
-        return previous is None or self.declared_position() < previous.declared_position()
+    def supersedes(self, previous: TurnFailure) -> bool:
+        return previous.superseded_by(self)
+
+    def superseded_by(self, failure: TurnFailure) -> bool:
+        return failure.declared_position() < self.declared_position()
+
+    def terminal_text(self, otherwise: Callable[[], str]) -> str:
+        """A declared failure ends the turn with its own text."""
+        return self.text
+
+    def declared_or(self, undeclared: TurnFailure) -> TurnFailure:
+        return self
 
     def prepare_execution_retry(self, db, execution_id: str) -> None:
         """Consume any earlier provider proof for this nonretryable failure."""
@@ -254,3 +267,23 @@ class NativeChildSignaled(ResumableFailure, TurnFailure):
 
     # Pi's rpc-mode shutdown exits 128 + SIGTERM or 128 + SIGHUP (rpc-mode.js:296).
     stop_exits: ClassVar[frozenset[int]] = frozenset({128 + signal.SIGTERM, 128 + signal.SIGHUP})
+
+
+@dataclass(frozen=True)
+class NoTurnFailure(TurnFailure):
+    """The turn has not failed: every declared failure supersedes it, and it raises nothing."""
+
+    text: str = ""
+    clean: ClassVar[bool] = True
+
+    def superseded_by(self, failure: TurnFailure) -> bool:
+        return True
+
+    def raise_native(self, proof, model: SelectedModel) -> None:
+        """Nothing failed, so nothing is raised."""
+
+    def terminal_text(self, otherwise: Callable[[], str]) -> str:
+        return otherwise()
+
+    def declared_or(self, undeclared: TurnFailure) -> TurnFailure:
+        return undeclared
