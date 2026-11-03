@@ -1,11 +1,15 @@
 """A session directory declares its one catalog, and a lock is never itself locked."""
 
+from pathlib import Path
+
 import pytest
 
 from agent_comms.locked_store import InstallationFiles, LiveFilesRequest
 from agent_comms.locked_store import LockedFile, RootFile
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.read_ledger import ReadLedger
-from agent_comms.store_files import store_lock_path
+from agent_comms.registry_store import RegistryStore
+from agent_comms.store_files import AtomicFile, store_lock_path
 from agent_comms.threads import ThreadCatalogFile
 
 
@@ -27,23 +31,39 @@ def test_session_locks_are_undeclared_and_never_locked(tmp_path):
     assert not store_lock_path(lock).exists()
 
 
-def test_copy_locks_only_files_their_writers_lock(tmp_path):
-    """A copy of a root creates a store lock only beside a store whose writers take it."""
+@pytest.mark.parametrize("store_type,copy_takes_lock", [
+    pytest.param(ReadLedger, False, id="atomic-single-file"),
+    pytest.param(RegistryStore, True, id="multi-file-registry"),
+])
+def test_copy_uses_the_declared_read_guard(
+    tmp_path: Path, store_type: type[ReadLedger] | type[RegistryStore], copy_takes_lock: bool,
+):
+    """Atomic documents copy without read locks; the registry copies under its shared guard."""
     root, copy = tmp_path / "root", tmp_path / "copy"
     directory = root / "plain-files"
     directory.mkdir(parents=True)
     plain = tuple(directory / f"slot-{index}" for index in range(3))
     for path in plain:
         path.write_text("{}")
-    store = ReadLedger.path_in(root)
-    store.write_text("{}")
-    for resource in InstallationFiles(LiveFilesRequest(root)).owned_files((*plain, store)):
+    store = store_type.at(root)
+    document = store.empty()
+    # Publish a declared document without first creating its writer lock: an
+    # existing lock would hide whether copy_group actually takes a read guard.
+    AtomicFile(store.path).write_text(FieldCodec.compact(
+        FieldCodec.encode_document(document, store.record_type)))
+    original = store.path.read_bytes()
+    assert not store_lock_path(store.path).exists()
+    for resource in InstallationFiles(LiveFilesRequest(root)).owned_files((*plain, store.path)):
         target = copy / resource.path
         target.parent.mkdir(parents=True, exist_ok=True)
         resource.owner.copy_group(resource.live(root), target)
     assert not any(directory.glob(".*.lock"))
-    assert store_lock_path(store).exists()
+    assert store_lock_path(store.path).exists() == copy_takes_lock
+    assert store.path.read_bytes() == original
+    assert store_type.at(copy).read() == document
     assert sorted(path.name for path in (copy / directory.relative_to(root)).iterdir()) == [
         path.name for path in plain]
+    for path in plain:
+        assert (copy / path.relative_to(root)).read_bytes() == path.read_bytes()
 
 
