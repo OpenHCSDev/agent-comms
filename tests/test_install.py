@@ -9,7 +9,6 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
-import pytest
 from agent_comms.locked_store import LiveFilesRequest
 from agent_comms.nominal.field_codec import TurnId
 from agent_comms.threads import ParkedThreadWorkState
@@ -20,11 +19,8 @@ from agent_comms.bus import Bus
 from agent_comms.recorded_bus import RecordedBusIdentity
 from bus_record_fixture import prepare_native_comms
 from agent_comms.comms import wire
-from agent_comms.team.config import GivenRepos, KeptRepos, NamedTeam
-from agent_comms.repo import Repo, RepositoryName
+from agent_comms.team.config import GivenRepos
 from agent_comms.registry_document import NoTeamProject, RegisteredTeamProject
-from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.backup import bus_files
 from agent_comms.installer.carry import CarryChain
 from agent_comms.installer.practice import PracticeCopy
@@ -159,7 +155,7 @@ def test_install_report_encodes_its_registered_harnesses() -> None:
     from agent_comms.installer.probes.harnesses import InstallResult
     from agent_comms.nominal.field_codec import FieldCodec
 
-    for config in (RegisteredTeamProject(RecordedThreadIncarnation("lead", 1.0), ()),
+    for config in (RegisteredTeamProject(()),
                    NoTeamProject()):
         report = InstallResult(config, {"claude-code": ("skill", "tools")})
         assert FieldCodec.decode(InstallResult, FieldCodec.encode(report)) == report
@@ -184,22 +180,17 @@ def test_an_install_on_a_bus_with_no_team_writes_no_team_config(private_director
     assert result.config == NoTeamProject()
 
 
-@pytest.mark.parametrize("flags", [
-    {"commander": NamedTeam("lead")},
-    {"repos": GivenRepos((Path("/checkout"),))},
-], ids=["commander-without-repos", "repos-without-commander"])
-def test_an_install_refuses_flags_a_bus_without_a_team_record_cannot_use(
-    private_directory, monkeypatch, flags,
-):
+def test_an_install_given_repos_founds_the_team_with_no_lead(private_directory, monkeypatch):
+    # The team owns its board and repositories: founding it names no thread.
     from agent_comms.cli_verbs.install import InstallCliCommand
 
     root = private_directory / "wire"
     root.mkdir(mode=0o700)
     _harnessless_home(private_directory, monkeypatch)
     comms = wire(root)
-    comms.registry.declare(Thread("lead", frozenset(), Checkout(private_directory)))
-    with pytest.raises(UpgradeRefused):
-        InstallCliCommand(project=private_directory, **flags).apply(comms)
+    result = InstallCliCommand(project=private_directory, repos=GivenRepos(())).apply(comms)
+    assert result.config == RegisteredTeamProject(())
+    assert wire(root).registry.snapshot().team_project == result.config
 
 
 def test_an_install_without_flags_keeps_native_team_and_parked_state(
@@ -218,7 +209,7 @@ def test_an_install_without_flags_keeps_native_team_and_parked_state(
     comms.registry.declare(Thread(
         "parked-teammate", frozenset(), Checkout(private_directory)))
     comms.registry.set_work_state("parked-teammate", ParkedThreadWorkState())
-    recorded = RegisteredTeamProject(comms.registry.require("lead").incarnation, ())
+    recorded = RegisteredTeamProject(())
     comms.registry.set_team_project(recorded)
     _harnessless_home(private_directory, monkeypatch)
     before = comms.registry.store.path.read_bytes()
@@ -234,43 +225,8 @@ def test_an_install_without_flags_keeps_native_team_and_parked_state(
             release.set()
     assert comms.registry.store.path.read_bytes() == before
     assert result.config == recorded
-    assert wire(root).registry.snapshot().commander_project == recorded
+    assert wire(root).registry.snapshot().team_project == recorded
     assert comms.registry.require("parked-teammate").work_state == ParkedThreadWorkState()
-    comms.registry.declare(Thread("replacement", frozenset(), Checkout(private_directory)))
-    changed = InstallCliCommand(project=private_directory, commander=NamedTeam("replacement")).apply(comms)
-    assert changed.config.commander == comms.registry.require("replacement").incarnation
-    assert comms.registry.snapshot().commander_project == changed.config
-
-
-def test_the_team_verb_names_a_lead_and_removes_a_team_at_runtime(private_directory):
-    # Tristan 10-30: leads are assigned at runtime, not only by a five-minute install.
-    from agent_comms.cli_verbs.team import TeamCliCommand
-    from agent_comms.errors import RelationViolationError
-
-    root = private_directory / "wire"
-    root.mkdir(mode=0o700)
-    comms = wire(root)
-    comms.registry.declare(Thread("old-lead", frozenset(), Checkout(private_directory)))
-    comms.registry.declare(Thread("new-lead", frozenset({"commanders"}), Checkout(private_directory)))
-    comms.registry.declare(Thread("peer", frozenset({"commanders"}), Checkout(private_directory)))
-    recorded = RegisteredTeamProject(
-        comms.registry.require("old-lead").incarnation, (Repo(checkout=private_directory, github=RepositoryName.from_wire("owner/repo")),))
-    comms.registry.set_team_project(recorded)
-    named = TeamCliCommand(lead=NamedTeam("new-lead")).apply(comms)
-    project = comms.registry.snapshot().commander_project
-    assert project == recorded.named(comms.registry.require("new-lead").incarnation, KeptRepos())
-    assert project.repos == recorded.repos
-    assert named.leads == ("new-lead",) and "old-lead" not in named.commanders
-    before = comms.registry.store.path.read_bytes()
-    with pytest.raises(RelationViolationError):
-        TeamCliCommand(remove=frozenset({"new-lead"})).apply(comms)
-    with pytest.raises(RelationViolationError):
-        TeamCliCommand(lead=NamedTeam("peer"),
-                            remove=frozenset({"peer", "new-lead"})).apply(comms)
-    assert comms.registry.store.path.read_bytes() == before
-    removed = TeamCliCommand(remove=frozenset({"peer"})).apply(comms)
-    assert removed.commanders == ("new-lead",)
-    assert "commanders" not in comms.registry.require("peer").tags
 
 
 def test_a_practice_copy_of_a_bus_without_messages_reads_its_history_twice(private_directory, capsys):

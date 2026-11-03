@@ -123,11 +123,11 @@ def test_first_remote_goal_checkout_uses_master_and_preserves_its_donor(
     remote_goal_checkout: RemoteGoalCheckout,
 ) -> None:
     case = remote_goal_checkout
-    project = case.comms.registry.snapshot().commander_project
+    project = case.comms.registry.snapshot().team_project
     assert case.repository.github not in project.repository_names()
     created = case.run()
     assert created.returncode == 0, created.stdout + created.stderr
-    assert case.comms.registry.snapshot().commander_project == project
+    assert case.comms.registry.snapshot().team_project == project
     assert Repo.qualified_github(case.path, case.repository.github).default_branch() == 'master'
     assert Checkout(case.path).common_dir == case.donor / '.git'
     assert case.repository.git(case.path, 'rev-parse', 'HEAD').strip() == case.repository.git(

@@ -89,8 +89,7 @@ def checkout_command_bus(repository, tmp_path, monkeypatch, installed_runtime, r
         "lead", frozenset(), Checkout(tmp_path / "lead"), execution=ExternalThreadExecution))
     worker = comms.registry.declare(Thread(
         "worker", frozenset(), Checkout(repository), execution=request.param))
-    comms.registry.set_team_project(RegisteredTeamProject(
-        lead.incarnation, (Repo(checkout=repository, github=identity),)))
+    comms.registry.set_team_project(RegisteredTeamProject((Repo(checkout=repository, github=identity),)))
     request_id = comms.goals.todos.add_request(lead.incarnation, "Prepare the pinned checkout").id
     now = time.time()
     order = PendingProblemOrder(
@@ -262,9 +261,8 @@ def test_checkout_add_allocates_a_declared_sibling_repository_before_it_exists(
 ):
     comms = checkout_command_bus
     sibling = SourceRepository.create(tmp_path / "paired", RepositoryName("OpenHCSDev", "toad"))
-    project = comms.registry.snapshot().commander_project.require()
-    comms.registry.set_team_project(RegisteredTeamProject(
-        project.commander, (*project.repos, sibling)))
+    project = comms.registry.snapshot().team_project.require()
+    comms.registry.set_team_project(RegisteredTeamProject((*project.repos, sibling)))
     rule = comms.registry.storage_rule
     worker = comms.registry.require("worker")
     destination = rule.repository_checkout(rule.initial_roots(worker.name), "P1", sibling.github)

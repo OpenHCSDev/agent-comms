@@ -1072,7 +1072,7 @@ def test_independent_sessions_share_the_delivered_message_reply_policy(comms, tm
 
     lead, teammate = (comms.registry.declare(Thread(
         name, frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution)) for name in ("lead", "teammate"))
-    comms.registry.set_team_project(RegisteredTeamProject(lead.incarnation, ()))
+    comms.registry.set_team_project(RegisteredTeamProject(()))
     for speaker, sender in ((lead, teammate), (teammate, lead)):
         output = ReplyingThreadOutput.for_comms(comms.transcripts.external(speaker.name), comms)
         original = comms.messaging.send(sender.name, speaker.name, "Open this answer", QuestionKind).message

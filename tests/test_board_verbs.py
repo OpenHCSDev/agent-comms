@@ -298,7 +298,7 @@ def test_review_scope_requires_the_actual_registered_birth(board_review):
     snapshot = comms.registry.snapshot()
     original = comms.registry.require("worker").incarnation.require_recorded()
     with pytest.raises(ToolRefusedError):
-        snapshot.commander_project.require_scope(
+        snapshot.team_project.require_scope(
             snapshot, replace(original, created_at=time.time() + 1000), request.repo)
     assert not StoredHeadReview.head_reviews(comms.goals.todos, request)
 

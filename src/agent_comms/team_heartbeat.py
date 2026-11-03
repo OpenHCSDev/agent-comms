@@ -94,7 +94,7 @@ class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
         """The bus's one team board, or none on a bus with no registered team project."""
         self.begin_pass()
         return tuple(TeamInputs.prepare(comms, project, ProgressRead(), self)
-                     for project in comms.registry.snapshot().commander_project.boards())
+                     for project in comms.registry.snapshot().team_project.boards())
 
     def observe(self, comms: Comms,
                 prepared: tuple[TeamInputs, ...]) -> tuple[TeamObservation, ...]:

@@ -1061,7 +1061,7 @@ class UnreviewedHead(HeadLine, HeadReviewCommands, DatedStandingRule, declared_n
         todos = goals.todos.board()
         return tuple(
             rule
-            for repo in snapshot.commander_project.repository_names()
+            for repo in snapshot.team_project.repository_names()
             for row in pulls.open(repo)
             for due in row.review_due(now, cls.seconds)
             for request in (PullRequestHead(repo, row.number, row.head),)
@@ -1124,7 +1124,7 @@ class StuckMerge(HeadLine, DatedStandingRule):
                       for todo in pulls.linked(repo).get(row.number, ())
                       for held in todo.current_holder.current_assignments()),
                     *pulls.working_on(goals, repo, row)))))
-            for repo in goals.registry.snapshot().commander_project.repository_names()
+            for repo in goals.registry.snapshot().team_project.repository_names()
             for row in pulls.open(repo)
             for blocks in (row.stuck(),) if blocks
         )
@@ -1167,7 +1167,7 @@ class IdlePullRequest(HeadLine, DatedStandingRule):
         """Holders are the live holds whose orders link the request, as the HUD cards read;
         the teammate's orders' links own which requests are its fleet's."""
         now = time.time()
-        repos = goals.registry.snapshot().commander_project.repository_names()
+        repos = goals.registry.snapshot().team_project.repository_names()
         linked = {repo: pulls.linked_among(ordered, repo) for repo in repos}
         holders: dict[tuple[RepositoryName, int], tuple[ThreadIncarnation, ...]] = {}
         for todo in held:
@@ -1226,7 +1226,7 @@ class OrderlessPullRequest(IdlePullRequest):
             cls(request=PullRequestHead(repo, row.number, row.head),
                 holders=pulls.working_on(goals, repo, row),
                 blocks=row.merge_blocks, moved=row.reviewable_at)
-            for repo in goals.registry.snapshot().commander_project.repository_names()
+            for repo in goals.registry.snapshot().team_project.repository_names()
             for linked in (pulls.linked_among(orders, repo),)
             for row in pulls.open(repo) if row.number not in linked and not row.armed_times
         )
@@ -1254,7 +1254,7 @@ class ChurningPullRequest(IdlePullRequest):
             cls(request=PullRequestHead(repo, row.number, row.head),
                 holders=pulls.working_on(goals, repo, row),
                 blocks=row.merge_blocks, moved=row.reviewable_at, opened=row.opened_at)
-            for repo in goals.registry.snapshot().commander_project.repository_names()
+            for repo in goals.registry.snapshot().team_project.repository_names()
             for row in pulls.open(repo) if not row.armed_times
         )
         return tuple(rule for rule in found if rule.began() <= now)

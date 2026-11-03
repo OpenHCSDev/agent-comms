@@ -43,7 +43,7 @@ DEFERRING = [RESULT, assistant(text("The six failing tests have no owner. They g
 
 @pytest.fixture
 def stop_binding(durable_home: Path, team_bus: Comms, tmp_path: Path) -> Iterator[ClaudeBridge]:
-    lead = team_bus.registry.snapshot().commander_project.require().commander
+    lead = team_bus.registry.snapshot().team_project.require().commander
     with resident_session(team_bus, tmp_path / "state", lead.name, "s") as bridge:
         yield bridge
 

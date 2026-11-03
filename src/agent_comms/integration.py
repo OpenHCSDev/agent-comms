@@ -195,7 +195,7 @@ class IntegrationCheckout(SourceCheckout):
         context.comms.registry.storage_rule.require_owned_checkout(
             owner, repository.checkout, repository.github, RepositoryReads())
         snapshot = context.comms.registry.snapshot()
-        snapshot.commander_project.require_scope(snapshot, context.actor_identity, repository.github)
+        snapshot.team_project.require_scope(snapshot, context.actor_identity, repository.github)
         return repository
 
     def publication_branch(self) -> str:
@@ -782,7 +782,7 @@ class IntegrationRun(InputPublication):
         core = self.checkout.owned_repository(context)
         snapshot = context.comms.registry.snapshot()
         actor = context.actor_identity
-        project = snapshot.commander_project
+        project = snapshot.team_project
         project.require_scope(snapshot, actor, core.github)
         todos = tuple(context.comms.goals.todos.get(problem) for problem in problems)
         for todo in todos:
@@ -906,9 +906,9 @@ class IntegrationRun(InputPublication):
         current_todos = tuple(context.comms.goals.todos.get(todo.id) for todo in todos)
         current_snapshot = context.comms.registry.snapshot()
         for todo in current_todos:
-            current_snapshot.commander_project.require_scope(current_snapshot, actor, todo.repo)
+            current_snapshot.team_project.require_scope(current_snapshot, actor, todo.repo)
         for source in inputs.sources:
-            current_snapshot.commander_project.require_scope(
+            current_snapshot.team_project.require_scope(
                 current_snapshot, actor, source.repository)
         context.comms.goals.todos.require_input_sources(inputs)
         return inputs
@@ -1080,7 +1080,7 @@ class IntegrationRun(InputPublication):
             raise IntegrationFailed("The real carrier must still match this checkout's HEAD")
         snapshot = context.comms.registry.snapshot()
         for source in prepared.sources:
-            snapshot.commander_project.require_scope(snapshot, context.actor_identity,
+            snapshot.team_project.require_scope(snapshot, context.actor_identity,
                                                      source.repository)
         context.comms.goals.todos.require_input_sources(prepared)
         prepared.require_current(context.repos)

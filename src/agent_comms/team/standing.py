@@ -149,7 +149,7 @@ class InstallDue(UndatedStandingRule, FamilyScan):
         (refactor-audit after the NRA migration) leaves the build at the next install and never
         needs a second list; a home with nothing installed carries none."""
         return installed.recorded_in(
-            repo for repo in comms.registry.snapshot().commander_project.require().repos
+            repo for repo in comms.registry.snapshot().team_project.require().repos
             if repo.checked_out)
 
     @classmethod
@@ -171,7 +171,7 @@ class InstallDue(UndatedStandingRule, FamilyScan):
     @classmethod
     def due(cls, comms: Comms, pulls: PullRequests) -> tuple[InstallDue, ...]:
         DeclaredFamily.discover_package(team)  # The verbs that clear it, for its action.
-        repos = comms.registry.snapshot().commander_project.require().repos
+        repos = comms.registry.snapshot().team_project.require().repos
         logs = InstallLogs(comms.root)
         due: list[InstallDue] = []
         core = {repo.github: repo for repo in repos}[CorePackage.repository]

@@ -581,8 +581,7 @@ def declare_team(comms: Comms, lead: Thread) -> Comms:
     """The bus's team project, led by `lead`: the one test owner of a team, for a test whose
     goals need a lead to assign them."""
     comms.registry.declare(lead)
-    comms.registry.set_team_project(RegisteredTeamProject(
-        comms.registry.require(lead.name).incarnation, ()))
+    comms.registry.set_team_project(RegisteredTeamProject(()))
     return comms
 
 

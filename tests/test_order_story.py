@@ -170,7 +170,7 @@ def edit_order(comms, tmp_path):
         request=request, review_at=RecordedEventTime(1000),
         assigner=lead, repo=source.github, text="Repair the worker")), comms)
     # Registered after the order is sent: the edit's repository is found among these.
-    comms.registry.set_team_project(RegisteredTeamProject(lead, (source, other)))
+    comms.registry.set_team_project(RegisteredTeamProject((source, other)))
     (other.checkout / "other_module.py").write_text("first\nsecond\n")
     return caller, other
 

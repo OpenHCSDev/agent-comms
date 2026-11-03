@@ -323,7 +323,7 @@ def test_failed_object_preparation_is_canonical_unread_progress_not_a_normal_car
     Repo.git(directory, "config", f"branch.{branch}.merge", "refs/heads/main")
     plans = TeamHeartbeat()
     with LaunchRoot.from_path(held_bus.root).selected():
-        prepared = TeamInputs.prepare(held_bus, held_bus.registry.snapshot().commander_project.require(), ProgressRead(), plans)
+        prepared = TeamInputs.prepare(held_bus, held_bus.registry.snapshot().team_project.require(), ProgressRead(), plans)
         progress = prepared.pulls.progress((todo,), held_bus.registry)[todo.id]
         assert isinstance(progress, UnreadProgress)
         assert str(directory) in progress.reason and str(missing) in progress.reason

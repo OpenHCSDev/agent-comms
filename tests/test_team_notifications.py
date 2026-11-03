@@ -87,7 +87,7 @@ def test_heartbeat_delivery_preserves_membership_board_history_and_direct_messag
     assert selected == replace(original, heartbeat_delivery=mode)
     assert FieldCodec.decode(Thread, FieldCodec.encode(selected)) == selected
     assert selected.for_registration(selected.name, selected).heartbeat_delivery is mode
-    assert selected in comms.registry.snapshot().commander_project.commanders(comms.registry.snapshot())
+    assert selected in comms.registry.snapshot().team_project.colleagues(comms.registry.snapshot())
 
     now = time.time()
     rule = ServicePassFailing(watch="delivery-setting", since=now, error="still visible", failed_at=now)
@@ -1134,7 +1134,7 @@ def test_enrollment_and_independent_execution_not_tags_determine_shared_particip
         "lead", "worker", "outsider", "declared-fork", "copied-fork", "bound-unit"))
     assert not commands("never-registered")
     snapshot = comms.registry.snapshot()
-    independent = {peer.name for peer in snapshot.commander_project.commanders(snapshot)}
+    independent = {peer.name for peer in snapshot.team_project.colleagues(snapshot)}
     assert {"lead", "worker", "outsider", "bound-unit"} <= independent
     assert {"declared-fork", "copied-fork"}.isdisjoint(independent)
     assert {"comms", tag} <= snapshot.require("copied-fork").tags

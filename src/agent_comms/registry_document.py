@@ -536,7 +536,7 @@ class TeamProject(DeclaredFamily, CitationProject, affix="TeamProject"):
         """An undeclared project admits no participants."""
         return ()
 
-    def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+    def colleagues(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
         """Independent colleagues, derived from their execution declarations."""
         return self.participants(snapshot.threads.values())
 
@@ -561,10 +561,6 @@ class TeamProject(DeclaredFamily, CitationProject, affix="TeamProject"):
                 f"Repository {repository.to_wire()} is outside this project's configured scope.")
         return project
 
-    @abstractmethod
-    def leads(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
-        """The registered teammate that owns the project's board, repositories and orders."""
-
     def boards(self) -> tuple[RegisteredTeamProject, ...]:
         """The one team board this bus keeps: none without a registered project."""
         return ()
@@ -584,56 +580,35 @@ class TeamProject(DeclaredFamily, CitationProject, affix="TeamProject"):
         return self.require().repos
 
     @abstractmethod
-    def named(self, commander: ThreadIncarnation,
-              repositories: RepositorySelection) -> RegisteredTeamProject: ...
-
-    @abstractmethod
     def reconfigured(self, repositories: RepositorySelection) -> TeamProject: ...
 
 
 class NoTeamProject(TeamProject):
-    def leads(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
-        return ()
-
     def repository_names(self, name: str = "") -> tuple[RepositoryName, ...]:
         return ()
 
     def require(self) -> RegisteredTeamProject:
         raise ToolRefusedError("This bus has no registered team project.")
 
-    def named(self, commander: ThreadIncarnation,
-              repositories: RepositorySelection) -> RegisteredTeamProject:
-        return RegisteredTeamProject(commander, repositories.founding(commander.name))
-
     def reconfigured(self, repositories: RepositorySelection) -> TeamProject:
-        repositories.without_team()
-        return self
+        """Given repositories found the team; no thread is recorded as its lead."""
+        return repositories.founded(self, RegisteredTeamProject)
 
 
 @dataclass(frozen=True)
 class RegisteredTeamProject(TeamProject):
-    commander: ThreadIncarnation
+    """The team's board, orders and repositories: they belong to the team, not to a thread."""
+
     repos: tuple[Repo, ...]
 
     def participants(self, threads: Iterable[Thread]) -> tuple[Thread, ...]:
-        """Execution owns independence; storage lead, tags and fork provenance grant none."""
+        """Execution owns independence; tags and fork provenance grant none."""
         return tuple(dict.fromkeys(
             peer for thread in threads
             for peer in thread.role.independent_threads(thread)))
 
     def boards(self) -> tuple[RegisteredTeamProject, ...]:
         return (self,)
-
-    def lead(self, snapshot: RegistrySnapshot) -> Thread:
-        """The one registered teammate a fork is declared under."""
-        (thread,) = self.leads(snapshot)
-        return thread
-
-    def leads(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
-        selected = snapshot.threads_for(self.commander.require_recorded())
-        if not selected:
-            raise RelationViolationError("The registered teammate thread no longer exists.")
-        return selected
 
     def repository_names(self, name: str = "") -> tuple[RepositoryName, ...]:
         """Each selected GitHub repository once, however many checkouts point at it."""
@@ -649,10 +624,6 @@ class RegisteredTeamProject(TeamProject):
     def require(self) -> RegisteredTeamProject:
         return self
 
-    def named(self, commander: ThreadIncarnation,
-              repositories: RepositorySelection) -> RegisteredTeamProject:
-        return RegisteredTeamProject(commander, repositories.applied(self.repos))
-
     def reconfigured(self, repositories: RepositorySelection) -> TeamProject:
         return replace(self, repos=repositories.applied(self.repos))
 
@@ -666,7 +637,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
     purpose: Annotated[RootPurpose, SlicePolicy(WholeDocumentValue)] = field(
         default_factory=WorkingRootPurpose
     )
-    commander_project: Annotated[
+    team_project: Annotated[
         TeamProject, SlicePolicy(WholeDocumentValue), WireOmitDefault()
     ] = field(default_factory=NoTeamProject)
     threads: Annotated[ThreadRows, SlicePolicy(ThreadRowsSlice)] = field(
@@ -795,7 +766,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
 
     def set_team_project(self, project: TeamProject) -> TeamProject:
         """Publish a project for its registered teammate identity."""
-        self.commander_project = project
+        self.team_project = project
         return project
 
     def prepare_declaration(self, thread: Thread, status: ThreadStatus) -> RegistrationChange:
@@ -1093,7 +1064,7 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
     aliases: Annotated[Mapping[str, str], SlicePolicy(MappingRowsSlice)]
     owner_generations: Annotated[Mapping[str, int], SlicePolicy(MappingRowsSlice)]
     _claimed_generations: Annotated[Mapping[str, int], SlicePolicy(MappingRowsSlice)] = field(repr=False)
-    commander_project: Annotated[TeamProject, SlicePolicy(WholeDocumentValue)] = field(
+    team_project: Annotated[TeamProject, SlicePolicy(WholeDocumentValue)] = field(
         default_factory=NoTeamProject
     )
     def __post_init__(self) -> None:
@@ -1175,7 +1146,7 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
             aliases=document.aliases,
             owner_generations=document.owners.generations,
             _claimed_generations=document.claims.generations,
-            commander_project=document.commander_project,
+            team_project=document.team_project,
         )
 
     def observed_activity(

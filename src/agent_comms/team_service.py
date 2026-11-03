@@ -67,7 +67,7 @@ class TeamService:
                     threads: Iterable[Thread]) -> tuple[Thread, ...]:
         """The independent colleagues among these that Core may address: an archived or
         deleting thread is not (ThreadStatus.publish_heartbeat owns that)."""
-        return tuple(thread for thread in snapshot.commander_project.participants(threads)
+        return tuple(thread for thread in snapshot.team_project.participants(threads)
                      if snapshot.status(thread.name).publish_heartbeat(lambda: True, False))
 
     @classmethod
@@ -81,7 +81,7 @@ class TeamService:
         owed = (thread for owner in goals.todos.requesters()
                 for thread in snapshot.threads_for(owner.require_recorded()))
         return tuple(dict.fromkeys(
-            (*cls.running(snapshot), *snapshot.commander_project.participants(owed))))
+            (*cls.running(snapshot), *snapshot.team_project.participants(owed))))
 
     @classmethod
     def forks(cls, snapshot: RegistrySnapshot, teammates: Iterable[Thread]) -> tuple[Thread, ...]:

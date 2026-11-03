@@ -449,7 +449,7 @@ def test_install_due_compares_fetched_main_to_installed_build(
     after_install = InstallDue.due(bus, pulls)
     assert after_install == ()
     assert Repo.git(checkout, "rev-parse", "HEAD") == before
-    configured = bus.registry.snapshot().commander_project.require().repos
+    configured = bus.registry.snapshot().team_project.require().repos
     assert tuple(repo.github for repo in configured) == tuple(repo.github for repo in registered)
     assert tuple(repo.checkout for repo in configured) == tuple(repo.checkout for repo in registered)
     for extra in extras:

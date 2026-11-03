@@ -156,7 +156,7 @@ def test_the_team_session_start_reads_all_package_files(tmp_path, source, comman
     context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
     trigger = {"startup": StartedDeal(), "resume": StartedDeal(),
                "compact": UnstampedCompactionDeal()}[source]
-    assert context.startswith(trigger.reason() + " Storage lead: claude-code.")
+    assert context.startswith(trigger.reason() + " ")
     assert "WHAT TRISTAN ACTUALLY SAID LAST" in context
     assert ("FUCK YOUR COMPACTION" in context) == (source == "compact")
     dealt = dealt_sources(transcript)
@@ -232,7 +232,7 @@ def test_a_slice_every_few_calls_rotating_and_dealt_again_at_compaction(tmp_path
 @pytest.mark.parametrize("actor", ("claude-code", "unit-x"))
 def test_rearm_rides_every_tool_call_while_a_running_bridge_has_no_monitor(
         tmp_path: Path, commanding_session, team_bus: Comms, actor: str):
-    """The storage lead and an untagged peer share the re-arm behaviour."""
+    """A tagged teammate and an untagged peer share the re-arm behaviour."""
     binding = admitted_binding(team_bus, actor)
     hook = DeafReminder.decode(hook_record(tmp_path / "session.jsonl"))
     claim = WatchClaim(hook.session_id)
@@ -614,8 +614,7 @@ def test_changing_storage_lead_preserves_the_peer_deal_and_real_child_delegation
     transcript.write_text("")
     assert DeckStart.decode(hook_record(transcript, "SessionStart")).take(team_bus, team_binding)
     assert transcript.with_suffix(".deck.json").exists()
-    commanding_session.registry.set_team_project(RegisteredTeamProject(
-        commanding_session.registry.require("unit-x").incarnation, ()))
+    commanding_session.registry.set_team_project(RegisteredTeamProject(()))
     dealt = transcript.with_suffix(".deal.json").read_bytes()
     reminder = BoardReminder.decode(hook_record(transcript))
     assert [reminder.take(team_bus, team_binding, reminder.count_call()) for _ in range(SliceReminder.every - 1)] == [()] * (SliceReminder.every - 1)
@@ -660,7 +659,7 @@ def test_a_fork_registers_under_the_session_that_spawned_it(
         assert fork.tags == snapshot.require(parent).tags
     assert TeammatesTag.declared_name in snapshot.require("claude-a8").tags
     assert {"claude-a7", "claude-a8"}.isdisjoint(
-        thread.name for thread in snapshot.commander_project.commanders(snapshot))
+        thread.name for thread in snapshot.team_project.colleagues(snapshot))
 
 
 def gated(transcript, tool, tool_input, *, comms: Comms, binding: Binding, **extra):

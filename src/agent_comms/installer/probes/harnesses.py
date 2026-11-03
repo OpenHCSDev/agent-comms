@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Annotated
 
 from agent_comms.cli_result import CliResult
-from agent_comms.team.config import TeamChoice, KeptTeam, KeptRepos, RepoChoice
+from agent_comms.team.config import KeptRepos, RepoChoice
 from agent_comms.comms import (
     Comms,
     client_wire,
@@ -40,15 +40,9 @@ class HarnessInstallation:
     repos: Annotated[
         RepoChoice,
         Argument(
-            flags=("--repos",), options={"help": "Replace the commander's recorded repositories"}
+            flags=("--repos",), options={"help": "Found the team with these repositories, or replace its recorded ones"}
         ),
     ] = KeptRepos()
-    commander: Annotated[
-        TeamChoice,
-        Argument(
-            flags=("--commander",), options={"help": "Record this thread as the bus's commander"}
-        ),
-    ] = KeptTeam()
 
     def declared_part(self) -> HarnessInstallation:
         """Project a CLI subclass onto this operation's declared fields."""
@@ -64,8 +58,8 @@ class HarnessInstallation:
         runtime (HarnessesProbe)."""
         home = Path.home()
         snapshot = ctx.registry.snapshot()
-        project = self.commander.configured(snapshot.commander_project, self.repos, snapshot)
-        if project != snapshot.commander_project:
+        project = snapshot.team_project.reconfigured(self.repos)
+        if project != snapshot.team_project:
             ctx.registry.set_team_project(project)
         return InstallResult(
             project,

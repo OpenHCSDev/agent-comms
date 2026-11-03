@@ -36,7 +36,7 @@ The refactoring game and its single-player mode are owned by
 owner directs single-player play; fleet dispatch requirements do not require
 creating units for that mode.
 
-Use the native Core tools `comms_order`, `comms_order_done`, `comms_verdict`, `comms_fleet_story` and `comms_inbox`, configured by Core's registry, which `agent-comms install` writes. An install records the commander only from `--commander NAME` and replaces the repos only from `--repos A,B`; otherwise it keeps the bus's record. Rerun install to change it; never edit the tools for one project.
+Use the native Core tools `comms_order`, `comms_order_done`, `comms_verdict`, `comms_fleet_story` and `comms_inbox`, configured by Core's registry, which `agent-comms install` writes. An install founds the team project or replaces its repos only from `--repos A,B`; otherwise it keeps the bus's record. The project records no lead. Rerun install to change it; never edit the tools for one project.
 
 ## Start of session, and after every compaction
 

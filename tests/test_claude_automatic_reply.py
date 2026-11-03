@@ -198,8 +198,7 @@ def assert_opening_send(comms: Comms, opening: Message, later: Message, turn_id:
 @pytest.mark.asyncio
 async def test_team_send_answers_only_the_question_that_opened_its_turn(bridge: ClaudeBridge) -> None:
     comms = bridge.comms
-    lead = comms.registry.require('viewer')
-    comms.registry.set_team_project(RegisteredTeamProject(lead.incarnation, ()))
+    comms.registry.set_team_project(RegisteredTeamProject(()))
     output = bridge.output_type.for_comms(comms.transcripts.external('viewer'), comms)
     session = ClaudeSession()
     opening = comms.messaging.send('peer', 'viewer', 'Please investigate', QuestionKind).message
@@ -321,7 +320,7 @@ async def test_twelve_directives_require_the_final_of_the_turn_they_opened(
         Thread('peer', frozenset({TeammatesTag.declared_name}), Checkout(Path.cwd())),
         StoppedThreadStatus(),
     )
-    comms.registry.set_team_project(RegisteredTeamProject(lead.incarnation, ()))
+    comms.registry.set_team_project(RegisteredTeamProject(()))
     output = bridge.output_type.for_comms(comms.transcripts.external('viewer'), comms)
     session = ClaudeSession()
     output.publish_batch(list(opening_record('previous-turn').updates(session)))

@@ -110,7 +110,7 @@ class Registration:
                 raise RelationViolationError('Caller changed before checkout transfer')
             edit.document.status(current.name).require_stopped()
             require_target()
-            if repository not in edit.document.commander_project.require().repos:
+            if repository not in edit.document.team_project.require().repos:
                 raise RelationViolationError('Registered repository changed before checkout transfer')
             rule = self.storage_rule
             if not rule.owns_checkout(current, destination, repository.github, RepositoryReads()):

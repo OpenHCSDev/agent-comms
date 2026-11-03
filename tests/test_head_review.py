@@ -950,7 +950,7 @@ def test_judge_reviewing_after_ok_withdraws_the_accepted_status_on_that_head(
                         str(second_checkout))
     configured_repository(comms, reviewed_source,
                           reviewed_source.model_copy(update={"checkout": second_checkout}))
-    project = comms.registry.snapshot().commander_project.require()
+    project = comms.registry.snapshot().team_project.require()
     assert project.repository_names().count(request.repo) == 1
     assert project.repository_names(str(second_checkout)) == (request.repo,)
     common = ["--pr", str(request.pr), "--head", request.head]

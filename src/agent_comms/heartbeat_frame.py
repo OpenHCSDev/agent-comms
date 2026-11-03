@@ -105,7 +105,7 @@ class HeartbeatFrame(TeamInputs):
     def capture(cls, comms: Comms, inputs: TeamInputs, plans: PlanReadings) -> Self:
         """One team board: every teammate's owed answers, never one lead's."""
         snapshot = comms.registry.snapshot()
-        project = snapshot.commander_project.require()
+        project = snapshot.team_project.require()
         with comms.goals.todos.snapshot() as db:
             closed = StoredClosedHead.current(db, project.repository_names())
             reviews = StoredHeadReview.head_reviews_among(

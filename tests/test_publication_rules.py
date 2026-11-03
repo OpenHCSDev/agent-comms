@@ -36,7 +36,7 @@ def test_unscanned_repository_is_pending_not_lost(head_bus, reviewed_source):
     github.put(source.github, ClosedListedPullRequest(
         7, 'closed/7', source.branch_commit, closed_at=stamp, updated=stamp,
         base='main', reviewable_times=(stamp,)))
-    repos = comms.registry.snapshot().commander_project.require().repository_names()
+    repos = comms.registry.snapshot().team_project.require().repository_names()
     plans = TeamHeartbeat()
 
     def rules(frame):

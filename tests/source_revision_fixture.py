@@ -12,7 +12,6 @@ import tomli_w
 
 from agent_comms.registry_document import RegisteredTeamProject
 from agent_comms.repo import Repo
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.repository_name import RepositoryName
 from agent_comms.change_report import OrderRoots
 from agent_comms.change_report import FileLine
@@ -47,7 +46,7 @@ class SourceRepository(Repo):
 
     @property
     def project(self) -> RegisteredTeamProject:
-        return RegisteredTeamProject(RecordedThreadIncarnation('lead', 1.0), (self,))
+        return RegisteredTeamProject((self,))
 
     @property
     def roots(self) -> OrderRoots:

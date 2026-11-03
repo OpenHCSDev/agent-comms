@@ -8,7 +8,7 @@ import re
 import shutil
 import subprocess
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
 from functools import cache, cached_property
@@ -36,10 +36,8 @@ class RepositorySelection(ABC):
     def applied(self, recorded: tuple[Repo, ...]) -> tuple[Repo, ...]: ...
 
     @abstractmethod
-    def founding(self, commander: str) -> tuple[Repo, ...]: ...
-
-    @abstractmethod
-    def without_team(self) -> None: ...
+    def founded[A, F](self, absent: A, found: Callable[[tuple[Repo, ...]], F]) -> A | F:
+        """What a bus without a team becomes under this choice."""
 
 
 class GitCommandError(RuntimeError, CommandFailure):

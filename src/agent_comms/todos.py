@@ -415,7 +415,7 @@ class CheckedDelivery(EvidenceRequirements, OrderDelivery, declared_name=None):
             try:
                 await asyncio.to_thread(
                     line.require_exists,
-                    order.source_roots(registry.snapshot().commander_project),
+                    order.source_roots(registry.snapshot().team_project),
                     revision)
             except MissingSourceLine as error:
                 raise TodoError(f"The order creates {line.to_wire()}; {error}") from error
@@ -1172,7 +1172,7 @@ class PullRequests(RepositoryReads):
         """The registered threads with the request's branch checked out: who is working on it
         when no order says so. One worktree read per local checkout in this frame."""
         snapshot = goals.registry.snapshot()
-        repository = Repo.selected(snapshot.commander_project.require().repos, repo.to_wire())
+        repository = Repo.selected(snapshot.team_project.require().repos, repo.to_wire())
         reader = WorkBranches(repository.checkout, reads=self)
         return tuple(dict.fromkeys(
             snapshot.require(name).incarnation
@@ -1181,7 +1181,7 @@ class PullRequests(RepositoryReads):
 
     def carry_reviews(self, goals: Goals, repo: RepositoryName) -> None:
         """Advance the frame's forge facts only after the existing verdict posts its carry."""
-        project = goals.registry.snapshot().commander_project.require()
+        project = goals.registry.snapshot().team_project.require()
         repository = Repo.selected(project.repos, repo.to_wire())
         reader = WorkBranches(repository.checkout, reads=self)
         for row in self.open(repo):
@@ -2869,7 +2869,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         """Create once; retain and return its nominal identity, never reparse our own URL."""
         todo.require_actor(actor, todo.held().generation)
         self.require_linkable()
-        RecordPullRequest.require_repository(store.registry_cut().commander_project,
+        RecordPullRequest.require_repository(store.registry_cut().team_project,
                                              todo, source.github)
         created = subprocess.run(
             ("gh", "pr", "create", "--draft", "-R", source.github.to_wire(),
@@ -4149,7 +4149,7 @@ class CitedEvidence:
     def require_evidence(self, goals: Goals, current: Todo) -> None:
         order = current.order.checked()
         self.require_cited(
-            order.source_roots(goals.registry.snapshot().commander_project),
+            order.source_roots(goals.registry.snapshot().team_project),
             order.cited_revision)
 
     def require_cited(self, roots: SourceRoots, source: SourceText) -> None:
@@ -4543,7 +4543,7 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
         return GrownHeadVerdict(reason, growth)
 
     def subject(self, goals: Goals, request: ReadPullRequestHead) -> str:
-        project = goals.registry.snapshot().commander_project.require()
+        project = goals.registry.snapshot().team_project.require()
         growth = WorkBranches(Repo.selected(project.repos, request.repo.to_wire()).checkout
                               ).reviewed_growth(request.pr, request.head, request.base)
         growth.require_parsed()
@@ -5068,7 +5068,7 @@ class EditVerdict(ToolCallVerdict, declared_name=None):
         rule = goals.registry.storage_rule
         roots = rule.roots_of(goals.registry.require(self.previous.owner))
         edited = Path(self.path).absolute()
-        for repo in goals.registry.snapshot().commander_project.require().repos:
+        for repo in goals.registry.snapshot().team_project.require().repos:
             fresh = (rule.order_checkout(roots, current.id) if repo.github == current.repo
                      else rule.repository_checkout(roots, current.id, repo.github))
             allocated = rule.reused_checkout(goals.registry.require(self.previous.owner),
@@ -5192,7 +5192,7 @@ class EditSendBackVerdict(SendBackVerdict, EditVerdict):
 
     def prepare(self, goals: Goals, current: Todo) -> Self:
         self.require_cited(
-            OrderRoots(self.edited(goals, current)[1], goals.registry.snapshot().commander_project),
+            OrderRoots(self.edited(goals, current)[1], goals.registry.snapshot().team_project),
             WorkingTree())
         return self
 
@@ -5433,7 +5433,7 @@ class RecordPullRequest(TodoCommand):
 
     def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
         """A companion link is checked against the registered project under the write."""
-        self.require_repository(store.registry_cut().commander_project, current, self.link.repo)
+        self.require_repository(store.registry_cut().team_project, current, self.link.repo)
 
     @staticmethod
     def require_repository(project: TeamProject, todo: Todo, repository: RepositoryName) -> None:
@@ -6857,7 +6857,7 @@ class EditWorkplaces:
         if not holds:
             return {}
         prepared = cls.for_assignment(comms.root, snapshot, tuple(hold.todo for hold in holds), ())
-        repositories = snapshot.commander_project.require().repos
+        repositories = snapshot.team_project.require().repos
         registered = frozenset(repo.github for repo in repositories)
         rule = prepared.rule
         declared = {todo.id: todo.order.source_repositories() for todo in prepared.orders.values()}

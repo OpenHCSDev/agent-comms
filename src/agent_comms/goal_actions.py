@@ -622,7 +622,7 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
     def require_ready(self, ctx: GoalActionContext) -> None:
         """Recheck goal consent and local request facts before reserving work or a child."""
         ctx.thread.goal.require_work(self.assigner, ctx.thread)
-        self.require_sendable(ctx.goals.registry.snapshot().commander_project)
+        self.require_sendable(ctx.goals.registry.snapshot().team_project)
         ctx.goals.todos.owner_request(self.request).require_open(self.assigner)
         self.review_at.require_recorded("A review time")
 

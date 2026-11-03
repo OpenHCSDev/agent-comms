@@ -359,17 +359,15 @@ class TeamContext(BaseModel):
         return cls(root=Path(root).resolve())
 
     @classmethod
-    def on_root(cls, commander: str, repos: tuple[Repo, ...], root: Path) -> Self:
+    def on_root(cls, actor: str, repos: tuple[Repo, ...], root: Path) -> Self:
         context = cls.read_root(root)
-        thread = context.comms.registry.require(commander)
-        context.comms.registry.set_team_project(
-            RegisteredTeamProject(thread.incarnation, repos)
-        )
-        return context.model_copy(update={'actor': PeerCaller(commander)})
+        context.comms.registry.require(actor)
+        context.comms.registry.set_team_project(RegisteredTeamProject(repos))
+        return context.model_copy(update={'actor': PeerCaller(actor)})
 
     @property
     def project(self) -> RegisteredTeamProject:
-        return self.comms.registry.snapshot().commander_project.require()
+        return self.comms.registry.snapshot().team_project.require()
 
     @property
     def repos(self) -> tuple[Repo, ...]:
@@ -899,8 +897,8 @@ class DirectiveVerb(TeamVerb):
         the replies that answer all of them at once, so one round trip clears the gate.
         """
         now = time.time()
-        # Debt and reply receipts follow the same exact represented owners, not the
-        # project's storage lead or every request the actor may maintain.
+        # Debt and reply receipts follow the exact represented owners, not every request
+        # the actor may maintain.
         owers = ctx.actor_identity.represented_owners
         opened = tuple(rule for owner in owers for rule in OwedAnswer.opened(ctx.comms, owner))
         owed = frozenset(rule.message.message_id for rule in opened)

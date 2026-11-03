@@ -546,7 +546,7 @@ def test_held_branch_rules_consume_the_complete_cut_after_worktree_mutation(
         with pytest.raises(WorkBranchError) as unprepared:
             pulls.require_branch_difference(path)
         assert str(path) in str(unprepared.value)
-        inputs = TeamInputs.prepare(built.comms, built.comms.registry.snapshot().commander_project.require(), pulls, plans)
+        inputs = TeamInputs.prepare(built.comms, built.comms.registry.snapshot().team_project.require(), pulls, plans)
         difference = inputs.pulls.require_branch_difference(path)
         assert difference.branch == 'unpushed'
         (publication,) = difference.unpublished
@@ -624,7 +624,7 @@ def test_allocated_clone_owns_its_custom_upstream_not_the_primary(fleet, configu
         primary = pulls.checkout(todo.order.checked().check.directory).branches
         primary.prepare_upstreams()
         assert branch not in primary.upstreams
-        inputs = TeamInputs.prepare(built.comms, built.comms.registry.snapshot().commander_project.require(), pulls, plans)
+        inputs = TeamInputs.prepare(built.comms, built.comms.registry.snapshot().team_project.require(), pulls, plans)
         observed = TeamObservation.read(built.comms,
                                              inputs, plans=plans)
         assert not any(isinstance(card, Unreadable) and card.unit.name == 'unpushed'
