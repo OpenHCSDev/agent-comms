@@ -121,9 +121,11 @@ class ForkingCaller(ThreadConnectorCaller):
 
 
 @dataclass(frozen=True)
-class DirectorCaller(OperatorOutcomes, ThreadConnectorCaller):
+class DirectorCaller(OperatorOutcomes, ForkingCaller):
     """claude-ai speaks for the owner, so its sends carry the director origin, which records each
-    message to a thread as a directive like the owner's own."""
+    message to a thread as a directive like the owner's own. Each remote Claude session on this
+    grant names itself with the fork argument: it is registered as claude-ai's child under its
+    own name, so teammates can tell the sessions apart and see who did what."""
 
     def require_directive(self, comms: Comms, body: str) -> None:
         """A directive passes DirectiveText."""
