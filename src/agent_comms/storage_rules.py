@@ -412,6 +412,9 @@ class StorageRule(RoomAllocation, DurableFile):
         """
         candidates = tuple(path for path in self.checkout_paths(owner, reads)
                            if (path / '.git').is_file() and not path.is_symlink()
+                           and any(allocation.reserves_boundary()
+                                   and allocation.owns_present(self, owner, path, reads)
+                                   for allocation in CheckoutAllocation.for_path(self, owner, path))
                            and reads.repository(path).github == repository)
         if owner.project_path in candidates:
             return owner.project_path
@@ -541,7 +544,8 @@ class StorageRule(RoomAllocation, DurableFile):
         ordered = self.order_checkout(self.roots_of(owner), '*')
         return tuple(path for path in (owner.project_path,
                                        *sorted(ordered.parent.glob(ordered.name)))
-                     if path.is_dir() and self.owns_present_checkout(owner, path, reads))
+                     if Checkout.git_roots(path) and not path.is_symlink()
+                     and self.owns_present_checkout(owner, path, reads))
 
     def checkouts_of(self, thread: Thread, reads: RepositoryReads) -> tuple[Path, ...]:
         """Read each repository through the caller's cut; directories and names do not register

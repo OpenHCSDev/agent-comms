@@ -127,7 +127,7 @@ from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Checkout, GitCommandError, Repo, RepositoryReads
 from agent_comms.repository_name import RepositoryName
 from agent_comms.slop import DeclarationDerivation, Slop
-from agent_comms.storage_rules import CheckoutAllocation, StorageRule, UnitStorage
+from agent_comms.storage_rules import CheckoutAllocation, StorageRule
 from agent_comms.thread_identity import (
     CoreWatcherIncarnation,
     RecordedThreadIncarnation,

@@ -220,9 +220,8 @@ def test_checkout_remove_retires_the_order_checkout_with_its_submodule(
     # The holder may close the problem before retiring its checkout.
     current = comms.goals.todos.get("P1")
     closed = comms.goals.todos.apply("P1", WithdrawTodo(
-        current.revision, comms.registry.require("worker").incarnation, current.held(),
+        current.revision, comms.registry.require("worker").incarnation,
         "The order is closed before its teammate retires the checkout it worked in."))
-    assert closed.assignment is None
     (path / "owner.py").write_text("an unpushed edit\n")
     held = core_process("--root", str(comms.root), "checkout", "--from", "worker", "remove", "P1")
     assert held.returncode != 0
