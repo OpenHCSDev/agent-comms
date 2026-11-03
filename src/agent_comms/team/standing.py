@@ -767,19 +767,20 @@ class UnitDeaf(InboxUnavailable):
     Every active thread is read, teammates included: a session bridge without a Monitor is
     TeamDeaf's separate signal."""
 
-    unit: str
+    unit: RecordedThreadIncarnation
+    """Whose drain is deaf, by birth, as TeamDeaf: a rename keeps the occurrence and its age."""
 
     @classmethod
     def paused(cls, comms: Comms) -> tuple[Self, ...]:
         snapshot = comms.registry.snapshot()
         units = list(comms.registry.active_threads().values())
         activity = comms.agents.all_activity(units, snapshot=snapshot)
-        return tuple(cls(paused + cls.seconds, name)
+        return tuple(cls(paused + cls.seconds, snapshot.require(name).incarnation.require_recorded())
                      for name, observed in activity.items()
                      for paused in observed.readiness.unavailable_since())
 
     def line(self) -> str:
-        return (f"UNDEAFEN {self.unit} has read none of its inbox since "
+        return (f"UNDEAFEN {self.unit.name} has read none of its inbox since "
                 f"{RecordedEventTime(self.since - self.seconds).clock()}, so every order to it"
                 " sits unread. who's it supposed to hear? -> read its drain diagnostic and fix"
                 " that owner")

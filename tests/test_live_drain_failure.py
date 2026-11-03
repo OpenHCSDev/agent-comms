@@ -263,6 +263,7 @@ def test_deaf_teammate_is_dated_by_the_drain_that_cannot_read_its_inbox(
     assert UnitDeaf.violations(comms) == ()
     monkeypatch.setattr(time, "time", lambda: 100.0 + InboxUnavailable.seconds + 1)
     found = UnitDeaf.violations(comms)
-    assert found == ((UnitDeaf(100.0 + InboxUnavailable.seconds, "beta"),) if deaf else ())
+    beta = comms.registry.require("beta").incarnation.require_recorded()
+    assert found == ((UnitDeaf(100.0 + InboxUnavailable.seconds, beta),) if deaf else ())
     if deaf:
         assert found[0].broke_after(100.0)
