@@ -260,9 +260,12 @@ def test_removed_worktree_updates_membership_and_another_home_cannot_claim_its_p
     assert comms.registry.require('worker').storage_roots == thread.storage_roots
 
 
-def test_equal_repository_spellings_allocate_one_owned_checkout(checkout_comms: Comms):
+@pytest.mark.parametrize('allocation', ('P1', '6828c4a330994dcb9e43c7edab128a53'))
+@pytest.mark.parametrize('suffix', ('agent-comms', 'Agent-Comms'))
+def test_equal_repository_spellings_allocate_one_owned_checkout(
+        checkout_comms: Comms, allocation: str, suffix: str):
     """RepositoryName equality is casefolded, so the CLI's spelling and the registered one name
-    the same allocation, and an existing lowercase checkout stays where it is."""
+    the same allocation; an existing checkout retains its physical spelling."""
     comms = checkout_comms
     rule = comms.registry.storage_rule
     thread = comms.registry.require('worker')
@@ -270,15 +273,27 @@ def test_equal_repository_spellings_allocate_one_owned_checkout(checkout_comms: 
     typed = RepositoryName('OpenHCSDev', 'Agent-Comms')
     registered = RepositoryName.from_wire('openhcsdev/agent-comms')
     assert typed == registered
-    path = rule.repository_checkout(rule.roots_of(thread), 'P1', typed)
-    assert path == rule.checkout_base / 'worker--P1--agent-comms'
-    assert path == rule.repository_checkout(rule.roots_of(thread), 'P1', registered)
+    canonical = rule.repository_checkout(rule.roots_of(thread), allocation, typed)
+    assert canonical == rule.checkout_base / f'worker--{allocation}--agent-comms'
+    assert canonical == rule.repository_checkout(rule.roots_of(thread), allocation, registered)
+    path = canonical.with_name(f'worker--{allocation}--{suffix}')
     start = DetachedStart('HEAD')
     StorageProjection(rule, thread, comms).check((
         CreateCheckoutStorageEffect(path, LocalRepositorySource(Repo.of(home)), start),))
     Checkout.add(home, path, start)
     assert rule.owns_present_checkout(thread, path, RepositoryReads())
     assert path in rule.checkouts_of(thread, RepositoryReads())
+    assert not thread.ran_in(Checkout(path))
+    rule.require_isolated_checkout(thread, path, comms.registry.all_threads().values(),
+                                   RepositoryReads())
+    assert not rule.owns_checkout(thread, path, RepositoryName('OpenHCSDev', 'other'),
+                                  RepositoryReads())
+    assert not rule.owns_checkout(thread, path.with_name(f'other--{allocation}--{suffix}'),
+                                  typed, RepositoryReads())
+    assert not rule.owns_checkout(thread, path.parent.parent / path.name, typed,
+                                  RepositoryReads())
+    assert not rule.owns_checkout(thread, path.with_name(f'worker--invalid--{suffix}'),
+                                  typed, RepositoryReads())
 
 
 @pytest.mark.parametrize('enclosing_source', (False, True))

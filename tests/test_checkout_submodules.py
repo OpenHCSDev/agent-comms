@@ -621,18 +621,23 @@ def test_transfer_restores_original_tree_and_modules_after_actual_git_failure(re
     assert (repository / '.git' / 'config').read_bytes() == config
 
 
-def test_exact_historical_retirement_needs_ownership_not_a_current_goal(checkout_command_bus, repository):
+@pytest.mark.parametrize('allocated', (False, True), ids=('selected-history', 'mixed-case-allocation'))
+def test_exact_historical_retirement_needs_ownership_not_a_current_goal(
+        checkout_command_bus, repository, allocated):
     comms = checkout_command_bus
     rule = comms.registry.storage_rule
     owner = comms.registry.require('worker')
-    path = rule.checkout_base / 'retained-historical-source'
+    path = rule.checkout_base / (
+        f'{owner.name}--{GoalId.mint()}--Agent-Comms' if allocated
+        else 'retained-historical-source')
     path.parent.mkdir(parents=True, exist_ok=True)
     Checkout.add(repository, path, NewBranchStart('retained-old-source', 'HEAD'))
-    assert comms.threads.set_project(owner.incarnation, str(path)).changed
-    assert comms.threads.set_project(owner.incarnation, str(repository)).changed
+    if not allocated:
+        assert comms.threads.set_project(owner.incarnation, str(path)).changed
+        assert comms.threads.set_project(owner.incarnation, str(repository)).changed
     owner = comms.registry.require(owner.name)
-    assert Checkout(path) in owner.earlier_projects
-    assert path not in rule.checkouts_of(owner, RepositoryReads())
+    assert (Checkout(path) in owner.earlier_projects) is (not allocated)
+    assert (path in rule.checkouts_of(owner, RepositoryReads())) is allocated
     foreign = core_process('--root', str(comms.root), 'goal-checkout', '--from', 'lead',
                            '--source', str(path), 'remove', str(repository))
     assert foreign.returncode != 0 and path.exists()
