@@ -1156,7 +1156,7 @@ class CompactionData(PiResponseData):
     def require_compaction(self) -> CompactionData:
         return self
 
-    summary: str | None = None
+    summary: PiField[ReportedText | PiOmitted] = PiOmitted()
     usage: Annotated[PiField[PiUsage], WireNullDefault()] = UnreportedUsage()
     first_kept_entry_id: Annotated[
         PiField[ReportedText | PiOmitted], WireName("firstKeptEntryId")
@@ -1167,12 +1167,6 @@ class CompactionData(PiResponseData):
     estimated_tokens_after: Annotated[
         PiField[PiCount], WireName("estimatedTokensAfter")
     ] = UnreportedCount()
-
-    @property
-    def display_summary(self):
-        from .backend import compaction_summary
-
-        return compaction_summary(self.summary) if self.summary is not None else None
 
     def charge(self):
         yield from events.ProviderUsage.charges(self.usage, CompactionChargeId.fresh())

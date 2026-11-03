@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import unicodedata
 from abc import ABC, abstractmethod
 from collections.abc import (
     AsyncGenerator,
@@ -85,14 +84,6 @@ if TYPE_CHECKING:
     from .acp_failure import ProviderRetryResult
     from .pi_native_backend import PersistentPiSession
     from .pi_payloads import AssistantMessage, UserMessage
-
-
-def compaction_summary(value: str) -> str:
-    """Preserve saved Markdown, excluding terminal control codes."""
-    return "".join(
-        char if char in "\n\t" or not unicodedata.category(char).startswith("C") else " "
-        for char in value.replace("\r\n", "\n")
-    )
 
 
 # Pi 0.85.1 owns provider-idle detection and defaults it to 300 seconds. This

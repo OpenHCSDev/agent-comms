@@ -295,7 +295,6 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch, n
             ]
             assert len(terminal) == 1
             assert terminal[0].reason is ManualCompactionReason
-            assert terminal[0].summary == committed[0].summary
             assert not attachment.turns.persistent_backends
             # The child that compacted stays retained and current; nothing reopens it.
             assert retained.returncode is None

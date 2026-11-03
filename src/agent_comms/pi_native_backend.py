@@ -312,13 +312,11 @@ class PiNativeBackend(
             data = (await self.inspect(thread, command)).require_compaction()
         except NativePiUnavailable as error:
             return FailedCompaction(str(error))
-        if data.summary is None:
-            return NothingToCompaction()
-        return PlacedCompaction(
-            summary=data.summary,
+        return next((PlacedCompaction(
+            summary=summary,
             first_kept=data.first_kept_entry_id.value_or(None),
             tokens_before=data.tokens_before,
-        )
+        ) for summary in data.summary.present()), NothingToCompaction())
 
     # -- Forks ------------------------------------------------------------
 
