@@ -13,6 +13,7 @@ import re
 import sys
 import types
 from abc import ABC, abstractmethod
+from contextvars import ContextVar
 from collections.abc import Callable, Collection, Hashable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import MISSING, Field, dataclass, field, fields, is_dataclass
 from datetime import datetime
@@ -61,6 +62,98 @@ if TYPE_CHECKING:
 
 T = TypeVar("T")
 
+
+
+@dataclass
+class SchemaDefinition:
+    """One declaration's schema inside one document, never an equal-shaped substitute."""
+
+    declaration: object
+    name: str
+    schema: dict[str, JsonValue] = field(default_factory=dict)
+    uses: int = 0
+
+    @property
+    def reference(self) -> str:
+        return f"#/$defs/{self.name}"
+
+    def worth_sharing(self) -> bool:
+        body = len(json.dumps(self.schema, separators=(',', ':')))
+        reference = len(json.dumps({'$ref': self.reference}, separators=(',', ':')))
+        definition = len(json.dumps(self.encoded(), separators=(',', ':'))) + len(self.name) + 3
+        return body * self.uses > definition + reference * self.uses
+
+    def encoded(self) -> dict[str, JsonValue]:
+        return {'$comment': str(self.declaration), **self.schema}
+
+
+@dataclass
+class SchemaDefinitions:
+    """A schema build owns its declarations and emits repeated ones once through $defs."""
+
+    definitions: dict[object, SchemaDefinition] = field(default_factory=dict)
+    current: ClassVar[ContextVar[SchemaDefinitions | None]] = ContextVar('schema_document', default=None)
+
+    @classmethod
+    def build(cls, render: Callable[[], dict[str, JsonValue]]) -> dict[str, JsonValue]:
+        if cls.current.get() is not None:
+            return render()
+        document = cls()
+        token = cls.current.set(document)
+        try:
+            return document.finish(render())
+        finally:
+            cls.current.reset(token)
+
+    @classmethod
+    def value(cls, declaration: object, render: Callable[[], dict[str, JsonValue]]) -> dict[str, JsonValue]:
+        def reference() -> dict[str, JsonValue]:
+            document = cls.current.get()
+            assert document is not None  # build owns the synchronous schema scope.
+            return document.reference(declaration, render)
+        return cls.build(reference)
+
+    def reference(self, declaration: object,
+                  render: Callable[[], dict[str, JsonValue]]) -> dict[str, JsonValue]:
+        if declaration not in self.definitions:
+            definition = SchemaDefinition(declaration, f'd{len(self.definitions)}')
+            self.definitions[declaration] = definition
+            definition.schema = render()
+        definition = self.definitions[declaration]
+        definition.uses += 1
+        return {'$ref': definition.reference}
+
+    def finish(self, schema: dict[str, JsonValue]) -> dict[str, JsonValue]:
+        references = {definition.reference: definition for definition in self.definitions.values()}
+        shared = {reference for reference, definition in references.items()
+                  if definition.worth_sharing()}
+
+        def resolve(value: JsonValue) -> JsonValue:
+            if isinstance(value, list):
+                return [resolve(item) for item in value]
+            if not isinstance(value, dict):
+                return value
+            return resolve_record(value)
+
+        def resolve_record(value: dict[str, JsonValue]) -> dict[str, JsonValue]:
+            # A represented model owns a separate JSON Schema resource and its references.
+            if '$id' in value:
+                return value
+            reference = value.get('$ref')
+            if isinstance(reference, str) and reference in references and reference not in shared:
+                definition = references[reference]
+                return {**resolve_record(definition.schema),
+                        **{key: resolve(item) for key, item in value.items() if key != '$ref'}}
+            return {key: resolve(item) for key, item in value.items()}
+
+        result = resolve_record(schema)
+        definitions = {definition.name: resolve_record(definition.encoded())
+                       for reference, definition in references.items() if reference in shared}
+        if definitions:
+            if '$defs' in result:
+                raise TypeError('A schema document already declares its own $defs')
+            result['$defs'] = definitions
+        return result
 
 
 class UnsupportedFieldType(TypeError):
@@ -2726,7 +2819,7 @@ class FieldCodec(MroDispatch, Sealed):
     @classmethod
     def record_schema(cls, *targets: type) -> dict[str, JsonValue]:
         """Named request fields; external tool/CLI selection remains separate."""
-        return cls._record_schema(targets, {}, [])
+        return SchemaDefinitions.build(lambda: cls._record_schema(targets, {}, []))
 
     @classmethod
     def _record_schema(
@@ -2746,7 +2839,8 @@ class FieldCodec(MroDispatch, Sealed):
     def value_schema(cls, annotation: object) -> dict[str, JsonValue]:
         """Derive external scalar/array choices from the same decode declarations."""
         annotation, representation = cls.representation(annotation)
-        return representation.schema_for(annotation)
+        return SchemaDefinitions.value(
+            (annotation, representation), lambda: representation.schema_for(annotation))
 
     @classmethod
     def project(cls, value: object, view: type[ViewExclusion], annotation: object = None) -> JsonValue:
