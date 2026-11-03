@@ -428,41 +428,33 @@ class RetiredViewsRead(ToolResult):
 
 @dataclass(frozen=True)
 class TargetActionsRead(ToolResult):
-    actions: tuple[PreparedTargetAction, ...]
+    actions: tuple[TargetAction, ...]
 
 
 @dataclass(frozen=True, kw_only=True)
 class CommsTargetActionsTool(ReadTool, ToolRequest[ToolCaller, TargetActionsRead]):
-    """A UI's thread or channel menu: the actions its selection offers, prepared on Core's
-    host, where their configuration lives."""
+    """A UI's thread or channel menu: the actions its selection offers. Opening one prepares
+    its fields through CommsPrepareTargetActionTool, so listing never runs Pi."""
 
     label = "Target actions"
-    description = ("The actions a thread or channel menu offers for these targets, each with its "
-                   "editable fields and the choices Core's configuration offers them.")
+    description = "The actions a thread or channel menu offers for these targets."
     project: Annotated[Checkout, *tool_field("Project the menu was opened in")]
     targets: Annotated[tuple[CommandTarget, ...], *tool_field("Selected threads or channels")]
     channel: Annotated[ChannelSelection, *tool_field("Surrounding channel")] = NoChannel()
 
     def apply(self, comms: Comms, caller: ToolCaller) -> TargetActionsRead:
-        actions = TargetActionCommand.target_catalog(
-            comms, TargetActionCommand.selected_targets(self.targets), self.channel, project=self.project)
-        return TargetActionsRead(asyncio.run(self.prepared(actions, ConfigOptions.for_route(comms.route))))
-
-    @staticmethod
-    async def prepared(
-        actions: tuple[TargetAction, ...], catalogs: ConfigOptions,
-    ) -> tuple[PreparedTargetAction, ...]:
-        return tuple([await action.prepared(catalogs) for action in actions])
+        return TargetActionsRead(TargetActionCommand.target_catalog(
+            comms, TargetActionCommand.selected_targets(self.targets), self.channel, project=self.project))
 
 
 @dataclass(frozen=True, kw_only=True)
 class CommsPrepareTargetActionTool(ReadTool, ToolRequest[ToolCaller, PreparedTargetAction]):
-    """An editor whose values changed asks Core which choices the edited action now offers."""
+    """Opening a menu action, or changing its values, asks Core which choices it offers."""
 
     label = "Prepare target action"
-    description = ("The choices Core's configuration offers an edited menu action's fields, "
-                   "such as the thinking levels of a newly chosen model.")
-    action: Annotated[TargetAction, *tool_field("The action with its edited values")]
+    description = ("The choices Core's configuration offers a menu action's fields, such as the "
+                   "thinking levels of its chosen model.")
+    action: Annotated[TargetAction, *tool_field("The action with its current values")]
 
     def apply(self, comms: Comms, caller: ToolCaller) -> PreparedTargetAction:
         return asyncio.run(self.action.prepared(ConfigOptions.for_route(comms.route)))

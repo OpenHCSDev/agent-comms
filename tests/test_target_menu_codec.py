@@ -96,8 +96,8 @@ def test_a_ui_lists_and_applies_a_menu_action_through_core(tmp_path):
     assert received == answer
 
 
-def test_an_edited_action_is_prepared_again_through_core(tmp_path):
-    """A dialog whose values changed asks Core for the choices the edited action offers."""
+def test_an_opened_action_is_prepared_through_core(tmp_path):
+    """Opening an action, or editing it, asks Core for the choices it offers."""
     from agent_comms.comms import wire
     from agent_comms.core_access import LocalCoreAccess
     from agent_comms.tools import CommsPrepareTargetActionTool, CommsTargetActionsTool
@@ -109,4 +109,4 @@ def test_an_edited_action_is_prepared_again_through_core(tmp_path):
         project=project, targets=CommandTarget.arguments(("#all",), project))).actions
     prepared = core.call(CommsPrepareTargetActionTool(action=action.edited({})))
     assert FieldCodec.decode(PreparedTargetAction, FieldCodec.encode(prepared)) == prepared
-    assert prepared.fields == action.fields
+    assert tuple(item.name for item in prepared.fields) == tuple(item.name for item in action.editable_fields)
