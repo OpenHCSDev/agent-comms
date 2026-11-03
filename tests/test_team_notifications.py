@@ -1020,23 +1020,21 @@ def test_retained_packet_without_display_witness_keeps_original_message_identity
     assert Message.from_wire(retained.to_wire()).message_id == message.message_id
 
 
-def test_a_stopped_session_stays_on_the_team_while_an_open_request_waits_on_it(notification_bus):
+def test_a_stopped_session_is_on_the_team_only_while_an_open_request_waits_on_it(
+    notification_bus,
+):
     """No lead: the team is every running colleague and every colleague an open request waits
-    on. A closed session keeps its board while its request is open, and leaves once it is done,
-    so the board never grows with every session the registry has held."""
+    on, so the board never grows with every session the registry has held. A stopped
+    colleague with nothing open is off the board; one of Tristan's asks puts it back on."""
     comms = notification_bus
-    lead = comms.registry.require("lead")
-    assert "lead" in {thread.name for thread in TeamHeartbeat.served(comms.registry, comms.goals)}
-    comms.registry.register(replace(lead, process_identity=NoProcess()))
-    stopped = comms.registry.require("lead")
-    open_requests = comms.goals.todos.open_requests(stopped.acting_identity)
-    assert open_requests
-    assert "lead" in {thread.name for thread in TeamHeartbeat.served(comms.registry, comms.goals)}
-    for request in open_requests:
-        comms.goals.todos.complete_request(
-            stopped.acting_identity, request.id, "The closed session's request is done.")
-    assert "lead" not in {thread.name
-                          for thread in TeamHeartbeat.served(comms.registry, comms.goals)}
+    worker = comms.registry.require("worker")
+    assert not worker.process_alive
+    assert worker.incarnation not in comms.goals.todos.requesters()
+    served = {thread.name for thread in TeamHeartbeat.served(comms.registry, comms.goals)}
+    assert "lead" in served and "worker" not in served
+    comms.goals.todos.add_request(worker.incarnation, "The stopped worker's own ask.")
+    assert "worker" in {thread.name
+                        for thread in TeamHeartbeat.served(comms.registry, comms.goals)}
 
 
 def test_a_closed_session_leaves_the_board_for_the_live_teammates(notification_bus):
