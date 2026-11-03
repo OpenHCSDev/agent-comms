@@ -314,7 +314,6 @@ class PiNativeBackend(
             return FailedCompaction(str(error))
         return next((PlacedCompaction(
             summary=summary,
-            first_kept=data.first_kept_entry_id.value_or(None),
             tokens_before=data.tokens_before,
         ) for summary in data.summary.present()), NothingToCompaction())
 

@@ -115,7 +115,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
         ),
         GoalChangedUpdate(NoGoal(), IdleGoalExecution()),
         CompactionChangedUpdate(CompactionStart()),
-        CompactionCommittedUpdate("summary", "first-kept"),
+        CompactionCommittedUpdate("summary"),
         TranscriptSnapshotUpdate(read.read(), read.identity),
         TranscriptDraftUpdate(read.identity, NoDraft()),
         InputDeliveryChangedUpdate(),

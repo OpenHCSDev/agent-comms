@@ -136,10 +136,9 @@ class CompactionOutcome(DeclaredFamily, DeclaredReply, TurnOutcome, affix="Compa
 
 @dataclass(frozen=True)
 class PlacedCompaction(CompactionOutcome):
-    """A summary now replaces the entries before ``first_kept``."""
+    """A summary now replaces the entries Pi's compaction entry names."""
 
     summary: str
-    first_kept: str | None
     tokens_before: PiCount
 
     def completion_event[T](self, end: Callable[..., T], abort: Callable[..., T],

@@ -41,8 +41,8 @@ def decode(wire):
 
 @pytest.mark.parametrize('result,expected', [
     ({'kind': 'nothing_to'}, NothingToCompaction()),
-    ({'kind': 'placed', 'summary': 'summary', 'first_kept': '7', 'tokens_before': 30},
-     PlacedCompaction('summary', '7', PiCount.from_wire(30))),
+    ({'kind': 'placed', 'summary': 'summary', 'tokens_before': 30},
+     PlacedCompaction('summary', PiCount.from_wire(30))),
     ({'kind': 'stale'}, StaleCompaction()),
     ({'kind': 'failed', 'message': 'failure'}, FailedCompaction('failure')),
 ])

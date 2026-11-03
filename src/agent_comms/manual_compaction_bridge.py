@@ -52,7 +52,7 @@ class CompactionReply(MroDispatch):
     def placed(self, outcome: PlacedCompaction) -> PromptResponse:
         return PromptResponse(
             stop_reason="end_turn",
-            field_meta=encode_updates(CompactionCommittedUpdate(outcome.summary, outcome.first_kept)),
+            field_meta=encode_updates(CompactionCommittedUpdate(outcome.summary)),
         )
 
     @handles(NothingToCompaction)
