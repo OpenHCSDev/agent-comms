@@ -1075,10 +1075,13 @@ async def test_a_ui_reads_one_conversation_page_the_same_locally_and_remotely(cl
     comms.registry.declare(Thread(CALLER.name, frozenset(), Checkout(comms.root)))
     sent = comms.messaging.send_user_message(
         ThreadTarget("worker"), "page through the boundary", worktree=Checkout(comms.root))
-    request = CommsConversationPageTool(conversation=ThreadTarget("worker"))
+    project = Checkout(comms.root)
+    request = CommsConversationPageTool(conversation=ThreadTarget("worker"), project=project)
 
     local = LocalCoreAccess(comms).call(request)
     assert sent.message_id in [message.message_id for message in local.messages]
+    # The UI's project, not the bus root, is the worktree the read proof records.
+    assert local.selection.identity.project_path == project.resolved().path
 
     envelope = ToolsCallMessage(jsonrpc="2.0", id=3,
                                 params=request.called())

@@ -244,8 +244,10 @@ class NamedTarget(CommandTarget):
     default_audience = MessageAudience.DIRECT
 
     @abstractmethod
-    def display_page(self, views: HistoryViews, bounds: PageBounds) -> MessagePage:
-        """This conversation's display page as the bus's human user reads it."""
+    def display_page(
+        self, views: HistoryViews, project: Checkout, bounds: PageBounds
+    ) -> MessagePage:
+        """This conversation's display page as the human user of `project` reads it."""
 
     @classmethod
     def address(cls, name: str) -> str:
@@ -370,8 +372,10 @@ class ThreadTarget(NamedTarget):
     def automatic_reply_targets(self, sender: str) -> tuple[str, ...]:
         return (self.reply_target(sender),)
 
-    def display_page(self, views: HistoryViews, bounds: PageBounds) -> MessagePage:
-        return views.dm_display_page(self, worktree=Checkout(views.root), bounds=bounds)
+    def display_page(
+        self, views: HistoryViews, project: Checkout, bounds: PageBounds
+    ) -> MessagePage:
+        return views.dm_display_page(self, worktree=project, bounds=bounds)
 
     sigil = "@"
     route: ClassVar[ReplyRoute] = SenderReply()
@@ -503,9 +507,11 @@ class IncarnationThreadTarget(ThreadTarget):
 
 
 class ChannelTarget(NamedTarget):
-    def display_page(self, views: HistoryViews, bounds: PageBounds) -> MessagePage:
+    def display_page(
+        self, views: HistoryViews, project: Checkout, bounds: PageBounds
+    ) -> MessagePage:
         return views.channel_display_page(
-            self.name, viewer=views.display_viewer(Checkout(views.root)), bounds=bounds)
+            self.name, viewer=views.display_viewer(project), bounds=bounds)
 
     needs_channel_state = True
     batchable = True

@@ -458,12 +458,13 @@ class CommsConversationPageTool(ReadTool, ToolRequest):
     label = "Conversation page"
     description = "Read one bounded display page of a channel or a DM as the owner's UI shows it."
     conversation: Annotated[NamedTarget, *tool_field("The channel or the DM's thread")]
+    project: Annotated[Checkout, *tool_field("The project whose human user reads the page")]
     bounds: Annotated[PageBounds, *tool_field("Which page: direction, size; default newest")] = (
         NEWEST_PAGE
     )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> MessagePage:
-        return self.conversation.display_page(comms.views, self.bounds)
+        return self.conversation.display_page(comms.views, self.project, self.bounds)
 
 
 @dataclass(frozen=True, kw_only=True)
