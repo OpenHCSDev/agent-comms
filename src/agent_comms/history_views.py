@@ -31,7 +31,7 @@ from .sent_message import AssignedSourceIdentity
 from .view_unread import transcript_read_state
 
 if TYPE_CHECKING:
-    from .historical_views import HistoricalThread, HistorySource
+    from .historical_views import HistoricalSenders, HistoricalThread, HistorySource
     from .registry_provenance import DeletedThread
 from agent_comms.thread_presentation import NoThreadPresentation, ThreadPresentation
 
@@ -244,8 +244,8 @@ class HistoryViews:
             self.channels.catalog.restore_missing(incoming, activity)
         return source
 
-    def historical_threads(self, name: str | None = None) -> tuple[HistoricalThread, ...]:
-        return self.bus.history.threads(name)
+    def historical_threads(self, senders: HistoricalSenders) -> tuple[HistoricalThread, ...]:
+        return self.bus.history.threads(senders)
 
     def dm_display_page(
         self, peer: ThreadTarget, *, worktree: Checkout, bounds: PageBounds = NEWEST_PAGE

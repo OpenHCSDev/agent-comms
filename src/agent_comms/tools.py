@@ -96,6 +96,7 @@ from .context_store import (
     LATEST_CONTEXT, CapturedContext, ContextManifestCursor, ContextManifestPage, ContextManifestReference,
 )
 from .importing import ImportedSessionMetadata, ThreadImported
+from .historical_views import AllHistoricalSenders, HistoricalSenders, HistoricalThread
 from .cli_bridges.history import ExpectedSession, OfflineHistory
 from .harness_install import Harness
 from .thread_management import ImportDirectory
@@ -442,6 +443,23 @@ class RetiredViewsRead(ToolResult):
     """Which of a UI's open views no longer have a source, as Core decides."""
 
     retired: RetiredViews
+
+
+@dataclass(frozen=True)
+class HistoricalThreadsRead(ToolResult):
+    threads: tuple[HistoricalThread, ...]
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsHistoricalThreadsTool(ReadTool, ToolRequest[ToolCaller, HistoricalThreadsRead]):
+    """The preserved identities a UI's saved-sessions view lists, for every sender or one."""
+
+    label = "Historical threads"
+    description = "Preserved thread identities from attached history sources, for every sender or one name."
+    senders: Annotated[HistoricalSenders, *tool_field("Every sender, or one name")] = AllHistoricalSenders()
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> HistoricalThreadsRead:
+        return HistoricalThreadsRead(comms.views.historical_threads(self.senders))
 
 
 @dataclass(frozen=True, kw_only=True)

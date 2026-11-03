@@ -206,3 +206,18 @@ def test_a_ui_reads_a_threads_context_through_core(tmp_path):
     request = CommsOwnerRequestTool(owner=read.entry.thread.incarnation,
                                     request=runtime.ContextCoreRuntimeRequest(thread="worker"))
     assert FieldCodec.decode(CommsOwnerRequestTool, FieldCodec.encode(request)) == request
+
+
+def test_a_ui_lists_historical_identities_through_core(tmp_path):
+    """Every sender is null and one sender is its name, so neither needs a None flag."""
+    from agent_comms.core_access import LocalCoreAccess
+    from agent_comms.historical_views import AllHistoricalSenders, HistoricalSenders, NamedHistoricalSender
+    from agent_comms.nominal.field_codec import FieldCodec
+    from agent_comms.tools import CommsHistoricalThreadsTool, HistoricalThreadsRead
+
+    assert FieldCodec.encode(AllHistoricalSenders(), HistoricalSenders) is None
+    assert FieldCodec.decode(HistoricalSenders, "alice") == NamedHistoricalSender("alice")
+    comms = wire(tmp_path / "wire")
+    for senders in (AllHistoricalSenders(), NamedHistoricalSender("alice")):
+        read = LocalCoreAccess(comms).call(CommsHistoricalThreadsTool(senders=senders))
+        assert FieldCodec.decode(HistoricalThreadsRead, FieldCodec.encode(read)) == read
