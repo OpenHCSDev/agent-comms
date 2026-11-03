@@ -297,7 +297,7 @@ def test_a_recorded_verdict_drops_its_board_line_on_the_next_tool_call(
     claim.path.parent.mkdir(parents=True)
     record = WatchRecord("lead", str(comms.root), ("watch",), tmp_path / "inbox")
     worker = RecordedThreadIncarnation("worker", 1.0)
-    rules = (*OrderlessUnreviewedHead.scan_reviews(comms.goals, "lead", ProgressRead(())),
+    rules = (*OrderlessUnreviewedHead.scan_reviews(comms.goals, ProgressRead(())),
              ReviewTimerUp("P1", worker, "order-P1", RecordedEventTime(1000.0)),
              SpinningTeammate("P2", worker, 92))
     beat(comms, rules)

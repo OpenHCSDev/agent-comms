@@ -182,10 +182,8 @@ def test_muted_changed_quiet_display_publishes_once_when_enabled(notification_bu
 def test_real_heartbeat_dispatches_watch_and_plan_roles_separately(notification_bus: Comms) -> None:
     heartbeat = TeamHeartbeat()
     prepared = heartbeat.prepare(notification_bus)
-    lead = notification_bus.registry.require("lead")
-    inputs = prepared[lead]
-    observed = heartbeat.observe(notification_bus, prepared)
-    item = next(item for item in observed if item.thread == lead)
+    inputs, = prepared
+    item, = heartbeat.observe(notification_bus, prepared)
     assert item.frame.plan is inputs.plan
     assert item.frame.pulls is inputs.pulls
     assert (item.frame.live, item.frame.orphaned) == (inputs.live, inputs.orphaned)
@@ -800,7 +798,7 @@ def test_failed_rule_scan_raises_to_the_heartbeat(notification_bus, request):
     @dataclass(frozen=True)
     class FailedScan(UndatedStandingRule):
         @classmethod
-        def scan_observed(cls, comms, commander, observed, frame):
+        def scan_observed(cls, comms, observed, frame):
             raise IndexError("P729 isolated scan failure")
 
         def line(self):
@@ -1019,14 +1017,18 @@ def test_retained_packet_without_display_witness_keeps_original_message_identity
     assert Message.from_wire(retained.to_wire()).message_id == message.message_id
 
 
-def test_a_teammate_whose_session_closed_keeps_its_requests_but_gets_no_board(notification_bus):
-    """No lead: the board goes to the live teammates. A closed session keeps its open requests
-    and simply stops being served until it is live again."""
+def test_a_closed_session_stays_on_the_team_and_an_archived_thread_leaves_it(notification_bus):
+    """No lead: the team is every registered colleague Core may address. A closed session keeps
+    its board and its open requests; an archived thread gets no board."""
+    from agent_comms.thread_status import ArchivedThreadStatus
+
     comms = notification_bus
     lead = comms.registry.require("lead")
     assert "lead" in {thread.name for thread in TeamHeartbeat.served(comms.registry)}
     comms.registry.register(replace(lead, process_identity=NoProcess()))
     assert comms.goals.todos.open_requests(lead.acting_identity)
+    assert "lead" in {thread.name for thread in TeamHeartbeat.served(comms.registry)}
+    comms.registry.register(comms.registry.require("lead"), ArchivedThreadStatus())
     assert "lead" not in {thread.name for thread in TeamHeartbeat.served(comms.registry)}
 
 
@@ -1040,7 +1042,7 @@ def test_a_closed_session_leaves_the_board_for_the_live_teammates(notification_b
                                     process_identity=NoProcess()))
     lead = comms.registry.require("lead")
     assert not lead.process_alive
-    assert tuple(thread.name for thread in TeamHeartbeat.served(comms.registry)) == ("worker",)
+    assert {thread.name for thread in TeamHeartbeat.served(comms.registry)} >= {"lead", "worker"}
     beat(comms, (ServicePassFailing(watch="following-rule", since=time.time(),
                                     error="independent source", failed_at=time.time()),))
     worker = comms.registry.require("worker").incarnation

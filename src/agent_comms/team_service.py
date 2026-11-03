@@ -63,9 +63,12 @@ class TeamService:
 
     @classmethod
     def teammates(cls, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
-        """The team: every live independent colleague. There is no lead; the board, its
-        warnings and its pauses belong to each of them alike."""
-        return cls.live(snapshot.commander_project.commanders(snapshot))
+        """The team: every registered independent colleague Core may address. There is no
+        lead; the board, its warnings and its pauses belong to each of them alike. A stopped
+        session stays a teammate (its owed answers and its frame stay on the board); an
+        archived or deleting thread does not (ThreadStatus.publish_heartbeat owns that)."""
+        return tuple(thread for thread in snapshot.commander_project.commanders(snapshot)
+                     if snapshot.status(thread.name).publish_heartbeat(lambda: True, False))
 
     @classmethod
     def forks(cls, snapshot: RegistrySnapshot, teammates: Iterable[Thread]) -> tuple[Thread, ...]:
@@ -104,6 +107,5 @@ class TeamService:
     @classmethod
     def duty(cls, registry: Registration, goals: Goals) -> HeartbeatDuty:
         """Owed while any live teammate holds an open owner request; the pass acts only then."""
-        owed = any(goals.todos.open_requests(thread.acting_identity, limit=1, descending=False)
-                   for thread in cls.teammates(registry.snapshot()))
+        owed = any(cls.requested_by(thread, goals) for thread in cls.teammates(registry.snapshot()))
         return OwedHeartbeat() if owed else UnownedHeartbeat()

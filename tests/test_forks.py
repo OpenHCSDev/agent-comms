@@ -336,7 +336,7 @@ def test_unjudged_reminder_names_each_order_with_edits(fork_bus):
     comms, source, _ = fork_bus
     record_edits(comms, source, Unjudged.limit + 1)
     frame = capture_frame(comms, ProgressRead())
-    assert Unjudged.reason(comms, "lead", frame) == (
+    assert Unjudged.reason(comms, frame) == (
         f"{Unjudged.limit + 1} edits since each order's last head verdict: "
         f"retained P40 {Unjudged.limit + 1}")
 

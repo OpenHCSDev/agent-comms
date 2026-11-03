@@ -102,7 +102,7 @@ def assert_review_preconditions(rule, comms, request):
 def test_held_board_commands_take_the_same_verdicts_as_the_order(board_review, claim_it):
     comms, request, claim, link = board_review
     todo = claim() if claim_it else link()
-    rules = LinkedUnreviewedHead.scan_reviews(comms.goals, "lead", ProgressRead(()))
+    rules = LinkedUnreviewedHead.scan_reviews(comms.goals, ProgressRead(()))
     rule, = rules
     assert rule.todo == todo
     assert judge.PromoteVerb not in rule.clearing_actions()
@@ -163,7 +163,7 @@ def test_shared_head_keeps_each_order_on_its_own_board_and_timer_line(board_revi
     comms, request, claim, link = board_review
     first = link()
     second = claim("P1")
-    rules = LinkedUnreviewedHead.scan_reviews(comms.goals, "lead", ProgressRead(()))
+    rules = LinkedUnreviewedHead.scan_reviews(comms.goals, ProgressRead(()))
     assert {rule.todo.id for rule in rules} == {first.id, second.id}
     for rule in rules:
         verdicts = assert_review_preconditions(rule, comms, request)
@@ -181,7 +181,7 @@ def test_shared_head_keeps_each_order_on_its_own_board_and_timer_line(board_revi
 
 def test_orderless_board_commands_do_not_invent_a_problem(board_review):
     comms, request, _, _ = board_review
-    rule, = OrderlessUnreviewedHead.scan_reviews(comms.goals, "lead", ProgressRead(()))
+    rule, = OrderlessUnreviewedHead.scan_reviews(comms.goals, ProgressRead(()))
     assert judge.PromoteVerb not in rule.clearing_actions()
     assert "problem" not in rule.command_values()
     assert "--problem" not in rule.clearing_commands()
@@ -205,7 +205,7 @@ def test_claim_link_survives_sendbacks_and_explicit_release_without_editing_goal
     assert released.current_holder.current_assignments() == ()
     assert released.order.holds_head(request)
     assert comms.goals.todos.resolve_order(released.creator_identity, previous.owner, released.id) == released
-    rule, = LinkedUnreviewedHead.scan_reviews(comms.goals, "lead", ProgressRead(()))
+    rule, = LinkedUnreviewedHead.scan_reviews(comms.goals, ProgressRead(()))
     assert UnderReviewHeadVerdict in assert_review_preconditions(rule, comms, request)
     # A former holder can already be doing different work. A head review must not edit that goal.
     other = comms.goals.todos.get("P1")

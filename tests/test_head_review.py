@@ -983,7 +983,7 @@ def test_review_ok_follows_an_unchanged_change(head_bus, reviewed_source):
     pulls.carry_reviews(comms.goals, request.repo)
     assert pulls.open(request.repo)[0].has_head_review
     assert StoredHeadReview.head_reviews(comms.goals.todos, moved)[0].verdict == CarriedHeadVerdict(ACCEPTED, request)
-    assert not OrderlessUnreviewedHead.scan_reviews(comms.goals, "lead", pulls)
+    assert not OrderlessUnreviewedHead.scan_reviews(comms.goals, pulls)
     carried_posts = review_posts(github, merged)
     assert len(carried_posts) == 2 and "state=pending" in carried_posts[0]
     assert f"description=carried from {request.head[:9]}: same change" in carried_posts[1]
@@ -1047,15 +1047,13 @@ def test_overdue_linked_head_stays_visible_without_refusing_new_orders(head_bus)
         repo=todo.repo, text="Repair the next owner", order=todo.order.checked(),
         review_at=RecordedEventTime(time.time() + 3600),
     )
-    assert [rule.request for rule in OrderlessUnreviewedHead.scan_reviews(
-        comms.goals, "lead", ProgressRead(()))] == [request]
+    assert [rule.request for rule in OrderlessUnreviewedHead.scan_reviews(comms.goals, ProgressRead(()))] == [request]
     comms.goals.update_goal("outsider", action)
     held = todo.held()
     RecordPullRequest(todo.revision, held.owner_identity,
                       PullRequestLink(request.repo, request.pr), held.generation).record(comms.goals, todo.id)
     held_orders = comms.goals.todos.held_orders()
-    assert [rule.request for rule in LinkedUnreviewedHead.scan_reviews(
-        comms.goals, "lead", ProgressRead(held_orders))] == [request]
+    assert [rule.request for rule in LinkedUnreviewedHead.scan_reviews(comms.goals, ProgressRead(held_orders))] == [request]
     comms.goals.update_goal("outsider", replace(action, problem="P4"))
     assert comms.goals.todos.get("P4").held().owner == "outsider"
 
@@ -1100,8 +1098,7 @@ def test_a_reviewing_mark_owes_the_judge_line_until_a_decision(head_bus):
     subject, since = HeadSubject(request), time.time() - 1
 
     def owed() -> list[PullRequestHead]:
-        return [rule.request for rule in OrderlessUnreviewedHead.scan_reviews(
-            comms.goals, "lead", ProgressRead(()))]
+        return [rule.request for rule in OrderlessUnreviewedHead.scan_reviews(comms.goals, ProgressRead(()))]
 
     invoke(comms, request, UnderReviewHeadVerdict())
     assert owed() == [request]
