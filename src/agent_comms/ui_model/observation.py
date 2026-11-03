@@ -1347,7 +1347,7 @@ class ObservationFailed(TaggedRecordMember, ServiceResult):
 
     async def received(self, process: ObservationProcess, observed: Callable[[Observed], None]) -> None:
         await Coordination.run_worker(partial(process.peer.join, 2))
-        raise process.ended(self.error)
+        raise process.ended(ServiceReported(self.error))
 
 
 class ObserverStatus(ABC):
@@ -1564,41 +1564,54 @@ class RelayConnection(Connection):
 
 async def relay_frames(connection: Connection, peer: WebSocketFrames) -> str:
     """Carry frames both ways between a local connection and a WebSocket until either side
-    ends, then end both, and say which side ended. Socket reads and writes run in worker
-    threads, so a peer that stops reading never blocks this loop; closing the connection
-    wakes a thread blocked in either."""
+    ends, then close the WebSocket, stop both directions and say which side ended first.
+
+    The local connection stays open: its owner records the returned reason and then closes
+    it, which also wakes a worker thread still blocked on it. Socket reads and writes run in
+    worker threads, so a peer that stops reading never blocks this loop. A direction that
+    fails in any other way raises its own error here."""
     from aiohttp import WSMsgType
 
-    async def outward() -> str:
+    ended: asyncio.Future[str] = asyncio.get_running_loop().create_future()
+
+    def end(reason: str) -> None:
+        """The first side to end names the relay's end; a later one only follows it."""
+        if not ended.done():
+            ended.set_result(reason)
+
+    async def outward() -> None:
         try:
             while True:
                 await peer.send_bytes(await asyncio.to_thread(connection.recv_bytes))
         except (EOFError, OSError) as error:
             # The local socket's own end-of-stream: this is how its side ends.
-            return f"the local side ended ({type(error).__name__})"
+            end(f"the local side ended ({type(error).__name__})")
 
-    async def inward() -> str:
+    async def inward() -> None:
         try:
             async for message in peer:
                 if message.type is not WSMsgType.BINARY:
-                    return f"the peer sent a {message.type.name} frame"
+                    end(f"the peer sent a {message.type.name} frame")
+                    return
                 await asyncio.to_thread(connection.send_bytes, message.data)
         except OSError as error:
             # The local socket's write deadline: the local side stopped reading.
-            return f"the local side stopped reading ({type(error).__name__})"
-        return "the peer closed its socket"
+            end(f"the local side stopped reading ({type(error).__name__})")
+            return
+        end("the peer closed its socket")
 
     directions = (asyncio.create_task(outward()), asyncio.create_task(inward()))
     try:
-        finished, _ = await asyncio.wait(directions, return_when=asyncio.FIRST_COMPLETED)
+        await asyncio.wait((ended, *directions), return_when=asyncio.FIRST_COMPLETED)
     finally:
-        # Close before any await: a cancelled caller may not get past one.
-        connection.close()
         for direction in directions:
             direction.cancel()
         await peer.close()
-        await asyncio.gather(*directions, return_exceptions=True)
-    return next(iter(finished)).result()
+        outcomes = await asyncio.gather(*directions, return_exceptions=True)
+    for outcome in outcomes:
+        if isinstance(outcome, Exception):
+            raise outcome
+    return ended.result()
 
 
 class EncodedConnection(Connection):
@@ -1656,6 +1669,42 @@ class ObservationSource(ABC):
     def observation_peer(self) -> ObservationPeer: ...
 
 
+class ObserverEnd(ABC):
+    """How a UI learned its observation ended. The peer that served it says what that means:
+    a local process reports its exit, a connector its relay's recorded end."""
+
+    @abstractmethod
+    def reported_by(self, peer: ObservationPeer) -> ObserverDied: ...
+
+
+@dataclass(frozen=True)
+class ServiceReported(ObserverEnd):
+    """The service sent its own traceback before exiting: that is the cause."""
+
+    traceback: str
+
+    def reported_by(self, peer: ObservationPeer) -> ObserverDied:
+        return peer.service_failed(self.traceback)
+
+
+@dataclass(frozen=True)
+class ConnectionClosed(ObserverEnd):
+    """The connection reached its end without a report from the service."""
+
+    def reported_by(self, peer: ObservationPeer) -> ObserverDied:
+        return peer.connection_closed()
+
+
+@dataclass(frozen=True)
+class ConnectionBroken(ObserverEnd):
+    """A request found the connection already gone."""
+
+    error: str
+
+    def reported_by(self, peer: ObservationPeer) -> ObserverDied:
+        return peer.connection_broken(self.error)
+
+
 class ObservationPeer(ABC):
     """Who serves a UI's observation: a local process, or a Core across the connector.
     It owns the connection the UI reads, how the service is joined, and how its end reads."""
@@ -1663,10 +1712,25 @@ class ObservationPeer(ABC):
     connection: Connection
 
     @abstractmethod
-    def join(self, timeout: float | None = None) -> None: ...
+    def join(self, timeout: float | None = None) -> None:
+        """Wait for the service to end; never ends it."""
+
+    def retire(self) -> None:
+        """End this observation's service and wait for it."""
+        self.join()
+
+    def died(self, end: ObserverEnd) -> ObserverDied:
+        return end.reported_by(self)
 
     @abstractmethod
-    def died(self, error: str | None) -> ObserverDied: ...
+    def service_failed(self, traceback: str) -> ObserverDied: ...
+
+    @abstractmethod
+    def connection_closed(self) -> ObserverDied: ...
+
+    def connection_broken(self, error: str) -> ObserverDied:
+        """A failed request shows only that the connection is gone: by default, its closing."""
+        return self.connection_closed()
 
 
 class LocalObservationPeer(ObservationPeer):
@@ -1686,7 +1750,13 @@ class LocalObservationPeer(ObservationPeer):
     def join(self, timeout: float | None = None) -> None:
         self.process.join(timeout)
 
-    def died(self, error: str | None) -> ObserverDied:
+    def service_failed(self, traceback: str) -> ObserverDied:
+        return ObserverDied(self.process.pid, self.process.exitcode, traceback)
+
+    def connection_closed(self) -> ObserverDied:
+        return ObserverDied(self.process.pid, self.process.exitcode, None)
+
+    def connection_broken(self, error: str) -> ObserverDied:
         return ObserverDied(self.process.pid, self.process.exitcode, error)
 
 
@@ -1708,7 +1778,7 @@ class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
         self.status: ObserverStatus = NoObserverFailure()
         self.peer = source.observation_peer()
         self.connection = self.peer.connection
-        self._resources.callback(self.peer.join)
+        self._resources.callback(self.peer.retire)
         self._resources.enter_context(self.connection)
         self._reader = AsyncExitStack()
 
@@ -1760,17 +1830,17 @@ class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
         try:
             self.connection.send(request)
         except BrokenPipeError as error:
-            died = self.ended(str(error))
+            died = self.ended(ConnectionBroken(str(error)))
         else:
             return
         # The pickler's failed-send traceback retains an exported BytesIO
         # view. ObserverDied carries the cause text, not that pipe buffer.
         raise died
 
-    def ended(self, error: str | None) -> ObserverDied:
+    def ended(self, end: ObserverEnd) -> ObserverDied:
         """The service ended (``error``: the traceback it sent): fail its awaited reads and say how it exited."""
         died = self.status.failure(
-            partial(self.peer.died, error)
+            partial(self.peer.died, end)
         )
         self.status = died
         self.abandon_reads(died)
@@ -1839,7 +1909,7 @@ class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
                 await result.received(self, observed)
         except (EOFError, ConnectionResetError):
             await Coordination.run_worker(partial(self.peer.join, 2))
-            failed(self.ended(None))
+            failed(self.ended(ConnectionClosed()))
         except ObserverDied as error:
             failed(error)
 

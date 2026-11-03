@@ -11,6 +11,7 @@ from agent_comms.comms import Comms
 from agent_comms.connector import Connector
 from agent_comms.connector_store import ConnectorStore, UiReadAccess
 from agent_comms.remote_core import ConnectorClient
+from agent_comms.ui_model.observation import ConnectionClosed
 from agent_comms.repo import Checkout
 from agent_comms.ui_model.observation import (
     ObservationProcess,
@@ -78,7 +79,24 @@ def test_retiring_a_peer_ends_its_relay_while_the_connector_is_still_connecting(
         with accepted:
             started = time.monotonic()
             peer.connection.close()
-            peer.join(5)
+            peer.retire()
             assert not peer.thread.is_alive()
             assert time.monotonic() - started < 5
-            assert peer.died(None).error == "the UI retired the observation"
+            assert ConnectionClosed().reported_by(peer).error == "the UI retired the observation"
+
+
+def test_an_ended_observation_reports_its_own_cause() -> None:
+    """The service's traceback is reported as itself; a plain close reports the relay's recorded
+    end, and waiting on the relay never rewrites that end as a retirement."""
+    from agent_comms.ui_model.observation import ServiceReported
+
+    peer = TestConnectorSource(Endpoint(URL("http://127.0.0.1:9/mcp")), Credential("token")).observation_peer()
+    try:
+        peer.join(10)
+        assert not peer.thread.is_alive()
+        assert "retired" not in peer.ending
+        assert "Traceback: the service failed" in str(ServiceReported("Traceback: the service failed").reported_by(peer))
+        closed = str(ConnectionClosed().reported_by(peer))
+        assert peer.ending in closed and "Traceback" not in closed
+    finally:
+        peer.retire()

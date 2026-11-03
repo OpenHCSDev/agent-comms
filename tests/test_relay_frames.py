@@ -15,7 +15,11 @@ def relaying(local: RelayConnection) -> TestServer:
     async def observe(request: web.Request) -> web.WebSocketResponse:
         peer = web.WebSocketResponse()
         await peer.prepare(request)
-        await relay_frames(local, peer)
+        try:
+            await relay_frames(local, peer)
+        finally:
+            # The relay's owner closes the local side once it has the reason, as both owners do.
+            local.close()
         return peer
 
     application = web.Application()

@@ -891,10 +891,12 @@ class ObservationRelay:
         self.connection = RelayConnection(relay.detach())
 
     async def carry(self, viewer: web.WebSocketResponse) -> None:
-        """Relay frames both ways until either side ends, then retire the process."""
+        """Relay frames both ways until either side ends, then close the service's connection,
+        which ends it, and retire the process."""
         try:
             await relay_frames(self.connection, viewer)
         finally:
+            self.connection.close()
             await asyncio.to_thread(self.retire)
 
     exit_seconds: ClassVar[float] = 5
