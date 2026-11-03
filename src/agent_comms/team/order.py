@@ -899,8 +899,8 @@ class DirectiveVerb(TeamVerb):
         the replies that answer all of them at once, so one round trip clears the gate.
         """
         now = time.time()
-        # Debt and reply receipts follow the exact represented owners, not every request
-        # the actor may maintain.
+        # Debts and replies follow the exact represented owners, not every request the
+        # actor may maintain.
         owers = ctx.actor_identity.represented_owners
         opened = tuple(rule for owner in owers for rule in OwedAnswer.opened(ctx.comms, owner))
         owed = frozenset(rule.message.message_id for rule in opened)

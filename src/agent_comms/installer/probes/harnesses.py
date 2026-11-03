@@ -40,7 +40,8 @@ class HarnessInstallation:
     repos: Annotated[
         RepoChoice,
         Argument(
-            flags=("--repos",), options={"help": "Found the team with these repositories, or replace its recorded ones"}
+            flags=("--repos",),
+            options={"help": "Found the team with these repositories or replace them"},
         ),
     ] = KeptRepos()
 

@@ -632,8 +632,8 @@ class RegisteredTeamProject(TeamProject):
 @dataclass
 class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
     version: Annotated[
-        Literal[1], SlicePolicy(WholeDocumentValue), WireRequired()
-    ] = 1
+        Literal[2], SlicePolicy(WholeDocumentValue), WireRequired()
+    ] = 2
     purpose: Annotated[RootPurpose, SlicePolicy(WholeDocumentValue)] = field(
         default_factory=WorkingRootPurpose
     )

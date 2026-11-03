@@ -2,8 +2,9 @@
 
 The registry kept the project under ``commander_project`` with a ``commander`` incarnation:
 one thread recorded as the team's lead. The project is now ``team_project`` with only its
-repositories, and the decoder refuses the retired key and field, so this step moves the
-project to its new key and drops the lead. Delete this step after the live installation.
+repositories, and the version-2 decoder refuses version 1, so this step stamps every
+registry version 2, moving a stored project to its new key without its lead. Delete this
+step after the live installation.
 """
 
 from __future__ import annotations
@@ -33,11 +34,14 @@ class TeamProjectLead(Carry):
             return Carried(0)
         document = FieldCodec.decode(
             dict[str, JsonValue], FieldCodec.parse(path.read_text(encoding="utf-8")))
-        if self.retired_key not in document:
+        version = FieldCodec.record_key(RegistryDocument, "version")
+        if document[version] == RegistryDocument.version:
             return Carried(0)
-        project = FieldCodec.decode(dict[str, JsonValue], document.pop(self.retired_key))
-        project.pop(self.retired_field, None)  # a bus without a team stored no lead
-        document[FieldCodec.record_key(RegistryDocument, "team_project")] = project
+        if self.retired_key in document:  # a bus without a team stored no project
+            project = FieldCodec.decode(dict[str, JsonValue], document.pop(self.retired_key))
+            project.pop(self.retired_field)
+            document[FieldCodec.record_key(RegistryDocument, "team_project")] = project
+        document[version] = RegistryDocument.version
         if apply:
             MaintenanceBarrier(path).read().require_held_by(
                 MaintenanceHolder.current(), "Drop the stored team lead")
