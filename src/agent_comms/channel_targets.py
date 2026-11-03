@@ -45,8 +45,9 @@ if TYPE_CHECKING:
     from .threads import Thread
 
 
-class ChannelSelection(ABC):
-    """Decoded menu context; container shapes stop at this input boundary."""
+class ChannelSelection(SubclassUnion, affix="Channel"):
+    """Decoded menu context; its members cross a boundary by shape: none is null, one
+    surrounding channel is its name, and per-target channels are their mapping."""
     needs_catalog: ClassVar[bool] = True
 
     @abstractmethod
@@ -56,7 +57,7 @@ class ChannelSelection(ABC):
         """Ordinary thread actions may ignore one surrounding channel."""
 
 
-class SurroundingChannel(SubclassUnion, ChannelSelection, affix="Channel"):
+class SurroundingChannel(ChannelSelection, declared_name=None):
     """The one channel a command line names around its targets, or none: null or the name."""
 
     def names_for_binding(self) -> tuple[str, ...]:
@@ -90,7 +91,7 @@ class OneChannel(SingleFieldValue, SurroundingChannel):
 
 
 @dataclass(frozen=True)
-class PerTargetChannels(ChannelSelection):
+class PerTargetChannels(SingleFieldValue, ChannelSelection):
     mapping: dict[str, tuple[str, ...]]
 
     def channels_for(self, target: str) -> tuple[SurroundingChannel, ...]:

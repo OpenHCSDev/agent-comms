@@ -55,6 +55,14 @@ class TargetField:
     async def prepare(self, catalogs: ConfigOptions, selection: object) -> TargetField:
         return self
 
+    def offered(self) -> tuple[CatalogChoice, ...]:
+        """The choices preparation found; an unrestricted field offers none."""
+        return ()
+
+    def with_offered(self, options: tuple[CatalogChoice, ...]) -> TargetField:
+        """A field prepared elsewhere keeps the choices it was offered there."""
+        return self
+
     @property
     def required(self) -> bool:
         return self.plan.constructor_required
@@ -78,6 +86,12 @@ class ChoiceTargetField(TargetField):
     @property
     def choices(self) -> tuple[tuple[str, str], ...]:
         return tuple((choice.name, choice.editor_value) for choice in self.options)
+
+    def offered(self) -> tuple[CatalogChoice, ...]:
+        return self.options
+
+    def with_offered(self, options: tuple[CatalogChoice, ...]) -> ChoiceTargetField:
+        return replace(self, options=options)
 
     async def prepare(self, catalogs: ConfigOptions,
                       selection: object) -> ChoiceTargetField:

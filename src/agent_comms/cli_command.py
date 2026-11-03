@@ -33,10 +33,12 @@ from agent_comms.cli_failures import CLI_FAILURES
 from agent_comms.cli_result import CliResult, ResultShower
 from agent_comms.command import Command
 from agent_comms.comms import Comms
-from agent_comms.config_options import ConfigOptions
+from agent_comms.config_options import CatalogChoice, ConfigOptions
 from agent_comms.nominal.declared_family import ModuleMembers
 from agent_comms.declared_verb import DeclaredCommand
-from agent_comms.nominal.field_codec import FieldCodec, FieldPlan, RecordMember, TargetBound, WireValue
+from agent_comms.nominal.field_codec import (
+    FieldCodec, FieldPlan, RecordMember, SubclassUnion, TaggedRecordMember, TargetBound, WireValue,
+)
 from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, StartedOwner
 from agent_comms.lifecycle_capability import LifecycleCapability, Successful
 from agent_comms.registry_document import RegistrySnapshot
@@ -302,6 +304,12 @@ class TargetAction:
     async def prepare_fields(self) -> tuple[TargetField, ...]:
         return await self.bound[0].prepare_fields()
 
+    async def prepared(self) -> PreparedTargetAction:
+        """Core's host prepares the fields; a remote editor receives what it offered."""
+        fields = await self.prepare_fields()
+        return PreparedTargetAction(self.bound, self.targets, self.declaration, self.channels,
+                                    offered=tuple(item.offered() for item in fields))
+
     @property
     def label(self) -> str:
         return self.declaration.help
@@ -330,6 +338,17 @@ class TargetAction:
                     'required': [item.name for item in self.editable_fields if item.required]},
                 'confirmation': self.confirmation, 'targets': list(self.targets),
                 'bound_count': len(self.bound)}
+
+
+@dataclass(frozen=True)
+class PreparedTargetAction(TargetAction):
+    """An action whose fields were prepared where its configuration lives: one tuple of
+    offered choices per editable field, in their declared order."""
+    offered: tuple[tuple[CatalogChoice, ...], ...] = field(default=(), kw_only=True)
+
+    async def prepare_fields(self) -> tuple[TargetField, ...]:
+        return tuple(item.with_offered(options)
+                     for item, options in zip(self.editable_fields, self.offered, strict=True))
 
 
 class TargetOutcome(LifecycleCapability, ABC):
@@ -426,9 +445,14 @@ class CommandSelectionChanged(ToolRefusedError):
 
 
 @dataclass(frozen=True)
-class TargetSelection(ABC):
-    """The targets one execution runs on; each kind owns how its result comes back."""
+class TargetSelection(SubclassUnion, affix="Target"):
+    """The targets one execution runs on; each kind owns how its result comes back. A
+    remote UI sends it to Core, so each record carries its kind."""
     targets: tuple[CommandTarget, ...]
+
+    @classmethod
+    def decodes_tagged_records(cls) -> bool:
+        return True
 
     def __post_init__(self) -> None:
         if not self.targets:
@@ -449,7 +473,8 @@ class TargetSelection(ABC):
         """Bind, authorize and apply the declaration on this selection."""
 
 
-class OneTarget(TargetSelection):
+@dataclass(frozen=True)
+class OneTarget(TaggedRecordMember, TargetSelection):
     """A single target: resolve errors raise and the bound command's own result returns."""
 
     def __post_init__(self) -> None:
@@ -484,7 +509,8 @@ class TargetBatchSchedule:
     together: dict[type[AppliedTogether], list[tuple[int, CommandTarget, AppliedTogether]]]
 
 
-class TargetBatch(TargetSelection):
+@dataclass(frozen=True)
+class TargetBatch(TaggedRecordMember, TargetSelection):
     """Every other selection: each target's failure is collected and a TargetBatchResult returns."""
 
     def command_members(self, family: type[CliCommand]) -> tuple[type[CliCommand], ...]:
