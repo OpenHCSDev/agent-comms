@@ -61,6 +61,31 @@ def test_selected_capture_request_survives_cli_and_launcher_wire(tmp_path: Path)
     assert not probe.destination.exists()
 
 
+def test_selected_capture_reads_original_inputs_before_releasing_its_cut(
+    capture_source: Comms, tmp_path: Path,
+) -> None:
+    source = capture_source
+    entry = source.registry.snapshot().entry('capture-owner')
+    lookup = entry.thread.incarnation.require_recorded().lookup
+    key = TurnInputKey(TurnId('b' * 32))
+    InputDispositions(source.root).record(
+        key, seq=None, owner=entry.thread.name, claim_scope=1,
+        target=entry.thread.name, text='original unresolved input',
+    )
+    gate = MaintenanceBarrier(source.registry.store.path)
+    held = gate.retarget(gate.begin(MaintenanceOperator.current()), LaunchRuntime.running())
+    destination = tmp_path / 'read-back'
+    try:
+        with held.holding():
+            measured = SelectedInputsProbe(source.root, destination, 3 * 1024**3, (lookup,)).run()
+            assert measured.bytes > 0
+            assert InputDispositions(destination).unresolved((entry,)) == InputDispositions(
+                source.root,
+            ).unresolved((entry,))
+    finally:
+        gate.clear(held)
+
+
 def test_capture_refuses_a_destination_inside_its_source(
     capture_source: Comms,
 ) -> None:

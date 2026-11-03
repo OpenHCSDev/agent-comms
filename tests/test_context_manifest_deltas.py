@@ -237,6 +237,7 @@ def test_selected_context_copy_preserves_closure_and_original_sequences(tmp_path
     copy = PracticeCopy(comms.root, tmp_path / 'retained')
     copy.include_contexts((), requests=(reference, reference), maximum_bytes=2**20)
     retained = ContextStore(copy.path)
+    comms.contexts.require_retained(retained, (), (reference,))
 
     with retained.snapshot() as db:
         info = ContextStoreInfo.require(db, singleton=1)
@@ -259,6 +260,17 @@ def test_selected_context_copy_preserves_closure_and_original_sequences(tmp_path
     assert ContextStore.path_in(comms.root) in copy.copied
     assert copy.request.source_root() == comms.root
     assert copy.request.root == copy.path
+
+
+def test_selected_context_readback_refuses_omitted_native_entries(tmp_path: Path) -> None:
+    comms = context_comms(tmp_path / 'source')
+    owner = comms.registry.require('Alice')
+    selected = comms.contexts.record_after(UNREAD_CONTEXT, context(owner, tmp_path, 1, 1))
+    identity = selected.recorded.segments[2].entries[0].identity
+    destination = ContextStore(tmp_path / 'retained')
+    comms.contexts.retain_contexts(destination, (), maximum_bytes=2**20)
+    with pytest.raises(RelationViolationError, match='context entries differ'):
+        comms.contexts.require_retained(destination, (identity,), ())
 
 
 def foreign_context_reference(

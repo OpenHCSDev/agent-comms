@@ -562,6 +562,40 @@ class ContextStore(DurableStore, InputCaptureFile):
                 for reference in selected:
                     ContextRequest.require(original.destination, id=reference.record_id)
 
+    def require_retained(
+        self, destination: ContextStore, identities: tuple[NativeSessionIdentity, ...],
+        requests: tuple[ContextManifestReference, ...],
+    ) -> None:
+        """Compare selected originals through the browser's entry and request readers.
+
+        The caller owns the cross-store capture lifetime. Resolve every retained
+        request, including predecessors, rather than comparing only its final
+        displayed value or recreating the serialized version/entry relationship.
+        """
+        with self.snapshot() as source, destination.snapshot() as retained:
+            for identity in identities:
+                source_entries, retained_entries = ({row.entry_id: row for row in ContextEntry.select(
+                    db, session_id=identity.session_id, session_file=identity.session_file,
+                )} for db in (source, retained))
+                if source_entries != retained_entries:
+                    raise RelationViolationError("Selected context entries differ from their originals")
+            for reference in requests:
+                stored = ContextStoreInfo.require(retained, singleton=1).source
+                if stored != reference.source:
+                    raise RelationViolationError("Retained context reference names another source")
+                ContextRequest.require(retained, id=reference.record_id)
+            for row in ContextRequest.stream(retained):
+                original_source = ContextStoreInfo.require(source, singleton=1).source
+                retained_source = ContextStoreInfo.require(retained, singleton=1).source
+                original_row = ContextRequest.require(source, id=row.id)
+                expected = self.resolve(source, original_source, original_row)
+                actual = destination.resolve(retained, retained_source, row)
+                if row != original_row or actual != expected:
+                    raise RelationViolationError("Retained context reader differs from its original")
+            for version in ContextSegmentVersion.stream(retained):
+                if version != ContextSegmentVersion.require(source, id=version.id):
+                    raise RelationViolationError("Retained context version differs from its original")
+
     def prior(self, owner: ThreadIncarnation) -> RecordedContextState:
         """Read the thread's previous request from a snapshot, outside any write lock."""
         with self.snapshot() as db:

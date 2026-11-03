@@ -11,9 +11,10 @@ from math import ceil
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from agent_comms.context_store import ContextManifestReference, ContextStore
-from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination_database import CoordinationStore, ReadableStore
 from agent_comms.coordination_tables.annotations import ContextSpanRows
-from agent_comms.input_disposition import InputDocument, SnapshotInputDispositions
+from agent_comms.coordination_tables.participants import Participants
+from agent_comms.input_disposition import InputDispositions, InputDocument, SnapshotInputDispositions
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.participant_store import ParticipantRows, ParticipantStore
 from agent_comms.registry_document import RegistryEntry
@@ -249,9 +250,49 @@ class PracticeCopy:
             self.remaining_bytes(maximum_bytes)
             self.include_contexts(identities, maximum_bytes=maximum_bytes, requests=requests)
             self.include_inputs(entries, maximum_bytes=maximum_bytes, identities=identities)
+            self.require_inputs(entries, identities=identities, requests=requests)
             measured = PracticeMeasurement.capture(self.path)
             measured.remaining(maximum_bytes)
             return measured
+
+    def require_inputs(
+        self, entries: tuple[RegistryEntry, ...], *,
+        identities: tuple[NativeSessionIdentity, ...],
+        requests: tuple[ContextManifestReference, ...],
+    ) -> None:
+        """Read back the selected copy before its original capture cut is released.
+
+        Use the ordinary unresolved projection, context resolver and participant
+        aggregate reader. No lifecycle reset, input replay, callback or second
+        hold can stand in for equality while these originals are still frozen.
+        """
+        ContextStore(self.root).require_retained(ContextStore(self.path), identities, requests)
+        if InputDispositions(self.root).unresolved(entries) != InputDispositions(self.path).unresolved(entries):
+            raise UpgradeRefused("Selected unresolved input reader differs from its original")
+        with (
+            ReadableStore(CoordinationStore.path_in(self.root)).reader_snapshot() as source,
+            ReadableStore(CoordinationStore.path_in(self.path)).reader_snapshot() as retained,
+        ):
+            schema = CoordinationStore.schema_at(CoordinationStore.path_in(self.root))
+            schema.require_schema(source)
+            schema.require_schema(retained)
+            for identity in identities:
+                source_inputs, retained_inputs = ({row.input_id: row for row in NativeRuntimeInput.select(
+                    db, session_id=identity.session_id, session_file=identity.session_file,
+                )} for db in (source, retained))
+                if source_inputs != retained_inputs:
+                    raise UpgradeRefused("Selected native session/path inputs differ from their originals")
+            for entry in entries:
+                lookup = entry.thread.incarnation.require_recorded().lookup
+                if Participants.count(source, participant_lookup=lookup) != Participants.count(
+                    retained, participant_lookup=lookup,
+                ):
+                    raise UpgradeRefused("Selected participant presence differs from its original")
+            for person in Participants.stream(retained):
+                if ParticipantStore.read_at(source, person.participant_lookup) != ParticipantStore.read_at(
+                    retained, person.participant_lookup,
+                ):
+                    raise UpgradeRefused("Selected participant aggregate differs from its original")
 
     def include_contexts(
         self, identities: Iterable[NativeSessionIdentity], *, maximum_bytes: int,

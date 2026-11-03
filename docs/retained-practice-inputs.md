@@ -34,6 +34,26 @@ probe or create the selected destination. The first check incorrectly compared
 the CLI subclass identity with the decoded base request; that failed epoch is
 retained beside the corrected declared-value check.
 
+## Readback belongs to the captured cut
+
+`PracticeCopy.capture_inputs` now reads the selected stores back before leaving
+`capturing_inputs`, while the existing installer hold still excludes source
+writers. It compares the ordinary unresolved-input projection, native inputs by
+both session and original path, selected participant presence, and every retained
+participant's ordinary aggregate. The held original's registry selects the
+coordinator schema once; that declaration validates both databases. Selected data
+does not gain a registry or runnable-root authority merely to pass readback.
+`ContextStore.require_retained` owns context comparison: complete selected entry
+groups and all retained requests, including predecessors, resolve through the same
+reader as saved-context browsing.
+
+A mismatch refuses the selected operation. The checks run under the existing
+source-integrity and registry checks, without restoring holder write permission,
+a callback, another hold, or a post-rehearsal comparison against newer originals.
+A final byte measurement still does not establish peak resources, native launch
+permission, or the real Toad journey. The two additional controls are authored,
+not executed in this source change.
+
 ## Original recipient birth participates in owner matching
 
 Source tracing found `StoredInput.matches_owner` consulted only its origin,
