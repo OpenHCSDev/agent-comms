@@ -29,6 +29,7 @@ from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import AcpSessionId, InputId
 from .native_input_proof import NativeContextProof
 from .pi_counts import PiCount
+from .thread_model import ThreadModel, UndeclaredModel
 from .pi_commands import NativeQuery
 from .pi_payloads import PiResponseData
 from .pi_vocabulary import CompactionReason
@@ -117,8 +118,9 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
         return DealDelivery()
 
     @property
-    def model_choice(self):
-        return None
+    def saved_model(self) -> ThreadModel:
+        """A runtime without a saved session file selects no model."""
+        return UndeclaredModel()
 
 
 # ---------------------------------------------------------------------------

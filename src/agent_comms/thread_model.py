@@ -58,12 +58,6 @@ class ThreadModel(SubclassUnion, ModelSelection, affix="Model"):
         selected = arguments.last(lambda entry: entry.apply_model)(UndeclaredModel())
         return selected.qualified_by(arguments.provider)
 
-    @staticmethod
-    @boundary_decoder
-    def from_choice(choice: tuple[str, str] | None) -> ThreadModel:
-        """A saved session's provider and model, or none."""
-        return UndeclaredModel() if choice is None else DeclaredModel("/".join(choice))
-
     def declared(self, text: str) -> DeclaredModel:
         """The model a launch argument names, replacing this one."""
         return DeclaredModel(text)

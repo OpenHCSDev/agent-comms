@@ -49,6 +49,7 @@ from .recorded_time import GeneratedTimestamp
 from .routing import NoTurnRouting, Routing
 from .transcript_events import ImportedMessage, NoticeTranscript, TranscriptEvent
 from .transcript_routes import InputPresentation, NoInputDisplay, _SessionRoutes
+from .thread_model import DeclaredModel
 from .turn_item import FreshNativeId, NativeItemId
 
 
@@ -212,8 +213,9 @@ class NativeEntry(TaggedPayload, RecordedEntry, DeclaredFamily, affix="Entry"):
             yield evidence
 
     @property
-    def model_choice(self) -> tuple[str, str] | None:
-        return None
+    def saved_models(self) -> tuple[DeclaredModel, ...]:
+        """The model this entry selected; an entry that selects none answers nothing."""
+        return ()
 
     @property
     def input_id(self) -> ReportedInputId | PiOmitted:
@@ -743,8 +745,9 @@ class ModelChangeEntry(NativeEntry):
     model_id: Annotated[str, WireName("modelId")]
 
     @property
-    def model_choice(self) -> tuple[str, str] | None:
-        return (self.provider, self.model_id) if self.provider and self.model_id else None
+    def saved_models(self) -> tuple[DeclaredModel, ...]:
+        """Pi's model change, when it wrote both its provider and model id."""
+        return (DeclaredModel(f"{self.provider}/{self.model_id}"),) if self.provider and self.model_id else ()
 
 
 @dataclass(frozen=True, kw_only=True)

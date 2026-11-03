@@ -23,6 +23,7 @@ from agent_comms.pi_wire import PiOmitted
 from agent_comms.pi_payloads import PiResponseData
 
 from .agent_backend import CompactionOutcome, FailedCompaction, Forks, Interrupts, NewThreadBackend, NothingToCompaction, PlacedCompaction, RuntimeLocation
+from .thread_model import ThreadModel, UndeclaredModel
 from .turn_inbox import InputContent
 from .coordinator import Coordination
 from .nominal.field_codec import AcpSessionId
@@ -118,11 +119,10 @@ class PiSessionFile(RuntimeLocation):
             root=root, owner=thread.incarnation.require_recorded()))
 
     @property
-    def model_choice(self):
-        for entry in NativeTranscript(Path(self.path)).tail():
-            if entry.model_choice is not None:
-                return entry.model_choice
-        return None
+    def saved_model(self) -> ThreadModel:
+        """The newest model the saved session selected, read from its tail."""
+        return next((model for entry in NativeTranscript(Path(self.path)).tail()
+                     for model in entry.saved_models), UndeclaredModel())
 
 
 class PersistentPiSession:
