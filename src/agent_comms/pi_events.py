@@ -47,16 +47,10 @@ if TYPE_CHECKING:
 class PiEvent(OpenPayload, affix=""):
     """One declaration-owned record received by the Pi RPC channel."""
 
-    starts: ClassVar[type[phases.TurnPhase] | None] = None
     ends: ClassVar[tuple[type[phases.TurnPhase], ...]] = ()
 
     def on(self, current: phases.TurnPhase) -> phases.TurnPhase:
-        if self.starts is not None:
-            return self.enter(self.starts, current)
         return self.leave(current) if self.matches_end(current) else current
-
-    def enter(self, member: type[phases.TurnPhase], current: phases.TurnPhase) -> phases.TurnPhase:
-        return member()
 
     def matches_end(self, current: phases.TurnPhase) -> bool:
         return isinstance(current, self.ends)
@@ -65,12 +59,9 @@ class PiEvent(OpenPayload, affix=""):
         return phases.ModelWaitPhase()
 
     def __init_subclass__(
-        cls, *, starts: type[phases.TurnPhase] | None = None,
-        ends: type[phases.TurnPhase] | None = None, **kwargs,
+        cls, *, ends: type[phases.TurnPhase] | None = None, **kwargs,
     ) -> None:
         super().__init_subclass__(**kwargs)
-        if starts is not None:
-            cls.starts = starts
         if ends is not None:
             cls.ends = (*cls.ends, ends)
 
@@ -126,6 +117,18 @@ class PiEvent(OpenPayload, affix=""):
 
     def correlate_or_deliver(self, channel, on_event: Callable[[PiEvent], None]) -> None:
         on_event(self)
+
+
+class PhaseStartEvent(PiEvent, declared_name=None):
+    """An event that opens a turn phase; the phase it opens is declared by its class."""
+
+    starts: ClassVar[type[phases.TurnPhase]]
+
+    def on(self, current: phases.TurnPhase) -> phases.TurnPhase:
+        return self.enter(current)
+
+    def enter(self, current: phases.TurnPhase) -> phases.TurnPhase:
+        return self.starts()
 
 
 class NativePiEvent(PiEvent, declared_name=None):
@@ -322,7 +325,9 @@ class RetryAttemptEvent(NativePiEvent, declared_name=None):
         session.watchdog.progress()
 
 
-class AutoRetryStart(RetryAttemptEvent, DurablePiEvent, starts=phases.ProviderRetryPhase):
+class AutoRetryStart(PhaseStartEvent, RetryAttemptEvent, DurablePiEvent):
+    starts = phases.ProviderRetryPhase
+
     def prepare_retry(self, session: TurnSession) -> None:
         session.output.final_assistant_stop = False
 
@@ -382,8 +387,10 @@ class CompactionEnd(ReasonedCompaction, ends=phases.CompactionPhase):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CompactionStart(ReasonedCompaction, starts=phases.CompactionPhase):
-    def enter(self, member: type[phases.TurnPhase], current: phases.TurnPhase) -> phases.TurnPhase:
+class CompactionStart(PhaseStartEvent, ReasonedCompaction):
+    starts = phases.CompactionPhase
+
+    def enter(self, current: phases.TurnPhase) -> phases.TurnPhase:
         return current.compacting()
 
     reason: type[CompactionReason] = UnknownCompactionReason
@@ -854,7 +861,9 @@ class SteeringInterruptStarted(NativePiEvent):
         session.explicit_interrupt = True
 
 
-class SummarizationRetryAttemptStart(RetryAttemptEvent, starts=phases.SummarizationRetryPhase):
+class SummarizationRetryAttemptStart(PhaseStartEvent, RetryAttemptEvent):
+    starts = phases.SummarizationRetryPhase
+
     pass
 
 
@@ -867,7 +876,9 @@ class SummarizationRetryFinished(NativePiEvent, ends=phases.SummarizationRetryPh
         session.watchdog.progress()
 
 
-class SummarizationRetryScheduled(RetryAttemptEvent, starts=phases.SummarizationRetryPhase):
+class SummarizationRetryScheduled(PhaseStartEvent, RetryAttemptEvent):
+    starts = phases.SummarizationRetryPhase
+
     pass
 
 
@@ -923,9 +934,11 @@ class ToolExecutionStart(
     PiToolCallEvent,
     NativePiEvent,
     DurablePiEvent,
-    starts=phases.ToolRunningPhase,
+    PhaseStartEvent,
 ):
-    def enter(self, member: type[phases.TurnPhase], current: phases.TurnPhase) -> phases.TurnPhase:
+    starts = phases.ToolRunningPhase
+
+    def enter(self, current: phases.TurnPhase) -> phases.TurnPhase:
         return current.tool_started(self.tool_id, self.tool_label)
 
     args: object = field(default_factory=dict)

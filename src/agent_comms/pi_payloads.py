@@ -603,10 +603,6 @@ class PiMessage(WithheldAnnotations, ExternalNull, OpenPayload, affix="Message")
     diagnostics: tuple[PiDiagnostic, ...] = ()
     timestamp: Annotated[PiField[EventTime], EventMilliseconds] = UnrecordedEventTime()
 
-    def __post_init__(self):
-        if isinstance(self.stop_reason, str):
-            object.__setattr__(self, "stop_reason", PiStopReason.from_external(self.stop_reason))
-
     @property
     def measured_tokens(self) -> PiCount:
         return self.stop_reason.measured(self.usage.total_tokens)

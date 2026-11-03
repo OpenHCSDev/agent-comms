@@ -32,7 +32,7 @@ class DeleteTagCliCommand(MultipleTargets, ExactTagCliCommand, declared_name="de
     ] = False
 
     def confirmation(self) -> str:
-        return self.disposition.confirmation(self.name)
+        return self.disposition.confirmation((self.name,))
 
     @classmethod
     def selection_confirmation[C: DeleteTagCliCommand](cls: type[C], commands: tuple[C, ...]) -> str:
