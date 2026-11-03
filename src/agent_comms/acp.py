@@ -374,12 +374,11 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
     async def _selected_write_request(self, session_id: AcpSessionId, request) -> PromptResponse:
         owner = self.sessions.require(session_id)
-        controller = self._runtime.controller.get()
-        attached = controller.attached(self.sessions.client) if controller is not None else None
-        if attached is None:
-            raise RequestError.invalid_params(
-                {"reason": "Selected write requires attached ACP controller"}
-            )
+        attached = self._runtime.controller.get().attached(
+            self.sessions.bound_controller()
+        ).require_present(
+            RequestError.invalid_params({"reason": "Selected write requires attached ACP controller"})
+        )
         scope = await Coordination.run_worker(partial(self.cursors.scope, owner, session_id))
         plans = SelectedWritePlans(self._comms, scope.require_live().wire_root_id)
         acknowledgement = await Coordination.run_worker(
@@ -432,7 +431,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             existing = self._runtime.controller.get()
             context = (
                 self._runtime.controller.set(self.sessions.client)
-                if existing is not None and existing.attached(None) is None
+                if existing.binds_client
                 else None
             )
             try:

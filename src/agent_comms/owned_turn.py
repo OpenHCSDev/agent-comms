@@ -19,6 +19,7 @@ from agent_comms.following_inputs import OwnerFollowingInputs
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 
 from . import agent_events as events
+from .controller import NO_CONTROLLER
 from .agent_backend import InputStartListener
 from .turn_inbox import InputContent, TurnInbox
 from .channel_coding_tools import CodingToolMode
@@ -417,11 +418,10 @@ class OwnedTurn:
             self.runner.inputs.bind_native_turn(self.session_id, self.thread),
         )
         self.finish_event = asyncio.Event()
+        # Autonomous, channel and goal turns bind no client, so an unbound default has none.
         self.controller = self.acceptance.controller(
             self.runner.inputs.state(self.session_id), self.runner.runtime,
-        )
-        if self.controller is not None:
-            self.controller = self.controller.attached(None)  # Autonomous/channel/goal turns have no controller.
+        ).attached(NO_CONTROLLER)
         self.runner.inputs.state(self.session_id).capture_first_source(self.original)
         self.input_cleanup.pop_all()
         self.input_cleanup.push_async_callback(

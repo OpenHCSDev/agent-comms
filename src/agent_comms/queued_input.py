@@ -22,7 +22,7 @@ from .turn_inbox import InputContent, InputRequest
 from .assignment_states import DeferredAssignment, DeliveredAssignment
 from .child_process import ProcessIdentity
 from .context_segments.wake import MessageDelivery
-from .controller import Controller
+from .controller import NO_CONTROLLER, Controller
 from .coordination_cohort import pending_sealed_assignments
 from .coordination_database import CoordinationStore
 from .coordination_errors import IdentityConflict, StaleRevision
@@ -102,7 +102,7 @@ class AcceptedInputSourceRule(ReservationRule):
 class AcceptedTurn(TurnAcceptance):
     input_id: InputId
 
-    def controller(self, state: DrainedSession, runtime: RuntimeServer) -> Controller | None:
+    def controller(self, state: DrainedSession, runtime: RuntimeServer) -> Controller:
         return state.queued[self.input_id].controller
 
     def require_current(
@@ -178,7 +178,7 @@ class QueuedInput:
     input_id: InputId
     prompt: str
     images: tuple[ImageInput, ...] = ()
-    controller: Controller | None = None
+    controller: Controller = NO_CONTROLLER
 
     @property
     def key(self) -> InputKey:
@@ -206,7 +206,7 @@ class QueuedInput:
         prompt: str,
         echo: bool,
         images: tuple[ImageInput, ...],
-        controller: Controller | None,
+        controller: Controller,
         ownership: ExitStack,
         input_id: InputId,
         origin: InputOrigin = UnattributedInputOrigin(),
@@ -253,7 +253,7 @@ class QueuedInput:
     @asynccontextmanager
     async def reserve(
         cls, inputs: InputDrain, session_id: AcpSessionId, name: str, *, text: str, prompt: str,
-        echo: bool, images: tuple[ImageInput, ...], controller: Controller | None,
+        echo: bool, images: tuple[ImageInput, ...], controller: Controller,
         input_id: InputId,
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> AsyncIterator[InputReservation[Self]]:

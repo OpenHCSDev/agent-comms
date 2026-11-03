@@ -289,7 +289,7 @@ class RuntimeServer(SessionUpdateSink):
         self.clients = SessionClients(self)
         # Set only while handling a prompt on this particular attachment.
         # Never publish this bearer to ACP metadata, the transcript or other sockets.
-        self.controller: ContextVar[Controller | None] = ContextVar(
+        self.controller: ContextVar[Controller] = ContextVar(
             "runtime_permission_controller", default=UNBOUND_CONTROLLER
         )
         self.path = socket_path(agent._comms.root, os.getpid())
