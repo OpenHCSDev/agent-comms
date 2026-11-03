@@ -486,7 +486,7 @@ class ThreadManagement:
         """Read Pi state first, then publish its model under the registry lock."""
         path = Path(source_path).expanduser().resolve()
         location = original.backend.location_type(str(path))
-        saved_model = ThreadModel.from_choice(location.model_choice) if path.is_file() else UndeclaredModel()
+        saved_model = location.saved_model if path.is_file() else UndeclaredModel()
         attached = replace(
             original.initialized_native_configuration(
                 model=saved_model, thinking_level=NoThinkingOverride,

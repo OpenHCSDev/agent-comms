@@ -460,7 +460,7 @@ class TestLedgerOps:
             assert isinstance(event, AssistantTranscript)
             texts.append(event.text)
         assert texts == [str(index) for index in range(80, 100)]
-        assert PiSessionFile(str(path)).model_choice == ("test", "one")
+        assert PiSessionFile(str(path)).saved_model == DeclaredModel("test/one")
 
     def test_merge_requires_registered_author(self, wired: Comms) -> None:
         with pytest.raises(UnregisteredThreadError):
