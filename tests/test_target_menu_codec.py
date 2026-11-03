@@ -94,3 +94,19 @@ def test_a_ui_lists_and_applies_a_menu_action_through_core(tmp_path):
     answer = core.call(CommsTargetEditTool(edit=edit))
     received = FieldCodec.decode(TargetEditResult | Channel, FieldCodec.encode(answer, TargetEditResult | Channel))
     assert received == answer
+
+
+def test_an_edited_action_is_prepared_again_through_core(tmp_path):
+    """A dialog whose values changed asks Core for the choices the edited action offers."""
+    from agent_comms.comms import wire
+    from agent_comms.core_access import LocalCoreAccess
+    from agent_comms.tools import CommsPrepareTargetActionTool, CommsTargetActionsTool
+
+    comms = wire(tmp_path / "wire")
+    project = Checkout(tmp_path)
+    core = LocalCoreAccess(comms)
+    (action,) = core.call(CommsTargetActionsTool(
+        project=project, targets=CommandTarget.arguments(("#all",), project))).actions
+    prepared = core.call(CommsPrepareTargetActionTool(action=action.edited({})))
+    assert FieldCodec.decode(PreparedTargetAction, FieldCodec.encode(prepared)) == prepared
+    assert prepared.fields == action.fields

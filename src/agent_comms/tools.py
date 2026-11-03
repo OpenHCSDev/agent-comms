@@ -456,6 +456,19 @@ class CommsTargetActionsTool(ReadTool, ToolRequest[ToolCaller, TargetActionsRead
 
 
 @dataclass(frozen=True, kw_only=True)
+class CommsPrepareTargetActionTool(ReadTool, ToolRequest[ToolCaller, PreparedTargetAction]):
+    """An editor whose values changed asks Core which choices the edited action now offers."""
+
+    label = "Prepare target action"
+    description = ("The choices Core's configuration offers an edited menu action's fields, "
+                   "such as the thinking levels of a newly chosen model.")
+    action: Annotated[TargetAction, *tool_field("The action with its edited values")]
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> PreparedTargetAction:
+        return asyncio.run(self.action.prepared(ConfigOptions.for_route(comms.route)))
+
+
+@dataclass(frozen=True, kw_only=True)
 class CommsTargetEditTool(ToolRequest[ToolCaller, TargetEditResult | Channel]):
     """A UI applies one menu action, as the owner, locally or across the connector."""
 

@@ -35,6 +35,7 @@ from agent_comms.cli_result import CliResult, ResultShower, TargetEditResult
 from agent_comms.command import Command
 from agent_comms.comms import Comms
 from agent_comms.config_options import CatalogChoice, ConfigOptions
+from agent_comms.tool_result import ToolResult
 from agent_comms.nominal.declared_family import ModuleMembers
 from agent_comms.declared_verb import DeclaredCommand
 from agent_comms.nominal.field_codec import (
@@ -337,7 +338,7 @@ class TargetAction:
 
 
 @dataclass(frozen=True)
-class PreparedTargetAction(TargetAction):
+class PreparedTargetAction(TargetAction, ToolResult):
     """An action whose fields were prepared where its configuration lives: one tuple of
     offered choices per editable field, in their declared order."""
     offered: tuple[tuple[CatalogChoice, ...], ...] = field(default=(), kw_only=True)
