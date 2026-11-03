@@ -1130,6 +1130,25 @@ class CommsDeleteViewTool(NativeToolRequest):
         return CommsChannelsTool().apply(comms, caller)
 
 
+@dataclass(frozen=True)
+class DisplayOrderStored(ToolResult):
+    order: type[ThreadSort] | type[ChannelSort]
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsStoreDisplayOrderTool(HumanToolRequest[DisplayOrderStored]):
+    """The owner's UI stores a member or channel-list order; the order itself knows which
+    channel preference it is."""
+
+    label = "Store display order"
+    description = "Store a channel's member order or the channel-list order; requires a human UI caller."
+    order: Annotated[type[ThreadSort] | type[ChannelSort], *tool_field("The chosen order")]
+    channel: Annotated[str | None, *tool_field("The channel a member order belongs to")] = None
+
+    def answered(self, comms: Comms) -> DisplayOrderStored:
+        return DisplayOrderStored(self.order.store_channel_order(comms.channels, self.channel))
+
+
 @dataclass(frozen=True, kw_only=True)
 class CommsSortChannelTool(NativeToolRequest):
     label = "Sort channel members"
