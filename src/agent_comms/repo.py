@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import heapq
+import os
 import re
 import shutil
 import subprocess
@@ -20,7 +21,7 @@ from .coordination_errors import CommandFailure
 from .nominal.declared_family import DeclaredFamily
 from .errors import MissingSourceLine
 from .nominal.field_codec import FieldCodec, GitCommitText, PresentMember, SingleFieldValue, WireValue
-from .native_build_inputs import GitLaunch
+from .native_build_inputs import CloneShape, FullClone, GitLaunch, PartialClone
 from .repository_name import RepositoryName
 
 if TYPE_CHECKING:
@@ -114,7 +115,22 @@ class Repo(GitLaunch, BaseModel, WireValue):
     @classmethod
     def command(cls, checkout: Path | str, *args: str) -> tuple[str, ...]:
         """Only explicit acquisition may contact a promisor remote for missing objects."""
-        return super().command(checkout, "--no-lazy-fetch", *args)
+        shape = cls.clone_shape(str(checkout))
+        return super().command(checkout, *shape.read_options(cls.located(os.environ)), *args)
+
+    promisor_settings: ClassVar[str] = r"^(remote\..+\.promisor|extensions\.partialclone)$"
+
+    @staticmethod
+    @cache
+    def clone_shape(checkout: str) -> CloneShape:
+        """Git reads a repository as partial when a remote is a promisor or extensions.partialClone
+        names one; `clone --filter` writes the first. Git answers 1 when no setting matches."""
+        probe = GitLaunch._run(checkout, "config", "--type=bool-or-str", "--get-regexp",
+                               Repo.promisor_settings)
+        if probe.returncode not in (0, 1):
+            probe.check_returncode()
+        settings = (line.split(maxsplit=1) for line in probe.stdout.decode().splitlines())
+        return PartialClone() if any(value != "false" for _, value in settings) else FullClone()
 
     def to_wire(self) -> dict[str, object]:
         return self.model_dump(mode="json")
