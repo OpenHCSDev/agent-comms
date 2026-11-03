@@ -430,7 +430,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             # absent); never fall back to a passive ACP client in that case.
             existing = self._runtime.controller.get()
             context = (
-                self._runtime.controller.set(self.sessions.client)
+                self._runtime.controller.set(self.sessions.bound_controller())
                 if existing.binds_client
                 else None
             )
