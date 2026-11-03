@@ -8,6 +8,9 @@ facts live in the coordinator, attached read-only to the bus snapshot the page i
 from __future__ import annotations
 
 import sqlite3
+import time
+from abc import abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
@@ -16,7 +19,9 @@ from .bus_tables import MessageIdentitySource
 from .coordination_database import CoordinationStore
 from .coordination_tables.assignments import WakeAssignment
 from .coordination_tables.harness_deliveries import HarnessDelivery
-from .nominal.field_codec import RecordMember
+from .message_page import InboxPage
+from .nominal.field_codec import NullMember, RecordMember, SingleFieldValue, SubclassUnion
+from .watched import Watched
 from .message_reference import AfterMessageStart, InboxStart, MessageReference, StreamBeginning
 from .private_registry_guard import RegistryPrivacy
 from .read_basis import ReadCursor
@@ -86,3 +91,42 @@ class TakenInputStart(RecordMember, StreamBeginning, TakenInputPosition):
 @dataclass(frozen=True, slots=True)
 class TakenInputAfter(RecordMember, AfterMessageStart, TakenInputPosition):
     """A stream that already passed this message continues on taken inputs."""
+
+
+class InboxWait(SubclassUnion, affix="Wait"):
+    """How long an inbox read may wait for its first message. A bridge waits on the bus's
+    own commit signal instead of polling, through the same request locally and over the
+    connector."""
+
+    @abstractmethod
+    def read(self, bus: Watched, page: Callable[[], InboxPage]) -> InboxPage: ...
+
+
+@dataclass(frozen=True, slots=True)
+class NoWait(NullMember, InboxWait):
+    """Answer with what is there now."""
+
+    def read(self, bus: Watched, page: Callable[[], InboxPage]) -> InboxPage:
+        return page()
+
+
+@dataclass(frozen=True, slots=True)
+class SecondsWait(SingleFieldValue, InboxWait):
+    """Wait up to `seconds` for a message, waking on each bus commit; an HTTP request
+    must answer before its client gives up, so the bound stays under a minute."""
+
+    seconds: int
+    longest: ClassVar[int] = 50
+
+    def __post_init__(self) -> None:
+        if not 0 < self.seconds <= self.longest:
+            raise ValueError(f"An inbox wait lasts 1 to {self.longest} seconds")
+
+    def read(self, bus: Watched, page: Callable[[], InboxPage]) -> InboxPage:
+        deadline = time.monotonic() + self.seconds
+        with bus.changes() as changes:
+            while (not (current := page()).page.messages
+                   and (left := deadline - time.monotonic()) > 0):
+                changes.block_until_change(left)
+                changes.changed_paths()
+            return current

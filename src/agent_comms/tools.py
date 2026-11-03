@@ -6,7 +6,7 @@ from agent_comms_hooks import ToolRefusedError
 from agent_comms.nominal.field_codec import WireExclude
 
 from .input_key import InputKeyText
-from .agent_inbox import TakenInputStart
+from .agent_inbox import InboxWait, NoWait, TakenInputPosition, TakenInputStart
 
 from .tool_request import ListedNames, LiveOwnerTool, OmittedNames, PublishingTool, PublishingToolRequest, ReadTool, SubjectBinding, ThreadReadTool, ThreadToolRequest, ToolRequest, tool_field
 from .order_tools import MessagePublished
@@ -269,9 +269,11 @@ class TaskPublished(ToolResult):
 
 @dataclass(frozen=True)
 class InboxPageRead(ToolResult):
-    """One page of messages nothing took yet; reading it records nothing."""
+    """One page of messages nothing took yet; reading it records nothing. A reader on the
+    other side of the connector decodes it, so its messages are declared as messages, like a
+    MessagePage's."""
 
-    messages: tuple[Annotated[Message, WireForm], ...]
+    messages: tuple[Message, ...]
     remaining: int
     unresolved_inputs: tuple[UnresolvedInput, ...]
     standby_review: Annotated[StandbyReview | NoStandbyReview, WireOmitDefault()] = (
@@ -1184,7 +1186,7 @@ class CommsHistoryTool(ReadTool, ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsInboxTool(ToolRequest):
+class CommsInboxTool(ToolRequest[ToolCaller, InboxPageRead]):
     label = "Comms Inbox"
     description = (
         "Fetch one oldest-first page of messages no harness attempted and no native input took, "
@@ -1204,16 +1206,22 @@ class CommsInboxTool(ToolRequest):
     standby: Annotated[
         StandbyRequest | NoStandby, *tool_field("Goal and dependencies to review")
     ] = NoStandby()
+    after: Annotated[
+        TakenInputPosition, *tool_field("Continue after this taken message; default the oldest")
+    ] = TakenInputStart()
+    wait: Annotated[
+        InboxWait, *tool_field("Seconds to wait for a first message; default answer now")
+    ] = NoWait()
 
     def apply(self, comms: Comms, caller: ToolCaller) -> InboxPageRead:
         thread = self.thread
         if not (target := self.target.strip()):
             raise ToolRefusedError("An inbox target cannot be empty.")
         review = self.standby.review(comms, thread)
-        page = comms.bus.inbox_at(
+        page = self.wait.read(comms.bus.bus, lambda: comms.bus.inbox_at(
             thread, comms.registry.snapshot(), CommandTarget.named(target),
-            after=TakenInputStart(), bounds=PageBounds(limit=self.limit),
-        )
+            after=self.after, bounds=PageBounds(limit=self.limit),
+        ))
         return InboxPageRead(
             page.page.messages, page.remaining, tuple(comms.goals.unresolved_inputs(thread)),
             standby_review=review,
