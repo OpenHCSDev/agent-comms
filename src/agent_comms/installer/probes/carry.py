@@ -23,7 +23,7 @@ from agent_comms.installer.interpreter_operation import (
     SubjectPhase,
     TargetProbe,
 )
-from agent_comms.locked_store import FilesRequest, RootFile
+from agent_comms.locked_store import FilesRequest, InstallationFiles, RootFile
 from agent_comms.store_files import BorrowedStoreLock, is_store_lock
 from agent_comms.typed_table import ExternalStore, TriggerKind, TypedTable
 
@@ -39,7 +39,7 @@ class Carried:
     Store locks are excluded from that inventory and cannot authorize a rewrite."""
 
     def for_step(self, step: Carry) -> Carried:
-        resources = RootFile.referenced_files(step.files, self.rewritten)
+        resources = InstallationFiles(step.files).referenced_files(self.rewritten)
         for resource in resources:
             step.require_confined(step.files.location(resource))
         return replace(self, rewritten=tuple(resource.path for resource in resources))

@@ -297,18 +297,6 @@ class RootFile:
         """Declarations with a reserved namespace validate it here."""
 
     @classmethod
-    def installation_declarations(cls, files: FilesRequest) -> dict[Path, type[RootFile]]:
-        root = files.root
-        declarations = {}
-        for owner, directory in cls.declarations_in(root):
-            declarations.update(dict.fromkeys(owner.files_in(directory), owner.declaring_owner()))
-        primaries = cls.primaries_in(root)
-        declaring = {owner: owner.declaring_owner() for owner in set(primaries.values())}
-        declarations.update((path, declaring[owner]) for path, owner in primaries.items())
-        declarations.update(cls.external_declarations(files))
-        return declarations
-
-    @classmethod
     def families(cls) -> Iterator[type[Self]]:
         pending = [cls]
         visited = set()
@@ -324,83 +312,6 @@ class RootFile:
     def external_declarations(cls, files: FilesRequest) -> dict[Path, type[RootFile]]:
         return {path: owner for family in cls.families()
                 for path, owner in family.external_members(files).items()}
-
-    @classmethod
-    def referenced_files(cls, files: FilesRequest, paths: Collection[Path]
-                         ) -> tuple[DeclaredFile | UndeclaredFile, ...]:
-        """Resolve the collection together: each inventory pass scans the whole root,
-        so resolving separately for each path multiplies that work."""
-        names = tuple(path for path in paths if not path.is_absolute())
-        return cls.owned_files(files, (
-            *(path for path in paths if path.is_absolute()), *cls.named_paths(files, names)))
-
-    @classmethod
-    def named_files(cls, files: FilesRequest, names: Collection[Path]
-                    ) -> tuple[DeclaredFile | UndeclaredFile, ...]:
-        return cls.owned_files(files, cls.named_paths(files, names))
-
-    @classmethod
-    def named_paths(cls, files: FilesRequest, names: Collection[Path]) -> tuple[Path, ...]:
-        if not names:
-            return ()
-        root = files.root
-        declarations = cls.installation_declarations(files)
-        known = {files.retained_name(owner, path): path for path, owner in declarations.items()}
-        for name in names:
-            if name.is_absolute() or ".." in name.parts:
-                raise RelationViolationError(f"Installation refuses a retained name: {name}")
-            for family in cls.families():
-                family.require_retained_name(name)
-        return tuple(known.get(name, root / name) for name in names)
-
-    @classmethod
-    def owned_files(
-        cls, files: FilesRequest, paths: Collection[Path],
-    ) -> tuple[DeclaredFile | UndeclaredFile, ...]:
-        """Resolve primaries once; companions belong to their primary's declaration.
-
-        Missing selected files still identify an absent resource to restore. An
-        undeclared existing file acquires content behavior without inventing a
-        store declaration for it.
-        """
-        if not paths:
-            return ()
-        root = files.root
-        declarations = cls.installation_declarations(files)
-        primaries = cls.primaries_in(root)
-        primaries.update((path, owner) for path, owner in cls.external_declarations(
-            files).items() if path.is_file())
-        selected = frozenset(paths)
-        owners: dict[Path, type[RootFile]] = {
-            path: owner for path, owner in primaries.items() if path in selected
-        }
-        companions = {member for path, owner in owners.items()
-                      for member in (*owner.files(path), *owner.transient_paths(path))
-                      if member != path}
-        owners.update((path, declarations.get(path, RootFile))
-                      for path in selected - owners.keys() - companions)
-        companions.update(member for path, owner in owners.items()
-                          for member in (*owner.files(path), *owner.transient_paths(path))
-                          if member != path)
-        # A lock is never content, even after a carry deletes the store it locked.
-        companions.update(path for path in selected if is_store_lock(path))
-        resources: list[DeclaredFile | UndeclaredFile] = []
-        names: set[Path] = set()
-        for path, owner in owners.items():
-            if path in companions:
-                continue
-            if path.resolve() != path:
-                raise RelationViolationError(f"Installation refuses an aliased file: {path}")
-            if path not in declarations and not path.is_relative_to(root):
-                raise RelationViolationError(f"Installation refuses an undeclared file: {path}")
-            name = files.retained_name(owner, path)
-            resource = (declarations[path].resource(name) if path in declarations
-                        else UndeclaredFile(name))
-            if name in names:
-                raise RelationViolationError(f"Installation file names collide: {name}")
-            names.add(name)
-            resources.append(resource)
-        return tuple(resources)
 
     @classmethod
     def paths_in(cls, root: Path) -> frozenset[Path]:
@@ -585,6 +496,95 @@ class RetainedCopyRequest(FilesRequest):
 
     def retained_name(self, owner: type[RootFile], path: Path) -> Path:
         return path.relative_to(self.root)
+
+
+@dataclass(frozen=True)
+class InstallationFiles:
+    """One invocation's observed file ownership, never a cache across migration cuts.
+
+    Names and companion selection use the same declaration/primary observation.
+    A later before/after scan captures a new observation, including new and
+    undeclared files; no live change is hidden by reusing this object.
+    """
+
+    files: FilesRequest
+
+    @cached_property
+    def primaries(self) -> Mapping[Path, type[RootFile]]:
+        return RootFile.primaries_in(self.files.root)
+
+    @cached_property
+    def external(self) -> Mapping[Path, type[RootFile]]:
+        return RootFile.external_declarations(self.files)
+
+    @cached_property
+    def declarations(self) -> Mapping[Path, type[RootFile]]:
+        declarations = {}
+        for owner, directory in RootFile.declarations_in(self.files.root):
+            declarations.update(dict.fromkeys(owner.files_in(directory), owner.declaring_owner()))
+        declaring = {owner: owner.declaring_owner() for owner in set(self.primaries.values())}
+        declarations.update((path, declaring[owner]) for path, owner in self.primaries.items())
+        declarations.update(self.external)
+        return declarations
+
+    def referenced_files(self, paths: Collection[Path]) -> tuple[DeclaredFile | UndeclaredFile, ...]:
+        names = tuple(path for path in paths if not path.is_absolute())
+        return self.owned_files((
+            *(path for path in paths if path.is_absolute()), *self.named_paths(names)))
+
+    def named_files(self, names: Collection[Path]) -> tuple[DeclaredFile | UndeclaredFile, ...]:
+        return self.owned_files(self.named_paths(names))
+
+    def named_paths(self, names: Collection[Path]) -> tuple[Path, ...]:
+        if not names:
+            return ()
+        known = {self.files.retained_name(owner, path): path
+                 for path, owner in self.declarations.items()}
+        for name in names:
+            if name.is_absolute() or ".." in name.parts:
+                raise RelationViolationError(f"Installation refuses a retained name: {name}")
+            for family in RootFile.families():
+                family.require_retained_name(name)
+        return tuple(known.get(name, self.files.root / name) for name in names)
+
+    def owned_files(self, paths: Collection[Path]) -> tuple[DeclaredFile | UndeclaredFile, ...]:
+        """Missing resources retain absence; existing unknown files retain their bytes."""
+        if not paths:
+            return ()
+        declarations = self.declarations
+        primaries = dict(self.primaries)
+        primaries.update((path, owner) for path, owner in self.external.items() if path.is_file())
+        selected = frozenset(paths)
+        owners: dict[Path, type[RootFile]] = {
+            path: owner for path, owner in primaries.items() if path in selected
+        }
+        companions = {member for path, owner in owners.items()
+                      for member in (*owner.files(path), *owner.transient_paths(path))
+                      if member != path}
+        owners.update((path, declarations.get(path, RootFile))
+                      for path in selected - owners.keys() - companions)
+        companions.update(member for path, owner in owners.items()
+                          for member in (*owner.files(path), *owner.transient_paths(path))
+                          if member != path)
+        # A lock is never content, even after a carry deletes the store it locked.
+        companions.update(path for path in selected if is_store_lock(path))
+        resources: list[DeclaredFile | UndeclaredFile] = []
+        names: set[Path] = set()
+        for path, owner in owners.items():
+            if path in companions:
+                continue
+            if path.resolve() != path:
+                raise RelationViolationError(f"Installation refuses an aliased file: {path}")
+            if path not in declarations and not path.is_relative_to(self.files.root):
+                raise RelationViolationError(f"Installation refuses an undeclared file: {path}")
+            name = self.files.retained_name(owner, path)
+            resource = (declarations[path].resource(name) if path in declarations
+                        else UndeclaredFile(name))
+            if name in names:
+                raise RelationViolationError(f"Installation file names collide: {name}")
+            names.add(name)
+            resources.append(resource)
+        return tuple(resources)
 
 
 class LockedFile(DrainedWriters, RootFile, StoreLockOwner, declared_name=None):
