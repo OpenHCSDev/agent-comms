@@ -219,7 +219,7 @@ def test_a_non_refreshable_todo_conflict_does_not_end_the_heartbeat_pass(checkou
     class ConflictingServicePass(ServicePassFailing):
         current: Todo
 
-        def enforce(self, comms: Comms, commander: str) -> None:
+        def enforce(self, comms: Comms) -> None:
             raise TodoConflict(self.current)
 
     current = c.goals.todos.get('P1')
@@ -248,11 +248,10 @@ def test_a_second_todo_conflict_is_reported_without_ending_the_pass(struck_unown
     class ChangingRow(UnownedWheelSpin):
         next_row: Todo
 
-        def enforce(self, comms: Comms, commander: str) -> None:
+        def enforce(self, comms: Comms) -> None:
             raise TodoConflict(self.todo)
 
-        def redecided(self, comms: Comms, commander: str,
-                      current: Todo) -> tuple[StandingRule, ...]:
+        def redecided(self, comms: Comms, current: Todo) -> tuple[StandingRule, ...]:
             return (type(self)(self.next_row, self.next_row),)
 
     previous = c.goals.todos.get('P1')

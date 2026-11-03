@@ -335,7 +335,7 @@ def test_failure_keeps_the_board_and_recovery_clears_only_the_failure(notificati
     comms = notification_bus
 
     class RefusedRule(ServicePassFailing):
-        def enforce(self, _comms, _team):
+        def enforce(self, _comms):
             raise TeammateOccupied("another order already holds the selected teammate")
 
     recorded_turn(comms, (True, True))
@@ -629,31 +629,35 @@ def test_a_registered_fork_is_on_the_hud(notification_bus):
     assert fork.incarnation in lead_hud(comms).forks
 
 
-def test_quiet_completion_is_per_team_even_when_a_later_recipient_fails(notification_bus):
+def test_quiet_completion_is_per_teammate_even_when_a_later_recipient_fails(
+    notification_bus, monkeypatch,
+):
+    """One team board, delivered per teammate: a recipient failing after another was served
+    leaves the served one's completion recorded."""
     comms = notification_bus
     lead = comms.registry.require("lead")
     missing = replace(comms.registry.require("worker"), name="unregistered-recipient")
     failing = ServicePassFailing(watch="following-rule", since=time.time(), error="independent source",
                                  failed_at=time.time())
-    frame = capture_frame(comms, ProgressRead())
-    frames = tuple(TeamObservation(frame, (failing,), ())
-                   for thread in (lead, missing))
-    with pytest.raises(UnregisteredThreadError):
-        asyncio.run(ObservedHeartbeat(frames).run(lambda: nullcontext(comms)))
+    observed = TeamObservation(capture_frame(comms, ProgressRead()), (failing,), ())
+    with monkeypatch.context() as patched:
+        patched.setattr(TeamHeartbeat, "served", classmethod(lambda cls, registry, goals: (lead, missing)))
+        with pytest.raises(UnregisteredThreadError):
+            asyncio.run(ObservedHeartbeat(observed).run(lambda: nullcontext(comms)))
     completed = ServicePassStore.at(comms.root).read().commander_completed
     assert set(completed) == {lead.incarnation}
     assert missing.incarnation not in completed
     # A quiet pass still completes and keeps the original alarm visibly open.
     beat(comms, (failing,))
     assert len(notifications(comms)) == 2
-    # A pass that misses a still-registered commander retires nothing but its frame.
-    asyncio.run(ObservedHeartbeat(()).run(lambda: nullcontext(comms)))
+    # A pass with no board retires the frames and no teammate's completion.
+    asyncio.run(ObservedHeartbeat().run(lambda: nullcontext(comms)))
     assert TeamFrame.read_all(comms.root) == ()
     assert set(ServicePassStore.at(comms.root).read().commander_completed) == {lead.incarnation}
     # Only the registry retiring the incarnation drops its completion.
     comms.registry.unregister("lead")
     comms.registry.remove("lead")
-    asyncio.run(ObservedHeartbeat(()).run(lambda: nullcontext(comms)))
+    asyncio.run(ObservedHeartbeat().run(lambda: nullcontext(comms)))
     assert not ServicePassStore.at(comms.root).read().commander_completed
 
 
@@ -691,12 +695,12 @@ def test_occupied_unit_refusal_is_published_and_later_rule_still_runs(notificati
     refusal = TeammateOccupied("another order already holds the selected teammate")
 
     class FollowingRule(ServicePassFailing):
-        def enforce(self, _comms, _team):
+        def enforce(self, _comms):
             enforced.append(self.watch)
 
     class OccupiedRule(FollowingRule):
-        def enforce(self, _comms, _team):
-            super().enforce(_comms, _team)
+        def enforce(self, _comms):
+            super().enforce(_comms)
             raise refusal
 
     rules = (OccupiedRule(watch="occupied-unit", since=1.0, error="teammate already holds work",
@@ -1016,19 +1020,23 @@ def test_retained_packet_without_display_witness_keeps_original_message_identity
     assert Message.from_wire(retained.to_wire()).message_id == message.message_id
 
 
-def test_a_closed_session_stays_on_the_team_and_an_archived_thread_leaves_it(notification_bus):
-    """No lead: the team is every registered colleague Core may address. A closed session keeps
-    its board and its open requests; an archived thread gets no board."""
-    from agent_comms.thread_status import ArchivedThreadStatus
-
+def test_a_stopped_session_stays_on_the_team_while_an_open_request_waits_on_it(notification_bus):
+    """No lead: the team is every running colleague and every colleague an open request waits
+    on. A closed session keeps its board while its request is open, and leaves once it is done,
+    so the board never grows with every session the registry has held."""
     comms = notification_bus
     lead = comms.registry.require("lead")
     assert "lead" in {thread.name for thread in TeamHeartbeat.served(comms.registry, comms.goals)}
     comms.registry.register(replace(lead, process_identity=NoProcess()))
-    assert comms.goals.todos.open_requests(lead.acting_identity)
+    stopped = comms.registry.require("lead")
+    open_requests = comms.goals.todos.open_requests(stopped.acting_identity)
+    assert open_requests
     assert "lead" in {thread.name for thread in TeamHeartbeat.served(comms.registry, comms.goals)}
-    comms.registry.register(comms.registry.require("lead"), ArchivedThreadStatus())
-    assert "lead" not in {thread.name for thread in TeamHeartbeat.served(comms.registry, comms.goals)}
+    for request in open_requests:
+        comms.goals.todos.complete_request(
+            stopped.acting_identity, request.id, "The closed session's request is done.")
+    assert "lead" not in {thread.name
+                          for thread in TeamHeartbeat.served(comms.registry, comms.goals)}
 
 
 def test_a_closed_session_leaves_the_board_for_the_live_teammates(notification_bus):

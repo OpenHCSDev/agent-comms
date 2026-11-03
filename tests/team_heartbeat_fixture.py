@@ -54,7 +54,8 @@ def observe_team(comms: Comms, pulls: ProgressRead,
 class ObservedHeartbeat(TeamHeartbeat, declared_name=None):
     """Only the input is controlled; phase dispatch, writes and completion remain real."""
 
-    def __init__(self, observed: TeamObservation) -> None:
+    def __init__(self, *observed: TeamObservation) -> None:
+        """The pass's boards: one team board, or none for a bus without one."""
         super().__init__()
         self.observed = observed
 
@@ -62,4 +63,4 @@ class ObservedHeartbeat(TeamHeartbeat, declared_name=None):
         return ()
 
     def observe(self, comms: Comms, prepared: tuple[TeamInputs, ...]) -> tuple[TeamObservation, ...]:
-        return (self.observed,)
+        return self.observed

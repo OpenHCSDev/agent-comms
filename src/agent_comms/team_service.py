@@ -75,11 +75,13 @@ class TeamService:
         """The team: every running colleague, and every colleague one of Tristan's open
         requests waits on, running or not. There is no lead; the board, its warnings and its
         pauses belong to each of them alike. A stopped session holding his ask keeps its owed
-        answers and frame on the board; a finished session does not, so the board scales with
+        answers and frame on the board, archived or not (publish_heartbeat still declines to
+        message an unaddressable one); a finished session does not, so the board scales with
         the team, never with every thread the registry has held."""
         owed = (thread for owner in goals.todos.requesters()
                 for thread in snapshot.threads_for(owner.require_recorded()))
-        return tuple(dict.fromkeys((*cls.running(snapshot), *cls.addressable(snapshot, owed))))
+        return tuple(dict.fromkeys(
+            (*cls.running(snapshot), *snapshot.commander_project.participants(owed))))
 
     @classmethod
     def forks(cls, snapshot: RegistrySnapshot, teammates: Iterable[Thread]) -> tuple[Thread, ...]:
