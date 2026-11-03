@@ -183,17 +183,23 @@ class DisplayCut(OperatorOutcomes, ABC):
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class DisplayIdentity(DisplayCut):
-    """The scope observation compared between pages, independent of paint evidence."""
+class DisplayIdentity(SubclassUnion, DisplayCut, affix="DisplayIdentity"):
+    """The scope observation compared between pages, independent of paint evidence. A
+    revision carries it to a remote UI and back, and the members share their common
+    fields, so each record carries its kind."""
 
     viewer: ThreadIncarnation
     history_revision: FileObservation
     bus_identity: RecordedBusIdentity
 
+    @classmethod
+    def decodes_tagged_records(cls) -> bool:
+        return True
+
     @property
-    def notification_identity(self) -> DisplayIdentity:
+    def notification_identity(self) -> SourceDisplayIdentity:
         """The captured viewer/source cut, without an unrelated channel/DM payload."""
-        return DisplayIdentity(
+        return SourceDisplayIdentity(
             viewer=self.viewer,
             history_revision=self.history_revision,
             bus_identity=self.bus_identity,
@@ -203,13 +209,18 @@ class DisplayIdentity(DisplayCut):
         return DisplayOutcomes(self.viewer, self.bus_identity)
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class SourceDisplayIdentity(TaggedRecordMember, DisplayIdentity):
+    """The viewer and source cut alone: a notification's or a historical display's."""
+
+
 @dataclass(frozen=True, slots=True)
-class ChannelDisplayIdentity(DisplayIdentity):
+class ChannelDisplayIdentity(TaggedRecordMember, DisplayIdentity):
     scope: ChannelDisplayScope
 
 
 @dataclass(frozen=True, slots=True)
-class DMDisplayIdentity(DisplayIdentity):
+class DMDisplayIdentity(TaggedRecordMember, DisplayIdentity):
     root_identity: tuple[int, int]
     project_path: Annotated[Path, PathText]
     requested_peer: str

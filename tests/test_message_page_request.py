@@ -28,8 +28,8 @@ class ReviewScope(MessageDisplayScope):
     index_targets = frozenset()
 
     @property
-    def index_predicate(self):
-        return "substr(body,1,length(?))=?", (self.prefix, self.prefix)
+    def condition(self):
+        return "substr({body},1,length(?))=?", (self.prefix, self.prefix)
 
     def includes(self, message):
         return message.body.startswith(self.prefix)

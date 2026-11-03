@@ -10,6 +10,7 @@ from .connector_profile import UiConnectionProfile
 from .core_access import CoreAccess
 from .errors import RelationViolationError
 from .nominal.field_codec import FieldCodec
+from .tool_caller import ToolCaller
 from .tool_request import ToolRequest
 from .tool_result import ToolResult
 
@@ -20,7 +21,7 @@ class RemoteCoreAccess(UiConnectionProfile, CoreAccess):
 
     timeout_seconds = 30
 
-    def call(self, request: ToolRequest) -> ToolResult:
+    def call[R: ToolResult](self, request: ToolRequest[ToolCaller, R]) -> R:
         envelope = ToolsCallMessage(jsonrpc="2.0", id=1, params=request.called())
         posted = urllib.request.Request(
             str(self.endpoint.url),

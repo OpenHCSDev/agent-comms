@@ -5,7 +5,7 @@ import pytest
 
 from agent_comms.channel_targets import CommandTarget, IncarnationThreadTarget, NamedTarget
 from agent_comms.errors import HumanSendRefusedError, UnregisteredThreadError
-from agent_comms.historical_views import ConversationObservation, DMDisplayHistory
+from agent_comms.historical_views import UnobservedConversation, DMDisplayHistory
 from agent_comms.read_basis import NamedViewer
 from agent_comms.thread_execution import ExternalThreadExecution
 from bus_record_fixture import context_comms
@@ -74,7 +74,7 @@ def test_retained_dm_target_follows_rename_through_send_page_and_revision(tmp_pa
     generic_page = comms.views.history_page(target, viewer=NamedViewer(sent.sender))
     assert generic_page.messages == page.messages
     observed = DMDisplayHistory.revision(
-        comms.views, target, ConversationObservation(), worktree=worktree)
+        comms.views, target, UnobservedConversation(), worktree=worktree)
     assert observed.selection.peer == target.incarnation
     assert observed.selection.peer.name == "renamed"
 
@@ -96,7 +96,7 @@ def test_retained_dm_refuses_a_removed_birth_at_every_selection_boundary(tmp_pat
     with pytest.raises(UnregisteredThreadError):
         comms.views.dm_display_page(target, worktree=worktree)
     with pytest.raises(UnregisteredThreadError):
-        DMDisplayHistory.revision(comms.views, target, ConversationObservation(), worktree=worktree)
+        DMDisplayHistory.revision(comms.views, target, UnobservedConversation(), worktree=worktree)
     with pytest.raises(UnregisteredThreadError):
         comms.views.history_page(target, viewer=NamedViewer(viewer.name))
 

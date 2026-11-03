@@ -10,6 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
+from .tool_result import ToolResult
 from .nominal.field_codec import (
     NominalSpelling, NominalText, NullMember, RecordMember, SingleFieldValue, SubclassUnion,
     TaggedRecordMember,
@@ -88,6 +89,13 @@ class SequenceCursor(PageCursor, declared_name=None):
 @dataclass(frozen=True)
 class LiveCursor(SingleFieldValue, SequenceCursor):
     """Its sequence is its whole wire value."""
+
+
+@dataclass(frozen=True)
+class LatestSequence(ToolResult):
+    """The newest message on the bus, whoever it was sent to: the bound a UI reads up to."""
+
+    cursor: LiveCursor
 
 
 @dataclass(frozen=True)

@@ -8,7 +8,7 @@ from agent_comms.channel_targets import CommandTarget
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.historical_views import (
     ChannelDisplayHistory,
-    ConversationObservation,
+    UnobservedConversation,
     DMDisplayHistory,
 )
 from agent_comms.private_path import FileRevision
@@ -30,7 +30,7 @@ def test_revision_keeps_the_typed_history_catalogue_observation(tmp_path, view, 
         source = declared_wire(tmp_path / "original")
         comms.views.attach_history(source.root)
     observed = view.revision(
-        comms.views, target, ConversationObservation(), worktree=Checkout(comms.root),
+        comms.views, target, UnobservedConversation(), worktree=Checkout(comms.root),
     )
     assert observed.selection.history_revision == FileRevision.capture(comms.bus.history.path)
     assert FieldCodec.decode(type(observed.selection), FieldCodec.encode(observed.selection)) == observed.selection
@@ -39,7 +39,7 @@ def test_revision_keeps_the_typed_history_catalogue_observation(tmp_path, view, 
 @pytest.mark.parametrize("view,target", [(DMDisplayHistory, CommandTarget.named("peer")), (ChannelDisplayHistory, CommandTarget.named("#comms"))])
 def test_unrelated_registration_does_not_replace_display(tmp_path, view, target):
     comms = declared_wire(tmp_path)
-    before = view.revision(comms.views, target, ConversationObservation(), worktree=Checkout(tmp_path))
+    before = view.revision(comms.views, target, UnobservedConversation(), worktree=Checkout(tmp_path))
     comms.registry.declare(Thread(name='unrelated', tags=frozenset({'other'}), worktree=Checkout(tmp_path)))
     after = view.revision(comms.views, target, before, worktree=Checkout(tmp_path))
 
@@ -50,7 +50,7 @@ def test_unrelated_registration_does_not_replace_display(tmp_path, view, target)
 def test_peer_rename_replaces_display_once(tmp_path):
     comms = declared_wire(tmp_path)
     target = CommandTarget.named("peer")
-    before = DMDisplayHistory.revision(comms.views, target, ConversationObservation(), worktree=Checkout(tmp_path))
+    before = DMDisplayHistory.revision(comms.views, target, UnobservedConversation(), worktree=Checkout(tmp_path))
     comms.registry.rename("peer", "renamed")
     after = DMDisplayHistory.revision(comms.views, target, before, worktree=Checkout(tmp_path))
     settled = DMDisplayHistory.revision(comms.views, target, after, worktree=Checkout(tmp_path))

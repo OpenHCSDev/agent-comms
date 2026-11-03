@@ -28,9 +28,8 @@ if TYPE_CHECKING:
     from .cli_command import CliCommand
     from .comms import Comms
     from .goal_management import Goals
-    from .historical_views import ChannelHistory, DMHistory, HistoryView
+    from .historical_views import ChannelHistory, ConversationHistoryView, DMHistory, HistoryView
     from .history_views import HistoryViews
-    from .message_page import MessagePage, PageBounds
     from .messages import Message, MessageInput
     from .read_basis import (
         ChannelConversation,
@@ -244,10 +243,9 @@ class NamedTarget(CommandTarget):
     default_audience = MessageAudience.DIRECT
 
     @abstractmethod
-    def display_page(
-        self, views: HistoryViews, project: Checkout, bounds: PageBounds
-    ) -> MessagePage:
-        """This conversation's display page as the human user of `project` reads it."""
+    def display_history(self, views: HistoryViews, project: Checkout) -> ConversationHistoryView:
+        """The history this conversation is read through by the human user of `project`: its
+        pages and its revisions both come from it."""
 
     @classmethod
     def address(cls, name: str) -> str:
@@ -372,10 +370,8 @@ class ThreadTarget(NamedTarget):
     def automatic_reply_targets(self, sender: str) -> tuple[str, ...]:
         return (self.reply_target(sender),)
 
-    def display_page(
-        self, views: HistoryViews, project: Checkout, bounds: PageBounds
-    ) -> MessagePage:
-        return views.dm_display_page(self, worktree=project, bounds=bounds)
+    def display_history(self, views: HistoryViews, project: Checkout) -> ConversationHistoryView:
+        return views.dm_history(self, worktree=project)
 
     sigil = "@"
     route: ClassVar[ReplyRoute] = SenderReply()
@@ -507,11 +503,8 @@ class IncarnationThreadTarget(ThreadTarget):
 
 
 class ChannelTarget(NamedTarget):
-    def display_page(
-        self, views: HistoryViews, project: Checkout, bounds: PageBounds
-    ) -> MessagePage:
-        return views.channel_display_page(
-            self.name, viewer=views.display_viewer(project), bounds=bounds)
+    def display_history(self, views: HistoryViews, project: Checkout) -> ConversationHistoryView:
+        return views.channel_history(self, worktree=project)
 
     needs_channel_state = True
     batchable = True

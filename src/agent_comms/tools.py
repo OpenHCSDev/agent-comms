@@ -57,6 +57,8 @@ from .goals import GoalDeclaration
 from .history_result import HistoryPageResult
 from .input_attempt import UnresolvedInput
 from .message_page import NEWEST_PAGE, MessagePage, PageBounds
+from .page_traversal import LatestSequence, LiveCursor
+from .historical_views import ConversationObservation, ConversationRevision, UnobservedConversation
 from .message_reference import MessageReference
 from .messages import InfoKind, Message, MessageKind, NoticeRole, SendableMessageKind
 from .owner_lifecycle import OwnerStartResult
@@ -452,7 +454,7 @@ class CommsChannelsTool(ReadTool, ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsConversationPageTool(ReadTool, ToolRequest):
+class CommsConversationPageTool(ReadTool, ToolRequest[ToolCaller, MessagePage]):
     """The UI's conversation read: the same request locally and through the connector."""
 
     label = "Conversation page"
@@ -464,7 +466,40 @@ class CommsConversationPageTool(ReadTool, ToolRequest):
     )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> MessagePage:
-        return self.conversation.display_page(comms.views, self.project, self.bounds)
+        history = self.conversation.display_history(comms.views, self.project)
+        return history.page(comms.views.presentation, self.bounds)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsConversationRevisionTool(ReadTool, ToolRequest[ToolCaller, ConversationRevision]):
+    """The UI's change check for one conversation: the same request locally and through the
+    connector. The UI keeps the revision it gets back and sends it with the next check."""
+
+    label = "Conversation revision"
+    description = (
+        "Check a channel or a DM for changes since the UI's last observation; returns the "
+        "revision to compare and keep."
+    )
+    conversation: Annotated[NamedTarget, *tool_field("The channel or the DM's thread")]
+    project: Annotated[Checkout, *tool_field("The project whose human user reads it")]
+    seen: Annotated[
+        ConversationObservation, *tool_field("What the UI last saw; unobserved the first time")
+    ] = UnobservedConversation()
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> ConversationRevision:
+        history = self.conversation.display_history(comms.views, self.project)
+        return history.revision(comms.views, self.conversation, self.seen, worktree=self.project)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsLatestSequenceTool(ReadTool, ToolRequest[ToolCaller, LatestSequence]):
+    """The bound a UI reads new messages up to, locally or through the connector."""
+
+    label = "Latest sequence"
+    description = "The sequence number of the newest message on the bus, whoever it was sent to."
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> LatestSequence:
+        return LatestSequence(LiveCursor(comms.views.latest_sequence()))
 
 
 @dataclass(frozen=True, kw_only=True)

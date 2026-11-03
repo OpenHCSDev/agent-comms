@@ -37,7 +37,7 @@ from agent_comms.thread_presentation import NoThreadPresentation, ThreadPresenta
 
 from .agent_activity import AgentActivity
 from .channel_management import ChannelManagement
-from .channel_targets import CommandTarget, ThreadTarget
+from .channel_targets import ChannelTarget, CommandTarget, ThreadTarget
 from .channels import ChannelMemberIndex
 from .collaboration_ledger import CollaborationLedger
 from .errors import UnknownChannelError
@@ -250,8 +250,18 @@ class HistoryViews:
     def dm_display_page(
         self, peer: ThreadTarget, *, worktree: Checkout, bounds: PageBounds = NEWEST_PAGE
     ) -> MessagePage:
-        viewer = self.messaging.user_identity(worktree)
-        return DMDisplayHistory(viewer.name, peer, worktree).page(self.presentation, bounds)
+        return self.dm_history(peer, worktree=worktree).page(self.presentation, bounds)
+
+    def dm_history(self, peer: ThreadTarget, *, worktree: Checkout) -> DMDisplayHistory:
+        """A DM as the human user of `worktree` reads it."""
+        return DMDisplayHistory(self.messaging.user_identity(worktree).name, peer, worktree)
+
+    def channel_history(
+        self, channel: ChannelTarget, *, worktree: Checkout
+    ) -> ChannelDisplayHistory:
+        """A channel as the human user of `worktree` reads it."""
+        return ChannelDisplayHistory(
+            self.bus.require_channel(channel.name), self.display_viewer(worktree))
 
     def display_viewer(self, worktree: Checkout) -> NamedViewer:
         """Select the human reader; page capture resolves it in its own snapshot."""
