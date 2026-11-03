@@ -279,7 +279,7 @@ class NoTurnFailure(TurnFailure):
     def superseded_by(self, failure: TurnFailure) -> bool:
         return True
 
-    def raise_native(self, proof, model: SelectedModel) -> None:
+    def raise_native(self, proof: object, model: SelectedModel) -> None:
         """Nothing failed, so nothing is raised."""
 
     def terminal_text(self, otherwise: Callable[[], str]) -> str:
