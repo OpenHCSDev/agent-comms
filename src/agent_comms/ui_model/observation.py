@@ -102,14 +102,19 @@ if TYPE_CHECKING:
     from agent_comms.transcripts import TranscriptRead
 
 
-class ObservationRequest(ABC):
-    """A UI request; each declares how the service receives it."""
+class ObservationRequest(SubclassUnion, affix=""):
+    """A UI request; each declares how the service receives it. A remote UI sends it over
+    the connector, so each record carries its kind."""
+
+    @classmethod
+    def decodes_tagged_records(cls) -> bool:
+        return True
 
     @abstractmethod
     def receive(self, service: ObservationService) -> None: ...
 
 
-class InterestRequest(ObservationRequest):
+class InterestRequest(TaggedRecordMember, ObservationRequest, declared_name=None):
     """Changes what is observed; the service observes again."""
 
     @abstractmethod
@@ -395,7 +400,7 @@ class ReadUnreadable[T](StoredRead[T]):
 
 
 @dataclass(frozen=True)
-class AwaitedRead(ObservationRequest):
+class AwaitedRead(TaggedRecordMember, ObservationRequest, declared_name=None):
     """A read the UI awaits; the service answers it by ``request_id``.
 
     ``root`` is the Comms root the UI's view belongs to; a read for another
@@ -418,7 +423,7 @@ class AwaitedRead(ObservationRequest):
         return ReadRefused(self.request_id, error, traceback.format_exc())
 
 
-class ReadRequest(AwaitedRead):
+class ReadRequest(AwaitedRead, declared_name=None):
     """A read of Core's stores, served one at a time in arrival order."""
 
     deferred_reads: ClassVar[tuple[type[Exception], ...]] = (CoordinationReadUnavailable,)
@@ -459,7 +464,7 @@ class ReadOperation(ReadRequest):
 
 
 @dataclass(frozen=True)
-class OwnerRead(AwaitedRead):
+class OwnerRead(AwaitedRead, declared_name=None):
     """A read scoped to the captured thread incarnation ``owner``.
 
     Served as it arrives, beside store reads; the shared operation owns its
@@ -498,7 +503,7 @@ class OwnerRead(AwaitedRead):
 
 
 @dataclass(frozen=True)
-class CancelRead(ObservationRequest):
+class CancelRead(TaggedRecordMember, ObservationRequest):
     """The UI stopped waiting; a read not yet answered is dropped."""
 
     request_id: int
@@ -714,13 +719,13 @@ class SidebarReading(ReadingObservation[ObserveSidebar]):
 
 
 @dataclass(frozen=True)
-class StopSidebar(ObservationRequest):
+class StopSidebar(TaggedRecordMember, ObservationRequest):
     def receive(self, service: ObservationService) -> None:
         service.interest.remove(SidebarReading)
 
 
 @dataclass(frozen=True)
-class StopObserving(ObservationRequest):
+class StopObserving(TaggedRecordMember, ObservationRequest):
     """Views are retiring; finish their outstanding reads without observing more state."""
 
     def receive(self, service: ObservationService) -> None:
@@ -729,7 +734,8 @@ class StopObserving(ObservationRequest):
 
 @dataclass(frozen=True)
 class ObserveThreads(InterestRequest):
-    names: frozenset[str]
+    # Not ``names``: DeclaredFamily.names is the family's member-name lookup.
+    threads: frozenset[str]
 
     def observation(self) -> ThreadReading:
         return ThreadReading(self)
@@ -744,7 +750,7 @@ class ObserveTeamHud(InterestRequest):
 
 
 @dataclass(frozen=True)
-class StopTeamHud(ObservationRequest):
+class StopTeamHud(TaggedRecordMember, ObservationRequest):
     def receive(self, service: ObservationService) -> None:
         service.interest.remove(TeamHudReading)
 
@@ -918,12 +924,12 @@ class ThreadReading(ReadingObservation[ObserveThreads]):
     def __init__(self, request: ObserveThreads):
         super().__init__(request)
         self.observed = ThreadsObserved(WireRevision.empty(), {}, frozenset(), {})
-        self.initial = request.names
-        self.located_threads = LocatedThreads({}, request.names, {})
+        self.initial = request.threads
+        self.located_threads = LocatedThreads({}, request.threads, {})
 
     def continue_from(self, previous: Self) -> Self:
         self.observed = previous.observed
-        self.initial = self.request.names - previous.request.names
+        self.initial = self.request.threads - previous.request.threads
         return self
 
     def read(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:
@@ -936,7 +942,7 @@ class ThreadReading(ReadingObservation[ObserveThreads]):
             lambda error: self.failed(located.names, ThreadBusy(), results),
             lambda error: self.failed(located.names, ThreadUnavailable(error), results))
         results.update((name, value) for name, value in previous.results.items()
-                       if name in self.request.names and name not in located.names)
+                       if name in self.request.threads and name not in located.names)
         observed = ThreadsObserved(revision, results, frozenset(), located.activity)
         self.observed = observed
         changed = observed.changed_since(previous) | self.initial
@@ -951,7 +957,7 @@ class ThreadReading(ReadingObservation[ObserveThreads]):
     def located(self, comms: Comms, revision: WireRevision, previous: ThreadsObserved) -> LocatedThreads:
         # Keep each completed stage when a later stored read fails, exactly as
         # the original read did before its activity/names became declared state.
-        self.located_threads = LocatedThreads({}, self.request.names, {})
+        self.located_threads = LocatedThreads({}, self.request.threads, {})
         readable, _ = previous.revision_inputs()
         names = self.located_threads.names
         watched = names | frozenset(actor for view in readable.values()
@@ -996,8 +1002,13 @@ class ViewReading(Observation[ObserveViews]):
             ViewsRetired(revision, retired).publish(service)
 
 
-class ServiceResult(ABC):
-    """What the service sends; each declares how the UI side receives it."""
+class ServiceResult(SubclassUnion, affix=""):
+    """What the service sends; each declares how the UI side receives it. A remote UI
+    receives it over the connector, so each record carries its kind."""
+
+    @classmethod
+    def decodes_tagged_records(cls) -> bool:
+        return True
 
     def retire_request(self, service: ObservationService, request: ReadRequest) -> None:
         service.pending.pop(request.request_id)
@@ -1006,12 +1017,12 @@ class ServiceResult(ABC):
     async def received(self, process: ObservationProcess, observed: Callable[[Observed], None]) -> None: ...
 
 
-class ReadOutcome(ServiceResult):
+class ReadOutcome(TaggedRecordMember, ServiceResult, declared_name=None):
     """The service's answer to a read, including a read that remains busy."""
 
 
 @dataclass(frozen=True)
-class Observed(ObservationStep, ServiceResult):
+class Observed(TaggedRecordMember, ObservationStep, ServiceResult, declared_name=None):
     """A result, as of one revision of Core's stores."""
 
     revision: WireRevision
@@ -1087,7 +1098,7 @@ class NoSidebarResult(PublishState):
 
 
 @dataclass(frozen=True)
-class SidebarResult(PublishState, Observed):
+class SidebarResult(PublishState, Observed, declared_name=None):
     revision: WireRevision = field(compare=False)
     request: ObserveSidebar
 
@@ -1268,7 +1279,7 @@ class ViewsRetired(Observed):
 
 
 @dataclass(frozen=True)
-class ObservationFailed(ServiceResult):
+class ObservationFailed(TaggedRecordMember, ServiceResult):
     """The service failed and is exiting; ``error`` is its traceback."""
 
     error: str
