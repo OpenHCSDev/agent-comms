@@ -1582,7 +1582,7 @@ class DeclaredWireType(ExternalJsonShape, WireValue):
         return compile_decoder(cls.wire_type)
 
     @classmethod
-    def schema(cls) -> dict[str, object]:
+    def schema(cls) -> dict[str, JsonValue]:
         return FieldCodec.value_schema(cls.wire_type)
 
 
@@ -1595,12 +1595,13 @@ class CapabilityUnion(ExternalJsonShape, WireValue):
 
     @classmethod
     def capability_members(cls) -> tuple[type, ...]:
-        pending, roots = list(cls.__subclasses__()), {}
+        pending: list[type] = list(cls.__subclasses__())
+        roots: dict[type[DeclaredFamily], None] = {}
         while pending:
             member = pending.pop()
             pending.extend(member.__subclasses__())
-            if isinstance(root := getattr(member, "family_root", None), type):
-                roots[root] = None
+            if issubclass(member, DeclaredFamily):
+                roots[member.family_root] = None
         return tuple(dict.fromkeys(
             member for root in roots for member in root.members_with(cls)))
 
@@ -1610,10 +1611,10 @@ class CapabilityUnion(ExternalJsonShape, WireValue):
 
     @classmethod
     def from_wire(cls, data: object) -> Self:
-        return ValueDecoder.for_members(cls.capability_members()).decode_bound(data, {})
+        return cast(Self, ValueDecoder.for_members(cls.capability_members()).decode_bound(data, {}))
 
     @classmethod
-    def schema(cls) -> dict[str, object]:
+    def schema(cls) -> dict[str, JsonValue]:
         return FieldCodec.value_schema(ValueDecoder.for_members(cls.capability_members()).target)
 
 
@@ -1633,7 +1634,7 @@ class SubclassUnion(DeclaredFamily, AcceptsNull, ExternalJsonShape, WireValue):
         return ValueDecoder.for_members(cls.members_with(cls)).decode_bound(data, {})
 
     @classmethod
-    def schema(cls) -> dict[str, object]:
+    def schema(cls) -> dict[str, JsonValue]:
         return FieldCodec.value_schema(ValueDecoder.for_members(cls.members_with(cls)).target)
 
     @classmethod
@@ -1686,7 +1687,7 @@ class NullMember(ExternalField, AcceptsNull, WireValue):
         return None
 
     @classmethod
-    def schema(cls) -> dict[str, object]:
+    def schema(cls) -> dict[str, JsonValue]:
         return FieldCodec.value_schema(type(None))
 
 
@@ -1738,7 +1739,7 @@ class RecordMember(WireValue):
         return FieldCodec.decode_record(cls, data)
 
     @classmethod
-    def schema(cls) -> dict[str, object]:
+    def schema(cls) -> dict[str, JsonValue]:
         return FieldCodec.record_schema(cls)
 
     def to_wire(self) -> dict[str, object]:
@@ -2101,7 +2102,7 @@ class SequenceNumber(ValidatedScalar):
         return position
 
     @classmethod
-    def schema(cls) -> dict[str, object]:
+    def schema(cls) -> dict[str, JsonValue]:
         return {"type": "integer", "minimum": cls.minimum}
 
 
@@ -2760,7 +2761,8 @@ class FieldCodec(MroDispatch, Sealed):
             alternatives = []
             for member in target.members_with(target):
                 tag = member.family_discriminator
-                selector = {tag: {"type": "string", "const": member.declared_name}}
+                selector: dict[str, JsonValue] = {
+                    tag: {"type": "string", "const": member.declared_name}}
                 alternatives.append(
                     cls._record_schema((member,), selector, [tag]) if is_dataclass(member)
                     # A model member (a Pydantic wire model) describes its own fields.
@@ -2774,8 +2776,10 @@ class FieldCodec(MroDispatch, Sealed):
         cls, member: type, selector: dict[str, JsonValue], tag: str,
     ) -> dict[str, JsonValue]:
         schema = dict(compile_decoder(member).value_schema())
-        schema["properties"] = {**selector, **schema.get("properties", {})}
-        schema["required"] = [tag, *schema.get("required", [])]
+        properties = FieldCodec.decode(dict[str, JsonValue], schema.get("properties", {}))
+        required = FieldCodec.decode(list[str], schema.get("required", []))
+        schema["properties"] = {**selector, **properties}
+        schema["required"] = [tag, *required]
         return schema
 
     @classmethod
