@@ -95,7 +95,10 @@ from .owner_connection import OwnerConnection
 from .context_store import (
     LATEST_CONTEXT, CapturedContext, ContextManifestCursor, ContextManifestPage, ContextManifestReference,
 )
-from .importing import ImportedSessionMetadata
+from .importing import ImportedSessionMetadata, ThreadImported
+from .cli_bridges.history import ExpectedSession, OfflineHistory
+from .harness_install import Harness
+from .thread_management import ImportDirectory
 from .registry_document import RegistryEntry
 from .session_revision import SessionObservation
 from .turn_context import CodexRolloutProvenance, ContextSourceText, Provenance, SegmentManifest
@@ -439,6 +442,26 @@ class RetiredViewsRead(ToolResult):
     """Which of a UI's open views no longer have a source, as Core decides."""
 
     retired: RetiredViews
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsImportThreadTool(ToolRequest[ToolCaller, ThreadImported]):
+    """A UI imports a harness session as a stopped thread; Core's host reads the source file.
+    Requires a human caller."""
+
+    label = "Import thread"
+    description = ("Import a harness session file on Core's host as a stopped thread; requires a "
+                   "human UI caller.")
+    source: Annotated[Path, *tool_field("Session file on Core's host")]
+    harness: Annotated[type[Harness], *tool_field("Harness that wrote the session")]
+    name: Annotated[str, *tool_field("Thread name")]
+    session: Annotated[ExpectedSession, *tool_field("Expected session")]
+    worktree: Annotated[ImportDirectory, *tool_field("Worktree for the imported thread")]
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> ThreadImported:
+        caller.require_human()
+        return comms.threads.import_thread(OfflineHistory.stored(self.harness, self.source, self.session),
+                                          name=self.name, worktree=self.worktree)
 
 
 @dataclass(frozen=True)

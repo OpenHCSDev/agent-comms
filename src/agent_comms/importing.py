@@ -16,6 +16,7 @@ from typing import Annotated, TYPE_CHECKING
 
 
 from .cli_result import CliResult
+from .tool_result import ToolResult
 from .nominal.field_codec import FieldCodec, WireName
 from .harness_install import Harness
 from .thread_text import NoThreadText, ThreadText
@@ -232,7 +233,7 @@ class ImportBuffer:
 
 
 @dataclass(frozen=True, slots=True)
-class ThreadImported(CliResult):
+class ThreadImported(CliResult, ToolResult):
     thread: str
     session_file: str
     harness: type[Harness]
