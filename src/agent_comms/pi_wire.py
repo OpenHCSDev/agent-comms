@@ -66,11 +66,20 @@ class PiPayload(ExternalField):
     def to_wire(self):
         return FieldCodec.encode_fields(self)
 
+    @classmethod
+    def envelope_keys(cls) -> frozenset[str]:
+        """External keys this payload's record carries beyond its declared fields."""
+        return frozenset()
+
 
 class TaggedPayload(PiPayload):
     """A payload whose external record names its member under a declared key."""
 
     wire_tag: ClassVar[str]
+
+    @classmethod
+    def envelope_keys(cls) -> frozenset[str]:
+        return frozenset({cls.wire_tag})
 
     def to_wire(self):
         data = super().to_wire()

@@ -139,7 +139,7 @@ class StrictFields(PiPayload):
         cls, value: dict[str, JsonValue], decoded: dict[str, object],
     ) -> dict[str, object]:
         names = {key for _, key in FieldCodec.record_fields(cls)}
-        if set(value) - names - {cls.wire_tag}:
+        if set(value) - names - cls.envelope_keys():
             raise MalformedRecord(f"Unexpected {cls.__name__} fields")
         return super().decode_fields(value, decoded)
 
