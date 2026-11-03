@@ -70,7 +70,7 @@ from agent_comms.maintenance_barrier import (
     ReadyPhase,
 )
 from agent_comms.store_files import ExclusiveLock, StoreGuard, _store_lock
-from agent_comms.tools import ChannelListing, CommsChannelsTool, CommsPinChannelTool, CommsUserSendTool, invoke_tool
+from agent_comms.tools import ChannelListing, CommsChannelsTool, CommsPinChannelTool, CommsSendTool, CommsUserSendTool, invoke_tool
 from agent_comms.tool_caller import HumanCaller, NoThreadCaller, ThreadCaller
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.tool_request import ReadTool, ToolCall, ToolRequest
@@ -1051,3 +1051,14 @@ async def test_ui_mcp_publishes_with_the_durable_human_identity(
     assert len(messages) == 3 and {message.sender for message in messages} == {messages[0].sender}
     assert set(comms.registry.snapshot().threads) - set(before.threads) == {messages[0].sender}
     assert comms.registry.require(messages[0].sender).role is UserThreadRole
+
+
+def test_a_cloud_session_on_the_claude_ai_grant_acts_under_its_own_name(comms):
+    """Several remote Claude sessions share claude-ai's grant; each names itself with the fork
+    argument and is registered as claude-ai's child under that name, so its work is its own."""
+    comms.registry.declare(Thread(CALLER.name, frozenset(), Checkout(comms.root)))
+    acting, rest = CALLER.acting({"fork": {"name": "claude-cloud-1"}, "thread": "worker"})
+    assert rest == {"thread": "worker"}
+    CALLER.prepare_call(comms, acting)
+    assert comms.registry.require("claude-cloud-1").parent.names() == ("claude-ai",)
+    assert "fork" in CALLER.input_schema(CommsSendTool)["properties"]
