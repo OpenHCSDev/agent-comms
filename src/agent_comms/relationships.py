@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, fields, replace
 from functools import cmp_to_key
 from pathlib import Path
@@ -539,7 +539,7 @@ class RelationshipEditContext:
     document: RelationshipDocument
     first: Thread
     peer_name: str
-    second: Thread | None
+    second: PeerThread
 
     @property
     def pairs(self) -> tuple[Collaboration, ...]:
@@ -555,33 +555,68 @@ class RelationshipEditContext:
         """Decode the pair's one collaboration state once, from its edges."""
         pairs = self.pairs
         for edge in pairs:
-            if self.second is not None and edge.counterpart(self.first) == self.second.incarnation:
+            if self.second.holds(edge.counterpart(self.first)):
                 return ActiveCollaboration(edge)
         return ReplacedPeerCollaboration(pairs[0]) if pairs else NoCollaboration()
 
     def require_peer(self) -> Thread:
-        if self.second is None:
-            raise UnregisteredThreadError(f"Thread {self.peer_name!r} is not registered.")
-        self.second.role.require_executable(RelationViolationError(
+        peer = self.second.require(self.peer_name)
+        peer.role.require_executable(RelationViolationError(
             f"Thread {self.peer_name!r} is human; collaborations relate agents"
         ))
-        if self.first.name == self.second.name:
+        if self.first.name == peer.name:
             raise ValueError("A thread cannot collaborate with itself")
         self.collaboration.require_current_peer()
-        return self.second
+        return peer
 
     def publish(self, changed: Collaboration) -> tuple[RelationshipDocument, Collaboration]:
         return self.collaboration.published(self.document, changed), changed.oriented(self.first)
 
 
+class PeerThread(ABC):
+    """The named peer: registered under its current incarnation, or not registered."""
+
+    @classmethod
+    def named(cls, threads: Mapping[str, Thread], name: str) -> PeerThread:
+        return RegisteredPeer(threads[name]) if name in threads else UnregisteredPeer()
+
+    @abstractmethod
+    def require(self, name: str) -> Thread: ...
+
+    @abstractmethod
+    def holds(self, incarnation: object) -> bool: ...
+
+
+@dataclass(frozen=True)
+class RegisteredPeer(PeerThread):
+    thread: Thread
+
+    def require(self, name: str) -> Thread:
+        return self.thread
+
+    def holds(self, incarnation: object) -> bool:
+        return incarnation == self.thread.incarnation
+
+
+class UnregisteredPeer(PeerThread):
+    def require(self, name: str) -> Thread:
+        raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
+
+    def holds(self, incarnation: object) -> bool:
+        return False
+
+
 class PairCollaboration(ABC):
     """A peer pair's collaboration: none, active, or held by a replaced peer identity."""
 
+    @abstractmethod
     def require_current_peer(self) -> None:
-        """Most states admit an edit against the current peer."""
+        """Refuse an edit when the pair's edge names a replaced peer identity."""
 
     @abstractmethod
-    def added(self, ctx: RelationshipEditContext, peer: Thread, note: str) -> Collaboration: ...
+    def added(
+        self, ctx: RelationshipEditContext, peer: Thread, note: str,
+    ) -> Collaboration: ...
 
     @abstractmethod
     def updated(self, note: str) -> Collaboration: ...
@@ -590,16 +625,22 @@ class PairCollaboration(ABC):
     def removed(self, document: RelationshipDocument) -> RelationshipDocument: ...
 
     @abstractmethod
-    def published(self, document: RelationshipDocument, changed: Collaboration) -> RelationshipDocument: ...
+    def published(
+        self, document: RelationshipDocument, changed: Collaboration,
+    ) -> RelationshipDocument: ...
 
 
 class NoCollaboration(PairCollaboration):
     """The pair has no edge: adding creates one, updating has nothing to update."""
 
+    def require_current_peer(self) -> None:
+        """No edge names a replaced peer."""
+
     def added(self, ctx: RelationshipEditContext, peer: Thread, note: str) -> Collaboration:
         now = time.time()
         return Collaboration(
-            ctx.first.name, peer.name, ctx.first.incarnation.wire_birth, peer.incarnation.wire_birth, note, now, now
+            ctx.first.name, peer.name, ctx.first.incarnation.wire_birth,
+            peer.incarnation.wire_birth, note, now, now,
         )
 
     def updated(self, note: str) -> Collaboration:
@@ -608,7 +649,9 @@ class NoCollaboration(PairCollaboration):
     def removed(self, document: RelationshipDocument) -> RelationshipDocument:
         return document
 
-    def published(self, document: RelationshipDocument, changed: Collaboration) -> RelationshipDocument:
+    def published(
+        self, document: RelationshipDocument, changed: Collaboration,
+    ) -> RelationshipDocument:
         return replace(document, collaborations=(*document.collaborations, changed))
 
 
@@ -620,7 +663,8 @@ class HeldCollaboration(PairCollaboration):
 
     def removed(self, document: RelationshipDocument) -> RelationshipDocument:
         return replace(document, collaborations=tuple(
-            edge for edge in document.collaborations if edge.pair_identity != self.edge.pair_identity
+            edge for edge in document.collaborations
+            if edge.pair_identity != self.edge.pair_identity
         ))
 
 
@@ -628,13 +672,18 @@ class HeldCollaboration(PairCollaboration):
 class ActiveCollaboration(HeldCollaboration):
     """The edge names the peer's current incarnation."""
 
+    def require_current_peer(self) -> None:
+        """The edge already names the current peer."""
+
     def added(self, ctx: RelationshipEditContext, peer: Thread, note: str) -> Collaboration:
         return self.edge
 
     def updated(self, note: str) -> Collaboration:
         return self.edge.updated(note, time.time())
 
-    def published(self, document: RelationshipDocument, changed: Collaboration) -> RelationshipDocument:
+    def published(
+        self, document: RelationshipDocument, changed: Collaboration,
+    ) -> RelationshipDocument:
         if changed is self.edge:
             return document
         return replace(document, collaborations=(
@@ -869,7 +918,7 @@ class ThreadRelationships:
         ) -> DocumentChange[RelationshipDocument, Collaboration | None]:
             resolved = document.resolved(registry)
             changed, result = command.apply(
-                RelationshipEditContext(resolved, first, peer, registry.threads.get(peer))
+                RelationshipEditContext(resolved, first, peer, PeerThread.named(registry.threads, peer))
             )
             return DocumentChange(document if changed == document else changed, result)
 
