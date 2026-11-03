@@ -94,9 +94,10 @@ from agent_comms.view_unread import ReplyIndexResult
 from agent_comms.watched import FileSource
 from agent_comms.work_branches import WorkBranchError
 
+from multiprocessing.connection import Connection
+
 if TYPE_CHECKING:
     from concurrent.futures import Future
-    from multiprocessing.connection import Connection
 
     from agent_comms.tool_result import ToolResult
     from agent_comms.transcripts import TranscriptRead
@@ -1477,6 +1478,35 @@ class ObservationService:
                 retrying.cancel()
                 self.pending.clear()
                 self.comms.views.transcript_reads.close()
+
+
+class EncodedConnection(Connection):
+    """The local pipe's framing and lifetime, carrying declared records instead of pickles,
+    so an observation can be served across a boundary the peer does not trust with code.
+    Each end declares what it sends and what it receives."""
+
+    sends: ClassVar[type]
+    receives: ClassVar[type]
+
+    def send(self, obj: object) -> None:
+        self.send_bytes(FieldCodec.compact(FieldCodec.encode_document(obj, self.sends)).encode())
+
+    def recv(self) -> object:
+        return FieldCodec.decode_document(self.receives, FieldCodec.parse(self.recv_bytes().decode()))
+
+
+class ServiceEnd(EncodedConnection):
+    """The observation service's end: results out, requests in."""
+
+    sends = ServiceResult
+    receives = ObservationRequest
+
+
+class ViewerEnd(EncodedConnection):
+    """A UI's end: requests out, results in."""
+
+    sends = ObservationRequest
+    receives = ServiceResult
 
 
 def serve(route: CommsRoute, connection: Connection) -> None:
