@@ -28,7 +28,9 @@ if TYPE_CHECKING:
     from .cli_command import CliCommand
     from .comms import Comms
     from .goal_management import Goals
-    from .historical_views import ChannelHistory, DMHistory, HistoryView
+    from .historical_views import (
+        ChannelHistory, ConversationObservation, ConversationRevision, DMHistory, HistoryView,
+    )
     from .history_views import HistoryViews
     from .message_page import MessagePage, PageBounds
     from .messages import Message, MessageInput
@@ -249,6 +251,12 @@ class NamedTarget(CommandTarget):
     ) -> MessagePage:
         """This conversation's display page as the human user of `project` reads it."""
 
+    @abstractmethod
+    def revision(
+        self, views: HistoryViews, seen: ConversationObservation, project: Checkout
+    ) -> ConversationRevision:
+        """What the human user of `project` would see now, given what they last saw."""
+
     @classmethod
     def address(cls, name: str) -> str:
         """The target name an address of this kind names once its sigil is read."""
@@ -376,6 +384,11 @@ class ThreadTarget(NamedTarget):
         self, views: HistoryViews, project: Checkout, bounds: PageBounds
     ) -> MessagePage:
         return views.dm_display_page(self, worktree=project, bounds=bounds)
+
+    def revision(
+        self, views: HistoryViews, seen: ConversationObservation, project: Checkout
+    ) -> ConversationRevision:
+        return views.dm_revision(self, seen, worktree=project)
 
     sigil = "@"
     route: ClassVar[ReplyRoute] = SenderReply()
@@ -512,6 +525,11 @@ class ChannelTarget(NamedTarget):
     ) -> MessagePage:
         return views.channel_display_page(
             self.name, viewer=views.display_viewer(project), bounds=bounds)
+
+    def revision(
+        self, views: HistoryViews, seen: ConversationObservation, project: Checkout
+    ) -> ConversationRevision:
+        return views.channel_revision(self, seen, worktree=project)
 
     needs_channel_state = True
     batchable = True

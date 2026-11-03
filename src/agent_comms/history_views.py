@@ -37,7 +37,7 @@ from agent_comms.thread_presentation import NoThreadPresentation, ThreadPresenta
 
 from .agent_activity import AgentActivity
 from .channel_management import ChannelManagement
-from .channel_targets import CommandTarget, ThreadTarget
+from .channel_targets import ChannelTarget, CommandTarget, ThreadTarget
 from .channels import ChannelMemberIndex
 from .collaboration_ledger import CollaborationLedger
 from .errors import UnknownChannelError
@@ -51,7 +51,10 @@ from .exporting import (
     WireTranscriptExporter,
 )
 from .goal_management import Goals
-from .historical_views import ChannelDisplayHistory, ChannelHistory, DMDisplayHistory, DMHistory
+from .historical_views import (
+    ChannelDisplayHistory, ChannelHistory, ConversationObservation, ConversationRevision,
+    DMDisplayHistory, DMHistory,
+)
 from .message_bus import MessageBus
 from .message_page import NEWEST_PAGE, MessagePage, PageBounds
 from .message_reference import MessageReference
@@ -252,6 +255,16 @@ class HistoryViews:
     ) -> MessagePage:
         viewer = self.messaging.user_identity(worktree)
         return DMDisplayHistory(viewer.name, peer, worktree).page(self.presentation, bounds)
+
+    def dm_revision(
+        self, peer: ThreadTarget, seen: ConversationObservation, *, worktree: Checkout
+    ) -> ConversationRevision:
+        return DMDisplayHistory.revision(self, peer, seen, worktree=worktree)
+
+    def channel_revision(
+        self, channel: ChannelTarget, seen: ConversationObservation, *, worktree: Checkout
+    ) -> ConversationRevision:
+        return ChannelDisplayHistory.revision(self, channel, seen, worktree=worktree)
 
     def display_viewer(self, worktree: Checkout) -> NamedViewer:
         """Select the human reader; page capture resolves it in its own snapshot."""

@@ -1064,11 +1064,20 @@ def test_a_cloud_session_on_the_claude_ai_grant_acts_under_its_own_name(comms):
     assert "fork" in CALLER.input_schema(CommsSendTool)["properties"]
 
 
-async def test_a_ui_reads_one_conversation_page_the_same_locally_and_remotely(client, comms):
-    """The UI's page request answers in process and through tools/call with one record:
-    the remote reply decodes into the request's declared result, the way RemoteCoreAccess
-    decodes it."""
+async def remote_answer(client: TestClient, token: str, request):
+    """One request through the real HTTP tools/call, decoded the way RemoteCoreAccess does."""
     from agent_comms.connector import ToolsCallMessage, ToolsCallReply
+
+    envelope = ToolsCallMessage(jsonrpc="2.0", id=3, params=request.called())
+    reply = FieldCodec.decode(ToolsCallReply, await (await client.post(
+        "/mcp", headers={"Authorization": f"Bearer {token}"},
+        json=FieldCodec.encode(envelope))).json())
+    assert not reply.result.is_error, reply.result.content
+    return FieldCodec.decode(request.result_type(), reply.result.structured_content)
+
+
+async def test_a_ui_reads_one_conversation_page_the_same_locally_and_remotely(client, comms):
+    """The UI's page request answers in process and through tools/call with one record."""
     from agent_comms.core_access import LocalCoreAccess
     from agent_comms.tools import CommsConversationPageTool
 
@@ -1083,12 +1092,36 @@ async def test_a_ui_reads_one_conversation_page_the_same_locally_and_remotely(cl
     # The UI's project, not the bus root, is the worktree the read proof records.
     assert local.selection.identity.project_path == project.resolved().path
 
-    envelope = ToolsCallMessage(jsonrpc="2.0", id=3,
-                                params=request.called())
-    headers = {"Authorization": f"Bearer {await approved_token(client, comms)}"}
-    reply = FieldCodec.decode(ToolsCallReply, await (await client.post(
-        "/mcp", headers=headers, json=FieldCodec.encode(envelope))).json())
-    assert not reply.result.is_error
-    remote = FieldCodec.decode(request.result_type(), reply.result.structured_content)
+    remote = await remote_answer(client, await approved_token(client, comms), request)
     assert [m.message_id for m in remote.messages] == [m.message_id for m in local.messages]
     assert remote.selection == local.selection  # the read proof comes back for the read mark
+
+
+@pytest.mark.parametrize("conversation", [ThreadTarget("worker"), CommandTarget.named("#comms")])
+async def test_a_ui_checks_a_conversation_for_changes_the_same_locally_and_remotely(
+    client, comms, conversation
+):
+    """A revision is what the UI keeps and sends back with its next check, so it must come
+    back from the connector as the same record, channel or DM, and settle once nothing
+    changed. The latest-sequence bound travels the same way."""
+    from agent_comms.core_access import LocalCoreAccess
+    from agent_comms.tools import CommsConversationRevisionTool, CommsLatestSequenceTool
+
+    comms.registry.declare(Thread(CALLER.name, frozenset({"comms"}), Checkout(comms.root)))
+    comms.messaging.send_user_message(
+        conversation, "check through the boundary", worktree=Checkout(comms.root))
+    local_core, token = LocalCoreAccess(comms), await approved_token(client, comms)
+    first = CommsConversationRevisionTool(conversation=conversation, project=Checkout(comms.root))
+
+    local = local_core.call(first)
+    remote = await remote_answer(client, token, first)
+    assert remote == local
+
+    again = replace(first, seen=remote)
+    settled = await remote_answer(client, token, again)
+    assert settled == local_core.call(again)
+    assert not settled.display_changed_since(remote)
+
+    latest = CommsLatestSequenceTool()
+    assert await remote_answer(client, token, latest) == local_core.call(latest)
+    assert local_core.call(latest).cursor.sequence == comms.views.latest_sequence()

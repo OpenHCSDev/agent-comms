@@ -29,6 +29,10 @@ class MessagePage(ToolResult):
     selection: SelectedDisplay
     source_pages: tuple[MessagePage, ...] = ()
 
+    def same_display(self, earlier: MessagePage) -> bool:
+        """Read-scope safety compares the original pages, never a client identity copy."""
+        return self.selection.identity == earlier.selection.identity
+
     def select(self, sequences) -> MessagePage:
         """Keep only painted messages and the corresponding original read proof."""
         return self.selection.select(self, sequences)

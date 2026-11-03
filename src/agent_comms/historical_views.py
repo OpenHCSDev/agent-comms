@@ -22,9 +22,12 @@ from .channels import Channel
 from .child_process import Platform
 from .coordination_errors import HistoricalSourceChanged
 from .errors import UnregisteredThreadError
-from .nominal.field_codec import FieldCodec, ScratchName, TaggedRecordMember
+from .nominal.field_codec import (
+    FieldCodec, NullMember, RecordMember, ScratchName, SubclassUnion, TaggedRecordMember,
+)
 from .locked_store import DocumentChange, RegistryFile, RootFile
 from .maintenance_barrier import CarriedDocument
+from .tool_result import ToolResult
 from .message_page import (
     NEWEST_PAGE,
     ConversationMessagePageRequest,
@@ -46,6 +49,7 @@ from .read_basis import (
     ChannelDisplayScope,
     DisplayBasis,
     DisplayIdentity,
+    SourceDisplayIdentity,
     DisplayViewer,
     DMDisplayBasis,
     DMDisplayIdentity,
@@ -81,8 +85,8 @@ class HistoricalSelection(TaggedRecordMember, SelectedDisplay):
     displayed: HistoricalDisplay
 
     @property
-    def identity(self):
-        return DisplayIdentity(
+    def identity(self) -> SourceDisplayIdentity:
+        return SourceDisplayIdentity(
             viewer=self.displayed.displayed.viewer_identity,
             history_revision=self.history_revision,
             bus_identity=self.displayed.displayed.bus_identity,
@@ -138,7 +142,23 @@ class HistoryView(ABC):
         return MessagePageRequest(scope, bounds)
 
 
-class ConversationObservation:
+class ConversationObservation(SubclassUnion, affix=""):
+    """What a UI last saw of one conversation. It goes to Core with the next revision read
+    and comes back as the new revision, locally or through the connector."""
+
+    @abstractmethod
+    def matches_stores(self, stores: WireRevision) -> bool: ...
+
+    @abstractmethod
+    def capture(self, stores: WireRevision,
+                read: Callable[[], ConversationRevision]) -> ConversationRevision: ...
+
+    @abstractmethod
+    def display_changed_before(self, later: ConversationRevision) -> bool: ...
+
+
+@dataclass(frozen=True, slots=True)
+class UnobservedConversation(NullMember, ConversationObservation):
     """A first observation has no selection and therefore always reads."""
 
     def matches_stores(self, stores: WireRevision) -> bool:
@@ -153,8 +173,9 @@ class ConversationObservation:
 
 
 @dataclass(frozen=True, slots=True)
-class ConversationRevision(ConversationObservation):
-    """Core's captured selection and original store observation for one view."""
+class ConversationRevision(RecordMember, ConversationObservation, ToolResult):
+    """Core's captured selection and original store observation for one view, and the reply
+    a UI's revision request returns."""
 
     stores: WireRevision
     selection: DisplayIdentity
@@ -177,11 +198,6 @@ class ConversationRevision(ConversationObservation):
 
 class ConversationHistoryView:
     """Historical views that present conversation content, not owner state."""
-
-    @classmethod
-    def same_display(cls, page: MessagePage, earlier: MessagePage) -> bool:
-        """Read-scope safety uses the original pages, never a client identity copy."""
-        return page.selection.identity == earlier.selection.identity
 
     @classmethod
     def revision(cls, views: HistoryViews, target: NamedTarget,
