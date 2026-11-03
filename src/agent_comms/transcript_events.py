@@ -25,6 +25,7 @@ from .nominal.field_codec import (
     projected,
 )
 from .message_reference import MessageReference
+from .pi_wire import PiOmitted, ReportedInputId
 from .messages import Message
 from .recorded_time import EventTime, UnrecordedEventTime
 from .routing import MessageRoute, NoTurnRouting, Routing, TurnRouting
@@ -168,7 +169,7 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     native_inputs: ClassVar[frozenset[str]] = frozenset()
     incoming_sources: ClassVar[tuple[MessageReference, ...]] = ()
 
-    def with_native_input(self, native_id: InputId | None) -> TranscriptEvent:
+    def with_native_input(self, native_id: ReportedInputId | PiOmitted) -> TranscriptEvent:
         return self
 
     @property
@@ -345,14 +346,14 @@ class IncomingTranscript(TextTranscript):
 @dataclass(frozen=True)
 class UserTranscript(NativeTextTranscript):
     category = UserCategory
-    native_id: InputId | None = field(default=None, kw_only=True)
+    native_id: ReportedInputId | PiOmitted = field(default_factory=PiOmitted, kw_only=True)
 
-    def with_native_input(self, native_id: InputId | None) -> UserTranscript:
+    def with_native_input(self, native_id: ReportedInputId | PiOmitted) -> UserTranscript:
         return replace(self, native_id=native_id)
 
     @property
     def native_inputs(self) -> frozenset[str]:
-        return frozenset((self.native_id,)) if self.native_id is not None else frozenset()
+        return frozenset(self.native_id.present())
 
     @property
     def routed(self) -> bool:

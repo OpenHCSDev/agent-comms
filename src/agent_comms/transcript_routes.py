@@ -15,6 +15,7 @@ from agent_comms.native_session_reopen import NativeSessionIdentity
 from .errors import RelationViolationError
 from .nominal.field_codec import InputId, MalformedRecord, NominalSpelling, NominalText, NullMember, SingleFieldValue
 from .input_disposition import InputDispositions
+from .pi_wire import PiOmitted, ReportedInputId
 from .private_path import FileObservation, FileRevision
 from .routing import NoTurnRouting, Routing, TurnRouting
 from .text_digest import TextDigest
@@ -189,9 +190,10 @@ class _SessionRoutes:
             )
         return self._cache[entry_id]
 
-    def input_display(self, native_id: InputId | None) -> InputPresentation:
-        if native_id is None:
-            return NoInputDisplay()
+    def input_display(self, native_id: ReportedInputId | PiOmitted) -> InputPresentation:
+        return next((self.displayed(present) for present in native_id.present()), NoInputDisplay())
+
+    def displayed(self, native_id: InputId) -> InputPresentation:
         if native_id not in self._input_cache:
             self._input_cache[native_id] = next(
                 iter(InputDisplay.select(self._connection, native_id=native_id)), NoInputDisplay(),
