@@ -37,11 +37,13 @@ from .native_fork import (
 from .native_package import SYSTEM_PROMPT
 from .native_pi import NativePiRpcLaunch
 from .native_session_reopen import NativeSessionIdentity
-from .native_transcript import NativeTranscript
+from .native_transcript import NativeTranscript, RetainedNativeTranscript
+from .private_path import FileRevision
 from .pi_commands import Compact, NativeQuery
 from .rule_deal import SystemPromptDelivery
 from .selected_session import SavedSelectedSession
 from .session_revision import (
+    NoSessionObservation,
     SessionObservation,
     SessionRevision,
     SessionRevisionUnavailable,
@@ -90,6 +92,15 @@ class PiSessionFile(RuntimeLocation):
 
     path: str
 
+    @property
+    def transcript(self) -> NativeTranscript:
+        return NativeTranscript(Path(self.path))
+
+    @classmethod
+    def retained(cls, path: Path, identity: NativeSessionIdentity,
+                 revision: FileRevision) -> RetainedPiSessionFile:
+        return RetainedPiSessionFile(str(path), identity, revision)
+
     def select_session(self, directory, execution, source_reads, *, participant):
         path = Path(self.path).absolute()
         retained = execution.retained_source(path)
@@ -101,14 +112,14 @@ class PiSessionFile(RuntimeLocation):
                                     owner=participant.owner.thread.incarnation.require_recorded())
 
     def history_source(self, root, incarnation):
-        return NativeTranscript(Path(self.path))
+        return self.transcript
 
     def deal_delivery(self) -> SystemPromptDelivery:
         """Native Pi always launches with the prepared prompt (NativePiRpcLaunch.bootstrap)."""
         return SystemPromptDelivery(SYSTEM_PROMPT)
 
     def imported_sources(self):
-        return NativeTranscript(Path(self.path)).imported_sources()
+        return self.transcript.imported_sources()
 
     def storage_files(self):
         return (NativeSessionLocks(Path(self.path)),)
@@ -121,8 +132,46 @@ class PiSessionFile(RuntimeLocation):
     @property
     def saved_model(self) -> ThreadModel:
         """The newest model the saved session selected, read from its tail."""
-        return next((model for entry in NativeTranscript(Path(self.path)).tail()
+        return next((model for entry in self.transcript.tail()
                      for model in entry.saved_models), UndeclaredModel())
+
+
+@dataclass(frozen=True)
+class RetainedPiSessionFile(PiSessionFile):
+    """Original-coordinate history, with no selected native session or writable sidecars."""
+
+    identity: NativeSessionIdentity
+    revision: FileRevision
+    resumable: ClassVar[bool] = False
+
+    @property
+    def read_key(self) -> str:
+        return self.identity.session_file
+
+    @property
+    def transcript(self) -> NativeTranscript:
+        return RetainedNativeTranscript(Path(self.path), self.identity, self.revision)
+
+    def require_forkable(self):
+        raise NativePiUnavailable("Retained native history cannot fork a session")
+
+    def arguments(self):
+        raise NativePiUnavailable("Retained native history has no launch arguments")
+
+    def new_location(self, root, worktree):
+        raise NativePiUnavailable("Retained native history cannot start a session")
+
+    def select_session(self, directory, execution, source_reads, *, participant):
+        raise NativePiUnavailable("Retained native history cannot select a native input")
+
+    async def compact(self, operation):
+        return FailedCompaction("Retained native history cannot be compacted.")
+
+    def storage_files(self):
+        return ()
+
+    def session_observation(self, root: Path, thread: Thread) -> SessionObservation:
+        return NoSessionObservation()
 
 
 class PersistentPiSession:

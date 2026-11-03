@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, Annotated
 from .errors import RelationViolationError
 from .nominal.field_codec import NullMember, PathText, RecordMember, SubclassUnion, WireTransient
 from .unstarted_runtime import UnstartedRuntime
+from .native_session_reopen import NativeSessionIdentity
+from .private_path import FileRevision
 
 if TYPE_CHECKING:
     from .agent_backend import AgentBackend, RuntimeLocation
@@ -169,6 +171,41 @@ class BoundBusSession(BoundSessionLocation, BusSessionLocation, declared_name=No
 @dataclass(frozen=True, eq=False)
 class BoundExternalSession(BoundSessionLocation, ExternalSessionLocation, declared_name=None):
     pass
+
+
+@dataclass(frozen=True, slots=True)
+class RetainedSessionLocation(RecordMember, SessionFile):
+    """An already retained journal: physical storage and original native identity.
+
+    The storage root supplies bytes, never registry, publication or launch authority.
+    This declaration performs no capture and never substitutes newly imported entry IDs.
+    """
+
+    storage: BusSessionLocation
+    identity: NativeSessionIdentity
+    revision: FileRevision
+
+    def bound_to(self, root: Path) -> BoundRetainedSession:
+        return BoundRetainedSession(self.storage, self.identity, self.revision, root.resolve())
+
+    def location(self, backend: type[AgentBackend]) -> RuntimeLocation:
+        raise RelationViolationError("Retained history must be bound to its storage root")
+
+    def writable_location(self, backend: type[AgentBackend]) -> RuntimeLocation:
+        raise RelationViolationError("Retained native history has no writable session")
+
+    def applied(self, previous: SessionFile) -> SessionFile:
+        return self
+
+
+@dataclass(frozen=True, slots=True)
+class BoundRetainedSession(RetainedSessionLocation, declared_name=None):
+    root: Annotated[Path, WireTransient()] = field(repr=False, compare=False)
+
+    def location(self, backend: type[AgentBackend]) -> RuntimeLocation:
+        return backend.location_type.retained(
+            self.storage.resolve(self.root), self.identity, self.revision,
+        )
 
 
 @dataclass(frozen=True, slots=True)

@@ -44,6 +44,8 @@ if TYPE_CHECKING:
     from .launch_runtime import LaunchRuntime
     from .owned_turn import TurnDelivery
     from .threads import Thread
+    from .native_session_reopen import NativeSessionIdentity
+    from .private_path import FileRevision
     from .transcript_sources import TranscriptSource
     from .turn_runner import TurnRunner
 
@@ -62,6 +64,12 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
     @property
     def backend(self):
         return self._backend
+
+    @classmethod
+    def retained(cls, path: Path, identity: NativeSessionIdentity,
+                 revision: FileRevision) -> RuntimeLocation:
+        """Only a backend with an original-coordinate reader can bind retained bytes."""
+        raise BackendDeclarationError(f"{cls.__name__} cannot read retained native history")
 
     def require_forkable(self):
         pass
