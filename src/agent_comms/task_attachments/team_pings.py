@@ -78,18 +78,6 @@ class Ping(DeclaredFamily, affix="Ping"):
     @abstractmethod
     def key(self) -> object: ...
 
-    @property
-    def label(self) -> str:
-        """The words a reader sees for this line."""
-        return self.text
-
-    def retained(self) -> bool:
-        """A captured line lives only while a pass captures it."""
-        return False
-
-    def continued(self, start: EventTime, now: float) -> Ping:
-        """This pass's line, keeping the start the board already holds for it."""
-        return replace(self, since=start.continued_from(now))
 
     @property
     @abstractmethod
@@ -126,10 +114,10 @@ class Ping(DeclaredFamily, affix="Ping"):
             key: value for key, value in FieldCodec.encode(self).items() if key not in ignored
         }))
         since = self.since.recorded_at("A heartbeat line")
-        return BoardEntry(content.value, self.label, since, since + AwaitingTeam.seconds, self.owner_flagged)
+        return BoardEntry(content.value, self.text, since, since + AwaitingTeam.seconds, self.owner_flagged)
 
     def render(self, now: float) -> str:
-        return f"{self.label} ({self.since.age(now)})"
+        return f"{self.text} ({self.since.age(now)})"
 
     def alarm_pings(self) -> tuple[Ping, ...]:
         return (self,)
@@ -166,33 +154,6 @@ class RulePing(Ping):
     @classmethod
     def capture(cls, rule: StandingRule) -> Self:
         return cls(type(rule), rule.observation_key(), text=rule.line(), subjects=rule.subjects())
-
-
-@dataclass(frozen=True)
-class UnboundRulePing(RulePing):
-    """A rule line the previous runtime recorded without saying whose it was, before teammates
-    were told apart. No stored evidence names its thread, so it is an observation only: it keeps
-    its original digest, start (recorded or not) and subjects through every pass until it is
-    explicitly retired, never goes on the board and never waits on a teammate. It is never a
-    capture, so no enforcement, routing or readiness follows from it."""
-
-    marker: ClassVar[str] = "(recorded before teammates were told apart; whose is unknown)"
-
-    @property
-    def label(self) -> str:
-        return f"{self.text} {self.marker}"
-
-    def retained(self) -> bool:
-        return True
-
-    def continued(self, start: EventTime, now: float) -> Ping:
-        return self
-
-    def on_board(self, history: TeamHistory) -> bool:
-        return False
-
-    def waits_on_team(self, cut: float) -> bool:
-        return False
 
 
 @dataclass(frozen=True)
@@ -361,11 +322,9 @@ class TeamUpdate(OwnerNotice, declared_name=None):
             *(TeammatePing.capture(state) for state in states if state.attention()),
             *(RulePing.capture(rule) for rule in rules),
         )
-        # An unbound line from before the cutover stays beside the captures it cannot match.
-        carried = tuple(ping for packet in previous for ping in packet.handled if ping.retained())
         handled = tuple(sorted(
-            dict.fromkeys(ping.continued(began.get(ping, ping.since), now)
-                          for ping in (*captures, *carried)),
+            (replace(ping, since=began.get(ping, ping.since).continued_from(now))
+             for ping in captures),
             key=lambda ping: not ping.urgent,
         ))
         announced = {ping.key: ping for packet in published for ping in packet.handled}
@@ -548,7 +507,7 @@ class AlarmSection:
         """The section in one line: how many of each rule, and the line left longest, so the
         reader sees what is owed and for how long before reading any row."""
         oldest = min(self.pings, key=lambda ping: ping.since.chronology())
-        words = oldest.label.partition(FoldedRule.arrow)[0].split(" ")
+        words = oldest.text.partition(FoldedRule.arrow)[0].split(" ")
         named = " ".join(words[:14]) + (" …" if len(words) > 14 else "")
         counts = ", ".join(f"{len(pings)} {kind.declared_name.replace('_', ' ')}"
                            for kind, pings in self.by_kind().items())
@@ -561,7 +520,7 @@ class AlarmSection:
 
     def tables(self, now: float) -> tuple[ViewTable[AlarmLine], ...]:
         return (ViewTable(AlarmLine, HudExclude, tuple(
-            AlarmLine(ping.alarm_kind, ping.label, ping.since.age(now)) for ping in self.pings)),)
+            AlarmLine(ping.alarm_kind, ping.text, ping.since.age(now)) for ping in self.pings)),)
 
 
 class ActionWord(ABC):
@@ -642,7 +601,7 @@ class FoldedRule:
 
     @classmethod
     def of(cls, kind: type[DeclaredFamily], pings: tuple[Ping, ...]) -> FoldedRule:
-        split = tuple(ping.label.partition(cls.arrow) for ping in pings)
+        split = tuple(ping.text.partition(cls.arrow) for ping in pings)
         words = tuple(tuple(observed.split(" ")) for observed, _, _ in split)
         actions = tuple(tuple(action.split(" ")) if arrow else () for _, arrow, action in split)
         # A lone row shares nothing with anyone: it keeps every word it has.
