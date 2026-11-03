@@ -1585,6 +1585,37 @@ class DeclaredWireType(ExternalJsonShape, WireValue):
         return FieldCodec.value_schema(cls.wire_type)
 
 
+class CapabilityUnion(ExternalJsonShape, WireValue):
+    """A capability shared by members of several declared families. Its wire value is the
+    member it holds; its members are each family's members with this capability, found
+    from the families its concrete subclasses belong to, so none is listed by hand."""
+
+    __slots__ = ()
+
+    @classmethod
+    def capability_members(cls) -> tuple[type, ...]:
+        pending, roots = list(cls.__subclasses__()), {}
+        while pending:
+            member = pending.pop()
+            pending.extend(member.__subclasses__())
+            if isinstance(root := getattr(member, "family_root", None), type):
+                roots[root] = None
+        return tuple(dict.fromkeys(
+            member for root in roots for member in root.members_with(cls)))
+
+    @classmethod
+    def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
+        return ValueDecoder.for_members(cls.capability_members())
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        return ValueDecoder.for_members(cls.capability_members()).decode_bound(data, {})
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return FieldCodec.value_schema(ValueDecoder.for_members(cls.capability_members()).target)
+
+
 class SubclassUnion(DeclaredFamily, AcceptsNull, ExternalJsonShape, WireValue):
     """An untagged wire family; each union declares its own root with affix=""."""
 
