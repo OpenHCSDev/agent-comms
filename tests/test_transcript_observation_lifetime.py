@@ -92,16 +92,16 @@ async def test_broken_pipe_ends_subscription_with_observer_died(headless_owner):
         ReadNotifications(str(headless_owner._comms.root), LiveNotificationRead(()))))
     try:
         await asyncio.sleep(0)
-        process.process.terminate()
-        process.process.join(timeout=10)
-        assert not process.process.is_alive()
+        process.peer.process.terminate()
+        process.peer.process.join(timeout=10)
+        assert not process.peer.process.is_alive()
         with pytest.raises(ObserverDied) as failed_send:
             process.request(StopObserving())
         with pytest.raises(ObserverDied) as failed_read:
             await pending
         assert failed_send.value is failed_read.value is process.status
         assert process.ended(None) is failed_send.value
-        assert failed_send.value.pid == process.process.pid
+        assert failed_send.value.pid == process.peer.process.pid
         assert process.reads == {}
     finally:
         await process.close()

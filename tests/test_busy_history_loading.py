@@ -119,7 +119,7 @@ async def test_awaited_scope_preserves_exit_and_closes_once(comms, monkeypatch, 
     assert raised.value is error
     await process.close()
     assert closes == [process.connection]
-    assert process.connection.closed and process.process.exitcode == 0
+    assert process.connection.closed and process.peer.process.exitcode == 0
 
 
 def test_observer_start_failure_releases_both_real_pipe_endpoints(comms, monkeypatch):
@@ -212,7 +212,7 @@ async def test_owner_reply_uses_the_same_peer_retirement(comms):
 async def test_awaited_notifications_then_immediate_close_retires_successfully(comms):
     async with ObservationProcess.awaited(comms.route) as process:
         assert (await process.read(ReadNotifications(str(comms.root), LiveNotificationRead(())))).outcomes == {}
-    assert process.connection.closed and process.process.exitcode == 0
+    assert process.connection.closed and process.peer.process.exitcode == 0
     assert not process.reads
 
 

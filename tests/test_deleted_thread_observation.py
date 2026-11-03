@@ -107,7 +107,7 @@ async def test_observer_process_survives_deleted_interest_and_keeps_serving(comm
         updated = await delivered.until(lambda result: isinstance(result, ThreadsObserved)
                                         and 'surviving' in result.changed)
         assert isinstance(updated.activity['surviving'], ObservedActivity)
-        assert process.process.is_alive()
+        assert process.peer.process.is_alive()
         async with asyncio.timeout(30):
             assert (await process.read(ReadNotifications(str(comms.root), LiveNotificationRead(())))).outcomes == {}
 
