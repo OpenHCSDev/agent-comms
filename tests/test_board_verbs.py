@@ -216,7 +216,7 @@ def test_claim_link_survives_sendbacks_and_explicit_release_without_editing_goal
     assert judge.OkVerb in rule.clearing_actions()
     command, = judge.OkVerb.commands({**rule.command_values(),
         "why": shlex.quote(REASON.text), "serves": shlex.quote(QUOTE)})
-    judge.main(shlex.split(command)[1:], order.Team.read_root(comms.root))
+    judge.main(shlex.split(command)[1:], order.Team(root=comms.root, actor=PeerCaller("lead")))
     accepted = comms.goals.todos.get(original.id)
     assert accepted.order.holds_head(request)
     assert StoredHeadReview.head_reviews(comms.goals.todos, request)[0].order.problem == original.id
