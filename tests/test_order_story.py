@@ -146,7 +146,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
         StrikeReason("The copied holder releases its order so original public history can be checked."),
     ))
     withdrawn = copied.goals.todos.apply(current.id, WithdrawTodo(
-        released.revision, actor, previous,
+        released.revision, actor,
         "This copied order is withdrawn after checking its original recorded public events.",
     ))
     assert withdrawn.state is DoneTodoState

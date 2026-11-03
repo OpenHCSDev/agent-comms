@@ -435,10 +435,10 @@ def pr_team(tmp_path, monkeypatch, proof_build_checkouts, durable_home, github_c
     Registration(tmp_path / "registry.json").register(lead)
     # The source carries the copied plans; a second checkout of its repository would
     # be compared against the source's installed commit, which it never holds.
-    Team.on_root('lead', (source,), tmp_path)
-    bus = wire(tmp_path)
-    bus.goals.todos.add_request(lead.incarnation, "Repair the copied order workflow")
-    return Team.read_root(tmp_path)
+    # Verbs act as the teammate running them; no lead stands in for an actor-less context.
+    team = Team.on_root('lead', (source,), tmp_path)
+    team.comms.goals.todos.add_request(lead.incarnation, "Repair the copied order workflow")
+    return team
 
 
 def pr_order(
