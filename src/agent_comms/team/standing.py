@@ -735,8 +735,9 @@ class InboxUnavailable(IndependentStandingRule, DatedStandingRule, declared_name
 
 @dataclass(frozen=True)
 class TeamDeaf(InboxUnavailable, declared_name="commander_deaf"):
-    """A teammate's session bridge has no confirmed Monitor; its own registration dates the
-    pause. Every live teammate is watched, never one lead."""
+    """A running teammate's session bridge has no confirmed Monitor; its own registration dates
+    the pause. Every running teammate is watched, never one lead; a closed session is stopped,
+    not deaf."""
 
     teammate: str
 
@@ -745,7 +746,7 @@ class TeamDeaf(InboxUnavailable, declared_name="commander_deaf"):
         snapshot = comms.registry.snapshot()
         return tuple(
             cls(paused + cls.seconds, teammate.name)
-            for teammate in TeamService.teammates(snapshot)
+            for teammate in TeamService.running(snapshot)
             for paused in snapshot.status(teammate.name).paused_since(
                 snapshot.seen_at(teammate.name))
         )

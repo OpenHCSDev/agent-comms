@@ -90,6 +90,12 @@ class TeamService:
             for _ in thread.role.executor(thread))
 
     @classmethod
+    def running(cls, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+        """The teammates that can act now. A warning that owes an answer within minutes goes
+        only to them: a stopped session cannot be ignoring what it never read."""
+        return cls.live(cls.teammates(snapshot))
+
+    @classmethod
     def longest_owed(cls, registry: Registration, goals: Goals) -> Thread:
         """The live teammate holding the oldest open owner request. An order Core starts itself
         must name exactly one open request; only an owed pass acts, so one always exists."""

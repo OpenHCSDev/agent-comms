@@ -135,10 +135,10 @@ class VibeCheck(UndatedStandingRule):
         )
 
     def enforce(self, comms: Comms) -> None:
-        """The degraded team is everyone's: each live teammate gets the burst and owes its
+        """The degraded team is everyone's: each running teammate gets the burst and owes its
         answer."""
         burst = self.burst()
-        for teammate in TeamService.teammates(comms.registry.snapshot()):
+        for teammate in TeamService.running(comms.registry.snapshot()):
             VibeCheckNotice.burst_once(comms, teammate.incarnation, burst, burst[0])
 
     def burst(self) -> tuple[str, ...]:
@@ -220,7 +220,7 @@ class Chokehold(IndependentStandingRule, UndatedStandingRule):
         with comms.bus.bus.reading() as source:
             return tuple(
                 cls(teammate.incarnation, message)
-                for teammate in TeamService.teammates(snapshot)
+                for teammate in TeamService.running(snapshot)
                 for message in VibeCheckNotice.unanswered(
                     source, snapshot, teammate.name, time.time() - cls.after)[:1]
             )
