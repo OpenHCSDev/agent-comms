@@ -307,11 +307,16 @@ class TeamUpdate(OwnerNotice, declared_name=None):
                published: tuple[TeamUpdate, ...], now: float,
                history: TeamHistory,
                not_applied: tuple[str, ...] = ()) -> TeamDelivery:
-        """Observation owns ages; actual publication owns which lines were announced.
-        Publication never disposes of a ping; open requests still wake on every beat."""
-        known = {ping.key: ping for packet in previous for ping in packet.handled}
-        # Equality ignores the start, so an unchanged observation keeps the start it had.
-        began = {ping: ping.since for ping in known.values()}
+        """The board owns ages; actual publication owns which lines were announced.
+        Publication never disposes of a ping; open requests still wake on every beat.
+
+        ``previous`` is every teammate's retained packet: one board, so a line keeps the
+        earliest start any teammate retained, and a teammate who joins later inherits it."""
+        # Equality ignores the start, so an unchanged observation keeps the start it had;
+        # written latest-first, the earliest recorded start is the one kept.
+        began = {ping: ping.since for ping in sorted(
+            (ping for packet in previous for ping in packet.handled),
+            key=lambda ping: ping.since.chronology(), reverse=True)}
         handled = tuple(sorted(
             (replace(ping, since=began.get(ping, ping.since).continued_from(now))
              for ping in (
@@ -326,8 +331,9 @@ class TeamUpdate(OwnerNotice, declared_name=None):
         open_members = frozenset(opened)
         packet = TeamDecisions(
             commander, handled, new,
-            tuple(ping for old in previous for ping in old.handled
-                  if ping in open_members and ping.waits_on_team(now - AwaitingTeam.seconds)),
+            tuple(ping for ping in handled
+                  if ping in began and ping in open_members
+                  and ping.waits_on_team(now - AwaitingTeam.seconds)),
             not_applied=not_applied,
         ) if new or opened or not_applied else notice
         return TeamDelivery(packet, opened)

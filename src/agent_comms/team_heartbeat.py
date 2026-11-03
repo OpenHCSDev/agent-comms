@@ -6,7 +6,7 @@ import time
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 from agent_comms.team_hud import CodexUsage, TeamFrame, TeamHud, HudUnavailableGroup
 from agent_comms.child_process import ReadWork
@@ -136,11 +136,13 @@ class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
                 states = tuple(state for state in observed.states if state not in rejected)
                 rules = tuple(rule for rule in observed.rules if rule not in rejected)
                 not_applied = tuple(rule.rejected_line(error) for rule, error in rejected.items())
+                # One board: every teammate's retained packet dates its lines.
+                retained = tuple(packet for packets in held.values() for packet in packets)
                 deliveries = tuple(TeamUpdate.derive(
-                    recipient, states, rules, latest, published=announced[recipient],
+                    recipient, states, rules, retained, published=announced[recipient],
                     now=now, history=history,
                     not_applied=not_applied,
-                ) for recipient, latest in held.items())
+                ) for recipient in held)
                 if not deliveries:
                     continue  # No live teammate: enforced, and nobody to write a board for.
                 board = TeamHud.of(comms, observed.frame, observed.states,
