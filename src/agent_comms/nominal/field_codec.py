@@ -13,6 +13,7 @@ import re
 import sys
 import types
 from abc import ABC, abstractmethod
+from contextvars import ContextVar
 from collections.abc import Callable, Collection, Hashable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import MISSING, Field, dataclass, field, fields, is_dataclass
 from datetime import datetime
@@ -2743,16 +2744,28 @@ class FieldCodec(MroDispatch, Sealed):
         """An alternative schema with no possible member rejects every value."""
         return {combinator: alternatives} if alternatives else {"not": {}}
 
+    _expanding_families: ClassVar[ContextVar[frozenset[type]]] = ContextVar(
+        "expanding_families", default=frozenset())
+
     @classmethod
     def _family_schema(cls, target: type[DeclaredFamily]) -> dict[str, JsonValue]:
-        """Instance values carry their selector inside the encoded object."""
-        alternatives = []
-        for member in target.members_with(target):
-            tag = member.family_discriminator
-            alternatives.append(cls._record_schema(
-                (member,), {tag: {"type": "string", "const": member.declared_name}}, [tag]
-            ))
-        return cls.alternatives_schema("oneOf", alternatives)
+        """Instance values carry their selector inside the encoded object. A family that
+        holds itself (a proof wrapping a proof) is described once; its re-entry accepts the
+        nested record and names the family it repeats."""
+        expanding = cls._expanding_families.get()
+        if target in expanding:
+            return {"$comment": f"recursive {target.__qualname__}", "type": "object"}
+        token = cls._expanding_families.set(expanding | {target})
+        try:
+            alternatives = []
+            for member in target.members_with(target):
+                tag = member.family_discriminator
+                alternatives.append(cls._record_schema(
+                    (member,), {tag: {"type": "string", "const": member.declared_name}}, [tag]
+                ))
+            return cls.alternatives_schema("oneOf", alternatives)
+        finally:
+            cls._expanding_families.reset(token)
 
     @classmethod
     def record_schema(cls, *targets: type) -> dict[str, JsonValue]:
