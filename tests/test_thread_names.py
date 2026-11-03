@@ -122,3 +122,21 @@ def test_a_ui_reads_a_threads_configuration_through_core(tmp_path):
     answer = LocalCoreAccess(comms).call(CommsThreadConfigurationTool(thread="worker"))
     received = FieldCodec.decode(ThreadConfigured, FieldCodec.encode(answer))
     assert received.update.status_label == comms.configuration.answer("worker").status_label
+
+
+def test_a_ui_asks_core_which_open_views_lost_their_source(tmp_path):
+    """A deleted thread and an unknown channel are retired; the answer crosses the codec."""
+    from agent_comms.core_access import LocalCoreAccess
+    from agent_comms.nominal.field_codec import FieldCodec
+    from agent_comms.tools import CommsRetiredViewsTool, RetiredViewsRead
+
+    comms = wire(tmp_path / "wire")
+    _declare(comms, "worker", str(tmp_path))
+    _declare(comms, "gone", str(tmp_path))
+    kept, deleted = (comms.registry.require(name).incarnation for name in ("worker", "gone"))
+    comms.registry.remove("gone")
+    request = CommsRetiredViewsTool(threads=frozenset({kept, deleted}), channels=frozenset({"#all", "#nowhere"}))
+    answer = LocalCoreAccess(comms).call(FieldCodec.decode(CommsRetiredViewsTool, FieldCodec.encode(request)))
+    received = FieldCodec.decode(RetiredViewsRead, FieldCodec.encode(answer))
+    assert received.retired.threads == {deleted}
+    assert received.retired.channels == {"#nowhere"}

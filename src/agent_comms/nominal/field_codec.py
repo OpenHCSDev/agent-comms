@@ -2687,6 +2687,11 @@ class FieldCodec(MroDispatch, Sealed):
         )
 
     @classmethod
+    def ordering(cls, encoded: object) -> str:
+        """The order of an unordered collection's encoded members: their sorted compact text."""
+        return cls.compact(encoded, sort_keys=True)
+
+    @classmethod
     def digest(cls, value: object) -> str:
         """SHA-256 of a declared value's sorted compact encoding."""
         return hashlib.sha256(cls.compact(cls.encode(value), sort_keys=True).encode()).hexdigest()
@@ -3512,10 +3517,10 @@ class _FrozenSetDecoder[E](_ArrayDecoder[frozenset[E]]):
     container = frozenset
 
     def encode(self, value: frozenset[E]) -> list[object]:
-        return self.encode_items(sorted(value))
+        return sorted(self.encode_items(value), key=FieldCodec.ordering)
 
     def compared(self, value: frozenset[E]) -> list[object]:
-        return sorted(super().compared(value), key=lambda item: FieldCodec.compact(item, sort_keys=True))
+        return sorted(super().compared(value), key=FieldCodec.ordering)
 
 
 class _ListDecoder[E](_ArrayDecoder[list[E]]):
@@ -3624,7 +3629,7 @@ class _DictDecoder[K, V](ValueDecoder[dict[K, V]]):
     def compared(self, value: dict[K, V]) -> list[object]:
         entries = [(self.key.comparison(key), self.value.comparison(item))
                    for key, item in value.items()]
-        return sorted(entries, key=lambda item: FieldCodec.compact(item[0], sort_keys=True))
+        return sorted(entries, key=lambda entry: FieldCodec.ordering(entry[0]))
 
     def decode(self, data: object) -> dict[K, V]:
         return self.decode_entries(

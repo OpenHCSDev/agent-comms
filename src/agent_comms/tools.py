@@ -115,6 +115,8 @@ from .thread_model import ThreadModel
 from .threads import NextTurnConfiguration
 from .tool_caller import ThreadCaller, ThreadListing, ToolCaller
 from .acp_extension import CoordinationChangedUpdate
+from .history_views import RetiredViews
+from .thread_identity import ThreadIncarnation
 from .registry_document import ProjectThreadSelection, RegistrySnapshot
 from .transcripts import TranscriptCursor
 from .tool_result import ToolResult
@@ -411,6 +413,26 @@ class CommsChannelTool(ReadTool, ToolRequest[ToolCaller, Channel]):
 
     def apply(self, comms: Comms, caller: ToolCaller) -> Channel:
         return comms.bus.require_channel(self.name)
+
+
+@dataclass(frozen=True)
+class RetiredViewsRead(ToolResult):
+    """Which of a UI's open views no longer have a source, as Core decides."""
+
+    retired: RetiredViews
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsRetiredViewsTool(ReadTool, ToolRequest[ToolCaller, RetiredViewsRead]):
+    """A UI asks which of its open thread and channel views lost their source."""
+
+    label = "Retired views"
+    description = "Which of these thread incarnations and channel views were deleted, replaced or archived."
+    threads: Annotated[frozenset[ThreadIncarnation], *tool_field("Open thread views")]
+    channels: Annotated[frozenset[str], *tool_field("Open channel views")]
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> RetiredViewsRead:
+        return RetiredViewsRead(comms.views.retired_views(self.threads, self.channels))
 
 
 @dataclass(frozen=True)
