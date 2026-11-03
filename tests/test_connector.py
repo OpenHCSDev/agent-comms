@@ -34,6 +34,7 @@ from agent_comms.bus import Bus
 from agent_comms.comms import Comms, wire
 from agent_comms.connector import (
     ApprovalLink,
+    InitializeResult,
     AuthorizationCodeGrant,
     Connector,
     ConnectorSendTool,
@@ -571,6 +572,7 @@ async def test_connector_lists_every_tool(client, store, comms):
         "jsonrpc": "2.0", "id": "initialize", "result": {
             "protocolVersion": "2025-06-18", "capabilities": {"tools": {"listChanged": False}},
             "serverInfo": {"name": "agent-comms", "version": "1"},
+            "instructions": InitializeResult().instructions,
         },
     }
     ready = await client.post("/mcp", headers=headers, json={
@@ -1146,3 +1148,13 @@ async def test_an_inbox_read_after_its_place_the_same_locally_and_remotely(
     remote = await remote_answer(client, await approved_token(client, comms), request)
     assert [m.body for m in remote.messages] == [m.body for m in local.messages] == ["second"]
 
+
+
+def test_every_session_is_told_how_to_take_its_own_name() -> None:
+    """The fork argument's description survives its union type, so each session sees it."""
+    from agent_comms.connector_caller import ActingFork
+    from agent_comms.tools import CommsSendTool
+
+    fork = FieldCodec.record_schema(CommsSendTool, ActingFork)["properties"]["fork"]
+    assert "Your own name on the bus" in fork["description"]
+    assert "distinct name" in InitializeResult().instructions

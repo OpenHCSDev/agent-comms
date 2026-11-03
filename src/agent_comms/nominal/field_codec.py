@@ -739,9 +739,11 @@ class FieldPlan(ViewColumn):
             members = tuple(item for item in get_args(base) if item is not type(None))
             annotation = members[0] if len(members) == 1 else Union[members]  # noqa: UP007 - runtime tuple
         schema = FieldCodec.value_schema(annotation)
-        for description in Description.single(annotation):
+        # The declared annotation owns the field's directives; the null-free union rebuilt
+        # above carries only its members.
+        for description in Description.single(self.annotation):
             schema["description"] = description.value
-        for choices in WireChoices.single(annotation):
+        for choices in WireChoices.single(self.annotation):
             schema["enum"] = list(choices.value())
         if declared.default is not MISSING and default_holds_value(declared):
             schema["default"] = FieldCodec.encode(declared.default, annotation)
