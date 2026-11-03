@@ -79,7 +79,7 @@ class CursorOwner(RegistryOwner):
             owner.require_live(boundary, "Current cursor owner changed while reading")
             with store.session.read():
                 owner.require_participant(store, "Current cursor participant generation changed")
-                if owner.cursor(store.session._connection) != state.cursor:
+                if owner.state(store.session._connection) != state:
                     raise StaleFence("Current cursor SQL row changed while reading")
         return state
 
@@ -127,7 +127,7 @@ class CursorOwner(RegistryOwner):
                 coverage.source_prefix.require_current(bus.bus)
                 self.require_live(boundary, "Current cursor owner or namespace changed")
                 self.require_participant(store, "Current cursor recipient generation changed")
-                if self.cursor(db) != state.cursor:
+                if self.state(db) != state:
                     raise StaleFence("Current cursor SQL row changed during source verification")
                 state.require_progress(self, coverage, proof.injected_for(state))
                 if self.matches_prefix(db, coverage.evidence()) and proof.allows(
@@ -155,13 +155,9 @@ class CursorOwner(RegistryOwner):
         if not person.committed or person.owner_identity != self.participant_identity:
             raise StaleFence(reason)
 
-    def cursor(self, db: sqlite3.Connection) -> CurrentNativeCursor | None:
-        """The thread's one cursor; a restart or retry continues it."""
-        return CurrentNativeCursor.one(db, wire_root_id=self.wire_root_id, recipient_lookup=self.lookup)
-
     def state(self, db: sqlite3.Connection) -> CursorState:
-        """Classify recipient progress once, at its storage boundary."""
-        row = self.cursor(db)
+        """Classify the thread's one cursor once, at its storage boundary; a restart or retry continues it."""
+        row = CurrentNativeCursor.one(db, wire_root_id=self.wire_root_id, recipient_lookup=self.lookup)
         if row is None:
             return UnstartedCursor()
         if (not row.owner_identity.within(self.participant_identity)
@@ -220,10 +216,6 @@ class CursorState(ABC):
 
     @property
     @abstractmethod
-    def cursor(self) -> CurrentNativeCursor | None: ...
-
-    @property
-    @abstractmethod
     def injected_seq(self) -> int: ...
 
     @abstractmethod
@@ -257,10 +249,6 @@ class UnstartedCursor(CursorState):
     @property
     def covered_seq(self) -> int:
         return 0
-
-    @property
-    def cursor(self) -> CurrentNativeCursor | None:
-        return None
 
     @property
     def injected_seq(self) -> int:
@@ -299,10 +287,6 @@ class RecordedCursor(CursorState):
     @property
     def covered_seq(self) -> int:
         return self.row.covered_seq
-
-    @property
-    def cursor(self) -> CurrentNativeCursor | None:
-        return self.row
 
     @property
     def injected_seq(self) -> int:
