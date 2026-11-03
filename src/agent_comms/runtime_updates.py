@@ -409,7 +409,7 @@ class RuntimeInfoObserved(RuntimeUpdate):
         return phase.runtime_info(self)
 
     def publish(self, output: ThreadOutput) -> None:
-        output.agents.observe_runtime_info(output.activity_thread, self.observation)
+        output.agents.observe_runtime_info(output.transcript.incarnation, self.observation)
 
 
 @dataclass(frozen=True)

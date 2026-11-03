@@ -6,6 +6,7 @@ from .activity_clocks import ActivityClocks
 from abc import ABC, abstractmethod
 import time
 from dataclasses import dataclass, field, replace
+from typing import Literal
 
 from . import channels
 from .channel_targets import ChannelTarget, DeclaredTag, Tag
@@ -20,6 +21,7 @@ from .channels import (
 )
 from .display_order import ChannelSort, CreatedThreadSort, NameChannelSort, ThreadSort
 from .errors import RelationViolationError, UnknownChannelError
+from .nominal.field_codec import ThreadLookup
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,7 +32,7 @@ class ChannelPreferences:
     parent: str | None = None
     archived: bool = False
     any_mode: bool = False
-    pinned_threads: frozenset[str] = frozenset()
+    pinned_threads: frozenset[ThreadLookup] = frozenset()
 
     def channel[C: Channel](self, declaration: type[C], name: str, tags: frozenset[str], **identity) -> C:
         return declaration(
@@ -55,7 +57,7 @@ class CatalogAccess(ABC):
     def require_channel(self, target: str, activity: ActivityClocks) -> Channel: ...
 
     @abstractmethod
-    def pinned_threads(self, channel: str) -> frozenset[str]: ...
+    def pinned_threads(self, channel: str) -> frozenset[ThreadLookup]: ...
 
 
 class NoCatalog(CatalogAccess):
@@ -66,7 +68,7 @@ class NoCatalog(CatalogAccess):
     def require_channel(self, target: str, activity: ActivityClocks) -> Channel:
         raise ValueError("Channel lookup requires an acquired catalog")
 
-    def pinned_threads(self, channel: str) -> frozenset[str]:
+    def pinned_threads(self, channel: str) -> frozenset[ThreadLookup]:
         raise ValueError("Thread pin lookup requires an acquired catalog")
 
 
@@ -77,11 +79,11 @@ class CatalogPreferences(CatalogAccess):
     preferences: dict[str, ChannelPreferences] = field(default_factory=dict)
     list_order: type[ChannelSort] = NameChannelSort
 
-    def pinned_threads(self, channel: str) -> frozenset[str]:
+    def pinned_threads(self, channel: str) -> frozenset[ThreadLookup]:
         return self.preferences.get(channel, ChannelPreferences()).pinned_threads
 
 
-    def pinned_members(self) -> dict[str, frozenset[str]]:
+    def pinned_members(self) -> dict[str, frozenset[ThreadLookup]]:
         return {
             name: value.pinned_threads
             for name, value in self.preferences.items()
@@ -114,22 +116,14 @@ class CatalogPreferences(CatalogAccess):
         return self.set_preferences(name, activity, any_mode=enabled)
 
 
-    def set_thread_pinned(self, channel: str, thread: str, pinned: bool) -> None:
+    def set_thread_pinned(self, channel: str, thread: ThreadLookup, pinned: bool) -> None:
         preference = self.preferences.get(channel, ChannelPreferences())
         selected = preference.pinned_threads
         selected = selected | {thread} if pinned else selected - {thread}
         self.preferences[channel] = replace(preference, pinned_threads=selected)
 
 
-    def rename_thread(self, previous: str, current: str) -> None:
-        for name, preference in tuple(self.preferences.items()):
-            if previous in preference.pinned_threads:
-                self.preferences[name] = replace(
-                    preference, pinned_threads=(preference.pinned_threads - {previous}) | {current}
-                )
-
-
-    def remove_thread(self, thread: str) -> None:
+    def remove_thread(self, thread: ThreadLookup) -> None:
         for name in tuple(self.preferences):
             self.set_thread_pinned(name, thread, False)
 
@@ -146,6 +140,8 @@ class CatalogPreferences(CatalogAccess):
 class CatalogDocument(CatalogPreferences):
     tags: frozenset[str] = frozenset()
     saved_views: dict[str, SavedView] = field(default_factory=dict)
+    version: Literal[2] = 2
+
     def __post_init__(self) -> None:
         self.validate()
 

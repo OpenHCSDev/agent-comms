@@ -67,6 +67,8 @@ if TYPE_CHECKING:
     from .input_drain import InputDrain
     from .rule_deal import Redeals
     from .runtime_info import AgentRuntimeInfo
+    from .runtime_field import RuntimePublication
+    from .threads import Thread
     from .started_input import StartedInput
     from .turn_input_source import OriginalTurnInput
     from .turn_progress import TurnProgress
@@ -407,12 +409,12 @@ class Error(AgentEvent):
 class RuntimeInfoObservation(AgentEvent):
     """Record one producer observation through the existing runtime-info owner."""
 
-    def project_runtime_info(self, current: AgentRuntimeInfo) -> AgentRuntimeInfo:
+    def project_runtime_info(self, current: AgentRuntimeInfo, publication: RuntimePublication) -> AgentRuntimeInfo:
         return current
 
     async def record_in(self, consumer: AgentEventConsumer) -> None:
         await Coordination.run_worker(partial(
-            consumer.comms.agents.observe_runtime_info, consumer.thread_name, self,
+            consumer.comms.agents.observe_runtime_info, consumer.thread.incarnation, self,
         ))
 
 
@@ -422,8 +424,9 @@ class ContextUsageObservation(RuntimeInfoObservation):
 
     context_used: PiCount = field(default_factory=UnreportedCount)
 
-    def project_runtime_info(self, current: AgentRuntimeInfo) -> AgentRuntimeInfo:
-        return replace(super().project_runtime_info(current), context_used=self.context_used)
+    def project_runtime_info(self, current: AgentRuntimeInfo, publication: RuntimePublication) -> AgentRuntimeInfo:
+        return replace(super().project_runtime_info(current, publication),
+                       context_used_observation=publication.capture(self.context_used))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -432,8 +435,9 @@ class ContextSizeObservation(RuntimeInfoObservation):
 
     context_size: PiCount = field(default_factory=UnreportedCount)
 
-    def project_runtime_info(self, current: AgentRuntimeInfo) -> AgentRuntimeInfo:
-        return replace(super().project_runtime_info(current), context_size=self.context_size)
+    def project_runtime_info(self, current: AgentRuntimeInfo, publication: RuntimePublication) -> AgentRuntimeInfo:
+        return replace(super().project_runtime_info(current, publication),
+                       context_size_observation=publication.capture(self.context_size))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -447,8 +451,9 @@ class ModelObservation(RuntimeInfoObservation):
 
     model: ThreadModel = UndeclaredModel()
 
-    def project_runtime_info(self, current: AgentRuntimeInfo) -> AgentRuntimeInfo:
-        return replace(super().project_runtime_info(current), model=self.model)
+    def project_runtime_info(self, current: AgentRuntimeInfo, publication: RuntimePublication) -> AgentRuntimeInfo:
+        return replace(super().project_runtime_info(current, publication),
+                       model_observation=publication.capture(self.model))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -504,17 +509,21 @@ class TurnSettled(AgentEvent):
 class AgentEventConsumer(MroDispatch):
     """Shared activity and metadata algorithms; owners supply their context."""
 
-    def __init__(self, *, comms: Comms, thread_name: str):
+    def __init__(self, *, comms: Comms, thread: Thread):
         self._comms = comms
-        self._thread_name = thread_name
+        self._thread = thread
 
     @property
     def comms(self) -> Comms:
         return self._comms
 
     @property
+    def thread(self) -> Thread:
+        return self._thread
+
+    @property
     def thread_name(self) -> str:
-        return self._thread_name
+        return self.thread.name
 
     async def before_native_metadata(self, event: NativeMetadataObservation) -> None:
         pass

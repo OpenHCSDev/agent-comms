@@ -12,7 +12,7 @@ from agent_comms.bus import Bus, PublicRecord
 from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.channels import AnyOfMatch, ViewPredicate, ActivityView, ParticipantsView
 from agent_comms.comms import wire
-from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
 from agent_comms.message_page import PageBounds
 from agent_comms.messages import InfoKind, Membership, Message
 from agent_comms.page_traversal import LiveCursor
@@ -21,7 +21,7 @@ from test_private_human_ingress import _root
 from agent_comms.threads import Thread
 
 
-def saved_catalog(root):
+def saved_catalog(root, pinned):
     from agent_comms.catalog_document import CatalogDocument, ChannelPreferences
     from agent_comms.display_order import LastActivityThreadSort, LastUserInputChannelSort
 
@@ -32,7 +32,7 @@ def saved_catalog(root):
                 created_at=17,
                 pinned=True,
                 order=LastActivityThreadSort,
-                pinned_threads=frozenset({"a"}),
+                pinned_threads=frozenset({pinned}),
                 parent="#ui",
             ),
             "#api": ChannelPreferences(created_at=17, parent="#engineering", any_mode=True),
@@ -52,7 +52,8 @@ def test_saved_projection_preserves_preferences_history_and_has_no_writable_alia
     comms = wire(tmp_path)
     for name, tags in (("a", {"api"}), ("b", {"ui"}), ("other", set())):
         comms.registry.declare(Thread(name, frozenset(tags), Checkout(tmp_path)))
-    original = saved_catalog(tmp_path)
+    pinned = comms.registry.require("a").incarnation.require_recorded().lookup
+    original = saved_catalog(tmp_path, pinned)
     rows = [
         Message("other", target, str(i), InfoKind, timestamp=i, seq=i)
         for i, target in enumerate(("#engineering", "#api", "#ui", "#engineering"), 1)
@@ -68,7 +69,7 @@ def test_saved_projection_preserves_preferences_history_and_has_no_writable_alia
     projection = imported.require_channel("#engineering", activity)
     assert projection.view.original_targets == {"#engineering"}
     assert projection.pinned and projection.parent == "#ui"
-    assert projection.created_at == 17 and imported.pinned_threads("#engineering") == {"a"}
+    assert projection.created_at == 17 and imported.pinned_threads("#engineering") == {pinned}
     assert imported.require_channel("#api", activity).exact and imported.require_channel("#api", activity).any_mode
     assert "#engineering" not in imported.targets_for(frozenset({"api"}))
     assert set(
@@ -125,7 +126,7 @@ def test_private_initial_rejects_view_but_routes_exact_tags_and_membership(tmp_p
 def test_restoring_same_named_view_keeps_current_predicate_and_original_target_history(tmp_path):
     source_root = tmp_path / "source"
     source_root.mkdir()
-    saved_catalog(source_root)
+    saved_catalog(source_root, ThreadLookup.mint())
     source = ChannelCatalog(source_root / "catalog.json").read()
     Bus.install(Bus.path_in(tmp_path / "destination"))
     comms = wire(tmp_path / "destination")

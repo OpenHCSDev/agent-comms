@@ -54,6 +54,7 @@ from typing_extensions import TypeAliasType, TypeForm
 from .declared_family import DeclaredFamily, FamilyMeta
 from .json_schema import JsonScalar, JsonSchemaOwner
 from .sealed import Sealed
+from .type_arguments import TypeArgumentMismatch, TypeArguments
 
 if TYPE_CHECKING:
     from _typeshed import DataclassInstance
@@ -1263,6 +1264,9 @@ class ValueDecoder[T](DecoderPlan, JsonSchemaOwner):
     @abstractmethod
     def encode(self, value: T) -> object: ...
 
+    def project_view(self, value: T, view: type[ViewExclusion]) -> JsonValue:
+        return FieldCodec.encode(value, self.target)
+
     def comparison(self, value: T) -> object:
         """The nominal value and its declaration-owned comparison content."""
         declaration = type(value)
@@ -1352,6 +1356,12 @@ class _RepresentedDecoder[T](ValueDecoder[T]):
 
     representation: type[FieldRepresentation[T]]
     structural: ValueDecoder[T]
+
+    def value_schema(self) -> dict[str, JsonValue]:
+        return self.representation.schema()
+
+    def project_view(self, value: T, view: type[ViewExclusion]) -> JsonValue:
+        return RepresentedProjection.of(value, view, self.target)
 
     def sql_checks(self, column: str, quote: Callable[[object], str]) -> tuple[str, ...]:
         return (
@@ -1604,6 +1614,27 @@ class WireValue(WireForm):
     def representation(cls) -> type[FieldRepresentation]:
         return cls
 
+    @classmethod
+    def parameterized_decoder(cls, annotation: object) -> ValueDecoder[object]:
+        raise UnsupportedFieldType(f"{cls.__qualname__} has no parameterized representation: {annotation}")
+
+    @classmethod
+    def decoder_for(cls, annotation: object, target: object) -> ValueDecoder[object]:
+        if get_origin(target) is cls:
+            return cls.parameterized_decoder(target)
+        return super().decoder_for(annotation, target)
+
+    @classmethod
+    def schema_for(cls, annotation: object) -> dict[str, JsonValue]:
+        if get_origin(annotation) is cls:
+            return cls.parameterized_decoder(annotation).value_schema()
+        return super().schema_for(annotation)
+
+    @classmethod
+    def project_view(cls, value: object, view: type[ViewExclusion], annotation: object) -> JsonValue:
+        declared, _ = FieldCodec.representation(annotation or cls)
+        return compile_decoder(Annotated[declared, cls]).project_view(value, view)
+
     @abstractmethod
     def to_wire(self) -> JsonValue: ...
 
@@ -1684,6 +1715,10 @@ class SubclassUnion(DeclaredFamily, AcceptsNull, ExternalJsonShape, WireValue):
     """An untagged wire family; each union declares its own root with affix=""."""
 
     @classmethod
+    def parameterized_decoder(cls, annotation: object) -> ValueDecoder[object]:
+        return UnionDecoder(annotation, tuple(compile_decoder(member) for member in TypeArguments.members(annotation)))
+
+    @classmethod
     def decodes_tagged_records(cls) -> bool:
         return False
 
@@ -1722,6 +1757,10 @@ class PresentMember:
 
 class NullMember(ExternalField, AcceptsNull, WireValue):
     """One declared empty member owns the JSON null representation."""
+
+    @classmethod
+    def parameterized_decoder(cls, annotation: object) -> ValueDecoder[object]:
+        return compile_decoder(cls)
 
     def present(self) -> tuple[()]:
         return ()
@@ -1793,6 +1832,10 @@ class RecordMember(WireValue):
     """A wire union's record case uses the declared record codec."""
 
     @classmethod
+    def parameterized_decoder(cls, annotation: object) -> ValueDecoder[object]:
+        return _RecordDecoder(annotation)
+
+    @classmethod
     def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
         return _member_decoders[cls]
 
@@ -1810,6 +1853,10 @@ class RecordMember(WireValue):
 
 class TaggedRecordMember(RecordMember):
     """A record member whose wire shape retains its declared family selector."""
+
+    @classmethod
+    def parameterized_decoder(cls, annotation: object) -> ValueDecoder[object]:
+        return _structural_decoder(annotation)
 
     @classmethod
     def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
@@ -1830,7 +1877,7 @@ class RepresentedProjection(MroDispatch):
     @handles(RecordMember)
     @staticmethod
     def record(value: RecordMember, view: type[ViewExclusion], annotation: object) -> JsonValue:
-        return FieldCodec._project_record(value, view)
+        return FieldCodec._project_record(value, view, type(value))
 
     @handles(object)
     @staticmethod
@@ -2568,6 +2615,9 @@ class FieldCodec(MroDispatch, Sealed):
             return object, _JsonValueRepresentation
         if isinstance(target, type) and issubclass(target, (NominalText, WireValue)):
             return target, target.representation()
+        origin = get_origin(target)
+        if isinstance(origin, type) and issubclass(origin, WireValue):
+            return target, origin.representation()
         return target, StructuralRepresentation
 
     @classmethod
@@ -2618,16 +2668,17 @@ class FieldCodec(MroDispatch, Sealed):
         )
 
     @classmethod
-    def field_annotation(cls, record: type, name: str) -> type[object]:
+    def field_annotation(cls, record: TypeForm[object], name: str) -> object:
         """A field resolves where it was declared, without evaluating unrelated annotations."""
+        declaration = cast(type, get_origin(record) or record)
         declarer = next(
-            owner for owner in record.__mro__
+            owner for owner in declaration.__mro__
             if name in annotationlib.get_annotations(owner, format=annotationlib.Format.FORWARDREF)
         )
         annotations = annotationlib.get_annotations(
             declarer, format=annotationlib.Format.FORWARDREF,
         )
-        return cls._evaluate_annotations(declarer, {name: annotations[name]})[name]
+        return TypeArguments.of(record).resolve(cls._evaluate_annotations(declarer, {name: annotations[name]})[name])
 
     @overload
     @classmethod
@@ -2672,11 +2723,11 @@ class FieldCodec(MroDispatch, Sealed):
         return hashlib.sha256(cls.compact(compared, sort_keys=True).encode()).hexdigest()
 
     @classmethod
-    def compared_fields(cls, record: type) -> tuple[FieldPlan, ...]:
+    def compared_fields(cls, record: TypeForm[object]) -> tuple[FieldPlan, ...]:
         """Construct comparison plans at the codec's declared-record boundary."""
         return tuple(
             cls._field_plan(item, annotation)(declared=item, _annotation=annotation)
-            for item in fields(record) if item.compare
+            for item in fields(get_origin(record) or record) if item.compare
             for annotation in (cls.field_annotation(record, item.name),)
         )
 
@@ -2808,24 +2859,25 @@ class FieldCodec(MroDispatch, Sealed):
         return {combinator: alternatives} if alternatives else {"not": {}}
 
     @classmethod
-    def _family_schema(cls, target: type[DeclaredFamily]) -> dict[str, JsonValue]:
+    def _family_schema(cls, target: TypeForm[DeclaredFamily]) -> dict[str, JsonValue]:
         """Instance values carry their selector inside the encoded object."""
         alternatives = []
-        for member in target.members_with(target):
-            tag = member.family_discriminator
+        for member in TypeArguments.members(target):
+            declaration = get_origin(member) or member
+            tag = declaration.family_discriminator
             alternatives.append(cls._record_schema(
-                (member,), {tag: {"type": "string", "const": member.declared_name}}, [tag]
+                (member,), {tag: {"type": "string", "const": declaration.declared_name}}, [tag]
             ))
         return cls.alternatives_schema("oneOf", alternatives)
 
     @classmethod
-    def record_schema(cls, *targets: type) -> dict[str, JsonValue]:
+    def record_schema(cls, *targets: TypeForm[object]) -> dict[str, JsonValue]:
         """Named request fields; external tool/CLI selection remains separate."""
         return SchemaDefinitions.build(lambda: cls._record_schema(targets, {}, []))
 
     @classmethod
     def _record_schema(
-        cls, targets: tuple[type, ...], properties: dict[str, JsonValue], required: list[str]
+        cls, targets: tuple[TypeForm[object], ...], properties: dict[str, JsonValue], required: list[str]
     ) -> dict[str, JsonValue]:
         """Build fields once, including an internally supplied family selector."""
         for target in targets:
@@ -2858,20 +2910,22 @@ class FieldCodec(MroDispatch, Sealed):
     @classmethod
     def _project_structure(cls, value: object, view: type[ViewExclusion], annotation: object) -> JsonValue:
         if is_dataclass(value) and not isinstance(value, type):
-            return cls._project_record(value, view)
+            declared = cls.representation(annotation)[0]
+            record = TypeArguments.member(declared, type(value)) if get_args(declared) else type(value)
+            return cls._project_record(value, view, record)
         if isinstance(value, (tuple, list)):
             arguments = get_args(cls.representation(annotation)[0])
             return [cls.project(item, view, arguments[0] if arguments else None) for item in value]
         return cls.encode(value)
 
     @classmethod
-    def _project_record(cls, value: object, view: type[ViewExclusion]) -> JsonValue:
+    def _project_record(cls, value: object, view: type[ViewExclusion], declaration: TypeForm[object]) -> JsonValue:
         """A record's view: its tag, its view's fields and the properties the view owns."""
         result = cls._tag(value)
-        result.update(cls._record_plan(type(value)).encoded(
+        result.update(cls._record_plan(declaration).encoded(
             value, view, lambda entry, current: cls.project(current, view, entry.annotation)
         ))
-        properties = cls.projections(type(value), view)
+        properties = cls.projections(get_origin(declaration) or declaration, view)
         result.update(
             (member.wire_name, cls.project(getattr(value, name), view))
             for name, member in properties.items()
@@ -2921,12 +2975,14 @@ class FieldCodec(MroDispatch, Sealed):
 
     @classmethod
     @cache
-    def _record_plan(cls, record: type) -> FieldCodec._RecordPlan:
+    def _record_plan(cls, record: TypeForm[object]) -> FieldCodec._RecordPlan:
         """Resolve every per-row type decision for one record declaration once."""
-        hints = cls._types(record)
+        declaration = cast(type, get_origin(record) or record)
+        arguments = TypeArguments.of(record)
+        hints = {name: arguments.resolve(annotation) for name, annotation in cls._types(declaration).items()}
         declarations = tuple(
             cls._field_plan(item, hints[item.name])(declared=item, _annotation=hints[item.name])
-            for item in fields(record)
+            for item in fields(declaration)
         )
         declared = tuple(plan for plan in declarations if plan.declared.init and plan.records)
         if any(not isinstance(plan.key, str) or not plan.key for plan in declared):
@@ -2938,7 +2994,7 @@ class FieldCodec(MroDispatch, Sealed):
                 key=lambda row: (WireOrder.read(row[1].annotation, row[0]), row[0]),
             )
         )
-        computed = {member.wire_name for member in cls.projections(record, WireExclude).values()}
+        computed = {member.wire_name for member in cls.projections(declaration, WireExclude).values()}
         wire_fields, required_keys = [], []
         for entry in entries:
             keys = entry.contribute(wire_fields)
@@ -2946,7 +3002,7 @@ class FieldCodec(MroDispatch, Sealed):
                 required_keys.extend(keys)
         wire_keys = [key for entry in entries for key in entry.wire_keys]
         if len(set(wire_keys)) != len(wire_keys) or (
-            issubclass(record, DeclaredFamily) and record.family_discriminator in wire_keys
+            issubclass(declaration, DeclaredFamily) and declaration.family_discriminator in wire_keys
         ):
             raise TypeError("Conflicting wire field names.")
         return cls._RecordPlan(
@@ -3348,6 +3404,12 @@ class UnionDecoder[T](_ContextDecoder[T]):
     def accepts_value(self, value: object) -> bool:
         return any(alternative.accepts_value(value) for alternative in self.alternatives)
 
+    def value_schema(self) -> dict[str, JsonValue]:
+        return FieldCodec.alternatives_schema("anyOf", [FieldCodec.value_schema(member.target) for member in self.alternatives])
+
+    def project_view(self, value: T, view: type[ViewExclusion]) -> JsonValue:
+        return self.selected(value).project_view(value, view)
+
     def selected(self, value: T) -> ValueDecoder[T]:
         for alternative in self.alternatives:
             if alternative.accepts_value(value):
@@ -3651,59 +3713,80 @@ class _PairKeyDictDecoder[K, V](_DictDecoder[K, V]):
 class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Member]):
     """The encoded object carries its member's name under the family tag."""
 
-    target: type[Member]
+    target: TypeForm[Member]
+
+    @property
+    def family(self) -> type[Member]:
+        return cast(type[Member], get_origin(self.target) or self.target)
+
+    def accepts_value(self, value: object) -> bool:
+        return isinstance(value, self.family)
+
+    def value_schema(self) -> dict[str, JsonValue]:
+        return FieldCodec._family_schema(self.target)
+
+    def member_decoder(self, member: type[Member]) -> ValueDecoder[Member]:
+        bound = TypeArguments.member(self.target, member) if get_args(self.target) else member
+        return cast(ValueDecoder[Member], _member_decoders[bound])
 
     def field_paths(self, key: str, seen: frozenset[type] = frozenset()) -> tuple[tuple[str, ...], ...]:
-        return tuple(path for member in self.target.members_with(self.target)
+        return tuple(path for member in TypeArguments.members(self.target)
                      for path in _member_decoders[member].field_paths(key, seen))
 
     def tagged(self, data: object) -> TypeGuard[dict[str, object]]:
         """The family form: an object naming its member under the family tag."""
-        return isinstance(data, dict) and isinstance(data.get(self.target.family_discriminator), str)
+        return isinstance(data, dict) and isinstance(data.get(self.family.family_discriminator), str)
 
     def fits_wire(self, data: object) -> bool:
         return self.tagged(data)
 
     def encode(self, value: Member) -> dict[str, object]:
-        return {**value.record_tag(), **_member_decoders[type(value)].encode(value)}
+        return {**value.record_tag(), **self.member_decoder(type(value)).encode(value)}
+
+    def project_view(self, value: Member, view: type[ViewExclusion]) -> JsonValue:
+        return self.member_decoder(type(value)).project_view(value, view)
 
     def compared(self, value: Member) -> object:
-        return _member_decoders[type(value)].compared(value)
+        return self.member_decoder(type(value)).compared(value)
 
     def compile_comparison(self, compiled: set[object]) -> None:
-        for member in self.target.members_with(self.target):
+        for member in TypeArguments.members(self.target):
             _member_decoders[member].compile_comparison(compiled)
 
     def editor_choices(self):
-        return tuple((member.label, {self.target.family_discriminator: member.declared_name})
-                     for member in self.target.members_with(self.target))
+        return tuple((member.label, {self.family.family_discriminator: member.declared_name})
+                     for member in TypeArguments.members(self.target))
 
     def argument_options(self, argument: Argument) -> dict[str, object]:
         """Every member is a command-line choice, labelled or not."""
-        return {"choices": list(self.target.names())}
+        return {"choices": [payload[self.family.family_discriminator] for _, payload in self.editor_choices()]}
 
     def argument_text(self, encoded: object) -> object:
-        return cast(Mapping[str, object], encoded)[self.target.family_discriminator]
+        return cast(Mapping[str, object], encoded)[self.family.family_discriminator]
 
     def argument_payload(self, text: object) -> object:
-        return {self.target.family_discriminator: text}
+        return {self.family.family_discriminator: text}
 
     def shape_refusal(self, data: object) -> MalformedRecord:
         if isinstance(data, dict):
-            return MalformedRecord(f"Expected a string family {self.target.family_discriminator}.")
+            return MalformedRecord(f"Expected a string family {self.family.family_discriminator}.")
         return MalformedRecord("Expected a family object.")
 
     def member(self, data: object) -> tuple[type[Member], dict]:
         if not self.tagged(data):
             raise _FamilyRecordDecoder.shape_refusal(self, data)
-        tag = self.target.family_discriminator
-        return _declared_member(self.target, data[tag]), {
+        tag = self.family.family_discriminator
+        return _declared_member(self.family, data[tag]), {
             key: value for key, value in data.items() if key != tag
         }
 
     def decode_bound(self, data: object, context: Mapping[str, object]) -> Member:
         member, payload = self.member(data)
-        return cast(Member, _member_decoders[member].decode_bound(payload, context))
+        try:
+            decoder = self.member_decoder(member)
+        except TypeArgumentMismatch as error:
+            raise MalformedRecord(f"Member {member.__name__} does not belong to {self.target}") from error
+        return decoder.decode_bound(payload, context)
 
 
 class _LeafDocumentDecoder(_FamilyRecordDecoder):
@@ -3733,7 +3816,22 @@ class _RecordDecoder[T](_ContextDecoder[T]):
     """A dataclass record. Its plan is looked up at decode time, so a
     record that contains itself compiles without recursion."""
 
-    target: type[T]
+    target: TypeForm[T]
+
+    @property
+    def record_type(self) -> type[T]:
+        return cast(type[T], get_origin(self.target) or self.target)
+
+    def accepts_value(self, value: object) -> bool:
+        return isinstance(value, self.record_type)
+
+    def value_schema(self) -> dict[str, JsonValue]:
+        return FieldCodec.record_schema(self.target)
+
+    def project_view(self, value: T, view: type[ViewExclusion]) -> JsonValue:
+        if not self.accepts_value(value):
+            raise MalformedRecord(f"Expected {self.record_type.__name__} record")
+        return FieldCodec._project_record(value, view, self.target)
 
     @property
     def plan(self) -> FieldCodec._RecordPlan:
@@ -3752,14 +3850,14 @@ class _RecordDecoder[T](_ContextDecoder[T]):
         return plan.required_wire_keys <= data.keys() <= plan.accepted_keys
 
     def encode(self, value: object) -> dict[str, object]:
-        if not isinstance(value, self.target):
-            raise MalformedRecord(f"Expected {self.target.__name__} record")
+        if not isinstance(value, self.record_type):
+            raise MalformedRecord(f"Expected {self.record_type.__name__} record")
         result = self.plan.encoded(
             value, WireExclude, lambda entry, current: entry.value.encode(current)
         )
         result.update(
             (member.wire_name, FieldCodec.encode(getattr(value, name)))
-            for name, member in FieldCodec.projections(self.target, WireExclude).items()
+            for name, member in FieldCodec.projections(self.record_type, WireExclude).items()
         )
         return result
 
@@ -3821,7 +3919,7 @@ class _RecordDecoder[T](_ContextDecoder[T]):
             raise MalformedRecord("Expected a record object; fix: supply a JSON object.")
         problems = self.missing_fields(data)
         unknown = list(self.unknown_fields(data))
-        target = self.target
+        target = self.record_type
         values = {}
         for entry in entries:
             key = (target, entry.name)
@@ -3892,10 +3990,11 @@ def _structural_decoder(annotation: object) -> ValueDecoder[object]:
         pass
     else:
         return decoder.from_annotation(annotation, get_args(annotation))
-    if isinstance(annotation, type) and issubclass(annotation, DeclaredFamily):
-        members = annotation._member_declarations()
-        leaf_document = annotation.decodes_tagged_records() and annotation in members and not any(
-            other is not annotation and issubclass(other, annotation) for other in members
+    declaration = get_origin(annotation) or annotation
+    if isinstance(declaration, type) and issubclass(declaration, DeclaredFamily):
+        members = declaration._member_declarations()
+        leaf_document = declaration.decodes_tagged_records() and declaration in members and not any(
+            other is not declaration and issubclass(other, declaration) for other in members
         )
         plan = _LeafDocumentDecoder if leaf_document else _FamilyRecordDecoder
         return cast(ValueDecoder[object], plan(annotation))
@@ -3942,7 +4041,7 @@ class _MemberDecoders(dict[object, ValueDecoder[object]]):
         decoder: ValueDecoder[object]
         if isinstance(target, type) and issubclass(target, BaseModel):
             decoder = _PydanticDecoder(target)
-        elif isinstance(target, type) and is_dataclass(target):
+        elif isinstance(get_origin(target) or target, type) and is_dataclass(get_origin(target) or target):
             decoder = _RecordDecoder(target)
         else:
             raise UnsupportedFieldType(f"Unsupported JSON type: {target}")

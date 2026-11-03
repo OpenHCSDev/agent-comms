@@ -46,9 +46,10 @@ async def test_menu_reports_the_model_the_runtime_runs(tmp_path, monkeypatch):
     try:
         project = tmp_path / "alpha"
         project.mkdir()
-        name = owner.sessions.declare_thread(str(project)).name
+        thread = owner.sessions.declare_thread(str(project))
+        name = thread.name
         reported = NativeMetadataObservation(model=DeclaredModel("test/two"))
-        comms.agents.observe_runtime_info(name, reported)
+        comms.agents.observe_runtime_info(thread.incarnation, reported)
         config = owner.sessions.config
         selection = comms.threads.running_selection(name)
         menu = await config.describe(owner.inputs.configuration.catalog_for(ModelConfigOption), selection)

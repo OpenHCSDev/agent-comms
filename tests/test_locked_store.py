@@ -16,7 +16,9 @@ from agent_comms.private_path import FileRevision, MissingFile
 from agent_comms.coordination_errors import StaleRevision
 from agent_comms.pi_counts import PiCount
 from agent_comms.registry_store import RegistryStore
-from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoDocument, RuntimeInfoStore
+from agent_comms.nominal.field_codec import FieldCodec, SingleFieldValue
+from agent_comms.maintenance_barrier import CarriedDocument
+from agent_comms.store_files import DependentStateTier, SingleFileStore
 from agent_comms.child_process import Platform
 from agent_comms.store_files import (
     ExclusiveLock,
@@ -42,13 +44,41 @@ def test_document_bytes_captures_original_missing_or_existing_file(tmp_path, exi
         assert not path.exists() and not path.parent.exists()
 
 
+@dataclass(frozen=True, slots=True)
+class NamedObservation:
+    """A generic named counter; product runtime schemas do not own lock tests."""
+
+    label: str
+    timestamp: float
+    context_used: PiCount
+
+    def __post_init__(self) -> None:
+        FieldCodec.decode(float, self.timestamp)
+
+
+@dataclass(frozen=True, slots=True)
+class ObservationDocument(SingleFieldValue):
+    observations: dict[str, NamedObservation] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class ObservationStore(SingleFileStore, CarriedDocument[ObservationDocument], DependentStateTier, declared_name=None):
+    """Exercise document locking without pinning a product's identity schema."""
+
+    filename = "observations.json"
+    record_type = ObservationDocument
+
+    def empty(self) -> ObservationDocument:
+        return ObservationDocument()
+
+
 def observation(thread="goal"):
-    return AgentRuntimeInfo(thread=thread, timestamp=122.0, context_used=PiCount.from_wire(2))
+    return NamedObservation(label=thread, timestamp=122.0, context_used=PiCount.from_wire(2))
 
 
 def record(store, value):
     store.update(lambda document: DocumentChange.to(
-        RuntimeInfoDocument({**document.observations, value.thread: value})
+        ObservationDocument({**document.observations, value.label: value})
     ))
 
 
@@ -57,7 +87,7 @@ def clear(store, thread, *, timestamp=None):
         current = document.observations.get(thread)
         if current is None or (timestamp is not None and current.timestamp != timestamp):
             return DocumentChange(document, False)
-        return DocumentChange(RuntimeInfoDocument(
+        return DocumentChange(ObservationDocument(
             {key: row for key, row in document.observations.items() if key != thread}
         ), True)
 
@@ -82,13 +112,13 @@ def _record(path, start, prefix):
     if not start.wait(10):
         raise TimeoutError("writer was not started")
     for index in range(12):
-        record(RuntimeInfoStore(path), observation(f"{prefix}-{index}"))
+        record(ObservationStore(path), observation(f"{prefix}-{index}"))
 
 
 def _replace_captured_documents(root):
     RegistryStore(root / "registry.json").mark_historical()
     for name in ("first", "second"):
-        record(RuntimeInfoStore(root / name), observation("successor"))
+        record(ObservationStore(root / name), observation("successor"))
 
 
 class RegistryWithConcurrentDecoder(RegistryStore, declared_name=None):
@@ -102,7 +132,7 @@ class RegistryWithConcurrentDecoder(RegistryStore, declared_name=None):
 
 
 @dataclass(frozen=True, slots=True)
-class RuntimeWithConcurrentDecoder(RuntimeInfoStore, declared_name=None):
+class RuntimeWithConcurrentDecoder(ObservationStore, declared_name=None):
     pending: list[str] = field(default_factory=lambda: ["concurrent"])
 
     def _decode_capture(self, source):
@@ -120,13 +150,13 @@ class ImpatientRuntimeDecoder(RuntimeWithConcurrentDecoder, declared_name=None):
 
 def test_update_decodes_without_exclusion_and_never_applies_a_stale_change(tmp_path):
     path = tmp_path / "runtime_info.json"
-    record(RuntimeInfoStore(path), observation("original"))
+    record(ObservationStore(path), observation("original"))
     store = RuntimeWithConcurrentDecoder(path)
     applied = []
 
     def change(document):
         applied.append(frozenset(document.observations))
-        return DocumentChange.to(RuntimeInfoDocument({
+        return DocumentChange.to(ObservationDocument({
             **document.observations, "local": observation("local"),
         }))
 
@@ -141,7 +171,7 @@ def test_update_decodes_without_exclusion_and_never_applies_a_stale_change(tmp_p
 
 def _record_under_wire(path, ready):
     with _store_lock(path.parent / 'wire', ExclusiveLock(), StoreGuard.contention):
-        store = RuntimeInfoStore(path)
+        store = ObservationStore(path)
         record(store, observation())
         assert store.read().observations == {"goal": observation()}
         assert clear(store, "goal", timestamp=122.0)
@@ -184,18 +214,18 @@ def assert_writer_excluded(path):
 
 def test_abstract_parent_refuses_and_a_concrete_adopter_reads(tmp_path):
     @dataclass(frozen=True, slots=True)
-    class AbstractDocument(LockedStore[RuntimeInfoDocument]):
+    class AbstractDocument(LockedStore[ObservationDocument]):
         pass
 
     for owner in (LockedStore, AbstractDocument):
         with pytest.raises(TypeError):
             owner(tmp_path / "document")
-    assert RuntimeInfoStore(tmp_path / "document").read() == RuntimeInfoDocument()
+    assert ObservationStore(tmp_path / "document").read() == ObservationDocument()
 
 
 def test_current_observation_persistence_and_noop(tmp_path):
-    store = RuntimeInfoStore(tmp_path / "runtime_info.json")
-    assert store.read() == RuntimeInfoDocument()
+    store = ObservationStore(tmp_path / "runtime_info.json")
+    assert store.read() == ObservationDocument()
     assert not store.path.exists()
     assert not clear(store, "absent")
     assert not store.path.exists()
@@ -206,16 +236,16 @@ def test_current_observation_persistence_and_noop(tmp_path):
     assert not clear(store, "goal", timestamp=999.0)
     assert store.path.stat() == before
     assert clear(store, "goal", timestamp=122.0)
-    assert store.read() == RuntimeInfoDocument()
+    assert store.read() == ObservationDocument()
 
 
 def test_each_transition_is_visible_before_the_next_while_writer_stays_excluded(tmp_path):
-    store = RuntimeInfoStore(tmp_path / "runtime_info.json")
-    first = RuntimeInfoDocument({"first": observation("first")})
-    second = RuntimeInfoDocument({**first.observations, "second": observation("second")})
+    store = ObservationStore(tmp_path / "runtime_info.json")
+    first = ObservationDocument({"first": observation("first")})
+    second = ObservationDocument({**first.observations, "second": observation("second")})
 
     def changes(original):
-        assert original == RuntimeInfoDocument()
+        assert original == ObservationDocument()
         yield DocumentChange(first, "first")
         assert store.read() == first
         assert_writer_excluded(store.path)
@@ -226,8 +256,8 @@ def test_each_transition_is_visible_before_the_next_while_writer_stays_excluded(
 
 
 def test_related_snapshots_keep_their_cut_and_release_writers_before_decode(tmp_path):
-    first = RuntimeInfoStore(tmp_path / "first")
-    second = RuntimeInfoStore(tmp_path / "second")
+    first = ObservationStore(tmp_path / "first")
+    second = ObservationStore(tmp_path / "second")
     for store in (first, second):
         record(store, observation("original"))
     registry = RegistryWithConcurrentDecoder(tmp_path / "registry.json")
@@ -240,7 +270,7 @@ def test_related_snapshots_keep_their_cut_and_release_writers_before_decode(tmp_
 
 
 def test_mode_preserved_and_new_inode_published(tmp_path):
-    store = RuntimeInfoStore(tmp_path / "runtime_info.json")
+    store = ObservationStore(tmp_path / "runtime_info.json")
     record(store, observation())
     store.path.chmod(0o640)
     inode = store.path.stat().st_ino
@@ -254,8 +284,8 @@ def test_mode_preserved_and_new_inode_published(tmp_path):
 
 
 def test_unknown_observation_fields_are_rejected_without_rewriting_saved_data(tmp_path):
-    store = RuntimeInfoStore(tmp_path / "runtime_info.json")
-    data = RuntimeInfoDocument({"goal": observation()}).to_wire()
+    store = ObservationStore(tmp_path / "runtime_info.json")
+    data = ObservationDocument({"goal": observation()}).to_wire()
     data["goal"]["future_field"] = {"not_authoritative_here": True}
     store.path.write_text(json.dumps(data))
     before = store.path.read_bytes()
@@ -269,7 +299,7 @@ def test_unknown_observation_fields_are_rejected_without_rewriting_saved_data(tm
 @pytest.mark.parametrize("existing", [False, True])
 @pytest.mark.parametrize("stage", ["file_sync", "replace", "directory_sync"])
 def test_write_failure_preserves_previous_bytes(tmp_path, monkeypatch, existing, stage):
-    store = RuntimeInfoStore(tmp_path / "runtime_info.json")
+    store = ObservationStore(tmp_path / "runtime_info.json")
     if existing:
         record(store, observation())
         store.path.chmod(0o640)
@@ -305,7 +335,7 @@ def test_write_failure_preserves_previous_bytes(tmp_path, monkeypatch, existing,
 
 
 def test_callback_and_encoding_fail_before_publication(tmp_path):
-    store = RuntimeInfoStore(tmp_path / "runtime_info.json")
+    store = ObservationStore(tmp_path / "runtime_info.json")
     record(store, observation())
 
     def fail(document):
@@ -325,8 +355,8 @@ def test_callback_and_encoding_fail_before_publication(tmp_path):
 
 
 def test_invalid_boundary_is_not_overwritten(tmp_path):
-    store = RuntimeInfoStore(tmp_path / "runtime_info.json")
-    data = RuntimeInfoDocument({"goal": observation()}).to_wire()
+    store = ObservationStore(tmp_path / "runtime_info.json")
+    data = ObservationDocument({"goal": observation()}).to_wire()
     data["goal"]["context_used"] = True
     text = json.dumps(data)
     store.path.write_text(text)
@@ -356,7 +386,7 @@ def test_concurrent_writers_keep_all_rows(tmp_path):
     path, start = tmp_path / "runtime_info.json", event()
     with process(_record, path, start, "first"), process(_record, path, start, "second"):
         start.set()
-    assert set(RuntimeInfoStore(path).read().observations) == {
+    assert set(ObservationStore(path).read().observations) == {
         f"{prefix}-{index}" for prefix in ("first", "second") for index in range(12)
     }
 

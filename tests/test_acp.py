@@ -117,18 +117,19 @@ class TestHandlers:
         agent = self._agent(tmp_path)
         session = await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         session_id = FieldCodec.decode(AcpSessionId, session.session_id)
+        original = agent._comms.registry.require("proj").incarnation
         agent._comms.agents.observe_runtime_info(
-            "proj", ae.ContextUsageObservation(context_used=PiCount.from_wire(38723))
+            original, ae.ContextUsageObservation(context_used=PiCount.from_wire(38723))
         )
         agent._comms.agents.observe_runtime_info(
-            "proj", ae.AgentInfo(model=DeclaredModel('test/model'), context_size=PiCount.from_wire(272000))
+            original, ae.AgentInfo(model=DeclaredModel('test/model'), context_size=PiCount.from_wire(272000))
         )
         reopened = canonical_agent(wire(agent._comms.root))
         assert facts((await reopened.sessions.metadata("proj", session_id=session_id)), CoordinationChangedUpdate)[
             0
         ].context_usage == ContextUsage(38723, 272000)
         agent._comms.agents.observe_runtime_info(
-            "proj", ae.ContextInfo(context_used=PiCount.from_wire(None), context_size=PiCount.from_wire(272000))
+            original, ae.ContextInfo(context_used=PiCount.from_wire(None), context_size=PiCount.from_wire(272000))
         )
         assert (
             facts((await reopened.sessions.metadata("proj", session_id=session_id)), CoordinationChangedUpdate)[0].context_usage

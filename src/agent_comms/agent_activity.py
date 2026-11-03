@@ -38,7 +38,7 @@ from .errors import RelationViolationError
 from .nominal.field_codec import ThreadLookup, TurnId
 from .frozen_recipient import FrozenRecipient
 from .routing import NoTurnRouting, Routing
-from .runtime_info import RuntimeInfo, RuntimeInfoStore
+from .runtime_info import RuntimeInfo, RuntimeInfoStore, RuntimeReadScope
 from .thread_identity import OwnerIdentity, ThreadIncarnation
 from .threads import Thread
 from .turn_lease import NoFinishedTurn, TurnCompletion, TurnLeaseFence, TurnState
@@ -306,10 +306,15 @@ class AgentActivity:
         self._emit_activity(IdlePhase().activity_event(lease.identity.incarnation.name))
         return fence
 
-    def observe_runtime_info(self, thread: str, observation: RuntimeInfoObservation) -> None:
-        """Serialize the original observation with thread rename/retirement."""
-        canonical = self.registry.require(thread).name
-        self.runtime_info.observe(canonical, time.time(), observation)
+    def observe_runtime_info(self, original: ThreadIncarnation, observation: RuntimeInfoObservation) -> None:
+        """Publish this captured birth while its declaration remains current."""
+        with self.registry.store.current_snapshot() as cut:
+            cut.snapshot.born(original.require_recorded().lookup)
+            self.runtime_info.observe(original.require_recorded(), time.time(), observation)
+
+    def runtime_info_for(self, thread: Thread, snapshot: RegistrySnapshot) -> RuntimeInfo:
+        return self.runtime_info.for_thread(RuntimeReadScope.captured(thread, snapshot))
 
     def agent_info_of(self, thread: str) -> RuntimeInfo:
-        return self.runtime_info.for_thread(self.registry.require(thread).name)
+        snapshot = self.registry.snapshot()
+        return self.runtime_info_for(snapshot.require(thread), snapshot)

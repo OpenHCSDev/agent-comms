@@ -12,6 +12,7 @@ from agent_comms.native_arguments import NativeArguments, SelectedModel
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.pi_vocabulary import NoThinkingOverride, ServiceTier, ThinkingChoice
 from agent_comms.thread_text import AbsentText, GivenText, TextChoice
+from agent_comms.reading_attribution import CurrentReadingAttribution, ReadingAttribution
 
 if TYPE_CHECKING:
     from agent_comms.native_arguments import ProviderChoice
@@ -62,6 +63,9 @@ class ThreadModel(SubclassUnion, ModelSelection, affix="Model"):
         """The model a launch argument names, replacing this one."""
         return DeclaredModel(text)
 
+    def observation_attribution(self, observed: ReadingAttribution) -> ReadingAttribution:
+        return CurrentReadingAttribution()
+
     @abstractmethod
     def applied(self, previous: ThreadModel) -> ThreadModel:
         """An undeclared model takes the previous or observed one; a declared one keeps itself."""
@@ -95,6 +99,9 @@ class DeclaredModel(NamedModel, ThreadModel):
 
 @dataclass(frozen=True, slots=True)
 class UndeclaredModel(UnselectedModel, ThreadModel):
+    def observation_attribution(self, observed: ReadingAttribution) -> ReadingAttribution:
+        return observed
+
     def applied(self, previous: ThreadModel) -> ThreadModel:
         return previous
 

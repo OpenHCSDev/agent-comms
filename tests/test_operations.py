@@ -29,6 +29,8 @@ from agent_comms.pi_counts import PiCount
 from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.presentation import CountedInbox, CountedRead, UncountedRead
 from agent_comms.context_reading import ContextUsage
+from agent_comms.runtime_info import UnobservedRuntimeInfo
+from agent_comms.thread_identity import ThreadIncarnationRecord
 from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript, ToolStartTranscript, ToolEndTranscript
 from agent_comms.read_basis import NamedViewer
 from agent_comms.thread_management import ForkSpec
@@ -195,12 +197,13 @@ class TestThreadOps:
         assert [message.body for message in wired.bus.inbox(claimed.name).page.messages] == ["after claim"]
 
     def test_presence_uses_configured_model_with_runtime_context(self, wired: Comms) -> None:
+        original = wired.registry.require("fixer")
         wired.threads.set_thread_configuration(
-            wired.registry.require("fixer"), NextTurnConfiguration(model=ChosenModel('configured/model'))
+            original, NextTurnConfiguration(model=ChosenModel('configured/model'))
         )
-        wired.agents.observe_runtime_info("fixer", ContextUsageObservation(context_used=PiCount.from_wire(25)))
+        wired.agents.observe_runtime_info(original.incarnation, ContextUsageObservation(context_used=PiCount.from_wire(25)))
         wired.agents.observe_runtime_info(
-            "fixer", AgentInfo(model=DeclaredModel('observed/model'), context_size=PiCount.from_wire(100))
+            original.incarnation, AgentInfo(model=DeclaredModel('observed/model'), context_size=PiCount.from_wire(100))
         )
         row = FieldCodec.decode(dict[str, JsonValue], next(row.to_wire() for row in wired.views.who() if row.thread.name == "fixer"))
         assert row["model"] == "configured/model"
@@ -208,8 +211,9 @@ class TestThreadOps:
         assert wired.agents.agent_info_of("fixer").context_used == PiCount.from_wire(25)
 
     def test_configuration_names_the_resolved_model(self, wired: Comms) -> None:
-        wired.agents.observe_runtime_info("fixer", ContextUsageObservation(context_used=PiCount.from_wire(25)))
-        wired.agents.observe_runtime_info("fixer", AgentInfo(model=DeclaredModel('observed/model'), context_size=PiCount.from_wire(100)))
+        original = wired.registry.require("fixer").incarnation
+        wired.agents.observe_runtime_info(original, ContextUsageObservation(context_used=PiCount.from_wire(25)))
+        wired.agents.observe_runtime_info(original, AgentInfo(model=DeclaredModel('observed/model'), context_size=PiCount.from_wire(100)))
         answer = wired.configuration.answer("fixer")
         assert answer.model == "observed/model"
         assert answer.context_usage == ContextUsage(25, 100)
@@ -222,9 +226,10 @@ class TestThreadOps:
         assert isinstance(usage, ContextUsage)
         assert usage.used == 25
 
-    def test_runtime_info_rejects_unknown_thread(self, wired: Comms) -> None:
+    def test_runtime_info_rejects_unknown_incarnation(self, wired: Comms) -> None:
+        original = ThreadIncarnationRecord("ghost", 1.0).incarnation()
         with pytest.raises(UnregisteredThreadError):
-            wired.agents.observe_runtime_info("ghost", AgentInfo(model=DeclaredModel('model')))
+            wired.agents.observe_runtime_info(original, AgentInfo(model=DeclaredModel('model')))
 
     def test_list_threads_shape(self, wired: Comms) -> None:
         rows = {row.thread.name: row for row in wired.views.list_threads()}
@@ -309,7 +314,7 @@ class TestThreadOps:
         shown = wired.bus.inbox("PR111", CommandTarget.named("fixer")).page.messages
         wired.bus.mark_read_through("PR111", shown[-1].seq, target=CommandTarget.named("fixer"))
         wired.agents.set_activity("PR111", ActivityState.WORKING, "renaming")
-        wired.agents.observe_runtime_info("PR111", AgentInfo(model=DeclaredModel('test/model')))
+        wired.agents.observe_runtime_info(wired.registry.require("PR111").incarnation, AgentInfo(model=DeclaredModel('test/model')))
         wired.ledger.merge({"owner": "PR111", "members": ["PR111", "fixer"]}, author="PR111")
         monkeypatch.setenv("AGENT_COMMS_THREAD", "PR111")
 
@@ -381,6 +386,37 @@ class TestThreadOps:
         result = wired.threads.rename_managed_thread(replacement.incarnation, "chosen", owner=owner)
         assert result.current == "chosen"
         assert wired.registry.require("chosen").incarnation == replacement.incarnation
+
+    def test_runtime_observations_follow_birth_across_rename_and_refuse_replacement(self, wired: Comms) -> None:
+        owner = ProcessIdentity.capture(os.getpid())
+        original = wired.registry.declare(Thread(
+            'runtime-source', frozenset({'acp'}), Checkout(wired.root),
+            created_at=10.0, process_identity=owner))
+        wired.agents.observe_runtime_info(original.incarnation, AgentInfo(
+            model=DeclaredModel('original/model'), context_size=PiCount.from_wire(100)))
+        wired.threads.rename_managed_thread(original.incarnation, 'runtime-first', owner=owner)
+        wired.threads.rename_managed_thread(original.incarnation, 'runtime-second', owner=owner)
+        # The original capture still selects the same birth after both name changes.
+        wired.agents.observe_runtime_info(original.incarnation, ContextUsageObservation(
+            context_used=PiCount.from_wire(25)))
+        current = wired.agents.agent_info_of('runtime-second')
+        assert current.model == DeclaredModel('original/model')
+        assert current.context_reading() == ContextUsage(25, 100)
+
+        wired.registry.unregister('runtime-second')
+        wired.registry.remove('runtime-second')
+        replacement = wired.registry.declare(Thread(
+            'runtime-source', frozenset({'acp'}), Checkout(wired.root),
+            created_at=20.0, process_identity=owner))
+        assert wired.agents.agent_info_of(replacement.name) == UnobservedRuntimeInfo()
+        wired.agents.observe_runtime_info(replacement.incarnation, AgentInfo(
+            model=DeclaredModel('replacement/model'), context_size=PiCount.from_wire(200)))
+        replacement_info = wired.agents.agent_info_of(replacement.name)
+        with pytest.raises(UnregisteredThreadError):
+            wired.agents.observe_runtime_info(original.incarnation, ContextUsageObservation(
+                context_used=PiCount.from_wire(999)))
+        assert wired.agents.agent_info_of(replacement.name) == replacement_info
+        assert replacement_info.model == DeclaredModel('replacement/model')
 
     def test_managed_rename_normalizes_title_and_proves_owner(self, wired: Comms) -> None:
         wired.registry.declare(

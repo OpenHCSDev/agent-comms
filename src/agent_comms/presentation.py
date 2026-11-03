@@ -87,7 +87,7 @@ from .revision_views import (
     StatusSourced,
     StoresView,
 )
-from .runtime_info import RuntimeInfo
+from .runtime_info import RuntimeInfo, RuntimeReadScope
 from .storage_room import RoomLedger
 from .thread_identity import ThreadIncarnation
 from .thread_presentation import ThreadOwnerBinding, UnavailableThreadOwnerBinding
@@ -274,7 +274,7 @@ class ChannelView(ToolResult):
 
     @classmethod
     def roster(cls, snapshot: RegistrySnapshot, channels: Iterable[Channel],
-        pins: Mapping[str, frozenset[str]], order: type[ChannelSort],
+        pins: Mapping[str, frozenset[ThreadLookup]], order: type[ChannelSort],
         activity: Mapping[str, ObservedActivity], sent: Mapping[str, float],
         messages: Mapping[str, ChannelActivity], visibility: RosterVisibility,
     ) -> tuple[ChannelView, ...]:
@@ -288,13 +288,15 @@ class ChannelView(ToolResult):
     @classmethod
     def capture(
         cls, channel: Channel, registered: tuple[Thread, ...], snapshot: RegistrySnapshot,
-        pins: frozenset[str], activity: Mapping[str, ObservedActivity], sent: Mapping[str, float],
+        pins: frozenset[ThreadLookup], activity: Mapping[str, ObservedActivity], sent: Mapping[str, float],
         history: ChannelActivity, visibility: RosterVisibility,
     ) -> ChannelView:
         people = {thread.name: thread for thread in registered
                   if snapshot.status(thread.name).in_view(visibility)}
+        pinned_names = frozenset(name for name, thread in people.items()
+                                 if thread.incarnation.require_recorded().lookup in pins)
         members = tuple(sorted(people, key=lambda name: (
-            name not in pins,
+            name not in pinned_names,
             channel.order.key(name, people[name].created_at,
                               activity[name].timestamp if name in activity else 0,
                               sent.get(name, 0)),
@@ -303,7 +305,7 @@ class ChannelView(ToolResult):
             channel, members,
             max(history.last_message,
                 max((activity[name].timestamp for name in members if name in activity), default=0)),
-            history.last_user_input, pins & frozenset(members),
+            history.last_user_input, pinned_names,
             sum(1 for _ in snapshot.active_threads(registered)), len(registered),
         )
 
@@ -404,12 +406,12 @@ class ThreadView(ThreadRecord):
         threads = tuple(snapshot.visible_threads(visibility, names=names))
         if not threads:
             return ()
-        runtime = agents.runtime_info.for_threads(thread.name for thread in threads)
+        runtime = agents.runtime_info.for_threads(RuntimeReadScope.captured(thread, snapshot) for thread in threads)
         waits = partial(GoalWaits.for_goal, rows=goals.waits.read())
         activities = agents.all_activity(threads, snapshot=snapshot)
         return tuple(cls(
             thread, snapshot.status(thread.name), activities[thread.name],
-            goals.snapshot_for(thread, snapshot, waits).execution, runtime[thread.name],
+            goals.snapshot_for(thread, snapshot, waits).execution, runtime[thread.incarnation.require_recorded()],
             snapshot.seen_at(thread.name), snapshot.owner_binding(thread.name),
         ) for thread in threads)
 

@@ -112,14 +112,15 @@ def test_batch_capability_owns_selection_catalog_and_execution(comms, tmp_path):
     ("archived", False), ("deleting", False),
 ])
 def test_channel_pin_filters_hidden_thread_presence(comms, tmp_path, presence, allowed):
-    comms.registry.declare(
+    thread = comms.registry.declare(
         Thread("first", frozenset({"team"}), Checkout(tmp_path)),
         ThreadStatus.member_named(presence)(),
     )
+    lookup = thread.incarnation.require_recorded().lookup
     if allowed:
         comms.channels.set_thread_pinned("#team", "first", True)
-        assert "first" in comms.channels.catalog.read().pinned_members().get("#team", frozenset())
+        assert lookup in comms.channels.catalog.read().pinned_members().get("#team", frozenset())
     else:
         with pytest.raises(ValueError, match="not a member"):
             comms.channels.set_thread_pinned("#team", "first", True)
-        assert "first" not in comms.channels.catalog.read().pinned_members().get("#team", frozenset())
+        assert lookup not in comms.channels.catalog.read().pinned_members().get("#team", frozenset())

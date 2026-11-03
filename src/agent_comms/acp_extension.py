@@ -26,6 +26,7 @@ from .turn_inbox import SendNow, TurnInbox
 from .agent_events import CompactionEvent
 from .child_process import ProcessIdentity
 from .context_reading import ContextReading
+from .reading_attribution import CurrentReadingAttribution, ReadingAttribution
 from .nominal.declared_family import DeclaredFamily
 from .external_transcript import DraftRow
 from .transcript_sources import NoDraft
@@ -650,10 +651,13 @@ class CoordinationChangedUpdate(AgentCommsUpdate):
     thinking_level: str | None
     title: str
     context_usage: ContextReading
+    model_attribution: Annotated[ReadingAttribution, WireOmitDefault()] = field(
+        default_factory=CurrentReadingAttribution, kw_only=True
+    )
 
     @property
     def status_label(self) -> str:
-        return " · ".join((self.model, *self.context_usage.label_parts()))
+        return " · ".join((self.model_attribution.status_text(self.model), *self.context_usage.label_parts()))
 
     @property
     def persistence(self) -> str:

@@ -28,11 +28,11 @@ async def test_real_idle_owner_is_replaced_without_losing_session(
         monkeypatch.setenv('AGENT_COMMS_AGENT_MODELS', 'response-local/fixture')
         comms = wire(native.root)
         with LaunchRoot.from_path(comms.root).selected():
-            comms.registry.declare(Thread(
+            thread = comms.registry.declare(Thread(
                 'worker', frozenset(), Checkout(native.project), session_file=RegistrySessionLocation.from_path(str(native.session), comms.root)))
-            comms.agents.observe_runtime_info('worker', ContextUsageObservation(
+            comms.agents.observe_runtime_info(thread.incarnation, ContextUsageObservation(
                 context_used=PiCount.from_wire(23)))
-            comms.agents.observe_runtime_info('worker', AgentInfo(
+            comms.agents.observe_runtime_info(thread.incarnation, AgentInfo(
                 model=DeclaredModel('response-local/fixture'), context_size=PiCount.from_wire(100)))
             comms.ledger.merge({'saved': {'worker': ['work remains', 23]}}, 'worker')
             metadata = comms.agents.runtime_info.path.read_bytes()

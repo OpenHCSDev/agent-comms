@@ -252,9 +252,9 @@ class ChannelManagement:
             return self.catalog.change(lambda document: document.set_preferences(name, activity, pinned=pinned))
 
     def set_thread_pinned(self, channel: str, name: str, pinned: bool) -> None:
-        with self.bus.opened_activity() as activity:
-            thread = self.registry.require(name)
-            snapshot = self.registry.snapshot()
+        with self.registry.store.current_snapshot() as cut, self.bus.opened_activity() as activity:
+            snapshot = cut.snapshot
+            thread = snapshot.require(name)
 
             def record(document: CatalogDocument) -> None:
                 view = document.require_channel(channel, activity)
@@ -267,7 +267,7 @@ class ChannelManagement:
                     if not view.matches(thread.tags):
                         raise ValueError(message)
                     snapshot.status(thread.name).require_visible(message)
-                document.set_thread_pinned(view.name, thread.name, pinned)
+                document.set_thread_pinned(view.name, thread.incarnation.require_recorded().lookup, pinned)
 
             self.catalog.change(record)
 

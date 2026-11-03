@@ -419,9 +419,7 @@ class ThreadManagement:
 
     def _rename_stores(self, previous: str, current: str) -> None:
         self.agents.activity.rename_thread(previous, current)
-        self.agents.runtime_info.rename_thread(previous, current)
         self.ledger.rename_thread(previous, current)
-        self.catalog.change(lambda document: document.rename_thread(previous, current))
 
     def heartbeat(self, name: str) -> None:
         self.registry.heartbeat(name)
@@ -470,10 +468,12 @@ class ThreadManagement:
         )
 
     def running_selection(self, name: str) -> RunningSelection:
-        thread = self.registry.require(name)
+        snapshot = self.registry.snapshot()
+        thread = snapshot.require(name)
+        info = self.agents.runtime_info_for(thread, snapshot)
         return RunningSelection(
             thread,
-            thread.model.applied(self.agents.agent_info_of(thread.name).model),
+            thread.model.applied(info.current_model(thread.incarnation.require_recorded())),
         )
 
     def resolve_thread_model(

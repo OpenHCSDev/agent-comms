@@ -17,7 +17,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.context_reading import ContextUsage, UnmeasuredContext
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
-from agent_comms.nominal.field_codec import FieldCodec, TurnId, GoalId
+from agent_comms.nominal.field_codec import FieldCodec, TurnId, GoalId, ThreadLookup
 from agent_comms.goals import Goal
 from agent_comms.launch_runtime import CallingThreadUnavailable
 from agent_comms.messages import HandoffKind, InfoKind, Message
@@ -26,7 +26,9 @@ from agent_comms.pi_counts import PiCount
 from agent_comms.registration import Registration
 from agent_comms.private_registry_guard import PrivateRegistryGuard
 from agent_comms.registry_document import RegistryDocument
-from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoStore
+from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoStore, RuntimeReadScope
+from agent_comms.runtime_field import RuntimePublication
+from agent_comms.thread_identity import ThreadIncarnationRecord
 from agent_comms.shared_ledger import SharedLedger
 from agent_comms.thread_status import DeletingThreadStatus, HeartbeatThreadStatus, StoppedThreadStatus
 from agent_comms.threads import current_thread
@@ -59,22 +61,31 @@ def test_native_root_rejects_unattestable_windows_ownership(tmp_path: Path) -> N
         prepare_native_comms(wire(tmp_path))
 
 
+@pytest.fixture
+def runtime_publication():
+    owner = ThreadIncarnationRecord("a", 1.0).incarnation().require_recorded()
+    return RuntimePublication(owner, 1.0)
+
+
 class TestAgentRuntimeInfo:
-    def test_context_percent_and_persistence(self, tmp_path: Path):
-        info = AgentRuntimeInfo(
-            thread="a", model=DeclaredModel('provider/model'), context_used=PiCount.from_wire(25), context_size=PiCount.from_wire(100), timestamp=1.0
-        )
-        assert info.context_reading() == ContextUsage(25, 100)
+    def test_context_percent_and_persistence(self, tmp_path: Path, runtime_publication):
+        owner = runtime_publication.owner.require_recorded()
         store = RuntimeInfoStore(tmp_path / "runtime.json")
-        store.observe("a", 1.0, AgentInfo(model=DeclaredModel('provider/model'), context_size=PiCount.from_wire(100)))
-        store.observe("a", 1.0, ContextUsageObservation(context_used=PiCount.from_wire(25)))
-        assert store.read().observations["a"] == info
+        store.observe(owner, runtime_publication.timestamp, AgentInfo(
+            model=DeclaredModel('provider/model'), context_size=PiCount.from_wire(100)))
+        store.observe(owner, runtime_publication.timestamp, ContextUsageObservation(
+            context_used=PiCount.from_wire(25)))
+        info = store.for_thread(RuntimeReadScope(owner, (owner.name,)))
+        assert info.model == DeclaredModel('provider/model')
+        assert info.context_reading() == ContextUsage(25, 100)
+        assert store.read().observations[owner] == info
 
-    def test_unknown_context_stays_unknown(self):
-        assert AgentRuntimeInfo(thread="a", context_size=PiCount.from_wire(100), timestamp=1.0).context_reading() == UnmeasuredContext()
+    def test_unknown_context_stays_unknown(self, runtime_publication):
+        info = AgentRuntimeInfo(context_size_observation=runtime_publication.capture(PiCount.from_wire(100)))
+        assert info.context_reading() == UnmeasuredContext()
 
-    def test_nonpositive_context_is_unreported(self):
-        info = AgentRuntimeInfo(thread="a", context_used=PiCount.from_wire(-1), timestamp=1.0)
+    def test_nonpositive_context_is_unreported(self, runtime_publication):
+        info = AgentRuntimeInfo(context_used_observation=runtime_publication.capture(PiCount.from_wire(-1)))
         assert info.context_used == PiCount.from_wire(None)
         assert info.context_reading() == UnmeasuredContext()
 

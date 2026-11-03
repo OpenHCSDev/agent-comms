@@ -10,6 +10,7 @@ from .child_process import ProcessIdentity
 from .registration import Registration
 from .thread_management import ThreadManagement
 from .agent_activity import AgentActivity
+from .native_settings import NativeThreadDefaults
 
 
 class ThreadConfiguration:
@@ -20,15 +21,17 @@ class ThreadConfiguration:
         self.root, self.registry, self.threads, self.agents = root, registry, threads, agents
 
     def answer(self, name: str) -> CoordinationChangedUpdate:
-        thread = self.registry.require(name)
-        info = self.agents.agent_info_of(thread.name)
+        snapshot = self.registry.snapshot()
+        thread = snapshot.require(name)
+        info = self.agents.runtime_info_for(thread, snapshot)
         return CoordinationChangedUpdate(
             thread.incarnation.require_recorded(),
             str(self.root.resolve()),
             ProcessIdentity.capture(os.getpid()),
             thread.worktree,
-            self.threads.resolve_thread_model(thread.name),
+            thread.model.applied(info.model).otherwise(NativeThreadDefaults.model.text),
             thread.thinking_level.wire_value(),
             thread.display_title,
             info.context_reading(),
+            model_attribution=thread.model.observation_attribution(info.model_attribution()),
         )

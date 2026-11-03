@@ -259,7 +259,7 @@ class TurnRunner:
     ) -> None:
         """Publish this attested saved owner through the shared info consumer."""
         state.model.require_selection(thread.model)
-        await events.AgentEventConsumer(comms=self.comms, thread_name=thread.name).dispatch(info)
+        await events.AgentEventConsumer(comms=self.comms, thread=thread).dispatch(info)
         await AcpEventConsumer(self.effects, session_id, self.runtime).dispatch(info)
 
     async def inspect_context(self, session_id: AcpSessionId, thread: Thread) -> NativeContextData:
