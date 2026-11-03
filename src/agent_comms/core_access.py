@@ -12,14 +12,14 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from .comms import Comms
-from .tool_caller import HumanCaller
+from .tool_caller import HumanCaller, ToolCaller
 from .tool_request import ToolRequest
 from .tool_result import ToolResult
 
 
 class CoreAccess(ABC):
     @abstractmethod
-    def call(self, request: ToolRequest) -> ToolResult:
+    def call[R: ToolResult](self, request: ToolRequest[ToolCaller, R]) -> R:
         """The request's declared result, from whichever Core this access reaches."""
 
 
@@ -30,5 +30,5 @@ class LocalCoreAccess(CoreAccess):
 
     comms: Comms
 
-    def call(self, request: ToolRequest) -> ToolResult:
+    def call[R: ToolResult](self, request: ToolRequest[ToolCaller, R]) -> R:
         return HumanCaller().invoke(request, self.comms)

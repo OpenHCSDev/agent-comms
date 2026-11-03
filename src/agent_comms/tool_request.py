@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import annotationlib
 
 from abc import abstractmethod
 from collections.abc import Mapping
-from inspect import signature
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, ClassVar, NoReturn
+from types import get_original_bases
+from typing import Annotated, ClassVar, NoReturn, cast, get_args, get_origin
 
 from agent_comms_hooks import ToolRefusedError
 from pydantic import JsonValue
@@ -102,7 +101,7 @@ class ToolCall:
 
 
 @dataclass(frozen=True, kw_only=True)
-class ToolRequest[Caller: ToolCaller = ToolCaller](
+class ToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResult](
     AsyncWork, FreshIngress, ArgumentTool, ThreadCommandAvailability, NativeRequestTools, NativeToolDeclaration
 ):
     native_call: ClassVar[type[CoordinationCall]] = CoordinationCall
@@ -155,13 +154,17 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
         return result
 
     @classmethod
-    def result_type(cls) -> type[ToolResult]:
-        """The result apply declares; a remote reply decodes into it."""
-        declared = signature(cls.apply, annotation_format=annotationlib.Format.STRING)
-        result: type[ToolResult] = annotationlib.ForwardRef(
-            declared.return_annotation, module=cls.apply.__module__
-        ).evaluate()
-        return result
+    def result_type(cls) -> type[Result]:
+        """The result this request declares once, as the family's second type argument in its
+        own or an inherited class header; a remote reply decodes into it."""
+        requests = cls.__mro__[:cls.__mro__.index(ToolRequest) + 1]
+        for declaration in requests:
+            for base in get_original_bases(declaration):
+                if get_origin(base) in requests:
+                    match get_args(base):
+                        case (_, result):
+                            return cast(type[Result], result)
+        raise TypeError(f"{cls.__qualname__} declares no result in its class header")
 
     @classmethod
     def invoke(
@@ -194,12 +197,12 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
         return {}
 
     @abstractmethod
-    def apply(self, comms: Comms, caller: Caller) -> ToolResult:
+    def apply(self, comms: Comms, caller: Caller) -> Result:
         """Each tool declares its own result record; invoke alone encodes it."""
 
     def apply_without_thread(
-        self: ToolRequest[ToolCaller], comms: Comms, caller: NoThreadCaller
-    ) -> ToolResult:
+        self: ToolRequest[ToolCaller, Result], comms: Comms, caller: NoThreadCaller
+    ) -> Result:
         return self.apply(comms, caller)
 
 

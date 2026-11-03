@@ -454,7 +454,7 @@ class CommsChannelsTool(ReadTool, ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsConversationPageTool(ReadTool, ToolRequest):
+class CommsConversationPageTool(ReadTool, ToolRequest[ToolCaller, MessagePage]):
     """The UI's conversation read: the same request locally and through the connector."""
 
     label = "Conversation page"
@@ -470,7 +470,7 @@ class CommsConversationPageTool(ReadTool, ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsConversationRevisionTool(ReadTool, ToolRequest):
+class CommsConversationRevisionTool(ReadTool, ToolRequest[ToolCaller, ConversationRevision]):
     """The UI's change check for one conversation: the same request locally and through the
     connector. The UI keeps the revision it gets back and sends it with the next check."""
 
@@ -490,7 +490,7 @@ class CommsConversationRevisionTool(ReadTool, ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsLatestSequenceTool(ReadTool, ToolRequest):
+class CommsLatestSequenceTool(ReadTool, ToolRequest[ToolCaller, LatestSequence]):
     """The bound a UI reads new messages up to, locally or through the connector."""
 
     label = "Latest sequence"

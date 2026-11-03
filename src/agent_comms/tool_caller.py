@@ -44,7 +44,7 @@ class ToolCaller(ReadAuthority):
         return ThreadCaller(actor) if actor else NoThreadCaller()
 
     @abstractmethod
-    def invoke(self, request: ToolRequest, comms: Comms) -> ToolResult: ...
+    def invoke[R: ToolResult](self, request: ToolRequest[ToolCaller, R], comms: Comms) -> R: ...
 
     @abstractmethod
     def listing(self, comms: Comms, threads: tuple[ThreadRecord, ...]) -> ThreadListing: ...
@@ -103,7 +103,7 @@ class NoThreadCaller(OperatorOutcomes, ToolCaller):
             "Team verbs act as the teammate running them: pass --from NAME or run from a "
             "session bound to the bus. There is no lead to act as.")
 
-    def invoke(self, request: ToolRequest, comms: Comms) -> ToolResult:
+    def invoke[R: ToolResult](self, request: ToolRequest[ToolCaller, R], comms: Comms) -> R:
         return request.apply_without_thread(comms, self)
 
     def listing(self, comms: Comms, threads: tuple[ThreadRecord, ...]) -> ThreadListing:
@@ -147,7 +147,7 @@ class ThreadCaller(ToolCaller):
         order.require_reviewer(comms.goals, request, actor)
         return actor
 
-    def invoke(self, request: ToolRequest[ThreadCaller], comms: Comms) -> ToolResult:
+    def invoke[R: ToolResult](self, request: ToolRequest[ThreadCaller, R], comms: Comms) -> R:
         return request.apply(comms, self)
 
     def listing(self, comms: Comms, threads: tuple[ThreadRecord, ...]) -> ThreadListing:
