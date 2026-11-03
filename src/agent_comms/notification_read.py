@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from .activity import ObservedActivity
 from .notification_assignment import NotificationAssignment
 from agent_comms.message_notification import (
-    NoNotificationWindow, NotificationEvidence, NotificationWindow,
+    NoNotificationWindow, NotificationPass, NotificationWindow,
 )
 from .registry_provenance import DeletedThread
 from .revision_views import ActivityView, NotificationEvidenceView
@@ -43,18 +43,18 @@ class NotificationsRead:
         known = {**comms.views.observed_activity(revision, names - known.keys()), **known}
         return cls(revision, {name: known[name] for name in names if name in known}, window)
 
-    def live_changed(self, comms: Comms, revision: WireRevision) -> bool:
+    def live_changed(self, comms: Comms, notifications: NotificationPass) -> bool:
         """Read marks, participant activity or retained assignment evidence changed."""
+        revision = notifications.revision
         return (
             revision.changed_since(ActivityView(), self.revision)
             and comms.views.observed_activity(revision, self.notification_window.activity_names())
             != self.activity
-        ) or NotificationEvidence.since(comms, revision, self.revision).changed(
-            self.notification_window)
+        ) or notifications.changed(self.notification_window, self.revision)
 
 
 class UnreadableNotificationsRead(NotificationsRead):
     """An unreadable read names no participants, so any later revision reads again."""
 
-    def live_changed(self, comms: Comms, revision: WireRevision) -> bool:
-        return revision != self.revision
+    def live_changed(self, comms: Comms, notifications: NotificationPass) -> bool:
+        return notifications.revision != self.revision

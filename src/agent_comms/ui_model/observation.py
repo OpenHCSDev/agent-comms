@@ -56,7 +56,7 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.errors import RelationViolationError
 from agent_comms.history_views import RetiredViews
-from agent_comms.message_notification import NotificationWindow
+from agent_comms.message_notification import NotificationPass, NotificationWindow
 from agent_comms.notification_read import NotificationsRead, UnreadableNotificationsRead
 from agent_comms.message_reference import MessageReference
 from agent_comms.nominal.field_codec import MessageId
@@ -830,8 +830,9 @@ class NotificationReading(ReadingObservation[ObserveNotifications]):
 
     def read(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:
         current, stale = [], []
+        notifications = NotificationPass(comms, revision)
         for batch in self.batches:
-            changed = batch.request.operation.changed_since(comms, revision, batch.state)
+            changed = batch.request.operation.changed_since(comms, batch.state, notifications)
             (stale if changed else current).append(batch)
         pending: set[ReadNotifications] = set()
         for family, keys in self.wanted().items():

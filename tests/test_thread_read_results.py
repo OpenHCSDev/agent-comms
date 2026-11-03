@@ -5,6 +5,8 @@ from itertools import product
 
 import pytest
 
+from agent_comms.message_notification import NotificationPass
+
 from agent_comms.presentation import WireRevision
 from agent_comms.thread_presentation import NoThreadPresentation
 from agent_comms.ui_model.observation import (
@@ -117,7 +119,7 @@ def test_assignment_row_changes_attribute_only_their_view(
         later = replace(later, expiry_tick=revision.expiry_tick + 60)
     assert later != revision
     assert later.changed_threads(previous, comms, activity) == expected
-    assert notification_read.live_changed(comms, later) == bool(expected)
+    assert notification_read.live_changed(comms, NotificationPass(comms, later)) == bool(expected)
 
 
 def reachable_types(root: object) -> set[str]:

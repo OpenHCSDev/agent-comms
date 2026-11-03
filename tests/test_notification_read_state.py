@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.message_notification import NotificationPass
+
 from agent_comms.bus_read import BusRead, UiRead
 from agent_comms.comms import Comms
 from agent_comms.coordination_errors import StaleRevision
@@ -54,11 +56,11 @@ def test_notification_read_states_use_the_request_revision_contract(comms):
     live = LiveNotificationRead(())
     recorded = RecordedNotificationRead((), HistorySourceKey("archive"))
     settled = NotificationsRead(original, {})
-    assert not live.changed_since(comms, original, settled)
-    assert not live.changed_since(comms, later, settled)
-    assert not recorded.changed_since(comms, later, settled)
-    assert live.changed_since(comms, later, UnreadableNotificationsRead(original))
-    assert not live.changed_since(comms, original, UnreadableNotificationsRead(original))
+    assert not live.changed_since(comms, settled, NotificationPass(comms, original))
+    assert not live.changed_since(comms, settled, NotificationPass(comms, later))
+    assert not recorded.changed_since(comms, settled, NotificationPass(comms, later))
+    assert live.changed_since(comms, UnreadableNotificationsRead(original), NotificationPass(comms, later))
+    assert not live.changed_since(comms, UnreadableNotificationsRead(original), NotificationPass(comms, original))
 
 
 TEAM = (("sender", AgentThreadRole), ("worker", AgentThreadRole), ("human", UserThreadRole),
@@ -93,7 +95,7 @@ def test_the_window_names_native_recipients_and_activity_holds_only_projected_on
     assert settled.activity.keys() == names - {"archived"}
     assert settled.activity["gone"] == DeletedThread("gone")
     assert settled.activity["worker"] == comms.views.observed_activity(revision, ("worker",))["worker"]
-    assert not settled.live_changed(comms, revision)
+    assert not settled.live_changed(comms, NotificationPass(comms, revision))
 
 
 def test_an_archived_participant_becoming_visible_changes_the_read(comms, tmp_path):
@@ -105,7 +107,7 @@ def test_an_archived_participant_becoming_visible_changes_the_read(comms, tmp_pa
     comms.registry.declare(Thread("archived", frozenset({"team"}), Checkout(tmp_path)))
     later = comms.views.revision()
     assert later.changed_since(ActivityView(), revision)
-    assert settled.live_changed(comms, later)
+    assert settled.live_changed(comms, NotificationPass(comms, later))
 
 
 def test_a_participant_deleted_after_the_read_changes_it(comms, tmp_path):
@@ -114,7 +116,7 @@ def test_a_participant_deleted_after_the_read_changes_it(comms, tmp_path):
     assert "gone" in settled.activity and settled.activity["gone"] != DeletedThread("gone")
 
     comms.registry.remove("gone")
-    assert settled.live_changed(comms, comms.views.revision())
+    assert settled.live_changed(comms, NotificationPass(comms, comms.views.revision()))
 
 
 def test_notification_read_only_acquires_activity_when_its_source_changed(comms, tmp_path):
@@ -136,9 +138,9 @@ def test_notification_read_only_acquires_activity_when_its_source_changed(comms,
     previous = sys.getprofile()
     sys.setprofile(count_reads)
     try:
-        assert not settled.live_changed(comms, replace(original, reads=source))
+        assert not settled.live_changed(comms, NotificationPass(comms, replace(original, reads=source)))
         assert calls == 0
-        assert not settled.live_changed(comms, replace(original, activity=source))
+        assert not settled.live_changed(comms, NotificationPass(comms, replace(original, activity=source)))
         assert calls == 1
     finally:
         sys.setprofile(previous)
@@ -152,7 +154,7 @@ def test_unrelated_registry_change_keeps_the_notification_window(comms: Comms, t
     settled = NotificationsRead(original)
 
     assert later.changed_since(ActivityView(), original)
-    assert not settled.live_changed(comms, later)
+    assert not settled.live_changed(comms, NotificationPass(comms, later))
 
 
 def batch_of(request: ReadNotifications) -> NotificationBatch:

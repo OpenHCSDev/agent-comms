@@ -6,6 +6,7 @@ from agent_comms.notification_assignment import NotificationSelection
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
+from functools import cached_property
 from pathlib import Path
 from .agent_activity import AgentActivity, RecordedRecipientActivity
 from .read_ledger import ReadDocument, ReadLedger
@@ -67,55 +68,53 @@ class NotificationWindow(ABC):
                          for item in items for name in item.activity_names())
 
     @abstractmethod
-    def changed(self, evidence: CapturedNotificationEvidence) -> bool: ...
+    def changed(self, notifications: NotificationPass) -> bool: ...
 
 
 class NoNotificationWindow(NotificationWindow):
     def __init__(self) -> None:
         super().__init__({}, ())
 
-    def changed(self, evidence: CapturedNotificationEvidence) -> bool:
+    def changed(self, notifications: NotificationPass) -> bool:
         return False
 
 
 @dataclass(frozen=True)
 class CapturedNotificationWindow(NotificationWindow):
-    def changed(self, evidence: CapturedNotificationEvidence) -> bool:
+    def changed(self, notifications: NotificationPass) -> bool:
+        evidence = notifications.evidence
         return bool(
             (self.read_marks and evidence.changed_marks(self.read_marks))
             or NotificationAssignment.changed(self.reads, evidence.root)
         )
 
 
-class NotificationEvidence:
-    """One refresh pass's answer to whether notification evidence changed: the revision
-    question is asked once, and the read ledger and registry are decoded once for every
-    window the pass checks."""
+class NotificationPass:
+    """One refresh pass over any number of notification windows. Each window's own earlier
+    revision decides whether its evidence can have moved; the read ledger and registry are
+    decoded at most once per pass, the first time a window needs them."""
 
-    @classmethod
-    def since(
-        cls, comms: Comms, revision: WireRevision, earlier: WireRevision,
-    ) -> NotificationEvidence:
-        if not revision.changed_since(NotificationEvidenceView(), earlier):
-            return cls()
-        reads = comms.bus.reads
+    def __init__(self, comms: Comms, revision: WireRevision) -> None:
+        self.comms = comms
+        self.revision = revision
+
+    @cached_property
+    def evidence(self) -> CapturedNotificationEvidence:
+        reads = self.comms.bus.reads
         return CapturedNotificationEvidence(
-            comms.root, reads, reads.read(), comms.registry.snapshot())
+            self.comms.root, reads, reads.read(), self.comms.registry.snapshot())
 
-    def changed(self, window: NotificationWindow) -> bool:
-        """No assignment or read evidence moved, so no window changed."""
-        return False
+    def changed(self, window: NotificationWindow, earlier: WireRevision) -> bool:
+        return (self.revision.changed_since(NotificationEvidenceView(), earlier)
+                and window.changed(self))
 
 
 @dataclass(frozen=True)
-class CapturedNotificationEvidence(NotificationEvidence):
+class CapturedNotificationEvidence:
     root: Path
     ledger: ReadLedger
     document: ReadDocument
     snapshot: RegistrySnapshot
-
-    def changed(self, window: NotificationWindow) -> bool:
-        return window.changed(self)
 
     def changed_marks(
         self, marks: Iterable[NotificationReadMark],
