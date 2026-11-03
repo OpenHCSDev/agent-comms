@@ -44,7 +44,7 @@ from .native_failures import NativePiUnavailable
 from .native_file_artifact import NativeFileArtifact
 from .native_output import AssistantOutput, NativeOutputScope, ToolOutput
 from .native_session_reopen import NativeSessionIdentity, PiSessionId
-from .pi_wire import McpCallPolicy, McpServerState, Opaque, OpenPayload, PiDiagnostic, PiField, PiOmitted, PiPayload, PiReported, PiUsage, TaggedPayload, UnknownPayload
+from .pi_wire import McpCallPolicy, McpServerState, Opaque, OpenPayload, PiDiagnostic, PiField, PiOmitted, PiPayload, PiReported, PiUsage, ReportedInputId, TaggedPayload, UnknownPayload
 from . import agent_events as events
 from .acp_failure import ExhaustedRetry, FailureSource, RecoveredRetry
 from .pi_counts import NonnegativePiCount, PiCount, TotalPiCount, UnreportedCount
@@ -171,13 +171,6 @@ class ReportedText(PiReported[str]):
     def text_or[D](self, default: D) -> str | D:
         """Pi's empty text falls back exactly as its omitted text does."""
         return self.value or default
-
-
-@dataclass(frozen=True)
-class ReportedInputId(PiReported[InputId]):
-    """The native input identity decoded from Pi's inputId field."""
-
-    value: InputId
 
 
 @dataclass(frozen=True)
@@ -755,9 +748,7 @@ class UserMessage(PiMessage):
     ) -> list[TranscriptEvent]:
         events = [event for part in parts for event in part.user_transcript(context.position, timestamp)]
         events = [replace(event, routing=routing) for event in events]
-        for input_id in self.input_id.present():
-            events = [event.with_native_input(input_id) for event in events]
-        return events
+        return [event.with_native_input(self.input_id) for event in events]
 
 
 @dataclass(frozen=True)

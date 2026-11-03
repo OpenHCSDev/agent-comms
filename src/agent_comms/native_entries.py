@@ -41,7 +41,7 @@ from .native_input_proof import (
     NativeInputLocation,
 )
 from .native_session_reopen import PiSessionId
-from agent_comms.pi_wire import PiField, PiOmitted, PiPayload, TaggedPayload
+from agent_comms.pi_wire import PiField, PiOmitted, PiPayload, ReportedInputId, TaggedPayload
 from agent_comms.pi_wire import Opaque
 from .pi_payloads import PiMessage, ReportedText
 from .pi_vocabulary import PendingStopReason, ThinkingLevel
@@ -216,8 +216,8 @@ class NativeEntry(TaggedPayload, RecordedEntry, DeclaredFamily, affix="Entry"):
         return None
 
     @property
-    def input_id(self) -> InputId | None:
-        return None
+    def input_id(self) -> ReportedInputId | PiOmitted:
+        return PiOmitted()
 
     @property
     def unread_reply(self) -> bool:
@@ -650,9 +650,8 @@ class MessageEntry(NativeEntry):
         return self.message.assistant
 
     @property
-    def input_id(self) -> InputId | None:
-        # NativeEntry declares absence as None for every entry; this hands Pi's answer over.
-        return self.message.input_id.value_or(None)
+    def input_id(self) -> ReportedInputId | PiOmitted:
+        return self.message.input_id
 
     def require_input_id(self) -> InputId:
         """A tracked user message names the input it carries; anything else is malformed."""
