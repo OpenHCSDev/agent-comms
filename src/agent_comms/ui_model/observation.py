@@ -539,18 +539,26 @@ class SubscribeTranscript(ReadTranscript):
     deferred_reads: ClassVar[tuple[type[Exception], ...]] = (StaleRevision,)
 
 
-class TranscriptPublicationState(ABC):
+class TranscriptPublicationState(SubclassUnion, affix=""):
+    """Whether a transcript read was already published; a remote UI sends it with its
+    read, so each record carries its kind."""
+
+    @classmethod
+    def decodes_tagged_records(cls) -> bool:
+        return True
+
     @abstractmethod
     def result(self, read: TranscriptRead) -> TranscriptSnapshotUpdate | TranscriptDraftUpdate: ...
 
 
-class NotPublished(TranscriptPublicationState):
+@dataclass(frozen=True)
+class NotPublished(TaggedRecordMember, TranscriptPublicationState):
     def result(self, read: TranscriptRead) -> TranscriptSnapshotUpdate:
         return TranscriptSnapshotUpdate.from_read(read)
 
 
 @dataclass(frozen=True)
-class Published(TranscriptPublicationState):
+class Published(TaggedRecordMember, TranscriptPublicationState):
     identity: TranscriptReadIdentity
 
     def result(self, read: TranscriptRead) -> TranscriptSnapshotUpdate | TranscriptDraftUpdate:
