@@ -40,9 +40,12 @@ retained beside the corrected declared-value check.
 `capturing_inputs`, while the existing installer hold still excludes source
 writers. It compares the ordinary unresolved-input projection, native inputs by
 both session and original path, selected participant presence, and every retained
-participant's ordinary aggregate. `ContextStore.require_retained` owns context
-comparison: complete selected entry groups and all retained requests, including
-predecessors, resolve through the same reader as saved-context browsing.
+participant's ordinary aggregate. The held original's registry selects the
+coordinator schema once; that declaration validates both databases. Selected data
+does not gain a registry or runnable-root authority merely to pass readback.
+`ContextStore.require_retained` owns context comparison: complete selected entry
+groups and all retained requests, including predecessors, resolve through the same
+reader as saved-context browsing.
 
 A mismatch refuses the selected operation. The checks run under the existing
 source-integrity and registry checks, without restoring holder write permission,

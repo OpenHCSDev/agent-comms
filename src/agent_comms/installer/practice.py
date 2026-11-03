@@ -273,8 +273,9 @@ class PracticeCopy:
             ReadableStore(CoordinationStore.path_in(self.root)).reader_snapshot() as source,
             ReadableStore(CoordinationStore.path_in(self.path)).reader_snapshot() as retained,
         ):
-            CoordinationStore.schema_at(CoordinationStore.path_in(self.root)).require_schema(source)
-            CoordinationStore.schema_at(CoordinationStore.path_in(self.path)).require_schema(retained)
+            schema = CoordinationStore.schema_at(CoordinationStore.path_in(self.root))
+            schema.require_schema(source)
+            schema.require_schema(retained)
             for identity in identities:
                 source_inputs, retained_inputs = ({row.input_id: row for row in NativeRuntimeInput.select(
                     db, session_id=identity.session_id, session_file=identity.session_file,
