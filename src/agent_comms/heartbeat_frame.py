@@ -15,6 +15,7 @@ from agent_comms.plan_phases import PlanPhase
 from agent_comms.repo import Repo
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import OwedAnswer, StandingRule
+from agent_comms.team_service import TeamService
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.threads import Thread
 from agent_comms.transcript_events import TurnDigest
@@ -36,8 +37,7 @@ class TeamInputs(HeldOrders):
     plan: PlanReading
 
     @classmethod
-    def prepare(cls, comms: Comms, commander: str, pulls: ProgressRead,
-                plans: PlanReadings) -> Self:
+    def prepare(cls, comms: Comms, pulls: ProgressRead, plans: PlanReadings) -> Self:
         holds = HeldOrders.read(comms)
         pulls.register(holds.todos)
         snapshot = comms.registry.snapshot()
@@ -53,7 +53,7 @@ class TeamInputs(HeldOrders):
             tuple(phase.phase_evidence() for phase in PlanPhase.members_with(PlanPhase)),
             history=pulls.checkout(repository.checkout).branches.history,
         )
-        StandingRule.prepare_all(comms, commander, holds, pulls)
+        StandingRule.prepare_all(comms, holds, pulls)
         return cls(holds.live, holds.orphaned, pulls, plan)
 
 
@@ -102,8 +102,8 @@ class HeartbeatFrame(TeamInputs):
         return self._edit_counts
 
     @classmethod
-    def capture(cls, comms: Comms, commander: str, inputs: TeamInputs,
-                plans: PlanReadings) -> Self:
+    def capture(cls, comms: Comms, inputs: TeamInputs, plans: PlanReadings) -> Self:
+        """One team board: every teammate's owed answers, never one lead's."""
         snapshot = comms.registry.snapshot()
         project = snapshot.commander_project.require()
         with comms.goals.todos.snapshot() as db:
@@ -117,7 +117,8 @@ class HeartbeatFrame(TeamInputs):
             inputs.orphaned,
             inputs.pulls,
             plan,
-            OwedAnswer.read_scan(comms, snapshot.require(commander).incarnation, inputs),
+            tuple(answer for teammate in TeamService.teammates(snapshot)
+                  for answer in OwedAnswer.read_scan(comms, teammate.incarnation, inputs)),
             closed,
             reviews,
             EditWorkplaces.capture(comms, snapshot, inputs.live, inputs.pulls),

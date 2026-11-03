@@ -313,16 +313,18 @@ class TeamHud(TeamLoad):
     open_pings: tuple[Ping, ...] = field(kw_only=True)
 
     @classmethod
-    def read(cls, comms: Comms, commander: str) -> TeamHud:
-        return TeamFrame.current(comms, commander)
+    def read(cls, comms: Comms, teammate: str) -> TeamHud:
+        return TeamFrame.current(comms, teammate)
 
     @classmethod
-    def of(cls, comms: Comms, commander: str, frame: HeartbeatFrame,
+    def of(cls, comms: Comms, frame: HeartbeatFrame,
            states: tuple[TeammateState, ...], *, delivery: TeamDelivery,
            usage: CodexUsage) -> TeamHud:
-        """Cards follow ``states``, already in the TeammateState family's declared order."""
+        """The one team board, prepared with its first teammate's delivery; for_delivery gives
+        every other teammate the same board. Cards follow ``states``, already in the
+        TeammateState family's declared order."""
         snapshot = comms.registry.snapshot()
-        owner = snapshot.require(commander).incarnation.require_recorded()
+        owner = delivery.packet.commander.require_recorded()
         pulls, reading = frame.pulls, frame.plan
         todo_history = reading.todos
         held = frame.todos
@@ -354,7 +356,7 @@ class TeamHud(TeamLoad):
             phase, phase.done(reading), phase.ready(reading),
             tuple(dict.fromkeys(todo.held().owner_identity for todo in phase.holding(reading))),
         ) for phase in PlanPhase.members_with(PlanPhase))
-        forks = tuple(fork.incarnation for fork in TeamService.forks(snapshot, commander)
+        forks = tuple(fork.incarnation for fork in TeamService.forks(snapshot)
                       if snapshot.status(fork.name).receiving)
         passes = ServicePassStore.at(comms.root).read()
         return cls(commander=owner, units=tuple(units), phases=phases,

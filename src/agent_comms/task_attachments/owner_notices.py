@@ -55,6 +55,12 @@ class RestartNotice(OwnerNotice, declared_name="restart_notice"):
 
 
 @dataclass(frozen=True)
+class OrderNotice(OwnerNotice, declared_name="order_notice"):
+    """Core's own word to a holder about its order (an unowned order given to it, its branch
+    behind main): Core acts, so no teammate is made its sender."""
+
+
+@dataclass(frozen=True)
 class MeantNotice(OwnerNotice, declared_name="meant_question"):
     """The rule gate asks a session whether it meant the answers it just wrote, and tells off a
     dodge (rule_deal.MeantRecord). It lands mid-turn like any line of his."""

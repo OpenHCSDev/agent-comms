@@ -62,12 +62,19 @@ class TeamService:
                      for request in goals.todos.open_requests(live.acting_identity, limit=1, descending=False))
 
     @classmethod
-    def forks(cls, snapshot: RegistrySnapshot, commander: str) -> tuple[Thread, ...]:
-        """The teammate's forks Core registered, heard from or not."""
-        return tuple(
-            fork for thread in snapshot.children(commander)
+    def teammates(cls, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+        """The team: every live independent colleague. There is no lead; the board, its
+        warnings and its pauses belong to each of them alike."""
+        return cls.live(snapshot.commander_project.commanders(snapshot))
+
+    @classmethod
+    def forks(cls, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+        """Every teammate's forks Core registered, heard from or not."""
+        return tuple(dict.fromkeys(
+            fork for teammate in cls.teammates(snapshot)
+            for thread in snapshot.children(teammate.name)
             for fork in thread.execution.forks(thread)
-        )
+        ))
 
     @classmethod
     def actors(cls, snapshot: RegistrySnapshot) -> frozenset[str]:
@@ -80,31 +87,23 @@ class TeamService:
             for _ in thread.role.executor(thread))
 
     @classmethod
-    def recipients(cls, snapshot: RegistrySnapshot, lead: Thread) -> tuple[Thread, ...]:
-        """The board's lead, then every other live teammate: one board read, one packet each."""
-        return tuple(dict.fromkeys((lead, *cls.live(snapshot.commander_project.commanders(snapshot)))))
+    def longest_owed(cls, registry: Registration, goals: Goals) -> Thread:
+        """The live teammate holding the oldest open owner request. An order Core starts itself
+        must name exactly one open request; only an owed pass acts, so one always exists."""
+        _, teammate = min(((request.created_at, teammate)
+                           for teammate in cls.teammates(registry.snapshot())
+                           for request in cls.requested_by(teammate, goals)),
+                          key=lambda owed: owed[0])
+        return teammate
 
     @classmethod
-    def served(cls, registry: Registration, goals: Goals) -> tuple[Thread, ...]:
-        """Every teammate a pass sends a packet to: each board's recipients, once."""
-        snapshot = registry.snapshot()
-        return tuple(dict.fromkeys(
-            recipient for lead in cls.boards(registry, goals)
-            for recipient in cls.recipients(snapshot, lead)))
-
-    @classmethod
-    def boards(cls, registry: Registration, goals: Goals) -> tuple[Thread, ...]:
-        """The registered lead's board, the one the heartbeat reads and writes every pass: a
-        lead's closed session must not blind the teammates still running.
-
-        Command moves with the registry, never with an old request: a thread that stood down
-        keeps its parked orders and requests, and gets no board, heartbeat or vibe check."""
-        return registry.snapshot().commander_project.leads(registry.snapshot())
+    def served(cls, registry: Registration) -> tuple[Thread, ...]:
+        """Every teammate a pass reads one team board for and sends its packet to."""
+        return cls.teammates(registry.snapshot())
 
     @classmethod
     def duty(cls, registry: Registration, goals: Goals) -> HeartbeatDuty:
         """Owed while any live teammate holds an open owner request; the pass acts only then."""
-        snapshot = registry.snapshot()
         owed = any(goals.todos.open_requests(thread.acting_identity, limit=1, descending=False)
-                   for thread in cls.live(snapshot.commander_project.commanders(snapshot)))
+                   for thread in cls.teammates(registry.snapshot()))
         return OwedHeartbeat() if owed else UnownedHeartbeat()

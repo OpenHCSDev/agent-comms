@@ -1493,7 +1493,7 @@ class InstallVerb(OrderVerb):
     clears = (InstallDue,)
 
     def run(self, ctx: Team) -> None:
-        for launch in InstallDue.launch_due(ctx.comms, ctx.actor_name):
+        for launch in InstallDue.launch_due(ctx.comms):
             print(launch)
 
 

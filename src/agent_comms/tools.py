@@ -1366,7 +1366,7 @@ class CommsInstallTool(NativeToolRequest):
     )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> InstallLaunches:
-        return InstallLaunches(InstallDue.launch_due(comms, caller.name))
+        return InstallLaunches(InstallDue.launch_due(comms))
 
 
 @dataclass(frozen=True, kw_only=True)

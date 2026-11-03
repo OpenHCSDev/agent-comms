@@ -17,7 +17,8 @@ from agent_comms import team
 from agent_comms.team.questions import UnansweredTeammateAsks
 from agent_comms.team_heartbeat import TeamHeartbeat
 from agent_comms.team_service import TeamService
-from agent_comms.task_attachments.owner_notices import TeamNotice
+from agent_comms.channel_targets import ThreadTarget
+from agent_comms.task_attachments.owner_notices import OrderNotice, TeamNotice
 from agent_comms.comms import Comms
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.cli_bridges.claude_protocol import OwedProgress
@@ -137,8 +138,7 @@ class InstallDue(UndatedStandingRule, FamilyScan):
     def action(self) -> str: ...
 
     @classmethod
-    def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[InstallDue, ...]:
+    def scan_observed(cls, comms: Comms, observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[InstallDue, ...]:
         return cls.due(comms, frame.pulls)
 
     @staticmethod
@@ -152,18 +152,18 @@ class InstallDue(UndatedStandingRule, FamilyScan):
             if repo.checked_out)
 
     @classmethod
-    def prepare(cls, comms: Comms, commander: str, holds: HeldOrders,
+    def prepare(cls, comms: Comms, holds: HeldOrders,
                 pulls: ProgressRead) -> None:
         """Fetching changes Git state, so the heartbeat joins it before observation."""
         for repo, _ in cls.recorded(comms, InstalledBuild.read()):
             repo.git(repo.checkout, "fetch", "-q", repo.remote, "main")
 
     @classmethod
-    def launch_due(cls, comms: Comms, commander: str) -> tuple[str, ...]:
+    def launch_due(cls, comms: Comms) -> tuple[str, ...]:
         """Launch Core's installer for every configured main the installed build lacks: the
         one launch `order install` and the remote install tool both make."""
         pulls = ProgressRead()
-        cls.prepare(comms, commander, HeldOrders.read(comms), pulls)
+        cls.prepare(comms, HeldOrders.read(comms), pulls)
         return tuple(f"{due.repo.to_wire()} main {due.main[:12]}: {due.launch(comms)}"
                      for due in cls.due(comms, pulls))
 
@@ -197,7 +197,7 @@ class InstallDue(UndatedStandingRule, FamilyScan):
         """An already-launched merge needs no second attempt."""
         return self.action
 
-    def enforce(self, comms: Comms, commander: str) -> None:
+    def enforce(self, comms: Comms) -> None:
         """Due is a disposition: the teammate's `order install` launches."""
 
     def line(self) -> str:
@@ -277,10 +277,12 @@ class RequestStalled(IndependentStandingRule, UndatedStandingRule):
         return (RequestSubject(self.request.id),)
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[RequestStalled, ...]:
-        thread = comms.registry.require(commander)
+    def violations(cls, comms: Comms) -> tuple[RequestStalled, ...]:
+        """Every live teammate's open requests: Tristan's asks belong to the team board."""
         store = comms.goals.todos
-        return tuple(cls(request) for request in store.open_requests(thread.acting_identity)
+        return tuple(cls(request)
+                     for teammate in TeamService.teammates(comms.registry.snapshot())
+                     for request in store.open_requests(teammate.acting_identity)
                      if not store.serving_orders(request.id))
 
     def line(self) -> str:
@@ -292,8 +294,7 @@ class PlanRule(UndatedStandingRule, FamilyScan, declared_name=None):
     """Rules read from the heartbeat's one look at the plans and the teammate's orders."""
 
     @classmethod
-    def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+    def scan_observed(cls, comms: Comms, observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
         return tuple(rule for member in cls.members_with(cls) for rule in member.found(frame.plan))
 
     @classmethod
@@ -319,8 +320,9 @@ class PlanIdle(PlanRule):
     def subjects(self) -> tuple[HeartbeatSubject, ...]:
         return (PhaseSubject(self.phase),)
 
-    def enforce(self, comms: Comms, commander: str) -> None:
-        self.phase.task.start(comms, comms.registry.require(commander), self.phase, self.reading)
+    def enforce(self, comms: Comms) -> None:
+        starter = TeamService.longest_owed(comms.registry, comms.goals)
+        self.phase.task.start(comms, starter, self.phase, self.reading)
 
     def line(self) -> str:
         return (
@@ -377,11 +379,11 @@ class UnitAskUnanswered(TeammateOwedAnswer, UndatedStandingRule):
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
-                  held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str,
+                  held: Mapping[ThreadIncarnation, Sequence[Todo]], owner: str,
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
         return tuple(cls(message, owner.name)
                      for owner, questions in UnansweredTeammateAsks.for_orders(
-                         source, snapshot, commander, held, time.time(),
+                         source, snapshot, owner, held, time.time(),
                      ).items()
                      for message in questions)
 
@@ -420,7 +422,7 @@ class DeliveryAwaitingJudgement(TeammateOwedAnswer, UndatedStandingRule, OrderHe
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
-                  held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str,
+                  held: Mapping[ThreadIncarnation, Sequence[Todo]], owner: str,
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
         """The retained claim owns the report and the head owed a verdict, published or not:
         a claim whose answer never reached the bus is still owed its judgement."""
@@ -470,7 +472,7 @@ class GoalBlocked(IndependentStandingRule, UndatedStandingRule):
     urgent: ClassVar[bool] = True
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+    def violations(cls, comms: Comms) -> tuple[Self, ...]:
         snapshot = comms.registry.snapshot()
         return tuple(cls(thread.incarnation, goal.id, reason)
                      for thread in snapshot.visible_threads(DEFAULT_ROSTER)
@@ -490,12 +492,11 @@ class HolderGone(IndependentStandingRule, UndatedStandingRule):
     todo: Todo
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+    def violations(cls, comms: Comms) -> tuple[Self, ...]:
         return cls.in_scan(HeldOrders.read(comms))
 
     @classmethod
-    def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+    def scan_observed(cls, comms: Comms, observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
         return cls.in_scan(frame)
 
     @classmethod
@@ -546,22 +547,19 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule, FamilyScan)
         return hash((type(self), self.comparison_values()))
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[UnownedWheelSpin, ...]:
-        return cls.scan_orders(comms, commander, HeldOrders.read(comms), PullRequests())
+    def violations(cls, comms: Comms) -> tuple[UnownedWheelSpin, ...]:
+        return cls.scan_orders(comms, HeldOrders.read(comms), PullRequests())
 
     @classmethod
-    def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[UnownedWheelSpin, ...]:
-        return cls.scan_orders(comms, commander, frame, frame.pulls)
+    def scan_observed(cls, comms: Comms, observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[UnownedWheelSpin, ...]:
+        return cls.scan_orders(comms, frame, frame.pulls)
 
     @classmethod
-    def scan_orders(cls, comms: Comms, commander: str,
-                    scan: HeldOrders, pulls: PullRequests) -> tuple[UnownedWheelSpin, ...]:
-        return cls.paired(comms, commander, comms.goals.todos.board(), scan, pulls)
+    def scan_orders(cls, comms: Comms, scan: HeldOrders, pulls: PullRequests) -> tuple[UnownedWheelSpin, ...]:
+        return cls.paired(comms, comms.goals.todos.board(), scan, pulls)
 
     @classmethod
-    def paired(cls, comms: Comms, commander: str,
-               todos: Iterable[Todo], scan: HeldOrders,
+    def paired(cls, comms: Comms, todos: Iterable[Todo], scan: HeldOrders,
                pulls: PullRequests) -> tuple[UnownedWheelSpin, ...]:
         """Restore recorded live holders before proposing any cross-unit dispatch."""
         rows = tuple(todo for todo in todos
@@ -587,8 +585,8 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule, FamilyScan)
         return (*retained, *found,
                 *(WaitingUnownedWheelSpin(todo) for todo in rows if todo.id not in covered))
 
-    def redecided(self, comms: Comms, commander: str, current: Todo) -> tuple[StandingRule, ...]:
-        return type(self).paired(comms, commander, (current,), HeldOrders.read(comms), PullRequests())
+    def redecided(self, comms: Comms, current: Todo) -> tuple[StandingRule, ...]:
+        return type(self).paired(comms, (current,), HeldOrders.read(comms), PullRequests())
 
     def line(self) -> str:
         return (f"STAFF {self.todo.id} has no owner and waits for a new teammate. who's taking it?"
@@ -603,9 +601,9 @@ class ReassignedWheelSpin(CoreActsStandingRule, UnownedWheelSpin):
     def unit(self) -> str:
         return self.dispatch.name
 
-    def enforce(self, comms: Comms, commander: str) -> None:
+    def enforce(self, comms: Comms) -> None:
         unit = self.dispatch.start(comms)
-        comms.messaging.send(commander, unit.name,
+        OrderNotice().publish(comms.messaging, ThreadTarget(unit.name),
             f"{self.line()}\n{self.dispatch.action.order.instructions(self.todo)}")
 
     def line(self) -> str:
@@ -620,8 +618,9 @@ class RetainedHolderWheelSpin(CoreActsStandingRule, UnownedWheelSpin):
     def comparison_values(self) -> tuple[object, ...]:
         return (*super().comparison_values(), self.previous.owner_identity)
 
-    def enforce(self, comms: Comms, commander: str) -> None:
-        actor = comms.registry.require(commander).incarnation
+    def enforce(self, comms: Comms) -> None:
+        """The order's creator maintains it, so Core restores its holder as that creator."""
+        actor = self.todo.creator_identity
         comms.goals.change_problem(self.todo.id, RestoreHolderTodo(
             self.todo.revision, actor, self.previous,
         ), actor)
@@ -631,35 +630,18 @@ class RetainedHolderWheelSpin(CoreActsStandingRule, UnownedWheelSpin):
                 f" hand the row away? -> keep {self.todo.id} with {self.previous.owner}")
 
 
-@dataclass(frozen=True)
-class UnownedObservation:
-    commander: Thread
-    rule: UnownedWheelSpin
+class UnownedOrderWatch(WatchPass[tuple[UnownedWheelSpin, ...]]):
+    """Keep dispatch preparation joined; only individually audited readers can be dropped.
+    One pairing over every unowned order, so an idle unit is offered once; each rule acts as
+    its own order's creator."""
 
-
-class UnownedOrderWatch(WatchPass[tuple[UnownedObservation, ...]]):
-    """Keep dispatch preparation joined; only individually audited readers can be dropped."""
-
-    def observe(self, comms: Comms, prepared: None) -> tuple[UnownedObservation, ...]:
+    def observe(self, comms: Comms, prepared: None) -> tuple[UnownedWheelSpin, ...]:
         available = comms.goals.todos.reassignable()
-        observed: list[UnownedObservation] = []
-        pulls = PullRequests(available)
-        for name in {todo.creator_identity.name for todo in available}:
-            commander = comms.registry.require(name)
-            mine = (todo for todo in available if todo.creator_identity.name == name)
-            observed.extend(
-                UnownedObservation(commander, rule)
-                for rule in UnownedWheelSpin.paired(
-                    comms, name, mine, HeldOrders.read(comms), pulls,
-                )
-            )
-        return tuple(observed)
+        return UnownedWheelSpin.paired(comms, available, HeldOrders.read(comms), PullRequests(available))
 
-    def pass_body(self, comms: Comms, observed: tuple[UnownedObservation, ...]) -> None:
-        for item in observed:
-            rejected = StandingRule.enforce_all(comms, item.commander.name, (item.rule,))
-            for rule, error in rejected.items():
-                logging.info("%s", rule.rejected_line(error))
+    def pass_body(self, comms: Comms, observed: tuple[UnownedWheelSpin, ...]) -> None:
+        for rule, error in StandingRule.enforce_all(comms, observed).items():
+            logging.info("%s", rule.rejected_line(error))
 
 
 class WaitingUnownedWheelSpin(UnownedWheelSpin):
@@ -679,20 +661,22 @@ class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, FamilyScan, de
         return (PassSubject(self.commander),)
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[HeartbeatSilent, ...]:
-        owner = comms.registry.require(commander)
-        incarnation = owner.incarnation.require_recorded()
-        completed = ServicePassStore.at(comms.root).read().commander_completed.get(incarnation)
+    def violations(cls, comms: Comms) -> tuple[HeartbeatSilent, ...]:
+        """Each live teammate owed service whose own pass is missing or stale."""
+        passes = ServicePassStore.at(comms.root).read()
         now = time.time()
         found = []
         rule: HeartbeatSilent
-        for request in TeamService.requested_by(owner, comms.goals):
-            if completed is None or completed < request.created_at:
-                rule = HeartbeatNotStarted(request.created_at + cls.seconds, incarnation, request.id)
-            else:
-                rule = MissedHeartbeat(completed + cls.seconds, incarnation)
-            if rule.since < now:
-                found.append(rule)
+        for owner in TeamService.teammates(comms.registry.snapshot()):
+            incarnation = owner.incarnation.require_recorded()
+            completed = passes.commander_completed.get(incarnation)
+            for request in TeamService.requested_by(owner, comms.goals):
+                if completed is None or completed < request.created_at:
+                    rule = HeartbeatNotStarted(request.created_at + cls.seconds, incarnation, request.id)
+                else:
+                    rule = MissedHeartbeat(completed + cls.seconds, incarnation)
+                if rule.since < now:
+                    found.append(rule)
         return tuple(found)
 
     def began(self) -> float:
@@ -730,13 +714,13 @@ class InboxUnavailable(IndependentStandingRule, DatedStandingRule, declared_name
 
     @classmethod
     @abstractmethod
-    def paused(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+    def paused(cls, comms: Comms) -> tuple[Self, ...]:
         """Each pause this member observes, dated when its window closes."""
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+    def violations(cls, comms: Comms) -> tuple[Self, ...]:
         now = time.time()
-        return tuple(rule for rule in cls.paused(comms, commander) if rule.since < now)
+        return tuple(rule for rule in cls.paused(comms) if rule.since < now)
 
     def began(self) -> float:
         return self.since
@@ -744,33 +728,41 @@ class InboxUnavailable(IndependentStandingRule, DatedStandingRule, declared_name
 
 @dataclass(frozen=True)
 class TeamDeaf(InboxUnavailable, declared_name="commander_deaf"):
-    """The session bridge has no confirmed Monitor; its own registration dates the pause."""
+    """A teammate's session bridge has no confirmed Monitor; its own registration dates the
+    pause. Every live teammate is watched, never one lead."""
+
+    teammate: str
 
     @classmethod
-    def paused(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+    def paused(cls, comms: Comms) -> tuple[Self, ...]:
         snapshot = comms.registry.snapshot()
-        pauses = snapshot.status(commander).paused_since(snapshot.seen_at(commander))
-        return tuple(cls(paused + cls.seconds) for paused in pauses)
+        return tuple(
+            cls(paused + cls.seconds, teammate.name)
+            for teammate in TeamService.teammates(snapshot)
+            for paused in snapshot.status(teammate.name).paused_since(snapshot.seen_at(teammate.name))
+        )
 
     def line(self) -> str:
         return DeafWatch(f"since {RecordedEventTime(self.since - self.seconds).clock()}").line()
 
-    def enforce(self, comms: Comms, commander: str) -> None:
+    def enforce(self, comms: Comms) -> None:
         """The teammate's own inbox is the dead path, so #comms hears it instead."""
-        TeamNotice().announce(comms.messaging, f"{commander}: {self.line()}")
+        TeamNotice().announce(comms.messaging, f"{self.teammate}: {self.line()}")
 
 
 @dataclass(frozen=True)
 class UnitDeaf(InboxUnavailable):
-    """A unit's own drain recorded that it cannot read its inbox; that record dates the pause."""
+    """A unit's own drain recorded that it cannot read its inbox; that record dates the pause.
+    Teammates are TeamDeaf's, read from their session bridge."""
 
     unit: str
 
     @classmethod
-    def paused(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+    def paused(cls, comms: Comms) -> tuple[Self, ...]:
         snapshot = comms.registry.snapshot()
+        teammates = {teammate.name for teammate in TeamService.teammates(snapshot)}
         units = [thread for name, thread in comms.registry.active_threads().items()
-                 if name != commander]
+                 if name not in teammates]
         activity = comms.agents.all_activity(units, snapshot=snapshot)
         return tuple(cls(paused + cls.seconds, name)
                      for name, observed in activity.items()
@@ -798,7 +790,7 @@ class ForkStalled(IndependentStandingRule, DatedStandingRule):
     seconds: ClassVar[int] = 300
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+    def violations(cls, comms: Comms) -> tuple[Self, ...]:
         """Each live commander session's registered, unarchived forks. Claude runs a fork
         inside its session's process, so only a session whose process is alive has any."""
         snapshot = comms.registry.snapshot()
@@ -841,7 +833,7 @@ class SlowInstallPhase(IndependentStandingRule, UndatedStandingRule):
     healthy: ClassVar[float] = 60
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+    def violations(cls, comms: Comms) -> tuple[Self, ...]:
         """The newest finished run whose target is the installed Core commit: a rehearsal of
         a newer tree writes phases this runtime may not declare, so only its own run is read."""
         installed = frozenset(record.commit for record in RecordedBuildIdentity.installed().commits)
@@ -870,8 +862,7 @@ class Scrutinize(IndependentStandingRule, UndatedStandingRule):
     count: int
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        actor = comms.registry.require(commander).incarnation
+    def violations(cls, comms: Comms) -> tuple[Self, ...]:
         return tuple(cls(held, todo, count)
                      for todo in comms.goals.todos.held_orders()
                      for held in todo.current_holder.current_assignments()
@@ -890,7 +881,7 @@ class Unjudged(ReasonedStandingRule, UndatedStandingRule):
             " reviewed head (one verdict judges every edit before it); fork judges for the rest")
 
     @classmethod
-    def reason(cls, comms: Comms, commander: str, frame: HeartbeatFrame) -> str | None:
+    def reason(cls, comms: Comms, frame: HeartbeatFrame) -> str | None:
         """The total, then each order's edits made since its last head verdict."""
         counts = frame.edit_counts(comms)
         total = sum(counts.values())
