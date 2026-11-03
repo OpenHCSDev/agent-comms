@@ -41,6 +41,7 @@ from agent_comms.todos import (
     StrikeReason,
     StrikeTodo,
     SupersededVerdict,
+    WaivedVerdict,
     Todo,
     TodoCommand,
     VoidStrikeTodo,
@@ -110,6 +111,7 @@ def test_story_members_round_trip_in_one_append_only_table(recorded_problem):
                          reason="A later commit rewrote this edit and carries its reviewed lines."),
         SendBackStrike(todo.revision, actor, todo.held(),
                        "The send-back records the miss the repair repeated in its owner."),
+        WaivedVerdict(todo.revision, actor, todo.held(), ToolCallId("waived-call")),
     )
     assert {type(event) for event in events} >= set(TodoCommand.members_with(StoryEvent))
     with store.writing() as db:

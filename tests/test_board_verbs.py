@@ -17,7 +17,7 @@ from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.goal_actions import SetGoalAction
 from team_heartbeat_fixture import capture_frame
 from agent_comms.head_review import HeadReviewOrder, PullRequestHead
-from agent_comms.tool_caller import ForkCaller, ThreadCaller
+from agent_comms.tool_caller import ForkCaller, PeerCaller, ThreadCaller
 from agent_comms_hooks import ToolRefusedError
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import HeadReviewTimerUp, LinkedUnreviewedHead, OrderlessUnreviewedHead, ReviewTimerUp, StandingRule
@@ -66,7 +66,7 @@ def board_review(head_bus):
 
 
 def assert_review_preconditions(rule, comms, request):
-    ctx = order.Team.read_root(comms.root)
+    ctx = order.Team(root=comms.root, actor=PeerCaller("lead"))  # the reviewer, by name
     observed = rule.command_values()
     todo = comms.goals.todos.get(observed.get("problem", "P2"))
     # Supply review prose once by declared argument, not a second roster of verb requirements.
@@ -262,13 +262,13 @@ def test_a_verdict_on_exactly_the_delivered_head_answers_the_delivery(board_revi
     comms, request, claim, _ = board_review
     claim()
     lead = comms.registry.require("lead").incarnation
-    opened, = DeliveryAwaitingJudgement.opened(comms, "lead")
+    opened, = DeliveryAwaitingJudgement.opened(comms, lead)
     assert opened.request == request
     NoHeadOrder().record_review(comms.goals, replace(request, head="f" * 40),
                                 ReviewedHeadVerdict(REASON), lead)
-    assert DeliveryAwaitingJudgement.opened(comms, "lead") == (opened,)
+    assert DeliveryAwaitingJudgement.opened(comms, lead) == (opened,)
     NoHeadOrder().record_review(comms.goals, request, ReviewedHeadVerdict(REASON), lead)
-    assert DeliveryAwaitingJudgement.opened(comms, "lead") == ()
+    assert DeliveryAwaitingJudgement.opened(comms, lead) == ()
 
 
 @pytest.mark.parametrize("reviewer", ("lead", "peer", "worker"))
