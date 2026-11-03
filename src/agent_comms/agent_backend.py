@@ -44,8 +44,8 @@ if TYPE_CHECKING:
     from .launch_runtime import LaunchRuntime
     from .owned_turn import TurnDelivery
     from .threads import Thread
-    from .native_session_reopen import NativeSessionIdentity
-    from .private_path import FileRevision
+    from .native_session_reopen import NativeSessionSnapshot
+    from .private_path import FileObservation, FileRevision
     from .transcript_sources import TranscriptSource
     from .turn_runner import TurnRunner
 
@@ -66,7 +66,7 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
         return self._backend
 
     @classmethod
-    def retained(cls, path: Path, identity: NativeSessionIdentity,
+    def retained(cls, path: Path, identity: NativeSessionSnapshot,
                  revision: FileRevision) -> RuntimeLocation:
         """Only a backend with an original-coordinate reader can bind retained bytes."""
         raise BackendDeclarationError(f"{cls.__name__} cannot read retained native history")
@@ -88,8 +88,35 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
     def arguments(self):
         return {"session_file": self.read_key}
 
+    def read_locations(self) -> tuple[RuntimeLocation, ...]:
+        """The bound byte locations; a logical read key is never a filesystem path."""
+        return (self,)
+
     def read_keys(self):
-        return (self.read_key,)
+        return tuple(location.read_key for location in self.read_locations())
+
+    def tool_watch_locations(self) -> tuple[RuntimeLocation, ...]:
+        return self.read_locations()
+
+    def read_revision(self, observed: FileObservation) -> FileObservation:
+        return observed
+
+    def read_inode(self, revision: FileRevision) -> int:
+        return revision.identity.inode
+
+    def read_cut(self):
+        # Like transcript_cursor, this boundary loads its implementation only after
+        # threads has finished declaring the runtime family.
+        from .native_transcript import NativeTranscript
+
+        return NativeTranscript(Path(self.path)).cut()
+
+    def read_position(self, mark: int, revision: FileRevision) -> int:
+        return mark if mark <= revision.size else 0
+
+    def mark_read(self, reads, viewer: str, through: int) -> None:
+        for location in self.read_locations():
+            reads.mark_read(viewer, location.read_key, through, location.read_cut())
 
     def transcript_cursor(self, frontier, offset, *, source):
         return frontier.cursor(source.read_key, offset)

@@ -166,3 +166,21 @@ class NativeSessionIdentity(PresentMember, SessionRetention):
                 return cls.from_evidence(scope.for_source(Path(session_file).absolute()))
         except NativePiUnavailable as error:
             raise NativeReopenError("Saved native session source cannot be opened") from error
+
+
+@dataclass(frozen=True)
+class NativeSessionSnapshot(NativeSessionIdentity):
+    """The original journal's identity and observed revision, not a new observation of it."""
+
+    revision: FileRevision
+
+    @classmethod
+    def from_evidence(cls, evidence: NativeEvidenceRead) -> NativeSessionSnapshot:
+        identity = NativeSessionIdentity.from_evidence(evidence)
+        return cls(identity.session_id, identity.session_file,
+                   evidence.source.prefix.observed_revision())
+
+    def require_retained(self, retained: FileRevision) -> None:
+        """A full retained image preserves the original offsets and read-mark extent."""
+        if self.revision.size != retained.size:
+            raise NativeReopenError("Retained journal does not contain the complete original image")

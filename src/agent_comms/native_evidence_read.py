@@ -34,6 +34,9 @@ class UnverifiedNativeEvidencePrefix:
 
     size = 0
 
+    def observed_revision(self) -> FileRevision:
+        raise NativePiUnavailable("Native evidence has no acquired source revision")
+
     @staticmethod
     def prepare(source: PrivateEvidenceRead, revision: FileRevision) -> FileRevision:
         return revision
@@ -49,6 +52,9 @@ class VerifiedNativeEvidencePrefix(UnverifiedNativeEvidencePrefix):
 
     size: int = field()
     revision: FileRevision
+
+    def observed_revision(self) -> FileRevision:
+        return self.revision
 
     def prepare(self, source: PrivateEvidenceRead, revision: FileRevision) -> FileRevision:
         return source.verify_snapshot(self.size, self.revision)

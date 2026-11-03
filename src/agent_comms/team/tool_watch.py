@@ -11,9 +11,9 @@ from ..selected_triage import SelectedTriage
 from .order import Team
 
 def thread_names(registry: Registration) -> dict[str, str]:
-    """Session file -> thread name, from the registry snapshot's threads."""
-    return {key: name for name, thread in registry.snapshot().threads.items()
-            for key in thread.runtime.read_keys()}
+    """Live byte location -> thread name; retained history cannot become a live feed."""
+    return {location.path: name for name, thread in registry.snapshot().threads.items()
+            for location in thread.runtime.tool_watch_locations()}
 
 
 def enforce_storage(ctx: Team, thread: str, call_id: str,

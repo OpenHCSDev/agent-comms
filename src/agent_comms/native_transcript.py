@@ -37,7 +37,7 @@ from .native_entries import (
     TranscriptProjection,
 )
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
-from .native_session_reopen import NativeSessionIdentity
+from .native_session_reopen import NativeSessionIdentity, NativeSessionSnapshot
 from .private_path import FileRevision
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .transcript_sources import TranscriptRecord, TranscriptSource
@@ -301,6 +301,9 @@ class NativeTranscript(TranscriptSource):
                 raise ValueError("Imported context saved source changed while reading")
             return tuple(sources)
 
+    def session_cut(self, revision: FileRevision, offset: int) -> PresentSessionCut:
+        return PresentSessionCut(revision, offset)
+
     def cut(self) -> SessionCut:
         try:
             stream = self.path.open("rb")
@@ -309,7 +312,7 @@ class NativeTranscript(TranscriptSource):
         # One open file supplies both the revision and its last record boundary.
         with stream:
             revision = FileRevision.from_file(stream)
-            return PresentSessionCut(revision, record_end(stream, revision.size))
+            return self.session_cut(revision, record_end(stream, revision.size))
 
     def committed_output_cut(self, location: NativeRecordLocation) -> SessionCut:
         """Corroborate one indexed output against its original header and row."""
@@ -328,7 +331,7 @@ class NativeTranscript(TranscriptSource):
                     or not raw.endswith(b"\n")):
                 raise TranscriptChanged()
             location.require_entry(NativeEntry.read(raw))
-            return PresentSessionCut(revision, location.session_entry_end)
+            return self.session_cut(revision, location.session_entry_end)
 
     def publication_revision(self, root: Path, recipient: RecordedThreadIncarnation):
         return self.cut().publication_revision(root, self, recipient)
@@ -512,10 +515,11 @@ class RetainedNativeTranscript(NativeTranscript):
     The original journal header and the retained file revision must both still match.
     """
 
-    def __init__(self, path: Path, identity: NativeSessionIdentity, revision: FileRevision) -> None:
+    def __init__(self, path: Path, identity: NativeSessionSnapshot, revision: FileRevision) -> None:
         super().__init__(path)
         self.original = identity
         self.revision = revision
+        identity.require_retained(revision)
         self.require_retained()
 
     @property
@@ -538,6 +542,11 @@ class RetainedNativeTranscript(NativeTranscript):
             yield self
         finally:
             self.require_retained()
+
+    def session_cut(self, revision: FileRevision, offset: int) -> PresentSessionCut:
+        # The physical revision is fenced by reading(); positions and marks still
+        # belong to the original acquired inode, including committed-output cuts.
+        return PresentSessionCut(self.original.revision, offset)
 
     def cut(self) -> SessionCut:
         with self.reading():

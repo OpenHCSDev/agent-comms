@@ -36,9 +36,10 @@ from .native_fork import (
 )
 from .native_package import SYSTEM_PROMPT
 from .native_pi import NativePiRpcLaunch
-from .native_session_reopen import NativeSessionIdentity
+from .native_session_reopen import NativeSessionIdentity, NativeSessionSnapshot
+from .coordination_errors import TranscriptChanged
 from .native_transcript import NativeTranscript, RetainedNativeTranscript
-from .private_path import FileRevision
+from .private_path import FileObservation, FileRevision
 from .pi_commands import Compact, NativeQuery
 from .rule_deal import SystemPromptDelivery
 from .selected_session import SavedSelectedSession
@@ -97,7 +98,7 @@ class PiSessionFile(RuntimeLocation):
         return NativeTranscript(Path(self.path))
 
     @classmethod
-    def retained(cls, path: Path, identity: NativeSessionIdentity,
+    def retained(cls, path: Path, identity: NativeSessionSnapshot,
                  revision: FileRevision) -> RetainedPiSessionFile:
         return RetainedPiSessionFile(str(path), identity, revision)
 
@@ -113,6 +114,9 @@ class PiSessionFile(RuntimeLocation):
 
     def history_source(self, root, incarnation):
         return self.transcript
+
+    def read_cut(self):
+        return self.transcript.cut()
 
     def deal_delivery(self) -> SystemPromptDelivery:
         """Native Pi always launches with the prepared prompt (NativePiRpcLaunch.bootstrap)."""
@@ -140,7 +144,7 @@ class PiSessionFile(RuntimeLocation):
 class RetainedPiSessionFile(PiSessionFile):
     """Original-coordinate history, with no selected native session or writable sidecars."""
 
-    identity: NativeSessionIdentity
+    identity: NativeSessionSnapshot
     revision: FileRevision
     resumable: ClassVar[bool] = False
 
@@ -151,6 +155,22 @@ class RetainedPiSessionFile(PiSessionFile):
     @property
     def transcript(self) -> NativeTranscript:
         return RetainedNativeTranscript(Path(self.path), self.identity, self.revision)
+
+    def read_revision(self, observed: FileObservation) -> FileObservation:
+        with self.transcript.reading():
+            if observed != self.revision:
+                raise TranscriptChanged("Retained journal revision changed")
+            return observed
+
+    def read_inode(self, revision: FileRevision) -> int:
+        return self.identity.revision.identity.inode
+
+    def read_position(self, mark: int, revision: FileRevision) -> int:
+        # An original mark beyond this older image has already read every retained byte.
+        return min(mark, revision.size)
+
+    def tool_watch_locations(self) -> tuple[RuntimeLocation, ...]:
+        return ()
 
     def require_forkable(self):
         raise NativePiUnavailable("Retained native history cannot fork a session")

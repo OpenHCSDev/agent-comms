@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Annotated
 from .errors import RelationViolationError
 from .nominal.field_codec import NullMember, PathText, RecordMember, SubclassUnion, WireTransient
 from .unstarted_runtime import UnstartedRuntime
-from .native_session_reopen import NativeSessionIdentity
+from .native_session_reopen import NativeSessionSnapshot
 from .private_path import FileRevision
 
 if TYPE_CHECKING:
@@ -182,7 +182,7 @@ class RetainedSessionLocation(RecordMember, SessionFile):
     """
 
     storage: BusSessionLocation
-    identity: NativeSessionIdentity
+    identity: NativeSessionSnapshot
     revision: FileRevision
 
     def bound_to(self, root: Path) -> BoundRetainedSession:

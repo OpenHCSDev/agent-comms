@@ -22,6 +22,7 @@ from agent_comms.locked_store import SQLiteStorage
 from agent_comms.messages import InfoKind, Message
 from agent_comms.watched import ChangeSignal, FileLifetimeSource, FileSource
 from agent_comms.private_path import FileRevision
+from agent_comms.pi_native_backend import PiSessionFile
 from agent_comms.presentation import WireRevision
 from agent_comms.view_unread import (
     NativeReplyPreparation, ReplyIndex, ReplyIndexUpdate, ReplyRead, ReplyReading,
@@ -259,7 +260,7 @@ def test_native_reply_publication_uses_the_index_commit_source(tmp_path):
         database = state._database()
         before = ReplyIndex(source=str(transcript))
         revision = FileRevision.capture(transcript).require(ValueError("Missing transcript"))
-        read = ReplyRead(before, revision, 0)
+        read = ReplyRead(before, revision, 0, PiSessionFile(str(transcript)))
         prepared = Future()
         prepared.set_result(ReplyIndexUpdate(before, replace(before, revision=revision), ()))
         preparation = NativeReplyPreparation({str(transcript): ReplyReading(read, prepared)})
