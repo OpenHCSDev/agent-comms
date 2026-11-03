@@ -146,9 +146,11 @@ class ContextStoreInfo(ContextStoreRows, ContextSourceState, SingletonRow):
             older = BeforeContextManifest(self.source, rows[0].id).available(db, incarnation)
             newer = AfterContextManifest(self.source, rows[-1].id).available(db, incarnation)
         retained = {item.record_id: item for item in previous if item.source == self.source}
+        resolved = {item.record_id: item for item in store.resolve(
+            db, self.source, (row for row in rows if row.id not in retained),
+        )}
         resources = tuple(
-            retained[row.id] if row.id in retained else store.resolve(db, self.source, row)
-            for row in rows
+            retained[row.id] if row.id in retained else resolved[row.id] for row in rows
         )
         return ContextManifestPage(resources, older, newer)
 
@@ -504,7 +506,7 @@ class ContextStore(DurableStore, InputCaptureFile):
     ) -> RecordedContextState:
         rows = ContextRequest.newest(db, owner)
         if rows:
-            return self.resolve(db, source, rows[0])
+            return next(self.resolve(db, source, rows))
         return AbsentContext()
 
     def entries(
@@ -526,10 +528,12 @@ class ContextStore(DurableStore, InputCaptureFile):
         with self.snapshot() as db:
             for entry in ContextEntry.stream(db):
                 yield from entry.manifest.original_values()
-            for request in ContextRequest.stream(db):
+            requests = tuple(ContextRequest.stream(db))
+            if requests:
                 source = ContextStoreInfo.require(db, singleton=1).source
-                for root in self.resolve(db, source, request).value.segments:
-                    yield from root.original_values()
+                for request in self.resolve(db, source, requests):
+                    for root in request.value.segments:
+                        yield from root.original_values()
 
     def retain_contexts(
         self, destination: ContextStore, identities: Iterable[NativeSessionIdentity], *,
@@ -584,14 +588,18 @@ class ContextStore(DurableStore, InputCaptureFile):
                 if stored != reference.source:
                     raise RelationViolationError("Retained context reference names another source")
                 ContextRequest.require(retained, id=reference.record_id)
-            for row in ContextRequest.stream(retained):
+            rows = tuple(ContextRequest.stream(retained))
+            if rows:
                 original_source = ContextStoreInfo.require(source, singleton=1).source
                 retained_source = ContextStoreInfo.require(retained, singleton=1).source
-                original_row = ContextRequest.require(source, id=row.id)
-                expected = self.resolve(source, original_source, original_row)
-                actual = destination.resolve(retained, retained_source, row)
-                if row != original_row or actual != expected:
+                originals = tuple(ContextRequest.require(source, id=row.id) for row in rows)
+                if rows != originals:
                     raise RelationViolationError("Retained context reader differs from its original")
+                expected = self.resolve(source, original_source, originals)
+                actual = destination.resolve(retained, retained_source, rows)
+                for original, copied in zip(expected, actual, strict=True):
+                    if copied != original:
+                        raise RelationViolationError("Retained context reader differs from its original")
             for version in ContextSegmentVersion.stream(retained):
                 if version != ContextSegmentVersion.require(source, id=version.id):
                     raise RelationViolationError("Retained context version differs from its original")
@@ -619,25 +627,36 @@ class ContextStore(DurableStore, InputCaptureFile):
         self,
         db: sqlite3.Connection,
         source: ContextStoreIdentity,
-        row: ContextRequest,
-    ) -> CapturedContext:
-        records = {row.id: row.recorded(db)}
+        rows: Iterable[ContextRequest],
+    ) -> Iterator[CapturedContext]:
+        """Resolve one snapshot's requested rows, decoding shared originals once.
+
+        Only selected rows and their direct referenced segments participate; the
+        maps die with this iterator and never cross a snapshot or retain history.
+        """
+        selected = tuple(rows)
+        originals = {row.id: row for row in selected}
+        records = {key: row.recorded(db) for key, row in originals.items()}
         references: set[ContextEntryReference] = set()
-        for position, part in enumerate(records[row.id].segments):
-            references.update(part.entries)
-            for predecessor in part.predecessors(row.id):
-                if predecessor not in records:
-                    prior = ContextRequest.require(db, id=predecessor)
+        for row in selected:
+            for position, part in enumerate(records[row.id].segments):
+                references.update(part.entries)
+                for predecessor in part.predecessors(row.id):
+                    if predecessor not in originals:
+                        originals[predecessor] = ContextRequest.require(db, id=predecessor)
+                    prior = originals[predecessor]
                     if prior.identity.thread != row.identity.thread:
                         raise RelationViolationError("Context predecessor is missing or foreign")
-                    records[predecessor] = prior.recorded(db)
-                # Only the referenced segment is needed, not the predecessor
-                # request's other segments and their unrelated dependencies.
-                prior_part = part.predecessor(records, position)
-                references.update(prior_part.entries)
+                    if predecessor not in records:
+                        records[predecessor] = prior.recorded(db)
+                    # Only the referenced segment is needed, not the predecessor
+                    # request's other segments and their unrelated dependencies.
+                    prior_part = part.predecessor(records, position)
+                    references.update(prior_part.entries)
         entries = {ref: ContextEntry.original(db, ref) for ref in references}
-        record = records[row.id]
-        return CapturedContext(source, row.id, record, record.restore(entries, records))
+        for row in selected:
+            record = records[row.id]
+            yield CapturedContext(source, row.id, record, record.restore(entries, records))
 
     def page(
         self,
