@@ -6,7 +6,7 @@ import math
 import shutil
 import time
 from abc import abstractmethod
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
@@ -99,11 +99,11 @@ class CheckoutAllocation(DeclaredFamily, affix="CheckoutAllocation"):
         return self.owns_present(rule, owner, path, reads)
 
     @classmethod
-    def for_work(cls, rule: StorageRule, owner: Thread, problem: str,
-                 primary: RepositoryName, companions: tuple[RepositoryName, ...],
-                 generation: GoalId) -> tuple[Path, ...]:
-        """Read/launch allocations reserve no editable work; declared members supply it."""
-        return ()
+    def declared_for_work(cls, rule: StorageRule, owner: Thread, problem: str,
+                          primary: RepositoryName, companions: tuple[RepositoryName, ...],
+                          generation: GoalId) -> Mapping[RepositoryName, Path]:
+        """Read/launch allocations reserve no editable work; members declare its paths."""
+        return {}
 
     @classmethod
     def source_repositories(cls, primary: RepositoryName,
@@ -198,11 +198,10 @@ class OrderCheckoutAllocation(ProblemCheckoutAllocation):
             yield cls(problem)
 
     @classmethod
-    def for_work(cls, rule: StorageRule, owner: Thread, problem: str,
-                 primary: RepositoryName, companions: tuple[RepositoryName, ...],
-                 generation: GoalId) -> tuple[Path, ...]:
-        return (rule.reused_checkout(owner, primary,
-                    rule.order_checkout(rule.roots_of(owner), problem), RepositoryReads()),)
+    def declared_for_work(cls, rule: StorageRule, owner: Thread, problem: str,
+                          primary: RepositoryName, companions: tuple[RepositoryName, ...],
+                          generation: GoalId) -> Mapping[RepositoryName, Path]:
+        return {primary: rule.order_checkout(rule.roots_of(owner), problem)}
 
     def owns_present(self, rule: StorageRule, owner: Thread, path: Path,
                      reads: RepositoryReads) -> bool:
@@ -237,12 +236,11 @@ class RepositoryCheckoutAllocation(ProblemCheckoutAllocation, RepositoryAllocati
     suffix: str
 
     @classmethod
-    def for_work(cls, rule: StorageRule, owner: Thread, problem: str,
-                 primary: RepositoryName, companions: tuple[RepositoryName, ...],
-                 generation: GoalId) -> tuple[Path, ...]:
-        return tuple(rule.reused_checkout(owner, repository,
-                     rule.repository_checkout(rule.roots_of(owner), problem, repository),
-                     RepositoryReads()) for repository in companions)
+    def declared_for_work(cls, rule: StorageRule, owner: Thread, problem: str,
+                          primary: RepositoryName, companions: tuple[RepositoryName, ...],
+                          generation: GoalId) -> Mapping[RepositoryName, Path]:
+        return {repository: rule.repository_checkout(rule.roots_of(owner), problem, repository)
+                for repository in cls.source_repositories(primary, companions)}
 
     @classmethod
     def source_repositories(cls, primary: RepositoryName,
@@ -266,17 +264,22 @@ class GoalCheckoutAllocation(RepositoryAllocation, EditableCheckoutAllocation):
         return tuple(dict.fromkeys((primary, *companions)))
 
     @classmethod
-    def for_work(cls, rule: StorageRule, owner: Thread, problem: str,
-                 primary: RepositoryName, companions: tuple[RepositoryName, ...],
-                 generation: GoalId) -> tuple[Path, ...]:
-        return tuple(path for repository in cls.source_repositories(primary, companions)
-                     for path in cls.for_goal(rule, owner, generation, repository))
+    def declared_for_work(cls, rule: StorageRule, owner: Thread, problem: str,
+                          primary: RepositoryName, companions: tuple[RepositoryName, ...],
+                          generation: GoalId) -> Mapping[RepositoryName, Path]:
+        return {repository: cls.declared_for_goal(rule, owner, generation, repository)
+                for repository in cls.source_repositories(primary, companions)}
+
+    @classmethod
+    def declared_for_goal(cls, rule: StorageRule, owner: Thread, generation: GoalId,
+                          repository: RepositoryName) -> Path:
+        return rule.repository_checkout(rule.roots_of(owner), generation, repository)
 
     @classmethod
     def for_goal(cls, rule: StorageRule, owner: Thread, generation: GoalId,
                  repository: RepositoryName) -> tuple[Path, ...]:
         return (rule.reused_checkout(owner, repository,
-                    rule.repository_checkout(rule.roots_of(owner), generation, repository),
+                    cls.declared_for_goal(rule, owner, generation, repository),
                     RepositoryReads()),)
 
     @classmethod
@@ -396,6 +399,16 @@ class StorageRule(RoomAllocation, DurableFile):
         _, name = repository.key
         return checkout.with_name(f'{checkout.name}{self.checkout_separator}{name}')
 
+    def owned_checkouts(self, owner: Thread, repository: RepositoryName,
+                        reads: RepositoryReads) -> tuple[Path, ...]:
+        """Physical, editable allocations whose Git identity matches this repository."""
+        return tuple(path for path in self.checkout_paths(owner, reads)
+                     if (path / '.git').is_file() and not path.is_symlink()
+                     and any(allocation.reserves_boundary()
+                             and allocation.owns_present(self, owner, path, reads)
+                             for allocation in CheckoutAllocation.for_path(self, owner, path))
+                     and reads.repository(path).github == repository)
+
     def reused_checkout(self, owner: Thread, repository: RepositoryName,
                         fresh: Path, reads: RepositoryReads) -> Path:
         """Keep one existing owned tree for a repository across work identities.
@@ -404,12 +417,7 @@ class StorageRule(RoomAllocation, DurableFile):
         several retained trees require their owner to select/retire them, never
         silently create another or pick an arbitrary source.
         """
-        candidates = tuple(path for path in self.checkout_paths(owner, reads)
-                           if (path / '.git').is_file() and not path.is_symlink()
-                           and any(allocation.reserves_boundary()
-                                   and allocation.owns_present(self, owner, path, reads)
-                                   for allocation in CheckoutAllocation.for_path(self, owner, path))
-                           and reads.repository(path).github == repository)
+        candidates = self.owned_checkouts(owner, repository, reads)
         if owner.project_path in candidates:
             return owner.project_path
         if len(candidates) > 1:
@@ -445,10 +453,23 @@ class StorageRule(RoomAllocation, DurableFile):
 
     def edit_boundaries(self, owner: Thread, problem: str, primary: RepositoryName,
                         companions: tuple[RepositoryName, ...], generation: GoalId) -> frozenset[Path]:
-        """Physical editable roots follow declared allocations, even before materialization."""
-        return frozenset(path.resolve()
-                         for member in CheckoutAllocation.members_with(CheckoutAllocation)
-                         for path in member.for_work(self, owner, problem, primary, companions, generation))
+        """Read existing work's declared boundaries without selecting a new checkout.
+
+        Each repository keeps its physically present declared allocations. Only a
+        repository without one needs the normal, ambiguity-refusing reuse policy.
+        """
+        declared: dict[RepositoryName, set[Path]] = {}
+        for member in CheckoutAllocation.members_with(CheckoutAllocation):
+            for repository, path in member.declared_for_work(
+                    self, owner, problem, primary, companions, generation).items():
+                declared.setdefault(repository, set()).add(path)
+        reads = RepositoryReads()
+        roots: set[Path] = set()
+        for repository, paths in declared.items():
+            existing = paths.intersection(self.owned_checkouts(owner, repository, reads))
+            roots.update(existing or (self.reused_checkout(owner, repository, path, reads)
+                                      for path in paths))
+        return frozenset(path.resolve() for path in roots)
 
     def problem_checkouts(self, roots: StorageRoots, problem: str) -> tuple[Path, ...]:
         """Every checkout allocated to one problem: its check repository's, then each other's."""
