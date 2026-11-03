@@ -1465,7 +1465,7 @@ class MemoryLow(IndependentStandingRule, UndatedStandingRule):
 
 @dataclass(frozen=True)
 class DiskLow(IndependentStandingRule, UndatedStandingRule, FamilyScan):
-    """Under the cleanup threshold a cleanup owner is due; under the floor nothing allocates."""
+    """Report disk pressure and cleanup work without refusing allocations."""
 
     rule: StorageRule
     free_gib: float = field(compare=False)
@@ -1490,7 +1490,7 @@ class DiskLow(IndependentStandingRule, UndatedStandingRule, FamilyScan):
 
 @dataclass(frozen=True)
 class DiskFloorLow(DiskLow):
-    """The allocation-floor warning, selected by DiskLow rather than a second rule scan."""
+    """Critical disk pressure, selected by DiskLow rather than a second rule scan."""
 
     def floor_warning(self) -> str:
-        return f"; under the {self.rule.floor_gib:g} GiB floor nothing allocates"
+        return f"; critical pressure under {self.rule.floor_gib:g} GiB, not an allocation gate"

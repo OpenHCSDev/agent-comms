@@ -280,7 +280,7 @@ class RoomAllocation:
         return RoomNeed(self.memory_available_bytes(), int(self.free_gib() * 2**30))
 
     def room_floor(self):
-        return RoomNeed(int(self.memory_gib * 2**30), int(self.floor_gib * 2**30))
+        return RoomNeed(memory=int(self.memory_gib * 2**30))
 
     def _admit(self, ticket):
         """Reserve room for this claim, or raise RoomShortfall with the numbers that did not fit.
@@ -364,7 +364,6 @@ class RoomAllocation:
         if thread.process_alive:
             yield
             return
-        self.require_floor()
         reservation = asyncio.run(self.wait_for_room((UnitStartRoomWork,), thread, root))
         try:
             yield

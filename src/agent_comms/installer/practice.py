@@ -7,7 +7,6 @@ import subprocess
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from math import ceil
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from agent_comms.context_store import ContextManifestReference, ContextStore
@@ -30,7 +29,6 @@ from agent_comms.locked_store import (
     LiveFilesRequest, RegistryFile, RetainedCopyRequest, RootFile, UndeclaredFile,
 )
 from agent_comms.maintenance_barrier import MaintenanceBarrier, NoMaintenanceHolder
-from agent_comms.storage_rules import StorageRule
 from agent_comms.private_path import PrivateDirectoryRole
 
 
@@ -51,12 +49,10 @@ class PracticeMeasurement:
         return maximum_bytes - self.bytes
 
     @classmethod
-    def of(cls, copy: Path, floor: float) -> PracticeMeasurement:
-        """Refuse a copy without room for the rehearsal's second copy above the disk floor. The
-        free space is what a copy can cost; a fixed byte cap beside it refused a 3.01 GiB bus
-        with 29 GiB free and stopped install 45."""
+    def of(cls, copy: Path) -> PracticeMeasurement:
+        """Check room for the rehearsal's measured copies, without a fixed free-space reserve."""
         measured = cls.capture(copy)
-        if shutil.disk_usage(copy.parent).free < 2 * measured.bytes + floor:
+        if shutil.disk_usage(copy.parent).free < 2 * measured.bytes:
             raise UpgradeRefused(
                 f"Insufficient free space for rehearsal of {measured.bytes} copied bytes")
         return measured
@@ -161,18 +157,12 @@ class PracticeCopy:
         ) for source, resource in self.copied.items()))
 
     @property
-    def floor_bytes(self) -> int:
-        return ceil(StorageRule.load(self.root).floor_gib * 2**30)
-
-    @property
     def available_bytes(self) -> int:
-        return shutil.disk_usage(self.path.parent).free - self.floor_bytes
+        return shutil.disk_usage(self.path.parent).free
 
     def prepare(self) -> None:
         """One space and private-directory owner for whole and selected materialization."""
         PrivateDirectoryRole.make_parents(self.path)
-        if self.available_bytes < 0:
-            raise UpgradeRefused("Insufficient free space before building the practice copy")
 
     def remaining_bytes(self, maximum_bytes: int) -> int:
         """Share one explicit total allowance across incrementally selected stores.
@@ -379,4 +369,4 @@ class PracticeCopy:
 
     @property
     def measurement(self) -> PracticeMeasurement:
-        return PracticeMeasurement.of(self.path, self.floor_bytes)
+        return PracticeMeasurement.of(self.path)

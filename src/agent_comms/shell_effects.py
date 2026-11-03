@@ -60,9 +60,8 @@ class StorageEffect(ABC):
     def require_order_check(self) -> None:
         """Ordinary storage effects remain valid in an order check."""
 
-    @abstractmethod
     def check(self, projection: StorageProjection) -> None:
-        """Refuse this operation if the thread's storage cannot take it."""
+        """Effects without a path restriction only declare their measured work."""
 
 
 @dataclass(frozen=True)
@@ -85,9 +84,6 @@ class ForbiddenStorageEffect(StorageEffect):
 class AllocateStorageEffect(StorageEffect):
     work: ClassVar[tuple[type[RoomWork], ...]] = (AllocationRoomWork,)
 
-    def check(self, projection: StorageProjection) -> None:
-        projection.rule.require_floor()
-
 
 class BuildStorageEffect(AllocateStorageEffect):
     work: ClassVar[tuple[type[RoomWork], ...]] = (BuildRoomWork,)
@@ -105,7 +101,7 @@ class TestGateStorageEffect(AllocateStorageEffect):
 
 @dataclass(frozen=True)
 class CheckoutStorageEffect(AllocateStorageEffect):
-    """Shared checkout ownership and free-space admission."""
+    """Shared checkout ownership and allocation measurement."""
 
     path: Path
     repository: RepositorySource

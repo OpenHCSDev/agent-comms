@@ -1,5 +1,4 @@
 import asyncio
-import re
 import sys
 from dataclasses import replace
 
@@ -8,10 +7,6 @@ import pytest
 from agent_comms.comms import wire
 from agent_comms.repo import Checkout, Repo
 from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.shell_effects import AllocateStorageEffect
-from agent_comms.tool_denial import StorageDenied
-from agent_comms.storage_projection import StorageProjection
-from agent_comms.storage_rules import StorageRule
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import NoThreadCaller
 from agent_comms.tools import invoke_tool
@@ -30,7 +25,7 @@ async def test_real_stopped_owner_with_large_checkout_starts_through_shared_agen
     source.touch()
     comms = wire(tmp_path / "wire")
     comms.registry.storage_rule = replace(
-        comms.registry.storage_rule, volume=tmp_path, floor_gib=0, memory_gib=0)
+        comms.registry.storage_rule, volume=tmp_path, floor_gib=2**40, memory_gib=0)
     declared = RegistrySessionLocation.from_path(str(source), comms.root)
     comms.registry.declare(Thread('worker', frozenset(), Checkout(tmp_path), session_file=declared))
     comms.registry.unregister("worker")
@@ -45,14 +40,3 @@ async def test_real_stopped_owner_with_large_checkout_starts_through_shared_agen
         assert comms.registry.require("worker").session_file == declared.bound_to(comms.root)
     finally:
         await asyncio.to_thread(comms.owners.stop, "worker")
-
-
-def test_start_and_allocating_tools_refuse_below_the_free_space_floor(tmp_path):
-    rule = StorageRule(volume=tmp_path, floor_gib=2.0**40)  # above any real volume's free space
-    comms = wire(tmp_path / "wire")
-    thread = comms.registry.declare(Thread("worker", frozenset(), Checkout(tmp_path)))
-    with pytest.raises(StorageDenied, match=re.escape(f"{rule.floor_gib:g} GiB free")):
-        with rule.room_for_start(thread, comms.root):
-            pytest.fail("A stopped owner must not start below the volume floor")
-    with pytest.raises(StorageDenied, match=re.escape(f"{rule.floor_gib:g} GiB free")):
-        StorageProjection(rule, thread, comms).check((AllocateStorageEffect(),))
