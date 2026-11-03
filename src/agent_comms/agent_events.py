@@ -239,10 +239,6 @@ class CompactionEvent(AgentEvent, DeclaredFamily, affix="Event"):
     def phase(self) -> str:
         """ACP phase of this observation."""
 
-    @property
-    def summary(self) -> str | None:
-        return None
-
     def deal_rules(self, deal: Redeals) -> None:
         """Only a compaction that placed its summary drops the rules from context."""
 
@@ -278,8 +274,6 @@ class CompactionAbort(CompactionFinish):
 
 @dataclass(frozen=True)
 class CompactionEnd(CompactionFinish):
-    summary: str | None = None
-
     @property
     def phase(self) -> str:
         return "end"

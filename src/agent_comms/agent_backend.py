@@ -144,7 +144,7 @@ class PlacedCompaction(CompactionOutcome):
 
     def completion_event[T](self, end: Callable[..., T], abort: Callable[..., T],
                             reason: type[CompactionReason]) -> T:
-        return end(reason=reason, summary=self.summary)
+        return end(reason=reason)
 
 
 @dataclass(frozen=True)
