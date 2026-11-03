@@ -1,0 +1,60 @@
+"""Whole observation messages round-trip through FieldCodec, as a connector carries them."""
+
+import pytest
+
+from agent_comms.coordination_errors import DeferredRead, ReportedDeferredRead, Refused
+from agent_comms.errors import RouteChangedError
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, ReportedError
+from agent_comms.ui_model.observation import ReadRefused, UnreadableHistory
+from agent_comms.ui_model.unread import (
+    CappedReplyUnread,
+    EmptyCappedReplyUnread,
+    ExactUnread,
+    IndexingUnread,
+    ReplyUnread,
+    UnobservedUnread,
+    UnreadPresentation,
+)
+
+
+def round_trip[T](value: T, annotation: type[T]) -> T:
+    return FieldCodec.decode_document(annotation, FieldCodec.encode_document(value, annotation))
+
+
+def test_a_refused_read_arrives_as_the_same_refusal() -> None:
+    sent = ReadRefused(4, Refused.invalid_params({"field": "x"}), "trace")
+    received = round_trip(sent, ReadRefused)
+    assert type(received.error) is Refused
+    assert (received.request_id, received.error.code, received.error.message, received.error.data) == (
+        4, Refused.INVALID_PARAMS, "Invalid params", {"field": "x"})
+
+
+def test_a_declared_unreadable_history_arrives_equal() -> None:
+    sent = ReadRefused(5, UnreadableHistory("/runtime", "bad record"), "trace")
+    assert round_trip(sent, ReadRefused) == sent
+
+
+def test_an_undeclared_error_is_reported_never_rebuilt() -> None:
+    received = round_trip(ReadRefused(6, RouteChangedError("moved"), "trace"), ReadRefused)
+    assert type(received.error) is ReportedError
+    assert (received.error.kind, received.error.message) == ("agent_comms.errors.RouteChangedError", "moved")
+
+
+def test_a_deferred_read_field_receives_a_deferred_read() -> None:
+    received = round_trip(DeferredRead("busy"), DeferredRead)
+    assert isinstance(received, DeferredRead) and type(received) is ReportedDeferredRead
+
+
+def test_a_declared_error_of_the_wrong_type_is_refused() -> None:
+    with pytest.raises(MalformedRecord):
+        FieldCodec.decode_document(DeferredRead, {
+            "kind": "agent_comms.coordination_errors.Refused", "declared": [1, "x", None]})
+
+
+@pytest.mark.parametrize("unread", [
+    ExactUnread(3), ReplyUnread(2), CappedReplyUnread(9), EmptyCappedReplyUnread(),
+    IndexingUnread(), UnobservedUnread(),
+])
+def test_every_unread_kind_round_trips(unread: UnreadPresentation) -> None:
+    received = round_trip(unread, UnreadPresentation)
+    assert type(received) is type(unread) and received == unread

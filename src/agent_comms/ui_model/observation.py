@@ -61,7 +61,7 @@ from agent_comms.history_views import RetiredViews
 from agent_comms.message_notification import NotificationPass, NotificationWindow
 from agent_comms.notification_read import NotificationsRead, UnreadableNotificationsRead
 from agent_comms.message_reference import MessageReference
-from agent_comms.nominal.field_codec import DeclaredWireType, FieldCodec, MessageId, SubclassUnion, TaggedRecordMember
+from agent_comms.nominal.field_codec import DeclaredError, FieldCodec, MessageId, SubclassUnion, TaggedRecordMember
 from agent_comms.nominal.fold import Absorbs, Accumulates, Fold
 from agent_comms.notification_reads import NotificationRead
 from agent_comms.read_basis import DisplayCut, NoDisplaySelection
@@ -282,7 +282,7 @@ class ReadingObservation[InterestT: InterestRequest](Observation[InterestT]):
 
 
 @final
-class UnreadableHistory(ValueError, DeclaredWireType):  # noqa: N818 - nominal stored-read state
+class UnreadableHistory(ValueError, DeclaredError):  # noqa: N818 - nominal stored-read state
     """A strict stored-data read failed, not the observer or the whole UI.
 
     The reader runtime is known; the writer version is not inferred from a

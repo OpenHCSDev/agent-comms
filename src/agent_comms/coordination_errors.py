@@ -6,7 +6,9 @@ from contextlib import contextmanager
 from copyreg import __newobj__
 from typing import ClassVar, Never, Self
 
-from .nominal.field_codec import ReportedError
+from pydantic import JsonValue
+
+from .nominal.field_codec import DeclaredError, FieldCodec, ReportedError
 
 
 class DrainDeferred(Exception):  # noqa: N818 - capability, not an outcome
@@ -27,11 +29,14 @@ class DrainUnavailable(DrainDeferred):
     """A failure meaning the drain's store or coordinator is unavailable right now."""
 
 
-class Refused(CommandFailure, DrainUnavailable):
+class Refused(CommandFailure, DrainUnavailable, DeclaredError):
     """A Core refusal; JSON-RPC 2.0 section 5.1 declares its standard wire codes.
 
-    ACP translates this value at its boundary, never inside Core's producers.
+    ACP translates this value at its boundary, never inside Core's producers. Its code,
+    message and data are its whole state, so a remote UI receives the refusal itself.
     """
+
+    wire_type: ClassVar[object] = tuple[int, str, JsonValue]
 
     INVALID_PARAMS: ClassVar[int] = -32602
     METHOD_NOT_FOUND: ClassVar[int] = -32601
@@ -47,6 +52,14 @@ class Refused(CommandFailure, DrainUnavailable):
     @property
     def message(self) -> str:
         return str(self)
+
+    def to_wire(self) -> JsonValue:
+        return [self.code, self.message, FieldCodec.encode(self.data)]
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        code, message, details = FieldCodec.decode(tuple[int, str, JsonValue], data)
+        return cls(code, message, details)
 
     @classmethod
     def invalid_params(cls, data: object = None) -> Self:
