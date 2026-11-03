@@ -185,18 +185,30 @@ class CloneShape(ABC):
         """The Git options every read of this repository passes."""
 
     promisor_settings: ClassVar[str] = r"^(remote\..+\.promisor|extensions\.partialclone)$"
+    shapes: ClassVar[dict[Path, CloneShape]] = {}
 
     @classmethod
-    @cache
     def of(cls, checkout: Path) -> CloneShape:
         """Git reads a repository as partial when a remote is a promisor or extensions.partialClone
         names one; `clone --filter` writes the first. Git answers 1 when no setting matches."""
+        if checkout in cls.shapes:
+            return cls.shapes[checkout]
         probe = GitLaunch._run(checkout, "config", "--type=bool-or-str", "--get-regexp",
                                cls.promisor_settings)
         if probe.returncode not in (0, 1):
-            probe.check_returncode()
+            return UnreadableClone()
         settings = (line.split(maxsplit=1) for line in probe.stdout.decode().splitlines())
-        return PartialClone() if any(value != "false" for _, value in settings) else FullClone()
+        shape = PartialClone() if any(value != "false" for _, value in settings) else FullClone()
+        cls.shapes[checkout] = shape
+        return shape
+
+
+class UnreadableClone(CloneShape):
+    """Git could not read the checkout's configuration. The read itself then fails through its
+    caller's own Git failure, and the next read probes again instead of remembering this."""
+
+    def read_options(self, program: Path) -> tuple[str, ...]:
+        return ()
 
 
 class FullClone(CloneShape):
