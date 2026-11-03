@@ -59,7 +59,7 @@ from agent_comms.history_views import RetiredViews
 from agent_comms.message_notification import NotificationPass, NotificationWindow
 from agent_comms.notification_read import NotificationsRead, UnreadableNotificationsRead
 from agent_comms.message_reference import MessageReference
-from agent_comms.nominal.field_codec import MessageId, SubclassUnion, TaggedRecordMember
+from agent_comms.nominal.field_codec import DeclaredWireType, FieldCodec, MessageId, SubclassUnion, TaggedRecordMember
 from agent_comms.nominal.fold import Absorbs, Accumulates, Fold
 from agent_comms.notification_reads import NotificationRead
 from agent_comms.read_basis import DisplayCut, NoDisplaySelection
@@ -280,7 +280,7 @@ class ReadingObservation[InterestT: InterestRequest](Observation[InterestT]):
 
 
 @final
-class UnreadableHistory(ValueError):  # noqa: N818 - nominal stored-read state
+class UnreadableHistory(ValueError, DeclaredWireType):  # noqa: N818 - nominal stored-read state
     """A strict stored-data read failed, not the observer or the whole UI.
 
     The reader runtime is known; the writer version is not inferred from a
@@ -302,6 +302,17 @@ class UnreadableHistory(ValueError):  # noqa: N818 - nominal stored-read state
             return ReadDeferred(error)
         except cls.UNREADABLE_READS as error:
             return ReadUnreadable(error, cls.capture(error))
+
+    # Its whole state is its two arguments: the reader runtime and the reason. A remote UI
+    # receives them as they are; the reader runtime then names the Core that failed.
+    wire_type: ClassVar[object] = tuple[str, str]
+
+    def to_wire(self) -> list[str]:
+        return list(self.args)
+
+    @classmethod
+    def from_wire(cls, data: object) -> UnreadableHistory:
+        return cls(*FieldCodec.decode(tuple[str, str], data))
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, UnreadableHistory):
