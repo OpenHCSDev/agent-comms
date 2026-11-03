@@ -107,7 +107,6 @@ from .thread_identity import OwnerIdentity
 
 from agent_comms.selected_write_authority import BoundSelectedWriteAuthority
 if TYPE_CHECKING:
-    from .selected_tool_broker import SelectedToolIntent
     from .coordination_tables.assignments import WakeAssignment
 
 from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary
@@ -238,16 +237,8 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         runtime_enabled: bool = False,
         use_unstable_protocol: bool = False,
         auto_wake: bool = True,
-        private_selected_tool_intent: SelectedToolIntent | None = None,
     ):
         self._comms = comms
-        if private_selected_tool_intent is not None:
-            from .selected_tool_broker import SelectedToolIntent
-
-            if type(private_selected_tool_intent) is not SelectedToolIntent:
-                raise TypeError("private selected tool needs a nominal owner intent")
-            self._comms.owners.require_private_launch()
-        self._private_selected_tool_intent = private_selected_tool_intent
         self.use_unstable_protocol = use_unstable_protocol
         # Enabled for verified native owners by default. Explicit construction
         # may disable it; model/tool content cannot change this owner policy.
@@ -542,7 +533,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             write_authority=AcpSelectedWriteAuthority(
                 self, session_id, SelectedWritePlans(self._comms, wire_root_id)
             ),
-            selected_tool_intent=self._private_selected_tool_intent,
         )
         with execution.cursor_delivery.measurements.operation("accept_deliveries"):
             await _accept_visible_deliveries(

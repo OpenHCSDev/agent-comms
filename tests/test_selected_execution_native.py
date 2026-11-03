@@ -27,6 +27,7 @@ from agent_comms.native_package import VerifiedNativePackage
 
 from agent_comms.native_tools import NativeToolDeclaration
 from agent_comms.cursor_owner import CursorOwner
+from agent_comms.selected_actions import CodingSelectedAction
 from agent_comms.selected_tool_broker import SelectedToolIntent
 from test_coordinated_runtime import _root
 from test_coordinated_runtime import tmp_path as private_root_fixture
@@ -217,7 +218,7 @@ async def test_native_full_four_tools_publish_and_release(
         wire_root_id=root_id,
         owner_name="beta",
         native_package=VerifiedNativePackage.acquire(Path(package)),
-        selected_tool_intent=SelectedToolIntent() if selected_write else None,
+        action=SelectedToolIntent() if selected_write else CodingSelectedAction(),
         cursor_delivery=cursor_delivery,
     )
     try:
