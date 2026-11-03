@@ -1,7 +1,7 @@
 """The real SessionStart command works before a teammate connects to the bus."""
 
 
-from agent_comms.repo import Checkout
+from agent_comms.repo import Checkout, Repo
 import inspect
 import io
 import json
@@ -607,14 +607,16 @@ def test_prime_in_a_session_no_bus_thread_holds_is_refused_out_loud(tmp_path, mo
         SessionEndpoint("loose").session().require_bound()
 
 
-def test_changing_storage_lead_preserves_the_peer_deal_and_real_child_delegation(
+def test_changing_the_team_project_preserves_the_peer_deal_and_real_child_delegation(
         tmp_path, capsys, commanding_session, team_bus, team_binding):
-    """Moving storage ownership neither demotes a peer nor changes its retained context."""
+    """Changing the team's repositories neither demotes a peer nor changes its retained
+    context."""
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
     assert DeckStart.decode(hook_record(transcript, "SessionStart")).take(team_bus, team_binding)
     assert transcript.with_suffix(".deck.json").exists()
-    commanding_session.registry.set_team_project(RegisteredTeamProject(()))
+    commanding_session.registry.set_team_project(RegisteredTeamProject((Repo(
+        checkout=tmp_path, github=RepositoryName.from_wire("owner/repo")),)))
     dealt = transcript.with_suffix(".deal.json").read_bytes()
     reminder = BoardReminder.decode(hook_record(transcript))
     assert [reminder.take(team_bus, team_binding, reminder.count_call()) for _ in range(SliceReminder.every - 1)] == [()] * (SliceReminder.every - 1)
@@ -636,8 +638,7 @@ def test_changing_storage_lead_preserves_the_peer_deal_and_real_child_delegation
 def test_a_fork_registers_under_the_session_that_spawned_it(
         tmp_path, capsys, commanding_session, team_bus, team_binding):
     """No CLI subprocess: the hook declares the fork in its own process as a child of the
-    session's own bus thread, carrying every tag that thread carries (#commanders included),
-    even when that thread is a co-commander and not the registry's lead."""
+    session's own bus thread, carrying every tag that thread carries (#commanders included)."""
     commanding_session.registry.declare(Thread(
         "claude-nra", frozenset({TeammatesTag.declared_name}), Checkout(tmp_path),
         model=DeclaredModel("anthropic/claude-opus-4-6")))

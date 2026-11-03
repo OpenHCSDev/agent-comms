@@ -273,7 +273,7 @@ def test_a_verdict_on_exactly_the_delivered_head_answers_the_delivery(board_revi
 
 @pytest.mark.parametrize("reviewer", ("lead", "peer", "worker"))
 def test_independent_colleagues_may_review_without_rank_tags(board_review, reviewer):
-    """Native and external colleagues share scope; a storage lead has no extra permission."""
+    """Native and external colleagues share scope; no colleague has extra permission."""
     comms, request, _, _ = board_review
     comms.registry.declare(Thread("peer", frozenset({"comms"}),
                                   comms.registry.require("lead").worktree,
