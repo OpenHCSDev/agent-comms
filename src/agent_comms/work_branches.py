@@ -221,6 +221,16 @@ class BranchDifference:
     unpublished: tuple[UnpushedHead, ...]
 
     @property
+    def needs_rebase(self) -> bool:
+        """Only outstanding committed changes need a newer base before publication.
+
+        An ancestor of main has no outgoing delta; retaining its checkout as evidence
+        does not create work whenever main advances. Uncommitted edits remain owned
+        by the checkout and the holder's before-commit synchronization.
+        """
+        return bool(self.behind and self.files)
+
+    @property
     def changes_source(self) -> bool:
         """Any file under the source tree, not only the Python modules growth counts."""
         return any(path.startswith(SourceGrowth.tree) for path in self.files)
