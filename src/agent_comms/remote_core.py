@@ -25,12 +25,13 @@ class RemoteCoreAccess(UiConnectionProfile, CoreAccess):
         posted = urllib.request.Request(
             str(self.endpoint.url),
             data=FieldCodec.compact(FieldCodec.encode(envelope)).encode(),
-            headers={"Authorization": f"Bearer {self.credential.token}",
-                     "Content-Type": "application/json"},
+            headers={
+                "Authorization": f"Bearer {self.credential.token}",
+                "Content-Type": "application/json",
+            },
         )
         with urllib.request.urlopen(posted, timeout=self.timeout_seconds) as response:
             reply = FieldCodec.decode(ToolsCallReply, json.load(response))
         if reply.result.is_error:
-            raise RelationViolationError(
-                " ".join(content.text for content in reply.result.content))
+            raise RelationViolationError(" ".join(content.text for content in reply.result.content))
         return FieldCodec.decode(request.result_type(), reply.result.structured_content)

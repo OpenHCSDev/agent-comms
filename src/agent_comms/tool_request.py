@@ -158,13 +158,10 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
     def result_type(cls) -> type[ToolResult]:
         """The result apply declares; a remote reply decodes into it."""
         declared = signature(cls.apply, annotation_format=annotationlib.Format.STRING)
-        match annotationlib.ForwardRef(
+        result: type[ToolResult] = annotationlib.ForwardRef(
             declared.return_annotation, module=cls.apply.__module__
-        ).evaluate():
-            case type() as result if issubclass(result, ToolResult):
-                return result
-            case other:
-                raise TypeError(f"{cls.__name__}.apply declares {other!r}, not a ToolResult")
+        ).evaluate()
+        return result
 
     @classmethod
     def invoke(
