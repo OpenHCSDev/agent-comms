@@ -228,9 +228,10 @@ class Chokehold(IndependentStandingRule, UndatedStandingRule):
     def enforce(self, comms: Comms) -> None:
         """Only the birth that ignored its check is paused or told: a thread that replaced it
         under the same name is refused at the read and again inside the goal write."""
-        current = comms.registry.require(self.teammate.name)
-        if current.incarnation != self.teammate:
+        births = comms.registry.snapshot().threads_for(self.teammate.require_recorded())
+        if not births:
             raise BirthChangedError()
+        (current,) = births
         if not any(goal.state.protected for goal in current.goal):
             comms.goals.update_born_goal(self.teammate, ChokeholdPausedGoalAction())
         ChokeholdNotice.burst_once(comms, self.teammate, self.burst(), self.ignored())

@@ -28,6 +28,12 @@ class BirthChangedError(RejectedEnforcementError):
     reason: ClassVar[str] = "the thread it was decided for was replaced under its name"
 
 
+class NobodyOwedError(RejectedEnforcementError):
+    """Core would file an order under a running teammate's open request, and none holds one."""
+
+    reason: ClassVar[str] = "no running teammate holds an open owner request"
+
+
 class TodoError(ToolRefusedError):
     """A todo request is invalid or its persisted state cannot be trusted."""
 

@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
 from typing import TYPE_CHECKING
 
+from .errors import NobodyOwedError
 from .threads import Thread
 
 if TYPE_CHECKING:
@@ -98,11 +99,15 @@ class TeamService:
     @classmethod
     def longest_owed(cls, registry: Registration, goals: Goals) -> Thread:
         """The live teammate holding the oldest open owner request. An order Core starts itself
-        must name exactly one open request; only an owed pass acts, so one always exists."""
-        _, teammate = min(((request.created_at, teammate)
-                           for teammate in cls.teammates(registry.snapshot())
-                           for request in cls.requested_by(teammate, goals)),
-                          key=lambda owed: owed[0])
+        must name exactly one open request. Only an owed pass acts, but that teammate can stop
+        between the duty read and the act: then this refuses as not applied (NobodyOwedError)
+        instead of failing the pass."""
+        owed = tuple((request.created_at, teammate)
+                     for teammate in cls.teammates(registry.snapshot())
+                     for request in cls.requested_by(teammate, goals))
+        if not owed:
+            raise NobodyOwedError()
+        _, teammate = min(owed, key=lambda pair: pair[0])
         return teammate
 
     @classmethod

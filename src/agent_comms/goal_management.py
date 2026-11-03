@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 from agent_comms.nominal.field_codec import GoalId
 from .agent_activity import AgentActivity
 from .coordination_errors import StaleFence
-from .errors import BirthChangedError, RelationViolationError
+from .errors import BirthChangedError, RelationViolationError, UnregisteredThreadError
 from .goal_records import GoalRecords
 from .goal_actions import (
     GoalAction,
@@ -120,7 +120,11 @@ class BornGoalTarget(GoalTarget):
         return self.birth.name
 
     def select(self, document: RegistryDocument) -> Thread:
-        thread = document.require(self.birth.name)
+        """The name follows renames (aliases); a removed or replaced birth is refused alike."""
+        try:
+            thread = document.require(self.birth.name)
+        except UnregisteredThreadError as error:
+            raise BirthChangedError() from error
         if thread.incarnation != self.birth:
             raise BirthChangedError()
         return thread
