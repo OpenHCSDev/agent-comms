@@ -2,24 +2,98 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import socket
+import threading
 import urllib.request
+from multiprocessing.connection import Connection
+
+from yarl import URL
 
 from .connector import ToolsCallMessage, ToolsCallReply
-from .connector_profile import UiConnectionProfile
+from .connector_profile import BearerSecret, UiConnectionProfile
 from .core_access import CoreAccess
 from .errors import RelationViolationError
 from .nominal.field_codec import FieldCodec
 from .tool_caller import ToolCaller
 from .tool_request import ToolRequest
 from .tool_result import ToolResult
+from .ui_model.observation import ObservationPeer, ObservationSource, ObserverDied, RelayConnection, ViewerEnd, relay_frames
 
 
-class RemoteCoreAccess(UiConnectionProfile, CoreAccess):
+class ConnectorObserverClosed(ObserverDied):
+    """The connector ended a remote UI's observation; there is no local process to describe."""
+
+    def __init__(self, url: URL, error: str | None):
+        self.pid, self.exit_status, self.error = 0, None, error
+        super(ObserverDied, self).__init__(
+            f"The comms observation at {url} closed" + (f":\n{error}" if error else ""))
+
+
+class ConnectorObservationPeer(ObservationPeer):
+    """A Core across the connector serves this UI's observation. Frames relay between the
+    UI's ViewerEnd and the connector's /observe socket from a thread with its own event
+    loop, so the UI's loop is never borrowed; the frames are declared records both ways."""
+
+    def __init__(self, access: RemoteCoreAccess) -> None:
+        self.url = access.endpoint.url.with_path("/observe")
+        viewer, relay = socket.socketpair()
+        self.connection = ViewerEnd(viewer.detach())
+        self.ending = "the connector closed the observation"
+        # The relay's loop and task exist before its thread starts, so retiring the peer can
+        # cancel it at any point, connection setup included.
+        self.loop = asyncio.new_event_loop()
+        self.lifetime = threading.Lock()
+        self.task = self.loop.create_task(
+            self.carry(RelayConnection(relay.detach()), access.credential.token))
+        self.thread = threading.Thread(
+            target=self.run, name="agent-comms-remote-observation", daemon=True)
+        self.thread.start()
+
+    def run(self) -> None:
+        try:
+            self.loop.run_until_complete(self.task)
+        except asyncio.CancelledError:
+            # join cancels the relay: the UI retired this observation.
+            self.ending = "the UI retired the observation"
+        finally:
+            with self.lifetime:
+                self.loop.close()
+
+    async def carry(self, local: Connection, token: BearerSecret) -> None:
+        import aiohttp
+
+        try:
+            async with aiohttp.ClientSession() as session, session.ws_connect(
+                self.url, headers={"Authorization": f"Bearer {token}"},
+            ) as remote:
+                self.ending = await relay_frames(local, remote)
+        except (OSError, aiohttp.ClientError) as error:
+            # Connecting is the boundary: the connector refused or could not be reached.
+            self.ending = f"{type(error).__name__}: {error}"
+        finally:
+            local.close()
+
+    def join(self, timeout: float | None = None) -> None:
+        """Retiring the peer ends its relay now, even while the connector is still connecting."""
+        with self.lifetime:
+            if not self.loop.is_closed():
+                self.loop.call_soon_threadsafe(self.task.cancel)
+        self.thread.join(timeout)
+
+    def died(self, error: str | None) -> ObserverDied:
+        return ConnectorObserverClosed(self.url, error or self.ending)
+
+
+class RemoteCoreAccess(UiConnectionProfile, CoreAccess, ObservationSource):
     """The owner's UI profile is the remote access: its endpoint and credential are all a
     call needs, and the server still decides scope, expiry and revocation."""
 
     timeout_seconds = 30
+
+    def observation_peer(self) -> ConnectorObservationPeer:
+        return ConnectorObservationPeer(self)
 
     def call[R: ToolResult](self, request: ToolRequest[ToolCaller, R]) -> R:
         envelope = ToolsCallMessage(jsonrpc="2.0", id=1, params=request.called())

@@ -232,7 +232,7 @@ async def test_unknown_saved_member_does_not_kill_the_real_observation_process(c
         process.start_receiving(delivered.observed, delivered.failed)
         process.request(ObserveSidebar(Checkout(comms.root.parent), True, True))
         await delivered.until(lambda result: isinstance(result, SidebarObserved))
-        assert process.process.is_alive()
+        assert process.peer.process.is_alive()
         process.request(ObserveThreads(frozenset({"saved"})))
         threads = await delivered.until(lambda result: isinstance(result, ThreadsObserved))
         assert not isinstance(threads.results["saved"], ThreadUnavailable)
@@ -244,6 +244,6 @@ async def test_unknown_saved_member_does_not_kill_the_real_observation_process(c
         # Serve a separate, readable request using the same actual pipe/child.
         async with asyncio.timeout(30):
             assert (await process.read(ReadNotifications(str(comms.root), LiveNotificationRead(())))).outcomes == {}
-        assert process.process.is_alive()
+        assert process.peer.process.is_alive()
         assert comms.contexts.path.read_bytes() == original
         assert comms.bus.bus.path.read_bytes() == original_bus
