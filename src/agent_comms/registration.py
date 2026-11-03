@@ -471,5 +471,4 @@ class Registration:
         return [name for name in document.threads if name != exclude]
 
     def __contains__(self, name: str) -> bool:
-        document = self.store.read()
-        return document.canonical_name(name) in document.threads
+        return name in self.store.read()

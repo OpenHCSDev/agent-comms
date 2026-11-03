@@ -140,3 +140,13 @@ def test_a_ui_asks_core_which_open_views_lost_their_source(tmp_path):
     received = FieldCodec.decode(RetiredViewsRead, FieldCodec.encode(answer))
     assert received.retired.threads == {deleted}
     assert received.retired.channels == {"#nowhere"}
+
+
+def test_a_received_registry_answers_membership_under_its_aliases(tmp_path):
+    """A UI holding Core's registry snapshot asks membership the way Core's registration does."""
+    comms = wire(tmp_path / "wire")
+    _declare(comms, "worker", str(tmp_path))
+    comms.registry.rename("worker", "renamed")
+    snapshot = comms.registry.snapshot()
+    assert "renamed" in snapshot and "worker" in snapshot and "nobody" not in snapshot
+    assert ("worker" in comms.registry) == ("worker" in snapshot)

@@ -186,6 +186,10 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
 
     __slots__ = ()
 
+    def __contains__(self, name: str) -> bool:
+        """A thread is present under its name or any alias the namespace keeps for it."""
+        return self.canonical_name(name) in self.threads
+
     threads: ThreadRows
     statuses: StatusMap
     last_seen: Mapping[str, float]
