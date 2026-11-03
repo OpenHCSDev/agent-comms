@@ -18,7 +18,7 @@ from typing import ClassVar
 import pytest
 
 from agent_comms.team.publication_rules import EmptyPullRequest, UnpushedBranch
-from agent_comms.team.spinning import SpinningTeammate
+from agent_comms.team.spinning import SpinningTeammate, StaleUncommittedEdits
 from agent_comms.team_heartbeat import TeamHeartbeat, TeamObservation
 from team_heartbeat_fixture import current_hud, observe_team
 from agent_comms.comms import Comms
@@ -387,6 +387,22 @@ class SpinningTeammateSeed(IncidentSeed):
         return SpinningTeammate(todo.id, todo.held().owner_identity, SpinningTeammate.calls)
 
 
+class StaleUncommittedEditsSeed(IncidentSeed):
+    rule = StaleUncommittedEdits
+
+    @classmethod
+    def seed(cls, fleet: Team) -> StandingRule:
+        edited = time.time() - 3 * 3600
+        home = fleet.worktree("uncommitted", base=fleet.main)
+        todo = fleet.unit("uncommitted", home, at=edited - 60)
+        storage = fleet.comms.registry.storage_rule
+        path = storage.order_checkout(storage.initial_roots("uncommitted"), todo.id) / "repair.py"
+        path.write_text("repair = 1\n")
+        os.utime(path, (edited, edited))
+        return StaleUncommittedEdits(todo.id, todo.order.checked().id,
+                                     todo.held().owner_identity, edited, time.time())
+
+
 class LostToolsSeed(IncidentSeed):
     rule = LostTools
 
@@ -698,6 +714,27 @@ def test_a_merged_order_running_its_proof_is_not_spinning(fleet):
     hud = current_hud(built.comms, Team.commander, observed.frame, observed.states)
     assert any(order.state == "Merged, no runtime install, waiting on the run"
                for unit in hud.units for order in unit.orders)
+
+
+@pytest.mark.parametrize("age_hours, expected", ((3, True), (1, False)))
+def test_uncommitted_notice_uses_the_latest_captured_edit(fleet, age_hours, expected):
+    built, _ = fleet
+    todo = built.comms.goals.todos.get(built.problems["uncommitted"])
+    storage = built.comms.registry.storage_rule
+    checkout = storage.order_checkout(storage.initial_roots("uncommitted"), todo.id)
+    edited = time.time() - age_hours * 3600
+    os.utime(checkout / "repair.py", (edited, edited))
+    observed = built.observe()
+    found = tuple(rule for rule in observed.rules
+                  if isinstance(rule, StaleUncommittedEdits) and rule.problem == todo.id)
+    assert bool(found) is expected
+    assert built.comms.goals.todos.get(todo.id) == todo
+    if expected:
+        (notice,) = found
+        assert notice.edited_at == edited
+        assert notice.line().startswith(f"COMMIT uncommitted {todo.id}:")
+        assert "commit and push it, or say why it stays local" in notice.line()
+        assert replace(notice, now=notice.now + 60).observation_key() == notice.observation_key()
 
 
 def test_a_stopped_unit_is_not_spinning(fleet):
