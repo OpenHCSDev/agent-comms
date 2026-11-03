@@ -147,14 +147,13 @@ class TurnOutput:
         return self.clean
 
     def terminal_text(self, success: bool, stderr: str, returncode: int | None) -> str:
-        return self.failure.terminal_text(
-            lambda: self.unfailed_text(success, stderr, returncode))
+        def unfailed() -> str:
+            if success:
+                return "".join(self.text_parts).strip()
+            return (
+                self.error_message
+                or (self.redact(stderr) if stderr else "")
+                or f"Backend exited with code {returncode}"
+            )
 
-    def unfailed_text(self, success: bool, stderr: str, returncode: int | None) -> str:
-        if success:
-            return "".join(self.text_parts).strip()
-        return (
-            self.error_message
-            or (self.redact(stderr) if stderr else "")
-            or f"Backend exited with code {returncode}"
-        )
+        return self.failure.terminal_text(unfailed)
