@@ -21,7 +21,7 @@ from agent_comms.coordinator import Coordination
 
 from .cohort_schema import CohortTable
 from .nominal.field_codec import FieldCodec, InputId, MalformedRecord, RootId, Sha256Text, ThreadLookup
-from .native_entries import NativeEvidenceRead
+from .native_entries import NO_EVIDENCE_READ, NativeEvidenceRead, NoEvidenceRead
 from .native_input_owner import ParticipantOwner
 from .native_input_record import NativeColumn, NativeInputExecution, NativeInputRecord
 from .native_pi import read_tracked_input_commitment
@@ -201,7 +201,7 @@ def expected_prompt_bindings(
 
 
 def expected_prompt_matches_journal(
-    session_file: Path, binding: PromptBinding, *, evidence: NativeEvidenceRead | None = None
+    session_file: Path, binding: PromptBinding, *, evidence: NativeEvidenceRead | NoEvidenceRead = NO_EVIDENCE_READ
 ) -> bool:
     """Join the durable journal digest to the prelaunch binding digest.
 
