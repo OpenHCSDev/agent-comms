@@ -13,7 +13,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, cast
+from typing import ClassVar, cast
 
 from pydantic import JsonValue
 
@@ -29,9 +29,6 @@ from .nominal.field_codec import (
 )
 from .repo import Checkout, GitCommandError, Repo
 from .repository_name import RepositoryName
-
-if TYPE_CHECKING:
-    from .registry_document import TeamProject
 
 
 class SourceText(ABC):
@@ -177,11 +174,23 @@ class CommitRevision(FetchedRevision):
         return self.commit
 
 
+class CitationProject(ABC):
+    """The registered repositories a qualified citation can name. The team project inherits
+    this contract, so a citation reads its repositories without importing the registry."""
+
+    @abstractmethod
+    def repository_names(self, name: str = "") -> tuple[RepositoryName, ...]: ...
+
+    @abstractmethod
+    def registered_repos(self) -> tuple[Repo, ...]:
+        """Every registered repository; an unregistered project refuses."""
+
+
 class SourceRoots(ABC):
     """Where citations are read: the checkout an unqualified citation names, and the teammate
     project whose registered repositories a qualified citation names instead."""
 
-    project: TeamProject
+    project: CitationProject
 
     @property
     @abstractmethod
@@ -195,7 +204,7 @@ class OrderRoots(SourceRoots):
     unqualified ones are read there."""
 
     checkout: Path
-    project: TeamProject
+    project: CitationProject
 
     @property
     def order(self) -> Path:
@@ -207,11 +216,11 @@ class RegisteredRoots(SourceRoots):
     """Citations with no order behind them: unqualified ones need exactly one registered
     repository to name."""
 
-    project: TeamProject
+    project: CitationProject
 
     @property
     def order(self) -> Path:
-        repositories = self.project.require().repos
+        repositories = self.project.registered_repos()
         if len(repositories) != 1:
             raise ValueError("An unqualified FILE:LINE names no repository when several are "
                              "registered; cite it as owner/name:FILE:LINE.")
@@ -253,7 +262,7 @@ class NamedRepository(CitedRepository):
     name: RepositoryName
 
     def source(self, roots: SourceRoots, revision: SourceText) -> tuple[Path, SourceText]:
-        return (Repo.selected(roots.project.require().repos, self.name.to_wire()).checkout,
+        return (Repo.selected(roots.project.registered_repos(), self.name.to_wire()).checkout,
                 MainRevision())
 
     def named_repositories(self) -> tuple[RepositoryName, ...]:
@@ -410,7 +419,7 @@ class FileLine(WireValue, SourceReference):
                 "owner/name:src/agent_comms/FILE.py:LINE for another registered repository"}
 
     @classmethod
-    def scan(cls, text: str, project: TeamProject) -> tuple[FileLine, ...]:
+    def scan(cls, text: str, project: CitationProject) -> tuple[FileLine, ...]:
         """Every file:line reference a message body already declares. A prefix is the
         citation's repository only when it names a registered one; any other prefix
         (``origin/main:``, ``HEAD~1:``) is a revision spelling and the line is the order's."""

@@ -17,6 +17,7 @@ from agent_comms_hooks import ToolRefusedError
 from .activity import ActivityCapture, ObservedActivity
 from .agent_activity import AgentActivity
 from .catalog_document import CatalogAccess
+from .change_report import CitationProject
 from .channel_targets import TeammatesTag, ResolvedTarget, SurroundingChannel
 from .channels import Channel, ChannelMemberIndex
 from .child_process import NoProcess, ProcessIdentity
@@ -528,7 +529,7 @@ class HistoricalRootPurpose(RootPurpose):
 
 
 @dataclass(frozen=True)
-class TeamProject(DeclaredFamily, affix="TeamProject"):
+class TeamProject(DeclaredFamily, CitationProject, affix="TeamProject"):
     """This bus's teammate declaration; identity resolves through the registry lookup."""
 
     def participants(self, threads: Iterable[Thread]) -> tuple[Thread, ...]:
@@ -577,6 +578,9 @@ class TeamProject(DeclaredFamily, affix="TeamProject"):
 
     @abstractmethod
     def require(self) -> RegisteredTeamProject: ...
+
+    def registered_repos(self) -> tuple[Repo, ...]:
+        return self.require().repos
 
     @abstractmethod
     def named(self, commander: ThreadIncarnation,
