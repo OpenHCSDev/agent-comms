@@ -20,6 +20,9 @@ from agent_comms.repo import Checkout
 import asyncio
 import itertools
 import multiprocessing
+import os
+import socket
+import struct
 import signal
 import sys
 import time
@@ -38,6 +41,7 @@ from agent_comms_hooks import ToolRefusedError
 from metaclass_registry.mro_dispatch import MroDispatch, handles
 
 from agent_comms.acp_extension import (
+    GoalSnapshotReply,
     TranscriptDraftUpdate,
     TranscriptSnapshotUpdate,
 )
@@ -45,7 +49,8 @@ from agent_comms.active_route import CommsRoute
 from agent_comms.activity import ObservedActivity
 from agent_comms.bus_read import OwnerScopedRead, UiRead
 from agent_comms.child_process import join_retirement
-from agent_comms.team_hud import TeamFrame, TeamHud
+from agent_comms.input_disposition import DeliveryOverview
+from agent_comms.team_hud import TeamFrame, TeamHud, TeammateDetail
 from agent_comms.comms import Comms
 from agent_comms.coordinator import Coordination
 from agent_comms.coordination_errors import (
@@ -94,22 +99,31 @@ from agent_comms.view_unread import ReplyIndexResult
 from agent_comms.watched import FileSource
 from agent_comms.work_branches import WorkBranchError
 
+from multiprocessing.connection import Connection
+
 if TYPE_CHECKING:
+    from aiohttp import ClientWebSocketResponse, web
+
+    type WebSocketFrames = ClientWebSocketResponse | web.WebSocketResponse
     from concurrent.futures import Future
-    from multiprocessing.connection import Connection
 
     from agent_comms.tool_result import ToolResult
     from agent_comms.transcripts import TranscriptRead
 
 
-class ObservationRequest(ABC):
-    """A UI request; each declares how the service receives it."""
+class ObservationRequest(SubclassUnion, affix=""):
+    """A UI request; each declares how the service receives it. A remote UI sends it over
+    the connector, so each record carries its kind."""
+
+    @classmethod
+    def decodes_tagged_records(cls) -> bool:
+        return True
 
     @abstractmethod
     def receive(self, service: ObservationService) -> None: ...
 
 
-class InterestRequest(ObservationRequest):
+class InterestRequest(TaggedRecordMember, ObservationRequest, declared_name=None):
     """Changes what is observed; the service observes again."""
 
     @abstractmethod
@@ -395,7 +409,7 @@ class ReadUnreadable[T](StoredRead[T]):
 
 
 @dataclass(frozen=True)
-class AwaitedRead(ObservationRequest):
+class AwaitedRead(TaggedRecordMember, ObservationRequest, declared_name=None):
     """A read the UI awaits; the service answers it by ``request_id``.
 
     ``root`` is the Comms root the UI's view belongs to; a read for another
@@ -418,7 +432,7 @@ class AwaitedRead(ObservationRequest):
         return ReadRefused(self.request_id, error, traceback.format_exc())
 
 
-class ReadRequest(AwaitedRead):
+class ReadRequest(AwaitedRead, declared_name=None):
     """A read of Core's stores, served one at a time in arrival order."""
 
     deferred_reads: ClassVar[tuple[type[Exception], ...]] = (CoordinationReadUnavailable,)
@@ -439,7 +453,7 @@ class ReadRequest(AwaitedRead):
                 raise
             except self.deferred_reads:
                 return ReadBusy(self.request_id)
-            return ReadAnswered(self.request_id, value)
+            return ReadAnswered.of(self.request_id, value)
         except self.refusal_errors as error:
             return self.refused(error)
 
@@ -459,7 +473,7 @@ class ReadOperation(ReadRequest):
 
 
 @dataclass(frozen=True)
-class OwnerRead(AwaitedRead):
+class OwnerRead(AwaitedRead, declared_name=None):
     """A read scoped to the captured thread incarnation ``owner``.
 
     Served as it arrives, beside store reads; the shared operation owns its
@@ -489,7 +503,7 @@ class OwnerRead(AwaitedRead):
     async def answer(self, comms: Comms) -> ReadOutcome:
         try:
             self.require_root(comms)
-            return ReadAnswered(self.request_id, await self.ask(comms))
+            return ReadAnswered.of(self.request_id, await self.ask(comms))
         except self.refusal_errors as error:
             return self.refused(error)
 
@@ -498,7 +512,7 @@ class OwnerRead(AwaitedRead):
 
 
 @dataclass(frozen=True)
-class CancelRead(ObservationRequest):
+class CancelRead(TaggedRecordMember, ObservationRequest):
     """The UI stopped waiting; a read not yet answered is dropped."""
 
     request_id: int
@@ -714,13 +728,13 @@ class SidebarReading(ReadingObservation[ObserveSidebar]):
 
 
 @dataclass(frozen=True)
-class StopSidebar(ObservationRequest):
+class StopSidebar(TaggedRecordMember, ObservationRequest):
     def receive(self, service: ObservationService) -> None:
         service.interest.remove(SidebarReading)
 
 
 @dataclass(frozen=True)
-class StopObserving(ObservationRequest):
+class StopObserving(TaggedRecordMember, ObservationRequest):
     """Views are retiring; finish their outstanding reads without observing more state."""
 
     def receive(self, service: ObservationService) -> None:
@@ -729,7 +743,8 @@ class StopObserving(ObservationRequest):
 
 @dataclass(frozen=True)
 class ObserveThreads(InterestRequest):
-    names: frozenset[str]
+    # Not ``names``: DeclaredFamily.names is the family's member-name lookup.
+    threads: frozenset[str]
 
     def observation(self) -> ThreadReading:
         return ThreadReading(self)
@@ -744,7 +759,7 @@ class ObserveTeamHud(InterestRequest):
 
 
 @dataclass(frozen=True)
-class StopTeamHud(ObservationRequest):
+class StopTeamHud(TaggedRecordMember, ObservationRequest):
     def receive(self, service: ObservationService) -> None:
         service.interest.remove(TeamHudReading)
 
@@ -918,12 +933,12 @@ class ThreadReading(ReadingObservation[ObserveThreads]):
     def __init__(self, request: ObserveThreads):
         super().__init__(request)
         self.observed = ThreadsObserved(WireRevision.empty(), {}, frozenset(), {})
-        self.initial = request.names
-        self.located_threads = LocatedThreads({}, request.names, {})
+        self.initial = request.threads
+        self.located_threads = LocatedThreads({}, request.threads, {})
 
     def continue_from(self, previous: Self) -> Self:
         self.observed = previous.observed
-        self.initial = self.request.names - previous.request.names
+        self.initial = self.request.threads - previous.request.threads
         return self
 
     def read(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:
@@ -936,7 +951,7 @@ class ThreadReading(ReadingObservation[ObserveThreads]):
             lambda error: self.failed(located.names, ThreadBusy(), results),
             lambda error: self.failed(located.names, ThreadUnavailable(error), results))
         results.update((name, value) for name, value in previous.results.items()
-                       if name in self.request.names and name not in located.names)
+                       if name in self.request.threads and name not in located.names)
         observed = ThreadsObserved(revision, results, frozenset(), located.activity)
         self.observed = observed
         changed = observed.changed_since(previous) | self.initial
@@ -951,7 +966,7 @@ class ThreadReading(ReadingObservation[ObserveThreads]):
     def located(self, comms: Comms, revision: WireRevision, previous: ThreadsObserved) -> LocatedThreads:
         # Keep each completed stage when a later stored read fails, exactly as
         # the original read did before its activity/names became declared state.
-        self.located_threads = LocatedThreads({}, self.request.names, {})
+        self.located_threads = LocatedThreads({}, self.request.threads, {})
         readable, _ = previous.revision_inputs()
         names = self.located_threads.names
         watched = names | frozenset(actor for view in readable.values()
@@ -996,8 +1011,13 @@ class ViewReading(Observation[ObserveViews]):
             ViewsRetired(revision, retired).publish(service)
 
 
-class ServiceResult(ABC):
-    """What the service sends; each declares how the UI side receives it."""
+class ServiceResult(SubclassUnion, affix=""):
+    """What the service sends; each declares how the UI side receives it. A remote UI
+    receives it over the connector, so each record carries its kind."""
+
+    @classmethod
+    def decodes_tagged_records(cls) -> bool:
+        return True
 
     def retire_request(self, service: ObservationService, request: ReadRequest) -> None:
         service.pending.pop(request.request_id)
@@ -1006,12 +1026,12 @@ class ServiceResult(ABC):
     async def received(self, process: ObservationProcess, observed: Callable[[Observed], None]) -> None: ...
 
 
-class ReadOutcome(ServiceResult):
+class ReadOutcome(TaggedRecordMember, ServiceResult, declared_name=None):
     """The service's answer to a read, including a read that remains busy."""
 
 
 @dataclass(frozen=True)
-class Observed(ObservationStep, ServiceResult):
+class Observed(TaggedRecordMember, ObservationStep, ServiceResult, declared_name=None):
     """A result, as of one revision of Core's stores."""
 
     revision: WireRevision
@@ -1024,13 +1044,65 @@ class Observed(ObservationStep, ServiceResult):
 
 
 @dataclass(frozen=True)
-class ReadAnswered(ReadOutcome):
+class ReadAnswered(ReadOutcome, declared_name=None):
+    """A read's answer. Each member carries one declared answer type, so a remote UI decodes
+    the answer as itself."""
+
+    answers: ClassVar[dict[type, type[ReadAnswered]]] = {}
+
     request_id: int
     value: object
+
+    def __init_subclass__(cls, *, answers: type, **kwargs: object) -> None:
+        super().__init_subclass__(**kwargs)
+        ReadAnswered.answers[answers] = cls
+
+    @staticmethod
+    def of(request_id: int, value: object) -> ReadAnswered:
+        """The boundary: a read's result reaches the wire through its declared answer member."""
+        for kind in type(value).__mro__:
+            if kind in ReadAnswered.answers:
+                return ReadAnswered.answers[kind](request_id, value)
+        raise TypeError(f"No read answer is declared for {type(value).__qualname__}")
 
     async def received(self, process: ObservationProcess, observed: Callable[[Observed], None]) -> None:
         if (waiter := process.reads.pop(self.request_id, None)) is not None and not waiter.done():
             waiter.set_result(self.value)
+
+
+@dataclass(frozen=True)
+class NothingAnswered(ReadAnswered, answers=type(None)):
+    value: None = None
+
+
+@dataclass(frozen=True)
+class TranscriptAnswered(ReadAnswered, answers=TranscriptSnapshotUpdate):
+    value: TranscriptSnapshotUpdate
+
+
+@dataclass(frozen=True)
+class DraftAnswered(ReadAnswered, answers=TranscriptDraftUpdate):
+    value: TranscriptDraftUpdate
+
+
+@dataclass(frozen=True)
+class NotificationsAnswered(ReadAnswered, answers=NotificationWindow):
+    value: NotificationWindow
+
+
+@dataclass(frozen=True)
+class TeammateAnswered(ReadAnswered, answers=TeammateDetail):
+    value: TeammateDetail
+
+
+@dataclass(frozen=True)
+class GoalAnswered(ReadAnswered, answers=GoalSnapshotReply):
+    value: GoalSnapshotReply
+
+
+@dataclass(frozen=True)
+class DeliveryAnswered(ReadAnswered, answers=DeliveryOverview):
+    value: DeliveryOverview
 
 
 @dataclass(frozen=True)
@@ -1087,7 +1159,7 @@ class NoSidebarResult(PublishState):
 
 
 @dataclass(frozen=True)
-class SidebarResult(PublishState, Observed):
+class SidebarResult(PublishState, Observed, declared_name=None):
     revision: WireRevision = field(compare=False)
     request: ObserveSidebar
 
@@ -1268,13 +1340,13 @@ class ViewsRetired(Observed):
 
 
 @dataclass(frozen=True)
-class ObservationFailed(ServiceResult):
+class ObservationFailed(TaggedRecordMember, ServiceResult):
     """The service failed and is exiting; ``error`` is its traceback."""
 
     error: str
 
     async def received(self, process: ObservationProcess, observed: Callable[[Observed], None]) -> None:
-        await Coordination.run_worker(partial(process.process.join, timeout=2))
+        await Coordination.run_worker(partial(process.peer.join, 2))
         raise process.ended(self.error)
 
 
@@ -1468,6 +1540,101 @@ class ObservationService:
                 self.comms.views.transcript_reads.close()
 
 
+class RelayConnection(Connection):
+    """One side of a relay socket. A relay blocks a worker thread in recv_bytes; closing
+    the descriptor from another thread does not wake it, so close shuts the socket down
+    first, which ends that read with EOF. A write the other side never takes fails after
+    write_timeout_seconds, so a reader that stopped ends the relay instead of pinning it
+    and its threads forever."""
+
+    write_timeout_seconds: ClassVar[int] = 30
+
+    def __init__(self, handle: int, readable: bool = True, writable: bool = True) -> None:
+        super().__init__(handle, readable, writable)
+        with socket.socket(fileno=os.dup(handle)) as peer:
+            peer.setsockopt(socket.SOL_SOCKET, socket.SO_SNDTIMEO,
+                            struct.pack("ll", self.write_timeout_seconds, 0))
+
+    def close(self) -> None:
+        if not self.closed:
+            with socket.socket(fileno=os.dup(self.fileno())) as peer:
+                peer.shutdown(socket.SHUT_RDWR)
+        super().close()
+
+
+async def relay_frames(connection: Connection, peer: WebSocketFrames) -> str:
+    """Carry frames both ways between a local connection and a WebSocket until either side
+    ends, then end both, and say which side ended. Socket reads and writes run in worker
+    threads, so a peer that stops reading never blocks this loop; closing the connection
+    wakes a thread blocked in either."""
+    from aiohttp import WSMsgType
+
+    async def outward() -> str:
+        try:
+            while True:
+                await peer.send_bytes(await asyncio.to_thread(connection.recv_bytes))
+        except (EOFError, OSError) as error:
+            # The local socket's own end-of-stream: this is how its side ends.
+            return f"the local side ended ({type(error).__name__})"
+
+    async def inward() -> str:
+        try:
+            async for message in peer:
+                if message.type is not WSMsgType.BINARY:
+                    return f"the peer sent a {message.type.name} frame"
+                await asyncio.to_thread(connection.send_bytes, message.data)
+        except OSError as error:
+            # The local socket's write deadline: the local side stopped reading.
+            return f"the local side stopped reading ({type(error).__name__})"
+        return "the peer closed its socket"
+
+    directions = (asyncio.create_task(outward()), asyncio.create_task(inward()))
+    try:
+        finished, _ = await asyncio.wait(directions, return_when=asyncio.FIRST_COMPLETED)
+    finally:
+        # Close before any await: a cancelled caller may not get past one.
+        connection.close()
+        for direction in directions:
+            direction.cancel()
+        await peer.close()
+        await asyncio.gather(*directions, return_exceptions=True)
+    return next(iter(finished)).result()
+
+
+class EncodedConnection(Connection):
+    """The local pipe's framing and lifetime, carrying declared records instead of pickles,
+    so an observation can be served across a boundary the peer does not trust with code.
+    Each end declares what it sends and what it receives."""
+
+    sends: ClassVar[type]
+    receives: ClassVar[type]
+
+    def send(self, obj: object) -> None:
+        self.send_bytes(FieldCodec.compact(FieldCodec.encode_document(obj, self.sends)).encode())
+
+    def recv(self) -> object:
+        return FieldCodec.decode_document(self.receives, FieldCodec.parse(self.recv_bytes().decode()))
+
+
+class ServiceEnd(EncodedConnection):
+    """The observation service's end: results out, requests in."""
+
+    sends = ServiceResult
+    receives = ObservationRequest
+
+
+class ViewerEnd(EncodedConnection):
+    """A UI's end: requests out, results in."""
+
+    sends = ObservationRequest
+    receives = ServiceResult
+
+
+def serve_encoded(route: CommsRoute, service_socket: socket.socket) -> None:
+    """Serve one remote viewer over its socket, decoding only declared records."""
+    serve(route, ServiceEnd(service_socket.detach()))
+
+
 def serve(route: CommsRoute, connection: Connection) -> None:
     """Observe the caller's selected route, including its reviewed native package."""
     try:
@@ -1482,6 +1649,47 @@ def serve(route: CommsRoute, connection: Connection) -> None:
         connection.close()
 
 
+class ObservationSource(ABC):
+    """Something a UI can observe Core through: it supplies the observation's peer."""
+
+    @abstractmethod
+    def observation_peer(self) -> ObservationPeer: ...
+
+
+class ObservationPeer(ABC):
+    """Who serves a UI's observation: a local process, or a Core across the connector.
+    It owns the connection the UI reads, how the service is joined, and how its end reads."""
+
+    connection: Connection
+
+    @abstractmethod
+    def join(self, timeout: float | None = None) -> None: ...
+
+    @abstractmethod
+    def died(self, error: str | None) -> ObserverDied: ...
+
+
+class LocalObservationPeer(ObservationPeer):
+    """The service in a spawned process of this machine, over a pipe."""
+
+    def __init__(self, route: CommsRoute) -> None:
+        context = multiprocessing.get_context("spawn")
+        self.connection, child = context.Pipe()
+        with ExitStack() as acquisition:
+            acquisition.enter_context(self.connection)
+            with child:
+                self.process = context.Process(target=serve, args=(route, child), daemon=False,
+                                               name="agent-comms-observation")
+                self.process.start()
+            acquisition.pop_all()
+
+    def join(self, timeout: float | None = None) -> None:
+        self.process.join(timeout)
+
+    def died(self, error: str | None) -> ObserverDied:
+        return ObserverDied(self.process.pid, self.process.exitcode, error)
+
+
 class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
     """One ordered receive/decode task, loop-owned delivery, and joined retirement."""
 
@@ -1491,21 +1699,17 @@ class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
         process.start_receiving(process.observed, process.failed)
         return process
 
-    def __init__(self, route: CommsRoute):
+    def __init__(self, source: CommsRoute | ObservationSource):
+        """``source`` names who serves the observation: a route serves it locally, a remote
+        UI profile across the connector."""
         self._resources = ExitStack()
         self.request_ids = itertools.count(1)
         self.reads: dict[int, asyncio.Future] = {}
         self.status: ObserverStatus = NoObserverFailure()
-        context = multiprocessing.get_context("spawn")
-        with ExitStack() as acquisition:
-            self.connection, child = context.Pipe()
-            acquisition.enter_context(self.connection)
-            with child:
-                self.process = context.Process(target=serve, args=(route, child), daemon=False,
-                                               name="agent-comms-observation")
-                self.process.start()
-            self._resources.callback(self.process.join)
-            self._resources.enter_context(acquisition.pop_all())
+        self.peer = source.observation_peer()
+        self.connection = self.peer.connection
+        self._resources.callback(self.peer.join)
+        self._resources.enter_context(self.connection)
         self._reader = AsyncExitStack()
 
     async def __aexit__(self, *exc: object) -> None:
@@ -1566,7 +1770,7 @@ class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
     def ended(self, error: str | None) -> ObserverDied:
         """The service ended (``error``: the traceback it sent): fail its awaited reads and say how it exited."""
         died = self.status.failure(
-            partial(ObserverDied, self.process.pid, self.process.exitcode, error)
+            partial(self.peer.died, error)
         )
         self.status = died
         self.abandon_reads(died)
@@ -1634,7 +1838,7 @@ class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
                 result: ServiceResult = await Coordination.run_worker(self.connection.recv)
                 await result.received(self, observed)
         except (EOFError, ConnectionResetError):
-            await Coordination.run_worker(partial(self.process.join, timeout=2))
+            await Coordination.run_worker(partial(self.peer.join, 2))
             failed(self.ended(None))
         except ObserverDied as error:
             failed(error)

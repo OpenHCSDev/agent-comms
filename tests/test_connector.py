@@ -1158,3 +1158,15 @@ def test_every_session_is_told_how_to_take_its_own_name() -> None:
     fork = FieldCodec.record_schema(CommsSendTool, ActingFork)["properties"]["fork"]
     assert "Your own name on the bus" in fork["description"]
     assert "distinct name" in InitializeResult().instructions
+
+
+async def test_connector_reports_the_root_its_core_serves(client, comms):
+    """A remote UI keys its observation by the served root, read through the same tools/call."""
+    headers = {"Authorization": f"Bearer {await approved_token(client, comms)}"}
+    response = await client.post("/mcp", headers=headers, json={
+        "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+        "params": {"name": "comms_served_root", "arguments": {}},
+    })
+    result = (await response.json())["result"]
+    assert result["isError"] is False
+    assert result["structuredContent"]["root"] == str(comms.root.resolve())

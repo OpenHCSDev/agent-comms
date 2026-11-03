@@ -27,6 +27,7 @@ import hashlib
 import html
 import json
 import logging
+import multiprocessing
 import os
 import secrets
 import signal
@@ -43,7 +44,7 @@ from types import MappingProxyType
 from typing import Annotated, ClassVar, Literal, Self, cast
 
 from agent_comms_hooks import ToolRefusedError
-from aiohttp import web
+from aiohttp import WSMsgType, web
 from aiohttp.typedefs import Handler
 from aiohttp.web_urldispatcher import AbstractResource, ResourceRoute, SystemRoute
 from pydantic import JsonValue
@@ -53,7 +54,9 @@ from .declared_verb import DeclaredVerb
 from .cli_protocol import CoreError
 from .command import Command
 from .child_process import GitChildren, OwnedGitOpening, join_retirement
+from .active_route import CommsRoute, resolve_comms_route
 from .comms import Comms, client_wire, wire
+from .ui_model.observation import RelayConnection, relay_frames, serve_encoded
 from .repo import Checkout
 from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from .errors import (
@@ -621,6 +624,7 @@ class Connector:
                 web.post(ApprovalLink.route, self.confirm),
                 web.post("/token", self.token),
                 web.post("/mcp", self.mcp),
+                web.get("/observe", self.observe),
             ]
         )
         return app
@@ -831,16 +835,32 @@ class Connector:
         caller.require_root(self.root)
         return caller
 
-    async def mcp(self, request: web.Request) -> web.Response:
+    async def bearer_caller(self, request: web.Request) -> ConnectorCaller:
+        """The request's bearer grant, or the OAuth challenge every route answers with."""
         token = request.headers.get("Authorization", "").removeprefix("Bearer ")
         try:
-            caller = await asyncio.to_thread(self.caller_for, token)
+            return await asyncio.to_thread(self.caller_for, token)
         except GrantRefusedError:
             raise web.HTTPUnauthorized(
                 headers={
                     "WWW-Authenticate": (f'Bearer resource_metadata="{self.resource_metadata_url}"')
                 }
             )
+
+    async def observe(self, request: web.Request) -> web.WebSocketResponse:
+        """A UI grant's observation of its root, carried as declared records."""
+        caller = await self.bearer_caller(request)
+        try:
+            caller.require_observation()
+        except GrantRefusedError as error:
+            raise web.HTTPForbidden(text=str(error))
+        viewer = web.WebSocketResponse()
+        await viewer.prepare(request)
+        await ObservationRelay(resolve_comms_route(self.root)).carry(viewer)
+        return viewer
+
+    async def mcp(self, request: web.Request) -> web.Response:
+        caller = await self.bearer_caller(request)
         try:
             data = await request.json()
         except json.JSONDecodeError as error:
@@ -855,6 +875,37 @@ class Connector:
         response = await message.answer(self, caller)
         logging.info("MCP %s answered in %.3fs", message.log_name, time.monotonic() - started)
         return response
+
+
+class ObservationRelay:
+    """One remote viewer's observation process. Its frames pass through unopened: the
+    service end decodes each one as a declared record and refuses anything else."""
+
+    def __init__(self, route: CommsRoute) -> None:
+        relay, service = socket.socketpair()
+        with service:
+            self.process = multiprocessing.get_context("spawn").Process(
+                target=serve_encoded, args=(route, service), daemon=False,
+                name="agent-comms-remote-observation")
+            self.process.start()
+        self.connection = RelayConnection(relay.detach())
+
+    async def carry(self, viewer: web.WebSocketResponse) -> None:
+        """Relay frames both ways until either side ends, then retire the process."""
+        try:
+            await relay_frames(self.connection, viewer)
+        finally:
+            await asyncio.to_thread(self.retire)
+
+    exit_seconds: ClassVar[float] = 5
+
+    def retire(self) -> None:
+        """The service exits once its connection closes; one that has not is hung, and is
+        killed so no observation process outlives its viewer."""
+        self.process.join(self.exit_seconds)
+        if self.process.exitcode is None:
+            self.process.kill()
+            self.process.join()
 
 
 @dataclass(frozen=True, kw_only=True)

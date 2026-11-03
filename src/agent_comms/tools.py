@@ -661,6 +661,24 @@ class CommsLatestSequenceTool(ReadTool, ToolRequest[ToolCaller, LatestSequence])
         return LatestSequence(LiveCursor(comms.views.latest_sequence()))
 
 
+@dataclass(frozen=True)
+class ServedRoot(ToolResult):
+    """The bus root a Core serves: the key its observation requests and views are read under."""
+
+    root: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsServedRootTool(ReadTool, ToolRequest[ToolCaller, ServedRoot]):
+    """A remote UI keys its observation by the root the connector's Core serves."""
+
+    label = "Served root"
+    description = "The bus root this Core serves; a UI keys its observation requests by it."
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> ServedRoot:
+        return ServedRoot(str(comms.root.resolve()))
+
+
 @dataclass(frozen=True, kw_only=True)
 class CommsSetChannelMetadataTool(NativeToolRequest):
     label = "Set channel presentation"

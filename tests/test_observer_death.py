@@ -46,7 +46,7 @@ async def test_a_killed_observer_is_reported_once_with_its_signal_and_fails_awai
     async with ObservationProcess.awaited(comms.route) as process:
         async with asyncio.timeout(30):
             assert (await process.read(empty_window(comms.root))).outcomes == {}  # the service runs
-        child = process.process.pid
+        child = process.peer.process.pid
         os.kill(child, signal.SIGSTOP)  # the read below stays unanswered until the child dies
         waiting = asyncio.ensure_future(process.read(empty_window(comms.root)))
         try:
@@ -60,7 +60,7 @@ async def test_a_killed_observer_is_reported_once_with_its_signal_and_fails_awai
                 async with asyncio.timeout(30):
                     await waiting
         finally:
-            if process.process.exitcode is None:
+            if process.peer.process.exitcode is None:
                 os.kill(child, signal.SIGKILL)
             waiting.cancel()
             await asyncio.gather(waiting, return_exceptions=True)
@@ -90,7 +90,7 @@ async def test_unavailable_live_owner_reads_preserve_the_observer(comms, durable
         with pytest.raises(RelationViolationError):
             await process.read(read_type(str(comms.root), owner.incarnation))
         assert (await process.read(empty_window(comms.root))).outcomes == {}
-        assert process.process.is_alive()
+        assert process.peer.process.is_alive()
         process.status.raise_if_failed()
 
 
@@ -101,7 +101,7 @@ async def test_an_unregistered_owner_cannot_supply_a_held_read_incarnation(comms
         with pytest.raises(OwnerIdentityChangedError):
             await process.read(read_type(str(comms.root), owner.incarnation))
         assert (await process.read(empty_window(comms.root))).outcomes == {}
-        assert process.process.is_alive()
+        assert process.peer.process.is_alive()
         process.status.raise_if_failed()
 
 
@@ -123,7 +123,7 @@ async def test_retained_delivery_reads_preserve_the_observer_without_a_native_qu
         assert [row.input_id for row in result.inputs] == [key]
         assert ledger.path.read_bytes() == original
         assert (await process.read(empty_window(comms.root))).outcomes == {}
-        assert process.process.is_alive()
+        assert process.peer.process.is_alive()
         process.status.raise_if_failed()
 
 
@@ -138,7 +138,7 @@ async def test_stale_owner_reads_preserve_the_observer(comms, durable_home, read
         with pytest.raises(StaleRevision if other_root else OwnerIdentityChangedError):
             await process.read(read_type(root, identity))
         assert (await process.read(empty_window(comms.root))).outcomes == {}
-        assert process.process.is_alive()
+        assert process.peer.process.is_alive()
         process.status.raise_if_failed()
 
 
@@ -154,7 +154,7 @@ async def test_external_live_owner_reads_refuse_before_waiting_for_a_socket(
             async with asyncio.timeout(30):
                 await process.read(read_type(str(comms.root), owner.incarnation))
         assert (await process.read(empty_window(comms.root))).outcomes == {}
-        assert process.process.is_alive()
+        assert process.peer.process.is_alive()
         process.status.raise_if_failed()
 
 
