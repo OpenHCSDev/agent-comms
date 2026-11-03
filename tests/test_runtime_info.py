@@ -5,13 +5,15 @@ from agent_comms.agent_events import (
     ContextSizeObservation, ContextUsageObservation, ModelObservation, RuntimeInfoObservation,
 )
 from agent_comms.catalog_document import CatalogDocument
+from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.pi_counts import PiCount
-from agent_comms.reading_attribution import CurrentReadingAttribution, LastKnownReadingAttribution
+from agent_comms.reading_attribution import CurrentReadingAttribution, LastKnownReadingAttribution, ReadingAttribution
 from agent_comms.runtime_field import RuntimePublication, UnattributedRuntimeOrigin
 from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoDocument, RuntimeReadScope, UnobservedRuntimeInfo
+from agent_comms.threads import ChosenModel, NextTurnConfiguration
 from agent_comms.thread_identity import RecordedThreadIncarnation, UnrecordedThreadIncarnation
-from agent_comms.thread_model import DeclaredModel, UndeclaredModel
+from agent_comms.thread_model import DeclaredModel, ThreadModel, UndeclaredModel
 
 
 @pytest.mark.parametrize("document_type", [RuntimeInfoDocument, CatalogDocument])
@@ -118,6 +120,26 @@ def test_unattributed_runtime_retains_distinct_map_key_and_stored_thread_spellin
     reading = document.read_scope(RuntimeReadScope(current, (key.name,)))
     assert reading.model_attribution() == LastKnownReadingAttribution((key.name, "stored-B"))
     assert reading.current_model(current) == UndeclaredModel()
+
+
+@pytest.mark.parametrize("historical_model,expected", [
+    (UndeclaredModel(), CurrentReadingAttribution()),
+    (DeclaredModel("old/model"), LastKnownReadingAttribution(("fixer",))),
+])
+def test_configuration_labels_the_displayed_value_not_a_historical_unknown(
+    wired: Comms, historical_model: ThreadModel, expected: ReadingAttribution,
+) -> None:
+    thread = wired.registry.require("fixer")
+    historical = UnrecordedThreadIncarnation(thread.name)
+    origin = UnattributedRuntimeOrigin(thread.name, thread.name, 12.0)
+    info = AgentRuntimeInfo(model_observation=origin.capture(historical_model))
+    wired.agents.runtime_info.replace(RuntimeInfoDocument({historical: info}))
+    answer = wired.configuration.answer(thread.name)
+    assert answer.model_attribution == expected
+    wired.threads.set_thread_configuration(thread, NextTurnConfiguration(model=ChosenModel("configured/model")))
+    configured = wired.configuration.answer(thread.name)
+    assert configured.model == "configured/model"
+    assert configured.model_attribution == CurrentReadingAttribution()
 
 
 def test_recorded_runtime_follows_its_birth_not_a_reused_name() -> None:

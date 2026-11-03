@@ -24,14 +24,16 @@ class ThreadConfiguration:
         snapshot = self.registry.snapshot()
         thread = snapshot.require(name)
         info = self.agents.runtime_info_for(thread, snapshot)
+        selected = thread.model.applied(info.model)
+        attribution = selected.display_attribution(thread.model.observation_attribution(info.model_attribution()))
         return CoordinationChangedUpdate(
             thread.incarnation.require_recorded(),
             str(self.root.resolve()),
             ProcessIdentity.capture(os.getpid()),
             thread.worktree,
-            thread.model.applied(info.model).otherwise(NativeThreadDefaults.model.text),
+            selected.otherwise(NativeThreadDefaults.model.text),
             thread.thinking_level.wire_value(),
             thread.display_title,
             info.context_reading(),
-            model_attribution=thread.model.observation_attribution(info.model_attribution()),
+            model_attribution=attribution,
         )

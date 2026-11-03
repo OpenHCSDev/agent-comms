@@ -67,7 +67,7 @@ if TYPE_CHECKING:
     from .input_drain import InputDrain
     from .rule_deal import Redeals
     from .runtime_info import AgentRuntimeInfo
-    from .runtime_field import RuntimePublication
+    from .runtime_field import RuntimeOrigin
     from .threads import Thread
     from .started_input import StartedInput
     from .turn_input_source import OriginalTurnInput
@@ -409,7 +409,7 @@ class Error(AgentEvent):
 class RuntimeInfoObservation(AgentEvent):
     """Record one producer observation through the existing runtime-info owner."""
 
-    def project_runtime_info(self, current: AgentRuntimeInfo, publication: RuntimePublication) -> AgentRuntimeInfo:
+    def project_runtime_info(self, current: AgentRuntimeInfo, origin: RuntimeOrigin) -> AgentRuntimeInfo:
         return current
 
     async def record_in(self, consumer: AgentEventConsumer) -> None:
@@ -424,9 +424,9 @@ class ContextUsageObservation(RuntimeInfoObservation):
 
     context_used: PiCount = field(default_factory=UnreportedCount)
 
-    def project_runtime_info(self, current: AgentRuntimeInfo, publication: RuntimePublication) -> AgentRuntimeInfo:
-        return replace(super().project_runtime_info(current, publication),
-                       context_used_observation=publication.capture(self.context_used))
+    def project_runtime_info(self, current: AgentRuntimeInfo, origin: RuntimeOrigin) -> AgentRuntimeInfo:
+        return replace(super().project_runtime_info(current, origin),
+                       context_used_observation=origin.capture(self.context_used))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -435,9 +435,9 @@ class ContextSizeObservation(RuntimeInfoObservation):
 
     context_size: PiCount = field(default_factory=UnreportedCount)
 
-    def project_runtime_info(self, current: AgentRuntimeInfo, publication: RuntimePublication) -> AgentRuntimeInfo:
-        return replace(super().project_runtime_info(current, publication),
-                       context_size_observation=publication.capture(self.context_size))
+    def project_runtime_info(self, current: AgentRuntimeInfo, origin: RuntimeOrigin) -> AgentRuntimeInfo:
+        return replace(super().project_runtime_info(current, origin),
+                       context_size_observation=origin.capture(self.context_size))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -451,9 +451,9 @@ class ModelObservation(RuntimeInfoObservation):
 
     model: ThreadModel = UndeclaredModel()
 
-    def project_runtime_info(self, current: AgentRuntimeInfo, publication: RuntimePublication) -> AgentRuntimeInfo:
-        return replace(super().project_runtime_info(current, publication),
-                       model_observation=publication.capture(self.model))
+    def project_runtime_info(self, current: AgentRuntimeInfo, origin: RuntimeOrigin) -> AgentRuntimeInfo:
+        return replace(super().project_runtime_info(current, origin),
+                       model_observation=origin.capture(self.model))
 
 
 @dataclass(frozen=True, kw_only=True)

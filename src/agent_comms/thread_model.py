@@ -66,6 +66,10 @@ class ThreadModel(SubclassUnion, ModelSelection, affix="Model"):
     def observation_attribution(self, observed: ReadingAttribution) -> ReadingAttribution:
         return CurrentReadingAttribution()
 
+    def display_attribution(self, selected: ReadingAttribution) -> ReadingAttribution:
+        """A named displayed value retains the source selected for it."""
+        return selected
+
     @abstractmethod
     def applied(self, previous: ThreadModel) -> ThreadModel:
         """An undeclared model takes the previous or observed one; a declared one keeps itself."""
@@ -101,6 +105,10 @@ class DeclaredModel(NamedModel, ThreadModel):
 class UndeclaredModel(UnselectedModel, ThreadModel):
     def observation_attribution(self, observed: ReadingAttribution) -> ReadingAttribution:
         return observed
+
+    def display_attribution(self, selected: ReadingAttribution) -> ReadingAttribution:
+        """The displayed fallback comes from current defaults, not an old unknown."""
+        return CurrentReadingAttribution()
 
     def applied(self, previous: ThreadModel) -> ThreadModel:
         return previous
