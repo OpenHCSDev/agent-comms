@@ -43,33 +43,6 @@ if TYPE_CHECKING:
 _DEFAULT_PRESENCE = ProcessThreadStatus()
 
 
-class ProjectThreadSelection:
-    """The registry's complete answer, including absence and ambiguity."""
-
-    @classmethod
-    def from_threads(cls, threads: tuple[Thread, ...]) -> ProjectThreadSelection:
-        if not threads:
-            return NoProjectThread()
-        if len(threads) == 1:
-            return FoundProjectThread(threads[0])
-        return SeveralProjectThreads(threads)
-
-
-@dataclass(frozen=True, slots=True)
-class NoProjectThread(ProjectThreadSelection):
-    """There is no declared ACP thread at this project."""
-
-
-@dataclass(frozen=True, slots=True)
-class FoundProjectThread(ProjectThreadSelection):
-    thread: Thread
-
-
-@dataclass(frozen=True, slots=True)
-class SeveralProjectThreads(ProjectThreadSelection):
-    threads: tuple[Thread, ...]
-
-
 class Registration:
     """Own registration transactions; never borrow a Comms or facade's state."""
 
@@ -445,6 +418,7 @@ class Registration:
     require = reading(RegistryDocument.require)
     status = reading(RegistryDocument.status)
     user_thread = reading(RegistryDocument.user_thread)
+    session_thread = reading(RegistryDocument.session_thread)
 
     def goal_history(
         self, name: str, scope: GoalScope = AllGoals()
@@ -455,26 +429,6 @@ class Registration:
         return GoalHistoryStore(self.store.path).history(
             thread.incarnation.wire_birth, thread.goal, scope
         )
-
-    def session_thread(
-        self, project_path: Path, preferred: str | None = None,
-    ) -> ProjectThreadSelection:
-        """Select an unbound project's preferred name or sole declared ACP thread.
-
-        Preferred names keep their previous precedence, including non-ACP
-        threads. Bound sessions use strict lookup instead of project discovery.
-        """
-        project = Path(project_path).expanduser().resolve()
-        document = self.store.read()
-        located = tuple(t for t in document.threads.values() if t.project_path == project)
-        if preferred:
-            selected = document.canonical_name(preferred)
-            for thread in located:
-                if thread.name == selected:
-                    return FoundProjectThread(thread)
-        return ProjectThreadSelection.from_threads(tuple(
-            member for thread in located for member in thread.role.acp_thread(thread)
-        ))
 
     def all_threads(self) -> Mapping[str, Thread]:
         return dict(self.store.read().threads)

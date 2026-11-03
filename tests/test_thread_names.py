@@ -52,3 +52,22 @@ def test_rename_takes_its_own_alias_and_refuses_another_threads(tmp_path):
         comms.threads._rename_thread("other", "worker")
     assert comms.threads._rename_thread("renamed", "worker").current == "worker"
     assert comms.registry.canonical_name("renamed") == "worker"
+
+
+def test_a_remote_ui_reads_the_registry_with_its_renames(tmp_path):
+    """The registry Core answers survives the wire: a rename's alias still resolves remotely."""
+    from agent_comms.core_access import LocalCoreAccess
+    from agent_comms.nominal.field_codec import FieldCodec
+    from agent_comms.tools import CommsRegistryTool, RegistryRead
+
+    comms = wire(tmp_path / "wire")
+    _declare(comms, "worker", str(tmp_path))
+    comms.registry.rename("worker", "renamed")
+    answer = LocalCoreAccess(comms).call(CommsRegistryTool())
+    received = FieldCodec.decode(RegistryRead, FieldCodec.encode(answer))
+    assert received.snapshot == comms.registry.snapshot()
+    assert received.snapshot.canonical_name("worker") == "renamed"
+    # An unbound session resolves its project's thread from the received snapshot alone.
+    assert received.snapshot.session_thread(tmp_path, "worker").name_or("worker") == "renamed"
+    assert received.snapshot.session_thread(tmp_path / "elsewhere", "worker").name_or("kept") == "kept"
+    assert comms.registry.session_thread(tmp_path, "worker").name_or("worker") == "renamed"

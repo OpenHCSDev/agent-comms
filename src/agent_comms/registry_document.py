@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from pathlib import Path
 from abc import ABC, abstractmethod
 from collections import ChainMap
 from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping, Sequence
@@ -138,6 +139,40 @@ class ResolvedChannel(ResolvedTarget):
         )
 
 
+class ProjectThreadSelection:
+    """The registry's complete answer, including absence and ambiguity."""
+
+    @classmethod
+    def from_threads(cls, threads: tuple[Thread, ...]) -> ProjectThreadSelection:
+        if not threads:
+            return NoProjectThread()
+        if len(threads) == 1:
+            return FoundProjectThread(threads[0])
+        return SeveralProjectThreads(threads)
+
+    def name_or(self, fallback: str) -> str:
+        """Keep the caller's existing identity unless one thread was selected."""
+        return fallback
+
+
+@dataclass(frozen=True, slots=True)
+class NoProjectThread(ProjectThreadSelection):
+    """There is no declared ACP thread at this project."""
+
+
+@dataclass(frozen=True, slots=True)
+class FoundProjectThread(ProjectThreadSelection):
+    thread: Thread
+
+    def name_or(self, fallback: str) -> str:
+        return self.thread.name
+
+
+@dataclass(frozen=True, slots=True)
+class SeveralProjectThreads(ProjectThreadSelection):
+    threads: tuple[Thread, ...]
+
+
 class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thread]):
     """Presence reads shared by the acquired document and its detached cut."""
 
@@ -234,6 +269,25 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
 
     def user_thread(self) -> UserThreadLookup[Thread]:
         return self._human.map(self.require)
+
+    def session_thread(
+        self, project_path: Path, preferred: str | None = None,
+    ) -> ProjectThreadSelection:
+        """Select an unbound project's preferred name or sole declared ACP thread.
+
+        Preferred names keep their previous precedence, including non-ACP
+        threads. Bound sessions use strict lookup instead of project discovery.
+        """
+        project = Path(project_path).expanduser().resolve()
+        located = tuple(t for t in self.threads.values() if t.project_path == project)
+        if preferred:
+            selected = self.canonical_name(preferred)
+            for thread in located:
+                if thread.name == selected:
+                    return FoundProjectThread(thread)
+        return ProjectThreadSelection.from_threads(tuple(
+            member for thread in located for member in thread.role.acp_thread(thread)
+        ))
 
 
 class UserThreadLookup[Value](ABC):
