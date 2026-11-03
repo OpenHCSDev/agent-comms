@@ -1,6 +1,9 @@
 """A held phase's clock reads the real stored order history, not an inline tuple double."""
 from dataclasses import replace
 
+import pytest
+
+from agent_comms.nominal.field_codec import OrderId
 from agent_comms.nominal_census import NominalCensus
 from agent_comms.plan_reading import PlanReading
 from agent_comms.phase_evidence import MainTree
@@ -14,12 +17,12 @@ def held_order(comms, number: int, at: float, previous: tuple[float, ...] = ()):
     store = comms.goals.todos
     original = store.get("P1")
     current = replace(original, id=f"P{number}", order=replace(original.order.checked(),
-        id=f"order-{number}", at=RecordedEventTime(at), serves=BusWriterPhase))
+        id=OrderId.mint(), at=RecordedEventTime(at), serves=BusWriterPhase))
     with store.writing() as db:
         current.upsert(db)
         for timestamp in previous:
             StoredOrderStory.append(db, current.id, replace(current.order.checked(),
-                id=f"earlier-{number}-{timestamp}", at=RecordedEventTime(timestamp)))
+                id=OrderId.mint(), at=RecordedEventTime(timestamp)))
     return store.get(current.id)
 
 
@@ -51,5 +54,28 @@ def test_an_unplanned_reason_answers_without_reading_main(source_repository):
 
     reading = PlanReading((), MainTree.of(source_repository, NominalCensus()))
     reason = "This repair keeps the order tool usable before the planned work resumes."
-    assert UnplannedPhase.order_refusals(reading, reason) == ()
+    assert UnplannedPhase.order_refusals(lambda: reading, reason) == ()
     assert not reading.reads
+
+
+def unavailable_plan() -> PlanReading:
+    raise OSError("The unrelated historical checkout is unreadable")
+
+
+def test_explicit_unplanned_reason_needs_no_plan_acquisition():
+    from agent_comms.plan_phases import UnplannedPhase
+
+    reason = "This repair keeps the order tool usable before the planned work resumes."
+    assert UnplannedPhase.order_refusals(unavailable_plan, reason) == ()
+
+
+@pytest.mark.parametrize("reason", ("", "A short reason"))
+def test_missing_unplanned_reason_still_requires_plan_evidence(reason):
+    from agent_comms.plan_phases import UnplannedPhase
+
+    with pytest.raises(OSError, match="historical checkout"):
+        UnplannedPhase.order_refusals(unavailable_plan, reason)
+
+
+def test_a_named_plan_phase_needs_no_unrelated_plan_acquisition():
+    assert BusWriterPhase.order_refusals(unavailable_plan, "") == ()
