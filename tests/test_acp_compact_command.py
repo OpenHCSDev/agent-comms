@@ -22,10 +22,10 @@ from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.pi_counts import PiCount
 from delivery_owner_fixture import canonical_agent
 
-PLACED = PlacedCompaction("summary", "first-kept", PiCount.from_wire(1200))
+PLACED = PlacedCompaction("summary", PiCount.from_wire(1200))
 PLACED_REPLY = PromptResponse(
     stop_reason="end_turn",
-    field_meta=encode_updates(CompactionCommittedUpdate("summary", "first-kept")),
+    field_meta=encode_updates(CompactionCommittedUpdate("summary")),
 )
 
 

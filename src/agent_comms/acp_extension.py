@@ -676,10 +676,9 @@ class CompactionChangedUpdate(AgentCommsUpdate):
 
 @dataclass(frozen=True)
 class CompactionCommittedUpdate(AgentCommsUpdate):
-    """The /compact reply: the runtime placed this summary before ``first_kept``."""
+    """The /compact reply: the runtime placed this summary."""
 
     summary: str
-    first_kept: str | None
 
 
 @dataclass(frozen=True)

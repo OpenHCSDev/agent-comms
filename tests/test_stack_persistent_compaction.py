@@ -304,7 +304,6 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch, n
             compactions = [row for row in rows if row.get("type") == "compaction"]
             assert len(compactions) == 1
             assert summary in compactions[0]["summary"]
-            assert compactions[0]["firstKeptEntryId"] == committed[0].first_kept
             await asyncio.wait_for(
                 InitialInput.run(
                     owner.inputs, "worker", "worker", "AFTER_COMPACT", input_id=InputId.mint()
