@@ -125,7 +125,8 @@ class SecondsWait(SingleFieldValue, InboxWait):
     def read(self, bus: Watched, page: Callable[[], InboxPage]) -> InboxPage:
         deadline = time.monotonic() + self.seconds
         with bus.changes() as changes:
-            while not (current := page()).page.messages and (left := deadline - time.monotonic()) > 0:
-                changes.wait(left)
+            while (not (current := page()).page.messages
+                   and (left := deadline - time.monotonic()) > 0):
+                changes.block_until_change(left)
                 changes.changed_paths()
             return current

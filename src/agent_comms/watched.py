@@ -300,7 +300,7 @@ class ChangedSources(ExitStack):
         self._dirty.clear()
         return changed
 
-    def wait(self, seconds: float) -> None:
+    def block_until_change(self, seconds: float) -> None:
         """Block until the kernel reports a change to a registered source or `seconds` pass;
         changed_paths then says which."""
         self._readiness.poll(max(0, round(seconds * 1000)))
