@@ -8,7 +8,7 @@ from agent_comms.nominal.field_codec import WireExclude
 from .input_key import InputKeyText
 from .agent_inbox import TakenInputStart
 
-from .tool_request import ListedNames, LiveOwnerTool, OmittedNames, PublishingTool, PublishingToolRequest, ReadTool, SubjectBinding, ThreadReadTool, ThreadToolRequest, ToolRequest, tool_field
+from .tool_request import ListedNames, LiveOwnerTool, OmittedNames, PublishingTool, PublishingToolRequest, ReadTool, SubjectBinding, ThreadReadTool, ThreadContextAction, ThreadToolRequest, ToolRequest, tool_field
 from .order_tools import MessagePublished
 from .native_tools import CommunicationCall
 
@@ -1243,10 +1243,9 @@ class CommsCancelRestartTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsForkTool(LiveOwnerTool, NativeOwnerCommand, ToolRequest):
+class CommsForkTool(LiveOwnerTool, NativeOwnerCommand, ThreadContextAction):
     label = "Comms Fork"
     description = "Fork a child agent thread from a registered parent's persistent session."
-    context = "thread"
     action_label = "Fork from this thread"
     name: Annotated[str, *tool_field("Child thread name")]
     parent: Annotated[str, *tool_field("Parent thread name", binding=SubjectBinding)]
@@ -1285,10 +1284,9 @@ class CommsInstallTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsStopTool(NativeOwnerCommand, OwnerLifecycleControl, ToolRequest):
+class CommsStopTool(NativeOwnerCommand, OwnerLifecycleControl, ThreadContextAction):
     label = "Stop Comms Thread"
     description = "Stop a thread after verifying that its process owns the registered identity."
-    context = "thread"
     action_label = "Stop process"
     name: Annotated[str, *tool_field("Thread name", binding=SubjectBinding)]
 
@@ -1297,14 +1295,13 @@ class CommsStopTool(NativeOwnerCommand, OwnerLifecycleControl, ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsStartTool(LiveOwnerTool, NativeOwnerCommand, StartOwnerControl, ToolRequest):
+class CommsStartTool(LiveOwnerTool, NativeOwnerCommand, StartOwnerControl, ThreadContextAction):
     label = "Start Comms Thread"
     description = (
         "Start a stopped agent thread with its saved conversation and configuration. "
         "Reuses an already-running owner without interrupting it. The returned PID is "
         "reserved; startup may still be in progress. Does not send a new task."
     )
-    context = "thread"
     action_label = "Start thread"
     name: Annotated[str, *tool_field("Thread to start", binding=SubjectBinding)]
 
@@ -1313,14 +1310,13 @@ class CommsStartTool(LiveOwnerTool, NativeOwnerCommand, StartOwnerControl, ToolR
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsQueueRestartTool(LiveOwnerTool, NativeOwnerCommand, OwnerLifecycleControl, ToolRequest):
+class CommsQueueRestartTool(LiveOwnerTool, NativeOwnerCommand, OwnerLifecycleControl, ThreadContextAction):
     label = "Queue Idle Owner Restart"
     description = (
         "Queue an exact live owner incarnation for restart when idle. Never interrupt an active "
         "turn. A changed owner or uncertain attempt is never retried automatically. "
         "Restarts in the calling process's runtime; does not deploy another runtime."
     )
-    context = "thread"
     action_label = "Queue idle restart"
     name: Annotated[str, *tool_field("Live agent thread", binding=SubjectBinding)]
 
@@ -1329,10 +1325,9 @@ class CommsQueueRestartTool(LiveOwnerTool, NativeOwnerCommand, OwnerLifecycleCon
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsArchiveTool(ArchiveOwnerControl, ToolRequest):
+class CommsArchiveTool(ArchiveOwnerControl, ThreadContextAction):
     label = "Archive Comms Thread"
     description = "Archive a stopped thread while retaining its messages."
-    context = "thread"
     action_label = "Archive stopped thread"
     name: Annotated[str, *tool_field("Stopped thread name", binding=SubjectBinding)]
 
