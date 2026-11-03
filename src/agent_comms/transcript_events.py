@@ -120,6 +120,8 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     category: ClassVar[type[MessageCategory]]
     position: int | NativeItemId
     timestamp: float
+    ordinal: int = 0
+    """This event's place among the events of its one source record; see RecordedEntry.project_messages."""
     routing = None
     source = None
 

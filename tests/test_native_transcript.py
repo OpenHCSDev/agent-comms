@@ -1,7 +1,7 @@
 """Saved Pi boundary, bounded readers and presentation roundtrips."""
 
 import json
-from dataclasses import fields
+from dataclasses import fields, replace
 from pathlib import Path
 
 import pytest
@@ -56,10 +56,11 @@ def test_native_discriminator_is_separate_from_normalized_family_codec():
     normalized = FieldCodec.encode(entry)
     assert normalized["kind"] == "message" and normalized["message"]["kind"] == "user"
     assert "type" not in normalized and "role" not in normalized["message"]
-    # The entry was read from its own bytes, so its record starts at offset 0.
+    # The entry was read from its own bytes, so its record starts at offset 0; its two
+    # parts share that position and are told apart by their ordinal in the record.
     assert entry.events(TranscriptProjection(position=0)) == [
         transcript_records.event(UserTranscript, "look", position=0),
-        transcript_records.event(UserTranscript, "[Image attachment: image/png]", position=0),
+        replace(transcript_records.event(UserTranscript, "[Image attachment: image/png]", position=0), ordinal=1),
     ]
     assert entry.message.parts[1].data == "aGVsbG8="
 

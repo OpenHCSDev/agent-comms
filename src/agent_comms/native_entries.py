@@ -125,8 +125,11 @@ class RecordedEntry(PiPayload):
     def events(self, context: TranscriptProjection) -> list[TranscriptEvent]: ...
 
     def project_messages(self, context: TranscriptProjection, timestamps: Iterable[float]) -> list[TranscriptEvent]:
-        return [event for message, timestamp in zip(self.messages, timestamps, strict=True)
-                for event in message.transcript_events(context, timestamp)]
+        """The record's events in order. They share its position, so each carries its ordinal:
+        a Pi reply's two thinking parts around a tool call are two occurrences, not one."""
+        events = (event for message, timestamp in zip(self.messages, timestamps, strict=True)
+                  for event in message.transcript_events(context, timestamp))
+        return [replace(event, ordinal=ordinal) for ordinal, event in enumerate(events)]
 
     @property
     def original_id(self):
