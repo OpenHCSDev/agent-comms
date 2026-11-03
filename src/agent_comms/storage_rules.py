@@ -214,9 +214,11 @@ class RepositoryAllocation(CheckoutAllocation):
 
     suffix: str
 
-    @abstractmethod
     def owns_declared(self, rule: StorageRule, owner: Thread, path: Path,
-                      repository: RepositoryName, reads: RepositoryReads) -> bool: ...
+                      repository: RepositoryName, reads: RepositoryReads) -> bool:
+        # for_path has checked the physical allocation and parsed its goal/problem.
+        # Repository identity, not today's generated path spelling, owns the suffix.
+        return repository.named(self.suffix)
 
     def owns_present(self, rule: StorageRule, owner: Thread, path: Path,
                      reads: RepositoryReads) -> bool:
@@ -251,10 +253,6 @@ class RepositoryCheckoutAllocation(ProblemCheckoutAllocation, RepositoryAllocati
     def allocated(cls, problem: str, suffix: str) -> Iterator[CheckoutAllocation]:
         if suffix:
             yield cls(problem, suffix)
-
-    def owns_declared(self, rule: StorageRule, owner: Thread, path: Path,
-                      repository: RepositoryName, reads: RepositoryReads) -> bool:
-        return path == rule.repository_checkout(rule.roots_of(owner), self.problem, repository)
 
 
 @dataclass(frozen=True)
@@ -293,10 +291,6 @@ class GoalCheckoutAllocation(RepositoryAllocation, EditableCheckoutAllocation):
         except MalformedRecord:
             return  # Another allocation member owns names outside the goal-id spelling.
         yield cls(goal, suffix)
-
-    def owns_declared(self, rule: StorageRule, owner: Thread, path: Path,
-                      repository: RepositoryName, reads: RepositoryReads) -> bool:
-        return path == rule.repository_checkout(rule.roots_of(owner), self.goal, repository)
 
 
 class ScopedDirectory(ValueDirective[Path]):
