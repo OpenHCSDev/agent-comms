@@ -10,7 +10,7 @@ from yarl import URL
 from agent_comms.comms import Comms
 from agent_comms.connector import Connector
 from agent_comms.connector_store import ConnectorStore, UiReadAccess
-from agent_comms.remote_core import ConnectorAccess
+from agent_comms.remote_core import ConnectorClient
 from agent_comms.repo import Checkout
 from agent_comms.ui_model.observation import (
     ObservationProcess,
@@ -30,7 +30,7 @@ class Credential:
 
 
 @dataclass(frozen=True)
-class TestConnectorSource(ConnectorAccess):
+class TestConnectorSource(ConnectorClient):
     """The peer reads only the endpoint, credential and TLS trust; the test server is plain
     HTTP, which the owner's HTTPS profile refuses, so the test names them directly."""
 
