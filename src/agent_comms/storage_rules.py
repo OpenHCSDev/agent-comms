@@ -321,7 +321,7 @@ class StorageRule(RoomAllocation, DurableFile):
     host_memory_bytes: ClassVar[int] = 512 * 2**20
     # Independent interactive children; a reporting budget, never a killing limit.
     native_owner_memory_bytes: ClassVar[int] = 192 * 2**20
-    floor_gib: float = 10.0  # under this nothing that allocates may run
+    floor_gib: float = 10.0  # critical pressure observation only; never allocation admission
     cleanup_gib: float = 30.0  # under this a cleanup owner is due; it does not stop builds
     memory_gib: float = 3.0  # available memory under this makes a cleanup owner due
     idle_minutes: float = 30.0  # a pytest temp dir untouched this long holds memory for nothing
@@ -594,10 +594,6 @@ class StorageRule(RoomAllocation, DurableFile):
     def cleanup_due(self, free_gib: float) -> bool:
         return free_gib < self.cleanup_gib
 
-    def require_floor(self) -> None:
-        if self.below_floor(self.free_gib()):
-            self.deny(f'allocation requires {self.floor_gib:g} GiB free on {self.volume}')
-
     def require_destination(self, thread: Thread, path: Path) -> None:
         """Every destination obeys artifact and scratch ownership, without reading Git."""
         if '.artifacts' in path.parts:
@@ -624,8 +620,8 @@ class StorageRule(RoomAllocation, DurableFile):
             f'{self.roots_of(thread).scratch}/. '
             f'Run tests with PYTHONPATH=src on the shared {" or ".join(pythons)}; '
             'never create a venv, never uv sync, never write .artifacts, never git clone. '
-            f'Below {self.floor_gib:g} GB free on {self.volume}, no worktree, venv, build, install '
-            'or recording.'
+            f'Below {self.floor_gib:g} GiB free on {self.volume}, report disk pressure; '
+            'free-space warnings do not refuse work.'
         )
 
 

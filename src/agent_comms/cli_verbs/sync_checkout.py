@@ -22,5 +22,4 @@ class SyncCheckoutCliCommand(HomeCheckoutCliCommand, declared_name="sync-checkou
 
     def apply(self, ctx: Comms) -> SyncedCheckoutResult:
         _, checkout = self.home(ctx)
-        ctx.registry.storage_rule.require_floor()
         return SyncedCheckoutResult(checkout.path, checkout.sync())

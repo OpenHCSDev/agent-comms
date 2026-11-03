@@ -312,15 +312,14 @@ def test_remote_goal_checkout_keeps_independent_owners_separate(
         StorageProjection(case.rule, peer, case.comms).require_write(case.path / 'foreign.py')
 
 
-def test_remote_goal_checkout_checks_disk_before_clone(remote_goal_checkout: RemoteGoalCheckout) -> None:
+def test_remote_goal_checkout_runs_below_the_pressure_warning(remote_goal_checkout: RemoteGoalCheckout) -> None:
     case = remote_goal_checkout
     strict = replace(case.rule, floor_gib=2**40)
     StorageRule.path_in(case.comms.root).write_text(FieldCodec.compact(FieldCodec.encode(strict)))
-    refused = case.run()
-    assert refused.returncode != 0
-    assert 'GiB free' in refused.stdout + refused.stderr
-    assert not case.donor.exists()
-    assert not case.path.exists()
+    created = case.run()
+    assert created.returncode == 0, created.stdout + created.stderr
+    assert case.donor.exists()
+    assert case.path.exists()
 
 
 def test_explicit_remote_spelling_does_not_capture_relative_local_paths(
