@@ -2760,12 +2760,23 @@ class FieldCodec(MroDispatch, Sealed):
             alternatives = []
             for member in target.members_with(target):
                 tag = member.family_discriminator
-                alternatives.append(cls._record_schema(
-                    (member,), {tag: {"type": "string", "const": member.declared_name}}, [tag]
-                ))
+                selector = {tag: {"type": "string", "const": member.declared_name}}
+                alternatives.append(
+                    cls._record_schema((member,), selector, [tag]) if is_dataclass(member)
+                    # A model member (a Pydantic wire model) describes its own fields.
+                    else cls._tagged_model_schema(member, selector, tag))
             return cls.alternatives_schema("oneOf", alternatives)
         finally:
             cls._expanding_families.reset(token)
+
+    @classmethod
+    def _tagged_model_schema(
+        cls, member: type, selector: dict[str, JsonValue], tag: str,
+    ) -> dict[str, JsonValue]:
+        schema = dict(compile_decoder(member).value_schema())
+        schema["properties"] = {**selector, **schema.get("properties", {})}
+        schema["required"] = [tag, *schema.get("required", [])]
+        return schema
 
     @classmethod
     def record_schema(cls, *targets: type) -> dict[str, JsonValue]:
