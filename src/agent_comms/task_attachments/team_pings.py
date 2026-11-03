@@ -78,6 +78,10 @@ class Ping(DeclaredFamily, affix="Ping"):
     @abstractmethod
     def key(self) -> object: ...
 
+    def observed_as(self, observation: TextDigest) -> Ping:
+        """The same line under another observation digest; only a rule line has one."""
+        return self
+
     @property
     @abstractmethod
     def alarm_kind(self) -> type[DeclaredFamily]: ...
@@ -149,6 +153,9 @@ class RulePing(Ping):
 
     def alarm_pings(self) -> tuple[Ping, ...]:
         return self.rule.alarm_pings(self)
+
+    def observed_as(self, observation: TextDigest) -> Ping:
+        return replace(self, observation=observation)
 
     @classmethod
     def capture(cls, rule: StandingRule) -> Self:

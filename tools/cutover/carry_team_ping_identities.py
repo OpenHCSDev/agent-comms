@@ -29,12 +29,14 @@ from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import RegistryFile, RootFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceHolder
 from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.registry_document import RegistryDocument
 from agent_comms.recorded_time import EventTime
 from agent_comms.store_files import AtomicFile
 from agent_comms.task_attachments.team_pings import Ping, TeamUpdate, TeamUpdateStore
 from agent_comms.team.standing import TeamDeaf, UnitDeaf
 from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.threads import Thread
 from cutover.carry_team_project_lead import TeamProjectLead
 
 
@@ -53,7 +55,7 @@ class LeadWitness(Unwitnessed):
     current: TextDigest
 
     def bound(self, ping: Ping) -> Ping:
-        return replace(ping, observation=self.current)
+        return ping.observed_as(self.current)
 
 
 @dataclass(frozen=True)
@@ -65,7 +67,7 @@ class BirthWitness(Unwitnessed):
 
     def bound(self, ping: Ping) -> Ping:
         born = EventTime.capture(self.birth.created_at).chronology()
-        return replace(ping, observation=self.current) if born <= ping.since.chronology() else ping
+        return ping.observed_as(self.current) if born <= ping.since.chronology() else ping
 
 
 class TeamPingIdentities(Carry):
@@ -77,26 +79,21 @@ class TeamPingIdentities(Carry):
         """A line's digest as the previous runtime computed it: its type and compared values."""
         return TextDigest(FieldCodec.comparison_digest((rule, values)))
 
-    @staticmethod
-    def birth(row: JsonValue) -> RecordedThreadIncarnation:
-        record = FieldCodec.decode(dict[str, JsonValue], row)
-        return RecordedThreadIncarnation(FieldCodec.decode(str, record["name"]),
-                                         FieldCodec.decode(float, record["created_at"]))
-
-    def witnesses(self) -> dict[TextDigest, Unwitnessed]:
+    def witnesses(self) -> dict[object, Unwitnessed]:
         """Each retired digest original evidence can bind, read raw from the registry: its
         thread rows read the same in every version, and only version 1 stores a lead."""
         path = RegistryFile.path_in(self.root)
         document = FieldCodec.decode(dict[str, JsonValue], FieldCodec.parse(path.read_text()))
-        threads = FieldCodec.decode(dict[str, JsonValue], document["threads"])
-        witnesses: dict[TextDigest, Unwitnessed] = {}
-        for row in threads.values():
-            born = self.birth(row)
+        threads = FieldCodec.decode(
+            dict[str, Thread], document[FieldCodec.record_key(RegistryDocument, "threads")])
+        witnesses: dict[object, Unwitnessed] = {}
+        for thread in threads.values():
+            born = thread.incarnation.require_recorded()
             witnesses[self.retired(UnitDeaf, born.name)] = BirthWitness(
                 born, UnitDeaf(0.0, born).observation_key())
         if TeamProjectLead.retired_key in document:  # a version-1 registry with a team
             project = FieldCodec.decode(dict[str, JsonValue], document[TeamProjectLead.retired_key])
-            lead = self.birth(project[TeamProjectLead.retired_field])
+            lead = FieldCodec.decode(RecordedThreadIncarnation, project[TeamProjectLead.retired_field])
             witnesses[self.retired(TeamDeaf)] = LeadWitness(TeamDeaf(0.0, lead).observation_key())
         return witnesses
 
