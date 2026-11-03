@@ -32,6 +32,8 @@ from functools import cached_property, partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self, final
 
+from pydantic import JsonValue
+
 from agent_comms_hooks import ToolRefusedError
 from metaclass_registry.mro_dispatch import MroDispatch, handles
 
@@ -59,7 +61,7 @@ from agent_comms.history_views import RetiredViews
 from agent_comms.message_notification import NotificationPass, NotificationWindow
 from agent_comms.notification_read import NotificationsRead, UnreadableNotificationsRead
 from agent_comms.message_reference import MessageReference
-from agent_comms.nominal.field_codec import MessageId
+from agent_comms.nominal.field_codec import DeclaredError, FieldCodec, MessageId, SubclassUnion, TaggedRecordMember
 from agent_comms.nominal.fold import Absorbs, Accumulates, Fold
 from agent_comms.notification_reads import NotificationRead
 from agent_comms.read_basis import DisplayCut, NoDisplaySelection
@@ -280,7 +282,7 @@ class ReadingObservation[InterestT: InterestRequest](Observation[InterestT]):
 
 
 @final
-class UnreadableHistory(ValueError):  # noqa: N818 - nominal stored-read state
+class UnreadableHistory(ValueError, DeclaredError):  # noqa: N818 - nominal stored-read state
     """A strict stored-data read failed, not the observer or the whole UI.
 
     The reader runtime is known; the writer version is not inferred from a
@@ -302,6 +304,18 @@ class UnreadableHistory(ValueError):  # noqa: N818 - nominal stored-read state
             return ReadDeferred(error)
         except cls.UNREADABLE_READS as error:
             return ReadUnreadable(error, cls.capture(error))
+
+    # Its whole state is its two arguments: the reader runtime and the reason. A remote UI
+    # receives them as they are; the reader runtime then names the Core that failed.
+    wire_type: ClassVar[object] = tuple[str, str]
+
+    def to_wire(self) -> JsonValue:
+        wire: list[JsonValue] = list(self.args)
+        return wire
+
+    @classmethod
+    def from_wire(cls, data: object) -> UnreadableHistory:
+        return cls(*FieldCodec.decode(tuple[str, str], data))
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, UnreadableHistory):
@@ -528,18 +542,26 @@ class SubscribeTranscript(ReadTranscript):
     deferred_reads: ClassVar[tuple[type[Exception], ...]] = (StaleRevision,)
 
 
-class TranscriptPublicationState(ABC):
+class TranscriptPublicationState(SubclassUnion, affix=""):
+    """Whether a transcript read was already published; a remote UI sends it with its
+    read, so each record carries its kind."""
+
+    @classmethod
+    def decodes_tagged_records(cls) -> bool:
+        return True
+
     @abstractmethod
     def result(self, read: TranscriptRead) -> TranscriptSnapshotUpdate | TranscriptDraftUpdate: ...
 
 
-class NotPublished(TranscriptPublicationState):
+@dataclass(frozen=True)
+class NotPublished(TaggedRecordMember, TranscriptPublicationState):
     def result(self, read: TranscriptRead) -> TranscriptSnapshotUpdate:
         return TranscriptSnapshotUpdate.from_read(read)
 
 
 @dataclass(frozen=True)
-class Published(TranscriptPublicationState):
+class Published(TaggedRecordMember, TranscriptPublicationState):
     identity: TranscriptReadIdentity
 
     def result(self, read: TranscriptRead) -> TranscriptSnapshotUpdate | TranscriptDraftUpdate:
@@ -746,7 +768,7 @@ class TeamHudReading(ReadingObservation[ObserveTeamHud]):
 class ObserveViews(InterestRequest):
     """The thread incarnations and channel views open in the UI, to learn when one is retired."""
 
-    threads: frozenset
+    threads: frozenset[ThreadIncarnation]
     channels: frozenset[str]
 
     def observation(self) -> ViewReading:
@@ -1105,8 +1127,13 @@ class SidebarUnreadable(SidebarResult):
     error: UnreadableHistory
 
 
-class ThreadReadResult(PublishState, ABC):
-    """One thread's last read, including how to compare and display its answer."""
+class ThreadReadResult(PublishState, SubclassUnion, affix=""):
+    """One thread's last read, including how to compare and display its answer. A remote
+    UI receives it across the connector, so each record carries its kind."""
+
+    @classmethod
+    def decodes_tagged_records(cls) -> bool:
+        return True
 
     def same_as_presented(self, presented: ThreadPresented) -> bool:
         return False
@@ -1127,7 +1154,7 @@ class ThreadReadResult(PublishState, ABC):
 
 
 @dataclass(frozen=True)
-class ThreadPresented(ThreadReadResult):
+class ThreadPresented(TaggedRecordMember, ThreadReadResult):
     presentation: ThreadPresentation
 
     def same_observation(self, previous: ThreadReadResult) -> bool:
@@ -1152,7 +1179,7 @@ class ThreadPresented(ThreadReadResult):
 
 
 @dataclass(frozen=True)
-class ThreadUnavailable(ThreadReadResult):
+class ThreadUnavailable(TaggedRecordMember, ThreadReadResult):
     error: UnreadableHistory
 
     def status_row(self, name: str, owner: OpenThreadStatus) -> ThreadStatusModel:
@@ -1160,7 +1187,7 @@ class ThreadUnavailable(ThreadReadResult):
 
 
 @dataclass(frozen=True)
-class ThreadBusy(ThreadReadResult):
+class ThreadBusy(TaggedRecordMember, ThreadReadResult):
     def status_row(self, name: str, owner: OpenThreadStatus) -> ThreadStatusModel:
         return owner.open(name)
 
