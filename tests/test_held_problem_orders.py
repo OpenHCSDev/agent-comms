@@ -63,7 +63,8 @@ def held_team(pr_team, cited_source):
     practice = PracticeCopy(source.root, source.root.parent / f"{source.root.name}-copied")
     practice.include(tuple(RootFile.existing_in(practice.root)))
     (root, _) = practice.path, practice.measurement
-    ctx = source.model_copy(update={"root": root, "state": root / "state"})
+    # A copy keeps the source's wired bus (model_copy reruns no post-init): build the copy's own.
+    ctx = type(source)(root=root, actor=source.actor)
     yield ctx
     assert source.comms.goals.todos.get(todo.id) == original
 
