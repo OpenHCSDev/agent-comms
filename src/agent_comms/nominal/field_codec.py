@@ -3155,7 +3155,7 @@ class _UndeclaredDecoder(_JsonValueRepresentation, ValueDecoder[JsonValue]):
         if isinstance(value, type):
             return value.__module__, value.__qualname__
         if type(value) is dict:
-            return _PairKeyDictDecoder(dict, self, self).compared(value)
+            return _PairKeyDictDecoder(dict, self, self, (object, object)).compared(value)
         return compile_decoder(type(value)).compared(value)
 
 
@@ -3918,8 +3918,10 @@ class _ExceptionDecoder(ValueDecoder[BaseException]):
     target: type[BaseException]
 
     def reported(self) -> type[ReportedError]:
+        reporting: dict[type[BaseException], type[ReportedError]] = {
+            Exception: ReportedError, **ReportedError.reporting}
         try:
-            return {Exception: ReportedError, **ReportedError.reporting}[self.target]
+            return reporting[self.target]
         except KeyError:
             raise MalformedRecord(f"No reported error is declared for {self.target.__name__}") from None
 
