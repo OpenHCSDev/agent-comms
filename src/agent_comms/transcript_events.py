@@ -217,7 +217,6 @@ class TranscriptCoverage:
 @dataclass(frozen=True, kw_only=True)
 class RecordedTranscript(TranscriptEvent):
     routing: Routing = NoTurnRouting()
-    source: MessageReference | None = None
 
 
 class TextTranscript(TranscriptEvent):
@@ -464,16 +463,6 @@ class SentTranscript(OutgoingRoute, WireTextTranscript):
     def from_message(cls, message):
         return cls(message.body, timestamp=message.timestamp, source=message.reference,
                    routing=TurnRouting(reply=MessageRoute(message.sender, (message.target,))))
-
-    def matches(self, message: Message) -> bool:
-        return self == type(self).from_message(message)
-
-    def core_message(self, source) -> Message:
-        """Read the actual original; a stored report cannot invent its missing kind or role."""
-        original = source.sent_messages((self.source,)).get(self.source)
-        if original is not None and self.matches(original):
-            return original
-        raise ValueError("Sent report no longer matches its original assigned wire message")
 
 
 class ThinkingTranscript(ModelOutput, SilentTranscript, LiveTextTranscript):
