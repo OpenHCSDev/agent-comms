@@ -59,7 +59,7 @@ from agent_comms.history_views import RetiredViews
 from agent_comms.message_notification import NotificationPass, NotificationWindow
 from agent_comms.notification_read import NotificationsRead, UnreadableNotificationsRead
 from agent_comms.message_reference import MessageReference
-from agent_comms.nominal.field_codec import MessageId
+from agent_comms.nominal.field_codec import MessageId, SubclassUnion, TaggedRecordMember
 from agent_comms.nominal.fold import Absorbs, Accumulates, Fold
 from agent_comms.notification_reads import NotificationRead
 from agent_comms.read_basis import DisplayCut, NoDisplaySelection
@@ -1105,8 +1105,13 @@ class SidebarUnreadable(SidebarResult):
     error: UnreadableHistory
 
 
-class ThreadReadResult(PublishState, ABC):
-    """One thread's last read, including how to compare and display its answer."""
+class ThreadReadResult(PublishState, SubclassUnion, affix=""):
+    """One thread's last read, including how to compare and display its answer. A remote
+    UI receives it across the connector, so each record carries its kind."""
+
+    @classmethod
+    def decodes_tagged_records(cls) -> bool:
+        return True
 
     def same_as_presented(self, presented: ThreadPresented) -> bool:
         return False
@@ -1127,7 +1132,7 @@ class ThreadReadResult(PublishState, ABC):
 
 
 @dataclass(frozen=True)
-class ThreadPresented(ThreadReadResult):
+class ThreadPresented(TaggedRecordMember, ThreadReadResult):
     presentation: ThreadPresentation
 
     def same_observation(self, previous: ThreadReadResult) -> bool:
@@ -1152,7 +1157,7 @@ class ThreadPresented(ThreadReadResult):
 
 
 @dataclass(frozen=True)
-class ThreadUnavailable(ThreadReadResult):
+class ThreadUnavailable(TaggedRecordMember, ThreadReadResult):
     error: UnreadableHistory
 
     def status_row(self, name: str, owner: OpenThreadStatus) -> ThreadStatusModel:
@@ -1160,7 +1165,7 @@ class ThreadUnavailable(ThreadReadResult):
 
 
 @dataclass(frozen=True)
-class ThreadBusy(ThreadReadResult):
+class ThreadBusy(TaggedRecordMember, ThreadReadResult):
     def status_row(self, name: str, owner: OpenThreadStatus) -> ThreadStatusModel:
         return owner.open(name)
 
