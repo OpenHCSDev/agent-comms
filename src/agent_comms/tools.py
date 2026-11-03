@@ -89,6 +89,8 @@ from .pi_vocabulary import ServiceTier, ThinkingLevelField
 from .notification_evidence import AfterRecipient, FirstRecipient, RecipientCursor
 from .message_notification import MessageNotification
 from .presentation import ChannelView, WireRevision
+from .runtime_requests import QueueActionRuntimeRequest
+from .nominal.field_codec import ThreadLookup
 from .notification_evidence import RecipientLimit
 from .progress_claims import ProgressClaim
 from .relationships import (
@@ -426,6 +428,29 @@ class RetiredViewsRead(ToolResult):
     """Which of a UI's open views no longer have a source, as Core decides."""
 
     retired: RetiredViews
+
+
+@dataclass(frozen=True)
+class QueueActionApplied(ToolResult):
+    owner: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsQueueActionTool(ToolRequest[ToolCaller, QueueActionApplied]):
+    """A UI sends a queued message now, or clears a queue, at its original recipient's owner;
+    Core's host reaches the owner. Requires a human caller."""
+
+    label = "Queue action"
+    description = ("Send a queued message now, or clear the queue, at the original recipient's "
+                   "running owner; requires a human UI caller.")
+    lookup: Annotated[ThreadLookup, *tool_field("The original recipient's creation lookup")]
+    action: Annotated[type[QueueActionRuntimeRequest], *tool_field("Send now or clear")]
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> QueueActionApplied:
+        caller.require_human()
+        original = comms.registry.snapshot().born(self.lookup)
+        self.action.at_owner(comms.root, original)
+        return QueueActionApplied(original.name)
 
 
 @dataclass(frozen=True)

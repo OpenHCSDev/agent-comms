@@ -174,3 +174,15 @@ def test_a_ui_reads_and_orders_relationships_through_core(tmp_path):
     order = ThreadSort.members_with(ThreadSort)[-1]
     ordered = core.call(CommsSetRelationshipOrderTool(owner="worker", group=ChildrenRelationshipGroup, order=order))
     assert FieldCodec.decode(RelationshipOrdered, FieldCodec.encode(ordered)) == ordered
+
+
+def test_a_queue_action_request_crosses_as_itself():
+    """A remote UI names the original recipient and the action; Core reaches the owner."""
+    from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
+    from agent_comms.runtime_requests import ClearQueueRuntimeRequest, SendNowRuntimeRequest
+    from agent_comms.tools import CommsQueueActionTool
+
+    lookup = ThreadLookup.mint()
+    for action in (SendNowRuntimeRequest, ClearQueueRuntimeRequest):
+        request = CommsQueueActionTool(lookup=lookup, action=action)
+        assert FieldCodec.decode(CommsQueueActionTool, FieldCodec.encode(request)) == request
