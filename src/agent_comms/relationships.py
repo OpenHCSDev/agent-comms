@@ -609,9 +609,8 @@ class UnregisteredPeer(PeerThread):
 class PairCollaboration(ABC):
     """A peer pair's collaboration: none, active, or held by a replaced peer identity."""
 
-    @abstractmethod
     def require_current_peer(self) -> None:
-        """Refuse an edit when the pair's edge names a replaced peer identity."""
+        """Only an edge naming a replaced peer identity refuses an edit."""
 
     @abstractmethod
     def added(
@@ -632,9 +631,6 @@ class PairCollaboration(ABC):
 
 class NoCollaboration(PairCollaboration):
     """The pair has no edge: adding creates one, updating has nothing to update."""
-
-    def require_current_peer(self) -> None:
-        """No edge names a replaced peer."""
 
     def added(self, ctx: RelationshipEditContext, peer: Thread, note: str) -> Collaboration:
         now = time.time()
@@ -671,9 +667,6 @@ class HeldCollaboration(PairCollaboration):
 @dataclass(frozen=True)
 class ActiveCollaboration(HeldCollaboration):
     """The edge names the peer's current incarnation."""
-
-    def require_current_peer(self) -> None:
-        """The edge already names the current peer."""
 
     def added(self, ctx: RelationshipEditContext, peer: Thread, note: str) -> Collaboration:
         return self.edge
