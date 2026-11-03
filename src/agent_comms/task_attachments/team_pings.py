@@ -82,6 +82,15 @@ class Ping(DeclaredFamily, affix="Ping"):
         """The same line under another observation digest; only a rule line has one."""
         return self
 
+    def unbound(self, rules: tuple[type[StandingRule], ...]) -> Ping:
+        """This line as an unbound record, if its rule's identity changed since it was
+        recorded; only a rule line can be."""
+        return self
+
+    def retained_beside(self, captures: tuple[Ping, ...]) -> bool:
+        """A captured line lives only while this pass captures it."""
+        return False
+
     @property
     @abstractmethod
     def alarm_kind(self) -> type[DeclaredFamily]: ...
@@ -157,9 +166,30 @@ class RulePing(Ping):
     def observed_as(self, observation: TextDigest) -> Ping:
         return replace(self, observation=observation)
 
+    def unbound(self, rules: tuple[type[StandingRule], ...]) -> Ping:
+        return UnboundRulePing(
+            self.rule, self.observation, text=f"{self.text} {UnboundRulePing.marker}",
+            subjects=self.subjects, since=self.since) if self.rule in rules else self
+
     @classmethod
     def capture(cls, rule: StandingRule) -> Self:
         return cls(type(rule), rule.observation_key(), text=rule.line(), subjects=rule.subjects())
+
+
+@dataclass(frozen=True)
+class UnboundRulePing(RulePing):
+    """A rule line the previous runtime recorded without saying whose it was, before teammates
+    were told apart. No stored evidence names its thread, so it keeps its original digest and
+    start and stays beside this pass's captures while its rule still has a current line. It is
+    never a capture: no enforcement, routing or readiness follows from it."""
+
+    marker: ClassVar[str] = "(recorded before teammates were told apart; whose is unknown)"
+
+    def unbound(self, rules: tuple[type[StandingRule], ...]) -> Ping:
+        return self
+
+    def retained_beside(self, captures: tuple[Ping, ...]) -> bool:
+        return any(capture.alarm_kind is self.rule for capture in captures)
 
 
 @dataclass(frozen=True)
@@ -324,12 +354,17 @@ class TeamUpdate(OwnerNotice, declared_name=None):
         began = {ping: ping.since for ping in sorted(
             (ping for packet in previous for ping in packet.handled),
             key=lambda ping: ping.since.chronology(), reverse=True)}
+        captures: tuple[Ping, ...] = (
+            *(TeammatePing.capture(state) for state in states if state.attention()),
+            *(RulePing.capture(rule) for rule in rules),
+        )
+        # An unbound line from before the cutover stays beside the captures it cannot match.
+        carried = tuple(ping for packet in previous for ping in packet.handled
+                        if ping.retained_beside(captures))
         handled = tuple(sorted(
-            (replace(ping, since=began.get(ping, ping.since).continued_from(now))
-             for ping in (
-                 *(TeammatePing.capture(state) for state in states if state.attention()),
-                 *(RulePing.capture(rule) for rule in rules),
-             )), key=lambda ping: not ping.urgent,
+            dict.fromkeys(replace(ping, since=began.get(ping, ping.since).continued_from(now))
+                          for ping in (*captures, *carried)),
+            key=lambda ping: not ping.urgent,
         ))
         announced = {ping.key: ping for packet in published for ping in packet.handled}
         new = tuple(ping for ping in handled if announced.get(ping.key) != ping)
