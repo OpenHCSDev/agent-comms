@@ -1801,6 +1801,10 @@ class OrderProgress(DisclosedRecord, DeclaredFamily, affix="Progress"):
         """The order's distance readings; progress that read no commit has none."""
         return DistanceReadings()
 
+    def uncommitted_before(self, timestamp: float) -> tuple[float, ...]:
+        """Only selected uncommitted progress can owe publication of an old edit."""
+        return ()
+
     def waiting_on_install(self, todo: Todo) -> tuple[Todo, ...]:
         """The held order this progress leaves waiting on the fleet's install."""
         return ()
@@ -1961,6 +1965,9 @@ class EditingProgress(Moving, NoCommitProgress, FoundProgress):
     @property
     def state(self) -> str:
         return f"uncommitted edits at {RecordedEventTime(self.at).clock()}, no commit"
+
+    def uncommitted_before(self, timestamp: float) -> tuple[float, ...]:
+        return (self.at,) if self.at < timestamp else ()
 
 
 @dataclass(frozen=True)

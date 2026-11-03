@@ -3,6 +3,8 @@
 from dataclasses import dataclass, field
 from typing import ClassVar, Self
 
+from agent_comms.nominal.field_codec import OrderId
+from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import HeldBranch, HeldBranchRule
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.turn_digests import OrderToolCallCountRead, TurnsSince
@@ -39,3 +41,32 @@ class SpinningTeammate(HeldBranchRule, declared_name="spinning_unit"):
     def line(self) -> str:
         return (f"{self.holder.name} made {self.call_count} calls on {self.problem} and changed 0 src"
                 " lines. is it working, or just burning tokens? -> send the exact shape")
+
+
+@dataclass(frozen=True)
+class StaleUncommittedEdits(HeldBranchRule):
+    """A held order's selected edits have stopped moving without becoming a commit."""
+
+    problem: str
+    order: OrderId
+    holder: ThreadIncarnation
+    edited_at: float
+    now: float = field(compare=False)
+
+    hours: ClassVar[int] = 2
+
+    @classmethod
+    def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
+        return tuple(
+            cls(held.problem, held.todo.order.checked().id, held.holder, edited, held.source.now)
+            for held in branches
+            for progress in held.source.frame.pulls.progress(
+                (held.todo,), held.source.comms.registry).values()
+            for edited in progress.uncommitted_before(held.source.now - cls.hours * 3600)
+        )
+
+    def line(self) -> str:
+        edited = RecordedEventTime(self.edited_at)
+        return (f"COMMIT {self.holder.name} {self.problem}: uncommitted edits untouched since"
+                f" {edited.clock()} ({edited.age(self.now)}). work nobody can see isn't progress."
+                " -> commit and push it, or say why it stays local")
