@@ -3890,6 +3890,53 @@ class _PydanticDecoder(ValueDecoder[object]):
         return value.model_dump(mode="json", by_alias=True, exclude_none=True)
 
 
+class _ExceptionDecoder(ValueDecoder[BaseException]):
+    """A raised error crosses the wire as its class and arguments, so a remote caller
+    receives the same class it would locally. Decoding resolves only error classes declared
+    in this package (or built in) beneath the field's type, found through the class
+    hierarchy; nothing is imported or unpickled from the wire."""
+
+    origins = (BaseException,)
+    target: type[BaseException]
+    trusted_modules: ClassVar[tuple[str, ...]] = ("agent_comms", "builtins")
+
+    @staticmethod
+    def kind_of(error_class: type[BaseException]) -> str:
+        return f"{error_class.__module__}.{error_class.__qualname__}"
+
+    def declared(self, kind: str) -> type[BaseException]:
+        pending, seen = [self.target], set()
+        while pending:
+            candidate = pending.pop()
+            if candidate in seen:
+                continue
+            seen.add(candidate)
+            if self.kind_of(candidate) == kind and candidate.__module__.split(".")[0] in self.trusted_modules:
+                return candidate
+            pending.extend(candidate.__subclasses__())
+        raise MalformedRecord(f"{kind!r} is not a declared {self.target.__name__}")
+
+    def value_schema(self) -> dict[str, JsonValue]:
+        return {
+            "type": "object",
+            "properties": {"kind": {"type": "string"}, "args": {"type": "array"}},
+            "required": ["kind", "args"],
+        }
+
+    @boundary_decoder
+    def decode(self, data: object) -> BaseException:
+        record = FieldCodec.decode(dict[str, JsonValue], data)
+        error_class = self.declared(FieldCodec.decode(str, record.get("kind")))
+        arguments = FieldCodec.decode(list[JsonValue], record.get("args"))
+        with MalformedRecord.refusing(f"Invalid {error_class.__name__} arguments"):
+            return error_class(*arguments)
+
+    def encode(self, value: object) -> object:
+        if not isinstance(value, self.target):
+            raise TypeError(f"Expected {self.target.__name__}, received {type(value).__name__}")
+        return {"kind": self.kind_of(type(value)), "args": FieldCodec.encode(list(value.args))}
+
+
 class _MemberDecoders(dict[object, ValueDecoder[object]]):
     """Concrete declarations own one decoder for this process, after family-tag removal.
 
