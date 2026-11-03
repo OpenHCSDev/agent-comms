@@ -279,7 +279,7 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
         return self._human.map(self.require)
 
     def session_thread(
-        self, project: Path, preferred: str | None = None,
+        self, project: Path, preferred: str,
     ) -> ProjectThreadSelection:
         """Select an unbound project's preferred name or sole declared ACP thread.
 
@@ -289,11 +289,10 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
         sessions use strict lookup instead of project discovery.
         """
         located = tuple(t for t in self.threads.values() if t.project_path == project)
-        if preferred:
-            selected = self.canonical_name(preferred)
-            for thread in located:
-                if thread.name == selected:
-                    return FoundProjectThread(thread)
+        selected = self.canonical_name(preferred)
+        for thread in located:
+            if thread.name == selected:
+                return FoundProjectThread(thread)
         return ProjectThreadSelection.from_threads(tuple(
             member for thread in located for member in thread.role.acp_thread(thread)
         ))

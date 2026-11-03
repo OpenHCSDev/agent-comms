@@ -430,7 +430,7 @@ class Registration:
         )
 
     def session_thread(
-        self, project_path: Path, preferred: str | None = None,
+        self, project_path: Path, preferred: str,
     ) -> ProjectThreadSelection:
         """Core's host resolves the project path its registry records, then selects."""
         return self.store.read().session_thread(Path(project_path).expanduser().resolve(), preferred)
