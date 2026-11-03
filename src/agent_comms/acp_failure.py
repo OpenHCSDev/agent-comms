@@ -28,7 +28,7 @@ from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from .delivery_presentation import DeliveryPresentation
 from .nominal.field_codec import (
     FieldCodec, JsonShapeFamily, JsonShapeMember, NullMember, RecordMember, SubclassUnion,
-    WireName, WireOmitDefault, boundary_decoder,
+    WireName, WireOmitDefault,
 )
 from .input_attempt import InputAttempt
 from .pi_wire import PiDiagnostic
@@ -88,11 +88,6 @@ class BackendDeliveryFailure(DeliveryFailure):
 
 class ProviderRetryResult(SubclassUnion, affix=""):
     """One decoded native retry end, retained by the turn output and its outcome."""
-
-    @classmethod
-    @boundary_decoder
-    def from_optional(cls, result: ProviderRetryResult | None) -> ProviderRetryResult:
-        return NoRetry() if result is None else result
 
     @abstractmethod
     def refine_failure(self, failure: TurnFailure) -> TurnFailure: ...
@@ -285,7 +280,7 @@ class FailedNativeTurnOutcome(NativeTurnOutcome):
             ACPFailure.from_detail(Refused.INTERNAL_ERROR, terminal.text or "Backend failed",
                                   diagnostics=error.diagnostics if error is not None else ()),
             input_state=original.failure_state(document),
-            retry_result=ProviderRetryResult.from_optional(terminal.retry_result),
+            retry_result=terminal.retry_result,
         )
         return cls(
             request=RequestFailure(failure, False),

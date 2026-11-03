@@ -38,7 +38,6 @@ from .selected_actions import CodingSelectedAction, SelectedAction
 from .selected_participant import SelectedParticipant
 from .selected_result import CoordinatedTurn
 from .selected_session import SelectedSession
-from .selected_tool_broker import SelectedToolIntent
 from .selected_turn import SelectedAttempt, SelectedConsideration
 from .selected_write_authority import NoSelectedWritePlans, SelectedWriteAuthority
 from .turn_failure import RetryableProviderFailure
@@ -74,8 +73,7 @@ class SelectedExecution(NativeExecution):
     after_seq: int = 0
     session_file: Path | None = None
     session_directory: Path = field(init=False)
-    selected_existing_file_write: SelectedAction | None = None
-    selected_tool_intent: SelectedToolIntent | None = None
+    action: SelectedAction = field(default_factory=CodingSelectedAction)
     write_authority: SelectedWriteAuthority = field(default_factory=NoSelectedWritePlans)
     _run_permit: threading.Lock = field(init=False, default_factory=threading.Lock)
     following: FollowingInputs = field(default_factory=FollowingInputs, init=False, compare=False)
@@ -114,24 +112,12 @@ class SelectedExecution(NativeExecution):
         except NativePiUnavailable as error:
             raise SessionSetupFailed(f"Native session setup failed: {error}") from error
         self.session_directory = directory
-        if self.selected_tool_intent is not None:
-            if type(self.selected_tool_intent) is not SelectedToolIntent:
-                raise TypeError("selected tool requires a nominal owner intent")
-            if self.selected_existing_file_write is not None:
-                raise IdentityConflict("selected tool cannot share an operator file plan")
-
-    def action(self) -> SelectedAction:
-        if self.selected_tool_intent is not None:
-            return self.selected_tool_intent
-        if self.selected_existing_file_write is not None:
-            return self.selected_existing_file_write
-        return CodingSelectedAction()
 
     async def full(self, participant: SelectedParticipant, session: SelectedSession,
                    snapshot: RecoverySnapshot) -> CoordinatedTurn:
         """Direct work and a FULL verdict share one attempt and tool selection."""
         attempt = await SelectedAttempt.engage(participant, snapshot)
-        return await attempt.run(self, session, self.action(), self.write_authority)
+        return await attempt.run(self, session, self.action, self.write_authority)
 
     async def run(
         self, *, on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = None,

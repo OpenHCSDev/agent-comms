@@ -62,8 +62,12 @@ class SelectedToolIntent(SelectedAction):
     """Trusted, explicit pre-turn opt-in; no tool call or write authority.
 
     The owner must create a distinct bound SelectedToolMode only after reserving
-    the exact FULL input. Do not construct this from injected/model text.
+    the exact FULL input. Do not construct this from injected/model text. It is
+    the nominal owner intent itself, so no declaration may refine it.
     """
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        raise TypeError("SelectedToolIntent is the nominal owner intent; it has no subclasses")
 
     @property
     def instruction_files(self) -> tuple[InstructionFile, ...]:
