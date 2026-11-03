@@ -1,0 +1,69 @@
+"""A UI's ObservationProcess served by a Core across the connector."""
+
+import asyncio
+from dataclasses import dataclass
+
+from aiohttp.test_utils import TestServer
+from bus_record_fixture import prepare_native_comms
+from yarl import URL
+
+from agent_comms.comms import Comms
+from agent_comms.connector import Connector
+from agent_comms.connector_store import ConnectorStore, UiReadAccess
+from agent_comms.remote_core import ConnectorObservationPeer
+from agent_comms.repo import Checkout
+from agent_comms.ui_model.observation import (
+    ObservationPeer,
+    ObservationProcess,
+    ObservationSource,
+    ObserveSidebar,
+    SidebarResult,
+)
+
+
+@dataclass(frozen=True)
+class Endpoint:
+    url: URL
+
+
+@dataclass(frozen=True)
+class Credential:
+    token: str
+
+
+@dataclass(frozen=True)
+class TestConnectorSource(ObservationSource):
+    """The peer reads only the endpoint and credential; the test server is plain HTTP,
+    which the owner's HTTPS profile refuses, so the test names them directly."""
+
+    endpoint: Endpoint
+    credential: Credential
+
+    def observation_peer(self) -> ObservationPeer:
+        return ConnectorObservationPeer(self)
+
+
+async def test_an_observation_process_receives_its_sidebar_from_a_remote_core(tmp_path, comms: Comms) -> None:
+    prepare_native_comms(comms)
+    store = ConnectorStore.at(tmp_path / "auth")
+    namespace = comms.registry.store.privacy().namespace
+    granted = store.update(lambda grants: grants.ui_issued(namespace, 60, UiReadAccess))
+    connector = Connector(store, "http://127.0.0.1:18766", comms.root)
+    wanted = ObserveSidebar(Checkout(comms.root.parent), True, True)
+    async with TestServer(connector.application()) as server:
+        source = TestConnectorSource(Endpoint(server.make_url("/mcp")), Credential(granted.token))
+        sidebar: asyncio.Future[SidebarResult] = asyncio.get_running_loop().create_future()
+
+        def observed(result) -> None:
+            if isinstance(result, SidebarResult) and not sidebar.done():
+                sidebar.set_result(result)
+
+        def failed(error: Exception) -> None:
+            if not sidebar.done():
+                sidebar.set_exception(error)
+
+        async with ObservationProcess(source) as process:
+            process.start_receiving(observed, failed)
+            process.request(wanted)
+            answered = await asyncio.wait_for(sidebar, timeout=60)
+        assert answered.request == wanted

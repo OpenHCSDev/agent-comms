@@ -1529,6 +1529,47 @@ def serve(route: CommsRoute, connection: Connection) -> None:
         connection.close()
 
 
+class ObservationSource(ABC):
+    """Something a UI can observe Core through: it supplies the observation's peer."""
+
+    @abstractmethod
+    def observation_peer(self) -> ObservationPeer: ...
+
+
+class ObservationPeer(ABC):
+    """Who serves a UI's observation: a local process, or a Core across the connector.
+    It owns the connection the UI reads, how the service is joined, and how its end reads."""
+
+    connection: Connection
+
+    @abstractmethod
+    def join(self, timeout: float | None = None) -> None: ...
+
+    @abstractmethod
+    def died(self, error: str | None) -> ObserverDied: ...
+
+
+class LocalObservationPeer(ObservationPeer):
+    """The service in a spawned process of this machine, over a pipe."""
+
+    def __init__(self, route: CommsRoute) -> None:
+        context = multiprocessing.get_context("spawn")
+        self.connection, child = context.Pipe()
+        with ExitStack() as acquisition:
+            acquisition.enter_context(self.connection)
+            with child:
+                self.process = context.Process(target=serve, args=(route, child), daemon=False,
+                                               name="agent-comms-observation")
+                self.process.start()
+            acquisition.pop_all()
+
+    def join(self, timeout: float | None = None) -> None:
+        self.process.join(timeout)
+
+    def died(self, error: str | None) -> ObserverDied:
+        return ObserverDied(self.process.pid, self.process.exitcode, error)
+
+
 class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
     """One ordered receive/decode task, loop-owned delivery, and joined retirement."""
 
@@ -1538,21 +1579,17 @@ class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
         process.start_receiving(process.observed, process.failed)
         return process
 
-    def __init__(self, route: CommsRoute):
+    def __init__(self, source: CommsRoute | ObservationSource):
+        """``source`` names who serves the observation: a route serves it locally, a remote
+        UI profile across the connector."""
         self._resources = ExitStack()
         self.request_ids = itertools.count(1)
         self.reads: dict[int, asyncio.Future] = {}
         self.status: ObserverStatus = NoObserverFailure()
-        context = multiprocessing.get_context("spawn")
-        with ExitStack() as acquisition:
-            self.connection, child = context.Pipe()
-            acquisition.enter_context(self.connection)
-            with child:
-                self.process = context.Process(target=serve, args=(route, child), daemon=False,
-                                               name="agent-comms-observation")
-                self.process.start()
-            self._resources.callback(self.process.join)
-            self._resources.enter_context(acquisition.pop_all())
+        self.peer = source.observation_peer()
+        self.connection = self.peer.connection
+        self._resources.callback(self.peer.join)
+        self._resources.enter_context(self.connection)
         self._reader = AsyncExitStack()
 
     async def __aexit__(self, *exc: object) -> None:
@@ -1613,7 +1650,7 @@ class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
     def ended(self, error: str | None) -> ObserverDied:
         """The service ended (``error``: the traceback it sent): fail its awaited reads and say how it exited."""
         died = self.status.failure(
-            partial(ObserverDied, self.process.pid, self.process.exitcode, error)
+            partial(self.peer.died, error)
         )
         self.status = died
         self.abandon_reads(died)
@@ -1681,7 +1718,7 @@ class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
                 result: ServiceResult = await Coordination.run_worker(self.connection.recv)
                 await result.received(self, observed)
         except (EOFError, ConnectionResetError):
-            await Coordination.run_worker(partial(self.process.join, timeout=2))
+            await Coordination.run_worker(partial(self.peer.join, 2))
             failed(self.ended(None))
         except ObserverDied as error:
             failed(error)
