@@ -13,6 +13,7 @@ import re
 import sys
 import types
 from abc import ABC, abstractmethod
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from contextvars import ContextVar
 from collections.abc import Callable, Collection, Hashable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import MISSING, Field, dataclass, field, fields, is_dataclass
@@ -2749,11 +2750,22 @@ class FieldCodec(MroDispatch, Sealed):
     @classmethod
     def _family_schema(cls, target: type[DeclaredFamily]) -> dict[str, JsonValue]:
         """Instance values carry their selector inside the encoded object. A family that
-        holds itself (a proof wrapping a proof) is described once; its re-entry accepts the
-        nested record and names the family it repeats."""
+        holds itself (a proof wrapping a proof) is described once under the root's $defs, and
+        every occurrence, the nested one included, refers to that one description."""
+        reference: dict[str, JsonValue] = {
+            "$ref": f"#/$defs/{target.__module__}.{target.__qualname__}"}
+        with SchemaDefinitions.scope() as definitions:
+            return definitions.attached(cls._family_definition(target, definitions, reference))
+
+    @classmethod
+    def _family_definition(
+        cls, target: type[DeclaredFamily], definitions: SchemaDefinitions,
+        reference: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
         expanding = cls._expanding_families.get()
         if target in expanding:
-            return {"$comment": f"recursive {target.__qualname__}", "type": "object"}
+            definitions.recursive.add(target)
+            return reference
         token = cls._expanding_families.set(expanding | {target})
         try:
             alternatives = []
@@ -2765,9 +2777,10 @@ class FieldCodec(MroDispatch, Sealed):
                     cls._record_schema((member,), selector, [tag]) if is_dataclass(member)
                     # A model member (a Pydantic wire model) describes its own fields.
                     else cls._tagged_model_schema(member, selector, tag))
-            return cls.alternatives_schema("oneOf", alternatives)
+            schema = cls.alternatives_schema("oneOf", alternatives)
         finally:
             cls._expanding_families.reset(token)
+        return definitions.defined(target, schema, reference)
 
     @classmethod
     def _tagged_model_schema(
@@ -2781,7 +2794,8 @@ class FieldCodec(MroDispatch, Sealed):
     @classmethod
     def record_schema(cls, *targets: type) -> dict[str, JsonValue]:
         """Named request fields; external tool/CLI selection remains separate."""
-        return cls._record_schema(targets, {}, [])
+        with SchemaDefinitions.scope() as definitions:
+            return definitions.attached(cls._record_schema(targets, {}, []))
 
     @classmethod
     def _record_schema(
@@ -2801,7 +2815,8 @@ class FieldCodec(MroDispatch, Sealed):
     def value_schema(cls, annotation: object) -> dict[str, JsonValue]:
         """Derive external scalar/array choices from the same decode declarations."""
         annotation, representation = cls.representation(annotation)
-        return representation.schema_for(annotation)
+        with SchemaDefinitions.scope() as definitions:
+            return definitions.attached(representation.schema_for(annotation))
 
     @classmethod
     def project(cls, value: object, view: type[ViewExclusion], annotation: object = None) -> JsonValue:
@@ -3928,6 +3943,61 @@ class ReportedError(Exception):
 
     def __str__(self) -> str:
         return f"{self.kind}: {self.message}"
+
+
+class SchemaScope(ABC):
+    """Where a schema's shared definitions live while it is built."""
+
+    @abstractmethod
+    def entered(self) -> AbstractContextManager[SchemaDefinitions]: ...
+
+
+class NoSchemaScope(SchemaScope):
+    """No schema is being built: entering opens a root that carries the $defs."""
+
+    @contextmanager
+    def entered(self) -> Iterator[SchemaDefinitions]:
+        definitions = SchemaDefinitions(root=True, recursive=set(), definitions={})
+        token = SchemaDefinitions.current.set(definitions)
+        try:
+            yield definitions
+        finally:
+            SchemaDefinitions.current.reset(token)
+
+
+class SchemaDefinitions(SchemaScope):
+    """The definitions one root schema shares: a recursive family is described once and
+    referred to everywhere. Nested schema calls join the root's scope; only the root
+    carries $defs."""
+
+    current: ClassVar[ContextVar[SchemaScope]] = ContextVar(
+        "schema_definitions", default=NoSchemaScope())
+
+    def __init__(self, *, root: bool, recursive: set[type],
+                 definitions: dict[str, JsonValue]) -> None:
+        self.root, self.recursive, self.definitions = root, recursive, definitions
+
+    def entered(self) -> AbstractContextManager[SchemaDefinitions]:
+        return nullcontext(SchemaDefinitions(
+            root=False, recursive=self.recursive, definitions=self.definitions))
+
+    @classmethod
+    def scope(cls) -> AbstractContextManager[SchemaDefinitions]:
+        return cls.current.get().entered()
+
+    def defined(
+        self, target: type, schema: dict[str, JsonValue], reference: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        """A family its own members re-entered is stored once and referred to."""
+        if target not in self.recursive:
+            return schema
+        self.definitions[f"{target.__module__}.{target.__qualname__}"] = schema
+        return reference
+
+    def attached(self, schema: dict[str, JsonValue]) -> dict[str, JsonValue]:
+        if self.root and self.definitions:
+            return {**schema, "$defs": dict(self.definitions)}
+        return schema
 
 
 class ErrorRecord(SubclassUnion, affix=""):

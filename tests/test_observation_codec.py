@@ -64,3 +64,31 @@ def test_a_narrowed_refusal_arrives_as_itself() -> None:
 def test_every_unread_kind_round_trips(unread: UnreadPresentation) -> None:
     received = round_trip(unread, UnreadPresentation)
     assert type(received) is type(unread) and received == unread
+
+
+def goal_refusals(comms) -> tuple[Exception, ...]:
+    """Every goal refusal member, built the way Core builds it."""
+    from agent_comms.goals import GoalChangedError, GoalConsentRequired, UnobservedGoalCheckpoint
+    from agent_comms.repo import Checkout
+    from agent_comms.threads import Thread
+
+    comms.registry.declare(Thread("worker", frozenset(), Checkout(comms.root)))
+    worker = comms.registry.require("worker")
+    return (GoalRefused("no"), GoalConsentRequired(worker, worker.incarnation),
+            GoalChangedError(worker, UnobservedGoalCheckpoint()))
+
+
+def test_every_goal_refusal_arrives_as_itself(comms) -> None:
+    """A member that narrows the constructor still crosses: it is rebuilt from declared state."""
+    for sent in goal_refusals(comms):
+        received = round_trip(ReadRefused(9, sent, "trace"), ReadRefused).error
+        assert type(received) is type(sent)
+        assert (received.code, received.message) == (sent.code, sent.message)
+
+
+def test_a_changed_transcript_still_asks_the_reader_to_reload() -> None:
+    from agent_comms.coordination_errors import ReloadRequired, TranscriptChanged
+
+    received = round_trip(ReadRefused(10, TranscriptChanged(), "trace"), ReadRefused).error
+    assert type(received) is TranscriptChanged and isinstance(received, ReloadRequired)
+    assert str(received) == str(TranscriptChanged())

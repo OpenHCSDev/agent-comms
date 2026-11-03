@@ -58,8 +58,12 @@ class Refused(CommandFailure, DrainUnavailable, DeclaredError):
 
     @classmethod
     def from_wire(cls, data: object) -> Self:
+        """Rebuilt from its declared state, never through a member's narrowed constructor:
+        a member that adds state declares it by overriding this pair."""
         code, message, details = FieldCodec.decode(tuple[int, str, JsonValue], data)
-        return cls(code, message, details)
+        error = cls.__new__(cls)
+        Refused.__init__(error, code, message, details)
+        return error
 
     @classmethod
     def invalid_params(cls, data: object = None) -> Self:
@@ -145,9 +149,21 @@ class StaleRevision(CoordinationError, DeferredRead):  # noqa: N818 - nominal ou
     """The supplied CAS revision is not the authoritative revision."""
 
 
-class ReloadRequired(StaleRevision):  # noqa: N818 - nominal outcome name
+class ReloadRequired(StaleRevision, DeclaredError):  # noqa: N818 - nominal outcome name
     """The read's own bounds name a source that is gone; retrying them never succeeds,
-    so the caller is answered and re-reads from fresh bounds."""
+    so the caller is answered and re-reads from fresh bounds. Its message is its whole state,
+    so a remote UI receives the same reload signal."""
+
+    wire_type: ClassVar[object] = str
+
+    def to_wire(self) -> JsonValue:
+        return str(self)
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        error = cls.__new__(cls)
+        Exception.__init__(error, FieldCodec.decode(str, data))
+        return error
 
 
 class TranscriptChanged(ReloadRequired):  # noqa: N818 - nominal outcome name
