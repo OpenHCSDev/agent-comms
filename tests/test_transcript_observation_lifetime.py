@@ -7,6 +7,7 @@ from functools import partial
 
 import pytest
 
+from agent_comms.controller import NO_CONTROLLER
 from agent_comms.coordinator import Coordination
 from agent_comms.native_arguments import GivenBinary
 from agent_comms.notification_reads import LiveNotificationRead
@@ -46,7 +47,7 @@ async def test_headless_bind_has_no_observation_process(headless_owner, tmp_path
     session, = headless_owner.sessions.published
     state = headless_owner.inputs.state(session).owned()
     await headless_owner.sessions.start_owner(state.configuration.launch, state.owner)
-    assert headless_owner.sessions.client is None
+    assert headless_owner.sessions.client is NO_CONTROLLER
     assert headless_owner.sessions.require(session) == session
     assert observation_children() == ()
 

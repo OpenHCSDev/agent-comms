@@ -374,12 +374,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
     async def _selected_write_request(self, session_id: AcpSessionId, request) -> PromptResponse:
         owner = self.sessions.require(session_id)
-        controller = self._runtime.controller.get()
-        attached = controller.attached(self.sessions.client) if controller is not None else None
-        if attached is None:
-            raise RequestError.invalid_params(
-                {"reason": "Selected write requires attached ACP controller"}
-            )
+        attached = self._runtime.controller.get().attached(self.sessions.client).require_present(
+            RequestError.invalid_params({"reason": "Selected write requires attached ACP controller"})
+        )
         scope = await Coordination.run_worker(partial(self.cursors.scope, owner, session_id))
         plans = SelectedWritePlans(self._comms, scope.require_live().wire_root_id)
         acknowledgement = await Coordination.run_worker(
@@ -427,14 +424,10 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         self.inputs.ensure_live_drain(session_id)
         async with self.inputs.state(session_id).turn_lock:
             # A direct ACP prompt owns this one controller. Owner-socket prompts
-            # already carry a private subscriber binding (including None when
-            # absent); never fall back to a passive ACP client in that case.
-            existing = self._runtime.controller.get()
-            context = (
-                self._runtime.controller.set(self.sessions.client)
-                if existing is not None and existing.attached(None) is None
-                else None
-            )
+            # already carry a private subscriber binding (NoController when absent);
+            # only the unbound default yields to the attached ACP client.
+            context = self._runtime.controller.set(
+                self._runtime.controller.get().attached(self.sessions.client))
             try:
                 return await self.turns.prompt_owned(
                     session_id,
@@ -445,8 +438,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                     origin=command.origin,
                 )
             finally:
-                if context is not None:
-                    self._runtime.controller.reset(context)
+                self._runtime.controller.reset(context)
 
     @staticmethod
     def _require_compaction_text(request: PromptRequest) -> None:

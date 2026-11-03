@@ -27,7 +27,11 @@ class SessionUpdateSink(ABC):
 
 
 class Controller(ABC):
-    def attached(self, client: Controller | None) -> Controller | None:
+    def attached(self, client: Controller) -> Controller:
+        return self
+
+    def require_present(self, refusal: Exception) -> Controller:
+        """A turn that needs its attached controller has one."""
         return self
 
     @abstractmethod
@@ -45,23 +49,50 @@ class Controller(ABC):
 
 
 
-class UnboundController(Controller):
+class UncontrolledController(Controller):
+    """No transport answers for this turn, so every UI permission is cancelled."""
+
+    async def request_ui_permission(
+        self, runner: TurnRunner, session_id: AcpSessionId,
+        request: tuple[ToolCallUpdate, list[PermissionOption]],
+    ) -> dict[str, object]:
+        return {"outcome": "cancelled"}
+
+
+class UnboundController(UncontrolledController):
     """No prompt has selected a transport; ingress may still bind its ACP client."""
 
-    def attached(self, client: Controller | None) -> Controller | None:
+    def attached(self, client: Controller) -> Controller:
         return client
 
     def require_current(self, authority: AcpSelectedWriteAuthority, session_id: AcpSessionId) -> None:
         raise IdentityConflict("Selected write ACP controller changed")
 
-    async def request_ui_permission(
-        self, runner: TurnRunner, session_id: AcpSessionId,
-        request: tuple[ToolCallUpdate, list[PermissionOption]],
-    ) -> dict[str, object] | None:
-        return None
-
     def departed(self, runtime: RuntimeServer, session_id: AcpSessionId) -> bool:
         return False
 
 
+class NoController(UncontrolledController, SessionUpdateSink):
+    """No controller and no attached ACP client: autonomous, channel and goal turns,
+    owner-socket prompts without a live subscriber, and a session before its client
+    connects. Nobody accepts its updates or answers a permission for it."""
+
+    def require_present(self, refusal: Exception) -> Controller:
+        raise refusal
+
+    def require_current(self, authority: AcpSelectedWriteAuthority, session_id: AcpSessionId) -> None:
+        raise IdentityConflict("Selected write has no ACP controller")
+
+    def departed(self, runtime: RuntimeServer, session_id: AcpSessionId) -> bool:
+        return True
+
+    async def publish_update(self, *, session_id: AcpSessionId, update: BaseModel) -> bool:
+        return False
+
+    async def request_permission(self, **request: object) -> dict[str, object]:
+        """With no client, every permission request is cancelled."""
+        return {"outcome": {"outcome": "cancelled"}}
+
+
 UNBOUND_CONTROLLER = UnboundController()
+NO_CONTROLLER = NoController()

@@ -115,7 +115,7 @@ class OrdinaryTurnRule(ReservationRule):
 class TurnAcceptance(ABC):
     """The live ACP acknowledgement, when this turn has one."""
 
-    def controller(self, state: DrainedSession, runtime: RuntimeServer) -> Controller | None:
+    def controller(self, state: DrainedSession, runtime: RuntimeServer) -> Controller:
         return runtime.controller.get()
 
     @abstractmethod

@@ -365,7 +365,7 @@ class TurnRunner:
         self,
         session_id: AcpSessionId,
         turn_id: TurnId,
-        controller: Controller | None,
+        controller: Controller,
         request: pi.DialogUiRequest,
     ) -> pi.ExtensionUiChoice:
         """Project one bounded Pi UI dialog to exactly the turn's ACP controller.
@@ -373,7 +373,7 @@ class TurnRunner:
         No ACP response updates package configuration, launch trust or call grants.
         The backend revalidates this result before replying to the same Pi child.
         """
-        if controller is None or not await Coordination.run_worker(partial(self.owns_turn, session_id, turn_id)):
+        if not await Coordination.run_worker(partial(self.owns_turn, session_id, turn_id)):
             return pi.CancelledUiChoice()
         permission = request.permission(turn_id)
         if permission is None:

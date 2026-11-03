@@ -1,5 +1,6 @@
 """Original authored ingress and neutral historical evidence share one input store."""
 from pathlib import Path
+from agent_comms.controller import NO_CONTROLLER
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.repo import Checkout
 from agent_comms.controller import Controller, SessionUpdateSink
@@ -166,7 +167,7 @@ async def test_foreign_or_changed_origin_refused_before_any_reservation(live_own
                 prompt="Original",
                 echo=True,
                 images=(),
-                controller=None,
+                controller=NO_CONTROLLER,
                 origin=origin,
                 ownership=ownership,
                 input_id=InputId.mint(),

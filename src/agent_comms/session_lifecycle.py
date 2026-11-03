@@ -10,6 +10,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
+from .controller import NO_CONTROLLER, NoController
 from .coordination_errors import Refused
 from acp.schema import (
     AgentCapabilities,
@@ -92,7 +93,7 @@ class SessionLifecycle:
         self.comms = comms
         self.runtime, self.runtime_enabled, self.effects = runtime, runtime_enabled, effects
         self.published: dict[AcpSessionId, PublishedSession] = {}
-        self.client: SdkSessionConnection | None = None
+        self.client: SdkSessionConnection | NoController = NO_CONTROLLER
         self.proxies: dict[AcpSessionId, RuntimeProxy | IncompatibleOwner] = {}
         self._attachment_lock = asyncio.Lock()
         self._identity_lock = asyncio.Lock()

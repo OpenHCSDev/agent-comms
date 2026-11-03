@@ -7,6 +7,7 @@ commands do not own coordination, backend or identity lifecycles.
 
 from __future__ import annotations
 
+from .controller import NO_CONTROLLER
 from .repo import Checkout
 
 import json
@@ -229,7 +230,7 @@ class PromptRuntimeRequest(AttachedResultRuntimeRequest):
                 for subscriber in ctx.server.clients.get(ctx.session, ())
                 if subscriber.token == self.controller_token and not subscriber.writer.is_closing()
             ),
-            None,
+            NO_CONTROLLER,
         )
         token = ctx.server.controller.set(controller)
         try:

@@ -150,8 +150,6 @@ class RuntimeProxy(RuntimeConnection):
 
     async def present(self, line: OwnerUpdate) -> None:
         client = self.agent.sessions.client
-        if client is None:
-            return
         metadata = await Coordination.run_worker(
             partial(present_session, line.meta, self.session_id)
         )
@@ -172,7 +170,7 @@ class RuntimeProxy(RuntimeConnection):
         async def ask() -> None:
             response = ClientPermissionResponse.cancelled(request.id)
             try:
-                if self.agent.sessions.client is not None and token == self._controller_token:
+                if token == self._controller_token:
                     reply = await asyncio.wait_for(
                         self.agent.sessions.client.request_permission(
                             session_id=self.session_id,

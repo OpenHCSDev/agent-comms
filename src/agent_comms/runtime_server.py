@@ -289,7 +289,7 @@ class RuntimeServer(SessionUpdateSink):
         self.clients = SessionClients(self)
         # Set only while handling a prompt on this particular attachment.
         # Never publish this bearer to ACP metadata, the transcript or other sockets.
-        self.controller: ContextVar[Controller | None] = ContextVar(
+        self.controller: ContextVar[Controller] = ContextVar(
             "runtime_permission_controller", default=UNBOUND_CONTROLLER
         )
         self.path = socket_path(agent._comms.root, os.getpid())
@@ -367,10 +367,8 @@ class RuntimeServer(SessionUpdateSink):
 
         if not bound() or not sockets_bound():
             return False
-        delivered = False
-        client = self.agent.sessions.client
-        if client is not None:
-            delivered = await client.publish_update(session_id=session_id, update=update)
+        delivered = await self.agent.sessions.client.publish_update(
+            session_id=session_id, update=update)
         # Do not re-resolve the recipient set after an awaited handoff. A
         # socket reattach has a new identity even with the same session ID.
         sockets = (

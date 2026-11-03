@@ -8,6 +8,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms import backend
+from agent_comms.controller import NO_CONTROLLER
 from agent_comms.channel_coding_tools import OrdinaryGoalRule
 from agent_comms.acp import CommsAgent
 from agent_comms.turn_inbox import InputContent
@@ -91,7 +92,7 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
                 OrdinaryGoalRule.require(sender.goal_permission, replaced)
                 async with QueuedInput.reserve(
                     agent.inputs, session_id, worker, text='Following input after replacement',
-                    prompt='Following input after replacement', echo=True, images=(), controller=None,
+                    prompt='Following input after replacement', echo=True, images=(), controller=NO_CONTROLLER,
                  input_id=InputId.mint()) as reservation:
                     item = reservation.item
                     item.place(agent.inputs, session_id, agent.inputs.state(session_id).require_inbox(),

@@ -7,6 +7,7 @@ Without that adapter these tests prove the Pi/ACP path, NOT Toad rendering.
 """
 
 from __future__ import annotations
+from agent_comms.controller import NO_CONTROLLER
 from agent_comms.controller import SessionUpdateSink
 
 import asyncio
@@ -490,7 +491,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, native_runtime_
                 await proxy.subscribe()
                 assert not attachment_settled.is_set()  # Initial idle replay is not this turn.
                 if case == "no_controller":
-                    context = owner._runtime.controller.set(None)
+                    context = owner._runtime.controller.set(NO_CONTROLLER)
                     try:
                         task = asyncio.create_task(
                             owner.prompt(

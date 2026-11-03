@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated
 
 
+from .controller import NO_CONTROLLER
 from .bus_publication import HumanOrigin
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -172,8 +173,8 @@ class HumanInputOrigin(InputOrigin, ClaimScoped):
         return self.author.sender
 
     def require_ingress(self, comms, snapshot, claim_scope, controller):
-        if controller is None or controller.attached(None) is None:
-            raise RelationViolationError("User input origin requires its attached ACP controller")
+        controller.attached(NO_CONTROLLER).require_present(
+            RelationViolationError("User input origin requires its attached ACP controller"))
 
         comms.registry.store.privacy().require_root(
             self.root_id, RelationViolationError("User input origin belongs to another native namespace"),
