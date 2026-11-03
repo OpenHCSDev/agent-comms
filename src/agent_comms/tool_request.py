@@ -37,7 +37,7 @@ from .native_tools import (
 )
 from .thread_execution import ThreadCommandAvailability
 from .tool_caller import NoThreadCaller, ThreadCaller, ToolCaller
-from .tool_declaration import NativeRequestTools
+from .tool_declaration import NativeRequestTools, ToolDeclaration
 from .tool_result import ToolResult
 
 
@@ -102,16 +102,9 @@ class ToolCall:
 
 @dataclass(frozen=True, kw_only=True)
 class ToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResult](
-    AsyncWork, FreshIngress, ArgumentTool, ThreadCommandAvailability, NativeRequestTools, NativeToolDeclaration
+    AsyncWork, FreshIngress, ArgumentTool, ThreadCommandAvailability, ToolDeclaration
 ):
-    native_call: ClassVar[type[CoordinationCall]] = CoordinationCall
-
-    @classmethod
-    def create_call(
-        cls, call_id: ToolCallId, arguments: dict[str, object]
-    ) -> CoordinationCall:
-        return cls.native_call(
-            call_id=call_id, declared_name=cls.declared_name, arguments=arguments)
+    """A transport request; native exposure is an independent declared capability."""
 
     description: ClassVar[str]
     read_only_hint: ClassVar[bool] = False
@@ -197,6 +190,25 @@ class ToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResu
         return self.apply(comms, caller)
 
 
+class NativeToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResult](
+    ToolRequest[Caller, Result], NativeRequestTools, NativeToolDeclaration, declared_name=None,
+):
+    """A model command supplies both its native schema and its executing call."""
+
+    native_call: ClassVar[type[CoordinationCall]] = CoordinationCall
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return {**super().schema(), "loads_tools": cls.loads_tools}
+
+    @classmethod
+    def create_call(
+        cls, call_id: ToolCallId, arguments: dict[str, object]
+    ) -> CoordinationCall:
+        return cls.native_call(
+            call_id=call_id, declared_name=cls.declared_name, arguments=arguments)
+
+
 class PublishingTool[Caller: ToolCaller = ToolCaller]:
     """A publication refuses at its store's write guard during maintenance; waiting here
     would hold the connector's stop."""
@@ -211,7 +223,7 @@ class PublishingTool[Caller: ToolCaller = ToolCaller]:
 class PublishingToolRequest[Caller: ToolCaller = ToolCaller](
     PublishingTool[Caller], ToolRequest[Caller], declared_name=None,
 ):
-    """Native declarations using the shared publication capability."""
+    """Requests using the shared publication capability."""
 
 
 class LiveOwnerTool:
@@ -236,13 +248,13 @@ class ReadTool(ReadWork, FreshIngress):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ThreadReadTool(ReadTool, ToolRequest):
+class ThreadReadTool(ReadTool, NativeToolRequest):
     thread: Annotated[str, *tool_field("Thread to read; omit to read your own")] = (
         ""
     )
 
 
-class ThreadToolRequest(ToolRequest[ThreadCaller]):
+class ThreadToolRequest(NativeToolRequest[ThreadCaller]):
     """Self-relative requests declare their required caller at the shared boundary."""
 
     def apply_without_thread(self, comms: Comms, caller: NoThreadCaller) -> NoReturn:
@@ -250,7 +262,7 @@ class ThreadToolRequest(ToolRequest[ThreadCaller]):
 
 
 class ThreadContextAction[Caller: ToolCaller = ToolCaller](
-    ToolRequest[Caller], declared_name=None,
+    NativeToolRequest[Caller], declared_name=None,
 ):
     """A tool the UI offers as an action in a thread's context menu, listed in its declared
     order with the arguments the selected thread binds."""

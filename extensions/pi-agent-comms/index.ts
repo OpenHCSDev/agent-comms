@@ -21,6 +21,7 @@ interface ToolDeclaration {
 	label: string;
 	description: string;
 	parameters: Record<string, unknown>;
+	loads_tools: boolean;
 }
 
 // Node's default is 1 MiB; a Core reply past this bound is refused whole, never parsed in part.
@@ -71,6 +72,12 @@ export default function (pi: ExtensionAPI) {
 		return catalog;
 	};
 	let launchArguments: string[];
+	let deferredTools = new Set<string>();
+	const resetTools = () => pi.setActiveTools(
+		pi.getActiveTools().filter((name) => !deferredTools.has(name)),
+	);
+	pi.on("before_agent_start", resetTools);
+	pi.on("session_compact", resetTools);
 	const forkThread = process.env.PI_PARENT_ID ? currentThread : undefined;
 	const task = process.env.PI_TASK || "";
 	const managed = process.env.AGENT_COMMS_MANAGED === "1";
@@ -126,10 +133,16 @@ export default function (pi: ExtensionAPI) {
 						"tool", ...(currentThread ? ["--from", currentThread] : []),
 						"--tool", declaration.name, "--arguments", JSON.stringify(params),
 					], launchArguments);
+					if (declaration.loads_tools) {
+						const selected = result.tools as { name: string }[];
+						pi.setActiveTools([...new Set([...pi.getActiveTools(), ...selected.map((tool) => tool.name)])]);
+					}
 					return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }], details: result };
 				},
 			});
 		}
+		deferredTools = new Set(catalog.filter((tool) => !tool.loads_tools).map((tool) => tool.name));
+		resetTools();
 	});
 	if (forkThread && !managed) {
 		const activity = (state: string, detail = "") => {

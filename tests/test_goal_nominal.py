@@ -80,7 +80,7 @@ def test_cas_rejects_aba_and_unknown_payload_without_effects(owner):
     action = GoalAction.from_payload({"kind": "completed", "progress": "done"})
     with pytest.raises(ValueError):
         comms.goals.update_goal(
-            "worker", replace(action, expect=GoalPrecondition(expected_goal=goal))
+            "worker", replace(action, expect=GoalPrecondition(expected_checkpoint=goal.captured))
         )
     with pytest.raises(ValueError):
         GoalAction.from_payload({"kind": "active", "text": "wrong action fields"})

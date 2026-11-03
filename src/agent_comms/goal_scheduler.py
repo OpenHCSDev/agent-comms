@@ -177,7 +177,7 @@ class GoalScheduler:
                 text=text,
                 expect=GoalPrecondition(
                     goal_id=OneGoal(goal_id),
-                    expected_goal=goal,
+                    expected_checkpoint=goal.captured,
                     expected_owner=ProcessIdentity.capture(os.getpid()),
                 ),
             ),
@@ -201,7 +201,7 @@ class GoalScheduler:
                 action(
                     expect=GoalPrecondition(
                         goal_id=OneGoal(goal_id),
-                        expected_goal=goal,
+                        expected_checkpoint=goal.captured,
                         expected_owner=ProcessIdentity.capture(os.getpid()),
                     )
                 ),
@@ -227,7 +227,7 @@ class GoalScheduler:
             RetryGoalAction(
                 expect=GoalPrecondition(
                     goal_id=OneGoal(goal_id),
-                    expected_goal=goal,
+                    expected_checkpoint=goal.captured,
                     expected_owner=ProcessIdentity.capture(os.getpid()),
                 )
             ),
