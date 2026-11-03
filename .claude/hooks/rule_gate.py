@@ -268,7 +268,8 @@ def own_background_jobs() -> int:
             subprocess.run(["ps", "-eo", "pid=,ppid=,args="], capture_output=True, text=True).stdout.splitlines()]
     parents = {int(row[0]): int(row[1]) for row in rows if len(row) >= 2}
     ancestors, pid = set(), os.getpid()
-    while pid in parents and pid not in ancestors:
+    # init adopts orphaned shells of sessions that died; they are never this session's jobs.
+    while pid in parents and pid not in ancestors and pid > 1:
         ancestors.add(pid)
         pid = parents[pid]
     return sum(1 for row in rows if len(row) == 3 and "shell-snapshots/snapshot-" in row[2]
