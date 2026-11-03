@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Self
+
+from pydantic import JsonValue
 
 from agent_comms.coordination_errors import DrainUnavailable, Refused
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms_hooks import ToolRefusedError
 
 
@@ -65,10 +68,20 @@ class ThreadNotVisibleError(RelationViolationError, RejectedEnforcementError):
 
 
 class GoalRefused(Refused, RelationViolationError):
-    """A goal relation refused the action; preserve that refusal across owner RPC."""
+    """A goal relation refused the action; preserve that refusal across owner RPC. Its
+    code is fixed, so its message is its whole declared state."""
+
+    wire_type: ClassVar[object] = str
 
     def __init__(self, message: str) -> None:
         super().__init__(self.INVALID_PARAMS, message)
+
+    def to_wire(self) -> JsonValue:
+        return self.message
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        return cls(FieldCodec.decode(str, data))
 
 
 class UnclaimedError(RelationViolationError):

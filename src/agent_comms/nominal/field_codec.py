@@ -3914,6 +3914,14 @@ class ReportedError(Exception):
         super().__init_subclass__(**kwargs)
         ReportedError.reporting[cls.reports] = cls
 
+    @classmethod
+    def reporting_for(cls, target: type[BaseException]) -> type[ReportedError]:
+        """The reported error a field of ``target`` receives; a target with none declared refuses."""
+        reporting = {Exception: ReportedError} | ReportedError.reporting
+        if target not in reporting:
+            raise MalformedRecord(f"No reported error is declared for {target.__name__}")
+        return reporting[target]
+
     def __init__(self, kind: str, message: str):
         super().__init__(kind, message)
         self.kind, self.message = kind, message
@@ -3922,53 +3930,67 @@ class ReportedError(Exception):
         return f"{self.kind}: {self.message}"
 
 
+class ErrorRecord(SubclassUnion, affix=""):
+    """How an error crosses a boundary: a declared error as its declared form, any other
+    as its class and message. Each record answers the error a field of ``target`` receives."""
+
+    @classmethod
+    def decodes_tagged_records(cls) -> bool:
+        return True
+
+    @staticmethod
+    def of(value: BaseException) -> ErrorRecord:
+        """The boundary: an outgoing error is foreign until it is recorded here."""
+        error_class = f"{type(value).__module__}.{type(value).__qualname__}"
+        if isinstance(value, DeclaredError):
+            return DeclaredErrorRecord(error_class, value.to_wire())
+        return ReportedErrorRecord(error_class, str(value))
+
+    @abstractmethod
+    def error(self, target: type[BaseException]) -> BaseException: ...
+
+
+@dataclass(frozen=True)
+class DeclaredErrorRecord(TaggedRecordMember, ErrorRecord):
+    error_class: str
+    declared: JsonValue
+
+    def error(self, target: type[BaseException]) -> BaseException:
+        if self.error_class not in DeclaredError.declared_errors:
+            raise MalformedRecord(f"{self.error_class} is not a declared error")
+        return DeclaredError.declared_errors[self.error_class].from_wire(self.declared)
+
+
+@dataclass(frozen=True)
+class ReportedErrorRecord(TaggedRecordMember, ErrorRecord):
+    error_class: str
+    message: str
+
+    def error(self, target: type[BaseException]) -> BaseException:
+        return ReportedError.reporting_for(target)(self.error_class, self.message)
+
+
 class _ExceptionDecoder(ValueDecoder[BaseException]):
-    """A declared error crosses as its kind and declared form and arrives as itself. Any
-    other error crosses as its kind and message and arrives as the ReportedError that
-    inherits the field's error type."""
+    """An error crosses as its ErrorRecord and arrives as the error that record answers for
+    the field's type, refused when it is not one."""
 
     origins = (BaseException,)
     target: type[BaseException]
 
-    def reported(self) -> type[ReportedError]:
-        reporting: dict[type[BaseException], type[ReportedError]] = {
-            Exception: ReportedError, **ReportedError.reporting}
-        try:
-            return reporting[self.target]
-        except KeyError:
-            raise MalformedRecord(f"No reported error is declared for {self.target.__name__}") from None
-
     def value_schema(self) -> dict[str, JsonValue]:
-        return {
-            "type": "object",
-            "properties": {"kind": {"type": "string"}, "message": {"type": "string"}, "declared": {}},
-            "required": ["kind"],
-        }
+        return FieldCodec.value_schema(ErrorRecord)
 
     @boundary_decoder
     def decode(self, data: object) -> BaseException:
-        record = FieldCodec.decode(dict[str, JsonValue], data)
-        with MalformedRecord.refusing("An error record needs its kind and its form"):
-            kind = FieldCodec.decode(str, record["kind"])
-            try:
-                declared = DeclaredError.declared_errors[kind]
-            except KeyError:
-                return self.reported()(kind, FieldCodec.decode(str, record["message"]))
-            error = declared.from_wire(record["declared"])
+        error = FieldCodec.decode(ErrorRecord, data).error(self.target)
         if not isinstance(error, self.target):
-            raise MalformedRecord(f"{kind} is not a {self.target.__name__}")
+            raise MalformedRecord(f"{type(error).__qualname__} is not a {self.target.__name__}")
         return error
 
     def encode(self, value: object) -> object:
         if not isinstance(value, self.target):
             raise TypeError(f"Expected {self.target.__name__}, received {type(value).__name__}")
-        error_class = type(value)
-        kind = f"{error_class.__module__}.{error_class.__qualname__}"
-        try:
-            DeclaredError.declared_errors[kind]
-        except KeyError:
-            return {"kind": kind, "message": str(value)}
-        return {"kind": kind, "declared": cast(DeclaredError, value).to_wire()}
+        return FieldCodec.encode(ErrorRecord.of(value), ErrorRecord)
 
 
 class _MemberDecoders(dict[object, ValueDecoder[object]]):

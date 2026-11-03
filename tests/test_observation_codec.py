@@ -3,8 +3,8 @@
 import pytest
 
 from agent_comms.coordination_errors import DeferredRead, ReportedDeferredRead, Refused
-from agent_comms.errors import RouteChangedError
-from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, ReportedError
+from agent_comms.errors import GoalRefused, RouteChangedError
+from agent_comms.nominal.field_codec import ErrorRecord, FieldCodec, MalformedRecord, ReportedError
 from agent_comms.ui_model.observation import ReadRefused, UnreadableHistory
 from agent_comms.ui_model.unread import (
     CappedReplyUnread,
@@ -46,9 +46,15 @@ def test_a_deferred_read_field_receives_a_deferred_read() -> None:
 
 
 def test_a_declared_error_of_the_wrong_type_is_refused() -> None:
+    sent = FieldCodec.encode(ErrorRecord.of(Refused(1, "x")), ErrorRecord)
     with pytest.raises(MalformedRecord):
-        FieldCodec.decode_document(DeferredRead, {
-            "kind": "agent_comms.coordination_errors.Refused", "declared": [1, "x", None]})
+        FieldCodec.decode_document(DeferredRead, sent)
+
+
+def test_a_narrowed_refusal_arrives_as_itself() -> None:
+    received = round_trip(ReadRefused(7, GoalRefused("no"), "trace"), ReadRefused)
+    assert type(received.error) is GoalRefused
+    assert (received.error.code, received.error.message) == (Refused.INVALID_PARAMS, "no")
 
 
 @pytest.mark.parametrize("unread", [
