@@ -298,7 +298,7 @@ class ChokeholdAnswer(UndatedStandingRule, FamilyScan, declared_name=None):
     def scan_observed(cls, comms: Comms,
                       observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
         held = tuple(teammate.incarnation
-                     for teammate in TeamService.teammates(comms.registry.snapshot())
+                     for teammate in TeamService.teammates(comms.registry.snapshot(), comms.goals)
                      if cls.held(comms, teammate.name))
         blocking = cls.blocking_signs(comms, frame) if held else ()
         return tuple(

@@ -63,13 +63,23 @@ class TeamService:
                      for request in goals.todos.open_requests(live.acting_identity, limit=1, descending=False))
 
     @classmethod
-    def teammates(cls, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
-        """The team: every registered independent colleague Core may address. There is no
-        lead; the board, its warnings and its pauses belong to each of them alike. A stopped
-        session stays a teammate (its owed answers and its frame stay on the board); an
-        archived or deleting thread does not (ThreadStatus.publish_heartbeat owns that)."""
-        return tuple(thread for thread in snapshot.commander_project.commanders(snapshot)
+    def addressable(cls, snapshot: RegistrySnapshot,
+                    threads: Iterable[Thread]) -> tuple[Thread, ...]:
+        """The independent colleagues among these that Core may address: an archived or
+        deleting thread is not (ThreadStatus.publish_heartbeat owns that)."""
+        return tuple(thread for thread in snapshot.commander_project.participants(threads)
                      if snapshot.status(thread.name).publish_heartbeat(lambda: True, False))
+
+    @classmethod
+    def teammates(cls, snapshot: RegistrySnapshot, goals: Goals) -> tuple[Thread, ...]:
+        """The team: every running colleague, and every colleague one of Tristan's open
+        requests waits on, running or not. There is no lead; the board, its warnings and its
+        pauses belong to each of them alike. A stopped session holding his ask keeps its owed
+        answers and frame on the board; a finished session does not, so the board scales with
+        the team, never with every thread the registry has held."""
+        owed = (thread for owner in goals.todos.requesters()
+                for thread in snapshot.threads_for(owner.require_recorded()))
+        return tuple(dict.fromkeys((*cls.running(snapshot), *cls.addressable(snapshot, owed))))
 
     @classmethod
     def forks(cls, snapshot: RegistrySnapshot, teammates: Iterable[Thread]) -> tuple[Thread, ...]:
@@ -94,7 +104,7 @@ class TeamService:
     def running(cls, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
         """The teammates that can act now. A warning that owes an answer within minutes goes
         only to them: a stopped session cannot be ignoring what it never read."""
-        return cls.live(cls.teammates(snapshot))
+        return cls.live(cls.addressable(snapshot, snapshot.threads.values()))
 
     @classmethod
     def longest_owed(cls, registry: Registration, goals: Goals) -> Thread:
@@ -103,7 +113,7 @@ class TeamService:
         between the duty read and the act: then this refuses as not applied (NobodyOwedError)
         instead of failing the pass."""
         owed = tuple((request.created_at, teammate)
-                     for teammate in cls.teammates(registry.snapshot())
+                     for teammate in cls.running(registry.snapshot())
                      for request in cls.requested_by(teammate, goals))
         if not owed:
             raise NobodyOwedError()
@@ -111,12 +121,12 @@ class TeamService:
         return teammate
 
     @classmethod
-    def served(cls, registry: Registration) -> tuple[Thread, ...]:
+    def served(cls, registry: Registration, goals: Goals) -> tuple[Thread, ...]:
         """Every teammate a pass reads one team board for and sends its packet to."""
-        return cls.teammates(registry.snapshot())
+        return cls.teammates(registry.snapshot(), goals)
 
     @classmethod
     def duty(cls, registry: Registration, goals: Goals) -> HeartbeatDuty:
         """Owed while any live teammate holds an open owner request; the pass acts only then."""
-        owed = any(cls.requested_by(thread, goals) for thread in cls.teammates(registry.snapshot()))
+        owed = any(cls.requested_by(thread, goals) for thread in cls.running(registry.snapshot()))
         return OwedHeartbeat() if owed else UnownedHeartbeat()

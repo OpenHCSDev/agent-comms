@@ -6367,6 +6367,13 @@ class OwnerRequestStore(DurableStore):
             )
             return tuple(islice(requests, None if limit < 0 else limit))
 
+    def requesters(self) -> tuple[ThreadIncarnation, ...]:
+        """Each owner an open request waits on, once: read from the requests, never by asking
+        every thread the registry has ever held."""
+        with self.snapshot() as db:
+            return tuple(dict.fromkeys(
+                request.commander for request in OwnerRequest.stream(db, state=OpenRequestState())))
+
     def record_directive(self, request: OwnerRequestId, directive: RequestDirective) -> None:
         with self.writing() as db:
             current = OwnerRequest.require(db, id=request)

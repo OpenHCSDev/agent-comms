@@ -77,7 +77,7 @@ class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
             snapshot = comms.registry.snapshot()
             actions = TeamHistory.read(comms, self.actors(snapshot))
             duty = self.duty(comms.registry, comms.goals)
-            for thread in self.served(comms.registry):
+            for thread in self.served(comms.registry, comms.goals):
                 for update in TeamUpdate.report_failure(
                     thread.incarnation, failure,
                     TeamUpdate.latest(comms, thread.incarnation),
@@ -111,7 +111,7 @@ class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
         try:
             for observed in boards:
                 comms.goals.todos.record_merges(observed.merges(comms))
-                recipients = self.served(comms.registry)
+                recipients = self.served(comms.registry, comms.goals)
                 held = {recipient.incarnation: TeamUpdate.latest(comms, recipient.incarnation)
                         for recipient in recipients}
                 announced = {

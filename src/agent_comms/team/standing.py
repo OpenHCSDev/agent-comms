@@ -282,7 +282,7 @@ class RequestStalled(IndependentStandingRule, UndatedStandingRule):
         """Every live teammate's open requests: Tristan's asks belong to the team board."""
         store = comms.goals.todos
         return tuple(cls(request)
-                     for teammate in TeamService.teammates(comms.registry.snapshot())
+                     for teammate in TeamService.teammates(comms.registry.snapshot(), comms.goals)
                      for request in store.open_requests(teammate.acting_identity)
                      if not store.serving_orders(request.id))
 
@@ -673,7 +673,7 @@ class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, FamilyScan, de
         now = time.time()
         found = []
         rule: HeartbeatSilent
-        for owner in TeamService.teammates(comms.registry.snapshot()):
+        for owner in TeamService.running(comms.registry.snapshot()):
             incarnation = owner.incarnation.require_recorded()
             completed = passes.commander_completed.get(incarnation)
             for request in TeamService.requested_by(owner, comms.goals):
@@ -775,7 +775,8 @@ class UnitDeaf(InboxUnavailable):
         snapshot = comms.registry.snapshot()
         units = list(comms.registry.active_threads().values())
         activity = comms.agents.all_activity(units, snapshot=snapshot)
-        return tuple(cls(paused + cls.seconds, snapshot.require(name).incarnation.require_recorded())
+        return tuple(cls(paused + cls.seconds,
+                         snapshot.require(name).incarnation.require_recorded())
                      for name, observed in activity.items()
                      for paused in observed.readiness.unavailable_since())
 
@@ -805,7 +806,7 @@ class ForkStalled(IndependentStandingRule, DatedStandingRule):
         """Each teammate session's registered, unarchived forks. Claude runs a fork inside its
         session's process, so only a session whose bridge process is alive has any."""
         snapshot = comms.registry.snapshot()
-        teammates = {thread.name: thread for thread in TeamService.teammates(snapshot)}
+        teammates = {thread.name: thread for thread in TeamService.running(snapshot)}
         now = time.time()
         return tuple(
             cls(fork.incarnation, owed.at, record.bus, written, owed)

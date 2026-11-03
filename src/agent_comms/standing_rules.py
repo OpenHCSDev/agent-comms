@@ -777,7 +777,8 @@ class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
     def violations(cls, comms: Comms) -> tuple[Self, ...]:
         """Every live teammate's due debts: the team board shows them all."""
         now = time.time()
-        return tuple(rule for teammate in TeamService.teammates(comms.registry.snapshot())
+        return tuple(rule
+                     for teammate in TeamService.teammates(comms.registry.snapshot(), comms.goals)
                      for rule in cls.opened(comms, teammate.incarnation) if rule.due(now))
 
     @classmethod

@@ -1024,12 +1024,12 @@ def test_a_closed_session_stays_on_the_team_and_an_archived_thread_leaves_it(not
 
     comms = notification_bus
     lead = comms.registry.require("lead")
-    assert "lead" in {thread.name for thread in TeamHeartbeat.served(comms.registry)}
+    assert "lead" in {thread.name for thread in TeamHeartbeat.served(comms.registry, comms.goals)}
     comms.registry.register(replace(lead, process_identity=NoProcess()))
     assert comms.goals.todos.open_requests(lead.acting_identity)
-    assert "lead" in {thread.name for thread in TeamHeartbeat.served(comms.registry)}
+    assert "lead" in {thread.name for thread in TeamHeartbeat.served(comms.registry, comms.goals)}
     comms.registry.register(comms.registry.require("lead"), ArchivedThreadStatus())
-    assert "lead" not in {thread.name for thread in TeamHeartbeat.served(comms.registry)}
+    assert "lead" not in {thread.name for thread in TeamHeartbeat.served(comms.registry, comms.goals)}
 
 
 def test_a_closed_session_leaves_the_board_for_the_live_teammates(notification_bus):
@@ -1042,7 +1042,7 @@ def test_a_closed_session_leaves_the_board_for_the_live_teammates(notification_b
                                     process_identity=NoProcess()))
     lead = comms.registry.require("lead")
     assert not lead.process_alive
-    assert {thread.name for thread in TeamHeartbeat.served(comms.registry)} >= {"lead", "worker"}
+    assert {thread.name for thread in TeamHeartbeat.served(comms.registry, comms.goals)} >= {"lead", "worker"}
     beat(comms, (ServicePassFailing(watch="following-rule", since=time.time(),
                                     error="independent source", failed_at=time.time()),))
     worker = comms.registry.require("worker").incarnation

@@ -118,7 +118,7 @@ class HeartbeatFrame(TeamInputs):
             inputs.pulls,
             plan,
             tuple({answer.observation_key(): answer
-                   for teammate in TeamService.teammates(snapshot)
+                   for teammate in TeamService.teammates(snapshot, comms.goals)
                    for answer in OwedAnswer.read_scan(comms, teammate.incarnation, inputs)
                    }.values()),
             closed,

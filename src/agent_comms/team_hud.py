@@ -357,7 +357,7 @@ class TeamHud(TeamLoad):
             tuple(dict.fromkeys(todo.held().owner_identity for todo in phase.holding(reading))),
         ) for phase in PlanPhase.members_with(PlanPhase))
         forks = tuple(fork.incarnation
-                      for fork in TeamService.forks(snapshot, TeamService.teammates(snapshot))
+                      for fork in TeamService.forks(snapshot, TeamService.running(snapshot))
                       if snapshot.status(fork.name).receiving)
         passes = ServicePassStore.at(comms.root).read()
         return cls(commander=owner, units=tuple(units), phases=phases,
