@@ -24,6 +24,8 @@ from agent_comms.shell_effects import (
 from agent_comms.standing_rules import StorageHomeMissing
 from agent_comms.storage_projection import StorageProjection
 from agent_comms.storage_rules import (
+    CheckoutAllocation,
+    EditableCheckoutAllocation,
     ScopedDirectory,
     StorageRule,
     UnitStorage,
@@ -356,6 +358,42 @@ def test_goal_donor_allocation_never_grants_source_writes(checkout_comms: Comms)
     assert rule.repository_donor(replace(owner, name='renamed'), name) == donor
     with pytest.raises(StorageDenied, match='incarnation'):
         rule.require_repository_donor(next_birth, name, donor)
+
+
+@pytest.mark.parametrize("allocation", CheckoutAllocation.members_with(EditableCheckoutAllocation),
+                         ids=lambda member: member.__name__)
+@pytest.mark.parametrize("select_other", (False, True))
+def test_existing_work_boundaries_do_not_select_a_new_checkout(
+        checkout_comms: Comms, allocation: type[EditableCheckoutAllocation], select_other: bool):
+    comms = checkout_comms
+    rule = comms.registry.storage_rule
+    owner = comms.registry.require('worker')
+    source = owner.project_path
+    repository = Repo.of(source).github
+    first_goal, second_goal = GoalId.mint(), GoalId.mint()
+    first = allocation.declared_for_work(
+        rule, owner, 'P1', repository, (repository,), first_goal)[repository]
+    second = allocation.declared_for_work(
+        rule, owner, 'P2', repository, (repository,), second_goal)[repository]
+    # Real older worktrees are admitted input, even though new allocation now
+    # refuses to create a second tree. No peer tree or storage policy is changed.
+    Checkout.add(source, first, DetachedStart('HEAD'))
+    Checkout.add(source, second, DetachedStart('HEAD'))
+    if select_other:
+        owner = replace(owner, worktree=Checkout(second))
+    assert rule.edit_boundaries(owner, 'P1', repository, (repository,), first_goal) == {first}
+    assert rule.edit_boundaries(owner, 'P2', repository, (repository,), second_goal) == {second}
+    fresh = rule.order_checkout(rule.roots_of(owner), 'P3')
+    if select_other:
+        assert rule.edit_boundaries(
+            owner, 'P3', repository, (repository,), GoalId.mint()) == {second}
+    else:
+        with pytest.raises(StorageDenied):
+            rule.edit_boundaries(owner, 'P3', repository, (repository,), GoalId.mint())
+    with pytest.raises(StorageDenied):
+        StorageProjection(rule, owner, comms).check((CreateCheckoutStorageEffect(
+            fresh, LocalRepositorySource(Repo.of(source)), DetachedStart('HEAD')),))
+    assert not fresh.exists()
 
 
 def test_allocating_effect_reuses_one_checkout_instead_of_creating_more(checkout_comms: Comms):
