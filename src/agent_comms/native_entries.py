@@ -333,26 +333,20 @@ class NativeEvidenceRead:
             finally:
                 evidence.close()
 
-    @classmethod
     @contextmanager
-    def borrow(cls, session_file: Path, reader: NativeEvidenceRead | None = None):
-        """Own acquisition and refusal cleanup, without borrowing proof authority.
+    def borrowed(self, session_file: Path):
+        """Lend this acquired reader without lending its proof authority.
 
-        A supplied reader stays acquired by its original scope after success.
-        Failed corroboration or cancellation retires its bytes and descriptor;
+        It stays acquired by its original scope after success. Failed
+        corroboration or cancellation retires its bytes and descriptor;
         a consumer cannot continue using an observation after that refusal.
         """
-        session_file = Path(session_file).absolute()
-        if reader is None:
-            with cls.open(session_file) as acquired:
-                yield acquired
-        else:
-            try:
-                reader.require_path(session_file)
-                yield reader
-            except BaseException:
-                reader.close()
-                raise
+        try:
+            self.require_path(Path(session_file).absolute())
+            yield self
+        except BaseException:
+            self.close()
+            raise
 
     def _forget(self) -> None:
         self.entries: tuple[NativeEntry, ...] = ()
@@ -406,7 +400,7 @@ class NativeEvidenceRead:
     ) -> NativeContextProof:
         """Corroborate a journal row against this reader's original acquired bytes."""
         session_file = files.session.absolute()
-        with self.borrow(session_file, self) as evidence:
+        with self.borrowed(session_file) as evidence:
             with NativeContextJournal.open_evidence(files.input_proof) as db:
                 row = NativeContextJournal.for_input(db, input_id, generations)
             location = NativeInputLocation(
@@ -459,7 +453,7 @@ class NativeEvidenceRead:
         if context.input_commit != input_event.input_commit:
             raise NativePiUnavailable("Native Pi input/context events disagree")
         emitted = context.at(files.session, session_entry_start=input_event.session_entry_start)
-        with self.borrow(files.session, self) as evidence:
+        with self.borrowed(files.session) as evidence:
             if not evidence.corroborates_context(
                 emitted, input_id=input_event.input_id, files=files
             ):
@@ -757,3 +751,18 @@ class ModelChangeEntry(NativeEntry):
 @dataclass(frozen=True, kw_only=True)
 class ThinkingLevelChangeEntry(NativeEntry):
     thinking_level: Annotated[type[ThinkingLevel], WireName("thinkingLevel")]
+
+
+@dataclass(frozen=True)
+class NoEvidenceRead[Reader: NativeEvidenceRead]:
+    """No reader is acquired yet: borrowing opens one of `reads` for this call and retires it after."""
+
+    reads: type[Reader]
+
+    @contextmanager
+    def borrowed(self, session_file: Path) -> Iterator[Reader]:
+        with self.reads.open(Path(session_file).absolute()) as acquired:
+            yield acquired
+
+
+NO_EVIDENCE_READ = NoEvidenceRead(NativeEvidenceRead)
