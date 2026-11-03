@@ -10,12 +10,10 @@ from yarl import URL
 from agent_comms.comms import Comms
 from agent_comms.connector import Connector
 from agent_comms.connector_store import ConnectorStore, UiReadAccess
-from agent_comms.remote_core import ConnectorObservationPeer
+from agent_comms.remote_core import ConnectorAccess
 from agent_comms.repo import Checkout
 from agent_comms.ui_model.observation import (
-    ObservationPeer,
     ObservationProcess,
-    ObservationSource,
     ObserveSidebar,
     SidebarResult,
 )
@@ -32,15 +30,12 @@ class Credential:
 
 
 @dataclass(frozen=True)
-class TestConnectorSource(ObservationSource):
-    """The peer reads only the endpoint and credential; the test server is plain HTTP,
-    which the owner's HTTPS profile refuses, so the test names them directly."""
+class TestConnectorSource(ConnectorAccess):
+    """The peer reads only the endpoint, credential and TLS trust; the test server is plain
+    HTTP, which the owner's HTTPS profile refuses, so the test names them directly."""
 
     endpoint: Endpoint
     credential: Credential
-
-    def observation_peer(self) -> ObservationPeer:
-        return ConnectorObservationPeer(self)
 
 
 async def test_an_observation_process_receives_its_sidebar_from_a_remote_core(tmp_path, comms: Comms) -> None:
