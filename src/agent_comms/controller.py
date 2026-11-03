@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
@@ -27,9 +27,6 @@ class SessionUpdateSink(ABC):
 
 
 class Controller(ABC):
-    # Only the unbound default yields to an ACP client that a direct prompt brings.
-    binds_client: ClassVar[bool] = False
-
     def attached(self, client: Controller) -> Controller:
         return self
 
@@ -52,10 +49,18 @@ class Controller(ABC):
 
 
 
-class UnboundController(Controller):
-    """No prompt has selected a transport; ingress may still bind its ACP client."""
+class UncontrolledController(Controller):
+    """No transport answers for this turn, so no UI permission is ever granted."""
 
-    binds_client = True
+    async def request_ui_permission(
+        self, runner: TurnRunner, session_id: AcpSessionId,
+        request: tuple[ToolCallUpdate, list[PermissionOption]],
+    ) -> dict[str, object] | None:
+        return None
+
+
+class UnboundController(UncontrolledController):
+    """No prompt has selected a transport; ingress may still bind its ACP client."""
 
     def attached(self, client: Controller) -> Controller:
         return client
@@ -63,19 +68,14 @@ class UnboundController(Controller):
     def require_current(self, authority: AcpSelectedWriteAuthority, session_id: AcpSessionId) -> None:
         raise IdentityConflict("Selected write ACP controller changed")
 
-    async def request_ui_permission(
-        self, runner: TurnRunner, session_id: AcpSessionId,
-        request: tuple[ToolCallUpdate, list[PermissionOption]],
-    ) -> dict[str, object] | None:
-        return None
-
     def departed(self, runtime: RuntimeServer, session_id: AcpSessionId) -> bool:
         return False
 
 
-class NoController(Controller):
-    """This turn has no controller: autonomous, channel and goal turns, and owner-socket
-    prompts without a live subscriber. Nobody can answer a permission for it."""
+class NoController(UncontrolledController, SessionUpdateSink):
+    """No controller and no attached ACP client: autonomous, channel and goal turns,
+    owner-socket prompts without a live subscriber, and a session before its client
+    connects. Nobody accepts its updates or answers a permission for it."""
 
     def require_present(self, refusal: Exception) -> Controller:
         raise refusal
@@ -83,14 +83,15 @@ class NoController(Controller):
     def require_current(self, authority: AcpSelectedWriteAuthority, session_id: AcpSessionId) -> None:
         raise IdentityConflict("Selected write has no ACP controller")
 
-    async def request_ui_permission(
-        self, runner: TurnRunner, session_id: AcpSessionId,
-        request: tuple[ToolCallUpdate, list[PermissionOption]],
-    ) -> dict[str, object] | None:
-        return None
-
     def departed(self, runtime: RuntimeServer, session_id: AcpSessionId) -> bool:
         return True
+
+    async def publish_update(self, *, session_id: AcpSessionId, update: BaseModel) -> bool:
+        return False
+
+    async def request_permission(self, **request: object) -> dict[str, object]:
+        """With no client, every permission request is cancelled."""
+        return {"outcome": {"outcome": "cancelled"}}
 
 
 UNBOUND_CONTROLLER = UnboundController()

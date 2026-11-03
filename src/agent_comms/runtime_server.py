@@ -367,10 +367,8 @@ class RuntimeServer(SessionUpdateSink):
 
         if not bound() or not sockets_bound():
             return False
-        delivered = False
-        client = self.agent.sessions.client
-        if client is not None:
-            delivered = await client.publish_update(session_id=session_id, update=update)
+        delivered = await self.agent.sessions.client.publish_update(
+            session_id=session_id, update=update)
         # Do not re-resolve the recipient set after an awaited handoff. A
         # socket reattach has a new identity even with the same session ID.
         sockets = (

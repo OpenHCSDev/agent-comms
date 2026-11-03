@@ -1144,7 +1144,7 @@ class InputDrain(InputObservation):
         images: tuple[ImageInput, ...],
     ) -> PromptResponse:
         inbox = self.state(session_id).require_inbox()
-        controller = self.runtime.controller.get().attached(self.sessions.bound_controller())
+        controller = self.runtime.controller.get().attached(self.sessions.client)
         followup = UserFollowupSegment.capture(text.removeprefix(AGENT_PREFIX))
         async with QueuedInput.reserve(
             self, session_id, self.sessions.require(session_id), text=display_text,
