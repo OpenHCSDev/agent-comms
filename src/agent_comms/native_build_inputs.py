@@ -167,21 +167,60 @@ class GitVersion:
 
 
 class GitVersionUnsupported(RuntimeError):
-    """The Git on PATH predates the options every launch passes; nothing drops them."""
+    """The Git on PATH predates an option this repository's reads need; nothing drops it."""
 
     def __init__(self, program: Path, found: GitVersion, required: GitVersion) -> None:
         self.program, self.found, self.required = program, found, required
         super().__init__(
-            f"{program} is Git {found}; agent-comms requires Git {required} or later "
-            "(every repository read passes --no-lazy-fetch)."
+            f"{program} is Git {found}; reading a partial clone needs Git {required} or later "
+            "(its reads pass --no-lazy-fetch)."
         )
+
+
+class CloneShape(ABC):
+    """Whether a checkout's repository can fetch missing objects while it is read."""
+
+    @abstractmethod
+    def read_options(self, program: Path) -> tuple[str, ...]:
+        """The Git options every read of this repository passes."""
+
+    promisor_settings: ClassVar[str] = r"^(remote\..+\.promisor|extensions\.partialclone)$"
+
+    @classmethod
+    @cache
+    def of(cls, checkout: Path) -> CloneShape:
+        """Git reads a repository as partial when a remote is a promisor or extensions.partialClone
+        names one; `clone --filter` writes the first. Git answers 1 when no setting matches."""
+        probe = GitLaunch._run(checkout, "config", "--type=bool-or-str", "--get-regexp",
+                               cls.promisor_settings)
+        if probe.returncode not in (0, 1):
+            probe.check_returncode()
+        settings = (line.split(maxsplit=1) for line in probe.stdout.decode().splitlines())
+        return PartialClone() if any(value != "false" for _, value in settings) else FullClone()
+
+
+class FullClone(CloneShape):
+    """Every object is local, so a read can never fetch: reads pass nothing, on any Git."""
+
+    def read_options(self, program: Path) -> tuple[str, ...]:
+        return ()
+
+
+class PartialClone(CloneShape):
+    """A promisor remote supplies missing objects. Only explicit acquisition may fetch them,
+    so every read refuses lazy fetches with --no-lazy-fetch, first shipped in Git 2.44."""
+
+    minimum_version: ClassVar[GitVersion] = GitVersion(2, 44)
+
+    def read_options(self, program: Path) -> tuple[str, ...]:
+        found = GitLaunch.version(program)
+        if found < self.minimum_version:
+            raise GitVersionUnsupported(program, found, self.minimum_version)
+        return ("--no-lazy-fetch",)
 
 
 class GitLaunch(Executable):
     """One Git child boundary, also usable by the isolated stdlib bootstrap."""
-
-    # --no-lazy-fetch (switch_options, Repo.command) first shipped in Git 2.44.
-    minimum_version: ClassVar[GitVersion] = GitVersion(2, 44)
 
     program: ClassVar[str] = "git"
     chdir_option: ClassVar[str] = "-C"
@@ -249,9 +288,17 @@ class GitLaunch(Executable):
         return GitVersion.reported(probe.stdout.decode().strip())
 
     @classmethod
-    def require_version(cls, program: Path, found: GitVersion) -> None:
-        if found < cls.minimum_version:
-            raise GitVersionUnsupported(program, found, cls.minimum_version)
+    def version(cls, program: Path) -> GitVersion:
+        return cls._version(program, program.stat().st_mtime_ns)
+
+    @classmethod
+    def located(cls, source: Mapping[str, str]) -> Path:
+        """The git a launch with this environment runs."""
+        match shutil.which(cls.program, path=source.get("PATH", os.defpath)):
+            case str(executable):
+                return Path(executable)
+            case _:
+                raise FileNotFoundError(cls.program)
 
     @staticmethod
     @cache
@@ -269,14 +316,8 @@ class GitLaunch(Executable):
     @classmethod
     def environment(cls, source: Mapping[str, str]) -> dict[str, str]:
         """The checkout selects the repository; inherit auth and command configuration."""
-        match shutil.which(cls.program, path=source.get("PATH", os.defpath)):
-            case str(executable):
-                program = Path(executable)
-            case _:
-                raise FileNotFoundError(cls.program)
-        stamp = program.stat().st_mtime_ns
-        cls.require_version(program, cls._version(program, stamp))
-        local = cls._local_environment(program, stamp)
+        program = cls.located(source)
+        local = cls._local_environment(program, program.stat().st_mtime_ns)
         # GIT_CONFIG_* carries command configuration, including auth and fixture
         # identity; GIT_CONFIG instead selects an alternate configuration file.
         return {

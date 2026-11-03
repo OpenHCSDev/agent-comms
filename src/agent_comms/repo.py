@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import heapq
+import os
 import re
 import shutil
 import subprocess
@@ -20,7 +21,7 @@ from .coordination_errors import CommandFailure
 from .nominal.declared_family import DeclaredFamily
 from .errors import MissingSourceLine
 from .nominal.field_codec import FieldCodec, GitCommitText, PresentMember, SingleFieldValue, WireValue
-from .native_build_inputs import GitLaunch
+from .native_build_inputs import CloneShape, GitLaunch
 from .repository_name import RepositoryName
 
 if TYPE_CHECKING:
@@ -114,7 +115,8 @@ class Repo(GitLaunch, BaseModel, WireValue):
     @classmethod
     def command(cls, checkout: Path | str, *args: str) -> tuple[str, ...]:
         """Only explicit acquisition may contact a promisor remote for missing objects."""
-        return super().command(checkout, "--no-lazy-fetch", *args)
+        shape = CloneShape.of(Path(checkout))
+        return super().command(checkout, *shape.read_options(cls.located(os.environ)), *args)
 
     def to_wire(self) -> dict[str, object]:
         return self.model_dump(mode="json")
