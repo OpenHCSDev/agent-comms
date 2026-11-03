@@ -135,8 +135,9 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     def ended_calls(self) -> tuple[ToolCallId, ...]:
         return ()
 
-    def followed_by_assistant(self, text: AssistantTranscript) -> TranscriptEvent | None:
-        return None
+    def take_assistant(self, events: list[TranscriptEvent], text: AssistantTranscript) -> None:
+        """Assistant text after this event starts its own event."""
+        events.append(text)
 
     def for_assigned_source(self, source, published: bool) -> tuple[TranscriptEvent, ...]:
         return (self,)
@@ -391,13 +392,14 @@ class AssistantTranscript(ModelOutput, AgentTextTranscript):
         return bool(self.text)
 
     def append_to(self, events: list[TranscriptEvent]) -> None:
-        if events and (merged := events[-1].followed_by_assistant(self)) is not None:
-            events[-1] = merged
+        # The event before it decides whether assistant text continues it.
+        if events:
+            events[-1].take_assistant(events, self)
         else:
             super().append_to(events)
 
-    def followed_by_assistant(self, text: AssistantTranscript) -> TranscriptEvent:
-        return replace(self, text=self.text + text.text)
+    def take_assistant(self, events: list[TranscriptEvent], text: AssistantTranscript) -> None:
+        events[-1] = replace(self, text=self.text + text.text)
 
     def for_assigned_source(self, source, published: bool) -> tuple[TranscriptEvent, ...]:
         return () if published else (self,)
