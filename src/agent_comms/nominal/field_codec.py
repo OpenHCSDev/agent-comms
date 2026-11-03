@@ -3957,7 +3957,7 @@ class NoSchemaScope(SchemaScope):
 
     @contextmanager
     def entered(self) -> Iterator[SchemaDefinitions]:
-        definitions = SchemaDefinitions(root=True, recursive=set(), definitions={})
+        definitions = RootSchemaDefinitions(recursive=set(), definitions={})
         token = SchemaDefinitions.current.set(definitions)
         try:
             yield definitions
@@ -3973,13 +3973,13 @@ class SchemaDefinitions(SchemaScope):
     current: ClassVar[ContextVar[SchemaScope]] = ContextVar(
         "schema_definitions", default=NoSchemaScope())
 
-    def __init__(self, *, root: bool, recursive: set[type],
-                 definitions: dict[str, JsonValue]) -> None:
-        self.root, self.recursive, self.definitions = root, recursive, definitions
+    def __init__(self, *, recursive: set[type], definitions: dict[str, JsonValue]) -> None:
+        self.recursive, self.definitions = recursive, definitions
 
     def entered(self) -> AbstractContextManager[SchemaDefinitions]:
+        """A nested schema joins the root's definitions and attaches nothing itself."""
         return nullcontext(SchemaDefinitions(
-            root=False, recursive=self.recursive, definitions=self.definitions))
+            recursive=self.recursive, definitions=self.definitions))
 
     @classmethod
     def scope(cls) -> AbstractContextManager[SchemaDefinitions]:
@@ -3995,9 +3995,14 @@ class SchemaDefinitions(SchemaScope):
         return reference
 
     def attached(self, schema: dict[str, JsonValue]) -> dict[str, JsonValue]:
-        if self.root and self.definitions:
-            return {**schema, "$defs": dict(self.definitions)}
         return schema
+
+
+class RootSchemaDefinitions(SchemaDefinitions):
+    """The schema being returned to its caller carries the definitions it refers to."""
+
+    def attached(self, schema: dict[str, JsonValue]) -> dict[str, JsonValue]:
+        return {**schema, "$defs": dict(self.definitions)} if self.definitions else schema
 
 
 class ErrorRecord(SubclassUnion, affix=""):
