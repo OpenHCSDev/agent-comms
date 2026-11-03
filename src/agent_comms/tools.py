@@ -114,6 +114,7 @@ from .thread_identity import ToolName
 from .thread_model import ThreadModel
 from .threads import NextTurnConfiguration
 from .tool_caller import ThreadCaller, ThreadListing, ToolCaller
+from .registry_document import RegistrySnapshot
 from .tool_result import ToolResult
 from .notification_reads import LiveNotificationRead
 from .work_branches import WorkBranch, WorkBranches
@@ -900,6 +901,24 @@ class CommsThreadsTool(ReadTool, NativeToolRequest):
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadListing:
         threads = ThreadsCliCommand(active_only=self.active_only).apply(comms)
         return caller.listing(comms, threads.threads)
+
+
+@dataclass(frozen=True)
+class RegistryRead(ToolResult):
+    """The registry as Core holds it: names, aliases, statuses and generations."""
+
+    snapshot: RegistrySnapshot
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsRegistryTool(ReadTool, ToolRequest[ToolCaller, RegistryRead]):
+    """A remote UI resolves names, renames and recorded threads against Core's registry."""
+
+    label = "Thread registry"
+    description = "The thread registry snapshot: names, aliases, statuses and owner generations."
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> RegistryRead:
+        return RegistryRead(comms.registry.snapshot())
 
 
 @dataclass(frozen=True)
