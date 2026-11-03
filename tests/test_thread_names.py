@@ -109,3 +109,16 @@ def test_a_ui_session_finds_its_project_thread_through_core(tmp_path):
         received = FieldCodec.decode(SessionThreadSelected, FieldCodec.encode(answer))
         assert received == answer and isinstance(received.selection, expected)
     assert received.selection.name_or("kept") == "kept"
+
+
+def test_a_ui_reads_a_threads_configuration_through_core(tmp_path):
+    """The status a DM shows is Core's configuration answer, the same across the codec."""
+    from agent_comms.core_access import LocalCoreAccess
+    from agent_comms.nominal.field_codec import FieldCodec
+    from agent_comms.tools import CommsThreadConfigurationTool, ThreadConfigured
+
+    comms = wire(tmp_path / "wire")
+    _declare(comms, "worker", str(tmp_path))
+    answer = LocalCoreAccess(comms).call(CommsThreadConfigurationTool(thread="worker"))
+    received = FieldCodec.decode(ThreadConfigured, FieldCodec.encode(answer))
+    assert received.update.status_label == comms.configuration.answer("worker").status_label

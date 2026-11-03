@@ -110,6 +110,7 @@ from .thread_management import InheritedTags, RenameThreadResult, TagChoice
 from .thread_model import ThreadModel
 from .threads import NextTurnConfiguration
 from .tool_caller import ThreadCaller, ThreadListing, ToolCaller
+from .acp_extension import CoordinationChangedUpdate
 from .registry_document import ProjectThreadSelection, RegistrySnapshot
 from .transcripts import TranscriptCursor
 from .tool_result import ToolResult
@@ -344,6 +345,25 @@ class CommsChannelTool(ReadTool, ToolRequest[ToolCaller, Channel]):
 
     def apply(self, comms: Comms, caller: ToolCaller) -> Channel:
         return comms.bus.require_channel(self.name)
+
+
+@dataclass(frozen=True)
+class ThreadConfigured(ToolResult):
+    """A thread's configuration as Core answers it: model, thinking level, title, place."""
+
+    update: CoordinationChangedUpdate
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsThreadConfigurationTool(ReadTool, ToolRequest[ToolCaller, ThreadConfigured]):
+    """A UI shows a thread's configuration from Core, in process or across the connector."""
+
+    label = "Thread configuration"
+    description = "One thread's configuration: its model, thinking level, title and worktree."
+    thread: Annotated[str, *tool_field("Thread name")]
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> ThreadConfigured:
+        return ThreadConfigured(comms.configuration.answer(self.thread))
 
 
 @dataclass(frozen=True)
