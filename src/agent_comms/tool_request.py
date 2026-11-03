@@ -180,7 +180,10 @@ class ToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResu
             raise ToolArgumentsRefusedError(
                 f"Invalid {cls.declared_name} arguments: {error}"
             ) from error
-        return request.reply(FieldCodec.encode(caller.invoke(request, comms).to_wire()), caller)
+        # A request decoded from the wire meets whichever caller arrived; the caller's own
+        # invoke checks at runtime that it may apply this request (thread-only refusals).
+        applied = caller.invoke(cast(ToolRequest, request), comms)
+        return request.reply(FieldCodec.encode(applied.to_wire()), caller)
 
     def require_read_only(self) -> None:
         """Mutating declarations cannot run under a read-only connector principal."""
