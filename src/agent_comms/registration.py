@@ -17,7 +17,7 @@ from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .goal_scope import AllGoals, GoalScope
 from .native_input_owner import RegistryOwner
 from .registration_change import RegistrationChange
-from .registry_document import RegistryDocument, RegistrySnapshot
+from .registry_document import ProjectThreadSelection, RegistryDocument, RegistrySnapshot
 from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from .routing import NoTurnRouting, Routing
 from .storage_rules import StorageRule
@@ -418,7 +418,6 @@ class Registration:
     require = reading(RegistryDocument.require)
     status = reading(RegistryDocument.status)
     user_thread = reading(RegistryDocument.user_thread)
-    session_thread = reading(RegistryDocument.session_thread)
 
     def goal_history(
         self, name: str, scope: GoalScope = AllGoals()
@@ -429,6 +428,12 @@ class Registration:
         return GoalHistoryStore(self.store.path).history(
             thread.incarnation.wire_birth, thread.goal, scope
         )
+
+    def session_thread(
+        self, project_path: Path, preferred: str | None = None,
+    ) -> ProjectThreadSelection:
+        """Core's host resolves the project path its registry records, then selects."""
+        return self.store.read().session_thread(Path(project_path).expanduser().resolve(), preferred)
 
     def all_threads(self) -> Mapping[str, Thread]:
         return dict(self.store.read().threads)

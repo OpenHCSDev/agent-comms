@@ -110,7 +110,7 @@ from .thread_management import InheritedTags, RenameThreadResult, TagChoice
 from .thread_model import ThreadModel
 from .threads import NextTurnConfiguration
 from .tool_caller import ThreadCaller, ThreadListing, ToolCaller
-from .registry_document import RegistrySnapshot
+from .registry_document import ProjectThreadSelection, RegistrySnapshot
 from .transcripts import TranscriptCursor
 from .tool_result import ToolResult
 from .notification_reads import LiveNotificationRead
@@ -344,6 +344,28 @@ class CommsChannelTool(ReadTool, ToolRequest[ToolCaller, Channel]):
 
     def apply(self, comms: Comms, caller: ToolCaller) -> Channel:
         return comms.bus.require_channel(self.name)
+
+
+@dataclass(frozen=True)
+class SessionThreadSelected(ToolResult):
+    """Which thread an unbound UI session at a project names, as Core's registry selects it."""
+
+    selection: ProjectThreadSelection
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsSessionThreadTool(ReadTool, ToolRequest[ToolCaller, SessionThreadSelected]):
+    """An unbound UI session finds its project's thread; Core's host resolves the path its
+    registry records, so a detached copy never matches through a local alias."""
+
+    label = "Session thread"
+    description = ("Select the thread an unbound session at a project names: its preferred name, "
+                   "else the project's sole declared ACP thread.")
+    project: Annotated[str, *tool_field("Project path as the UI names it")]
+    preferred: Annotated[str, *tool_field("Preferred thread name")]
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> SessionThreadSelected:
+        return SessionThreadSelected(comms.registry.session_thread(Path(self.project), self.preferred))
 
 
 @dataclass(frozen=True, kw_only=True)
