@@ -67,10 +67,15 @@ def test_a_remote_ui_reads_the_registry_with_its_renames(tmp_path):
     received = FieldCodec.decode(RegistryRead, FieldCodec.encode(answer))
     assert received.snapshot == comms.registry.snapshot()
     assert received.snapshot.canonical_name("worker") == "renamed"
-    # An unbound session resolves its project's thread from the received snapshot alone.
-    assert received.snapshot.session_thread(tmp_path, "worker").name_or("worker") == "renamed"
-    assert received.snapshot.session_thread(tmp_path / "elsewhere", "worker").name_or("kept") == "kept"
-    assert comms.registry.session_thread(tmp_path, "worker").name_or("worker") == "renamed"
+    # The received snapshot selects by the project path Core records, compared exactly.
+    project = tmp_path.resolve()
+    assert received.snapshot.session_thread(project, "worker").name_or("worker") == "renamed"
+    assert received.snapshot.session_thread(project / "elsewhere", "worker").name_or("kept") == "kept"
+    # An alias resolves only on Core's host: a detached copy elsewhere never follows it.
+    alias = tmp_path.parent / f"{tmp_path.name}-alias"
+    alias.symlink_to(project)
+    assert received.snapshot.session_thread(alias, "worker").name_or("kept") == "kept"
+    assert comms.registry.session_thread(alias, "worker").name_or("worker") == "renamed"
 
 
 def test_a_ui_reads_whether_a_channel_takes_input_through_core(tmp_path):
@@ -86,3 +91,21 @@ def test_a_ui_reads_whether_a_channel_takes_input_through_core(tmp_path):
         answer = LocalCoreAccess(comms).call(CommsChannelTool(name=name))
         assert FieldCodec.decode(Channel, FieldCodec.encode(answer)) == answer
         assert answer.read_only is False
+
+
+def test_a_ui_session_finds_its_project_thread_through_core(tmp_path):
+    """Core resolves the project path on its own host, and the selection arrives as itself."""
+    from agent_comms.core_access import LocalCoreAccess
+    from agent_comms.nominal.field_codec import FieldCodec
+    from agent_comms.registry_document import FoundProjectThread, NoProjectThread
+    from agent_comms.tools import CommsSessionThreadTool, SessionThreadSelected
+
+    comms = wire(tmp_path / "wire")
+    _declare(comms, "worker", str(tmp_path))
+    alias = tmp_path.parent / f"{tmp_path.name}-alias"
+    alias.symlink_to(tmp_path.resolve())
+    for project, expected in ((alias, FoundProjectThread), (tmp_path / "elsewhere", NoProjectThread)):
+        answer = LocalCoreAccess(comms).call(CommsSessionThreadTool(project=str(project), preferred="worker"))
+        received = FieldCodec.decode(SessionThreadSelected, FieldCodec.encode(answer))
+        assert received == answer and isinstance(received.selection, expected)
+    assert received.selection.name_or("kept") == "kept"

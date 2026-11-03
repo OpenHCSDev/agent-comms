@@ -30,6 +30,8 @@ from .nominal.field_codec import (
     FieldPlan,
     MalformedRecord,
     SlicePolicy,
+    SubclassUnion,
+    TaggedRecordMember,
     ThreadLookup,
     WireOmitDefault,
     WireRequired,
@@ -140,8 +142,13 @@ class ResolvedChannel(ResolvedTarget):
         )
 
 
-class ProjectThreadSelection:
-    """The registry's complete answer, including absence and ambiguity."""
+class ProjectThreadSelection(SubclassUnion, affix="ProjectThread"):
+    """The registry's complete answer, including absence and ambiguity. A remote UI receives
+    it from Core, so each record carries its kind."""
+
+    @classmethod
+    def decodes_tagged_records(cls) -> bool:
+        return True
 
     @classmethod
     def from_threads(cls, threads: tuple[Thread, ...]) -> ProjectThreadSelection:
@@ -156,21 +163,21 @@ class ProjectThreadSelection:
         return fallback
 
 
-@dataclass(frozen=True, slots=True)
-class NoProjectThread(ProjectThreadSelection):
+@dataclass(frozen=True)
+class NoProjectThread(TaggedRecordMember, ProjectThreadSelection):
     """There is no declared ACP thread at this project."""
 
 
-@dataclass(frozen=True, slots=True)
-class FoundProjectThread(ProjectThreadSelection):
+@dataclass(frozen=True)
+class FoundProjectThread(TaggedRecordMember, ProjectThreadSelection):
     thread: Thread
 
     def name_or(self, fallback: str) -> str:
         return self.thread.name
 
 
-@dataclass(frozen=True, slots=True)
-class SeveralProjectThreads(ProjectThreadSelection):
+@dataclass(frozen=True)
+class SeveralProjectThreads(TaggedRecordMember, ProjectThreadSelection):
     threads: tuple[Thread, ...]
 
 
@@ -272,14 +279,15 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
         return self._human.map(self.require)
 
     def session_thread(
-        self, project_path: Path, preferred: str | None = None,
+        self, project: Path, preferred: str | None = None,
     ) -> ProjectThreadSelection:
         """Select an unbound project's preferred name or sole declared ACP thread.
 
-        Preferred names keep their previous precedence, including non-ACP
-        threads. Bound sessions use strict lookup instead of project discovery.
+        ``project`` is compared exactly as given: resolving a path belongs to the host whose
+        filesystem it names (Registration, beside Core), never to a detached copy elsewhere.
+        Preferred names keep their previous precedence, including non-ACP threads. Bound
+        sessions use strict lookup instead of project discovery.
         """
-        project = Path(project_path).expanduser().resolve()
         located = tuple(t for t in self.threads.values() if t.project_path == project)
         if preferred:
             selected = self.canonical_name(preferred)
