@@ -905,7 +905,7 @@ class ObservationRelay:
         """The service exits once its connection closes; one that has not is hung, and is
         killed so no observation process outlives its viewer."""
         self.process.join(self.exit_seconds)
-        if self.process.exitcode is None:
+        if self.process.is_alive():
             self.process.kill()
             self.process.join()
 

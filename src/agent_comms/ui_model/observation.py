@@ -1607,10 +1607,10 @@ async def relay_frames(connection: Connection, peer: WebSocketFrames) -> str:
         for direction in directions:
             direction.cancel()
         await peer.close()
-        outcomes = await asyncio.gather(*directions, return_exceptions=True)
-    for outcome in outcomes:
-        if isinstance(outcome, Exception):
-            raise outcome
+        await asyncio.wait(directions)
+    for direction in directions:
+        # A direction that failed rather than ended re-raises its own error here.
+        direction.cancelled() or direction.result()
     return ended.result()
 
 
