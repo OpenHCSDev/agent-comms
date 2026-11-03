@@ -344,8 +344,8 @@ class NativeChildState(ABC):
         await prepare()
         return await persistent.child_state.idle().inspect_acquired(persistent, request)
 
-    def retire(self, successor: NativeChildState | None = None) -> NativeChildState:
-        return successor if successor is not None else self
+    def retire(self) -> NativeChildState:
+        return self
 
     @property
     def settled(self) -> NativeChildState:
@@ -366,9 +366,8 @@ class ChildNative(NativeChildState):
     @abstractmethod
     def _shutdown_successor(self) -> NativeChildState: ...
 
-    def retire(self, successor: NativeChildState | None = None) -> NativeChildState:
-        following = self._shutdown_successor() if successor is None else successor
-        return RetiringNative(self.child, following)
+    def retire(self) -> NativeChildState:
+        return RetiringNative(self.child, self._shutdown_successor())
 
     async def closed(self) -> None:
         await self.child.shutdown()
@@ -392,9 +391,7 @@ class RetiringNative(SuccessorNative):
     ) -> PiResponseData:
         raise NativePiUnavailable("Native context requires an acquired native child")
 
-    def retire(self, successor: NativeChildState | None = None) -> NativeChildState:
-        if successor is not None:
-            self.successor = successor
+    def retire(self) -> NativeChildState:
         return self
 
     @property
