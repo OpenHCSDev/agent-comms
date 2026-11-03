@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import get_original_bases
-from typing import TYPE_CHECKING, Self, Annotated, ClassVar, NoReturn, cast, get_args, get_origin
+from typing import TYPE_CHECKING, Self, Annotated, ClassVar, NoReturn, TypeVar, cast, get_args, get_origin
 
 from agent_comms_hooks import ToolRefusedError
 from pydantic import JsonValue
@@ -141,15 +141,19 @@ class ToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResu
     @classmethod
     def result_type(cls) -> type[Result]:
         """The result this request declares once, as the family's second type argument in its
-        own or an inherited class header; a remote reply decodes into it."""
-        requests = cls.__mro__[:cls.__mro__.index(ToolRequest) + 1]
-        for declaration in requests:
+        own or an inherited class header, followed through every intermediate generic parent;
+        a remote reply decodes into it."""
+        bindings: dict[object, object] = {}
+        for declaration in cls.__mro__:
             for base in get_original_bases(declaration):
-                if get_origin(base) in requests:
-                    match get_args(base):
-                        case (_, result):
-                            return cast(type[Result], result)
-        raise TypeError(f"{cls.__qualname__} declares no result in its class header")
+                for parameter, argument in zip(
+                    getattr(get_origin(base), "__type_params__", ()), get_args(base)
+                ):
+                    bindings.setdefault(parameter, bindings.get(argument, argument))
+        result = bindings.get(ToolRequest.__type_params__[1])
+        if result is None or isinstance(result, TypeVar):
+            raise TypeError(f"{cls.__qualname__} declares no result in its class header")
+        return cast(type[Result], result)
 
     @classmethod
     def invoke(
@@ -207,6 +211,20 @@ class ToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResu
         self: ToolRequest[ToolCaller, R], comms: Comms, caller: NoThreadCaller
     ) -> R:
         return self.apply(comms, caller)
+
+
+class HumanToolRequest[Result: ToolResult = ToolResult](
+    ToolRequest[ToolCaller, Result], declared_name=None,
+):
+    """A request only the owner's UI may make: Core checks the human caller here, once,
+    and the member answers from comms alone."""
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> Result:
+        caller.require_human()
+        return self.answered(comms)
+
+    @abstractmethod
+    def answered(self, comms: Comms) -> Result: ...
 
 
 class NativeToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResult](

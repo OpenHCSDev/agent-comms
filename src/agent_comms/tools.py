@@ -11,6 +11,7 @@ from .input_key import InputKeyText
 from .agent_inbox import InboxWait, NoWait, TakenInputPosition, TakenInputStart
 
 from .tool_request import (
+    HumanToolRequest,
     ListedNames,
     LiveOwnerTool,
     OmittedNames,
@@ -134,7 +135,11 @@ from .task_sources import (
     TaskScopeSelection,
 )
 from .thread_execution import ArchiveOwnerControl, NativeOwnerCommand, OwnerLifecycleControl, StartOwnerControl
-from .thread_management import InheritedTags, RenameThreadResult, TagChoice
+from .thread_management import InheritedTags, ProjectChangeResult, RenameThreadResult, TagChoice
+from .input_origin import HumanInputOrigin
+from .thread_identity import ClaimedIdentity
+from .thread_presentation import ThreadPresentation
+from .child_process import ProcessIdentity
 from .thread_identity import ToolName
 from .thread_model import ThreadModel
 from .threads import NextTurnConfiguration, Thread
@@ -487,7 +492,9 @@ class ObservedToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = 
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsExportWireTool(ObservedToolRequest[ToolCaller, WireExportProvenance]):
+class CommsExportWireTool(
+    ObservedToolRequest[ToolCaller, WireExportProvenance], HumanToolRequest[WireExportProvenance],
+):
     """A UI exports wire history to a file on Core's host, with progress and cancellation.
     Requires a human caller."""
 
@@ -499,14 +506,13 @@ class CommsExportWireTool(ObservedToolRequest[ToolCaller, WireExportProvenance])
     scope: Annotated[WireExportScope, *tool_field("What to export")]
     limit: Annotated[WireExportLimit, *tool_field("How much to export")]
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> WireExportProvenance:
-        caller.require_human()
+    def answered(self, comms: Comms) -> WireExportProvenance:
         return comms.views.export_wire(self.destination, format=self.format, scope=self.scope,
                                        limit=self.limit, observer=self.observer)
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsImportThreadTool(ToolRequest[ToolCaller, ThreadImported]):
+class CommsImportThreadTool(HumanToolRequest[ThreadImported]):
     """A UI imports a harness session as a stopped thread; Core's host reads the source file.
     Requires a human caller."""
 
@@ -519,8 +525,7 @@ class CommsImportThreadTool(ToolRequest[ToolCaller, ThreadImported]):
     session: Annotated[ExpectedSession, *tool_field("Expected session")]
     worktree: Annotated[ImportDirectory, *tool_field("Worktree for the imported thread")]
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> ThreadImported:
-        caller.require_human()
+    def answered(self, comms: Comms) -> ThreadImported:
         return comms.threads.import_thread(OfflineHistory.stored(self.harness, self.source, self.session),
                                           name=self.name, worktree=self.worktree)
 
@@ -612,7 +617,7 @@ class OwnerAnswered(ToolResult):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsOwnerRequestTool(ToolRequest[ToolCaller, OwnerAnswered]):
+class CommsOwnerRequestTool(HumanToolRequest[OwnerAnswered]):
     """A UI asks one running owner incarnation a declared runtime request, such as its
     context; Core's host reaches the owner's socket. Requires a human caller."""
 
@@ -622,13 +627,65 @@ class CommsOwnerRequestTool(ToolRequest[ToolCaller, OwnerAnswered]):
     owner: Annotated[ThreadIncarnation, *tool_field("The owner incarnation the UI holds")]
     request: Annotated[RuntimeRequest, *tool_field("The declared runtime request")]
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> OwnerAnswered:
-        caller.require_human()
+    def answered(self, comms: Comms) -> OwnerAnswered:
         thread = comms.registry.require(self.owner.name)
         if thread.incarnation != self.owner:
             raise ValueError("Selected thread incarnation changed")
         return OwnerAnswered(FieldCodec.decode(JsonValue, OwnerConnection.exchange(
             comms.root, thread.require_process(), self.request)))
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsMoveThreadProjectTool(HumanToolRequest[ProjectChangeResult]):
+    """The owner's UI moves one thread incarnation's project; a later occupant of the name
+    is refused, never moved."""
+
+    label = "Move thread project"
+    description = "Move a thread incarnation's project directory; requires a human UI caller."
+    owner: Annotated[ThreadIncarnation, *tool_field("The thread incarnation the UI holds")]
+    path: Annotated[str, *tool_field("New project directory")]
+
+    def answered(self, comms: Comms) -> ProjectChangeResult:
+        return comms.threads.set_project(self.owner, self.path)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsRenameManagedThreadTool(HumanToolRequest[RenameThreadResult]):
+    """The owner's UI renames the running thread its agent process manages."""
+
+    label = "Rename managed thread"
+    description = "Rename a running managed thread after proving its process; requires a human UI caller."
+    thread: Annotated[str, *tool_field("The thread's current name")]
+    display_name: Annotated[str, *tool_field("The new display name")]
+    owner: Annotated[ProcessIdentity, *tool_field("The process that manages the thread")]
+
+    def answered(self, comms: Comms) -> RenameThreadResult:
+        return comms.threads.rename_managed_thread(self.thread, self.display_name, owner=self.owner)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsCaptureHumanInputTool(HumanToolRequest[HumanInputOrigin]):
+    """The original human author witness for input the owner is about to queue, captured
+    against the claimed identity on Core's host."""
+
+    label = "Capture human input"
+    description = "Capture the human author witness for queued input; requires a human UI caller."
+    claimed_identity: Annotated[ClaimedIdentity, *tool_field("The claimed input identity")]
+
+    def answered(self, comms: Comms) -> HumanInputOrigin:
+        return HumanInputOrigin.capture(comms, self.claimed_identity)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsThreadPresentationTool(ReadTool, ToolRequest[ToolCaller, ThreadPresentation]):
+    """One thread's published presentation, as the sidebar and session header show it."""
+
+    label = "Thread presentation"
+    description = "Read one thread's published presentation."
+    thread: Annotated[str, *tool_field("Thread name")]
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> ThreadPresentation:
+        return comms.views.thread_presentations((self.thread,)).read(self.thread).published()
 
 
 @dataclass(frozen=True)
@@ -637,7 +694,7 @@ class QueueActionApplied(ToolResult):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsQueueActionTool(ToolRequest[ToolCaller, QueueActionApplied]):
+class CommsQueueActionTool(HumanToolRequest[QueueActionApplied]):
     """A UI sends a queued message now, or clears a queue, at its original recipient's owner;
     Core's host reaches the owner. Requires a human caller."""
 
@@ -647,8 +704,7 @@ class CommsQueueActionTool(ToolRequest[ToolCaller, QueueActionApplied]):
     lookup: Annotated[ThreadLookup, *tool_field("The original recipient's creation lookup")]
     action: Annotated[type[QueueActionRuntimeRequest], *tool_field("Send now or clear")]
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> QueueActionApplied:
-        caller.require_human()
+    def answered(self, comms: Comms) -> QueueActionApplied:
         original = comms.registry.snapshot().born(self.lookup)
         self.action.at_owner(comms.root, original)
         return QueueActionApplied(original.name)
@@ -676,7 +732,7 @@ class PageMarked(ToolResult):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsMarkPageReadTool(ToolRequest[ToolCaller, PageMarked]):
+class CommsMarkPageReadTool(HumanToolRequest[PageMarked]):
     """A UI acknowledges exactly the page it painted, as the human user of its project."""
 
     label = "Mark page read"
@@ -685,8 +741,7 @@ class CommsMarkPageReadTool(ToolRequest[ToolCaller, PageMarked]):
     page: Annotated[MessagePage, *tool_field("The painted page")]
     worktree: Annotated[Checkout, *tool_field("The project whose human user read it")]
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> PageMarked:
-        caller.require_human()
+    def answered(self, comms: Comms) -> PageMarked:
         comms.views.mark_page_read(self.page, worktree=self.worktree)
         return PageMarked(len(self.page.messages))
 
@@ -714,7 +769,7 @@ class RelationshipOrdered(ToolResult):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsSetRelationshipOrderTool(ToolRequest[ToolCaller, RelationshipOrdered]):
+class CommsSetRelationshipOrderTool(HumanToolRequest[RelationshipOrdered]):
     """A UI sets how one of a thread's relationship groups is sorted; requires a human caller."""
 
     label = "Set relationship order"
@@ -723,8 +778,7 @@ class CommsSetRelationshipOrderTool(ToolRequest[ToolCaller, RelationshipOrdered]
     group: Annotated[type[SortableRelationshipGroup], *tool_field("Relationship group")]
     order: Annotated[type[ThreadSort], *tool_field("Thread order")]
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> RelationshipOrdered:
-        caller.require_human()
+    def answered(self, comms: Comms) -> RelationshipOrdered:
         return RelationshipOrdered(comms.relationships.set_order(self.owner, self.group, self.order))
 
 
@@ -763,7 +817,7 @@ class CommsPrepareTargetActionTool(ReadTool, ToolRequest[ToolCaller, PreparedTar
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsTargetEditTool(ToolRequest[ToolCaller, TargetEditResult | Channel]):
+class CommsTargetEditTool(HumanToolRequest[TargetEditResult | Channel]):
     """A UI applies one menu action, as the owner, locally or across the connector."""
 
     label = "Apply target action"
@@ -771,8 +825,7 @@ class CommsTargetEditTool(ToolRequest[ToolCaller, TargetEditResult | Channel]):
                    "requires a human UI caller.")
     edit: Annotated[TargetEdit, *tool_field("The accepted action and its values")]
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> TargetEditResult | Channel:
-        caller.require_human()
+    def answered(self, comms: Comms) -> TargetEditResult | Channel:
         return self.edit.apply(comms)
 
 
@@ -1598,7 +1651,7 @@ class ThreadViewMarked(ToolResult):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsMarkThreadViewReadTool(ToolRequest[ToolCaller, ThreadViewMarked]):
+class CommsMarkThreadViewReadTool(HumanToolRequest[ThreadViewMarked]):
     """A UI acknowledges what it displayed of one thread, as the owner, locally or across
     the connector; requires a human UI caller."""
 
@@ -1608,8 +1661,7 @@ class CommsMarkThreadViewReadTool(ToolRequest[ToolCaller, ThreadViewMarked]):
     thread: Annotated[str, *tool_field("Thread name")]
     through: Annotated[TranscriptCursor, *tool_field("Displayed transcript position")]
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> ThreadViewMarked:
-        caller.require_human()
+    def answered(self, comms: Comms) -> ThreadViewMarked:
         comms.views.mark_thread_view_read(self.thread, worktree=Checkout(comms.root), through=self.through)
         return ThreadViewMarked(self.thread)
 

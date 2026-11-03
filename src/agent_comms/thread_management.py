@@ -225,7 +225,7 @@ class ThreadDeleted(CliResult):
 
 
 @dataclass(frozen=True, slots=True)
-class ProjectChangeResult:
+class ProjectChangeResult(ToolResult):
     thread: str
     previous: str
     current: str

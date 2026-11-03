@@ -14,6 +14,7 @@ from .thread_identity import OwnerIdentity
 from .child_process import ProcessIdentity
 
 from .message_reference import MessageReference
+from .tool_result import ToolResult
 import agent_comms.session_load as session_load
 
 if TYPE_CHECKING:
@@ -231,7 +232,7 @@ class ThreadStatusDisplay:
 
 
 @dataclass(frozen=True, slots=True)
-class ThreadPresentation(ThreadStatusDisplay):
+class ThreadPresentation(ThreadStatusDisplay, ToolResult):
     """What a viewer shows for a thread, or its declared absence: no acquired evidence."""
 
     @property

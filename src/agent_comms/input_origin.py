@@ -16,6 +16,7 @@ from .goals import GoalCheckpoint
 from .harness_install import HarnessSession
 from .input_key import InputKey, InputKeyText
 from .message_reference import MessageReference
+from .tool_result import ToolResult
 from .repo import Checkout
 from .thread_identity import ClaimScoped, ClaimedIdentity
 from .turn_context import Provenance
@@ -134,7 +135,7 @@ class HarnessAttemptOrigin(InputOrigin):
 
 
 @dataclass(frozen=True)
-class HumanInputOrigin(InputOrigin, ClaimScoped):
+class HumanInputOrigin(InputOrigin, ClaimScoped, ToolResult):
     """Same cooperative local USER contract as the original wire publisher.
 
     The attached controller proves only who holds the transport. This USER
