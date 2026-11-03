@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from .goal_management import Goals
     from .historical_views import ChannelHistory, DMHistory, HistoryView
     from .history_views import HistoryViews
+    from .message_page import MessagePage, PageBounds
     from .messages import Message, MessageInput
     from .read_basis import (
         ChannelConversation,
@@ -242,6 +243,10 @@ class NamedTarget(CommandTarget):
     guidance_scope = ""
     default_audience = MessageAudience.DIRECT
 
+    @abstractmethod
+    def display_page(self, views: HistoryViews, bounds: PageBounds) -> MessagePage:
+        """This conversation's display page as the bus's human user reads it."""
+
     @classmethod
     def address(cls, name: str) -> str:
         """The target name an address of this kind names once its sigil is read."""
@@ -364,6 +369,9 @@ class NamedTarget(CommandTarget):
 class ThreadTarget(NamedTarget):
     def automatic_reply_targets(self, sender: str) -> tuple[str, ...]:
         return (self.reply_target(sender),)
+
+    def display_page(self, views: HistoryViews, bounds: PageBounds) -> MessagePage:
+        return views.dm_display_page(self, worktree=Checkout(views.root), bounds=bounds)
 
     sigil = "@"
     route: ClassVar[ReplyRoute] = SenderReply()
@@ -495,6 +503,10 @@ class IncarnationThreadTarget(ThreadTarget):
 
 
 class ChannelTarget(NamedTarget):
+    def display_page(self, views: HistoryViews, bounds: PageBounds) -> MessagePage:
+        return views.channel_display_page(
+            self.name, viewer=views.display_viewer(Checkout(views.root)), bounds=bounds)
+
     needs_channel_state = True
     batchable = True
     kind = "channel"

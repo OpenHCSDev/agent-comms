@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import annotationlib
+
 from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -150,6 +152,18 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
                 },
             )
         return result
+
+    def arguments(self) -> dict[str, JsonValue]:
+        """This request as tools/call arguments: what invoke decodes back into it."""
+        encoded = FieldCodec.encode(self)
+        encoded.pop(self.family_discriminator, None)
+        return encoded
+
+    @classmethod
+    def result_type(cls) -> type[ToolResult]:
+        """The result apply declares; a remote reply decodes into it."""
+        declared = annotationlib.get_annotations(cls.apply, format=annotationlib.Format.STRING)["return"]
+        return annotationlib.ForwardRef(declared, module=cls.apply.__module__).evaluate()
 
     @classmethod
     def invoke(

@@ -13,10 +13,12 @@ from .read_basis import (
     DisplayBasis, SelectedDisplay, NoDisplaySelection, MessageDisplayScope,
 )
 from .bus import BusReader
+from .tool_result import ToolResult
 
 @dataclass(frozen=True, slots=True)
-class MessagePage:
-    """A bounded, ascending page from the durable message log.
+class MessagePage(ToolResult):
+    """A bounded, ascending page from the durable message log, and the reply a UI's page
+    request returns, in process or through the connector.
 
     Cursors are exclusive message sequence numbers. Page size counts messages.
     """

@@ -79,7 +79,7 @@ import subprocess
 import site
 import socket
 import sys
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.channel_targets import CommandTarget, ThreadTarget
 
 LIST = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
 
@@ -1062,3 +1062,31 @@ def test_a_cloud_session_on_the_claude_ai_grant_acts_under_its_own_name(comms):
     CALLER.prepare_call(comms, acting)
     assert comms.registry.require("claude-cloud-1").parent.names() == ("claude-ai",)
     assert "fork" in CALLER.input_schema(CommsSendTool)["properties"]
+
+
+async def test_a_ui_reads_one_conversation_page_the_same_locally_and_remotely(client, comms):
+    """The UI's page request answers in process and through tools/call with one record:
+    the remote reply decodes into the request's declared result, the way RemoteCoreAccess
+    decodes it."""
+    from agent_comms.connector import ToolsCallMessage, ToolsCallReply
+    from agent_comms.core_access import LocalCoreAccess
+    from agent_comms.tool_request import ToolCall
+    from agent_comms.tools import CommsConversationPageTool
+
+    comms.registry.declare(Thread(CALLER.name, frozenset(), Checkout(comms.root)))
+    sent = comms.messaging.send_user_message(
+        ThreadTarget("worker"), "page through the boundary", worktree=Checkout(comms.root))
+    request = CommsConversationPageTool(conversation=ThreadTarget("worker"))
+
+    local = LocalCoreAccess(comms).call(request)
+    assert sent.message_id in [message.message_id for message in local.messages]
+
+    envelope = ToolsCallMessage(jsonrpc="2.0", id=3,
+                                params=ToolCall(request.declared_name, request.arguments()))
+    headers = {"Authorization": f"Bearer {await approved_token(client, comms)}"}
+    reply = FieldCodec.decode(ToolsCallReply, await (await client.post(
+        "/mcp", headers=headers, json=FieldCodec.encode(envelope))).json())
+    assert not reply.result.is_error
+    remote = FieldCodec.decode(request.result_type(), reply.result.structured_content)
+    assert [m.message_id for m in remote.messages] == [m.message_id for m in local.messages]
+    assert remote.selection == local.selection  # the read proof comes back for the read mark

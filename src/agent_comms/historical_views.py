@@ -22,7 +22,7 @@ from .channels import Channel
 from .child_process import Platform
 from .coordination_errors import HistoricalSourceChanged
 from .errors import UnregisteredThreadError
-from .nominal.field_codec import FieldCodec, ScratchName
+from .nominal.field_codec import FieldCodec, ScratchName, TaggedRecordMember
 from .locked_store import DocumentChange, RegistryFile, RootFile
 from .maintenance_barrier import CarriedDocument
 from .message_page import (
@@ -77,7 +77,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, slots=True)
-class HistoricalSelection(SelectedDisplay):
+class HistoricalSelection(TaggedRecordMember, SelectedDisplay):
     displayed: HistoricalDisplay
 
     @property
