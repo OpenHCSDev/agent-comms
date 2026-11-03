@@ -253,10 +253,10 @@ class NativeRuntimeInput(
         saved native history. A recorded acknowledgement additionally seals the exact
         original user entry; a precommit authorized row still owns its stage.
         """
-        rows = cls.select(
+        rows = [row for input_id in user.input_id.present() for row in cls.select(
             db, where="input_id=? AND session_file=? AND session_id=?",
-            parameters=(user.input_id, str(reader.path), session_id),
-        )
+            parameters=(input_id, str(reader.path), session_id),
+        )]
         for row in rows:
             user.require_tracked_user()
             if row.reference.recorded and not row.session_entry_id.holds(user.id):

@@ -287,7 +287,7 @@ class TranscriptRoutes(DurableStore):
             ):
                 raise RelationViolationError("Native publication session changed")
             if not inputs.in_turn(lease.turn_id).started_for_native(
-                lease, user.input_id, user.message.text, snapshot=snapshot
+                lease, user.require_input_id(), user.message.text, snapshot=snapshot
             ):
                 raise RelationViolationError("Native publication has no original STARTED input")
             references = tuple(dict.fromkeys((*routing.requests, *published)))
