@@ -159,7 +159,7 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
         """
 
         return entry.events(replace(
-            projection, input_display=InputDisplay(user.input_id, NoDisplayText())
+            projection, input_display=InputDisplay(user.require_input_id(), NoDisplayText())
         ))
 
     def require_attempt(self) -> FullNativeExecution:
