@@ -36,7 +36,6 @@ def published_board(fork_bus, installed_runtime):
     comms, source, _ = fork_bus
     from test_forks import record_edits
     record_edits(comms, source, 1)
-    parent = comms.registry.require('lead')
     frame = capture_frame(comms, ProgressRead())
     states = TeammateState.current(comms, frame)
     observation = TeamObservation(frame, (), states)

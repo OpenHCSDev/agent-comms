@@ -182,7 +182,6 @@ def struck_unowned_bus(checkout_bus: Comms) -> tuple[Comms, StrikeTodo]:
 
 
 def run_heartbeat_rules(c: Comms, rules: tuple[StandingRule, ...]) -> None:
-    lead = c.registry.require('lead')
     frame = capture_frame(c, ProgressRead())
     observed = TeamObservation(frame, rules, ())
     asyncio.run(ObservedHeartbeat(observed).run(lambda: nullcontext(c)))

@@ -12,7 +12,6 @@ from multiprocessing import Pipe
 
 import pytest
 
-from agent_comms.registry_document import RegisteredTeamProject
 
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.cli_verbs.fork import ForkCliCommand
