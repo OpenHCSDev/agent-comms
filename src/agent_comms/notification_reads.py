@@ -10,10 +10,9 @@ from .comms import Comms
 from .historical_views import HistorySource
 from .page_traversal import HistorySourceKey
 from .message_reference import MessageReference
-from agent_comms.message_notification import NotificationWindow
+from agent_comms.message_notification import NotificationPass, NotificationWindow
 from .notification_evidence import FirstRecipient, RecipientCursor, RecipientLimit
 from .notification_read import NotificationsRead
-from .presentation import WireRevision
 from .read_basis import ReadAuthority
 
 
@@ -25,7 +24,7 @@ class NotificationRead(UiRead[NotificationWindow], ABC):
 
     @abstractmethod
     def changed_since(
-        self, comms: Comms, revision: WireRevision, previous: NotificationsRead
+        self, comms: Comms, previous: NotificationsRead, notifications: NotificationPass,
     ) -> bool: ...
 
 
@@ -40,9 +39,9 @@ class LiveNotificationRead(NotificationRead):
         )
 
     def changed_since(
-        self, comms: Comms, revision: WireRevision, previous: NotificationsRead
+        self, comms: Comms, previous: NotificationsRead, notifications: NotificationPass,
     ) -> bool:
-        return previous.live_changed(comms, revision)
+        return previous.live_changed(comms, notifications)
 
 
 @dataclass(frozen=True)
@@ -61,6 +60,6 @@ class RecordedNotificationRead(NotificationRead):
             )
 
     def changed_since(
-        self, comms: Comms, revision: WireRevision, previous: NotificationsRead
+        self, comms: Comms, previous: NotificationsRead, notifications: NotificationPass,
     ) -> bool:
-        return revision.history != previous.revision.history
+        return notifications.revision.history != previous.revision.history

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from abc import abstractmethod
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -38,7 +38,6 @@ from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 
 if TYPE_CHECKING:
-    from .notification_assignment import NotificationReadMark
     from .bus_publication import Delivered
     from .messages import Message
     from .read_basis import MessageDisplayScope
@@ -207,15 +206,6 @@ class ReadLedger(SingleFileStore, Sealed, ThreadOwnedState, CarriedDocument[Read
         return snapshot.recipient(recipient, original).read_effect(
             self, original.message, snapshot, document=document
         )
-
-    def changed_notifications(
-        self, marks: Iterable[NotificationReadMark], snapshot: RegistrySnapshot,
-    ) -> tuple[NotificationReadMark, ...]:
-        """Compare only the source/recipient display facts a window actually used."""
-        document = self.read()
-        return tuple(mark for mark in marks if mark.displayed_to != self.displayed_recipient(
-            mark.source, mark.recipient, snapshot, document=document,
-        ))
 
     def historical_displayed_recipient(
         self, message, recipient, snapshot: RegistryProvenance, *, document=None

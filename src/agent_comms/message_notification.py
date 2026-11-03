@@ -6,9 +6,11 @@ from agent_comms.notification_assignment import NotificationSelection
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
+from functools import cached_property
 from pathlib import Path
 from .agent_activity import AgentActivity, RecordedRecipientActivity
-from .read_ledger import ReadLedger
+from .read_ledger import ReadDocument, ReadLedger
+from .registry_document import RegistrySnapshot
 from .frozen_recipient import FrozenRecipient
 from .channel_targets import CommandTarget
 from .nominal.field_codec import MessageId, ThreadLookup
@@ -66,27 +68,61 @@ class NotificationWindow(ABC):
                          for item in items for name in item.activity_names())
 
     @abstractmethod
-    def changed(self, comms: Comms, revision: WireRevision, earlier: WireRevision) -> bool: ...
+    def changed(self, notifications: NotificationPass) -> bool: ...
 
 
 class NoNotificationWindow(NotificationWindow):
     def __init__(self) -> None:
         super().__init__({}, ())
 
-    def changed(self, comms: Comms, revision: WireRevision, earlier: WireRevision) -> bool:
+    def changed(self, notifications: NotificationPass) -> bool:
         return False
 
 
 @dataclass(frozen=True)
 class CapturedNotificationWindow(NotificationWindow):
-    def changed(self, comms: Comms, revision: WireRevision, earlier: WireRevision) -> bool:
-        if not revision.changed_since(NotificationEvidenceView(), earlier):
-            return False
+    def changed(self, notifications: NotificationPass) -> bool:
+        evidence = notifications.evidence
         return bool(
-            (self.read_marks and comms.bus.reads.changed_notifications(
-                self.read_marks, comms.registry.snapshot(),
-            )) or NotificationAssignment.changed(self.reads, comms.root)
+            (self.read_marks and evidence.changed_marks(self.read_marks))
+            or NotificationAssignment.changed(self.reads, evidence.root)
         )
+
+
+class NotificationPass:
+    """One refresh pass over any number of notification windows. Each window's own earlier
+    revision decides whether its evidence can have moved; the read ledger and registry are
+    decoded at most once per pass, the first time a window needs them."""
+
+    def __init__(self, comms: Comms, revision: WireRevision) -> None:
+        self.comms = comms
+        self.revision = revision
+
+    @cached_property
+    def evidence(self) -> CapturedNotificationEvidence:
+        reads = self.comms.bus.reads
+        return CapturedNotificationEvidence(
+            self.comms.root, reads, reads.read(), self.comms.registry.snapshot())
+
+    def changed(self, window: NotificationWindow, earlier: WireRevision) -> bool:
+        return (self.revision.changed_since(NotificationEvidenceView(), earlier)
+                and window.changed(self))
+
+
+@dataclass(frozen=True)
+class CapturedNotificationEvidence:
+    root: Path
+    ledger: ReadLedger
+    document: ReadDocument
+    snapshot: RegistrySnapshot
+
+    def changed_marks(
+        self, marks: Iterable[NotificationReadMark],
+    ) -> tuple[NotificationReadMark, ...]:
+        """Compare only the source/recipient display facts a window actually used."""
+        return tuple(mark for mark in marks if mark.displayed_to != self.ledger.displayed_recipient(
+            mark.source, mark.recipient, self.snapshot, document=self.document,
+        ))
 
 
 @dataclass(frozen=True, slots=True)

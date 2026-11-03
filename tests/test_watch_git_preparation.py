@@ -31,7 +31,7 @@ from agent_comms.message_bus import Watch
 from agent_comms.service_passes import ServicePassStore
 from git_shutdown_fixture import HeldGitHTTP, held_commit
 from agent_comms.nominal_census import NominalCensus
-from agent_comms.phase_evidence import BusStorageAbsent, CommitMerged, EvidenceFound, EvidenceUnread, MainTree, PathsAbsent
+from agent_comms.phase_evidence import BusStorageAbsent, CommitMerged, EvidenceFound, EvidenceUnread, MainTree, PathsAbsent, PhaseEvidence
 from agent_comms.repo import Checkout, GitCommandError, Repo, UnavailableCommitError
 from agent_comms.todos import DraftPullRequest, UnmergedPullRequest
 from agent_comms.work_branches import SourceGrowth, WorkBranchError, WorkBranches
@@ -271,14 +271,49 @@ def test_failed_plan_acquisition_is_unknown_and_retries_without_main_moving(git_
     assert isinstance(failed.read(evidence), EvidenceUnread)
     assert head in failed.describe(evidence) and "origin" in failed.describe(evidence)
     plans.observe_reading(failed, (evidence,))
+    plans.finish_pass()
     Repo.git(repo.checkout, "remote", "set-url", "origin", str(case.source.remote_path))
     recovered = plans.prepare_reading(repo, (), (evidence,), history=Checkout(repo.checkout).read())
     assert recovered.main.commit == failed.main.commit
     assert repo.has_commit(head)
     prepared = case.snapshot()
     plans.observe_reading(recovered, (evidence,))
+    plans.finish_pass()
     assert recovered.read(evidence) == EvidenceFound(False)
     assert case.snapshot() == prepared
+
+
+class CountedEvidence(PhaseEvidence):
+    """Evidence whose every evaluation is visible, so sharing across readings is observable."""
+
+    def __init__(self) -> None:
+        self.evaluations = 0
+
+    def holds(self, reading) -> bool:
+        self.evaluations += 1
+        return True
+
+    def describe(self) -> str:
+        return "counted"
+
+
+def test_one_pass_answers_each_evidence_once_for_every_served_teammate(git_preparation):
+    repo = git_preparation.repository
+    evidence = CountedEvidence()
+    plans = RetainedNominalPlanReadings()
+    history = Checkout(repo.checkout).read()
+    plans.begin_pass()
+    readings = tuple(plans.prepare_reading(repo, (), (evidence,), history=history) for _ in range(3))
+    for reading in readings:
+        plans.observe_reading(reading, (evidence,))
+    plans.finish_pass()
+    assert all(reading.holds(evidence) for reading in readings)
+    assert evidence.evaluations == 1
+    plans.begin_pass()
+    following = plans.prepare_reading(repo, (), (evidence,), history=history)
+    plans.observe_reading(following, (evidence,))
+    plans.finish_pass()
+    assert evidence.evaluations == 1
 
 
 def test_unexpected_plan_object_loss_is_unknown_not_phase_completion(git_preparation):
@@ -342,6 +377,7 @@ def test_promised_content_is_unreadable_not_absent_and_never_lazily_acquired(
     plans = RetainedNominalPlanReadings()
     failed = plans.prepare_reading(repo, (), (evidence,), history=Checkout(repo.checkout).read())
     plans.observe_reading(failed, (evidence,))
+    plans.finish_pass()
     assert isinstance(failed.read(evidence), EvidenceUnread)
     assert "required blob unavailable" in failed.describe(evidence)
     assert not failed.holds(PathsAbsent(("src/promised.py",)))
@@ -356,6 +392,7 @@ def test_promised_content_is_unreadable_not_absent_and_never_lazily_acquired(
     prepared = case.snapshot()
     recovered = plans.prepare_reading(repo, (), (evidence,), history=Checkout(repo.checkout).read())
     plans.observe_reading(recovered, (evidence,))
+    plans.finish_pass()
     assert recovered.main.commit == failed.main.commit == head
     assert recovered.read(evidence) == EvidenceFound(True)
     assert dict(SourceGrowth.capture(
