@@ -1,5 +1,6 @@
 """Declared extension decoding is strict and shares its owner with consumers."""
 
+from agent_comms.transcript_sources import NoDraft
 from agent_comms.repo import Checkout
 import pytest
 
@@ -116,7 +117,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
         CompactionChangedUpdate(CompactionStart()),
         CompactionCommittedUpdate("summary", "first-kept"),
         TranscriptSnapshotUpdate(read.read(), read.identity),
-        TranscriptDraftUpdate(read.identity, None),
+        TranscriptDraftUpdate(read.identity, NoDraft()),
         InputDeliveryChangedUpdate(),
         NativeOutputCommittedUpdate(committed, AssistantOutput()),
         NativeRoundCommittedUpdate(committed),

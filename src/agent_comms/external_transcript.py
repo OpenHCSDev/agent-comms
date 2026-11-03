@@ -392,9 +392,6 @@ class DraftRow(ExternalTranscriptRows, TypedTable, TranscriptDraft, declared_nam
     item_id: NativeItemId
     events: tuple[TranscriptEvent, ...]
 
-    def external_row(self):
-        return self
-
     @classmethod
     @contextmanager
     def publication(cls, root: Path, input_id: InputId) -> Iterator[DraftPublication]:
