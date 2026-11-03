@@ -2,9 +2,11 @@
 
 from dataclasses import replace
 
+import pytest
+
 from agent_comms.comms import wire
 from agent_comms.heartbeat_subjects import TeamHistory
-from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.repo import Checkout
 from agent_comms.task_attachments.team_pings import (
     RulePing, TeamUpdate, TeamUpdateNotice, UnboundRulePing,
@@ -30,25 +32,28 @@ def test_a_teammate_with_no_packet_inherits_the_boards_earliest_start(tmp_path):
     assert handled.since == RecordedEventTime(100.0)
 
 
-def test_an_unbound_line_lives_beside_its_rules_captures_and_leaves_with_them(tmp_path):
-    """The first and every later pass keep the pre-cutover line, with its start, beside the
-    fresh capture it cannot match; a pass with no line of its rule drops it."""
+def board(tmp_path):
     comms = wire(tmp_path)
     for name, born in (("lead", 1.0), ("peer", 2.0)):
         comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path), created_at=born))
-    lead, peer = (comms.registry.require(name).incarnation for name in ("lead", "peer"))
+    return comms, *(comms.registry.require(name).incarnation for name in ("lead", "peer"))
+
+
+@pytest.mark.parametrize("start", [RecordedEventTime(100.0), UnrecordedEventTime()],
+                         ids=["dated", "undated"])
+def test_an_unbound_line_is_an_observation_kept_through_every_pass(tmp_path, start):
+    """The first and every later pass keep the pre-cutover line with its original start,
+    recorded or not, beside the capture it cannot match. A pass with no line of its rule does
+    not clear it: the thread it watched may still be deaf, just no longer captured."""
+    comms, lead, peer = board(tmp_path)
     history = TeamHistory.read(comms, frozenset())
-    unbound = UnboundRulePing(TeamDeaf, TextDigest("0" * 64), text="old deaf",
-                              since=RecordedEventTime(100.0))
+    unbound = UnboundRulePing(TeamDeaf, TextDigest("0" * 64), text="old deaf", since=start)
     current = TeamDeaf(900.0, peer.require_recorded())
     previous: tuple[TeamUpdate, ...] = (TeamUpdateNotice(lead, (unbound,)),)
-    for now in (1000.0, 1060.0):  # the first and second passes after the carry
-        packet = TeamUpdate.derive(lead, (), (current,), previous, published=(), now=now,
+    for now, rules in ((1000.0, (current,)), (1060.0, (current,)), (1120.0, ())):
+        packet = TeamUpdate.derive(lead, (), rules, previous, published=(), now=now,
                                    history=history).packet
-        assert {(ping, ping.since) for ping in packet.handled} == {
-            (unbound, RecordedEventTime(100.0)),
-            (RulePing.capture(current), RecordedEventTime(1000.0))}
+        kept, = (ping for ping in packet.handled if ping == unbound)
+        assert kept.since == start
+        assert not kept.on_board(history) and not kept.waits_on_team(now)
         previous = (packet,)
-    cleared = TeamUpdate.derive(lead, (), (), previous, published=(), now=1120.0,
-                                history=history).packet
-    assert cleared.handled == ()

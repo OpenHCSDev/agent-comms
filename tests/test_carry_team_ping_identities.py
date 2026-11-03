@@ -40,5 +40,6 @@ def test_every_retained_deaf_line_becomes_unbound_with_its_digest_and_start(tmp_
     assert packet.handled == (UnboundRulePing(TeamDeaf, retired(TeamDeaf), text=""),
                               UnboundRulePing(UnitDeaf, retired(UnitDeaf, "worker"), text=""))
     assert tuple(ping.since for ping in packet.handled) == (dated, undated)
-    assert all(UnboundRulePing.marker in ping.text for ping in packet.handled)
+    assert tuple(ping.text for ping in packet.handled) == ("deaf", "undeafen")
+    assert all(UnboundRulePing.marker in ping.label for ping in packet.handled)
     assert step.carry(apply=False).changed == 0
