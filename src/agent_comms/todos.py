@@ -823,11 +823,18 @@ class MergeBlock(DeclaredFamily, affix="MergeBlock"):
     @abstractmethod
     def remedy(self) -> str: ...
 
+    def red(self) -> bool:
+        """A failed required check, as opposed to one still pending or a merge state."""
+        return False
+
 
 @dataclass(frozen=True)
 class FailedCheckMergeBlock(MergeBlock):
     """A required check concluded red on the head."""
     name: str
+
+    def red(self) -> bool:
+        return True
 
     def what(self) -> str:
         return f"required check {self.name} failed"
@@ -952,6 +959,11 @@ class ListedPullRequest(HeadReviewStatus, DeclaredFamily, affix="ListedPullReque
     @cached_property
     def reviewable_at(self) -> float:
         return max(map(_github_time, self.reviewable_times))
+
+    @cached_property
+    def opened_at(self) -> float:
+        """When this work became a request: its creation, or its head commit if that is older."""
+        return min(map(_github_time, self.reviewable_times))
 
     def review_due(self, now: float, seconds: float) -> tuple[float, ...]:
         due = self.reviewable_at + seconds

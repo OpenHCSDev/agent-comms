@@ -16,6 +16,7 @@ from agent_comms.locked_store import DocumentChange
 from agent_comms.order_tools import (
     TeammateRead,
     CommsTeamLoadTool,
+    CommsBoardTool,
     CommsHudTool,
     CommsUnjudgedTool,
 )
@@ -58,7 +59,8 @@ def test_recorded_failure_precedes_stale_board_and_load_without_changing_retaine
     assert hud.units == original.units and hud.load == original.load
     assert hud.heartbeat == RecordedEventTime(old_completion)
     assert load.load == original.load and load.heartbeat == hud.heartbeat
-    for lines in (hud.frame, load.header):
+    board = ThreadCaller('lead').invoke(CommsBoardTool(), comms)
+    for lines in (hud.frame, load.header, board.lines):
         assert 'original branch read failed' in lines[0]
         assert 'elapsed' in lines[0]
         assert 'last completed' in lines[1]

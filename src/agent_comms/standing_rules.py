@@ -7,6 +7,7 @@ files are declared in ``agent_comms.team.standing`` until those files move into 
 from __future__ import annotations
 
 import argparse
+import math
 import time
 from abc import abstractmethod
 from collections import Counter
@@ -1224,6 +1225,43 @@ class OrderlessPullRequest(IdlePullRequest):
             for row in pulls.open(repo) if row.number not in linked and not row.armed_times
         )
         return tuple(rule for rule in found if rule.began() <= now)
+
+
+@dataclass(frozen=True)
+class ChurningPullRequest(IdlePullRequest):
+    """An open head whose required checks are red a day after the request opened, however
+    often it moves. Each push restarts the idle window, so a request that keeps changing and
+    never goes green looked busy forever (2026-11-03: Toad #1389 stayed red for four days and
+    grew to 140 files while its holder pushed every hour, and no line named it)."""
+
+    opened: float = field(compare=False, kw_only=True)
+    seconds: ClassVar[int] = 24 * 60 * 60
+    tag: ClassVar[str] = "CHURNING"
+    unheld: ClassVar[str] = "nobody has its branch checked out"
+    unowned: ClassVar[str] = "land what is green or split it"
+
+    @classmethod
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+        goals, pulls, now = comms.goals, frame.pulls, time.time()
+        found = (
+            cls(request=PullRequestHead(repo, row.number, row.head),
+                holders=pulls.working_on(goals, repo, row),
+                blocks=row.merge_blocks, moved=row.reviewable_at, opened=row.opened_at)
+            for repo in goals.registry.snapshot().commander_project.repository_names()
+            for row in pulls.open(repo) if not row.armed_times
+        )
+        return tuple(rule for rule in found if rule.began() <= now)
+
+    def began(self) -> float:
+        return self.opened + self.seconds if any(block.red() for block in self.blocks) else math.inf
+
+    def line(self) -> str:
+        held = ", ".join(holder.name for holder in self.holders) or self.unheld
+        red = "; ".join(block.what() for block in self.blocks if block.red())
+        return (f"{self.tag} {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]}"
+                f" ({held}): opened {RecordedEventTime(self.opened).stamp()} and still red: {red}."
+                f" busy isn't landing. -> {self.unowned}")
 
 
 @dataclass(frozen=True)
