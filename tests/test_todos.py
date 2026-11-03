@@ -578,19 +578,19 @@ def test_released_open_work_restores_its_own_holder_never_swaps(released_publish
     goals = {row.holder: c.registry.require(row.holder).goal for row in originals.values()}
     with LaunchRoot.from_path(ctx.root).selected():
         rules = UnownedWheelSpin.paired(
-            c, ctx.actor_name, c.goals.todos.reassignable(), HeldOrders.read(c),
+            c, c.goals.todos.reassignable(), HeldOrders.read(c),
             ProgressRead(tuple(c.goals.todos.get(pid) for pid in originals)))
         assert {rule.todo.id for rule in rules} == set(originals)
         assert all(isinstance(rule, RetainedHolderWheelSpin) for rule in rules)
         # 2026-10-25: Core restores the holder itself; KEEP lines locked the verbs for 169 min.
         assert all(not RulePing.capture(rule).team_disposes for rule in rules)
-        assert StandingRule.enforce_all(c, ctx.actor_name, rules) == {}
+        assert StandingRule.enforce_all(c, rules) == {}
         for problem, before in originals.items():
             after = c.goals.todos.get(problem)
             assert after.held() == before.held()
             assert (after.order, after.review_at) == (before.order, before.review_at)
             assert c.registry.require(before.holder).goal == goals[before.holder]
-        assert UnownedWheelSpin.violations(c, ctx.actor_name) == ()
+        assert UnownedWheelSpin.violations(c) == ()
 
 
 @pytest.mark.parametrize('disposition', ('retired', 'closed'))
@@ -607,7 +607,7 @@ def test_only_retired_holder_or_closed_pr_allows_cross_holder_dispatch(
                                                       'rev-parse', 'HEAD').strip(),
             updated=now, base='main', reviewable_times=(now,), closed_at=now))
     with LaunchRoot.from_path(ctx.root).selected():
-        rules = UnownedWheelSpin.violations(c, ctx.actor_name)
+        rules = UnownedWheelSpin.violations(c)
         by_problem = {rule.todo.id: rule for rule in rules}
         assert by_problem['P615'].unit == 'aaa-idle'
         assert all(isinstance(by_problem[pid], RetainedHolderWheelSpin) for pid in ('P637', 'P667'))
@@ -813,7 +813,7 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_team, monkeypatch):
 def test_reused_enforcement_rejects_a_new_idle_goal(checkout_bus):
 
     with LaunchRoot.from_path(checkout_bus.root).selected():
-        rule, = UnownedWheelSpin.violations(checkout_bus, 'lead')
+        rule, = UnownedWheelSpin.violations(checkout_bus)
         assert isinstance(rule, ReassignedWheelSpin)
         selected = rule.dispatch.unit
         assert selected.goal == NoGoal()
@@ -823,7 +823,7 @@ def test_reused_enforcement_rejects_a_new_idle_goal(checkout_bus):
         changed = checkout_bus.goals.update_goal(selected.name, SetGoalAction(
             text="New independent work after the idle observation"))
         before = checkout_bus.goals.todos.get(rule.todo.id)
-        rejected = StandingRule.enforce_all(checkout_bus, 'lead', (rule,))
+        rejected = StandingRule.enforce_all(checkout_bus, (rule,))
         assert checkout_bus.registry.require(selected.name).goal == changed
         assert checkout_bus.goals.todos.get(before.id) == before
         assert isinstance(rejected[rule], GoalChangedError)

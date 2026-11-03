@@ -37,10 +37,10 @@ def published_board(fork_bus, installed_runtime):
     from test_forks import record_edits
     record_edits(comms, source, 1)
     parent = comms.registry.require('lead')
-    frame = capture_frame(comms, parent.name, ProgressRead())
-    states = TeammateState.current(comms, parent.name, frame)
-    observation = TeamObservation(parent, frame, (), states)
-    asyncio.run(ObservedHeartbeat((observation,)).run(lambda: nullcontext(comms)))
+    frame = capture_frame(comms, ProgressRead())
+    states = TeammateState.current(comms, frame)
+    observation = TeamObservation(frame, (), states)
+    asyncio.run(ObservedHeartbeat(observation).run(lambda: nullcontext(comms)))
     return comms
 
 

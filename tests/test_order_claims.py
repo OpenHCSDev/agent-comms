@@ -557,7 +557,7 @@ def test_third_strike_keeps_holder_and_order_and_requests_scrutiny(held_team):
         assert todo.order == original.order
     assert todo.strikes_against(ctx.comms.registry.require("worker").incarnation) == 3
     assert not todo.history.events(todo.id, ReleaseTodo)
-    scrutiny, = Scrutinize.violations(ctx.comms, ctx.actor_name)
+    scrutiny, = Scrutinize.violations(ctx.comms)
     assert scrutiny.holder == todo.held()
     assert scrutiny.todo == todo
     assert scrutiny.count == 3

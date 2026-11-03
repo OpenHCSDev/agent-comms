@@ -27,6 +27,7 @@ from agent_comms.todos import (
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
+    from agent_comms.registry_document import RegisteredTeamProject
 
 
 @dataclass(frozen=True)
@@ -37,11 +38,10 @@ class TeamInputs(HeldOrders):
     plan: PlanReading
 
     @classmethod
-    def prepare(cls, comms: Comms, pulls: ProgressRead, plans: PlanReadings) -> Self:
+    def prepare(cls, comms: Comms, project: RegisteredTeamProject, pulls: ProgressRead,
+                plans: PlanReadings) -> Self:
         holds = HeldOrders.read(comms)
         pulls.register(holds.todos)
-        snapshot = comms.registry.snapshot()
-        project = snapshot.commander_project.require()
         repositories = project.repository_names()
         pulls.read_open(repositories)
         for repo in repositories:
@@ -117,8 +117,8 @@ class HeartbeatFrame(TeamInputs):
             inputs.orphaned,
             inputs.pulls,
             plan,
-            tuple(answer for teammate in TeamService.teammates(snapshot)
-                  for answer in OwedAnswer.read_scan(comms, teammate.incarnation, inputs)),
+            tuple({answer.observation_key(): answer for teammate in TeamService.teammates(snapshot)
+                   for answer in OwedAnswer.read_scan(comms, teammate.incarnation, inputs)}.values()),
             closed,
             reviews,
             EditWorkplaces.capture(comms, snapshot, inputs.live, inputs.pulls),

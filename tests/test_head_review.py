@@ -1078,8 +1078,8 @@ def test_review_timer_up_with_open_head_builds(held_bus, github_cli, reviewed_so
         RecordPullRequest(todo.revision, held.owner_identity,
                           PullRequestLink(request.repo, request.pr), held.generation).record(
                               comms.goals, todo.id)
-    frame = capture_frame(comms, "lead", ProgressRead(()))
-    found, = ReviewTimerUp.broken(comms, "lead", observed=(), frame=frame)
+    frame = capture_frame(comms, ProgressRead(()))
+    found, = ReviewTimerUp.broken(comms, observed=(), frame=frame)
     assert found.problem == "P3"
     assert found.holder == todo.held().owner_identity
     assert found.order == todo.order.checked().id
@@ -1325,8 +1325,8 @@ def test_retained_head_verdict_precedes_the_published_lost_packet(
         request.pr, 'feature', request.head, closed_at=stamp, updated=stamp,
         base='main', reviewable_times=(stamp,)))
     asyncio.run(ClosedPullRequestWatch().run(lambda: nullcontext(comms)))
-    frame = capture_frame(comms, 'lead', ProgressRead(()), TeamHeartbeat())
-    lost, = ClosedUnmergedPullRequest.scan_observed(comms, 'lead', (), frame)
+    frame = capture_frame(comms, ProgressRead(()), TeamHeartbeat())
+    lost, = ClosedUnmergedPullRequest.scan_observed(comms, (), frame)
     assert lost.request == request
 
     invoke(comms, request, verdict)

@@ -119,7 +119,7 @@ def test_the_installed_runs_phases_over_the_healthy_line_are_rows(tmp_path, monk
     finished_install(logs, tmp_path, TARGET, [PhaseTiming(StopServicesPhase(), 234.0, 234.0),
                                               PhaseTiming(TreeClosePhase(), 59.0, 59.0)])
     comms = type("Comms", (), {"root": logs.root})()
-    row, = SlowInstallPhase.violations(comms, "claude-code")
+    row, = SlowInstallPhase.violations(comms)
     assert row.phase == StopServicesPhase() and row.seconds == 234.0
     assert row.line().startswith("SLOW install phase StopServicesPhase took 234 s")
     assert row.line().endswith("-> order the fix to that phase's owner")

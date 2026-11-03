@@ -64,7 +64,7 @@ def test_retired_team_requests_follow_peer_authority(
     assert not store.open_requests(peer.acting_identity, limit=0)
     assert first.id.for_order(store, peer.acting_identity) == first.id
     assert first.id in {
-        rule.request.id for rule in RequestStalled.violations(comms, peer.name)
+        rule.request.id for rule in RequestStalled.violations(comms)
     }
     peer_context = Team.on_root(peer.name, (repository,), comms.root)
     request_main(["list"], peer_context)
@@ -77,7 +77,7 @@ def test_retired_team_requests_follow_peer_authority(
     assert f"{first.id.value} done" in capsys.readouterr().out
     assert store.open_requests(peer.acting_identity) == (newest, own)
     assert first.id not in {
-        rule.request.id for rule in RequestStalled.violations(comms, peer.name)
+        rule.request.id for rule in RequestStalled.violations(comms)
     }
     assert store.owner_request(first.id).commander == author.incarnation
 

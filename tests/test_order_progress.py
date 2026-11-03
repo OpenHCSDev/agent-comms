@@ -154,23 +154,23 @@ def test_deleted_branch_marks_one_card_unreadable(held_bus):
 
     plans = TeamHeartbeat()
     with LaunchRoot.from_path(comms.root).selected():
-        before = observe_team(comms, lead, ProgressRead(), plans=plans)
+        before = observe_team(comms, ProgressRead(), plans=plans)
         healthy = tuple(card for card in before.states if card.unit.name != 'worker')
         git(checkout, 'update-ref', '-d', f'refs/heads/{branch}')
-        interrupted = observe_team(comms, lead, ProgressRead(), plans=plans)
-        asyncio.run(ObservedHeartbeat((interrupted,)).run(lambda: nullcontext(comms)))
+        interrupted = observe_team(comms, ProgressRead(), plans=plans)
+        asyncio.run(ObservedHeartbeat(interrupted).run(lambda: nullcontext(comms)))
         published, = TeamFrame.read_all(comms.root)
         assert tuple(card.unit for card in published.units) == tuple(card.unit for card in interrupted.states)
         assert branch not in WorkBranches(checkout).worktrees()
         for _ in range(2):
-            frame = observe_team(comms, lead, ProgressRead(), plans=plans)
+            frame = observe_team(comms, ProgressRead(), plans=plans)
             (broken,) = (card for card in frame.states if card.unit.name == 'worker')
             assert isinstance(broken, Unreadable)
             with pytest.raises((GitCommandError, WorkBranchError)) as source_failure:
                 broken.source.require_read()
             assert broken.reason == str(source_failure.value)
             assert tuple(card for card in frame.states if card.unit.name != 'worker') == healthy
-            asyncio.run(ObservedHeartbeat((frame,)).run(lambda: nullcontext(comms)))
+            asyncio.run(ObservedHeartbeat(frame).run(lambda: nullcontext(comms)))
             expected = current_hud(comms, lead.name, frame.frame, frame.states)
             assert TeamFrame.read_all(comms.root) == (expected,)
 

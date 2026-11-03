@@ -601,14 +601,17 @@ class BranchBehindMain(CoreActsStandingRule, HeldBranchRule):
     def enforce(self, comms: Comms) -> None:
         # Retain the registry's alias/birth decision through publication. A departed
         # holder belongs to HolderGone, never to a new participant reusing its name.
+        # The notice is sent after the snapshot's shared lock is released.
         with comms.registry.store.current_snapshot() as cut:
-            for holder in cut.snapshot.threads_for(self.holder.require_recorded()):
-                cut.snapshot.status(holder.name).publish_heartbeat(
-                    lambda name=holder.name: OrderNotice().publish(comms.messaging, ThreadTarget(name), (
-                        f"{self.branch} is {self.behind} commits behind main. Rebase your branch"
-                        " onto origin/main now, retain main's moves and deletions, resolve every"
-                        " conflict yourself, push with --force-with-lease, and keep working; a"
-                        " stale tree turns your next push into everyone's conflict.")), None)
+            names = tuple(holder.name
+                          for holder in cut.snapshot.threads_for(self.holder.require_recorded())
+                          if cut.snapshot.status(holder.name).publish_heartbeat(lambda: True, False))
+        for name in names:
+            OrderNotice().publish(comms.messaging, ThreadTarget(name), (
+                f"{self.branch} is {self.behind} commits behind main. Rebase your branch"
+                " onto origin/main now, retain main's moves and deletions, resolve every"
+                " conflict yourself, push with --force-with-lease, and keep working; a"
+                " stale tree turns your next push into everyone's conflict."))
 
     @classmethod
     def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
@@ -752,7 +755,7 @@ class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
     @classmethod
     @abstractmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
-                  held: Mapping[ThreadIncarnation, Sequence[Todo]], owner: str,
+                  held: Mapping[ThreadIncarnation, Sequence[Todo]], debtor: str,
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
         """This member's open debts, inside their window or past it, on one bus cut."""
 
@@ -1329,12 +1332,12 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
-                  held: Mapping[ThreadIncarnation, Sequence[Todo]], owner: str,
+                  held: Mapping[ThreadIncarnation, Sequence[Todo]], debtor: str,
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
         """The frozen recipient owes the private directive, not every request maintainer.
         Stored request associations cannot substitute a different mailbox or birth.
         """
-        reader = snapshot.require(owner)
+        reader = snapshot.require(debtor)
         return tuple(
             cls(message=original, request=request.id, directive=directive,
                 answerer=reader)
@@ -1358,7 +1361,7 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
 
     def line(self) -> str:
         return (
-            f"ACT owner directive {self.cited} on request {self.request.value} was due"
+            f"ACT {self.answerer.name}'s owner directive {self.cited} on request {self.request.value} was due"
             f" {self.directive.due_time}. didn't we already have a plan due then?"
             " -> order its next step or mark the request done"
         )

@@ -64,7 +64,7 @@ class TestOrderCompletion:
 
         def orders(*todos):
             teammate = TeammateObservation(ctx.comms, ctx.comms.registry.require('worker'), todos,
-                                   capture_frame(ctx.comms, 'lead', ProgressRead()),
+                                   capture_frame(ctx.comms, ProgressRead()),
                                    (), time.time(),
                                    ctx.comms.registry.snapshot().status('worker'), False)
             return [state.orders for state in AwaitingApplicationRun.derive(teammate)]
@@ -230,4 +230,4 @@ class TestOrderCompletion:
         assert closed.state is DoneTodoState
         assert isinstance(closed.order, InstalledMergedProblemOrder)
         assert closed.order.artifact == str(artifact)
-        assert HolderGone.violations(ctx.comms, ctx.actor_name) == ()
+        assert HolderGone.violations(ctx.comms) == ()

@@ -222,7 +222,7 @@ def refused_publication(comms: Comms) -> Iterator[None]:
 
 
 def lead_hud(comms, states=()):
-    return current_hud(comms, "lead", capture_frame(comms, "lead", ProgressRead()), states)
+    return current_hud(comms, "lead", capture_frame(comms, ProgressRead()), states)
 
 
 def assert_status_fields(message, hud):
@@ -233,10 +233,10 @@ def assert_status_fields(message, hud):
 
 def beat(comms, rules=(), *, states=()):
     observed = TeamObservation(
-        comms.registry.require("lead"), capture_frame(comms, "lead", ProgressRead()),
+        capture_frame(comms, ProgressRead()),
         rules, states)
     # Deliberately construct a fresh watcher on every pass, never reuse a cache.
-    asyncio.run(ObservedHeartbeat((observed,)).run(lambda: nullcontext(comms)))
+    asyncio.run(ObservedHeartbeat(observed).run(lambda: nullcontext(comms)))
     return TeamFrame.current(comms, "lead")
 
 
@@ -638,8 +638,8 @@ def test_quiet_completion_is_per_team_even_when_a_later_recipient_fails(notifica
     missing = replace(comms.registry.require("worker"), name="unregistered-recipient")
     failing = ServicePassFailing(watch="following-rule", since=time.time(), error="independent source",
                                  failed_at=time.time())
-    frame = capture_frame(comms, "lead", ProgressRead())
-    frames = tuple(TeamObservation(thread, frame, (failing,), ())
+    frame = capture_frame(comms, ProgressRead())
+    frames = tuple(TeamObservation(frame, (failing,), ())
                    for thread in (lead, missing))
     with pytest.raises(UnregisteredThreadError):
         asyncio.run(ObservedHeartbeat(frames).run(lambda: nullcontext(comms)))
@@ -748,17 +748,17 @@ def test_resolution_is_passive_and_same_rule_can_recur(notification_bus):
     comms = notification_bus
     passes = ServicePassStore.at(comms.root)
     passes.failed("dependent-watch", RuntimeError("unreadable source"))
-    rules = ServicePassFailing.violations(comms, "lead")
+    rules = ServicePassFailing.violations(comms)
     beat(comms, rules)
     first, = notifications(comms)
     passes.passed("dependent-watch")
-    beat(comms, ServicePassFailing.violations(comms, "lead"))
+    beat(comms, ServicePassFailing.violations(comms))
     _, quiet = notifications(comms)
     assert isinstance(quiet.task, TeamUpdateNotice)
     assert_status_fields(quiet, lead_hud(comms))
     assert all(isinstance(decision.wake_mode, PassiveWake) for decision in quiet.decisions)
     # An identical quiet frame updates no bus history.
-    beat(comms, ServicePassFailing.violations(comms, "lead"))
+    beat(comms, ServicePassFailing.violations(comms))
     assert len(notifications(comms)) == 2
     # Use the same source occurrence to prove it was retired, not merely hidden.
     beat(comms, rules)
@@ -795,8 +795,8 @@ def test_new_local_commit_on_an_unpushed_branch_is_not_a_resolution(notification
 
 def test_failed_rule_scan_raises_to_the_heartbeat(notification_bus, request):
     comms = notification_bus
-    frame = capture_frame(comms, "lead", ProgressRead())
-    states = TeammateState.current(comms, "lead", frame)
+    frame = capture_frame(comms, ProgressRead())
+    states = TeammateState.current(comms, frame)
     @dataclass(frozen=True)
     class FailedScan(UndatedStandingRule):
         @classmethod
@@ -808,7 +808,7 @@ def test_failed_rule_scan_raises_to_the_heartbeat(notification_bus, request):
 
     request.addfinalizer(lambda: StandingRule.__registry__.pop(FailedScan.declared_name))
     with pytest.raises(IndexError):
-        StandingRule.broken(comms, "lead", observed=states, frame=frame)
+        StandingRule.broken(comms, observed=states, frame=frame)
 
 
 def test_team_page_reads_each_beats_frame_and_nothing_between(notification_bus):
@@ -989,7 +989,7 @@ def test_subject_evidence_is_shared_without_losing_each_pings_start(notification
     assert opened == (new,) and opened[0].since == new.since
     waiting = packet.undisposed(history, now)
     assert tuple(ping.since for ping in waiting) == (new.since,)
-    hud = TeamHud.of(comms, "lead", capture_frame(comms, "lead", ProgressRead()), (),
+    hud = TeamHud.of(comms, capture_frame(comms, ProgressRead()), (),
                           delivery=TeamDelivery(packet, opened), usage=CodexUsage.read())
     assert hud.open_pings is opened
     assert hud.board == (new.board_entry(),)
@@ -1019,21 +1019,19 @@ def test_retained_packet_without_display_witness_keeps_original_message_identity
     assert Message.from_wire(retained.to_wire()).message_id == message.message_id
 
 
-def test_a_team_that_stood_down_keeps_its_requests_but_gets_no_heartbeat(notification_bus):
-    """The registry names the commander; an old open request does not make one."""
+def test_a_teammate_whose_session_closed_keeps_its_requests_but_gets_no_board(notification_bus):
+    """No lead: the board goes to the live teammates. A closed session keeps its open requests
+    and simply stops being served until it is live again."""
     comms = notification_bus
     lead = comms.registry.require("lead")
-    assert lead.name in {thread.name for thread in TeamHeartbeat.boards(comms.registry, comms.goals)}
-    assert TeamHeartbeat.requested_by(lead, comms.goals)
-    comms.registry.set_team_project(RegisteredTeamProject(
-        comms.registry.require("worker").incarnation, ()))
-    assert TeamHeartbeat.requested_by(comms.registry.require("lead"), comms.goals)
-    assert "lead" not in {
-        thread.name for thread in TeamHeartbeat.boards(comms.registry, comms.goals)}
+    assert "lead" in {thread.name for thread in TeamHeartbeat.served(comms.registry)}
+    comms.registry.register(replace(lead, process_identity=NoProcess()))
+    assert comms.goals.todos.open_requests(lead.acting_identity)
+    assert "lead" not in {thread.name for thread in TeamHeartbeat.served(comms.registry)}
 
 
-def test_a_closed_lead_session_leaves_the_board_for_the_live_teammates(notification_bus):
-    """The lead's process going away must not empty the heartbeat for #commanders still running."""
+def test_a_closed_session_leaves_the_board_for_the_live_teammates(notification_bus):
+    """One teammate's process going away must not empty the heartbeat for the others."""
     comms = notification_bus
     comms.registry.register(replace(
         comms.registry.require("worker"), tags=frozenset({"comms", TeammatesTag.declared_name}),
@@ -1042,7 +1040,7 @@ def test_a_closed_lead_session_leaves_the_board_for_the_live_teammates(notificat
                                     process_identity=NoProcess()))
     lead = comms.registry.require("lead")
     assert not lead.process_alive
-    assert TeamHeartbeat.boards(comms.registry, comms.goals) == (lead,)
+    assert tuple(thread.name for thread in TeamHeartbeat.served(comms.registry)) == ("worker",)
     beat(comms, (ServicePassFailing(watch="following-rule", since=time.time(),
                                     error="independent source", failed_at=time.time()),))
     worker = comms.registry.require("worker").incarnation

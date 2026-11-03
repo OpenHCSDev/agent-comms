@@ -7,6 +7,7 @@ from agent_comms.comms import Comms
 from agent_comms.repo import Checkout
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import BranchBehindMain
+from agent_comms.task_attachments.owner_notices import OrderNotice
 from agent_comms.threads import Thread
 from conftest import declare_test_bus
 
@@ -24,32 +25,29 @@ def branch_notice(comms: Comms, tmp_path: Path) -> tuple[Comms, BranchBehindMain
     )
 
 
-@pytest.mark.parametrize("sender,rename_from,rename_to,target,actor", (
-    ("lead", "", "", "worker", "lead"),
-    ("worker", "", "", "#comms", "worker"),
-    ("lead", "worker", "renamed-worker", "renamed-worker", "lead"),
-    ("lead", "lead", "renamed-lead", "worker", "renamed-lead"),
-    ("worker", "worker", "renamed-worker", "#comms", "renamed-worker"),
+@pytest.mark.parametrize("rename_from,rename_to,target", (
+    ("", "", "worker"),
+    ("worker", "renamed-worker", "renamed-worker"),
+    ("lead", "renamed-lead", "worker"),
 ))
-def test_branch_notice_reaches_its_current_audience(
-    branch_notice: tuple[Comms, BranchBehindMain], sender: str,
-    rename_from: str, rename_to: str, target: str, actor: str,
+def test_branch_notice_reaches_its_current_holder_in_cores_voice(
+    branch_notice: tuple[Comms, BranchBehindMain], rename_from: str, rename_to: str, target: str,
 ) -> None:
+    """No teammate signs Core's rebase reminder: it is an order notice to the holder's current
+    name, whoever else is renamed."""
     comms, notice = branch_notice
     if rename_from:
         comms.registry.rename(rename_from, rename_to)
     before = comms.bus.bus.revision()
 
-    notice.enforce(comms, sender)
+    notice.enforce(comms)
 
     assert comms.bus.bus.revision() == before + 1
     message = comms.bus.bus.delivery(before + 1).message
     assert message.target == target
-    assert message.sender == actor
+    assert isinstance(message.task, OrderNotice)
     assert notice.branch in message.body
     assert "Rebase your branch onto origin/main" in message.body
-    assert "--force-with-lease" in message.body
-    assert "REBASE" in notice.line()
 
 
 @pytest.mark.parametrize("replacement", (False, True))
@@ -66,7 +64,7 @@ def test_branch_notice_never_addresses_a_departed_holders_replacement(
         ))
     before = comms.bus.bus.revision()
 
-    notice.enforce(comms, "lead")
+    notice.enforce(comms)
 
     assert comms.bus.bus.revision() == before
 
@@ -80,6 +78,6 @@ def test_branch_notice_skips_an_archived_holder(branch_notice: tuple[Comms, Bran
     comms.registry.register(comms.registry.require("worker"), ArchivedThreadStatus())
     before = comms.bus.bus.revision()
 
-    notice.enforce(comms, "lead")
+    notice.enforce(comms)
 
     assert comms.bus.bus.revision() == before

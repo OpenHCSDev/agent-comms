@@ -114,9 +114,9 @@ def test_storage_family_renders_each_broken_fact(
             first_call_deadline=RecordedEventTime(130),
         ),
     )
-    frame = capture_frame(comms, "lead", ProgressRead())
+    frame = capture_frame(comms, ProgressRead())
     found = StorageViolation.broken(
-        comms, "lead", observed=TeammateState.current(comms, "lead", frame), frame=frame)
+        comms, observed=TeammateState.current(comms, frame), frame=frame)
     storage = UnitStorage.read(comms.registry.storage_rule, worker, RepositoryReads())
     assert {type(violation) for violation in found} == expected
     assert all(violation.storage == storage for violation in found)

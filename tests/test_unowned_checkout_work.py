@@ -183,15 +183,15 @@ def struck_unowned_bus(checkout_bus: Comms) -> tuple[Comms, StrikeTodo]:
 
 def run_heartbeat_rules(c: Comms, rules: tuple[StandingRule, ...]) -> None:
     lead = c.registry.require('lead')
-    frame = capture_frame(c, lead.name, ProgressRead())
-    observed = TeamObservation(lead, frame, rules, ())
-    asyncio.run(ObservedHeartbeat((observed,)).run(lambda: nullcontext(c)))
+    frame = capture_frame(c, ProgressRead())
+    observed = TeamObservation(frame, rules, ())
+    asyncio.run(ObservedHeartbeat(observed).run(lambda: nullcontext(c)))
 
 
 def test_a_concurrent_unstrike_does_not_end_the_heartbeat_pass(struck_unowned_bus):
     c, strike = struck_unowned_bus
     with LaunchRoot.from_path(c.root).selected():
-        stale, = (rule for rule in UnownedWheelSpin.violations(c, 'lead')
+        stale, = (rule for rule in UnownedWheelSpin.violations(c)
                   if rule.todo.id == 'P1')
         current = c.goals.todos.get('P1')
         fresh = c.goals.todos.apply(current.id, VoidStrikeTodo(
@@ -205,7 +205,7 @@ def test_a_concurrent_unstrike_does_not_end_the_heartbeat_pass(struck_unowned_bu
         assert assigned.holder == 'idle'
         assert assigned.revision == fresh.revision + 1
         assert not assigned.strikes_against(c.registry.require('worker').incarnation)
-        assert stale.redecided(c, 'lead', assigned) == ()
+        assert stale.redecided(c, assigned) == ()
         update, = TeamUpdate.latest(c, c.registry.require('lead').incarnation)
         assert not update.not_applied
         assert RulePing.capture(following) in update.handled
@@ -264,7 +264,7 @@ def test_a_second_todo_conflict_is_reported_without_ending_the_pass(struck_unown
     following = ServicePassFailing(watch='following-rule', since=time.time(), error='independent source',
                                    failed_at=time.time())
     with LaunchRoot.from_path(c.root).selected():
-        rejected = StandingRule.enforce_all(c, 'lead', (stale, following))
+        rejected = StandingRule.enforce_all(c, (stale, following))
         error, = rejected.values()
         with pytest.raises(RepeatedTodoChange) as caught:
             raise error
@@ -291,7 +291,7 @@ def test_unreadable_checkout_is_its_holders_state_and_the_pass_carries_on(
         read = WorkBranches(checkout).read_checkout()
         assert isinstance(read, UnreadableCheckoutRead) and read.holds_work
         unreadable, = (state for state in TeammateState.current(
-            c, 'lead', capture_frame(c, 'lead', ProgressRead()))
+            c, capture_frame(c, ProgressRead()))
                       if isinstance(state, Unreadable))
         assert unreadable.unit == c.registry.require('worker').incarnation
         assert str(checkout) in unreadable.reason
@@ -305,8 +305,8 @@ def test_order_closed_after_the_frame_read_does_not_fail_the_merge_read(
     practice.include(tuple(RootFile.existing_in(practice.root)))
     c = wire(practice.path)
     with LaunchRoot.from_path(practice.path).selected():
-        frame = capture_frame(c, 'lead', ProgressRead())
-        worker, = (state for state in TeammateState.current(c, 'lead', frame)
+        frame = capture_frame(c, ProgressRead())
+        worker, = (state for state in TeammateState.current(c, frame)
                    if state.unit == c.registry.require('worker').incarnation)
         assert 'P1' in worker.orders and not isinstance(worker, Unreadable)
         row = c.goals.todos.get('P1')

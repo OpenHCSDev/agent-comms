@@ -379,11 +379,11 @@ class UnitAskUnanswered(TeammateOwedAnswer, UndatedStandingRule):
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
-                  held: Mapping[ThreadIncarnation, Sequence[Todo]], owner: str,
+                  held: Mapping[ThreadIncarnation, Sequence[Todo]], debtor: str,
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
         return tuple(cls(message, owner.name)
                      for owner, questions in UnansweredTeammateAsks.for_orders(
-                         source, snapshot, owner, held, time.time(),
+                         source, snapshot, debtor, held, time.time(),
                      ).items()
                      for message in questions)
 
@@ -422,7 +422,7 @@ class DeliveryAwaitingJudgement(TeammateOwedAnswer, UndatedStandingRule, OrderHe
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
-                  held: Mapping[ThreadIncarnation, Sequence[Todo]], owner: str,
+                  held: Mapping[ThreadIncarnation, Sequence[Todo]], debtor: str,
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
         """The retained claim owns the report and the head owed a verdict, published or not:
         a claim whose answer never reached the bus is still owed its judgement."""
@@ -752,17 +752,16 @@ class TeamDeaf(InboxUnavailable, declared_name="commander_deaf"):
 
 @dataclass(frozen=True)
 class UnitDeaf(InboxUnavailable):
-    """A unit's own drain recorded that it cannot read its inbox; that record dates the pause.
-    Teammates are TeamDeaf's, read from their session bridge."""
+    """A thread's own drain recorded that it cannot read its inbox; that record dates the pause.
+    Every active thread is read, teammates included: a session bridge without a Monitor is
+    TeamDeaf's separate signal."""
 
     unit: str
 
     @classmethod
     def paused(cls, comms: Comms) -> tuple[Self, ...]:
         snapshot = comms.registry.snapshot()
-        teammates = {teammate.name for teammate in TeamService.teammates(snapshot)}
-        units = [thread for name, thread in comms.registry.active_threads().items()
-                 if name not in teammates]
+        units = list(comms.registry.active_threads().values())
         activity = comms.agents.all_activity(units, snapshot=snapshot)
         return tuple(cls(paused + cls.seconds, name)
                      for name, observed in activity.items()
@@ -794,15 +793,14 @@ class ForkStalled(IndependentStandingRule, DatedStandingRule):
         """Each live commander session's registered, unarchived forks. Claude runs a fork
         inside its session's process, so only a session whose process is alive has any."""
         snapshot = comms.registry.snapshot()
-        commanders = frozenset(thread.name for thread in
-                               TeamService.live(snapshot.commander_project.commanders(snapshot)))
+        teammates = {thread.name: thread for thread in TeamService.teammates(snapshot)}
         now = time.time()
         return tuple(
             cls(fork.incarnation, owed.at, record.bus, written, owed)
             for bridge in Serve.running(Path.home()) if bridge.observed.owner.alive()
-            for record in bridge.claim.state().bindings() if record.bus in commanders
+            for record in bridge.claim.state().bindings() if record.bus in teammates
             for forks in ({thread.name: thread for thread in snapshot.visible_threads(
-                DEFAULT_ROSTER, names=(fork.name for fork in TeamService.forks(snapshot, record.bus)))},)
+                DEFAULT_ROSTER, names=(fork.name for fork in TeamService.forks(snapshot, (teammates[record.bus],))))},)
             for path in ClaudeTranscript.subagents(bridge.observed.transcript)
             for name in (SubagentId.of_transcript(path).fork,) if name in forks
             for fork in (forks[name],)

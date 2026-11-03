@@ -107,12 +107,12 @@ def test_held_board_commands_take_the_same_verdicts_as_the_order(board_review, c
     assert rule.todo == todo
     assert judge.PromoteVerb not in rule.clearing_actions()
     assert UnderReviewHeadVerdict in assert_review_preconditions(rule, comms, request)
-    frame = capture_frame(comms, "lead", ProgressRead(()))
+    frame = capture_frame(comms, ProgressRead(()))
     # The timer's own condition remains real: age the observed review timer in this read.
     timed = replace(todo, review_at=RecordedEventTime(time.time() - 120))
     frame = replace(frame, review_timers=TodoStore.timers_up_in(
         (timed,), time.time(), frame.pulls.progress((timed,), comms.registry)))
-    timers = ReviewTimerUp.scan_observed(comms, "lead", (), frame)
+    timers = ReviewTimerUp.scan_observed(comms, (), frame)
     assert bool(timers) == (not claim_it)
     for timer in timers:
         assert_review_preconditions(timer, comms, request)
@@ -168,11 +168,11 @@ def test_shared_head_keeps_each_order_on_its_own_board_and_timer_line(board_revi
     for rule in rules:
         verdicts = assert_review_preconditions(rule, comms, request)
         assert UnderReviewHeadVerdict in verdicts
-    frame = capture_frame(comms, "lead", ProgressRead(()))
+    frame = capture_frame(comms, ProgressRead(()))
     timed = replace(first, review_at=RecordedEventTime(time.time() - 120))
     frame = replace(frame, review_timers=TodoStore.timers_up_in(
         (timed,), time.time(), frame.pulls.progress((timed,), comms.registry)))
-    timers = ReviewTimerUp.scan_observed(comms, "lead", (), frame)
+    timers = ReviewTimerUp.scan_observed(comms, (), frame)
     timer, = timers
     assert timer.todo == timed
     assert timer.problem == first.id

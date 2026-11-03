@@ -32,7 +32,7 @@ def test_blocked_goal_leads_the_board_and_clears_when_active(comms, tmp_path, st
     thread = comms.registry.require("paper")
     comms.registry.register(replace(thread, goal=replace(thread.goal.require(), state=state)),
                             comms.registry.status("paper"))
-    rule, = GoalBlocked.violations(comms, "paper")
+    rule, = GoalBlocked.violations(comms)
     assert rule.thread == thread.incarnation
     assert rule.reason == reason
     assert reason[:200] in rule.line()
@@ -52,7 +52,7 @@ def test_blocked_goal_leads_the_board_and_clears_when_active(comms, tmp_path, st
         replace(current, goal=replace(current.goal.require(), state=ActiveGoal())),
         comms.registry.status("paper"),
     )
-    assert GoalBlocked.violations(comms, "paper") == ()
+    assert GoalBlocked.violations(comms) == ()
     cleared = TeamUpdate.derive(thread.incarnation, (), (), (update,),
                                      published=(update,), now=now + 60, history=history)
     assert cleared.packet.handled == ()

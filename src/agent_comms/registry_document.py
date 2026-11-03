@@ -565,6 +565,10 @@ class TeamProject(DeclaredFamily, CitationProject, affix="TeamProject"):
     def leads(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
         """The registered teammate that owns the project's board, repositories and orders."""
 
+    def boards(self) -> tuple[RegisteredTeamProject, ...]:
+        """The one team board this bus keeps: none without a registered project."""
+        return ()
+
     def unique_repositories(self, name: str = '') -> tuple[Repo, ...]:
         return ()
 
@@ -616,6 +620,9 @@ class RegisteredTeamProject(TeamProject):
         return tuple(dict.fromkeys(
             peer for thread in threads
             for peer in thread.role.independent_threads(thread)))
+
+    def boards(self) -> tuple[RegisteredTeamProject, ...]:
+        return (self,)
 
     def lead(self, snapshot: RegistrySnapshot) -> Thread:
         """The one registered teammate a fork is declared under."""

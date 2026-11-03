@@ -348,7 +348,7 @@ def test_board_start_line_disappears_when_its_phase_order_is_sent(notification_b
     claim = WatchClaim(hook.session_id)
     claim.path.parent.mkdir(parents=True)
     record = WatchRecord("lead", str(comms.root), ("watch",), tmp_path / "inbox")
-    reading = capture_frame(comms, "lead", ProgressRead()).plan
+    reading = capture_frame(comms, ProgressRead()).plan
     beat(comms, (PlanIdle(BusWriterPhase, reading),))
     phase_name = f"{BusWriterPhase.plan.declared_name}/{BusWriterPhase.declared_name}"
     lead = comms.registry.require("lead").incarnation

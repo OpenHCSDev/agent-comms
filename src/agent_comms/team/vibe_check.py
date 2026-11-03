@@ -167,17 +167,17 @@ class VibeCheckUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
-                  held: Mapping[ThreadIncarnation, Sequence[Todo]], owner: str,
+                  held: Mapping[ThreadIncarnation, Sequence[Todo]], debtor: str,
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
         return tuple(cls(message) for message in
-                     VibeCheckNotice.unanswered(source, snapshot, owner, time.time()))
+                     VibeCheckNotice.unanswered(source, snapshot, debtor, time.time()))
 
     def due(self, now: float) -> bool:
         return self.message.timestamp <= now - self.seconds
 
     def line(self) -> str:
-        return (f"vibe check {self.cited} from {RecordedEventTime(self.message.timestamp).stamp()}."
-                " still ignoring it? -> answer it")
+        return (f"vibe check {self.cited} to {self.message.target} from"
+                f" {RecordedEventTime(self.message.timestamp).stamp()}. still ignoring it? -> answer it")
 
 
 class PatternCatalog:
@@ -262,13 +262,14 @@ class ChokeholdUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
-                  held: Mapping[ThreadIncarnation, Sequence[Todo]], owner: str,
+                  held: Mapping[ThreadIncarnation, Sequence[Todo]], debtor: str,
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
         return tuple(cls(message) for message in
-                     ChokeholdNotice.unanswered(source, snapshot, owner, time.time()))
+                     ChokeholdNotice.unanswered(source, snapshot, debtor, time.time()))
 
     def line(self) -> str:
-        return f"chokehold {self.cited} is still unanswered. why? -> answer it by the protocol"
+        return (f"chokehold {self.cited} to {self.message.target} is still unanswered. why?"
+                " -> answer it by the protocol")
 
 
 @dataclass(frozen=True)

@@ -196,9 +196,9 @@ def test_teammate_state_family_uses_real_records(held_bus, tmp_path, request, me
             pass  # Assigned work, before its first-call deadline.
         else:
             pytest.fail(f"New TeammateState needs its real-record scenario: {member}")
-        frame = capture_frame(comms, "lead", ProgressRead())
+        frame = capture_frame(comms, ProgressRead())
         assert tuple(ReviewTimerUp.conditions(comms, frame)) == frame.review_timers
-        states = TeammateState.current(comms, "lead", frame)
+        states = TeammateState.current(comms, frame)
         (state,) = (state for state in states if state.unit.name == teammate)
         assert isinstance(state, member)
         assert state.unit == comms.registry.require(teammate).incarnation
@@ -238,7 +238,7 @@ def test_started_turn_on_delivered_order_is_moving_not_stalled(held_bus):
         (state,) = (
             state
             for state in TeammateState.current(
-                held_bus, "lead", capture_frame(held_bus, "lead", ProgressRead())
+                held_bus, capture_frame(held_bus, ProgressRead())
             )
             if state.unit.name == "worker"
         )
@@ -263,7 +263,7 @@ def test_a_stopped_child_holding_no_order_gets_no_card(held_bus):
     held_bus.registry.register(child, StoppedThreadStatus())
     with LaunchRoot.from_path(held_bus.root).selected():
         states = TeammateState.current(
-            held_bus, "lead", capture_frame(held_bus, "lead", ProgressRead()))
+            held_bus, capture_frame(held_bus, ProgressRead()))
     assert child.incarnation not in {state.unit for state in states}
 
 
@@ -271,7 +271,7 @@ def test_fork_gets_no_teammate_card(held_bus):
     fork = held_bus.registry.register_child("judge-fork", "lead", ForkExecution, held_bus.goals)
     with LaunchRoot.from_path(held_bus.root).selected():
         states = TeammateState.current(
-            held_bus, "lead", capture_frame(held_bus, "lead", ProgressRead()))
+            held_bus, capture_frame(held_bus, ProgressRead()))
     assert fork.incarnation not in {state.unit for state in states}
 
 
@@ -287,7 +287,7 @@ def test_only_the_same_call_failing_twice_is_spinning(held_bus, errors, paths, s
     with LaunchRoot.from_path(held_bus.root).selected():
         recorded_turn(held_bus, errors, paths)
         states = TeammateState.current(
-            held_bus, "lead", capture_frame(held_bus, "lead", ProgressRead()))
+            held_bus, capture_frame(held_bus, ProgressRead()))
         (state,) = (state for state in states if state.unit.name == "worker")
         assert isinstance(state, Spinning) is spinning
 
@@ -323,12 +323,12 @@ def test_failed_object_preparation_is_canonical_unread_progress_not_a_normal_car
     Repo.git(directory, "config", f"branch.{branch}.merge", "refs/heads/main")
     plans = TeamHeartbeat()
     with LaunchRoot.from_path(held_bus.root).selected():
-        prepared = TeamInputs.prepare(held_bus, "lead", ProgressRead(), plans)
+        prepared = TeamInputs.prepare(held_bus, held_bus.registry.snapshot().commander_project.require(), ProgressRead(), plans)
         progress = prepared.pulls.progress((todo,), held_bus.registry)[todo.id]
         assert isinstance(progress, UnreadProgress)
         assert str(directory) in progress.reason and str(missing) in progress.reason
         observed = TeamObservation.read(
-            held_bus, held_bus.registry.require("lead"), prepared, plans=plans)
+            held_bus, prepared, plans=plans)
     (unread,) = (state for state in observed.states if state.unit.name == todo.held().owner)
     assert isinstance(unread, Unreadable)
     assert progress.reason == unread.reason
@@ -360,7 +360,7 @@ def test_heartbeat_keeps_every_teammate_when_one_checkout_is_unreadable(
                       check=replace(checked.check, directory=outsider.project_path)),
     ))
     with LaunchRoot.from_path(held_bus.root).selected():
-        baseline = observe_team(held_bus, lead, ProgressRead())
+        baseline = observe_team(held_bus, ProgressRead())
         healthy, = (card for card in baseline.states if card.unit == outsider.incarnation)
         if primary:
             checkout = checked.check.directory
@@ -370,7 +370,7 @@ def test_heartbeat_keeps_every_teammate_when_one_checkout_is_unreadable(
             unread_checkout(held_bus, tmp_path)
         if not broken_metadata:
             (held_bus.registry.require("worker").project_path / ".git").unlink()
-        observed = observe_team(held_bus, lead, ProgressRead())
+        observed = observe_team(held_bus, ProgressRead())
         cards = observed.states
         worker, = (card for card in cards if card.unit.name == "worker")
         assert {card.unit.name for card in cards} >= {"worker", "outsider"}
@@ -383,7 +383,7 @@ def test_heartbeat_keeps_every_teammate_when_one_checkout_is_unreadable(
             assert worker.reason == str(source_failure.value)
         else:
             assert not isinstance(worker, Unreadable)
-        asyncio.run(ObservedHeartbeat((observed,)).run(lambda: nullcontext(held_bus)))
+        asyncio.run(ObservedHeartbeat(observed).run(lambda: nullcontext(held_bus)))
         expected = current_hud(held_bus, lead.name, observed.frame, cards)
         published, = TeamFrame.read_all(held_bus.root)
         assert published == expected

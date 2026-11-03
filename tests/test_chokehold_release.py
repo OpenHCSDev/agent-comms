@@ -39,7 +39,7 @@ def test_a_chokehold_pauses_only_the_teammate_who_ignored_the_check(comms, monke
     """Teammates sharing the board keep working; the one who ignored the vibe check stops."""
     _teammate(comms, monkeypatch, "ignored")
     _teammate(comms, monkeypatch, "running")
-    Chokehold(SimpleNamespace(seq=1, message_id="check")).enforce(comms, "ignored")
+    Chokehold("ignored", SimpleNamespace(seq=1, message_id="check")).enforce(comms)
 
     assert ChokeholdAnswer.held(comms, "ignored")
     assert not ChokeholdAnswer.held(comms, "running")
@@ -50,7 +50,7 @@ def test_a_chokehold_leaves_an_owner_pause_alone(comms, monkeypatch):
     """A goal the owner paused must not kill the heartbeat before the burst goes out."""
     _teammate(comms, monkeypatch, "owner-paused")
     comms.goals.update_goal("owner-paused", PausedGoalAction(), actor=OwnerInvocable)
-    Chokehold(SimpleNamespace(seq=1, message_id="check")).enforce(comms, "owner-paused")
+    Chokehold("owner-paused", SimpleNamespace(seq=1, message_id="check")).enforce(comms)
 
     assert not ChokeholdAnswer.held(comms, "owner-paused")
     assert _burst(comms, "owner-paused")

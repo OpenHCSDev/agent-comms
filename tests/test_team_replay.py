@@ -110,7 +110,7 @@ class Team:
 
     def observe(self) -> TeamObservation:
         return observe_team(
-            self.comms, self.comms.registry.require(self.commander), ProgressRead()
+            self.comms, ProgressRead()
         )
 
     def thread(self, name: str) -> Thread:
@@ -546,7 +546,7 @@ def test_held_branch_rules_consume_the_complete_cut_after_worktree_mutation(
         with pytest.raises(WorkBranchError) as unprepared:
             pulls.require_branch_difference(path)
         assert str(path) in str(unprepared.value)
-        inputs = TeamInputs.prepare(built.comms, Team.commander, pulls, plans)
+        inputs = TeamInputs.prepare(built.comms, built.comms.registry.snapshot().commander_project.require(), pulls, plans)
         difference = inputs.pulls.require_branch_difference(path)
         assert difference.branch == 'unpushed'
         (publication,) = difference.unpublished
@@ -565,7 +565,7 @@ def test_held_branch_rules_consume_the_complete_cut_after_worktree_mutation(
         prepared = git_case.snapshot()
         trace = tmp_path / 'prepared-observation.trace2.jsonl'
         monkeypatch.setenv('GIT_TRACE2_EVENT', str(trace))
-        observed = TeamObservation.read(built.comms, built.thread(Team.commander),
+        observed = TeamObservation.read(built.comms,
                                              inputs, plans=plans)
         monkeypatch.delenv('GIT_TRACE2_EVENT')
         assert inputs.pulls.require_branch_difference(path) == difference
@@ -581,7 +581,7 @@ def test_held_branch_rules_consume_the_complete_cut_after_worktree_mutation(
         assert not any(event.get('event') == 'child_start' and
                        any('upload-pack' in argument for argument in event.get('argv', ()))
                        for event in events)
-        fresh = observe_team(built.comms, built.thread(Team.commander),
+        fresh = observe_team(built.comms,
                                  ProgressRead(), plans=plans)
         if mutation == 'retire':
             assert path.resolve() not in fresh.frame.pulls.captured_branch_paths
@@ -624,8 +624,8 @@ def test_allocated_clone_owns_its_custom_upstream_not_the_primary(fleet, configu
         primary = pulls.checkout(todo.order.checked().check.directory).branches
         primary.prepare_upstreams()
         assert branch not in primary.upstreams
-        inputs = TeamInputs.prepare(built.comms, Team.commander, pulls, plans)
-        observed = TeamObservation.read(built.comms, built.thread(Team.commander),
+        inputs = TeamInputs.prepare(built.comms, built.comms.registry.snapshot().commander_project.require(), pulls, plans)
+        observed = TeamObservation.read(built.comms,
                                              inputs, plans=plans)
         assert not any(isinstance(card, Unreadable) and card.unit.name == 'unpushed'
                        for card in observed.states)

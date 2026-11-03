@@ -200,8 +200,8 @@ def claim_order(held_bus, github_cli):
 
 
 def state_cards(comms, member):
-    frame = capture_frame(comms, "lead", ProgressRead())
-    return tuple(state for state in TeammateState.current(comms, "lead", frame)
+    frame = capture_frame(comms, ProgressRead())
+    return tuple(state for state in TeammateState.current(comms, frame)
                  if isinstance(state, member))
 
 
@@ -287,9 +287,9 @@ def test_order_claim_publishes_only_to_its_retained_team_birth(
 
 
 def unanswered(comms):
-    frame = capture_frame(comms, "lead", ProgressRead())
+    frame = capture_frame(comms, ProgressRead())
     return UnitAskUnanswered.broken(
-        comms, "lead", observed=TeammateState.current(comms, "lead", frame), frame=frame)
+        comms, observed=TeammateState.current(comms, frame), frame=frame)
 
 
 def blocked_holder(comms):
@@ -315,7 +315,7 @@ def test_an_active_goal_with_an_unresolved_attempt_is_reported_never_retried(hel
     reserved = store.require_generation(goal.id)
     violation, = state_cards(held_bus, Blocked)
     assert violation.orders == ("P1", "P2")
-    violation.enforce(held_bus, "lead")
+    violation.enforce(held_bus)
     assert held_bus.registry.require("worker").goal.require() == goal
     assert isinstance(goal.state, ActiveGoal)
     assert store.require_generation(goal.id) == reserved
@@ -343,13 +343,13 @@ def test_holds_whose_holder_was_deleted_or_registered_again_are_reported_by_ever
         comms.registry.remove(name)
     comms.registry.declare(Thread("worker", frozenset({"comms"}), worker.worktree))
 
-    frame = capture_frame(comms, "lead", ProgressRead())
+    frame = capture_frame(comms, ProgressRead())
     broken = StandingRule.broken(
-        comms, "lead", observed=TeammateState.current(comms, "lead", frame), frame=frame)
+        comms, observed=TeammateState.current(comms, frame), frame=frame)
     gone = {rule.todo.id: rule.line() for rule in broken if isinstance(rule, HolderGone)}
     assert set(gone) == {"P1", "P2", "P3"}
     assert "order withdraw P1" in gone["P1"] and "order close P2" in gone["P2"]
-    assert {rule.todo.id for rule in HolderGone.violations(comms, "lead")} == set(gone)
+    assert {rule.todo.id for rule in HolderGone.violations(comms)} == set(gone)
     assert frame.todos == ()
     fleet, = FieldCodec.decode(
         TeamStory, CommsTeamStoryTool.invoke(comms, {}, caller=NoThreadCaller())).lines
@@ -409,7 +409,7 @@ def test_failed_holder_is_reported_without_reissuing_orders_or_replaying_unknown
     unresolved = inputs.lookup(UNRESOLVED_INPUT_KEY)
     violation, = state_cards(held_bus, Blocked)
     assert violation.orders == ("P1", "P2")
-    violation.enforce(held_bus, "lead")
+    violation.enforce(held_bus)
     assert held_bus.registry.require("worker").goal == goal
     assert held_bus.goals.todos.held_orders() == orders
     assert store.require_generation(goal.id) == generation
@@ -457,7 +457,7 @@ async def test_sigterm_group_preserves_active_goal_and_never_reissues_orders(
                 assert held_bus.registry.require("worker").goal == goal
                 assert isinstance(held_bus.goals.goal_execution("worker"), RunnableExecution)
                 for violation in state_cards(held_bus, Blocked):
-                    violation.enforce(held_bus, "lead")
+                    violation.enforce(held_bus)
                 assert held_bus.goals.todos.held_orders() == orders
                 assert InputDispositions(held_bus.root).lookup(UNRESOLVED_INPUT_KEY) == unresolved
             finally:
@@ -597,7 +597,7 @@ def test_unanswered_pages_match_the_complete_answer_reference(held_bus):
     answered = (questions[1].reference, questions[-1].reference)
     held_bus.messaging.send("lead", "outsider", "Answers retain their original references",
                             answers=answered)
-    assert tuple(item.message.reference for item in UnitAskUnanswered.violations(held_bus, "lead")) == tuple(
+    assert tuple(item.message.reference for item in UnitAskUnanswered.violations(held_bus)) == tuple(
         question.reference for question in reversed(questions) if question.reference not in answered
     )
 
@@ -748,10 +748,10 @@ def test_an_owed_answer_is_a_heartbeat_line_and_never_a_vibe_check(held_bus):
     from agent_comms.team.vibe_check import VibeCheck
 
     ask = publish(held_bus, "worker", "lead", time.time() - AwaitingTeam.seconds - 1)
-    frame = capture_frame(held_bus, "lead", ProgressRead())
+    frame = capture_frame(held_bus, ProgressRead())
     assert [rule.message.message_id for rule in OwedAnswer.scan_observed(
-        held_bus, "lead", (), frame)] == [ask.message_id]
-    assert VibeCheck.scan_observed(held_bus, "lead", (), frame) == ()
+        held_bus, (), frame)] == [ask.message_id]
+    assert VibeCheck.scan_observed(held_bus, (), frame) == ()
 
 
 def test_an_owed_vibe_check_refuses_only_verbs_that_answer_nothing(held_bus, tmp_path):
@@ -907,7 +907,7 @@ def test_an_overdue_owner_directive_gates_until_answered(held_bus, tmp_path):
     reply = tmp_path / "reply.txt"
     reply.write_text("Installing now")
     with pytest.raises(RecordProblems, match=re.escape(
-        f"ACT owner directive {directive.seq}:{directive.message_id}"
+        f"ACT lead's owner directive {directive.seq}:{directive.message_id}"
     )):
         SayVerb(units="#comms", body_file=str(reply)).apply(ctx)
     SayVerb(units="#comms", body_file=str(reply), answers=(directive.message_id,)).apply(ctx)
@@ -998,11 +998,11 @@ def test_one_state_per_teammate_even_when_blocked_and_detached(held_bus):
     assert detached.unit.name == "worker" and set(detached.orders) == {"P1", "P2"}
     blocked_holder(held_bus)
     blocked, = state_cards(held_bus, Blocked)
-    frame = capture_frame(held_bus, "lead", ProgressRead())
-    states = TeammateState.current(held_bus, "lead", frame)
+    frame = capture_frame(held_bus, ProgressRead())
+    states = TeammateState.current(held_bus, frame)
     assert tuple(state for state in states if state.unit == blocked.unit) == (blocked,)
     assert blocked not in StandingRule.broken(
-        held_bus, "lead", observed=states, frame=frame)
+        held_bus, observed=states, frame=frame)
 
 
 def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus):
@@ -1040,22 +1040,22 @@ def test_successful_pass_health_does_not_depend_on_messages(held_bus, monkeypatc
     passes.heartbeat_passed((worker,), observed)
     passes.heartbeat_passed((lead.incarnation,), observed)
     completed = passes.read().commander_completed[lead.incarnation]
-    assert HeartbeatSilent.violations(held_bus, "lead") == ()
+    assert HeartbeatSilent.violations(held_bus) == ()
     # The longest normal pass is quiet, not silent.
     monkeypatch.setattr(time, "time", lambda: completed + TeamHeartbeat.pass_duration)
-    assert HeartbeatSilent.violations(held_bus, "lead") == ()
+    assert HeartbeatSilent.violations(held_bus) == ()
     before = held_bus.bus.bus.revision()
     later = completed + HeartbeatSilent.seconds + 1
     monkeypatch.setattr(time, "time", lambda: later)
-    silent, = HeartbeatSilent.violations(held_bus, "lead")
+    silent, = HeartbeatSilent.violations(held_bus)
     assert isinstance(silent, MissedHeartbeat)
     assert silent.since == completed + HeartbeatSilent.seconds
     # Another teammate's pass cannot clear this alarm.
     passes.heartbeat_passed((worker,), observed)
-    assert HeartbeatSilent.violations(held_bus, "lead") == (silent,)
+    assert HeartbeatSilent.violations(held_bus) == (silent,)
     # A successful quiet pass clears the alarm without inventing a conversation.
     passes.heartbeat_passed((lead.incarnation,), observed)
-    assert HeartbeatSilent.violations(held_bus, "lead") == ()
+    assert HeartbeatSilent.violations(held_bus) == ()
     assert held_bus.bus.bus.revision() == before
 
 
@@ -1073,7 +1073,7 @@ def test_pass_missing_a_restarting_team_keeps_its_completion(held_bus):
     assert TeamFrame.read_all(held_bus.root) == ()
     held_bus.registry.register(alive)
     assert passes.read().commander_completed[lead.incarnation] == completed
-    assert HeartbeatSilent.violations(held_bus, "lead") == ()
+    assert HeartbeatSilent.violations(held_bus) == ()
 
 
 def test_first_pass_is_owed_from_oldest_request_and_survives_renames(held_bus, monkeypatch):
@@ -1082,26 +1082,26 @@ def test_first_pass_is_owed_from_oldest_request_and_survives_renames(held_bus, m
     request, = TeamHeartbeat.requested_by(held_bus.registry.require("lead"), held_bus.goals)
     due = request.created_at + HeartbeatSilent.seconds
     monkeypatch.setattr(time, "time", lambda: due + 1)
-    never, = HeartbeatSilent.violations(held_bus, "lead")
+    never, = HeartbeatSilent.violations(held_bus)
     assert isinstance(never, HeartbeatNotStarted)
     assert never.request == request.id and never.since == due
     held_bus.goals.todos.add_request(lead.incarnation, "A newer independent request")
     held_bus.messaging.send_user_message(
         ThreadTarget("lead"), "A DM is not a completed pass", worktree=Checkout(held_bus.root))
-    assert HeartbeatSilent.violations(held_bus, "lead") == (never,)
+    assert HeartbeatSilent.violations(held_bus) == (never,)
     passes = ServicePassStore.at(held_bus.root)
     observed = (lead.incarnation,)
     passes.heartbeat_passed(observed, observed)
     completed = passes.read().commander_completed[lead.incarnation]
-    assert HeartbeatSilent.violations(held_bus, "lead") == ()
+    assert HeartbeatSilent.violations(held_bus) == ()
     held_bus.threads._rename_thread("lead", "renamed-lead")
     monkeypatch.setattr(time, "time", lambda: completed + HeartbeatSilent.seconds + 1)
-    silent, = HeartbeatSilent.violations(held_bus, "renamed-lead")
+    silent, = HeartbeatSilent.violations(held_bus)
     assert isinstance(silent, MissedHeartbeat)
     assert silent.since == completed + HeartbeatSilent.seconds
     renamed = (held_bus.registry.require("renamed-lead").incarnation,)
     passes.heartbeat_passed(renamed, renamed)
-    assert HeartbeatSilent.violations(held_bus, "renamed-lead") == ()
+    assert HeartbeatSilent.violations(held_bus) == ()
 
 
 def test_one_answer_covers_an_escalation_burst_sent_before_it(held_bus):

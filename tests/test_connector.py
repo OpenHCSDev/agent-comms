@@ -536,13 +536,13 @@ async def test_watch_pass_logs_real_failures_with_tracebacks(connector, caplog):
     assert error.exc_info[0] is RuntimeError
     assert str(error.exc_info[1]) == "A real watch failure"
     assert error.exc_info[2] is not None
-    failing, = ServicePassFailing.violations(wire(connector.root), "worker")
+    failing, = ServicePassFailing.violations(wire(connector.root))
     assert failing.watch == "FailingWatch"
     stored = passes.read().failing["FailingWatch"]
     assert (failing.since, failing.error) == (stored.since, stored.error)
     passes.passed("FailingWatch")
     assert passes.read().failing == {}
-    assert ServicePassFailing.violations(wire(connector.root), "worker") == ()
+    assert ServicePassFailing.violations(wire(connector.root)) == ()
 
 
 async def test_registration_accepts_only_the_claude_callback(client):

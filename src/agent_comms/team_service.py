@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import TYPE_CHECKING
 
 from .threads import Thread
@@ -68,10 +68,10 @@ class TeamService:
         return cls.live(snapshot.commander_project.commanders(snapshot))
 
     @classmethod
-    def forks(cls, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
-        """Every teammate's forks Core registered, heard from or not."""
+    def forks(cls, snapshot: RegistrySnapshot, teammates: Iterable[Thread]) -> tuple[Thread, ...]:
+        """These teammates' forks Core registered, heard from or not."""
         return tuple(dict.fromkeys(
-            fork for teammate in cls.teammates(snapshot)
+            fork for teammate in teammates
             for thread in snapshot.children(teammate.name)
             for fork in thread.execution.forks(thread)
         ))

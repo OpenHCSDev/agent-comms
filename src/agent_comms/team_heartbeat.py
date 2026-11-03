@@ -62,7 +62,7 @@ class TeamObservation:
 
 class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamService,
                          TeamPass,
-                         PreparedWatchPass[TeamInputs, TeamObservation], declared_name="commander_heartbeat"):
+                         PreparedWatchPass[tuple[TeamInputs, ...], tuple[TeamObservation, ...]], declared_name="commander_heartbeat"):
 
     def failed(self, opened_wire: Callable[[], AbstractContextManager[Comms]],
                error: Exception) -> None:
@@ -90,64 +90,67 @@ class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
                         *TeamHud.alarm_text(sections, now),
                     )))
 
-    def prepare(self, comms: Comms) -> TeamInputs:
+    def prepare(self, comms: Comms) -> tuple[TeamInputs, ...]:
+        """The bus's one team board, or none on a bus with no registered team project."""
         self.begin_pass()
-        return TeamInputs.prepare(comms, ProgressRead(), self)
+        return tuple(TeamInputs.prepare(comms, project, ProgressRead(), self)
+                     for project in comms.registry.snapshot().commander_project.boards())
 
-    def observe(self, comms: Comms, prepared: TeamInputs) -> TeamObservation:
-        observed = TeamObservation.read(comms, prepared, plans=self)
+    def observe(self, comms: Comms, prepared: tuple[TeamInputs, ...]) -> tuple[TeamObservation, ...]:
+        observed = tuple(TeamObservation.read(comms, inputs, plans=self) for inputs in prepared)
         self.finish_pass()
         return observed
 
-    def pass_body(self, comms: Comms, observed: TeamObservation) -> None:
-        """Enforce the one team board once, then retain and publish it per teammate."""
+    def pass_body(self, comms: Comms, boards: tuple[TeamObservation, ...]) -> None:
+        """Enforce the team board once, then retain and publish it per teammate."""
         huds = {}
         completed = []
         now = time.time()
         duty = self.duty(comms.registry, comms.goals)
         try:
-            comms.goals.todos.record_merges(observed.merges(comms))
-            recipients = self.served(comms.registry)
-            held = {recipient.incarnation: TeamUpdate.latest(comms, recipient.incarnation)
-                    for recipient in recipients}
-            announced = {
-                recipient.incarnation: TeamUpdate.published(comms, recipient.incarnation)
-                for recipient in recipients
-            }
-            # A line any teammate's packet already handled is not enforced again.
-            known = frozenset(ping for packets in held.values()
-                              for packet in packets for ping in packet.handled)
-            rejected = StandingRule.enforce_all(
-                comms, duty.actionable(
-                    (*(rule for rule in observed.rules if RulePing.capture(rule) not in known),
-                     *(state for state in observed.states
-                       if state.attention() and TeammatePing.capture(state) not in known))),
-            )
-            usage = CodexUsage.read()
-            # Include acknowledgements committed during forge/provider reads and enforcement.
-            history = TeamHistory.read(comms, self.actors(comms.registry.snapshot()))
-            states = tuple(state for state in observed.states if state not in rejected)
-            rules = tuple(rule for rule in observed.rules if rule not in rejected)
-            not_applied = tuple(rule.rejected_line(error) for rule, error in rejected.items())
-            deliveries = tuple(TeamUpdate.derive(
-                recipient, states, rules, latest, published=announced[recipient],
-                now=now, history=history,
-                not_applied=not_applied,
-            ) for recipient, latest in held.items())
-            if not deliveries:
-                return  # No live teammate: enforced, and nobody to write a board for.
-            board = TeamHud.of(comms, observed.frame, observed.states, delivery=deliveries[0], usage=usage)
-            for delivery in deliveries:
-                hud = board.for_delivery(delivery)
-                recipient = delivery.packet.commander
-                TeamUpdateStore.record(comms.root, delivery.packet)
-                huds[recipient] = hud
-                facts = PublishedFacts.of(hud.display_facts)
-                latest = announced[recipient]
-                if delivery.packet.should_publish(facts, latest):
-                    duty.publish(lambda packet=delivery.packet, hud=hud, facts=facts:
-                                 packet.send(comms, hud.hud_text(now), publication=facts))
-                completed.append(recipient)
+            for observed in boards:
+                comms.goals.todos.record_merges(observed.merges(comms))
+                recipients = self.served(comms.registry)
+                held = {recipient.incarnation: TeamUpdate.latest(comms, recipient.incarnation)
+                        for recipient in recipients}
+                announced = {
+                    recipient.incarnation: TeamUpdate.published(comms, recipient.incarnation)
+                    for recipient in recipients
+                }
+                # A line any teammate's packet already handled is not enforced again.
+                known = frozenset(ping for packets in held.values()
+                                  for packet in packets for ping in packet.handled)
+                rejected = StandingRule.enforce_all(
+                    comms, duty.actionable(
+                        (*(rule for rule in observed.rules if RulePing.capture(rule) not in known),
+                         *(state for state in observed.states
+                           if state.attention() and TeammatePing.capture(state) not in known))),
+                )
+                usage = CodexUsage.read()
+                # Include acknowledgements committed during forge/provider reads and enforcement.
+                history = TeamHistory.read(comms, self.actors(comms.registry.snapshot()))
+                states = tuple(state for state in observed.states if state not in rejected)
+                rules = tuple(rule for rule in observed.rules if rule not in rejected)
+                not_applied = tuple(rule.rejected_line(error) for rule, error in rejected.items())
+                deliveries = tuple(TeamUpdate.derive(
+                    recipient, states, rules, latest, published=announced[recipient],
+                    now=now, history=history,
+                    not_applied=not_applied,
+                ) for recipient, latest in held.items())
+                if not deliveries:
+                    continue  # No live teammate: enforced, and nobody to write a board for.
+                board = TeamHud.of(comms, observed.frame, observed.states, delivery=deliveries[0], usage=usage)
+                for delivery in deliveries:
+                    hud = board.for_delivery(delivery)
+                    recipient = delivery.packet.commander
+                    TeamUpdateStore.record(comms.root, delivery.packet)
+                    huds[recipient] = hud
+                    facts = PublishedFacts.of(hud.display_facts)
+                    latest = announced[recipient]
+                    if delivery.packet.should_publish(facts, latest):
+                        duty.publish(lambda packet=delivery.packet, hud=hud, facts=facts:
+                                     packet.send(comms, hud.hud_text(now), publication=facts))
+                    completed.append(recipient)
         finally:
             # A later teammate's failure does not erase frames/passes already completed.
             TeamFrame.replace_all(comms.root, tuple(huds.values()))
