@@ -184,7 +184,7 @@ async def test_team_memory_stays_under_its_cap(tmp_path, native_workers, owner_c
             RetainedOwnerLaunch.capture, OwnerRestartSelection.capture(after, names[1]), after, comms.root))
         assert replacement.environment == original.environment
         await Coordination.run_worker(partial(
-            comms.threads.rename_managed_thread, names[2], "shared-renamed", owner=host,
+            comms.threads.rename_managed_thread, after.require_active(names[2]).incarnation, "shared-renamed", owner=host,
         ))
         assert comms.registry.require(names[2]).name == "shared-renamed"
         await client.shutdown()
@@ -360,7 +360,7 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
             originals.append(original)
         # The original process launch name remains valid through registry rename.
         await Coordination.run_worker(partial(
-            comms.threads.rename_managed_thread, "batch-b", "batch-renamed",
+            comms.threads.rename_managed_thread, originals[-1].incarnation, "batch-renamed",
             owner=originals[-1].require_process(),
         ))
         selected = ["batch-a", "batch-renamed"]

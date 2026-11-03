@@ -235,7 +235,7 @@ async def test_subscription_replay_uses_requested_alias(
         with Coordination(str(comms.root / "coordination.sqlite3")) as store:
             store.participants.register(thread.incarnation.lookup, committed=True)
         comms.threads.attach_session(thread, str(journal), process=thread.process_identity)
-        comms.threads.rename_managed_thread(original, "renamed", owner=ProcessIdentity.capture(os.getpid()))
+        comms.threads.rename_managed_thread(thread.incarnation, "renamed", owner=ProcessIdentity.capture(os.getpid()))
         requested = original if request_original else AcpSessionId("renamed")
         proxy = client._create_runtime_proxy(comms.registry.require(requested), requested)
         await proxy.subscribe()
@@ -347,7 +347,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
             replace(comms.registry.require("worker"), session_file=RegistrySessionLocation.from_path(str(tmp_path / "session.jsonl"), comms.root))
         )
         assert await proxy.request("cancel") == {"owner": "old"}
-        comms.threads.rename_managed_thread("worker", "renamed", owner=old)
+        comms.threads.rename_managed_thread(comms.registry.require("worker").incarnation, "renamed", owner=old)
         comms.registry.register(replace(comms.registry.require("renamed"), process_identity=new))
         old_server.close()
         for writer in connections:

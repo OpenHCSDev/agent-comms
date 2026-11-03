@@ -363,20 +363,39 @@ class TestThreadOps:
         with pytest.raises(RelationViolationError):
             wired.threads.rename_self("pr17", caller=ThreadCaller("fixer"))
 
+    def test_managed_rename_refuses_replaced_birth_under_the_same_process(self, wired: Comms) -> None:
+        owner = ProcessIdentity.capture(os.getpid())
+        original = wired.registry.declare(Thread(
+            'managed', frozenset({'acp'}), Checkout(wired.root),
+            created_at=10.0, process_identity=owner))
+        wired.registry.unregister(original.name)
+        wired.registry.remove(original.name)
+        replacement = wired.registry.declare(Thread(
+            'managed', frozenset({'acp'}), Checkout(wired.root),
+            created_at=20.0, process_identity=owner))
+
+        with pytest.raises(RelationViolationError, match="incarnation changed"):
+            wired.threads.rename_managed_thread(original.incarnation, "wrong-birth", owner=owner)
+        assert wired.registry.require(replacement.name) == replacement
+        assert "wrong-birth" not in wired.registry.snapshot().threads
+        result = wired.threads.rename_managed_thread(replacement.incarnation, "chosen", owner=owner)
+        assert result.current == "chosen"
+        assert wired.registry.require("chosen").incarnation == replacement.incarnation
+
     def test_managed_rename_normalizes_title_and_proves_owner(self, wired: Comms) -> None:
         wired.registry.declare(
             Thread(name='generated-7', tags=frozenset({'acp'}), worktree=Checkout(Path('/tmp/project')), process_identity=ProcessIdentity.capture(os.getpid()))
         )
 
         result = wired.threads.rename_managed_thread(
-            "generated-7", "testing 123", owner=ProcessIdentity.capture(os.getpid())
+            wired.registry.require("generated-7").incarnation, "testing 123", owner=ProcessIdentity.capture(os.getpid())
         )
 
         assert result.previous == "generated-7"
         assert result.current == "testing-123"
         assert wired.registry.require("generated-7").name == "testing-123"
         with pytest.raises(RelationViolationError):
-            wired.threads.rename_managed_thread("testing-123", "wrong", owner=ProcessIdentity.capture(os.getppid()))
+            wired.threads.rename_managed_thread(wired.registry.require("testing-123").incarnation, "wrong", owner=ProcessIdentity.capture(os.getppid()))
 
     def test_managed_rename_disambiguates_duplicate_titles(self, wired: Comms) -> None:
         wired.registry.declare(
@@ -386,7 +405,7 @@ class TestThreadOps:
             Thread(name='generated-7', tags=frozenset({'acp'}), worktree=Checkout(Path('/tmp/project')), process_identity=ProcessIdentity.capture(os.getpid()))
         )
 
-        result = wired.threads.rename_managed_thread("generated-7", "testing 123", owner=ProcessIdentity.capture(os.getpid()))
+        result = wired.threads.rename_managed_thread(wired.registry.require("generated-7").incarnation, "testing 123", owner=ProcessIdentity.capture(os.getpid()))
 
         assert result.current == "testing-123-2"
 
@@ -395,9 +414,9 @@ class TestThreadOps:
             Thread(name='generated-7', tags=frozenset(), worktree=Checkout(Path('/tmp/project')), process_identity=ProcessIdentity.capture(os.getpid()))
         )
         assert wired.threads.rename_managed_thread(
-            "generated-7", "chosen", owner=ProcessIdentity.capture(os.getpid())
+            wired.registry.require("generated-7").incarnation, "chosen", owner=ProcessIdentity.capture(os.getpid())
         ).changed
-        result = wired.threads.rename_managed_thread("chosen", "generated-7", owner=ProcessIdentity.capture(os.getpid()))
+        result = wired.threads.rename_managed_thread(wired.registry.require("chosen").incarnation, "generated-7", owner=ProcessIdentity.capture(os.getpid()))
         assert (result.previous, result.current, result.changed) == ("chosen", "generated-7", True)
         assert wired.registry.snapshot().aliases["chosen"] == "generated-7"
         assert "generated-7" not in wired.registry.snapshot().aliases
