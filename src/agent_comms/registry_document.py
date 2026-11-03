@@ -568,9 +568,6 @@ class TeamProject(DeclaredFamily, CitationProject, affix="TeamProject"):
     def unique_repositories(self, name: str = '') -> tuple[Repo, ...]:
         return ()
 
-    @abstractmethod
-    def repository_names(self, name: str = "") -> tuple[RepositoryName, ...]: ...
-
     def linkable(self, primary: RepositoryName) -> tuple[RepositoryName, ...]:
         """The repositories an order on ``primary`` may link pull requests in: its own and
         each repository this project registers."""
