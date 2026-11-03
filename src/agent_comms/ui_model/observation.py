@@ -20,6 +20,7 @@ from agent_comms.repo import Checkout
 import asyncio
 import itertools
 import multiprocessing
+import socket
 import signal
 import sys
 import time
@@ -1507,6 +1508,11 @@ class ViewerEnd(EncodedConnection):
 
     sends = ObservationRequest
     receives = ServiceResult
+
+
+def serve_encoded(route: CommsRoute, service_socket: socket.socket) -> None:
+    """Serve one remote viewer over its socket, decoding only declared records."""
+    serve(route, ServiceEnd(service_socket.detach()))
 
 
 def serve(route: CommsRoute, connection: Connection) -> None:
