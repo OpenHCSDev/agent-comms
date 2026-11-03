@@ -118,9 +118,12 @@ class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
                     recipient.incarnation: TeamUpdate.published(comms, recipient.incarnation)
                     for recipient in recipients
                 }
-                # A line any teammate's packet already handled is not enforced again.
-                known = frozenset(ping for packets in held.values()
-                                  for packet in packets for ping in packet.handled)
+                # A line is skipped only once every teammate's own packet handled it: a teammate
+                # who joins later still gets its effect, which the effects themselves keep
+                # once-only (a burst is sent once per recipient birth, per the bus).
+                known = frozenset.intersection(*(
+                    frozenset(ping for packet in packets for ping in packet.handled)
+                    for packets in held.values())) if held else frozenset()
                 rejected = StandingRule.enforce_all(
                     comms, duty.actionable(
                         (*(rule for rule in observed.rules if RulePing.capture(rule) not in known),

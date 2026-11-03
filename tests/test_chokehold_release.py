@@ -39,18 +39,41 @@ def test_a_chokehold_pauses_only_the_teammate_who_ignored_the_check(comms, monke
     """Teammates sharing the board keep working; the one who ignored the vibe check stops."""
     _teammate(comms, monkeypatch, "ignored")
     _teammate(comms, monkeypatch, "running")
-    Chokehold("ignored", SimpleNamespace(seq=1, message_id="check")).enforce(comms)
+    Chokehold(comms.registry.require("ignored").incarnation,
+              SimpleNamespace(seq=1, message_id="check")).enforce(comms)
 
     assert ChokeholdAnswer.held(comms, "ignored")
     assert not ChokeholdAnswer.held(comms, "running")
     assert _burst(comms, "ignored")
 
 
+def test_a_chokehold_never_pauses_a_thread_that_replaced_its_teammate(comms, monkeypatch):
+    """Decided for A's first birth; A is replaced under the same name before enforcement. The
+    replacement is neither paused nor told, and the refusal is a declared one the heartbeat
+    records as not applied."""
+    import pytest
+    from agent_comms.errors import BirthChangedError
+
+    _teammate(comms, monkeypatch, "a")
+    first = comms.registry.require("a")
+    rule = Chokehold(first.incarnation, SimpleNamespace(seq=1, message_id="check"))
+    comms.registry.unregister("a")
+    comms.registry.remove("a")
+    comms.registry.declare(Thread("a", first.tags, first.worktree, created_at=first.created_at + 1))
+    partial(invoke_tool, caller=ThreadCaller("a"))(comms, "comms_set_goal", {"text": "work"})
+
+    with pytest.raises(BirthChangedError):
+        rule.enforce(comms)
+    assert not ChokeholdAnswer.held(comms, "a")
+    assert not _burst(comms, "a")
+
+
 def test_a_chokehold_leaves_an_owner_pause_alone(comms, monkeypatch):
     """A goal the owner paused must not kill the heartbeat before the burst goes out."""
     _teammate(comms, monkeypatch, "owner-paused")
     comms.goals.update_goal("owner-paused", PausedGoalAction(), actor=OwnerInvocable)
-    Chokehold("owner-paused", SimpleNamespace(seq=1, message_id="check")).enforce(comms)
+    Chokehold(comms.registry.require("owner-paused").incarnation,
+              SimpleNamespace(seq=1, message_id="check")).enforce(comms)
 
     assert not ChokeholdAnswer.held(comms, "owner-paused")
     assert _burst(comms, "owner-paused")

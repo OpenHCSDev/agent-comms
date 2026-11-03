@@ -22,6 +22,12 @@ class RejectedEnforcementError(ValueError):
         return self.reason
 
 
+class BirthChangedError(RejectedEnforcementError):
+    """The thread an action was decided for was replaced under its name before it applied."""
+
+    reason: ClassVar[str] = "the thread it was decided for was replaced under its name"
+
+
 class TodoError(ToolRefusedError):
     """A todo request is invalid or its persisted state cannot be trusted."""
 

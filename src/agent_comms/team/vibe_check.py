@@ -27,6 +27,7 @@ from agent_comms.goal_actions import (
     CompliedGoalAction,
     OwnerInvocable,
 )
+from agent_comms.errors import BirthChangedError
 from agent_comms.messages import Message
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegistrySnapshot
@@ -138,7 +139,7 @@ class VibeCheck(UndatedStandingRule):
         answer."""
         burst = self.burst()
         for teammate in TeamService.teammates(comms.registry.snapshot()):
-            VibeCheckNotice.burst_once(comms, teammate.name, burst, burst[0])
+            VibeCheckNotice.burst_once(comms, teammate.incarnation, burst, burst[0])
 
     def burst(self) -> tuple[str, ...]:
         return (
@@ -206,7 +207,9 @@ class Chokehold(IndependentStandingRule, UndatedStandingRule):
     """A vibe check ignored past its window: the teammate who ignored it is paused, never the
     teammates whose work shares its board, and told in a burst it cannot skim what resumes it."""
 
-    teammate: str
+    teammate: ThreadIncarnation = field(compare=False)
+    """Whose check was ignored. Its check message is already that birth's, so an occurrence
+    keeps its identity (and age) whatever this adds."""
     check: Message
     after: ClassVar[int] = 10 * 60
 
@@ -216,15 +219,20 @@ class Chokehold(IndependentStandingRule, UndatedStandingRule):
         snapshot = comms.registry.snapshot()
         with comms.bus.bus.reading() as source:
             return tuple(
-                cls(teammate.name, message)
+                cls(teammate.incarnation, message)
                 for teammate in TeamService.teammates(snapshot)
                 for message in VibeCheckNotice.unanswered(
                     source, snapshot, teammate.name, time.time() - cls.after)[:1]
             )
 
     def enforce(self, comms: Comms) -> None:
-        if not any(goal.state.protected for goal in comms.registry.require(self.teammate).goal):
-            comms.goals.update_goal(self.teammate, ChokeholdPausedGoalAction())
+        """Only the birth that ignored its check is paused or told: a thread that replaced it
+        under the same name is refused at the read and again inside the goal write."""
+        current = comms.registry.require(self.teammate.name)
+        if current.incarnation != self.teammate:
+            raise BirthChangedError()
+        if not any(goal.state.protected for goal in current.goal):
+            comms.goals.update_born_goal(self.teammate, ChokeholdPausedGoalAction())
         ChokeholdNotice.burst_once(comms, self.teammate, self.burst(), self.ignored())
 
     def ignored(self) -> str:
@@ -251,7 +259,8 @@ class Chokehold(IndependentStandingRule, UndatedStandingRule):
 
     def line(self) -> str:
         return (
-            f"{self.teammate} ignored vibe check {self.check.seq}:{self.check.message_id}, so its"
+            f"{self.teammate.name} ignored vibe check {self.check.seq}:{self.check.message_id},"
+            " so its"
             f" goal is paused. happy now? -> answer the {ChokeholdNotice.title} burst"
             " by its protocol"
         )
@@ -280,27 +289,28 @@ class ChokeholdAnswer(UndatedStandingRule, FamilyScan, declared_name=None):
     """A paused teammate's newest answer to its chokehold, once every chokehold message to it is
     answered. The family judges each answer against one read of the signs still blocking release."""
 
-    teammate: str
+    teammate: ThreadIncarnation = field(compare=False)
     answer: Message
     blocking: tuple[Sign, ...] = field(compare=False)
 
     @classmethod
     def scan_observed(cls, comms: Comms,
                       observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
-        held = tuple(teammate.name for teammate in TeamService.teammates(comms.registry.snapshot())
+        held = tuple(teammate.incarnation
+                     for teammate in TeamService.teammates(comms.registry.snapshot())
                      if cls.held(comms, teammate.name))
         blocking = cls.blocking_signs(comms, frame) if held else ()
         return tuple(
             rule
             for teammate in held
-            for answer in cls.newest(comms, teammate)
+            for answer in cls.newest(comms, teammate.name)
             for member in cls.members_with(cls)
             for rule in member.judged(teammate, answer, blocking)
         )
 
     @classmethod
     @abstractmethod
-    def judged(cls, teammate: str, answer: Message,
+    def judged(cls, teammate: ThreadIncarnation, answer: Message,
                blocking: tuple[Sign, ...]) -> tuple[Self, ...]: ...
 
     @staticmethod
@@ -333,12 +343,13 @@ class ChokeholdReleased(ChokeholdAnswer):
     """The answer quotes the pattern catalog: Core resumes the goal the chokehold paused."""
 
     @classmethod
-    def judged(cls, teammate: str, answer: Message, blocking: tuple[Sign, ...]) -> tuple[Self, ...]:
+    def judged(cls, teammate: ThreadIncarnation, answer: Message,
+               blocking: tuple[Sign, ...]) -> tuple[Self, ...]:
         return ((cls(teammate, answer, blocking),)
                 if not blocking and PatternCatalog.quoted(answer.body) else ())
 
     def enforce(self, comms: Comms) -> None:
-        comms.goals.update_goal(
+        comms.goals.update_born_goal(
             self.teammate, CompliedGoalAction(witness=self.answer.message_id), actor=OwnerInvocable)
         ChokeholdNotice.burst(
             comms,
@@ -356,7 +367,8 @@ class ChokeholdHeld(ChokeholdAnswer):
     paused until those clear, and the paused teammate is told which."""
 
     @classmethod
-    def judged(cls, teammate: str, answer: Message, blocking: tuple[Sign, ...]) -> tuple[Self, ...]:
+    def judged(cls, teammate: ThreadIncarnation, answer: Message,
+               blocking: tuple[Sign, ...]) -> tuple[Self, ...]:
         return ((cls(teammate, answer, blocking),)
                 if blocking and PatternCatalog.quoted(answer.body) else ())
 
@@ -384,7 +396,8 @@ class ChokeholdRefused(ChokeholdAnswer):
     """The answer quotes nothing: the teammate stays paused and is choked again."""
 
     @classmethod
-    def judged(cls, teammate: str, answer: Message, blocking: tuple[Sign, ...]) -> tuple[Self, ...]:
+    def judged(cls, teammate: ThreadIncarnation, answer: Message,
+               blocking: tuple[Sign, ...]) -> tuple[Self, ...]:
         return () if PatternCatalog.quoted(answer.body) else (cls(teammate, answer, blocking),)
 
     def enforce(self, comms: Comms) -> None:

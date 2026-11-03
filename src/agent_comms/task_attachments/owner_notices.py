@@ -105,22 +105,24 @@ class EscalationNotice(OwnerNotice, declared_name=None):
         return cls(snapshot.require(commander).incarnation)
 
     @classmethod
-    def burst(cls, comms: Comms, commander: str, lines: Sequence[str]) -> None:
-        notice = cls.of(comms.registry.snapshot(), commander)
+    def burst(cls, comms: Comms, teammate: ThreadIncarnation, lines: Sequence[str]) -> None:
+        """Every line is addressed to this birth; require_target refuses a replacement."""
+        notice = cls(teammate)
         first, *rest = lines
-        notice.publish(comms.messaging, ThreadTarget(commander), first)
+        notice.publish(comms.messaging, ThreadTarget(teammate.name), first)
         for line in rest:
             time.sleep(cls.gap)
-            notice.publish(comms.messaging, ThreadTarget(commander), line)
+            notice.publish(comms.messaging, ThreadTarget(teammate.name), line)
 
     @classmethod
-    def burst_once(cls, comms: Comms, commander: str, lines: Sequence[str], identity: str) -> None:
+    def burst_once(cls, comms: Comms, teammate: ThreadIncarnation, lines: Sequence[str],
+                   identity: str) -> None:
         """A burst is sent once per identity line: the bus, not a process's memory, says it
         went out, so a restarted heartbeat that sees the rule as new again does not resend it."""
         with comms.bus.bus.reading() as source:
-            sent = cls.lines(source, comms.registry.snapshot(), commander, time.time())
+            sent = cls.lines(source, comms.registry.snapshot(), teammate.name, time.time())
         if not any(message.body == identity for message in sent):
-            cls.burst(comms, commander, lines)
+            cls.burst(comms, teammate, lines)
 
     @classmethod
     def lines(cls, source: BusReader, snapshot: RegistrySnapshot, commander: str,
@@ -135,13 +137,11 @@ class EscalationNotice(OwnerNotice, declared_name=None):
     @classmethod
     def newest_answer(cls, source: BusReader, snapshot: RegistrySnapshot, commander: str,
                       lines: Sequence[Message]) -> tuple[Message, ...]:
-        """The newest answer naming any of those lines from this teammate or any teammate of
-        the bus: every one of them holds the gate this burst closes, so one answer opens it."""
-        answerers = (commander, *(thread.name for thread
-                                  in snapshot.commander_project.commanders(snapshot)))
+        """The newest answer naming any of those lines from the addressed teammate itself. The
+        lines are already this birth's (lines() reads by its lookup); another teammate's
+        reply, quote included, never covers or releases them."""
         return source.latest_reply(
-            tuple(line.reference for line in lines),
-            frozenset().union(*(snapshot.names_for(name) for name in answerers)))
+            tuple(line.reference for line in lines), frozenset(snapshot.names_for(commander)))
 
     @classmethod
     def unanswered(cls, source: BusReader, snapshot: RegistrySnapshot, commander: str,

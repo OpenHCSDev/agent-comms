@@ -767,8 +767,10 @@ def test_an_owed_vibe_check_refuses_only_verbs_that_answer_nothing(held_bus, tmp
     assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == (ask.reference,)
 
 
-def test_a_peer_teammates_answer_clears_the_vibe_check_for_the_seat(held_bus):
-    """Answering a burst sent to the seat opens the gate: the reply author is any teammate."""
+def test_only_the_addressed_teammates_own_answer_clears_its_vibe_check(held_bus):
+    """No seat: a vibe check is one teammate's. A peer's reply naming it, quote or not, leaves it
+    owed (it could otherwise release that teammate's chokehold); the addressed teammate's own
+    reply clears it."""
     check = escalate(held_bus, VibeCheckNotice, time.time() - 3600)
     held_bus.registry.declare(Thread("peer", frozenset({TeammatesTag.declared_name}),
                                      Checkout(Path.cwd())), StoppedThreadStatus())
@@ -776,6 +778,10 @@ def test_a_peer_teammates_answer_clears_the_vibe_check_for_the_seat(held_bus):
     held_bus.messaging.send("peer", "lead", "Answered.", answers=(check.reference,),
                             answerer=TeamReceipts(peer.acting_identity,
                                                        (peer.incarnation, lead.incarnation)))
+    with held_bus.bus.bus.reading() as source:
+        assert [message.reference for message in VibeCheckNotice.unanswered(
+            source, held_bus.registry.snapshot(), "lead", time.time())] == [check.reference]
+    held_bus.messaging.send("lead", "peer", "Mine, answered.", answers=(check.reference,))
     with held_bus.bus.bus.reading() as source:
         assert VibeCheckNotice.unanswered(
             source, held_bus.registry.snapshot(), "lead", time.time()) == ()
@@ -1207,14 +1213,14 @@ def test_a_compliant_answer_resumes_a_held_teammate_whose_problems_closed_during
 def test_a_restarted_heartbeat_does_not_resend_an_escalation_burst(held_bus):
     """Deduplication sees answered and unanswered bursts through the same retained bus."""
     first = "first escalation identity"
-    VibeCheckNotice.burst_once(held_bus, "lead", (first,), first)
-    VibeCheckNotice.burst_once(held_bus, "lead", (first,), first)
+    VibeCheckNotice.burst_once(held_bus, held_bus.registry.require("lead").incarnation, (first,), first)
+    VibeCheckNotice.burst_once(held_bus, held_bus.registry.require("lead").incarnation, (first,), first)
     sent = VibeCheckNotice.unanswered(held_bus.bus.bus, held_bus.registry.snapshot(), "lead", time.time())
     assert len(sent) == 1
     publish(held_bus, "lead", sent[0].sender, time.time(), answers=(sent[0].reference,))
-    VibeCheckNotice.burst_once(held_bus, "lead", (first,), first)
+    VibeCheckNotice.burst_once(held_bus, held_bus.registry.require("lead").incarnation, (first,), first)
     assert not VibeCheckNotice.unanswered(held_bus.bus.bus, held_bus.registry.snapshot(), "lead", time.time())
     second = "second escalation identity"
-    VibeCheckNotice.burst_once(held_bus, "lead", (second,), second)
+    VibeCheckNotice.burst_once(held_bus, held_bus.registry.require("lead").incarnation, (second,), second)
     assert [message.body for message in VibeCheckNotice.unanswered(
         held_bus.bus.bus, held_bus.registry.snapshot(), "lead", time.time())] == [second]
