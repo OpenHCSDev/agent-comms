@@ -150,3 +150,27 @@ def test_a_received_registry_answers_membership_under_its_aliases(tmp_path):
     snapshot = comms.registry.snapshot()
     assert "renamed" in snapshot and "worker" in snapshot and "nobody" not in snapshot
     assert ("worker" in comms.registry) == ("worker" in snapshot)
+
+
+def test_a_ui_reads_and_orders_relationships_through_core(tmp_path):
+    """A thread sidebar's relationship reads and its ordering write cross as themselves."""
+    from agent_comms.core_access import LocalCoreAccess
+    from agent_comms.display_order import ThreadSort
+    from agent_comms.nominal.field_codec import FieldCodec
+    from agent_comms.relationships import ChildrenRelationshipGroup
+    from agent_comms.tools import (
+        CommsRelationshipRevisionTool, CommsSetRelationshipOrderTool, CommsThreadRelationshipsTool,
+        RelationshipOrdered, RelationshipRevisionRead, ThreadRelationshipsRead,
+    )
+
+    comms = wire(tmp_path / "wire")
+    _declare(comms, "worker", str(tmp_path))
+    core = LocalCoreAccess(comms)
+    revision = core.call(CommsRelationshipRevisionTool())
+    assert FieldCodec.decode(RelationshipRevisionRead, FieldCodec.encode(revision)) == revision
+    read = core.call(CommsThreadRelationshipsTool(owner="worker"))
+    assert FieldCodec.decode(ThreadRelationshipsRead, FieldCodec.encode(read)) == read
+    assert read.snapshot == comms.relationships.snapshot("worker")
+    order = ThreadSort.members_with(ThreadSort)[-1]
+    ordered = core.call(CommsSetRelationshipOrderTool(owner="worker", group=ChildrenRelationshipGroup, order=order))
+    assert FieldCodec.decode(RelationshipOrdered, FieldCodec.encode(ordered)) == ordered

@@ -88,7 +88,7 @@ from .pi_payloads import PublishedGoalToolDetails
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
 from .notification_evidence import AfterRecipient, FirstRecipient, RecipientCursor
 from .message_notification import MessageNotification
-from .presentation import ChannelView
+from .presentation import ChannelView, WireRevision
 from .notification_evidence import RecipientLimit
 from .progress_claims import ProgressClaim
 from .relationships import (
@@ -96,6 +96,8 @@ from .relationships import (
     GoalDerivedContact,
     GoalMentionDiagnostic,
     RelationshipEdit,
+    SortableRelationshipGroup,
+    ThreadCommsSnapshot,
 )
 from .restart_queue import QueuedRestart, RestartQueued, RestartQueue
 from .team.standing import InstallDue
@@ -424,6 +426,59 @@ class RetiredViewsRead(ToolResult):
     """Which of a UI's open views no longer have a source, as Core decides."""
 
     retired: RetiredViews
+
+
+@dataclass(frozen=True)
+class RelationshipRevisionRead(ToolResult):
+    revision: WireRevision
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsRelationshipRevisionTool(ReadTool, ToolRequest[ToolCaller, RelationshipRevisionRead]):
+    """What a thread's relationship view derives from; an equal revision shows the same thing."""
+
+    label = "Relationship revision"
+    description = "The wire revision thread relationship views derive from."
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> RelationshipRevisionRead:
+        return RelationshipRevisionRead(comms.relationships.revision())
+
+
+@dataclass(frozen=True)
+class ThreadRelationshipsRead(ToolResult):
+    snapshot: ThreadCommsSnapshot
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsThreadRelationshipsTool(ReadTool, ToolRequest[ToolCaller, ThreadRelationshipsRead]):
+    """One thread's relationship groups, as its sidebar shows them."""
+
+    label = "Thread relationships"
+    description = "One thread's inbound, outbound, parent, child and collaborating threads."
+    owner: Annotated[str, *tool_field("Thread whose relationships to read")]
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> ThreadRelationshipsRead:
+        return ThreadRelationshipsRead(comms.relationships.snapshot(self.owner))
+
+
+@dataclass(frozen=True)
+class RelationshipOrdered(ToolResult):
+    order: type[ThreadSort]
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsSetRelationshipOrderTool(ToolRequest[ToolCaller, RelationshipOrdered]):
+    """A UI sets how one of a thread's relationship groups is sorted; requires a human caller."""
+
+    label = "Set relationship order"
+    description = "Set how one sortable relationship group of a thread is ordered; requires a human UI caller."
+    owner: Annotated[str, *tool_field("Thread whose group to order")]
+    group: Annotated[type[SortableRelationshipGroup], *tool_field("Relationship group")]
+    order: Annotated[type[ThreadSort], *tool_field("Thread order")]
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> RelationshipOrdered:
+        caller.require_human()
+        return RelationshipOrdered(comms.relationships.set_order(self.owner, self.group, self.order))
 
 
 @dataclass(frozen=True)
