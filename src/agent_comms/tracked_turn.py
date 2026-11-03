@@ -36,7 +36,6 @@ from .native_pi import (
     NativeTurnResult,
 )
 from .native_prompt_send import UNGUARDED_PROMPT, PromptBoundary, PromptSendFailure
-from .native_session_reopen import SessionRetention
 from .native_startup import NativeStartup
 from .native_tool_call import NativeToolMode
 from .pi_rpc import PiRpcChannel
@@ -351,7 +350,7 @@ class TrackedTurnSession(TurnSession):
     async def retain_or_close(self) -> None:
         """Let the session keep a verified idle child; close any other child."""
         await self.finish_input()
-        retention = SessionRetention.from_optional(self.native.attestation.identity)
+        retention = self.native.attestation.identity
         # An input written but never started may still run in the child; it is not idle.
         self.retainable = self.retainable and self.inputs.settled
         if self.retainable and retention.retain(self.native, self.native_session):
@@ -421,9 +420,11 @@ class TrackedTurnSession(TurnSession):
                     break
                 async for _ in event.consume(self):
                     pass
-        if observed.identity is None:
+        for identity in observed.identity.present():
+            self.active_session_file = self.launch.session.attest(identity)
+            break
+        else:
             raise NativePiUnavailable("Native Pi omitted its private session identity")
-        self.active_session_file = self.launch.session.attest(observed.identity)
         self.native.attestation = observed
         with self.startup.measurements.operation("attestation_publication"):
             await self.observe_event(observed)

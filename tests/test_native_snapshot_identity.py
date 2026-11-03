@@ -40,7 +40,7 @@ def test_partial_native_snapshot_only_conflicts_on_known_components(command, par
         session_id=ReportedText("selected"), session_file=ReportedText("/selected.jsonl")
     )
     observed = snapshot(command, partial)
-    assert observed.identity is None
+    assert not observed.identity.present()
     assert observed.conflicts(selected) is conflict
     assert selected.conflicts(observed) is conflict
     assert ObservedAttestation(selected).conflicts(observed) is conflict

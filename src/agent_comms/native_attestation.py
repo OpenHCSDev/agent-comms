@@ -13,7 +13,7 @@ from . import pi_commands as commands
 from . import turn_failure as failures
 from .native_pi import CAPABILITY
 from .native_failures import NativePiUnavailable
-from .native_session_reopen import NativeSessionIdentity
+from .native_session_reopen import NativeSessionIdentity, NoSessionRetention, SessionRetention
 from .pi_events import PiEvent
 from .pi_payloads import NativeSessionSnapshot, SnapshotAttestation, StateData
 from .turn_item import PiRequestKey
@@ -50,10 +50,10 @@ class NativeAttestation(SnapshotAttestation):
         return not self.uncertain
 
     state = None
-    identity = None
+    identity: SessionRetention = NoSessionRetention()
 
     def require_identity(self) -> NativeSessionIdentity:
-        raise ValueError("Native child has not attested an original session identity")
+        return self.identity.require_identity()
 
     def require_state(self) -> StateData:
         raise NativePiUnavailable("Native child has not reported its original state")
@@ -69,7 +69,7 @@ class NativeAttestation(SnapshotAttestation):
         return LostAttestation()
 
     def allows_extension_input(self, inputs) -> bool:
-        return False
+        return self.identity.allows_extension_input(inputs)
 
     def conflicts(self, data: NativeSessionSnapshot) -> bool:
         return False
@@ -78,7 +78,7 @@ class NativeAttestation(SnapshotAttestation):
 @dataclass
 class PendingAttestation(NativeAttestation):
     observed = False
-    expected: NativeSessionIdentity | None = None
+    expected: SessionRetention = field(default_factory=NoSessionRetention)
     request: commands.GetState = field(
         default_factory=lambda: commands.GetState(
             id=RequestId(PiRequestKey.fresh())
@@ -104,7 +104,7 @@ class PendingAttestation(NativeAttestation):
                     failures.InputIdUnavailable("Pi native input-ID capability preflight failed.")
                 )
             observed = ObservedAttestation(data)
-            if self.expected is not None and observed.identity != self.expected:
+            if self.expected.conflicts_with(observed.identity):
                 raise IdentityAttestationError(
                     failures.IdentityUncertain("Pi session identity changed during this turn.")
                 )
@@ -123,11 +123,6 @@ class KnownSessionAttestation(NativeAttestation):
     def diagnostic_evidence(self):
         return {"session_id": self.identity.session_id, "session_file": self.identity.session_file}
 
-    def require_identity(self) -> NativeSessionIdentity:
-        return self.identity
-
-    def allows_extension_input(self, inputs) -> bool:
-        return inputs.permits_interaction
 
     def conflicts(self, data: NativeSessionSnapshot) -> bool:
         """Reject every reported component that differs from the known identity."""
@@ -160,14 +155,6 @@ class ObservedAttestation(NativeAttestation):
     def identity(self):
         return self.state.identity
 
-    def require_identity(self) -> NativeSessionIdentity:
-        identity = self.state.identity
-        if identity is None:
-            return super().require_identity()
-        return identity
-
-    def allows_extension_input(self, inputs) -> bool:
-        return self.identity is not None and inputs.permits_interaction
 
     def conflicts(self, data: NativeSessionSnapshot) -> bool:
         return self.state.conflicts(data)
