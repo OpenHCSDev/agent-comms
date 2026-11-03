@@ -65,6 +65,7 @@ class ConnectorObservationPeer(ObservationPeer):
                         frame = await asyncio.to_thread(local.recv_bytes)
                         await remote.send_bytes(frame)
                 finally:
+                    local.close()
                     inbound.cancel()
                     await asyncio.gather(inbound, return_exceptions=True)
         except (EOFError, OSError, aiohttp.ClientError) as error:

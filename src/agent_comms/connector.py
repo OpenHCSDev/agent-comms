@@ -898,9 +898,11 @@ class ObservationRelay:
                     break
                 self.connection.send_bytes(message.data)
         finally:
+            # Close before any await: a cancelled handler may not get past one, and the
+            # close is what ends the reader blocked in recv_bytes.
+            self.connection.close()
             outbound.cancel()
             await asyncio.gather(outbound, return_exceptions=True)
-            self.connection.close()
             await asyncio.to_thread(self.process.join, 5)
 
 
