@@ -753,13 +753,16 @@ class ThinkingLevelChangeEntry(NativeEntry):
     thinking_level: Annotated[type[ThinkingLevel], WireName("thinkingLevel")]
 
 
-class NoEvidenceRead:
-    """No reader is acquired yet: borrowing opens one for this call and retires it after."""
+@dataclass(frozen=True)
+class NoEvidenceRead[Reader: NativeEvidenceRead]:
+    """No reader is acquired yet: borrowing opens one of `reads` for this call and retires it after."""
+
+    reads: type[Reader]
 
     @contextmanager
-    def borrowed(self, session_file: Path) -> Iterator[NativeEvidenceRead]:
-        with NativeEvidenceRead.open(Path(session_file).absolute()) as acquired:
+    def borrowed(self, session_file: Path) -> Iterator[Reader]:
+        with self.reads.open(Path(session_file).absolute()) as acquired:
             yield acquired
 
 
-NO_EVIDENCE_READ = NoEvidenceRead()
+NO_EVIDENCE_READ = NoEvidenceRead(NativeEvidenceRead)
