@@ -4,11 +4,11 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, ClassVar, Literal, cast
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, cast
 
 from .context_reading import ContextReading, UnmeasuredContext
 from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import FieldCodec
+from .nominal.field_codec import FieldCodec, WireRequired
 from .locked_store import DocumentChange
 from .maintenance_barrier import CarriedDocument
 from .pi_counts import PiCount, UnreportedCount
@@ -128,7 +128,7 @@ class RuntimeInfoDocument:
     """Recorded and birthless scopes remain distinct native nominal keys."""
 
     observations: dict[ThreadIncarnation, AgentRuntimeInfo] = field(default_factory=dict)
-    version: Literal[2] = 2
+    version: Annotated[Literal[2], WireRequired()] = 2
 
     def read_scope(self, scope: RuntimeReadScope) -> RuntimeInfo:
         historical = AgentRuntimeInfo()

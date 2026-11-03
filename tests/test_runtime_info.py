@@ -4,13 +4,23 @@ import pytest
 from agent_comms.agent_events import (
     ContextSizeObservation, ContextUsageObservation, ModelObservation, RuntimeInfoObservation,
 )
-from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.catalog_document import CatalogDocument
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.pi_counts import PiCount
 from agent_comms.reading_attribution import CurrentReadingAttribution, LastKnownReadingAttribution
 from agent_comms.runtime_field import RuntimePublication, UnattributedRuntimeOrigin
 from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoDocument, RuntimeReadScope, UnobservedRuntimeInfo
 from agent_comms.thread_identity import RecordedThreadIncarnation, UnrecordedThreadIncarnation
 from agent_comms.thread_model import DeclaredModel, UndeclaredModel
+
+
+@pytest.mark.parametrize("document_type", [RuntimeInfoDocument, CatalogDocument])
+def test_current_store_format_requires_its_marker(document_type: type) -> None:
+    encoded = FieldCodec.encode(document_type())
+    assert isinstance(encoded, dict)
+    encoded.pop("version")
+    with pytest.raises(MalformedRecord):
+        FieldCodec.decode(document_type, encoded)
 
 
 @pytest.fixture

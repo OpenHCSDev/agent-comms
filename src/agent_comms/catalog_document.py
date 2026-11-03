@@ -6,7 +6,7 @@ from .activity_clocks import ActivityClocks
 from abc import ABC, abstractmethod
 import time
 from dataclasses import dataclass, field, replace
-from typing import Literal
+from typing import Annotated, Literal
 
 from . import channels
 from .channel_targets import ChannelTarget, DeclaredTag, Tag
@@ -21,7 +21,7 @@ from .channels import (
 )
 from .display_order import ChannelSort, CreatedThreadSort, NameChannelSort, ThreadSort
 from .errors import RelationViolationError, UnknownChannelError
-from .nominal.field_codec import ThreadLookup
+from .nominal.field_codec import ThreadLookup, WireRequired
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,7 +140,7 @@ class CatalogPreferences(CatalogAccess):
 class CatalogDocument(CatalogPreferences):
     tags: frozenset[str] = frozenset()
     saved_views: dict[str, SavedView] = field(default_factory=dict)
-    version: Literal[2] = 2
+    version: Annotated[Literal[2], WireRequired()] = 2
 
     def __post_init__(self) -> None:
         self.validate()
