@@ -159,15 +159,15 @@ def test_a_ui_reads_and_orders_relationships_through_core(tmp_path):
     from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.relationships import ChildrenRelationshipGroup
     from agent_comms.tools import (
-        CommsRelationshipRevisionTool, CommsSetRelationshipOrderTool, CommsThreadRelationshipsTool,
-        RelationshipOrdered, RelationshipRevisionRead, ThreadRelationshipsRead,
+        CommsSetRelationshipOrderTool, CommsWireRevisionTool, CommsThreadRelationshipsTool,
+        RelationshipOrdered, ThreadRelationshipsRead, WireRevisionRead,
     )
 
     comms = wire(tmp_path / "wire")
     _declare(comms, "worker", str(tmp_path))
     core = LocalCoreAccess(comms)
-    revision = core.call(CommsRelationshipRevisionTool())
-    assert FieldCodec.decode(RelationshipRevisionRead, FieldCodec.encode(revision)) == revision
+    revision = core.call(CommsWireRevisionTool())
+    assert FieldCodec.decode(WireRevisionRead, FieldCodec.encode(revision)) == revision
     read = core.call(CommsThreadRelationshipsTool(owner="worker"))
     assert FieldCodec.decode(ThreadRelationshipsRead, FieldCodec.encode(read)) == read
     assert read.snapshot == comms.relationships.snapshot("worker")

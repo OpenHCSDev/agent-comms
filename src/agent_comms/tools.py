@@ -611,19 +611,40 @@ class CommsQueueActionTool(ToolRequest[ToolCaller, QueueActionApplied]):
 
 
 @dataclass(frozen=True)
-class RelationshipRevisionRead(ToolResult):
+class WireRevisionRead(ToolResult):
     revision: WireRevision
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsRelationshipRevisionTool(ReadTool, ToolRequest[ToolCaller, RelationshipRevisionRead]):
-    """What a thread's relationship view derives from; an equal revision shows the same thing."""
+class CommsWireRevisionTool(ReadTool, ToolRequest[ToolCaller, WireRevisionRead]):
+    """What every wire view derives from; an equal revision shows the same thing."""
 
-    label = "Relationship revision"
-    description = "The wire revision thread relationship views derive from."
+    label = "Wire revision"
+    description = "The wire revision thread, relationship and conversation views derive from."
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> RelationshipRevisionRead:
-        return RelationshipRevisionRead(comms.relationships.revision())
+    def apply(self, comms: Comms, caller: ToolCaller) -> WireRevisionRead:
+        return WireRevisionRead(comms.views.revision())
+
+
+@dataclass(frozen=True)
+class PageMarked(ToolResult):
+    messages: int
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsMarkPageReadTool(ToolRequest[ToolCaller, PageMarked]):
+    """A UI acknowledges exactly the page it painted, as the human user of its project."""
+
+    label = "Mark page read"
+    description = ("Acknowledge the read evidence of exactly one painted conversation page, as "
+                   "the project's human user; requires a human UI caller.")
+    page: Annotated[MessagePage, *tool_field("The painted page")]
+    worktree: Annotated[Checkout, *tool_field("The project whose human user read it")]
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> PageMarked:
+        caller.require_human()
+        comms.views.mark_page_read(self.page, worktree=self.worktree)
+        return PageMarked(len(self.page.messages))
 
 
 @dataclass(frozen=True)
