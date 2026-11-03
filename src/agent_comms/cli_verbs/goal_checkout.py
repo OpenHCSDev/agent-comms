@@ -19,9 +19,11 @@ class GoalCheckoutCliCommand(PreparedCheckoutCliCommand, declared_name="goal-che
     repository: Annotated[RepositorySource, Argument(flags=("repository",))]
 
     def grant(self, ctx: Comms, thread: Thread) -> CheckoutGrant:
-        return GoalCheckoutGrant(thread, thread.goal.require(), self.repository)
+        return GoalCheckoutGrant(thread, thread.goal.require())
 
-    def destination(self, rule: StorageRule, thread: Thread) -> Path:
-        return rule.repository_checkout(
-            rule.roots_of(thread), thread.goal.require().id, self.repository.github,
-        )
+    def source(self, ctx: Comms, thread: Thread) -> RepositorySource:
+        return self.repository
+
+    def declared_destination(self, rule: StorageRule, thread: Thread) -> Path:
+        return rule.repository_checkout(rule.roots_of(thread), thread.goal.require().id,
+                                        self.repository.github)

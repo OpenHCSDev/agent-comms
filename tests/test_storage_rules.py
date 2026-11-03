@@ -327,8 +327,8 @@ def test_goal_donor_allocation_never_grants_source_writes(checkout_comms: Comms)
     owner = comms.registry.require('worker')
     goal = GoalId.mint()
     name = Repo.of(owner.project_path).github
-    donor = rule.repository_donor(owner, goal, name)
-    rule.require_repository_donor(owner, goal, name, donor)
+    donor = rule.repository_donor(owner, name)
+    rule.require_repository_donor(owner, name, donor)
     projection = StorageProjection(rule, owner, comms)
     with pytest.raises(StorageDenied, match='not allocated editable work'):
         projection.require_write(donor / 'source.py')
@@ -337,25 +337,27 @@ def test_goal_donor_allocation_never_grants_source_writes(checkout_comms: Comms)
     with pytest.raises(StorageDenied, match='not allocated editable work'):
         projection.require_write(donor / 'source.py')
     next_birth = replace(owner, created_at=RecordedCreationTime(owner.created_at + 1))
-    assert rule.repository_donor(next_birth, goal, name) != donor
-    assert rule.repository_donor(owner, GoalId.mint(), name) != donor
-    assert rule.repository_donor(replace(owner, name='renamed'), goal, name) == donor
-    with pytest.raises(StorageDenied, match='goal and incarnation'):
-        rule.require_repository_donor(next_birth, goal, name, donor)
+    assert rule.repository_donor(next_birth, name) != donor
+    assert rule.repository_donor(replace(owner, name='renamed'), name) == donor
+    with pytest.raises(StorageDenied, match='incarnation'):
+        rule.require_repository_donor(next_birth, name, donor)
 
 
-def test_three_small_checkouts_are_admitted(checkout_comms: Comms):
+def test_allocating_effect_reuses_one_checkout_instead_of_creating_more(checkout_comms: Comms):
     comms = checkout_comms
     rule = comms.registry.storage_rule
-    thread = checkout_comms.registry.require('worker')
-    projection = StorageProjection(rule, thread, comms)
-    for problem in ('P1', 'P2', 'P3'):
-        path = rule.order_checkout(rule.roots_of(thread), problem)
-        start = DetachedStart('HEAD')
-        projection.check((CreateCheckoutStorageEffect(path, LocalRepositorySource(Repo.of(thread.project_path)), start),))
-        Checkout.add(thread.project_path, path, start)
-    storage = UnitStorage.read(rule, thread, RepositoryReads())
-    assert len(storage.extra_checkouts) == 3
+    thread = comms.registry.require('worker')
+    first = rule.order_checkout(rule.roots_of(thread), 'P1')
+    source = LocalRepositorySource(Repo.of(thread.project_path))
+    effect = CreateCheckoutStorageEffect(first, source, DetachedStart('HEAD'))
+    StorageProjection(rule, thread, comms).check((effect,))
+    Checkout.add(thread.project_path, first, effect.start)
+    second = rule.order_checkout(rule.roots_of(thread), 'P2')
+    with pytest.raises(StorageDenied, match='Reuse'):
+        StorageProjection(rule, thread, comms).check((
+            CreateCheckoutStorageEffect(second, source, DetachedStart('HEAD')),))
+    assert not second.exists()
+    assert UnitStorage.read(rule, thread, RepositoryReads()).extra_checkouts == (Checkout(first),)
 
 
 def test_projected_checkout_membership_follows_add_and_remove(checkout_comms: Comms):

@@ -38,6 +38,7 @@ class PublishCheckoutCliCommand(HomeCheckoutCliCommand, declared_name="publish-c
         StorageProjection(rule, thread, ctx).require_write(source)
         for relative in (self.destination, self.link):
             rule.require_destination(thread, checkout.path / relative)
+        rule.require_floor()
         publication = CheckoutPublication(checkout, source, self.destination, self.link, self.previous, self.head)
         destination, files = publication.publish()
         return PublishedCheckoutResult(destination, files, self.head)

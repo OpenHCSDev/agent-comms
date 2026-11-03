@@ -138,6 +138,18 @@ class HomeCheckoutAllocation(CheckoutAllocation):
 class EditableCheckoutAllocation(CheckoutAllocation):
     """Declared editable members acquire Git identity once at the source-write boundary."""
 
+    def editable_roots(self, rule: StorageRule, owner: Thread, store: TodoStore,
+                       repository: RepositoryName) -> frozenset[Path]:
+        roots = frozenset(path for goal in owner.goal
+                          for path in GoalCheckoutAllocation.for_goal(
+                              rule, owner, goal.id, repository))
+        for current in store.held_by(owner.incarnation):
+            companions = current.order.source_repositories()
+            if repository in (current.repo, *companions):
+                roots |= rule.edit_boundaries(owner, current.id, current.repo,
+                                               companions, current.held().generation)
+        return roots
+
     def reserves_boundary(self) -> bool:
         return True
 
@@ -158,17 +170,6 @@ class ProblemCheckoutAllocation(EditableCheckoutAllocation):
 
     verb: ClassVar[str]
     problem: str
-
-    def editable_roots(self, rule: StorageRule, owner: Thread, store: TodoStore,
-                       repository: RepositoryName) -> frozenset[Path]:
-        current = store.get(self.problem)
-        current.state.require_open(current)
-        assignment = current.held()
-        current.require_assignee(owner.incarnation, assignment.generation)
-        companions = current.order.source_repositories()
-        if repository not in self.source_repositories(current.repo, companions):
-            return frozenset()
-        return rule.edit_boundaries(owner, current.id, current.repo, companions, assignment.generation)
 
     @classmethod
     def source_repositories(cls, primary: RepositoryName,
@@ -200,7 +201,8 @@ class OrderCheckoutAllocation(ProblemCheckoutAllocation):
     def for_work(cls, rule: StorageRule, owner: Thread, problem: str,
                  primary: RepositoryName, companions: tuple[RepositoryName, ...],
                  generation: GoalId) -> tuple[Path, ...]:
-        return (rule.order_checkout(rule.roots_of(owner), problem),)
+        return (rule.reused_checkout(owner, primary,
+                    rule.order_checkout(rule.roots_of(owner), problem), RepositoryReads()),)
 
     def owns_present(self, rule: StorageRule, owner: Thread, path: Path,
                      reads: RepositoryReads) -> bool:
@@ -236,8 +238,9 @@ class RepositoryCheckoutAllocation(ProblemCheckoutAllocation, RepositoryAllocati
     def for_work(cls, rule: StorageRule, owner: Thread, problem: str,
                  primary: RepositoryName, companions: tuple[RepositoryName, ...],
                  generation: GoalId) -> tuple[Path, ...]:
-        return tuple(rule.repository_checkout(rule.roots_of(owner), problem, repository)
-                     for repository in companions)
+        return tuple(rule.reused_checkout(owner, repository,
+                     rule.repository_checkout(rule.roots_of(owner), problem, repository),
+                     RepositoryReads()) for repository in companions)
 
     @classmethod
     def source_repositories(cls, primary: RepositoryName,
@@ -264,16 +267,6 @@ class GoalCheckoutAllocation(RepositoryAllocation, EditableCheckoutAllocation):
                             companions: tuple[RepositoryName, ...]) -> tuple[RepositoryName, ...]:
         return tuple(dict.fromkeys((primary, *companions)))
 
-    def editable_roots(self, rule: StorageRule, owner: Thread, store: TodoStore,
-                       repository: RepositoryName) -> frozenset[Path]:
-        roots = frozenset(path.resolve() for goal in owner.goal.matching(self.goal)
-                          for path in self.for_goal(rule, owner, goal.id, repository))
-        for current in store.for_goal(owner.incarnation, self.goal):
-            companions = current.order.source_repositories()
-            if repository in (current.repo, *companions):
-                roots |= rule.edit_boundaries(owner, current.id, current.repo, companions, self.goal)
-        return roots
-
     @classmethod
     def for_work(cls, rule: StorageRule, owner: Thread, problem: str,
                  primary: RepositoryName, companions: tuple[RepositoryName, ...],
@@ -284,7 +277,9 @@ class GoalCheckoutAllocation(RepositoryAllocation, EditableCheckoutAllocation):
     @classmethod
     def for_goal(cls, rule: StorageRule, owner: Thread, generation: GoalId,
                  repository: RepositoryName) -> tuple[Path, ...]:
-        return (rule.repository_checkout(rule.roots_of(owner), generation, repository),)
+        return (rule.reused_checkout(owner, repository,
+                    rule.repository_checkout(rule.roots_of(owner), generation, repository),
+                    RepositoryReads()),)
 
     @classmethod
     def read(cls, owner: Thread, path: Path, problem: str,
@@ -321,7 +316,7 @@ class StorageRule(RoomAllocation, DurableFile):
     host_memory_bytes: ClassVar[int] = 512 * 2**20
     # Independent interactive children; a reporting budget, never a killing limit.
     native_owner_memory_bytes: ClassVar[int] = 192 * 2**20
-    floor_gib: float = 10.0  # critical pressure observation only; never allocation admission
+    floor_gib: float = 10.0  # under this nothing that allocates may run
     cleanup_gib: float = 30.0  # under this a cleanup owner is due; it does not stop builds
     memory_gib: float = 3.0  # available memory under this makes a cleanup owner due
     idle_minutes: float = 30.0  # a pytest temp dir untouched this long holds memory for nothing
@@ -407,10 +402,36 @@ class StorageRule(RoomAllocation, DurableFile):
         _, name = repository.key
         return checkout.with_name(f'{checkout.name}{self.checkout_separator}{name}')
 
-    def repository_donor(self, owner: Thread, goal: GoalId,
-                         repository: RepositoryName) -> Path:
-        """Noneditable acquisition storage, owned by this birth and goal, never a registry row."""
-        return self.checkout_base / '.sources' / owner.incarnation.require_recorded().lookup / goal / Path(*repository.key)
+    def reused_checkout(self, owner: Thread, repository: RepositoryName,
+                        fresh: Path, reads: RepositoryReads) -> Path:
+        """Keep one existing owned tree for a repository across work identities.
+
+        The current project wins. Without one, a sole retained tree is reused;
+        several retained trees require their owner to select/retire them, never
+        silently create another or pick an arbitrary source.
+        """
+        candidates = tuple(path for path in self.checkout_paths(owner, reads)
+                           if (path / '.git').is_file() and not path.is_symlink()
+                           and reads.repository(path).github == repository)
+        if owner.project_path in candidates:
+            return owner.project_path
+        if len(candidates) > 1:
+            self.deny('Multiple owned checkouts already exist for '
+                      f'{repository}: ' + ', '.join(map(str, candidates))
+                      + '. Select the one to reuse with agent-comms set-project, '
+                      'and retire the completed others with goal-checkout --source.')
+        return next(iter(candidates), fresh)
+
+    def repository_donor(self, owner: Thread, repository: RepositoryName) -> Path:
+        """One noneditable acquisition donor per agent/repository, never per goal."""
+        base = self.checkout_base / '.sources' / owner.incarnation.require_recorded().lookup
+        fresh = base / Path(*repository.key)
+        selected = self.reused_checkout(owner, repository, fresh, RepositoryReads())
+        if (selected / '.git').is_file():
+            donor = Checkout(selected).common_dir.parent
+            if donor.is_relative_to(base):
+                return donor
+        return fresh
 
     def require_physical_allocation(self, path: Path) -> None:
         """Never follow an occupied symlink or discover a different allocation through it."""
@@ -418,12 +439,12 @@ class StorageRule(RoomAllocation, DurableFile):
                 or path == self.checkout_base or not path.is_relative_to(self.checkout_base)):
             self.deny(f'{path} is not a physical allocation under {self.checkout_base}')
 
-    def require_repository_donor(self, owner: Thread, goal: GoalId,
+    def require_repository_donor(self, owner: Thread,
                                  repository: RepositoryName, path: Path) -> None:
         self.require_destination(owner, path)
         self.require_physical_allocation(path)
-        if path != self.repository_donor(owner, goal, repository):
-            self.deny(f'{path} is not the repository donor of this goal and incarnation')
+        if path != self.repository_donor(owner, repository):
+            self.deny(f'{path} is not the repository donor of this incarnation')
 
     def edit_boundaries(self, owner: Thread, problem: str, primary: RepositoryName,
                         companions: tuple[RepositoryName, ...], generation: GoalId) -> frozenset[Path]:
@@ -493,10 +514,17 @@ class StorageRule(RoomAllocation, DurableFile):
                                 threads: Iterable[Thread], repository: Repo) -> None:
         """Relocation ownership is not permission to edit the old order."""
         reads = RepositoryReads()
-        if source.is_symlink() or source != source.resolve() or source.parent != self.checkout_base:
-            self.deny(f'{source} is not a physical checkout in {self.checkout_base}')
         if source == repository.checkout.resolve():
             self.deny(f'{source} is the registered repository checkout, not an isolated allocation')
+        self.require_isolated_checkout(owner, source, threads, reads)
+        if reads.repository(source).github != repository.github:
+            self.deny(f'{source} is not a checkout of {repository.github}')
+
+    def require_isolated_checkout(self, owner: Thread, source: Path,
+                                  threads: Iterable[Thread], reads: RepositoryReads) -> None:
+        """Current or historical ownership permits retirement/relocation, never source edits."""
+        if source.is_symlink() or source != source.resolve() or source.parent != self.checkout_base:
+            self.deny(f'{source} is not a physical checkout in {self.checkout_base}')
         if not (self.owns_present_checkout(owner, source, reads) or owner.ran_in(Checkout(source))):
             self.deny(f'{source} is not a current or historical checkout of {owner.name}')
         owners = tuple(thread for thread in threads
@@ -505,8 +533,6 @@ class StorageRule(RoomAllocation, DurableFile):
         if owners:
             self.deny(f'{source} has foreign or ambiguous checkout owners: '
                       + ', '.join(thread.name for thread in owners))
-        if reads.repository(source).github != repository.github:
-            self.deny(f'{source} is not a checkout of {repository.github}')
         if not (source / '.git').is_file():
             self.deny(f'{source} is a shared main/home checkout, not a linked worktree')
 
@@ -594,6 +620,22 @@ class StorageRule(RoomAllocation, DurableFile):
     def cleanup_due(self, free_gib: float) -> bool:
         return free_gib < self.cleanup_gib
 
+    def cleanup_guidance(self) -> str:
+        return (
+            'Clean your own completed disposable checkouts and runtime/cache output, after '
+            'checking clean source, published commits and live borrowers. Reuse the existing '
+            'checkout for this agent/repository; do not allocate a new tree for each goal. '
+            'Retire an exact owned historical tree with agent-comms goal-checkout '
+            '--from YOUR_THREAD --source EXACT_OWNED_PATH remove REPOSITORY. '
+            "Do not delete other agents' work, sessions, uncertain inputs or paper evidence."
+        )
+
+    def require_floor(self) -> None:
+        free = self.free_gib()
+        if self.below_floor(free):
+            self.deny(f'allocation requires {self.floor_gib:g} GiB free on {self.volume}; '
+                      f'{free:.2f} GiB is available. {self.cleanup_guidance()}')
+
     def require_destination(self, thread: Thread, path: Path) -> None:
         """Every destination obeys artifact and scratch ownership, without reading Git."""
         if '.artifacts' in path.parts:
@@ -620,8 +662,8 @@ class StorageRule(RoomAllocation, DurableFile):
             f'{self.roots_of(thread).scratch}/. '
             f'Run tests with PYTHONPATH=src on the shared {" or ".join(pythons)}; '
             'never create a venv, never uv sync, never write .artifacts, never git clone. '
-            f'Below {self.floor_gib:g} GiB free on {self.volume}, report disk pressure; '
-            'free-space warnings do not refuse work.'
+            f'Below {self.floor_gib:g} GB free on {self.volume}, no worktree, venv, build, install '
+            'or recording.'
         )
 
 
@@ -661,14 +703,5 @@ class UnitStorage:
         return replace(self, extra_checkouts=(*self.extra_checkouts, checkout))
 
     def removing(self, checkout: Checkout) -> UnitStorage:
-        if checkout not in self.extra_checkouts:
-            self.rule.deny('only a current extra checkout can be removed')
         return replace(self, extra_checkouts=tuple(
             current for current in self.extra_checkouts if current != checkout))
-
-    def require_retired(self, problem: str) -> None:
-        for path in self.rule.problem_checkouts(self.roots, problem):
-            if Checkout(path) in self.extra_checkouts:
-                self.rule.deny(
-                    f'{self.unit.name} still has the checkout {path} for this order; '
-                    'it removes it before the order counts as done')

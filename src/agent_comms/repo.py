@@ -492,7 +492,7 @@ class GitHubRepositorySource(RepositorySource):
         return f"github:{self.repository.to_wire()}"
 
     def allocations(self, rule: StorageRule, thread: Thread) -> tuple[Path, ...]:
-        return (rule.repository_donor(thread, thread.goal.require().id, self.repository),)
+        return (rule.repository_donor(thread, self.repository),)
 
     def acquire(self, rule: StorageRule, thread: Thread) -> Repo:
         donor, = self.allocations(rule, thread)
@@ -501,7 +501,7 @@ class GitHubRepositorySource(RepositorySource):
     def qualify(self, checkout: Path, rule: StorageRule, thread: Thread) -> Repo:
         repository = Repo.qualified_github(checkout, self.repository)
         donor, = self.allocations(rule, thread)
-        rule.require_repository_donor(thread, thread.goal.require().id, self.repository, donor)
+        rule.require_repository_donor(thread, self.repository, donor)
         if ((checkout / '.git').is_symlink() or not (checkout / '.git').is_file()
                 or Checkout(checkout).common_dir != donor / '.git'):
             raise ValueError(f'Checkout {checkout} is not linked to its goal-owned donor {donor}')
@@ -765,8 +765,10 @@ class Checkout(SingleFieldValue, PresentMember):
                  timeout=300)
 
     def held_work(self) -> str:
-        """Changes outside the pinned submodules, which retiring the tree would lose."""
-        return Repo.git(self.path, "status", "--porcelain", "--ignore-submodules=all")
+        """Every source change retirement would lose, including initialized submodules."""
+        roots = (self.path, *(module.path for module in self.initialized_submodules()))
+        return ''.join(f'{root}:\n{changes}' for root in roots
+                       if (changes := Repo.git(root, "status", "--porcelain", "--ignore-submodules=none")))
 
     def retire(self) -> None:
         """Remove this worktree. Git refuses any tree holding submodules without --force,
