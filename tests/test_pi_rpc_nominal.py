@@ -36,8 +36,8 @@ class AuditPausePhase(StallExempt, Excursion):
     stall_reason = "audit_pause_no_progress"
 
 
-class AuditPauseStart(pi.PiEvent, starts=AuditPausePhase):
-    pass
+class AuditPauseStart(pi.PhaseStartEvent):
+    starts = AuditPausePhase
 
 
 class AuditPauseEnd(pi.PiEvent, ends=AuditPausePhase):

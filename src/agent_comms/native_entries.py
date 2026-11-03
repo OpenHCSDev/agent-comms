@@ -41,7 +41,7 @@ from .native_input_proof import (
     NativeInputLocation,
 )
 from .native_session_reopen import PiSessionId
-from agent_comms.pi_wire import PiField, PiOmitted, PiPayload
+from agent_comms.pi_wire import PiField, PiOmitted, PiPayload, TaggedPayload
 from agent_comms.pi_wire import Opaque
 from .pi_payloads import PiMessage, ReportedText
 from .pi_vocabulary import PendingStopReason, ThinkingLevel
@@ -136,7 +136,7 @@ class RecordedEntry(PiPayload):
 
 
 @dataclass(frozen=True, kw_only=True)
-class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
+class NativeEntry(TaggedPayload, RecordedEntry, DeclaredFamily, affix="Entry"):
     wire_tag = "type"
     id: FreshNativeId | NoEntryId = NoEntryId()
     parent_id: Annotated[FreshNativeId | RootEntry, WireName("parentId")] = RootEntry()

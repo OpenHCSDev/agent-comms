@@ -25,8 +25,6 @@ if TYPE_CHECKING:
 
 
 class PiPayload(ExternalField):
-    wire_tag: ClassVar[str | None] = None
-
     @classmethod
     def decode_external_value(cls, value: object, record: Mapping[str, object]) -> object:
         if not isinstance(value, dict):
@@ -66,8 +64,17 @@ class PiPayload(ExternalField):
         return FieldCodec.decode_external(cls, value, {})
 
     def to_wire(self):
-        data = FieldCodec.encode_fields(self)
-        if self.wire_tag is not None and DeclaredFamily.record_tag(self):
+        return FieldCodec.encode_fields(self)
+
+
+class TaggedPayload(PiPayload):
+    """A payload whose external record names its member under a declared key."""
+
+    wire_tag: ClassVar[str]
+
+    def to_wire(self):
+        data = super().to_wire()
+        if DeclaredFamily.record_tag(self):
             data[self.wire_tag] = self.wire_discriminator()
         return data
 
@@ -76,7 +83,7 @@ class PiPayload(ExternalField):
         return FieldCodec.encode(type(self))
 
 
-class OpenPayload(PiPayload, DeclaredFamily):
+class OpenPayload(TaggedPayload, DeclaredFamily):
     """An external tag selects its member or the family's declared unknown payload."""
 
     wire_tag = "type"

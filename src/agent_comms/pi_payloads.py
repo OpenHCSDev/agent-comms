@@ -44,7 +44,7 @@ from .native_failures import NativePiUnavailable
 from .native_file_artifact import NativeFileArtifact
 from .native_output import AssistantOutput, NativeOutputScope, ToolOutput
 from .native_session_reopen import NativeSessionIdentity, PiSessionId
-from .pi_wire import McpCallPolicy, McpServerState, Opaque, OpenPayload, PiDiagnostic, PiField, PiOmitted, PiPayload, PiReported, PiUsage, UnknownPayload
+from .pi_wire import McpCallPolicy, McpServerState, Opaque, OpenPayload, PiDiagnostic, PiField, PiOmitted, PiPayload, PiReported, PiUsage, TaggedPayload, UnknownPayload
 from . import agent_events as events
 from .acp_failure import ExhaustedRetry, FailureSource, RecoveredRetry
 from .pi_counts import NonnegativePiCount, PiCount, TotalPiCount, UnreportedCount
@@ -1261,7 +1261,7 @@ class NativeEditDetails(PiPayload):
 
 
 @dataclass(frozen=True)
-class NativeToolDetails(ExternalNull, PiPayload, DeclaredFamily, affix="ToolDetails"):
+class NativeToolDetails(ExternalNull, TaggedPayload, DeclaredFamily, affix="ToolDetails"):
     """Decode the original owned result once; other extension details stay opaque."""
     wire_tag = "agentCommsKind"
 

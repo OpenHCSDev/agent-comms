@@ -282,7 +282,7 @@ class ChannelManagement:
                    confirmed: bool = False) -> TagChangeResult:
         Tag.validate(name)
         if disposition.requires_confirmation and not confirmed:
-            raise ValueError(disposition.confirmation(name))
+            raise ValueError(disposition.confirmation((name,)))
         snapshot = self.registry.snapshot()
         self.catalog.read().require_changeable_tag(name)
         cohort = tuple(thread for thread in snapshot.threads.values() if name in thread.tags)

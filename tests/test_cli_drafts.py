@@ -49,7 +49,8 @@ def test_batched_deltas_materialize_only_the_surviving_view(tmp_path):
 
         @property
         def events(self):
-            self.reads += 1
+            # Publication stages a copy of the draft, so count across every copy.
+            type(self).reads += 1
             return super().events
 
     output = _output(tmp_path)
@@ -57,7 +58,7 @@ def test_batched_deltas_materialize_only_the_surviving_view(tmp_path):
     output.publish_batch(
         [begun, *(AppendDraftItem(t_turn_id, NativeItemId("a"), "x") for _ in range(1000))]
     )
-    assert begun.accumulator.reads == 1
+    assert CountedDraft.reads == 1
     current = draft(output)
     assert current.events == (
         AssistantTranscript("x" * 1000, timestamp=1.0, position=NativeItemId("a")),
