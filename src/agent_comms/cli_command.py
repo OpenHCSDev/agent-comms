@@ -278,7 +278,7 @@ class CliCommand(
     def execute_target(cls, comms: Comms, target: TargetSelection, arguments: Mapping[str, object],
                        *, confirmed: bool = False,
                        channel: ChannelSelection = NoChannel(),
-                       project: Checkout) -> CliResult:
+                       project: Checkout) -> Answer | TargetBatchResult:
         if not cls.channel_fields():
             channel.require_unbound()
             channel = NoChannel()
@@ -468,9 +468,9 @@ class TargetSelection(SubclassUnion, affix="Target"):
         return member
 
     @abstractmethod
-    def run(self, declaration: type[CliCommand], comms: Comms, arguments: Mapping[str, object],
+    def run[R: CliResult](self, declaration: type[CliCommand[R]], comms: Comms, arguments: Mapping[str, object],
             *, confirmed: bool, channel: ChannelSelection, project: Checkout,
-            snapshot: RegistrySnapshot, catalog: CatalogAccess) -> CliResult:
+            snapshot: RegistrySnapshot, catalog: CatalogAccess) -> R | TargetBatchResult:
         """Bind, authorize and apply the declaration on this selection."""
 
 
@@ -483,7 +483,7 @@ class OneTarget(TaggedRecordMember, TargetSelection):
         if len(self.targets) != 1:
             raise ValueError('This action requires a single target')
 
-    def run(self, declaration: type[CliCommand], comms: Comms, arguments: Mapping[str, object], *, confirmed: bool, channel: ChannelSelection, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> CliResult:
+    def run[R: CliResult](self, declaration: type[CliCommand[R]], comms: Comms, arguments: Mapping[str, object], *, confirmed: bool, channel: ChannelSelection, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> R | TargetBatchResult:
         name, = self.targets
         resolved = name.resolve(snapshot, comms.bus.require_channel)
         bindings = tuple(bound for context in name.contexts(declaration, channel)
@@ -520,7 +520,7 @@ class TargetBatch(TaggedRecordMember, TargetSelection):
     def listed_declaration(self, member: type[CliCommand]) -> type[CliCommand]:
         return member.catalog_declaration()
 
-    def run(self, declaration: type[CliCommand], comms: Comms, arguments: Mapping[str, object], *, confirmed: bool, channel: ChannelSelection, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> CliResult:
+    def run[R: CliResult](self, declaration: type[CliCommand[R]], comms: Comms, arguments: Mapping[str, object], *, confirmed: bool, channel: ChannelSelection, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> R | TargetBatchResult:
         declaration.require_batch()
         declarations = (tuple(member for member in CliCommand.members_with(CliCommand)
                               if member.catalog_declaration() is declaration)
@@ -588,23 +588,25 @@ class AppliedTogether(CliCommand[Answer]):
 
 
 @dataclass(frozen=True)
-class TargetEdit(Command[Comms, CliResult]):
+class TargetEdit(Command[Comms, TargetEditResult | Channel]):
     """Accepted editor values use the declared field and current bound command."""
-    declaration: type[CliCommand]
+    declaration: type[TargetActionCommand]
     target: TargetSelection
     arguments: Mapping[str, object]
     confirmed: bool = False
     channel: ChannelSelection = NoChannel()
     project: Checkout = field(kw_only=True)
 
-    def apply(self, ctx: Comms) -> CliResult:
+    def apply(self, ctx: Comms) -> TargetEditResult | Channel:
         arguments = self.declaration.editor_arguments(self.arguments)
         return self.declaration.execute_target(ctx, self.target, arguments,
                                               confirmed=self.confirmed, channel=self.channel, project=self.project)
 
 
 @dataclass(frozen=True, kw_only=True)
-class TargetActionCommand[Result: TargetEditResult | Channel](CliCommand[Result], declared_name=None):
+class TargetActionCommand[Result: TargetEditResult | Channel = TargetEditResult | Channel](
+    CliCommand[Result], declared_name=None,
+):
     """A command a thread or channel menu offers. Its answer is one a remote UI decodes, and
     the menu's catalog lists exactly these members."""
 
