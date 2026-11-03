@@ -52,7 +52,7 @@ def test_carried_blocked_goal_requires_explicit_retry_preserving_unknown(tmp_pat
     assert (comms.root / 'registry.json').read_bytes() == original_registry
     reopened = GoalAttemptStore.at(comms.root / 'goal-private')
     assert reopened.require_generation(goal.id).lifecycle == ReadyGeneration()
-    expect = GoalPrecondition(goal_id=OneGoal(goal.id), expected_goal=goal,
+    expect = GoalPrecondition(goal_id=OneGoal(goal.id), expected_checkpoint=goal.captured,
                               expected_owner=thread.process_identity)
     for actor in (ModelInvocable, RuntimeInvocable, OwnerInvocable):
         with pytest.raises(ValueError):

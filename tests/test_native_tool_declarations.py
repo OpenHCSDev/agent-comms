@@ -153,17 +153,17 @@ def test_core_commands_share_native_identity_without_changing_external_decode():
     from agent_comms.native_tool_call import CodingCall
     from agent_comms.native_tools import NativeExecutableTool
     from agent_comms.tool_declaration import NativeRequestTools
-    from agent_comms.tool_request import ToolRequest
+    from agent_comms.tool_request import NativeToolRequest, ToolRequest
     from agent_comms.tools import CommsSendTool
 
     schemas = NativeRequestTools.catalog()
     assert {schema["name"] for schema in schemas} == {
-        request.declared_name for request in ToolRequest.members_with(ToolRequest)
+        request.declared_name for request in ToolRequest.members_with(NativeToolRequest)
     }
     assert json.loads(json.dumps(schemas)) == schemas
     assert isinstance(ToolDeclaration.for_name("EXTERNAL_UNKNOWN"), UndeclaredTool)
     assert ToolDeclaration.for_name("EXTERNAL_UNKNOWN").label == "EXTERNAL_UNKNOWN"
-    for request in ToolRequest.members_with(ToolRequest):
+    for request in ToolRequest.members_with(NativeToolRequest):
         arguments = {"to": "destination", "body": "decode-only"}
         call = CodingCall.decode("isolated-call", request.declared_name, arguments)
         assert isinstance(call, NativeExecutableTool) and call.declared_name == request.declared_name

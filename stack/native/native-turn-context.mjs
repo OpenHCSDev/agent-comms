@@ -274,7 +274,7 @@ export class TurnContext {
         segments.push(...NativeMessages.capture(provenance,observations));
         segments.push(new ToolCatalogSegment(provenance,context.tools));
         return new TurnContext(identity,segments,{kind:'reported_tools',version:VERSION,
-            names:context.tools.map(tool=>tool.name)});
+            names:session.getAllTools().map(tool=>tool.name)});
     }
     static async next(session) {
         return this.capture(session,{systemPrompt:session.systemPrompt,

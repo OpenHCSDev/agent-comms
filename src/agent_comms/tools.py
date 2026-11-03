@@ -20,8 +20,11 @@ from .tool_request import (
     ThreadContextAction,
     ThreadToolRequest,
     ToolRequest,
+    NativeToolRequest,
     tool_field,
 )
+from .tool_declaration import NativeRequestTools
+from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from .order_tools import MessagePublished
 from .native_tools import CommunicationCall
 
@@ -107,6 +110,7 @@ from .task_sources import (
 )
 from .thread_execution import ArchiveOwnerControl, NativeOwnerCommand, OwnerLifecycleControl, StartOwnerControl
 from .thread_management import InheritedTags, RenameThreadResult, TagChoice
+from .thread_identity import ToolName
 from .thread_model import ThreadModel
 from .threads import NextTurnConfiguration
 from .tool_caller import ThreadCaller, ThreadListing, ToolCaller
@@ -332,8 +336,70 @@ def _tag_set(value: str) -> frozenset[str]:
     return frozenset(tag.strip() for tag in value.split(",") if tag.strip())
 
 
+@dataclass(frozen=True)
+class AvailableTool:
+    name: ToolName
+    label: str
+    description: str
+
+
+@dataclass(frozen=True)
+class ToolsSelected(ToolResult):
+    tools: tuple[AvailableTool, ...]
+
+
+class ToolLookup(DeclaredFamily, affix="ToolLookup"):
+    """An exact selection and a word search are distinct ways to acquire declarations."""
+
+    @abstractmethod
+    def selected(self, catalog: tuple[type[NativeRequestTools], ...]) -> tuple[type[NativeRequestTools], ...]: ...
+
+
+@dataclass(frozen=True)
+class NamedToolLookup(ToolLookup, declared_name="named"):
+    tools: Annotated[tuple[ToolName, ...], WireName("names")]
+
+    def selected(self, catalog: tuple[type[NativeRequestTools], ...]) -> tuple[type[NativeRequestTools], ...]:
+        members = {ToolName(tool.declared_name): tool for tool in catalog}
+        unknown = set(self.tools) - members.keys()
+        if unknown:
+            raise UnknownFamilyMember(f"Unknown native tools: {', '.join(sorted(name.value for name in unknown))}")
+        return tuple(members[name] for name in dict.fromkeys(self.tools))
+
+
+@dataclass(frozen=True)
+class SearchToolLookup(ToolLookup, declared_name="search"):
+    query: str
+
+    def selected(self, catalog: tuple[type[NativeRequestTools], ...]) -> tuple[type[NativeRequestTools], ...]:
+        terms = self.query.casefold().split()
+        return tuple(tool for tool in catalog
+                     if all(term in f"{tool.declared_name} {tool.label} {tool.description}".casefold()
+                            for term in terms))
+
+
 @dataclass(frozen=True, kw_only=True)
-class CommsPinChannelTool(ToolRequest):
+class CommsDiscoverTool(ReadTool, NativeToolRequest[ToolCaller, ToolsSelected]):
+    """The native adapter activates these declarations through Pi's existing tool loader."""
+
+    label = "Find and load Comms tools"
+    description = (
+        "Find and load any Comms operation before calling it. Search by words in its name "
+        "or description, or select exact names. An explicitly empty search loads every tool. "
+        "Tools stay active for this turn, not for the session's lifetime. "
+        "Use this for messages, inbox, goals, orders, reviews, threads, channels and configuration."
+    )
+    loads_tools = True
+    native_call = CommunicationCall
+    selection: Annotated[ToolLookup, *tool_field("Search words or select exact tool names")]
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> ToolsSelected:
+        return ToolsSelected(tuple(AvailableTool(ToolName(tool.declared_name), tool.label, tool.description)
+                                   for tool in self.selection.selected(NativeRequestTools.members_with(NativeRequestTools))))
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsPinChannelTool(NativeToolRequest):
     label = "Pin Channel"
     description = (
         "Persist whether a channel is pinned. Pinned channels sort before unpinned "
@@ -347,7 +413,7 @@ class CommsPinChannelTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsPinThreadTool(ToolRequest):
+class CommsPinThreadTool(NativeToolRequest):
     label = "Pin Thread in Channel"
     description = (
         "Persist whether a member is pinned within one channel. Pins do not change "
@@ -385,7 +451,7 @@ class CallerSubject(NullMember, ToolSubject):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsModelTool(NextTurnConfiguration, NativeOwnerCommand, ToolRequest):
+class CommsModelTool(NextTurnConfiguration, NativeOwnerCommand, NativeToolRequest):
     label = "Change Thread Model"
     description = (
         "Change this thread's model, or another thread's model, for its future turns. "
@@ -406,7 +472,7 @@ class CommsModelTool(NextTurnConfiguration, NativeOwnerCommand, ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsSortChannelsTool(ToolRequest):
+class CommsSortChannelsTool(NativeToolRequest):
     label = "Sort Channels"
     description = (
         "Persist channel-list ordering independently of member ordering. Pinned "
@@ -419,7 +485,7 @@ class CommsSortChannelsTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsTagsTool(ToolRequest):
+class CommsTagsTool(NativeToolRequest):
     label = "Manage tags"
     description = (
         "List, create, rename, or delete tags. Renaming/deleting updates thread "
@@ -435,7 +501,7 @@ class CommsTagsTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsThreadTagsTool(ToolRequest):
+class CommsThreadTagsTool(NativeToolRequest):
     label = "Assign thread tags"
     description = (
         "Add/remove tags on a thread. Omit thread to manage your own tags. Channel "
@@ -458,7 +524,7 @@ class CommsThreadTagsTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsChannelsTool(ReadTool, ToolRequest):
+class CommsChannelsTool(ReadTool, NativeToolRequest):
     label = "List channels"
     description = "List named tag views and their current member threads; #any includes everyone."
 
@@ -518,7 +584,7 @@ class CommsLatestSequenceTool(ReadTool, ToolRequest[ToolCaller, LatestSequence])
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsSetChannelMetadataTool(ToolRequest):
+class CommsSetChannelMetadataTool(NativeToolRequest):
     label = "Set channel presentation"
     description = (
         "Set presentation-only parent and archive state. These fields never alter "
@@ -534,7 +600,7 @@ class CommsSetChannelMetadataTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsSetViewTool(ToolRequest):
+class CommsSetViewTool(NativeToolRequest):
     label = "Set non-routable view"
     description = (
         "Create/update a typed participant or activity projection. Views cannot receive"
@@ -551,7 +617,7 @@ class CommsSetViewTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsDeleteViewTool(ToolRequest):
+class CommsDeleteViewTool(NativeToolRequest):
     label = "Delete non-routable view"
     description = "Delete a saved projection without changing tags, channels, messages, or threads."
     name: Annotated[str, *tool_field("Saved view name")]
@@ -562,7 +628,7 @@ class CommsDeleteViewTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsSortChannelTool(ToolRequest):
+class CommsSortChannelTool(NativeToolRequest):
     label = "Sort channel members"
     description = "Persist one channel's member ordering, shared by all attached views."
     name: Annotated[str, *tool_field("Channel name")]
@@ -688,7 +754,7 @@ class CommsResumeGoalTool(GoalChangeTool):
             comms, caller,
             ActiveGoalAction(
                 expect=GoalPrecondition(
-                    expected_goal=current,
+                    expected_checkpoint=current.captured,
                     goal_id=OneGoal(goal_id),
                 ),
                 progress=progress,
@@ -717,7 +783,7 @@ class CommsEditGoalTool(GoalChangeTool):
         goal = self.update(
             comms, caller,
             EditGoalAction(
-                expect=GoalPrecondition(expected_goal=current, goal_id=OneGoal(goal_id)), text=self.text
+                expect=GoalPrecondition(expected_checkpoint=current.captured, goal_id=OneGoal(goal_id)), text=self.text
             ),
         )
         return self.thread.published(GoalUpdated(goal), goal)
@@ -738,7 +804,7 @@ class CommsClearGoalTool(GoalChangeTool):
         goal = self.update(
             comms, caller,
             ClearGoalAction(expect=GoalPrecondition(
-                expected_goal=current, goal_id=OneGoal(self.goal_id))),
+                expected_checkpoint=current.captured, goal_id=OneGoal(self.goal_id))),
         )
         return self.thread.published(GoalUpdated(goal), goal)
 
@@ -758,7 +824,7 @@ class CommsPauseGoalTool(GoalChangeTool):
         goal = self.update(
             comms, caller,
             PausedGoalAction(
-                expect=GoalPrecondition(expected_goal=current, goal_id=OneGoal(self.goal_id)),
+                expect=GoalPrecondition(expected_checkpoint=current.captured, goal_id=OneGoal(self.goal_id)),
                 progress=self.progress,
             ),
         )
@@ -822,7 +888,7 @@ class CommsGoalHistoryTool(ThreadReadTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsThreadsTool(ReadTool, ToolRequest):
+class CommsThreadsTool(ReadTool, NativeToolRequest):
     label = "Comms Threads"
     description = (
         "List agent threads with status and pending counts, plus one delivery summary "
@@ -847,7 +913,7 @@ class MessageOutcomes(ToolResult):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsMessageOutcomesTool(ReadTool, ToolRequest):
+class CommsMessageOutcomesTool(ReadTool, NativeToolRequest):
     label = "Message outcomes"
     description = (
         "Read one message's recipient outcomes: the message once, then one page of recipient "
@@ -890,7 +956,7 @@ class CommsResourcesTool(ThreadReadTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsWorkBranchesTool(ReadTool, ToolRequest):
+class CommsWorkBranchesTool(ReadTool, NativeToolRequest):
     label = "Work branches"
     description = (
         "Branches with commits not on main, newest first, each with its open PR or linked "
@@ -964,7 +1030,7 @@ class SendRefusalsRead(ToolResult):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsSendRefusalsTool(ReadTool, ToolRequest):
+class CommsSendRefusalsTool(ReadTool, NativeToolRequest):
     label = "Comms Send Refusals"
     description = "Read original refused-send outcomes; reading records no new outcome."
     sender: Annotated[str, *tool_field("Sender to filter; empty reads all senders")] = (
@@ -1043,7 +1109,6 @@ class CommsSendTool(SendTool, ThreadToolRequest):
 class CommsUserSendTool(PublishingToolRequest):
     """Local and connector UI input use the existing durable human publication."""
 
-    native_call = CommunicationCall
     label = "Send human input"
     description = ("Publish input typed by the owner to a thread or channel under the owner's "
                    "durable user identity; requires a human UI caller.")
@@ -1174,7 +1239,7 @@ class NoStandby(NullMember):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsHistoryTool(ReadTool, ToolRequest):
+class CommsHistoryTool(ReadTool, NativeToolRequest):
     label = "Conversation history"
     description = (
         "Read one bounded, newest-first channel or DM history page. "
@@ -1199,7 +1264,7 @@ class CommsHistoryTool(ReadTool, ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsInboxTool(ToolRequest[ToolCaller, InboxPageRead]):
+class CommsInboxTool(NativeToolRequest[ToolCaller, InboxPageRead]):
     label = "Comms Inbox"
     description = (
         "Fetch one oldest-first page of messages no harness attempted and no native input took, "
@@ -1242,7 +1307,7 @@ class CommsInboxTool(ToolRequest[ToolCaller, InboxPageRead]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsRestartQueueTool(ReadTool, ToolRequest):
+class CommsRestartQueueTool(ReadTool, NativeToolRequest):
     label = "Restart Queue Status"
     description = "Inspect queued, restarted, stale, or uncertain attempts for a thread."
     name: Annotated[str, *tool_field("Agent thread")]
@@ -1253,7 +1318,7 @@ class CommsRestartQueueTool(ReadTool, ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsCancelRestartTool(ToolRequest):
+class CommsCancelRestartTool(NativeToolRequest):
     label = "Cancel Queued Restart"
     description = "Cancel pending restarts for a thread; cannot undo an attempted restart."
     name: Annotated[str, *tool_field("Agent thread")]
@@ -1291,7 +1356,7 @@ class InstallLaunches(ToolResult):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsInstallTool(ToolRequest):
+class CommsInstallTool(NativeToolRequest):
     label = "Install Latest Mains"
     description = (
         "Launch Core's installer for every configured main the installed build lacks: the same "

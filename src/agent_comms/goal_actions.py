@@ -126,7 +126,6 @@ class PeerInvocable(GoalActor):
 class GoalPrecondition:
     goal_id: OneGoal | AllGoals = AllGoals()
     expected_state: GoalState | None = None
-    expected_goal: GoalDeclaration = NoGoal()
     expected_owner: ProcessIdentity | None = None
     expected_checkpoint: Annotated[
         GoalCheckpoint, field_codec.WireOmitDefault()
@@ -141,7 +140,6 @@ class GoalPrecondition:
             or not ctx.goals.registry.status(thread.name).running
         ):
             raise ValueError("The goal owner changed; refresh its state.")
-        self.expected_goal.check_expected(goal)
         self.goal_id.require(goal)
         if self.expected_state is not None:
             goal.require().require_state(self.expected_state)
@@ -346,7 +344,7 @@ class StandbyGoalAction(GoalReportAction, ModelInvocable, RuntimeInvocable):
         review = goals._goal_input_review(ctx.thread, ctx.thread.goal.require().id, self.wait_for)
         self.expect.check(GoalActionContext(goals, review.owner, actor))
         return PreparedStandbyGoalAction(
-            expect=replace(self.expect, expected_goal=review.owner.goal),
+            expect=replace(self.expect, expected_checkpoint=review.owner.goal.captured),
             progress=self.progress,
             wait_for=self.wait_for,
             reviewed_inputs=self.reviewed_inputs,
@@ -484,7 +482,7 @@ class HeldOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
         todo = goals.todos.get(self.problem)
         todo.require_assignee(ctx.thread.incarnation, goal.id)
         operation = self.operation.prepare(goals, todo)
-        return replace(self, operation=operation, expect=replace(self.expect, expected_goal=goal))
+        return replace(self, operation=operation, expect=replace(self.expect, expected_checkpoint=goal.captured))
 
     def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         ctx.goals.todos.apply(self.problem, self.operation)

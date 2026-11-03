@@ -168,6 +168,8 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
 class NativeRequestTools(GlobalCommsExtension, ToolDeclaration, declared_name=None):
     """Schema-bearing request declarations form the native catalog."""
 
+    loads_tools: ClassVar[bool] = False
+
     @classmethod
     @abstractmethod
     def schema(cls) -> dict[str, object]:

@@ -613,9 +613,6 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
     @abstractmethod
     def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]: ...
 
-    def check_expected(self, current: GoalDeclaration) -> None:
-        pass
-
     def accepts_following_handoff(self) -> bool:
         return False
 
@@ -820,10 +817,6 @@ class Goal(RecordMember, GoalDeclaration):
 
     def peer_change_values(self) -> GoalPeerChange:
         return GoalPeerChange(goal=self.revision_key, state=type(self.state), progress=self.progress)
-
-    def check_expected(self, current: GoalDeclaration) -> None:
-        if self != current:
-            raise GoalRefused("Goal changed during resume; refresh its state.")
 
     def accepts_following_handoff(self) -> bool:
         return bool(self.state.items_with(Active, self))

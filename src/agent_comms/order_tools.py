@@ -74,7 +74,7 @@ from .tool_request import (
     ReadTool,
     ThreadReadTool,
     ThreadToolRequest,
-    ToolRequest,
+    NativeToolRequest,
     tool_field,
 )
 from .tool_result import ToolResult
@@ -672,7 +672,7 @@ class TranscriptPageRead(
 class TeammateRead(
     UiRead[TeammateDetail],
     ReadTool,
-    ToolRequest,
+    NativeToolRequest,
     declared_name="comms_commander_unit",
 ):
     """One unit's card on a teammate's published frame, expanded with its orders' bounded
@@ -706,7 +706,7 @@ class TeammateRead(
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsOrderStoryTool(ReadTool, ToolRequest):
+class CommsOrderStoryTool(ReadTool, NativeToolRequest):
     label = "Order story"
     description = (
         "Read a saved order's dated facts from its Todo, oldest first. "
@@ -720,7 +720,7 @@ class CommsOrderStoryTool(ReadTool, ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsTeamStoryTool(ReadTool, ToolRequest, declared_name="comms_fleet_story"):
+class CommsTeamStoryTool(ReadTool, NativeToolRequest, declared_name="comms_fleet_story"):
     label = "Team story"
     description = ("Read what each held order on the shared board is doing now, one line per "
                    "order; orders held by unregistered participants collapse into one line.")
@@ -730,7 +730,7 @@ class CommsTeamStoryTool(ReadTool, ToolRequest, declared_name="comms_fleet_story
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsOrderWorkTool(ReadTool, ToolRequest):
+class CommsOrderWorkTool(ReadTool, NativeToolRequest):
     label = "Order work"
     description = (
         "Read every tool call the problem's assignee made since its order, newest "
