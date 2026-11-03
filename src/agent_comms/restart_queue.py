@@ -23,7 +23,7 @@ from agent_comms_hooks.process_claim import (
 )
 
 
-from .cli_result import CliResult, ResultShower
+from .cli_result import CliResult, ResultShower, TargetEditResult
 from .child_process import OutlivesLauncherLifetime, Platform, ProcessIdentity, SpawnedProcess
 from .comms import Comms, wire
 from .coordination_errors import CoordinationError
@@ -45,7 +45,6 @@ from .restart_refusals import RestartRefusal
 from .restart_scope import OwnersNamed
 from .thread_identity import OwnerIdentity, RecordedThreadIncarnation, ThreadIncarnationRecord
 from .typed_table import Column, DurableStore, FrozenColumn, Generated, Index, StoreRows, TypedTable, sql_literal
-from .tool_result import ToolResult
 from .watched import ChangeSignal, FileSource
 
 DIRECTORY = "owner-restart-queue"
@@ -216,7 +215,7 @@ class QueuedRestart(RecordMember, RestartRows, TypedTable):
 
 
 @dataclass(frozen=True)
-class RestartQueued(CliResult, ToolResult):
+class RestartQueued(CliResult, RecordMember, TargetEditResult):
     restart: QueuedRestart
 
     def show(self, shower: ResultShower, label: str, title: str) -> None:

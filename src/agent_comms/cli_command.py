@@ -30,7 +30,7 @@ from agent_comms.channel_targets import (
     SurroundingChannel,
 )
 from agent_comms.cli_failures import CLI_FAILURES
-from agent_comms.cli_result import CliResult, ResultShower
+from agent_comms.cli_result import CliResult, ResultShower, TargetEditResult
 from agent_comms.command import Command
 from agent_comms.comms import Comms
 from agent_comms.config_options import CatalogChoice, ConfigOptions
@@ -409,7 +409,7 @@ class TargetFailed(TargetOutcome):
 
 
 @dataclass(frozen=True)
-class TargetBatchResult(CliResult):
+class TargetBatchResult(CliResult, RecordMember, TargetEditResult):
     outcomes: tuple[TargetCompleted | TargetFailed, ...]
 
     def show(self, shower: ResultShower, label: str, title: str) -> None:

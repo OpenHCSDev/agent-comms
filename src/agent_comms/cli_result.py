@@ -7,8 +7,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TextIO
 
+from .nominal.field_codec import SubclassUnion
 from .pi_vocabulary import ServiceTier
-from .tool_result import DeclaredReply
+from .tool_result import DeclaredReply, ToolResult
 
 
 class ResultShower(ABC):
@@ -59,3 +60,8 @@ class ToolCatalogResult(CliResult):
 class ThreadToolCatalogResult(ToolCatalogResult):
     service_tier: ServiceTier
     launch_arguments: tuple[str, ...]
+
+
+class TargetEditResult(ToolResult, SubclassUnion, affix="TargetEditResult"):
+    """What a thread or channel action answers. A remote UI receives it from Core and decodes
+    it by shape: each member is also the CLI result it already was, with its CLI form."""

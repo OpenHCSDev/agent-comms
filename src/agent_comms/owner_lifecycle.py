@@ -26,7 +26,7 @@ from .child_process import (
     Platform,
     ProcessIdentity,
 )
-from .cli_result import CliResult
+from .cli_result import CliResult, TargetEditResult
 from .owner_connection import OwnerConnection
 from .owner_launch import RetainedOwnerLaunch, StartOwnerRuntimeRequest, StopOwnerRuntimeRequest
 from .owner_release import OwnerReleaseStore
@@ -37,7 +37,7 @@ from .diagnostics import OwnerProcessOutput
 from .errors import RelationViolationError
 from .launch_root import LaunchRoot
 from .input_key import AcpInputKey, InputKey
-from .nominal.field_codec import InputId
+from .nominal.field_codec import InputId, RecordMember
 from .input_disposition import InputDispositions
 from .launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime, RestartEnvironment, SetVariable, ThreadLaunch
 from .maintenance_barrier import MaintenanceBarrier
@@ -65,7 +65,6 @@ from .thread_identity import (
 )
 from .thread_text import GivenThreadText, NoThreadText, ThreadText
 from .threads import Thread
-from .tool_result import ToolResult
 
 if TYPE_CHECKING:
     from .goal_management import Goals
@@ -155,7 +154,7 @@ class OwnerRestartResult:
 
 
 @dataclass(frozen=True, slots=True)
-class OwnerStartResult(CliResult, ToolResult):
+class OwnerStartResult(CliResult, RecordMember, TargetEditResult):
     thread: str
     pid: int
     launched: bool
