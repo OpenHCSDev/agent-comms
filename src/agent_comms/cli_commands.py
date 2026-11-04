@@ -43,7 +43,7 @@ from .threads import Thread
 from .todos import Todo
 from .head_review import PullRequestHead
 from .turn_context import CodexRolloutProvenance, ContextManifest, ContextSegment, ContributionCoordinates, Provenance, TurnContext
-from .typed_table import StoreRewrite
+from .typed_table import SQLiteSchemaDifference, StoreRewrite
 
 from agent_comms.session_file import SessionFile
 
@@ -365,10 +365,10 @@ class WorktreeArgument:
 
 @dataclass(frozen=True)
 class StoreDifference:
-    """One schema object a reconcile rebuilt a store for, in the store's own words."""
+    """One schema object a reconcile rebuilt a store for."""
 
     path: Annotated[Path, PathText]
-    difference: str
+    difference: SQLiteSchemaDifference
 
 
 @dataclass(frozen=True)

@@ -28,5 +28,5 @@ class ReconcileStoresCliCommand(
             if (differences := owner.reconcile_at(path, self.practice)))
         return ReconciledStoresResult(
             tuple(path for path, _ in reconciled),
-            tuple(StoreDifference(path, str(difference))
+            tuple(StoreDifference(path, difference)
                   for path, differences in reconciled for difference in differences))

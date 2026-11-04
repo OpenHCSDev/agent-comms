@@ -197,7 +197,7 @@ def test_reconcile_names_every_store_it_carried_back_under_the_hold(private_comm
         completed = reconcile(root, holder)
         assert completed.returncode == 0, completed.stdout + completed.stderr
         assert tuple(json.loads(completed.stdout)["rewritten"]) == tuple(sorted(dropped))
-        named = {(each["path"], each["difference"].split(":")[0])
+        named = {(each["path"], each["difference"]["name"])
                  for each in json.loads(completed.stdout)["differences"]}
         assert named >= set(dropped.items()), "each rebuild names the object that differed"
         for name, index in dropped.items():
