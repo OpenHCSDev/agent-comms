@@ -57,7 +57,8 @@ def test_a_bound_session_is_not_dealt_a_second_list(tmp_path: Path):
 def running_job():
     """A real child of this test shaped like a Claude Code background shell, so the hook, a child
     of this test too, finds it among its parent's shells."""
-    job = subprocess.Popen(["bash", "-c", ": shell-snapshots/snapshot-job; sleep 30"])
+    # The trailing command keeps bash from replacing itself with sleep, which drops the marker.
+    job = subprocess.Popen(["bash", "-c", ": shell-snapshots/snapshot-job; sleep 30; :"])
     yield job
     job.kill()
     job.wait()

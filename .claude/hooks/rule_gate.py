@@ -12,17 +12,21 @@ call. One script owns the whole gate so its pieces cannot drift:
   rule_gate.py deck SESSION          (under the checkout's venv) write that deck once per session
   rule_gate.py fg      PreToolUse:   refuse a foreground Bash call that asks for over 15 s
   rule_gate.py idle    Stop:         refuse to end a turn while this session's background job runs
-  rule_gate.py install               build the checkout's locked venv and write these hooks into
-                                     ~/.claude/settings.json (cloud setup)
+  rule_gate.py install               build the checkout's locked venv, write these hooks into
+                                     ~/.claude/settings.json and put the deal in the system
+                                     prompt (cloud setup)
+  rule_gate.py carry                 (under the checkout's venv) write that system prompt
 
 Claude Code's JSON is decoded once, at the top, into a HookEvent and its ToolCall; everything
 after asks those types. A file counts once every line of it has been read by a Read that
-succeeded. Subagents and sessions Core launched or bound are never gated here. Any failure
-inside a hook allows the call: a gate bug must never lock a session.
+succeeded, or once the system prompt carries its exact content. Subagents and sessions Core
+launched or bound are never gated here. Any failure inside a hook allows the call and says so
+out loud: a gate bug must never lock a session, and must never pass for a gate that held.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -80,8 +84,11 @@ class Reading:
         sys.path.insert(0, str(team_directory().parent.parent))
         from agent_comms.team.package import TeamPackage
         dealt = (*TeamPackage.paper(), *TeamPackage.rules_files(), TeamPackage.patterns(), ASKS)
-        files = [path.resolve() for path in dealt if path.is_file()]
-        return cls(store, {path: OwedFile(path) for path in files})
+        carried = CarriedDeal().digests()
+        files = [path.resolve() for path in dealt
+                 if path.is_file() and not CarriedDeal.holds(carried, path.resolve())]
+        kind = cls if files or not carried else CarriedReading
+        return kind(store, {path: OwedFile(path) for path in files})
 
     @classmethod
     def owed(cls, store: Path) -> Reading | None:
@@ -98,6 +105,29 @@ class Reading:
 
     def remaining(self) -> tuple[Path, ...]:
         return tuple(path for path, owed in self.files.items() if owed.unread())
+
+    def told(self, source: str) -> str:
+        return (
+            f"Session {source}: Tristan's standing order. Before ANY other tool call, read "
+            "both papers, then every rule, in this order, and engage with them seriously. After a "
+            "compaction, calibrate against what you did before it; the summary is not to be "
+            "trusted. A gate refuses every other tool until every line of these is read (parallel "
+            "Reads are fine):\n" + "\n".join(map(str, self.files)))
+
+
+class CarriedReading(Reading):
+    """Every dealt file is in the system prompt at its exact content, so nothing is owed: a
+    session never pays for the same deal twice, and a compaction cannot take it away."""
+
+    def save(self) -> None:
+        self.store.unlink(missing_ok=True)
+
+    def told(self, source: str) -> str:
+        return (
+            f"Session {source}: Tristan's standing order. Both papers and every rule are in your "
+            "system prompt, whole and current, so nothing needs reading with a tool. Engage with "
+            "them seriously before you act. After a compaction, calibrate against what you did "
+            "before it; the summary is not to be trusted.")
 
 
 class ToolCall:
@@ -257,6 +287,46 @@ class Deck:
         return slices[(number // deck["every"] - 1) % len(slices)]
 
 
+@dataclass(frozen=True)
+class CarriedDeal:
+    """The deal as the system prompt of every session on this machine, through Claude Code's
+    output style: --append-system-prompt-file needs a launcher, and a cloud session has none.
+    Tristan, 2026-11-04: "any way to have the remote sessions get the sytemprompt appneded
+    ratherhta nrereading manually". The digests sit beside it because a file changed since setup
+    is not what the session was shown, so that one file is read like any other."""
+
+    style: ClassVar[str] = "team-deal"
+    header: ClassVar[str] = (
+        "---\nname: team-deal\ndescription: The team's papers and rules, carried whole\n"
+        "keep-coding-instructions: true\n---\n\n")
+
+    @property
+    def style_file(self) -> Path:
+        return Path.home() / ".claude" / "output-styles" / f"{self.style}.md"
+
+    @property
+    def manifest(self) -> Path:
+        return HookEvent.state() / "rule-deal-carried.json"
+
+    def write(self) -> None:
+        sys.path.insert(0, str(checkout() / "src"))
+        from agent_comms.deal_prompt import CloudDealPrompt
+        from agent_comms_hooks.skill import DeckReader
+        prompt = CloudDealPrompt.render()
+        self.style_file.parent.mkdir(parents=True, exist_ok=True)
+        self.style_file.write_text(self.header + prompt.text, encoding="utf-8")
+        self.manifest.write_text(json.dumps({
+            str(path.resolve()): read.digest
+            for path, read in zip(DeckReader.sources(), prompt.reads.reads, strict=True)}))
+
+    def digests(self) -> dict[str, str]:
+        return json.loads(self.manifest.read_text()) if self.manifest.is_file() else {}
+
+    @staticmethod
+    def holds(digests: dict[str, str], path: Path) -> bool:
+        return digests.get(str(path)) == hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def core_gates(event: HookEvent) -> bool:
     """A session Core launched (claude-comms) or bound to the bus (connect) answers Core's own
     gate and audit, whose list names the installed runtime's copies. This gate stands down rather
@@ -280,13 +350,7 @@ def deal(event: HookEvent) -> None:
         return
     reading = Reading.dealt(event.store)
     reading.save()
-    missing = Deck(event.session).deal()
-    print(
-        f"Session {event.source}: Tristan's standing order. Before ANY other tool call, read "
-        "both papers, then every rule, in this order, and engage with them seriously. After a "
-        "compaction, calibrate against what you did before it; the summary is not to be "
-        "trusted. A gate refuses every other tool until every line of these is read (parallel "
-        "Reads are fine):\n" + "\n".join(map(str, reading.files)) + missing)
+    print(reading.told(event.source) + Deck(event.session).deal())
 
 
 def gate(event: HookEvent) -> None:
@@ -391,9 +455,12 @@ def install() -> None:
         hooks[event] = kept + [{**group, "hooks": [
             {**hook, "command": hook["command"].replace(relative, f'"{script}"') + f" {USER_FLAG}"}
             for hook in group["hooks"]]} for group in groups]
+    # Rendered by the checkout's own interpreter, as the deck is, because it reads the installed packages.
+    subprocess.run([str(checkout_python()), str(script), "carry"], check=True)
+    document["outputStyle"] = CarriedDeal.style
     settings.parent.mkdir(parents=True, exist_ok=True)
     settings.write_text(json.dumps(document, indent=2) + "\n")
-    print(f"rule gate installed in {settings}")
+    print(f"rule gate installed in {settings}; the deal is in the system prompt as {CarriedDeal.style}")
 
 
 def project_gates() -> bool:
@@ -409,12 +476,17 @@ def main() -> None:
     if sys.argv[1] == "deck":
         Deck(sys.argv[2]).write()
         return
+    if sys.argv[1] == "carry":
+        CarriedDeal().write()
+        return
     try:
         if USER_FLAG in sys.argv and project_gates():
             return
         VERBS[sys.argv[1]](HookEvent.decode(json.load(sys.stdin)))
-    except Exception as error:  # a gate bug must allow the call, never lock the session
-        print(f"rule_gate {sys.argv[1:]}: {type(error).__name__}: {error}", file=sys.stderr)
+    except Exception as error:  # a gate bug allows the call, never locks the session, and says so
+        failure = f"rule_gate {sys.argv[1]} failed and allowed this call: {type(error).__name__}: {error}"
+        print(failure, file=sys.stderr)
+        print(json.dumps({"systemMessage": failure}))
 
 
 if __name__ == "__main__":
