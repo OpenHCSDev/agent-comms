@@ -255,7 +255,7 @@ class NativeRuntimeInput(
         """
         rows = [row for input_id in user.input_id.present() for row in cls.select(
             db, where="input_id=? AND session_file=? AND session_id=?",
-            parameters=(input_id, str(reader.path), session_id),
+            parameters=(input_id, str(reader.source_path), session_id),
         )]
         for row in rows:
             user.require_tracked_user()
@@ -307,7 +307,7 @@ class NativeRuntimeInput(
                     "WHERE n.owner_lookup=? AND n.session_file=? "
                     "AND n.session_id=? AND n.session_entry_id IS NOT NULL "
                     "AND o.receipt_seq IS NOT NULL",
-                    (owner_lookup, str(reader.path), reader.session_id),
+                    (owner_lookup, str(reader.source_path), reader.session_id),
                 )
             )[0]
 

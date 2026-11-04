@@ -11,7 +11,6 @@ import json
 from abc import abstractmethod
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field, replace
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .bus import Bus, BusReader
@@ -256,7 +255,9 @@ class ReadLedger(SingleFileStore, Sealed, ThreadOwnedState, CarriedDocument[Read
 
     @staticmethod
     def _transcript_key(viewer: str, source: str, inode: int) -> tuple[str, str, int]:
-        return viewer, str(Path(source).resolve()), inode
+        # RuntimeLocation already supplies the logical key. Resolving an archived
+        # name against today's filesystem can silently move an original read mark.
+        return viewer, source, inode
 
     def transcript_seen(
         self, viewer: str, source: str, inode: int, *, document: ReadDocument | None = None

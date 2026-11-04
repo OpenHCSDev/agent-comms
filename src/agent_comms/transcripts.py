@@ -26,7 +26,7 @@ from .page_traversal import HistorySourceKey
 from .message_bus import MessageBus
 from .message_reference import MessageReference
 from .native_runtime_input import PublishedReplyRevision
-from .native_transcript import NativeTranscript, RecordsCut, SessionCut
+from .native_transcript import RecordsCut, SessionCut
 from .native_output import NativeRecordLocation
 from .notification_assignment import NotificationAssignment
 from agent_comms.message_notification import NotificationWindow
@@ -238,8 +238,7 @@ class NativeTranscriptCursor(TranscriptCursor):
     def mark_read(self, reads: TranscriptReadState, viewer: str, runtime: RuntimeLocation) -> None:
         if self.session_file != runtime.read_key:
             raise TranscriptChanged()
-        for key in runtime.read_keys():
-            reads.mark_read(viewer, key, self.offset, NativeTranscript(Path(key)).cut())
+        runtime.mark_read(reads.reads, viewer, self.offset)
 
 
 @dataclass(frozen=True)

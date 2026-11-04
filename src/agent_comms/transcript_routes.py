@@ -259,11 +259,12 @@ class TranscriptRoutes(DurableStore):
         thread = RegistryOwner.capture_local(initial, incarnation.name).thread
         if thread.turn_lease != lease:
             raise RelationViolationError("Native publication has no current original turn")
-        path = Path(thread.runtime.path)
+        runtime = thread.writable_runtime
+        path = Path(runtime.path)
         revision = FileRevision.capture(path).require(
             RelationViolationError("Native publication has no retained session"))
         reader = NativeTranscript(path)
-        floor = checkpoint.offset if thread.runtime.read_key == checkpoint.session_file else 0
+        floor = checkpoint.offset if runtime.read_key == checkpoint.session_file else 0
         try:
             final, user = reader.publication_input(
                 after=floor, through=revision.size,
@@ -272,7 +273,7 @@ class TranscriptRoutes(DurableStore):
             )
         except MalformedRecord as error:
             raise RelationViolationError("Native publication evidence is invalid") from error
-        ids = routing.annotation_ids(reader, checkpoint, thread.runtime, final.end)
+        ids = routing.annotation_ids(reader, checkpoint, runtime, final.end)
         inputs = InputDispositions(log.path.parent)
         lookup = incarnation.lookup
         with log.reading() as source, registry.store.current_snapshot() as cut:
@@ -282,7 +283,7 @@ class TranscriptRoutes(DurableStore):
             if current.turn_lease != lease:
                 raise RelationViolationError("Native publication turn lease changed")
             if (
-                current.runtime.read_key != thread.runtime.read_key
+                current.writable_runtime != runtime
                 or FileRevision.capture(path) != revision
             ):
                 raise RelationViolationError("Native publication session changed")
@@ -309,7 +310,7 @@ class TranscriptRoutes(DurableStore):
                 tuple(item for item in originals if item.message.reference in published), lookup
             )
             self._record_publication(
-                thread.runtime.read_key, ids, final.entry.id, routing, published
+                runtime.read_key, ids, final.entry.id, routing, published
             )
 
     def _record_publication(self, session_file, entry_ids, final_id, routing, published):

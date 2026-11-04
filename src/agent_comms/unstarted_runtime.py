@@ -37,7 +37,7 @@ class UnstartedRuntime(RuntimeLocation):
     def arguments(self):
         return {}
 
-    def read_keys(self):
+    def read_locations(self):
         return ()
 
     def transcript_cursor(self, frontier, offset, *, source):

@@ -100,13 +100,14 @@ class SelectedExecution(NativeExecution):
         try:
             NativeSessionFiles.require_private_directory(self.root)
             owner = wire(self.root).registry.require(self.owner_name)
+            runtime = owner.writable_runtime
             if not owner.worktree.path.is_dir():
                 raise ValueError("registered participant worktree is unavailable")
             directory = owner.native_session_directory(self.root)
             directory.mkdir(parents=True, mode=0o700, exist_ok=True)
             NativeSessionFiles.require_private_directory(directory)
             paths = ((self.session_file,) if self.session_file is not None
-                     else owner.runtime.read_keys())
+                     else runtime.read_keys())
             for path in paths:
                 NativeSessionFiles.require_private_directory(Path(path).absolute().parent)
         except NativePiUnavailable as error:

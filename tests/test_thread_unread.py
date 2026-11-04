@@ -11,6 +11,7 @@ from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.comms import wire
 from conftest import installed_comms
 from agent_comms.private_path import FileRevision
+from agent_comms.pi_native_backend import PiSessionFile
 from agent_comms.registry_document import DEFAULT_ROSTER
 from agent_comms.ui_model.unread import CappedReplyUnread, EmptyCappedReplyUnread, ReplyUnread
 from agent_comms.view_unread import (
@@ -79,7 +80,7 @@ def test_prepare_caps_records_not_replies_and_detects_replacement(tmp_path):
         append(source, 'toolResult', 'not an assistant reply', toolCallId='tool')
     revision = FileRevision.capture(source)
     index = ReplyIndex(source=str(source))
-    update = index.prepare(revision, 0, get_context('spawn').Event())
+    update = index.prepare(PiSessionFile(str(source)), revision, 0, get_context('spawn').Event())
     assert isinstance(update, ReplyIndexUpdate)
     assert update.after.records == ReplyIndex.limit
     assert update.after.start > 0
@@ -91,7 +92,7 @@ def test_prepare_caps_records_not_replies_and_detects_replacement(tmp_path):
     replacement = tmp_path / 'replacement'
     session(replacement, 'replacement')
     replacement.replace(source)
-    assert isinstance(index.prepare(revision, 0, get_context('spawn').Event()), RevisionMoved)
+    assert isinstance(index.prepare(PiSessionFile(str(source)), revision, 0, get_context('spawn').Event()), RevisionMoved)
 
 
 def test_reply_counts_are_persistent_human_read_positions(tmp_path):
@@ -147,7 +148,8 @@ def test_completed_source_publishes_while_another_source_is_still_pending(tmp_pa
     append(second)
     state = comms.views.transcript_reads
     database = state._database()
-    reads = {str(path): ReplyRead(ReplyIndex(source=str(path)), FileRevision.capture(path), 0)
+    reads = {str(path): ReplyRead(ReplyIndex(source=str(path)), FileRevision.capture(path), 0,
+                                 PiSessionFile(str(path)))
              for path in (source, second)}
     futures = {name: Future() for name in reads}
     preparation = NativeReplyPreparation({name: ReplyReading(read, futures[name]) for name, read in reads.items()})
@@ -156,13 +158,13 @@ def test_completed_source_publishes_while_another_source_is_still_pending(tmp_pa
     subscribed = state.watch(frozenset(), observed.append)
     assert subscribed == frozenset(futures.values())
     first = reads[str(source)]
-    futures[str(source)].set_result(first.index.prepare(first.revision, 0, get_context('spawn').Event()))
+    futures[str(source)].set_result(first.prepare(get_context('spawn').Event()))
     state._preparation = preparation.finished(state, database, reads)
     assert not futures[str(second)].done()
     assert observed == [futures[str(source)]]
     assert TranscriptReply.after(database, {str(source): 0, str(second): 0}) == {str(source): 1, str(second): 0}
     last = reads[str(second)]
-    futures[str(second)].set_result(last.index.prepare(last.revision, 0, get_context('spawn').Event()))
+    futures[str(second)].set_result(last.prepare(get_context('spawn').Event()))
     state._preparation = preparation.finished(state, database, reads)
     assert state.preparation is state._idle
     assert observed == list(futures.values())

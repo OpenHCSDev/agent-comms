@@ -16,12 +16,12 @@ from typing import TYPE_CHECKING, ClassVar, Annotated
 from weakref import WeakValueDictionary, finalize
 
 from .agent_backend import RuntimeLocation
-from .coordination_errors import CoordinationReadUnavailable
+from .coordination_errors import CoordinationReadUnavailable, TranscriptChanged
 from .locked_store import PublishedSQLiteFile, RuntimeFile, SQLiteFile
 from .store_files import StoreBusy
 from .bus import Bus
 from .native_entries import NativeEntry
-from .native_transcript import SessionCut, record_end, reverse_records
+from .native_transcript import record_end, reverse_records
 from .private_path import FileObservation, FileRevision, MissingFile
 from .read_ledger import ReadDocument, ReadLedger
 from .registry_document import RosterVisibility
@@ -98,31 +98,35 @@ class ReplyIndex(ReplyIndexTable, TypedTable):
         """Coverage, not the number found, determines whether this is a lower bound."""
         return CappedCount(total) if self.start > seen else Counted(total)
 
-    def prepare(self, revision: FileRevision, seen: int, cancelled: Event) -> ReplyIndexResult:
+    def prepare(self, location: RuntimeLocation, revision: FileRevision,
+                seen: int, cancelled: Event) -> ReplyIndexResult:
         """Visit at most limit newest records, stopping earlier at the read mark. An append
         visits only the appended records and keeps the indexed prefix, so a growing
         transcript never re-reads records it already indexed."""
-        with Path(self.source).open("rb") as stream:
+        with Path(location.path).open("rb") as stream:
             if not revision.opened_by(stream):
                 return RevisionMoved()
         if self.continues(revision):
-            return self._scan(revision, seen, self.start, self.records, cancelled, ContinuedReplyIndex)
-        fresh = partial(self._scan, revision, seen, revision.size, 0, cancelled, ReplyIndexUpdate)
+            return self._scan(location, revision, seen, self.start, self.records, cancelled, ContinuedReplyIndex)
+        fresh = partial(self._scan, location, revision, seen, revision.size, 0, cancelled, ReplyIndexUpdate)
         for cut in self.appended_cut(revision):
             # Only appended: visit the new records, keep the indexed prefix and replies.
             boundary = max(seen, cut)
             return self._scan(
-                revision, boundary, revision.size, 0, cancelled, ContinuedReplyIndex,
+                location, revision, boundary, revision.size, 0, cancelled, ContinuedReplyIndex,
             ).extending(self, boundary, fresh)
         return fresh()
 
-    def _scan(self, revision: FileRevision, seen: int, start: int, visited: int,
-              cancelled: Event, result: type[ReplyIndexUpdate]) -> ReplyIndexResult:
+    def _scan(self, location: RuntimeLocation, revision: FileRevision, seen: int,
+              start: int, visited: int, cancelled: Event,
+              result: type[ReplyIndexUpdate]) -> ReplyIndexResult:
         replies: list[TranscriptReply] = []
-        source = Path(self.source)
+        source = Path(location.path)
         with source.open("rb") as stream, closing(
             reverse_records(source, start, floor=max(0, seen - 1), stream=stream)
         ) as records:
+            if not revision.opened_by(stream):
+                return RevisionMoved()
             complete = record_end(stream, revision.size)
             for begin, end, raw in records:
                 if visited >= self.limit or start <= seen:
@@ -146,11 +150,16 @@ class ReplyRead:
     index: ReplyIndex
     revision: FileRevision
     seen: int
+    location: RuntimeLocation
+
+    def current_revision(self) -> FileObservation:
+        return self.location.read_revision(FileRevision.capture(Path(self.location.path)))
 
     def prepare(self, cancelled: Event) -> ReplyIndexResult:
         """One independently scheduled source read; no loop over other people's files."""
         try:
-            return self.index.prepare(self.revision, self.seen, cancelled)
+            self.location.read_revision(self.revision)
+            return self.index.prepare(self.location, self.revision, self.seen, cancelled)
         except FileNotFoundError:
             return RevisionMoved()
 
@@ -367,7 +376,7 @@ class ReplyReading:
         if self.future.cancelled():
             return
         expected = self.read.revision
-        revision = FileRevision.capture(Path(self.read.index.source))
+        revision = self.read.current_revision()
         if revision.contains_cut(expected, expected.size):
             self.future.result().commit(database)
 
@@ -445,10 +454,11 @@ class TranscriptReadKeys:
         return cls(thread.incarnation, thread.runtime, {}, {}).refresh({})
 
     def refresh(self, observed: Mapping[str, FileObservation]) -> TranscriptReadKeys:
-        paths = {key: self.paths[key] if key in self.paths else Path(key).absolute()
-                 for key in self.runtime.read_keys()}
+        locations = {location.read_key: location for location in self.runtime.read_locations()}
+        paths = {key: Path(location.path).absolute() for key, location in locations.items()}
         return replace(self, paths=paths, revisions={
-            key: observed[key] if key in observed else FileRevision.capture(path)
+            key: locations[key].read_revision(
+                observed[key] if key in observed else FileRevision.capture(path))
             for key, path in paths.items()
         })
 
@@ -575,7 +585,8 @@ class TranscriptReadState(RuntimeFile, PublishedSQLiteFile, ThreadOwnedState):
 
     @contextmanager
     def _indexed_sources(
-        self, revisions: dict[str, FileObservation], seen: Mapping[str, int]
+        self, revisions: dict[str, FileObservation], seen: Mapping[str, int],
+        locations: Mapping[str, RuntimeLocation],
     ) -> Iterator[tuple[sqlite3.Connection, dict[str, ReplyIndex]]]:
         database = self._database()
         # Publish before reading committed counts, if the preparation has finished.
@@ -584,7 +595,7 @@ class TranscriptReadState(RuntimeFile, PublishedSQLiteFile, ThreadOwnedState):
             self.begin_snapshot(database)
             indexes = ReplyIndex.for_sources(database, tuple(revisions))
             needed = {
-                source: ReplyRead(indexes[source], revision, seen[source])
+                source: ReplyRead(indexes[source], revision, seen[source], locations[source])
                 for source, observed in revisions.items()
                 for revision in observed.revisions()
                 if not indexes[source].counts(revision, seen[source])
@@ -604,8 +615,12 @@ class TranscriptReadState(RuntimeFile, PublishedSQLiteFile, ThreadOwnedState):
                 prior = self._thread_keys.get(thread.name)
                 keys = (prior if prior is not None and prior.matches(thread)
                         else TranscriptReadKeys.capture(thread))
-                rebuild |= prior is None or prior.revisions.keys() != keys.revisions.keys()
+                rebuild |= prior is None or prior.paths != keys.paths
                 current[thread.name] = keys
+            for name in current.keys() & self._thread_keys.keys():
+                prior = self._thread_keys[name]
+                if prior.runtime != current[name].runtime:
+                    self._preparation.retire(prior.revisions.keys())
             rebuild |= bool(self._thread_keys.keys() - current.keys())
             self._thread_keys = current
             self._key_snapshot = snapshot
@@ -665,6 +680,13 @@ class TranscriptReadState(RuntimeFile, PublishedSQLiteFile, ThreadOwnedState):
                        threads: Mapping[str, TranscriptReadKeys]) -> TranscriptUnread:
         revisions = {source: revision for keys in threads.values()
                      for source, revision in keys.revisions.items()}
+        locations: dict[str, RuntimeLocation] = {}
+        for keys in threads.values():
+            for location in keys.runtime.read_locations():
+                key = location.read_key
+                if key in locations and locations[key] != location:
+                    raise TranscriptChanged()
+                locations[key] = location
         if not revisions:
             return TranscriptUnread({name: ReplyUnread(0) for name in threads})
         # A missing transcript has no replies.
@@ -674,10 +696,10 @@ class TranscriptReadState(RuntimeFile, PublishedSQLiteFile, ThreadOwnedState):
         seen = {}
         for source, revision in present.items():
             mark = self.reads.transcript_seen(
-                viewer, source, revision.identity.inode, document=document
+                viewer, source, locations[source].read_inode(revision), document=document
             )
-            seen[source] = mark if mark <= revision.size else 0
-        with self._indexed_sources(revisions, seen) as (database, indexes):
+            seen[source] = locations[source].read_position(mark, revision)
+        with self._indexed_sources(revisions, seen, locations) as (database, indexes):
             ends: dict[str, int] = {}
             for source, revision in present.items():
                 if seen[source] == revision.size:
@@ -693,9 +715,6 @@ class TranscriptReadState(RuntimeFile, PublishedSQLiteFile, ThreadOwnedState):
             total = sum((per_file[source] for source in keys.revisions), Counted(0))
             total.record(name, result)
         return TranscriptUnread(result)
-
-    def mark_read(self, viewer: str, source: str, through: int, cut: SessionCut) -> None:
-        cut.mark_read(self.reads, viewer, source, through)
 
 
 _shared_lock = RLock()

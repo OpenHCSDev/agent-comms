@@ -1,8 +1,11 @@
 """Saved Pi boundary, bounded readers and presentation roundtrips."""
 
 import json
+from collections.abc import Callable
 from dataclasses import fields, replace
 from pathlib import Path
+from shutil import copyfile
+from typing import BinaryIO, Literal
 
 import pytest
 
@@ -12,10 +15,21 @@ from agent_comms.nominal.field_codec import (
     MalformedRecord,
     ToolCallId,
 )
-from agent_comms.native_entries import MessageEntry, NativeEntry, TranscriptProjection, UnknownEntry
-from agent_comms.native_transcript import NativeTranscript
+from agent_comms.native_entries import MessageEntry, NativeEntry, NativeEvidenceScope, TranscriptProjection, UnknownEntry
+from agent_comms.native_transcript import NativeTranscript, RetainedNativeTranscript
+from agent_comms.native_output import NativeRecordLocation
+from agent_comms.agent_backend import RuntimeLocation
+from agent_comms.coordination_errors import TranscriptChanged
+from agent_comms.errors import RelationViolationError
+from agent_comms.native_failures import NativePiUnavailable
+from agent_comms.pi_native_backend import PiNativeBackend
+from agent_comms.private_path import FileRevision
+from agent_comms.recorded_time import UnrecordedEventTime
+from agent_comms.repo import Checkout
+from agent_comms.threads import Thread
+from agent_comms.session_file import BusSessionLocation, RetainedSessionLocation, SessionFile
 from agent_comms.native_input_proof import NativeContextProof
-from agent_comms.native_session_reopen import PiSessionId
+from agent_comms.native_session_reopen import NativeSessionIdentity, NativeSessionSnapshot, PiSessionId
 from agent_comms.pi_payloads import UserMessage
 from agent_comms.transcript_events import (
     AssistantTranscript,
@@ -27,13 +41,289 @@ from agent_comms.transcript_events import (
     UserTranscript,
 )
 from agent_comms.turn_item import FreshNativeId, NativeItemId
-from conftest import transcript_records
+from conftest import installed_comms, transcript_records
+from agent_comms.comms import wire
+from agent_comms.transcripts import NativeTranscriptCursor
+from agent_comms.ui_model.unread import ReplyUnread
+from agent_comms.view_unread import TranscriptReadKeys, TranscriptReadState
+from native_unread_fixture import completed_counts
 
 STAMPED = 1790812800.0  # "2026-10-01T00:00:00.000Z", the time every fixture row records
 
 
 def encoded(value):
     return json.dumps(value).encode() + b"\n"
+
+
+@pytest.fixture
+def retained_native_location(tmp_path: Path) -> tuple[Path, RetainedSessionLocation]:
+    session = PiSessionId.fresh()
+    root = installed_comms(tmp_path / "wire").root
+    original = tmp_path / "original" / "session.jsonl"
+    original.parent.mkdir(mode=0o700)
+    original.write_bytes(
+        encoded(dict(type="session", version=3, id=session, cwd=str(tmp_path),
+                     timestamp="2026-10-01T00:00:00.000Z"))
+        + encoded(dict(type="message", id="original-entry", parentId=None,
+                       timestamp="2026-10-01T00:00:00.000Z",
+                       message=dict(role="assistant", content=[dict(type="text", text="saved")],
+                                    stopReason="stop")))
+    )
+    original.chmod(0o600)
+    with NativeEvidenceScope() as scope:
+        identity = NativeSessionSnapshot.from_evidence(scope.for_source(original))
+    storage = root / "retained" / "session.jsonl"
+    storage.parent.mkdir()
+    copyfile(original, storage)
+    storage.chmod(0o600)
+    revision = FileRevision.capture(storage).require(ValueError("Missing retained fixture"))
+    assert revision.identity != identity.revision.identity
+    original.unlink()
+    location = RetainedSessionLocation(
+        BusSessionLocation(storage.relative_to(root)), identity, revision,
+    )
+    return root, location
+
+
+def test_retained_location_roundtrip_keeps_original_keys_and_reads_retained_bytes(
+    retained_native_location: tuple[Path, RetainedSessionLocation],
+) -> None:
+    root, original = retained_native_location
+    restored = FieldCodec.decode(SessionFile, FieldCodec.encode(original)).bound_to(root)
+    runtime = restored.location(PiNativeBackend)
+    assert not original.identity.path.exists()
+    assert runtime.read_key == original.identity.session_file
+    assert Path(runtime.path) == original.storage.resolve(root)
+    reader = runtime.history_source(root, Thread("reader", frozenset(), Checkout(root)).incarnation)
+    with reader.reading():
+        cut = reader.cut()
+        records = tuple(reader.forward(0, cut.offset))
+    assert reader.source_path == original.identity.path
+    assert reader.session_id == original.identity.session_id
+    assert records[-1].require_entry().require_entry_id() == FreshNativeId("original-entry")
+    assert records[-1].events[0].text == "saved"
+    assert not runtime.resumable
+    assert runtime.storage_files() == ()
+    assert runtime.tool_watch_locations() == ()
+    with pytest.raises(RelationViolationError):
+        restored.writable_location(PiNativeBackend)
+    with pytest.raises(NativePiUnavailable):
+        runtime.require_forkable()
+    with pytest.raises(NativePiUnavailable):
+        runtime.arguments()
+    with pytest.raises(NativePiUnavailable):
+        runtime.new_location(root, root)
+
+
+def test_retained_reader_rejects_another_header_identity(
+    retained_native_location: tuple[Path, RetainedSessionLocation],
+) -> None:
+    root, original = retained_native_location
+    changed = replace(original.identity, session_id=PiSessionId.fresh())
+    with pytest.raises(TranscriptChanged):
+        RetainedNativeTranscript(original.storage.resolve(root), changed, original.revision)
+
+
+def test_retained_reader_rejects_changed_bytes_during_its_read(
+    retained_native_location: tuple[Path, RetainedSessionLocation],
+) -> None:
+    root, original = retained_native_location
+    path = original.storage.resolve(root)
+    reader = RetainedNativeTranscript(path, original.identity, original.revision)
+    with pytest.raises(TranscriptChanged):
+        with reader.reading():
+            with path.open("ab") as output:
+                output.write(b"\n")
+    with pytest.raises(TranscriptChanged):
+        reader.cut()
+
+
+@pytest.mark.parametrize("read", [
+    pytest.param(lambda reader, size, output: reader.cut(), id="cut"),
+    pytest.param(lambda reader, size, output: reader.committed_output_cut(output), id="committed-cut"),
+    pytest.param(lambda reader, size, output: reader.imported_sources(), id="imported-sources"),
+    pytest.param(lambda reader, size, output: tuple(reader.tail()), id="tail"),
+    pytest.param(lambda reader, size, output: tuple(reader.forward(0, size)), id="forward"),
+    pytest.param(lambda reader, size, output: tuple(reader.reverse(size)), id="reverse"),
+])
+def test_retained_reader_rejects_descriptor_from_directory_aba(
+    retained_native_location: tuple[Path, RetainedSessionLocation],
+    monkeypatch: pytest.MonkeyPatch,
+    read: Callable[[NativeTranscript, int, NativeRecordLocation], object],
+) -> None:
+    root, location = retained_native_location
+    path = location.storage.resolve(root)
+    reader = RetainedNativeTranscript(path, location.identity, location.revision)
+    size = reader.cut().offset
+    last = tuple(reader.forward(0, size))[-1]
+    output = NativeRecordLocation(
+        session_id=location.identity.session_id,
+        session_file=location.identity.session_file,
+        session_entry_id=NativeItemId("original-entry"),
+        session_entry_start=last.start,
+        session_entry_end=last.end,
+    )
+    replacement = root / "other-retained"
+    replacement.mkdir()
+    other = replacement / path.name
+    other.write_bytes(path.read_bytes().replace(b'"saved"', b'"other"'))
+    parked = root / "parked-retained"
+    physical_open = Path.open
+    opened: list[FileRevision] = []
+
+    def open_after_directory_swap(candidate: Path, mode: Literal["rb"]) -> BinaryIO:
+        if candidate != path:
+            return physical_open(candidate, mode)
+        # The foreign IO boundary opens real B, then restores A before returning
+        # the descriptor. No product reader or revision method is replaced.
+        path.parent.rename(parked)
+        replacement.rename(path.parent)
+        try:
+            stream = physical_open(candidate, mode)
+            opened.append(FileRevision.from_file(stream))
+        finally:
+            path.parent.rename(replacement)
+            parked.rename(path.parent)
+        return stream
+
+    monkeypatch.setattr(Path, "open", open_after_directory_swap)
+    with pytest.raises(TranscriptChanged):
+        read(reader, size, output)
+    assert len(opened) == 1
+    assert opened[0].identity != location.revision.identity
+    assert FileRevision.capture(path) == location.revision
+
+
+def test_retained_cut_validates_descriptor_before_translating_original_coordinates(
+    retained_native_location: tuple[Path, RetainedSessionLocation],
+) -> None:
+    root, location = retained_native_location
+    path = location.storage.resolve(root)
+    reader = RetainedNativeTranscript(path, location.identity, location.revision)
+    other = root / "same-header.jsonl"
+    copyfile(path, other)
+    with other.open("rb") as stream, pytest.raises(TranscriptChanged):
+        reader.session_cut(FileRevision.from_file(stream), location.revision.size)
+
+
+@pytest.mark.parametrize("read", [
+    pytest.param(lambda runtime, reads, size, root: runtime.read_cut(), id="cut"),
+    pytest.param(
+        lambda runtime, reads, size, root: NativeTranscriptCursor(runtime.read_key, size).mark_read(
+            reads, "viewer", runtime),
+        id="nonzero-acknowledgement",
+    ),
+    pytest.param(
+        lambda runtime, reads, size, root: runtime.history_source(
+            root, Thread("reader", frozenset(), Checkout(root)).incarnation).last_tool_call(),
+        id="last-tool-call",
+    ),
+    pytest.param(lambda runtime, reads, size, root: runtime.saved_model, id="saved-model"),
+])
+def test_retained_failed_acquisition_refuses_after_parent_returns(
+    retained_native_location: tuple[Path, RetainedSessionLocation],
+    monkeypatch: pytest.MonkeyPatch,
+    read: Callable[[RuntimeLocation, TranscriptReadState, int, Path], object],
+) -> None:
+    root, location = retained_native_location
+    runtime = location.bound_to(root).location(PiNativeBackend)
+    reads = wire(root).views.transcript_reads
+    size = runtime.read_cut().offset
+    assert size > 0
+    path = location.storage.resolve(root)
+    parked = root / "temporarily-unavailable"
+    physical_open = Path.open
+    attempts: list[Path] = []
+
+    def failed_second_open(candidate: Path, mode: Literal["rb"]) -> BinaryIO:
+        if candidate != path:
+            return physical_open(candidate, mode)
+        attempts.append(candidate)
+        # Construction opens A successfully. Its subsequent read cannot acquire
+        # any descriptor; A returns before the reader's final pathname fence.
+        if len(attempts) == 2:
+            path.parent.rename(parked)
+            try:
+                return physical_open(candidate, mode)
+            finally:
+                parked.rename(path.parent)
+        return physical_open(candidate, mode)
+
+    monkeypatch.setattr(Path, "open", failed_second_open)
+    with pytest.raises(TranscriptChanged) as refused:
+        read(runtime, reads, size, root)
+    assert isinstance(refused.value.__cause__, FileNotFoundError)
+    assert len(attempts) == 2
+    assert FileRevision.capture(path) == location.revision
+    assert reads.reads.transcript_seen(
+        "viewer", runtime.read_key, location.identity.revision.identity.inode) == 0
+
+
+def test_unstarted_native_journal_may_have_an_empty_cut(tmp_path: Path) -> None:
+    reader = NativeTranscript(tmp_path / "not-written-yet.jsonl")
+    cut = reader.cut()
+    assert cut.offset == 0
+    assert cut.holds(cut, 0)
+    assert reader.last_tool_call() == UnrecordedEventTime()
+
+
+@pytest.mark.parametrize("already_read", [False, True])
+def test_retained_marks_and_unread_index_keep_the_original_inode(
+    retained_native_location: tuple[Path, RetainedSessionLocation], already_read: bool,
+) -> None:
+    root, location = retained_native_location
+    comms = wire(root)
+    comms.registry.declare(Thread("reader", frozenset(), Checkout(root), session_file=location))
+    runtime = comms.registry.require("reader").runtime
+    state = comms.views.transcript_reads
+    key = location.identity.session_file
+    original_inode = location.identity.revision.identity.inode
+    size = location.identity.revision.size
+    if already_read:
+        state.reads.mark_transcript("viewer", key, original_inode, size, size)
+    assert completed_counts(state, "viewer").counts["reader"] == ReplyUnread(0 if already_read else 1)
+    cut = runtime.read_cut()
+    assert cut.revision == location.identity.revision
+    NativeTranscriptCursor(key, cut.offset).mark_read(state, "viewer", runtime)
+    assert state.reads.transcript_seen("viewer", key, original_inode) == cut.offset
+    assert state.reads.transcript_seen("viewer", key, location.revision.identity.inode) == 0
+    assert completed_counts(state, "viewer").counts["reader"] == ReplyUnread(0)
+    assert runtime.read_position(size + 1, location.revision) == size
+
+
+def test_original_read_key_does_not_follow_a_recreated_path_alias(
+    retained_native_location: tuple[Path, RetainedSessionLocation],
+) -> None:
+    root, location = retained_native_location
+    state = wire(root).views.transcript_reads
+    runtime = location.bound_to(root).location(PiNativeBackend)
+    key = runtime.read_key
+    cut = runtime.read_cut()
+    NativeTranscriptCursor(key, cut.offset).mark_read(state, "viewer", runtime)
+    directory = location.identity.path.parent
+    directory.rmdir()
+    replacement = root / "different-original"
+    replacement.mkdir()
+    directory.symlink_to(replacement, target_is_directory=True)
+    assert str(location.identity.path.resolve()) != key
+    assert state.reads.transcript_seen("viewer", key, location.identity.revision.identity.inode) == cut.offset
+    assert runtime.read_cut() == cut
+
+
+def test_retained_unread_observation_watches_physical_storage_and_rejects_replacement(
+    retained_native_location: tuple[Path, RetainedSessionLocation],
+) -> None:
+    root, location = retained_native_location
+    comms = wire(root)
+    comms.registry.declare(Thread("reader", frozenset(), Checkout(root), session_file=location))
+    keys = TranscriptReadKeys.capture(comms.registry.require("reader"))
+    path = location.storage.resolve(root)
+    assert keys.paths == {location.identity.session_file: path}
+    replacement = root / "replacement.jsonl"
+    copyfile(path, replacement)
+    replacement.replace(path)
+    with pytest.raises(TranscriptChanged):
+        keys.refresh({})
 
 
 def test_native_discriminator_is_separate_from_normalized_family_codec():

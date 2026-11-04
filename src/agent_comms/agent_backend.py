@@ -28,6 +28,10 @@ from typing import TYPE_CHECKING, ClassVar, Self
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import AcpSessionId, InputId
 from .native_input_proof import NativeContextProof
+from .native_session_reopen import NativeSessionSnapshot
+from .native_transcript import NativeTranscript, SessionCut
+from .private_path import FileObservation, FileRevision
+from .read_ledger import ReadLedger
 from .pi_counts import PiCount
 from .thread_model import ThreadModel, UndeclaredModel
 from .pi_commands import NativeQuery
@@ -63,6 +67,12 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
     def backend(self):
         return self._backend
 
+    @classmethod
+    def retained(cls, path: Path, identity: NativeSessionSnapshot,
+                 revision: FileRevision) -> RuntimeLocation:
+        """Only a backend with an original-coordinate reader can bind retained bytes."""
+        raise BackendDeclarationError(f"{cls.__name__} cannot read retained native history")
+
     def require_forkable(self):
         pass
 
@@ -80,8 +90,31 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
     def arguments(self):
         return {"session_file": self.read_key}
 
+    def read_locations(self) -> tuple[RuntimeLocation, ...]:
+        """The bound byte locations; a logical read key is never a filesystem path."""
+        return (self,)
+
     def read_keys(self):
-        return (self.read_key,)
+        return tuple(location.read_key for location in self.read_locations())
+
+    def tool_watch_locations(self) -> tuple[RuntimeLocation, ...]:
+        return self.read_locations()
+
+    def read_revision(self, observed: FileObservation) -> FileObservation:
+        return observed
+
+    def read_inode(self, revision: FileRevision) -> int:
+        return revision.identity.inode
+
+    def read_cut(self) -> SessionCut:
+        return NativeTranscript(Path(self.path)).cut()
+
+    def read_position(self, mark: int, revision: FileRevision) -> int:
+        return mark if mark <= revision.size else 0
+
+    def mark_read(self, reads: ReadLedger, viewer: str, through: int) -> None:
+        for location in self.read_locations():
+            location.read_cut().mark_read(reads, viewer, location.read_key, through)
 
     def transcript_cursor(self, frontier, offset, *, source):
         return frontier.cursor(source.read_key, offset)
@@ -304,7 +337,7 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
 
     @classmethod
     @abstractmethod
-    def new_location(cls, root, worktree) -> RuntimeLocation: ...
+    def new_location(cls, root: Path, worktree: Path) -> RuntimeLocation: ...
 
     @classmethod
     def seal(cls) -> None:
@@ -325,7 +358,9 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
         AgentBackend.__registry__ = MappingProxyType(dict(AgentBackend.__registry__))  # type: ignore[assignment]
         AgentBackend._sealed = True
 
-    def run_turn(self, thread: Thread, content: InputContent, delivery: TurnDelivery):
+    def run_turn(
+        self, thread: Thread, content: InputContent, delivery: TurnDelivery,
+    ) -> AsyncIterator[AgentEvent]:
         raise BackendDeclarationError(f"{type(self).__name__} does not run turns")
 
     @classmethod
