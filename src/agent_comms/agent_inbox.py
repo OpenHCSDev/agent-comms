@@ -124,9 +124,13 @@ class SecondsWait(SingleFieldValue, InboxWait):
 
     def read(self, bus: Watched, page: Callable[[], InboxPage]) -> InboxPage:
         deadline = time.monotonic() + self.seconds
-        with bus.changes() as changes:
-            while (not (current := page()).page.messages
-                   and (left := deadline - time.monotonic()) > 0):
+        # Only the bus's own commits can bring a message: a goal, attempt or guard write in the
+        # same root re-ran this whole read for every waiting socket (P1200).
+        # The kernel wakes on any event in a watched directory; only a changed bus source re-reads.
+        with bus.register_sources(*bus.commit_sources()) as changes:
+            current = page()
+            while not current.page.messages and (left := deadline - time.monotonic()) > 0:
                 changes.block_until_change(left)
-                changes.changed_paths()
+                if changes.changed_paths():
+                    current = page()
             return current
