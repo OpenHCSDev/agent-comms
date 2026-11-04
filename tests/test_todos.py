@@ -475,7 +475,8 @@ def adopt_pr(ctx, pid, number):
 def test_order_pr_adopts_a_registered_companion_once(pr_team, proof_build_checkouts,
                                                      github_cli):
     """An agent-comms order records a registered Toad PR from its companion checkout; an
-    unregistered repository's PR is refused at the Todo write; repeating changes nothing."""
+    unregistered repository's PR is refused before its forge is read; repeating changes
+    nothing."""
     core = pr_team.repos[0]
     toad, textual = (next(graph.repository for graph in proof_build_checkouts
                           if graph.repository.github == package.repository)
@@ -511,7 +512,6 @@ def test_order_pr_adopts_a_registered_companion_once(pr_team, proof_build_checko
     order_pr(ctx, toad_checkout, original.id, "--existing", "1")
     assert TodoStore(ctx.root).get(original.id) == linked
     assert [call[:5] for call in github_cli.calls() if call[:2] == ("pr", "view")] == [
-        ("pr", "view", "1", "-R", textual.github.to_wire()),
         ("pr", "view", "1", "-R", toad.github.to_wire()),
         ("pr", "view", "1", "-R", toad.github.to_wire()),
     ]
