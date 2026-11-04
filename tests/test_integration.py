@@ -88,8 +88,9 @@ def test_actual_ci_cli_uses_verified_carrier_not_synthetic_message_and_revalidat
                              "--workflow-output", str(workflow_output)), cwd=checkout.path,
                             env=environment, capture_output=True, text=True, timeout=120)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert workflow_output.read_text() == f"base={local.baseline.commit}\ncombined=true\n"
     assert IntegrationInput.at(output) == inputs
+    assert workflow_output.read_text() == (
+        f"base={local.baseline.commit}\ncombined=true\ntested={inputs.tested}\n")
     assert inputs.carrier.pr == carrier.pr != pair.core.number
     assert inputs.pinned_sources(pair.core.github) == inputs.sources
     expected_local = tuple(
@@ -143,8 +144,8 @@ def test_actual_ordinary_ci_cli_captures_main_once_and_never_steals_an_unlinked_
                              "--workflow-output", str(workflow_output)),
                             cwd=checkout.path, env=environment, capture_output=True, text=True, timeout=120)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert workflow_output.read_text() == f"base={baseline}\ncombined=false\n"
     inputs = IntegrationInput.at(output)
+    assert workflow_output.read_text() == f"base={baseline}\ncombined=false\ntested={inputs.tested}\n"
     core = inputs.source(pair.core.github)
     client = inputs.source(pair.client.github)
     assert core.baseline.commit == baseline
