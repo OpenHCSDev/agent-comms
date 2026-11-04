@@ -91,7 +91,10 @@ class GoalExecutionSource:
 class GoalTarget(ABC):
     """Which thread a goal write selects inside the registry edit that publishes it."""
 
-    name: str
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """The thread name this write is addressed to."""
 
     @abstractmethod
     def select(self, document: RegistryDocument) -> Thread:
@@ -102,10 +105,14 @@ class GoalTarget(ABC):
 class NamedGoalTarget(GoalTarget):
     """Whichever thread holds the name when the edit opens."""
 
-    name: str
+    addressed: str
+
+    @property
+    def name(self) -> str:
+        return self.addressed
 
     def select(self, document: RegistryDocument) -> Thread:
-        return document.require(self.name)
+        return document.require(self.addressed)
 
 
 @dataclass(frozen=True)
@@ -116,7 +123,7 @@ class BornGoalTarget(GoalTarget):
     birth: ThreadIncarnation
 
     @property
-    def name(self) -> str:  # type: ignore[override]
+    def name(self) -> str:
         return self.birth.name
 
     def select(self, document: RegistryDocument) -> Thread:
