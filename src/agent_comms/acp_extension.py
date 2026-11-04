@@ -52,7 +52,7 @@ from .owner_protocol import IncompatibleOwner
 from agent_comms.pi_wire import McpLiveAcknowledgement
 from .reported_turn import ReportedTurn, ReportedTurnState
 from .routing import MessageRoute, NoMessageRoute
-from .thread_identity import ClaimScoped, ThreadIncarnation
+from .thread_identity import ClaimScoped, ClaimedIdentity, ThreadIncarnation
 from .tool_result import ToolResult
 from .transcripts import (
     LivePageSource, NativeCommittedPrefix, PageSource, TranscriptCursor, TranscriptPage, TranscriptRead, TranscriptReadIdentity,
@@ -518,9 +518,13 @@ class QueueProjection(DeclaredFamily, affix="QueueProjection"):
     def without_scope(self) -> None:
         """Do not offer queue access while its state is missing or still loading."""
 
-    def capture_human_input(self, comms, acquire_scope: Callable[[], QueueScope]) -> HumanInputOrigin:
+    def input_identity(self, acquire_scope: Callable[[], QueueScope]) -> ClaimedIdentity:
         """Refuse input until the queue's current state has been read."""
         raise ValueError(self.feedback(True))
+
+    def capture_human_input(self, comms, acquire_scope: Callable[[], QueueScope]) -> HumanInputOrigin:
+        """The author witness for the identity this projection admits, captured in process."""
+        return HumanInputOrigin.capture(comms, self.input_identity(acquire_scope))
 
 
 @dataclass(frozen=True)
@@ -568,8 +572,8 @@ class AvailableQueueProjection(QueueProjection):
     def without_scope(self) -> None:
         raise ValueError('Available input queue has no original attachment scope.')
 
-    def capture_human_input(self, comms, acquire_scope: Callable[[], QueueScope]) -> HumanInputOrigin:
-        return HumanInputOrigin.capture(comms, acquire_scope().claimed_identity)
+    def input_identity(self, acquire_scope: Callable[[], QueueScope]) -> ClaimedIdentity:
+        return acquire_scope().claimed_identity
 
 
 @dataclass(frozen=True)
