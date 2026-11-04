@@ -36,7 +36,6 @@ from .harness_delivery_states import DeliveredOutcome
 from .messages import Message
 from .nominal.field_codec import FieldCodec
 from .runtime_updates import RuntimeUpdate
-from .tool_caller import ThreadCaller
 from .tool_result import ToolResult
 from .tools import CommsInboxTool
 from .transcript_publication import PublishesToBus
@@ -148,7 +147,7 @@ class InboxWatch:
     def untaken(self) -> tuple[Message, ...]:
         with self.wire() as comms:
             request = CommsInboxTool(thread=self.thread, wait=SecondsWait(self.wait_seconds))
-            return request.apply(comms, ThreadCaller(self.thread)).messages
+            return request.page(comms).page.messages
 
     def taken(self, message: Message) -> None:
         """A message leaves the inbox only after its frame went out, so a dropped socket
