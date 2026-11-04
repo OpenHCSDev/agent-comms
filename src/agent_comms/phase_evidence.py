@@ -181,7 +181,8 @@ class MainTree:
         for blob, name in blobs:
             if name in contents:
                 tree = self.parse(name, blob, contents[name])
-                if (roots, name) not in self.bindings or not self.bindings[roots, name].retained(self):
+                key = (roots, name)
+                if key not in self.bindings or not self.bindings[key].retained(self):
                     self.bind(roots, name, blob, tree)
             yield self.bindings[roots, name]
 
@@ -189,12 +190,16 @@ class MainTree:
     """The import roots nearly every evidence reads: one parse records their bindings too."""
 
     def parse(self, name: str, blob: str, content: bytes) -> ast.Module:
-        """One parse per blob for every ``src``-wide reader: its source facts and its bindings
-        under the shared roots are recorded from the same tree."""
+        """One parse per blob for every ``src``-wide reader: a blob under the shared roots
+        records its source facts and its shared bindings from the same tree, each only
+        while not already current."""
         tree = ast.parse(content.decode(), filename=name)
-        self.facts[name] = SourceFacts.of(name, blob, tree)
         if any(PurePosixPath(name).is_relative_to(root) for root in self.shared_roots):
-            self.bind(self.shared_roots, name, blob, tree)
+            if name not in self.facts or not self.facts[name].retained(self):
+                self.facts[name] = SourceFacts.of(name, blob, tree)
+            shared = (self.shared_roots, name)
+            if shared not in self.bindings or not self.bindings[shared].retained(self):
+                self.bind(self.shared_roots, name, blob, tree)
         return tree
 
     def bind(self, roots: tuple[str, ...], name: str, blob: str, tree: ast.Module) -> None:
@@ -211,7 +216,9 @@ class MainTree:
                       if name not in self.facts or not self.facts[name].retained(self))
         contents = Repo.blobs(self.repo.checkout, *(blob for blob, _ in fresh))
         for (blob, name), content in zip(fresh, contents, strict=True):
-            self.parse(name, blob, content)
+            tree = self.parse(name, blob, content)
+            if name not in self.facts or not self.facts[name].retained(self):
+                self.facts[name] = SourceFacts.of(name, blob, tree)
         for _, name in blobs:
             yield self.facts[name]
 
@@ -819,6 +826,7 @@ class ClassChecks(ast.NodeVisitor):
 
     def __init__(self) -> None:
         self.declared: set[str] = set()
+        self.classes: list[tuple[str, frozenset[str]]] = []
         self.path = ""
         self.checked: list[tuple[str, int, frozenset[str]]] = []
         self._scopes: list[set[str]] = []
@@ -836,6 +844,7 @@ class ClassChecks(ast.NodeVisitor):
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         self.declared.add(node.name)
+        self.classes.append((node.name, frozenset(NamedClasses.of(node.bases))))
         self._methods.update(member for member in node.body
                              if isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef)))
         self.generic_visit(node)
@@ -896,8 +905,7 @@ class SourceFacts:
         checks.visit(tree)
         return cls(path, blob, bus.found, frozenset(checks.declared),
                    tuple((line, named) for _, line, named in checks.checked),
-                   tuple((node.name, frozenset(NamedClasses.of(node.bases)))
-                         for node in Classes.of((tree,))))
+                   tuple(checks.classes))
 
     def retained(self, main: MainTree) -> bool:
         """These facts remain valid exactly while this path holds their original blob."""
