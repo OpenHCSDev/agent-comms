@@ -793,17 +793,16 @@ def test_a_heartbeat_sized_message_is_one_readable_file_not_fragments():
     assert sum(line.startswith(frame.HEADER) for line in frame.export_lines)==1
 
 
-def test_foreign_task_notifications_are_named_and_malformed_matching_xml_fails():
+def test_foreign_task_notifications_are_named_and_one_without_an_event_is_foreign():
     record=decoded_record(dict(type='user',uuid=transcript_record('record'),timestamp='2026-10-16T16:40:05.123Z',
         sessionId='session',promptId='prompt',origin=dict(kind='task-notification'),
         message=dict(content='Another task producer')))
     assert isinstance(record.message.content[0].text,ForeignTaskNotification)
     assert record.updates(ClaudeSession())==()
-    from xml.etree.ElementTree import ParseError
-    with pytest.raises(ParseError):
-        decoded_record(dict(type='user',uuid=transcript_record('record'),timestamp='2026-10-16T16:40:05.123Z',
-            sessionId='session',promptId='prompt',origin=dict(kind='task-notification'),
-            message=dict(content='<task-notification>')))
+    unended=decoded_record(dict(type='user',uuid=transcript_record('record'),timestamp='2026-10-16T16:40:05.123Z',
+        sessionId='session',promptId='prompt',origin=dict(kind='task-notification'),
+        message=dict(content='<task-notification>')))
+    assert isinstance(unended.message.content[0].text,ForeignTaskNotification)
     assert isinstance(ClaudeMonitorFrame.decode_line('ordinary unrelated monitor event'),ForeignMonitorFrame)
     assert isinstance(ClaudeMonitorFrame.decode_line('"Comms in · old format...(truncated)'),ForeignMonitorFrame)
 

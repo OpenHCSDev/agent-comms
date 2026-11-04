@@ -14,6 +14,7 @@ from yarl import URL
 
 from agent_comms.activity import ActivityState, ObservedActivity
 from agent_comms.cli_bridges.claude_protocol import ClaudeMonitorFrame
+from agent_comms.cli_bridges.claude_protocol import MonitorTaskNotification, TaskEnvelope
 from agent_comms.cli_bridges.inbox_watch_client import FollowedTranscript, InboxSocket
 from agent_comms.comms import Comms
 from agent_comms.channel_targets import CommandTarget
@@ -251,6 +252,26 @@ async def test_a_transcript_record_core_cannot_read_is_said_and_keeps_the_push(
     assert "ValidationError" in said and "TaskGroup" not in said
 
 
+async def test_a_shown_message_that_is_not_xml_does_not_stop_the_transcript(
+    session, comms: Comms
+) -> None:
+    """A message shown as written said "&&" or "<", and every re-arm replayed it."""
+    client, token = session
+    socket = await client.ws_connect(await watch_path(client, token, "cloud"))
+    await socket.send_str(json.dumps({
+        "type": "user", "uuid": str(uuid4()), "timestamp": "2026-11-04T00:00:00.000Z", "sessionId": "s",
+        "promptId": "p", "origin": {"kind": "task-notification"},
+        "message": {"content": [{"type": "text", "text": (
+            "<task-notification><task-id>m</task-id><summary>Monitor event: \"watch\"</summary>"
+            "<event>Comms in · b · 1-a · 1/1\nrun a && b if x < y</event></task-notification>")}]},
+    }))
+    await socket.send_str(transcript_lines("after the shown message")[1])
+    async with asyncio.timeout(20):
+        while "after the shown message" not in await turns_of(client, token, "cloud"):
+            await asyncio.sleep(0.05)
+    await socket.close()
+
+
 async def test_a_monitor_notice_cut_short_in_the_transcript_does_not_stop_the_transcript(
     session, comms: Comms
 ) -> None:
@@ -271,14 +292,23 @@ def test_the_cloud_client_never_sends_a_watch_url_up_to_the_bus() -> None:
     url = "wss://ts-gaming.tail553874.ts.net/watch/AbC-d_123"
     line = FollowedTranscript.line(json.dumps({"url": url, "command": f"watch {url}"}).encode())
     assert "AbC-d_123" not in line
-    assert json.loads(line)["url"] == "<inbox watch URL>"
+    assert json.loads(line)["url"] == "[inbox watch URL]"
+
+
+def test_a_hidden_watch_url_leaves_a_task_notification_readable() -> None:
+    """The stand-in was written in angle brackets, inside the XML the notification is."""
+    url = "wss://ts-gaming.tail553874.ts.net/watch/AbC-d_123"
+    notification = f"<task-notification><event>closed {url}</event></task-notification>"
+    line = FollowedTranscript.line(json.dumps({"text": notification}).encode())
+    assert isinstance(TaskEnvelope.from_text(json.loads(line)["text"]), MonitorTaskNotification)
 
 
 async def test_the_cloud_client_says_out_loud_when_its_url_is_refused(session, tmp_path: Path) -> None:
     client, _ = session
-    used = str(client.make_url("/watch/not-a-ticket"))
+    used = str(client.make_url("/watch/not-a-ticket").with_scheme("ws"))
     ended = await InboxSocket(used, tmp_path / "messages").carried()
     assert ended.startswith("failed: WSServerHandshakeError")
+    assert "not-a-ticket" not in ended
 
 
 async def inbox_emptied(comms: Comms, thread: str) -> None:

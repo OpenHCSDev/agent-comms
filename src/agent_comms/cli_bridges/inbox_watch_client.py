@@ -50,12 +50,18 @@ class FollowedTranscript(RecentClaudeWindow, TranscriptRoute):
     source: Path
 
     watch_url: ClassVar[re.Pattern[str]] = re.compile(r'wss?://[^\s"\'\\]+/watch/[\w-]+')
-    hidden_url: ClassVar[str] = '<inbox watch URL>'
+    hidden_url: ClassVar[str] = '[inbox watch URL]'
+    """It lands inside whatever held the URL, including a task notification's XML, so it escapes
+    nothing and needs no escaping."""
 
     @classmethod
     def line(cls, raw: bytes) -> str:
         """The transcript holds each watch URL this session was given, and the bus holds no tokens."""
-        return cls.watch_url.sub(cls.hidden_url, raw.decode())
+        return cls.hidden(raw.decode())
+
+    @classmethod
+    def hidden(cls, text: str) -> str:
+        return cls.watch_url.sub(cls.hidden_url, text)
 
     async def lines_sent(self, socket: ClientWebSocketResponse, stream: BinaryIO, offset: int) -> int:
         """Every complete line from `offset`; where the next read starts."""
@@ -170,7 +176,7 @@ class InboxSocket:
                     publishing.cancel()
                 return f"closed with code {socket.close_code}"
         except (ClientError, OSError) as failure:
-            return f"failed: {type(failure).__name__}: {failure}"
+            return f"failed: {type(failure).__name__}: {FollowedTranscript.hidden(str(failure))}"
 
 
 def main() -> None:
