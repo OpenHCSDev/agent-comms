@@ -238,7 +238,7 @@ class NativeTranscriptCursor(TranscriptCursor):
     def mark_read(self, reads: TranscriptReadState, viewer: str, runtime: RuntimeLocation) -> None:
         if self.session_file != runtime.read_key:
             raise TranscriptChanged()
-        runtime.mark_read(reads, viewer, self.offset)
+        runtime.mark_read(reads.reads, viewer, self.offset)
 
 
 @dataclass(frozen=True)

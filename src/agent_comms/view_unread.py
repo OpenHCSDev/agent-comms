@@ -21,7 +21,7 @@ from .locked_store import PublishedSQLiteFile, RuntimeFile, SQLiteFile
 from .store_files import StoreBusy
 from .bus import Bus
 from .native_entries import NativeEntry
-from .native_transcript import SessionCut, record_end, reverse_records
+from .native_transcript import record_end, reverse_records
 from .private_path import FileObservation, FileRevision, MissingFile
 from .read_ledger import ReadDocument, ReadLedger
 from .registry_document import RosterVisibility
@@ -616,9 +616,11 @@ class TranscriptReadState(RuntimeFile, PublishedSQLiteFile, ThreadOwnedState):
                 keys = (prior if prior is not None and prior.matches(thread)
                         else TranscriptReadKeys.capture(thread))
                 rebuild |= prior is None or prior.paths != keys.paths
-                if prior is not None and prior.runtime != keys.runtime:
-                    self._preparation.retire(prior.revisions.keys())
                 current[thread.name] = keys
+            for name in current.keys() & self._thread_keys.keys():
+                prior = self._thread_keys[name]
+                if prior.runtime != current[name].runtime:
+                    self._preparation.retire(prior.revisions.keys())
             rebuild |= bool(self._thread_keys.keys() - current.keys())
             self._thread_keys = current
             self._key_snapshot = snapshot
@@ -713,9 +715,6 @@ class TranscriptReadState(RuntimeFile, PublishedSQLiteFile, ThreadOwnedState):
             total = sum((per_file[source] for source in keys.revisions), Counted(0))
             total.record(name, result)
         return TranscriptUnread(result)
-
-    def mark_read(self, viewer: str, source: str, through: int, cut: SessionCut) -> None:
-        cut.mark_read(self.reads, viewer, source, through)
 
 
 _shared_lock = RLock()

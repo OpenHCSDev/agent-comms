@@ -28,6 +28,10 @@ from typing import TYPE_CHECKING, ClassVar, Self
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import AcpSessionId, InputId
 from .native_input_proof import NativeContextProof
+from .native_session_reopen import NativeSessionSnapshot
+from .native_transcript import NativeTranscript, SessionCut
+from .private_path import FileObservation, FileRevision
+from .read_ledger import ReadLedger
 from .pi_counts import PiCount
 from .thread_model import ThreadModel, UndeclaredModel
 from .pi_commands import NativeQuery
@@ -44,8 +48,6 @@ if TYPE_CHECKING:
     from .launch_runtime import LaunchRuntime
     from .owned_turn import TurnDelivery
     from .threads import Thread
-    from .native_session_reopen import NativeSessionSnapshot
-    from .private_path import FileObservation, FileRevision
     from .transcript_sources import TranscriptSource
     from .turn_runner import TurnRunner
 
@@ -104,19 +106,15 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
     def read_inode(self, revision: FileRevision) -> int:
         return revision.identity.inode
 
-    def read_cut(self):
-        # Like transcript_cursor, this boundary loads its implementation only after
-        # threads has finished declaring the runtime family.
-        from .native_transcript import NativeTranscript
-
+    def read_cut(self) -> SessionCut:
         return NativeTranscript(Path(self.path)).cut()
 
     def read_position(self, mark: int, revision: FileRevision) -> int:
         return mark if mark <= revision.size else 0
 
-    def mark_read(self, reads, viewer: str, through: int) -> None:
+    def mark_read(self, reads: ReadLedger, viewer: str, through: int) -> None:
         for location in self.read_locations():
-            reads.mark_read(viewer, location.read_key, through, location.read_cut())
+            location.read_cut().mark_read(reads, viewer, location.read_key, through)
 
     def transcript_cursor(self, frontier, offset, *, source):
         return frontier.cursor(source.read_key, offset)
@@ -339,7 +337,7 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
 
     @classmethod
     @abstractmethod
-    def new_location(cls, root, worktree) -> RuntimeLocation: ...
+    def new_location(cls, root: Path, worktree: Path) -> RuntimeLocation: ...
 
     @classmethod
     def seal(cls) -> None:
@@ -360,7 +358,9 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
         AgentBackend.__registry__ = MappingProxyType(dict(AgentBackend.__registry__))  # type: ignore[assignment]
         AgentBackend._sealed = True
 
-    def run_turn(self, thread: Thread, content: InputContent, delivery: TurnDelivery):
+    def run_turn(
+        self, thread: Thread, content: InputContent, delivery: TurnDelivery,
+    ) -> AsyncIterator[AgentEvent]:
         raise BackendDeclarationError(f"{type(self).__name__} does not run turns")
 
     @classmethod

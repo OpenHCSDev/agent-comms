@@ -16,7 +16,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar, Never, Self
 
 from agent_comms.native_session_files import ForkedSession, NativeSessionFiles, NativeSessionLocks
 from agent_comms.pi_wire import PiOmitted
@@ -38,7 +38,7 @@ from .native_package import SYSTEM_PROMPT
 from .native_pi import NativePiRpcLaunch
 from .native_session_reopen import NativeSessionIdentity, NativeSessionSnapshot
 from .coordination_errors import TranscriptChanged
-from .native_transcript import NativeTranscript, RetainedNativeTranscript
+from .native_transcript import NativeTranscript, RetainedNativeTranscript, SessionCut
 from .private_path import FileObservation, FileRevision
 from .pi_commands import Compact, NativeQuery
 from .rule_deal import SystemPromptDelivery
@@ -115,7 +115,7 @@ class PiSessionFile(RuntimeLocation):
     def history_source(self, root, incarnation):
         return self.transcript
 
-    def read_cut(self):
+    def read_cut(self) -> SessionCut:
         return self.transcript.cut()
 
     def deal_delivery(self) -> SystemPromptDelivery:
@@ -172,22 +172,26 @@ class RetainedPiSessionFile(PiSessionFile):
     def tool_watch_locations(self) -> tuple[RuntimeLocation, ...]:
         return ()
 
-    def require_forkable(self):
+    def require_forkable(self) -> Never:
         raise NativePiUnavailable("Retained native history cannot fork a session")
 
-    def arguments(self):
+    def arguments(self) -> Never:
         raise NativePiUnavailable("Retained native history has no launch arguments")
 
-    def new_location(self, root, worktree):
+    def new_location(self, root: Path, worktree: Path) -> Never:
         raise NativePiUnavailable("Retained native history cannot start a session")
 
-    def select_session(self, directory, execution, source_reads, *, participant):
+    def select_session(
+        self, directory: object, execution: object, source_reads: object, *, participant: object,
+    ) -> Never:
         raise NativePiUnavailable("Retained native history cannot select a native input")
 
-    async def compact(self, operation):
+    async def compact(
+        self, operation: Callable[[], Awaitable[CompactionOutcome]],
+    ) -> CompactionOutcome:
         return FailedCompaction("Retained native history cannot be compacted.")
 
-    def storage_files(self):
+    def storage_files(self) -> tuple[()]:
         return ()
 
     def session_observation(self, root: Path, thread: Thread) -> SessionObservation:

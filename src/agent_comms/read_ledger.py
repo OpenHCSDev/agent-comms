@@ -11,7 +11,6 @@ import json
 from abc import abstractmethod
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field, replace
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .bus import Bus, BusReader
