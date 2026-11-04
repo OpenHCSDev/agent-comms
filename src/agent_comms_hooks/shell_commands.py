@@ -562,12 +562,6 @@ class ConnectCommand:
     def command_name(cls) -> str:
         return ConnectCommand.__name__.removesuffix('Command').lower()
 
-    @classmethod
-    def permits(cls, command: str) -> bool:
-        commands = tuple(ShellCommand.split(command))
-        return (len(commands) == 1 and commands[0].invokes(cls.program, cls.command_name())
-                and not commands[0].args[1:] and not commands[0].redirections)
-
 
 @dataclass(frozen=True)
 class ShellCommand:

@@ -11,7 +11,7 @@ from agent_comms.shell_effects import (
     shell_storage_effects,
 )
 from agent_comms_hooks.bounded_waits import WaitCommand
-from agent_comms_hooks.shell_commands import ConnectCommand, HereDocument, ShellCommand, ShellText
+from agent_comms_hooks.shell_commands import HereDocument, ShellCommand, ShellText
 
 
 CWD = Path('/shell-decoder-control')
@@ -339,8 +339,6 @@ class ShellDecoding(unittest.TestCase):
                      valid.replace('watch', 'wa\\\ntch')):
             with self.subTest(text=text):
                 self.assertEqual(tuple(ShellCommand.standalone(text)), ())
-        self.assertTrue(ConnectCommand.permits('agent-comms-claude-bridge connect'))
-        self.assertFalse(ConnectCommand.permits('agent-comms-claude-bridge connect > file'))
 
     def test_child_execution_owns_its_directory_lifetime(self):
         for text, paths in (

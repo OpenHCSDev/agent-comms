@@ -47,9 +47,10 @@ class NoSessionBridge(SessionCommandError):
     def __init__(self, session: str) -> None:
         super().__init__(
             f'No session bridge is running for session {session}; its log names why it stopped. '
-            f'Start it with {ConnectCommand.program.name} {ConnectCommand.command_name()} as a Bash '
-            'call of its own: no pipe, redirection or second command, the one call allowed while '
-            'it is down.')
+            'Tools keep working, but bus messages wait, Core records nothing and the deal is not '
+            f'enforced until it is back. Start it with {ConnectCommand.program.name} '
+            f'{ConnectCommand.command_name()} as a Bash call of its own: no pipe, redirection or '
+            'second command. If a stuck bridge still holds the session, stop that process first.')
 
 
 class HookBridgeUnavailable(RuntimeError, SessionFailure):
@@ -222,10 +223,13 @@ class AbsentSession(BoundSession):
 
 
 class SwappingSession(AbsentSession, HeldSocketWatch):
-    """Wait for the held claim's successor, with the hook's existing reply budget."""
+    """Wait briefly for the held claim's successor. A holder that never restores its socket is a
+    stuck bridge, not a swap, and every tool call would otherwise pay this wait and then fail."""
+
+    wait: ClassVar[float] = 5
 
     def invoke(self, program: type[ClaudeHookProgram], record: Mapping[str, object]) -> None:
-        deadline = time.monotonic() + HookAnswer.timeout
+        deadline = time.monotonic() + self.wait
         bound = BoundSession(self.endpoint)
         while time.monotonic() < deadline:
             try:
@@ -243,9 +247,7 @@ class SwappingSession(AbsentSession, HeldSocketWatch):
             else:
                 answer.print(program)
                 return
-        raise HookBridgeUnavailable(
-            f"Session {self.endpoint.thread} still holds its claim but did not restore its socket "
-            f"within {HookAnswer.timeout:g} seconds")
+        program.absent(record, NoSessionBridge(self.endpoint.thread))
 
 
 class SessionHookProgram(ClaudeHookProgram, ABC):

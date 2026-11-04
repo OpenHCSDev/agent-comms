@@ -9,7 +9,6 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms_hooks.shell_commands import ConnectCommand
 from agent_comms_hooks.watch import SessionEndpoint
 
 GATE = Path(__file__).resolve().parents[1] / ".claude" / "hooks" / "rule_gate.py"
@@ -51,13 +50,3 @@ def test_a_bound_session_is_not_dealt_a_second_list(tmp_path: Path):
     enroll(tmp_path)
     assert hook(tmp_path, "deal", source="compact") == ""
     assert not (tmp_path / ".claude" / "state" / f"rule-gate-{SESSION}.json").exists()
-
-
-@pytest.mark.parametrize("command, admitted", (
-    ("agent-comms-claude-bridge connect", True),
-    ("agent-comms-claude-bridge connect 2>&1 | head", False),
-    ("agent-comms-claude-bridge connect; ls", False),
-    ("ls", False),
-))
-def test_only_the_bare_connect_call_passes_while_the_bridge_is_down(command: str, admitted: bool):
-    assert ConnectCommand.permits(command) is admitted
