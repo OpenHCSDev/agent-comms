@@ -32,7 +32,9 @@ def test_the_thread_list_is_the_default_roster_not_every_archived_inbox(wired):
     wired.messaging.send("PR111", "retired", "a message it will never read")
     wired.registry.archive("retired")
 
+    user = wired.registry.claim_user(Checkout(wired.root / "user"))
+
     listed = {row.thread.name for row in wired.views.list_threads()}
 
     assert "retired" not in listed
-    assert "PR111" in listed
+    assert {"PR111", user.name} <= listed, "the roster lists the human, who never executes a turn"

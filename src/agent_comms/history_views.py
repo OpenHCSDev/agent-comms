@@ -487,7 +487,7 @@ class HistoryViews:
         threads have their own readers; listing them here counted thousands of retired inboxes
         on every call."""
         snapshot = self.registry.snapshot()
-        threads = tuple(sorted(snapshot.visible_threads(DEFAULT_ROSTER), key=lambda thread: thread.name))
+        threads = tuple(sorted(snapshot.roster(DEFAULT_ROSTER), key=lambda thread: thread.name))
         if active_only:
             threads = tuple(snapshot.active_threads(threads))
         pending = CountedRead().counts(self.bus, tuple(thread.name for thread in threads))
