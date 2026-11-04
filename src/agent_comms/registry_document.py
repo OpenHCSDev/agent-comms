@@ -6,6 +6,7 @@ import time
 from abc import ABC, abstractmethod
 from collections import ChainMap
 from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping, Sequence
+from pathlib import Path
 from dataclasses import dataclass, field, replace
 from functools import cached_property
 from types import MappingProxyType
@@ -47,8 +48,9 @@ from .registry_provenance import (
     RegistryProvenance,
     RetiredRecipient,
 )
-from .repo import Checkout, Repo, RepositorySelection
+from .repo import Checkout, Repo, RepositoryReads, RepositorySelection
 from .repository_name import RepositoryName
+from .storage_rules import StorageRule
 from .snapshot_slices import (
     MappingRowsSlice,
     OwnRow,
@@ -777,6 +779,19 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         self.threads[current.name] = updated
         return updated
 
+    def select_checkout(
+        self, identity: ThreadIncarnation, rule: StorageRule, repository: RepositoryName,
+        path: Path,
+    ) -> Thread:
+        """Change only this incarnation's repository choice for one selectable checkout."""
+        current = self.require(identity.name)
+        if current.incarnation != identity:
+            raise RelationViolationError("Checkout owner changed before selection")
+        rule.require_selectable_checkout(current, path, repository, RepositoryReads())
+        updated = replace(current, storage_roots=rule.roots_of(current).choosing(repository, path))
+        self.threads[current.name] = updated
+        return updated
+
     def set_work_state(self, name: str, state: ThreadWorkState) -> Thread:
         """Change order availability without replacing the thread's owner or presence."""
         current = self.require(name)
@@ -1235,7 +1250,8 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
 
     def claimed_identity(self, name: str) -> ClaimedIdentity:
         canonical = self.canonical_name(name)
-        return ClaimedIdentity(self.threads[canonical].incarnation, self.claim_generation(canonical))
+        return ClaimedIdentity(
+            self.threads[canonical].incarnation, self.claim_generation(canonical))
 
     def same_thread(self, actual: Thread, other: RegistrySnapshot, expected: Thread) -> bool:
         """Keep one launch, turn and authority across preparation; ignore display metadata."""

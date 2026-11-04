@@ -30,6 +30,7 @@ from agent_comms.work_branches import WorkBranches
 
 from .tool_denial import StorageDenied
 from .thread_storage import (
+    CheckoutReuse,
     StoragePath,
     StorageRoots,
 )
@@ -418,19 +419,20 @@ class StorageRule(RoomAllocation, DurableFile):
                         fresh: Path, reads: RepositoryReads) -> Path:
         """Keep one existing owned tree for a repository across work identities.
 
-        The current project wins. Without one, a sole retained tree is reused;
-        several retained trees require their owner to select/retire them, never
-        silently create another or pick an arbitrary source.
+        A stored repository choice wins independently of the current project.
         """
-        if self.owns_editable_checkout(owner, owner.project_path, repository, reads):
-            return owner.project_path
-        candidates = self.owned_checkouts(owner, repository, reads)
-        if len(candidates) > 1:
-            self.deny('Multiple owned checkouts already exist for '
-                      f'{repository}: ' + ', '.join(map(str, candidates))
-                      + '. Select the one to reuse with agent-comms set-project, '
-                      'and retire the completed others with goal-checkout --source.')
-        return next(iter(candidates), fresh)
+        return self.roots_of(owner).choice(repository).reused_checkout(
+            RuleCheckoutReuse(self, owner, repository, fresh, reads))
+
+    def require_selectable_checkout(self, owner: Thread, path: Path,
+                                    repository: RepositoryName, reads: RepositoryReads) -> Path:
+        """The one check a repository choice passes when it is made and every time it is reused."""
+        self.require_physical_allocation(path)
+        self.require_destination(owner, path)
+        if not self.owns_editable_checkout(owner, path, repository, reads):
+            self.deny(f'{path} is no longer an owned editable checkout of {repository}; '
+                      'select its replacement explicitly')
+        return path
 
     def repository_donor(self, owner: Thread, repository: RepositoryName) -> Path:
         """One noneditable acquisition donor per agent/repository, never per goal."""
@@ -691,6 +693,34 @@ class StorageRule(RoomAllocation, DurableFile):
             'or recording.'
         )
 
+
+@dataclass(frozen=True)
+class RuleCheckoutReuse(CheckoutReuse):
+    """The storage rule's answer to one reuse request for an owner's repository tree."""
+
+    rule: StorageRule
+    owner: Thread
+    repository: RepositoryName
+    fresh: Path
+    reads: RepositoryReads
+
+    def selected(self, path: Path) -> Path:
+        return self.rule.require_selectable_checkout(self.owner, path, self.repository, self.reads)
+
+    def unselected(self) -> Path:
+        """Without a choice, the current project wins, then the sole owned tree; unselected
+        ambiguity refuses rather than allocating another tree."""
+        rule, owner, repository = self.rule, self.owner, self.repository
+        if rule.owns_editable_checkout(owner, owner.project_path, repository, self.reads):
+            return owner.project_path
+        candidates = rule.owned_checkouts(owner, repository, self.reads)
+        if len(candidates) > 1:
+            rule.deny('Multiple owned checkouts already exist for '
+                      f'{repository}: ' + ', '.join(map(str, candidates))
+                      + '. Choose independently with agent-comms select-checkout '
+                      f'--from {owner.name} {repository.to_wire()} EXACT_OWNED_PATH. '
+                      'Retire only completed disposable trees with goal-checkout --source.')
+        return next(iter(candidates), self.fresh)
 
 @dataclass(frozen=True)
 class OrderCheckoutWork(WorkBranches):
