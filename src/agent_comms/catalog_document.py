@@ -198,12 +198,18 @@ class CatalogDocument(CatalogPreferences):
         """The tags this catalog created and every declared tag, which no bus lacks."""
         return self.tags | frozenset(DeclaredTag.names())
 
+    def channel_names(self) -> tuple[str, ...]:
+        """Every channel this catalog declares, in views() order: builtins, then sorted tags,
+        then saved views; the roster's own order is list_order. Names never read activity:
+        a reader that only needs to know which channels exist, such as a link context, asks
+        here instead of building every channel."""
+        return tuple(dict.fromkeys((
+            *BuiltinChannelView.addresses(),
+            *map(ChannelTarget.normalize_name, (*sorted(self.present_tags), *self.saved_views)),
+        )))
+
     def views(self, activity: ActivityClocks) -> Channels:
-        result = Channels((name, self.require_channel(name, activity)) for name in BuiltinChannelView.addresses())
-        result.update((channel, self.require_channel(channel, activity))
-                      for channel in map(ChannelTarget.normalize_name,
-                                         (*sorted(self.present_tags), *self.saved_views)))
-        return result
+        return Channels((name, self.require_channel(name, activity)) for name in self.channel_names())
 
     def require_channel(self, target: str, activity: ActivityClocks) -> Channel:
         target = ChannelTarget.normalize_name(target)
