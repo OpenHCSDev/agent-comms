@@ -17,7 +17,10 @@ ANTHROPIC = "sk-ant-" + "a1b2c3d4" * 4
     ("Authorization: Bearer abc.DEF-123", "Authorization: Bearer [hidden]"),
     ("POST /token?code=abcdef123456 200", "POST /token?code=[hidden] 200"),
     ('{"type":"probe","token":"9fb18ee9b7cb36bc"}', '{"type":"probe","token":"[hidden]"}'),
-    ("token: short", "token: short"),
+    ("token: short", "token: [hidden]"),
+    ("exit code: 1", "exit code: 1"),
+    ("HTTP status_code=500 session: 12", "HTTP status_code=500 session: 12"),
+    ("tests passed: 12", "tests passed: 12"),
     ("plain line, nothing secret", "plain line, nothing secret"),
 ))
 def test_a_secret_never_leaves_the_host(line, shown):
@@ -34,6 +37,11 @@ def test_a_secret_never_leaves_the_host(line, shown):
     (f"found {GITHUB} in the output", GITHUB),
     ("POST /token?access_token=abc%2Bdefghi%2Fjkl 200", "abc%2Bdefghi%2Fjkl"),
     ("--password=hunter2pass", "hunter2pass"),
+    ("got eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJl back", "eyJhbGciOiJIUzI1NiJ9"),
+    ("password: hunter2", "hunter2"),
+    ("pass=hunter2", "hunter2"),
+    ("set-cookie: session=abc123; Path=/", "abc123"),
+    ("key AIza" + "SyA1b2c3d4" * 4, "AIzaSy"),
 ))
 def test_the_secrets_a_host_really_holds_are_hidden(line, secret):
     assert secret not in HostLog.hidden(line)
@@ -44,6 +52,11 @@ def test_a_value_the_host_holds_is_hidden_wherever_it_appears():
                                 "SHORT_TOKEN": "abc"})
     assert held == ("plainwordsonly",)
     assert HostLog.hidden("then plainwordsonly came back", held) == "then [hidden] came back"
+
+
+@pytest.mark.parametrize("name", ("MY_CREDENTIALS", "DB_PASS", "COOKIE_JAR"))
+def test_a_secret_name_is_read_anywhere_in_the_variable(name):
+    assert HostLog.held_values({name: "hunter2"}) == ("hunter2",)
 
 
 def test_the_longer_held_value_is_hidden_whole():

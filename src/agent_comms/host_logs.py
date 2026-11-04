@@ -24,17 +24,20 @@ class HostLog(DeclaredFamily, affix="HostLog"):
     """One thing the host can show: its members say where it reads, and every read is bounded."""
 
     timeout_seconds: ClassVar[int] = 10
-    secret_name: ClassVar[re.Pattern[str]] = re.compile(r"(?i)(?:KEY|TOKEN|SECRET|PASSWORD)$")
-    shortest_secret: ClassVar[int] = 8
+    secret_name: ClassVar[re.Pattern[str]] = re.compile(r"(?i)KEY|TOKEN|SECRET|PASS|CREDENTIAL|COOKIE|AUTH")
+    shortest_secret: ClassVar[int] = 6
     secrets: ClassVar[tuple[tuple[re.Pattern[str], str], ...]] = (
         (re.compile(r'(?:wss?://[^\s"\'\\]+)?/watch/[\w-]+'), "[inbox watch URL]"),
         (re.compile(r"://[^\s/@]+@"), "://[hidden]@"),
         (re.compile(r"(?i)\b(bearer)\s+[\w.~+/=%-]+"), r"\1 [hidden]"),
         (re.compile(r"(?i)\b(basic)\s+[\w.~+/=%-]{8,}"), r"\1 [hidden]"),
         (re.compile(r"\b(?:gh[pousr]_|github_pat_|sk-|xox[abprs]-|glpat-|AKIA)[\w-]{8,}"), "[hidden]"),
+        (re.compile(r"\beyJ[\w-]+\.[\w-]+(?:\.[\w-]+)?"), "[hidden]"),
+        (re.compile(r"\bAIza[\w-]{30,}"), "[hidden]"),
         (re.compile(r"(\s-p)\S{3,}"), r"\1[hidden]"),
-        (re.compile(r"(?i)([\w-]*(?:token|secret|password|passwd|key|authorization|credential|code)"
-                    r"['\"]?\s*[=:]\s*['\"]?)[\w.~+/=%-]{8,}"), r"\1[hidden]"),
+        (re.compile(r"(?i)([\w-]*(?:token|secret|pass(?:word|wd)?|credentials?|cookie|auth(?:orization)?|[_-]key)"
+                    r"['\"]?\s*[=:]\s*['\"]?)(?!bearer\b|basic\b)[\w.~+/=%-]+"), r"\1[hidden]"),
+        (re.compile(r"(?i)([\w-]*(?:key|code|session)['\"]?\s*[=:]\s*['\"]?)[\w.~+/=%-]{8,}"), r"\1[hidden]"),
         (re.compile(r'"token":"[^"]+"'), '"token":"[hidden]"'),
     )
 
