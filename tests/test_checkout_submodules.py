@@ -85,12 +85,12 @@ def checkout_command_bus(repository, tmp_path, monkeypatch, installed_runtime, r
     StorageRule.path_in(root).write_text(FieldCodec.compact(FieldCodec.encode(rule)))
     Bus.install(Bus.path_in(root))
     comms = wire(root)
-    lead = comms.registry.declare(Thread(
-        "lead", frozenset(), Checkout(tmp_path / "lead"), execution=ExternalThreadExecution))
+    colleague = comms.registry.declare(Thread(
+        "colleague", frozenset(), Checkout(tmp_path / "colleague"), execution=ExternalThreadExecution))
     worker = comms.registry.declare(Thread(
         "worker", frozenset(), Checkout(repository), execution=request.param))
     comms.registry.set_team_project(RegisteredTeamProject((Repo(checkout=repository, github=identity),)))
-    request_id = comms.goals.todos.add_request(lead.incarnation, "Prepare the pinned checkout").id
+    request_id = comms.goals.todos.add_request(colleague.incarnation, "Prepare the pinned checkout").id
     now = time.time()
     order = PendingProblemOrder(
         owner=FileLine("owner.py", 1), scope=FIX_SCOPE,
@@ -100,8 +100,8 @@ def checkout_command_bus(repository, tmp_path, monkeypatch, installed_runtime, r
         report="Report the prepared checkout.", at=RecordedEventTime(now),
         first_call_deadline=RecordedEventTime(now + 120))
     comms.goals.todos.create(
-        "P1", identity, "Prepare the pinned checkout", creator=lead, owner=worker,
-        assigner=lead.incarnation, generation=prepare_checkout_goal_id, request=request_id,
+        "P1", identity, "Prepare the pinned checkout", creator=colleague, owner=worker,
+        assigner=colleague.incarnation, generation=prepare_checkout_goal_id, request=request_id,
         review_at=RecordedEventTime(now + 3600), order=order)
     monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
     monkeypatch.delenv("PI_WORKTREE", raising=False)
@@ -288,7 +288,7 @@ def test_checkout_add_allocates_a_declared_sibling_repository_before_it_exists(
     ("repository-checkout", ("P1", "OpenHCSDev/agent-comms")),
     ("goal-checkout", ()),
 ))
-@pytest.mark.parametrize("caller", ((), ("--from", "unknown"), ("--from", "lead")))
+@pytest.mark.parametrize("caller", ((), ("--from", "unknown"), ("--from", "colleague")))
 def test_checkout_refuses_missing_unknown_or_non_holder_before_git_mutation(
     checkout_command_bus, repository, caller, verb, arguments,
 ):
@@ -320,7 +320,7 @@ def test_checkout_remove_cannot_retire_another_callers_allocation(checkout_comma
     added = core_process("--root", str(comms.root), "checkout", "--from", "worker", "add", "P1")
     assert added.returncode == 0, added.stderr
     before = git(repository, "worktree", "list", "--porcelain")
-    denied = core_process("--root", str(comms.root), "checkout", "--from", "lead", "remove", "P1")
+    denied = core_process("--root", str(comms.root), "checkout", "--from", "colleague", "remove", "P1")
     assert denied.returncode != 0
     assert git(repository, "worktree", "list", "--porcelain") == before
     rule = comms.registry.storage_rule
@@ -636,7 +636,7 @@ def test_exact_historical_retirement_needs_ownership_not_a_current_goal(
     owner = comms.registry.require(owner.name)
     assert (Checkout(path) in owner.earlier_projects) is (not allocated)
     assert (path in rule.checkouts_of(owner, RepositoryReads())) is allocated
-    foreign = core_process('--root', str(comms.root), 'goal-checkout', '--from', 'lead',
+    foreign = core_process('--root', str(comms.root), 'goal-checkout', '--from', 'colleague',
                            '--source', str(path), 'remove', str(repository))
     assert foreign.returncode != 0 and path.exists()
     module_source = path / 'pinned' / 'catalog.md'

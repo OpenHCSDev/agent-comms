@@ -36,7 +36,7 @@ pytest_plugins = ("test_todos",)
 
 @pytest.fixture
 def cited_source(pr_team, proof_build_checkouts):
-    """The source the proof fixture built. The lead declares its repos as plain Repo,
+    """The source the proof fixture built. The colleague declares its repos as plain Repo,
     and the practice copy decodes them as such, so the source is selected by GitHub name."""
     return next(graph.repository for graph in proof_build_checkouts
                 if graph.repository.github == pr_team.repos[0].github)
@@ -49,15 +49,15 @@ def held_team(pr_team, cited_source):
     worker = thread("worker", source.root, 2.0)
     source.comms.registry.register(worker)
     RequestAddVerb(text="Repair the copied order workflow without changing original retained state").run(source)
-    lead = source.comms.registry.require(source.actor_name)
+    colleague = source.comms.registry.require(source.actor_name)
     todo = source.comms.goals.todos.create(
-        "P1", source.repos[0].github, "Repair the held workflow", creator=lead, assigner=lead.incarnation,
+        "P1", source.repos[0].github, "Repair the held workflow", creator=colleague, assigner=colleague.incarnation,
         owner=worker, generation=initial_order_goal_id,
-        request=NewestOpenRequest().for_order(source.comms.goals.todos, lead.incarnation),
+        request=NewestOpenRequest().for_order(source.comms.goals.todos, colleague.incarnation),
         review_at=RecordedEventTime(time.time() + 1000), order=order(cited_source),
     )
     published = source.comms.messaging.send(source.actor_name, worker.name, "Repair the held workflow through its existing declaration.")
-    source.comms.goals.todos.apply(todo.id, OrderMessage(todo.revision, lead.incarnation, published.message.message_id,
+    source.comms.goals.todos.apply(todo.id, OrderMessage(todo.revision, colleague.incarnation, published.message.message_id,
                                                       at=RecordedEventTime(time.time())))
     original = source.comms.goals.todos.get(todo.id)
     practice = PracticeCopy(source.root, source.root.parent / f"{source.root.name}-copied")
@@ -181,9 +181,9 @@ def test_second_unplanned_order_is_refused_without_recording(held_team, cited_so
         unplanned_reason="This isolated workflow verifies refusal rather than advancing the production plan.",
         problems=("P2",),
     )
-    lead = ctx.comms.registry.require(ctx.actor_name)
+    colleague = ctx.comms.registry.require(ctx.actor_name)
     ctx.comms.goals.todos.create(
-        "P2", ctx.repos[0].github, "Repair the second workflow", creator=lead, assigner=lead.incarnation, owner=lead,
+        "P2", ctx.repos[0].github, "Repair the second workflow", creator=colleague, assigner=colleague.incarnation, owner=colleague,
         generation=second_workflow_goal_id, request=original.request.require(),
         review_at=RecordedEventTime(time.time() + 1000), order=document.order,
     )
@@ -195,8 +195,8 @@ def test_second_unplanned_order_is_refused_without_recording(held_team, cited_so
     # owner check, so the refusal comes from the write that would have given worker P2.
     with pytest.raises(TeammateOccupied) as refused:
         main(["send", "worker", str(path), "--reassign",
-              "lead holds P2 only as its creator and must hand it to a teammate"], ctx)
-    assert ("worker already holds orders P1 (assigned by lead); running teammates holding no order:"
+              "colleague holds P2 only as its creator and must hand it to a teammate"], ctx)
+    assert ("worker already holds orders P1 (assigned by colleague); running teammates holding no order:"
             in str(refused.value))
     assert ctx.comms.goals.todos.board() == before
     assert ctx.comms.goals.todos.get("P1") == original

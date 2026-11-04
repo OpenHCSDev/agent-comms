@@ -81,7 +81,7 @@ class Team:
     request: str
     github: GitHubFixture
     problems: dict[str, str] = field(default_factory=dict)
-    commander: ClassVar[str] = "lead"
+    commander: ClassVar[str] = "colleague"
 
     @property
     def repository(self) -> RepositoryName:
@@ -176,13 +176,13 @@ class Team:
 
     def claim(self, todo: Todo, number: int, head: str, *, at: float) -> OrderClaim:
         """The unit delivers through the claim writer, linking its pull request to the order."""
-        lead = self.thread(self.commander).incarnation
+        colleague = self.thread(self.commander).incarnation
         unit = self.thread(todo.held().owner).incarnation
         original = self.comms.messaging.send(
             self.commander, unit.name, todo.order.instructions(todo)
         ).message
         todo = self.comms.goals.todos.apply(
-            todo.id, OrderMessage(todo.revision, lead, original.message_id, at=RecordedEventTime(time.time()))
+            todo.id, OrderMessage(todo.revision, colleague, original.message_id, at=RecordedEventTime(time.time()))
         )
         claimed = OrderClaim.for_order(
             todo,

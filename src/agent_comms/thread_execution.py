@@ -80,6 +80,12 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
     """The registration owns transport intent; presence does not imply an RPC."""
 
     @classmethod
+    def teammate(cls, thread: Thread) -> str:
+        """The teammate whose turn this thread works in: its board, its authority and its
+        requests. An independent session is its own."""
+        return thread.name
+
+    @classmethod
     def require_native(cls) -> None:
         raise RelationViolationError("This participant checks its CLI inbox; it has no native prompt transport.")
 
@@ -253,6 +259,12 @@ class SubagentExecution(ExternalThreadExecution):
     def independent_threads(cls, thread: Thread) -> tuple[Thread, ...]:
         """A genuine in-turn child acts through its parent, not as another session."""
         return ()
+
+    @classmethod
+    def teammate(cls, thread: Thread) -> str:
+        """A genuine in-turn child works inside its parent's turn."""
+        parent, = thread.parent.names()
+        return parent
 
     @classmethod
     def child_of(cls, parent: Thread, child: Thread) -> Thread:

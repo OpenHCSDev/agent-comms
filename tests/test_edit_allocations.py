@@ -33,13 +33,13 @@ def allocation_bus(fork_bus):
 
 
 def issue(comms, source, template, name, problem):
-    lead = comms.registry.require('lead').incarnation
+    colleague = comms.registry.require('colleague').incarnation
     action = CreateProblemGoalAction(
         problem=problem, repo=source.github, text='Repair actual allocated source edit ownership',
         order=replace(template, id=OrderId.mint()),
         request=comms.goals.todos.get('P40').request.require(),
-        review_at=template.at, assigner=lead)
-    ThreadCaller('lead').invoke(CommsTodoCreateTool(order=action, owner=name), comms)
+        review_at=template.at, assigner=colleague)
+    ThreadCaller('colleague').invoke(CommsTodoCreateTool(order=action, owner=name), comms)
     return comms.goals.todos.get(problem)
 
 
@@ -98,7 +98,7 @@ def test_prepared_cut_refuses_a_replaced_assignment_generation(allocation_bus):
     comms, source, template = allocation_bus
     original = issue(comms, source, template, 'first', 'P41')
     owner = comms.registry.require('second').incarnation
-    actor = comms.registry.require('lead').incarnation
+    actor = comms.registry.require('colleague').incarnation
     proposed = replace(original, assignment=Assignment.of(owner, actor, GoalId.mint()))
     store = comms.goals.todos
     prepared = store.preparing_edits((proposed,))
@@ -117,7 +117,7 @@ def test_same_owner_incoming_group_can_share_its_own_physical_allocation(allocat
     first = issue(comms, source, template, 'first', 'P41')
     second = issue(comms, source, template, 'second', 'P42')
     owner = comms.registry.require('first')
-    actor = comms.registry.require('lead').incarnation
+    actor = comms.registry.require('colleague').incarnation
     proposed = replace(second, assignment=Assignment.of(owner.incarnation, actor, first.held().generation))
     rule = StorageRule.load(comms.root)
     original = rule.order_checkout(rule.roots_of(owner), first.id)
@@ -136,7 +136,7 @@ def test_recreated_holder_cannot_use_the_prepared_birth(allocation_bus):
     comms, source, template = allocation_bus
     current = issue(comms, source, template, 'first', 'P41')
     old = comms.registry.require('second')
-    actor = comms.registry.require('lead').incarnation
+    actor = comms.registry.require('colleague').incarnation
     proposed = replace(current, assignment=Assignment.of(old.incarnation, actor, GoalId.mint()))
     prepared = comms.goals.todos.preparing_edits((proposed,))
     comms.registry.remove(old.name)

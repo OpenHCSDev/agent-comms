@@ -95,19 +95,18 @@ from agent_comms.connector_caller import DirectorCaller
 from agent_comms.turn_digests import OrderEditCountRead
 from agent_comms.ui_model.teammate_state import AwaitingTeam, Blocked, Detached, TeammateState
 from cli_command import team
-from conftest import declare_test_bus
+from conftest import team_as, declare_test_bus
 from native_backend_fixture import native_backend_fixture, wait_for
 from test_goal_execution import turn_on
 
 
 UNRESOLVED_INPUT_KEY = AcpInputKey(InputId.mint())
 
-def board_read(tool, comms, caller, thread="lead"):
+def board_read(tool, comms, caller, thread="colleague"):
     """A board tool's reply names whose board it read; the rest is that board's record."""
     reply = tool.invoke(comms, {"thread": thread}, caller=caller)
     assert reply.pop("board") == thread
     return reply
-
 
 
 @pytest.fixture
@@ -122,11 +121,11 @@ def held_bus(comms, tmp_path, source_repository, configured_repository, installe
     source.git(source.checkout, 'worktree', 'add', '-q', '-b', 'outsider-work', str(outsider))
     declare_test_bus(comms, channels=('comms',), threads=tuple(
         Thread(name=name, tags=frozenset({'comms'}), worktree=Checkout(worktree))
-        for name, worktree in (('lead', source.checkout), ('worker', source.checkout),
+        for name, worktree in (('colleague', source.checkout), ('worker', source.checkout),
                                ('outsider', outsider))
     ))
     request = comms.goals.todos.add_request(
-        comms.registry.require('lead').incarnation, 'Repair the held work').id
+        comms.registry.require('colleague').incarnation, 'Repair the held work').id
     now = time.time()
     # One order covers both problems: Core refuses a holder a second, unrelated order.
     order = PendingProblemOrder(
@@ -137,12 +136,12 @@ def held_bus(comms, tmp_path, source_repository, configured_repository, installe
         first_call_deadline=RecordedEventTime(now + 3600),
     )
     generation = GoalId.mint()
-    lead = comms.registry.require("lead")
+    colleague = comms.registry.require("colleague")
     worker = comms.registry.require("worker")
     for problem in ("P1", "P2"):
         comms.goals.todos.create(
             problem, RepositoryName.from_wire("OpenHCSDev/agent-comms"), f"Repair {problem}",
-            creator=lead, owner=worker, assigner=lead.incarnation, generation=generation,
+            creator=colleague, owner=worker, assigner=colleague.incarnation, generation=generation,
             request=request, review_at=RecordedEventTime(now + 3600), order=order,
         )
     comms.goals.update_goal("worker", SetGoalAction(
@@ -179,11 +178,11 @@ def claim_order(held_bus, github_cli):
     """Publish the real order and claim messages, using their retained identities."""
     def claim(problem, *, pull_request=1, head="a" * 40):
         todo = held_bus.goals.todos.get(problem)
-        lead = held_bus.registry.require("lead").incarnation
+        colleague = held_bus.registry.require("colleague").incarnation
         worker = held_bus.registry.require("worker").incarnation
-        original = held_bus.messaging.send("lead", "worker", todo.order.instructions(todo)).message
+        original = held_bus.messaging.send("colleague", "worker", todo.order.instructions(todo)).message
         todo = held_bus.goals.todos.apply(
-            todo.id, OrderMessage(todo.revision, lead, original.message_id, at=RecordedEventTime(time.time())))
+            todo.id, OrderMessage(todo.revision, colleague, original.message_id, at=RecordedEventTime(time.time())))
         github_cli.put(todo.repo, DraftListedPullRequest(
             number=pull_request, branch="repair", head=head, base="main",
             updated=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -214,24 +213,24 @@ def test_order_claim_publishes_only_to_its_retained_team_birth(
 ):
     comms = held_bus
     todo = comms.goals.todos.get("P1")
-    lead = comms.registry.require("lead").incarnation
+    colleague = comms.registry.require("colleague").incarnation
     worker = comms.registry.require("worker").incarnation
-    original = comms.messaging.send("lead", "worker", todo.order.instructions(todo)).message
+    original = comms.messaging.send("colleague", "worker", todo.order.instructions(todo)).message
     todo = comms.goals.todos.apply(
-        todo.id, OrderMessage(todo.revision, lead, original.message_id, at=RecordedEventTime(time.time())))
+        todo.id, OrderMessage(todo.revision, colleague, original.message_id, at=RecordedEventTime(time.time())))
     claim = OrderClaim.for_order(
         todo, worker, PullRequestLink(todo.repo, 1), "a" * 40,
         "Review this published repair with @outsider", original.reference)
     if change == "rename":
-        comms.registry.rename("lead", "renamed")
+        comms.registry.rename("colleague", "renamed")
     elif change == "rename_holder":
         comms.registry.rename("worker", "renamed-worker")
     else:
-        worktree = comms.registry.require("lead").worktree
-        comms.registry.unregister("lead")
-        comms.registry.remove("lead")
+        worktree = comms.registry.require("colleague").worktree
+        comms.registry.unregister("colleague")
+        comms.registry.remove("colleague")
         if change == "recreate":
-            comms.registry.declare(Thread("lead", frozenset({"comms"}), worktree))
+            comms.registry.declare(Thread("colleague", frozenset({"comms"}), worktree))
     before = comms.bus.bus.revision()
     operation = ClaimOrder(todo.revision, worker, todo.held().generation, claim)
     if change in ("rename", "rename_holder"):
@@ -268,11 +267,11 @@ def test_order_claim_publishes_only_to_its_retained_team_birth(
             else:
                 changed = future.result(timeout=5)
         delivery = comms.bus.bus.delivery(before + 1)
-        recipient = "renamed" if change == "rename" else "lead"
+        recipient = "renamed" if change == "rename" else "colleague"
         assert delivery.message.target == recipient
         assert delivery.message.sender == ("renamed-worker" if change == "rename_holder" else "worker")
         assert [(row.canonical_thread, row.recipient_lookup) for row in delivery.recipients] == [
-            (recipient, lead.require_recorded().lookup)]
+            (recipient, colleague.require_recorded().lookup)]
         assert comms.goals.todos.get(todo.id) == changed
         retained = comms.goals.todos.get(todo.id).order.team_claims()[0]
         # The retained claim is the publication's content; the bus adds its sequence and the
@@ -330,7 +329,7 @@ def test_holds_whose_holder_was_deleted_or_registered_again_are_reported_by_ever
     original = comms.goals.todos.get("P1")
     comms.goals.update_goal("outsider", CreateProblemGoalAction(
         problem="P3", request=original.request,
-        assigner=comms.registry.require("lead").incarnation, repo=original.repo,
+        assigner=comms.registry.require("colleague").incarnation, repo=original.repo,
         text="Repair P3", review_at=original.review_at,
         order=replace(original.order, id=OrderId.mint()),
     ))
@@ -358,7 +357,7 @@ def test_holds_whose_holder_was_deleted_or_registered_again_are_reported_by_ever
     assert set(named.split(", ")) == {"P1 worker", "P2 worker", "P3 outsider"}
     listed = FieldCodec.decode(TodoList, board_read(CommsTodoListTool, comms, NoThreadCaller()))
     assert {"P1", "P2", "P3"} <= {todo.id for todo in listed.todos} and listed.progress == {}
-    assert tuple(OrderEditCountRead.for_team(comms, "lead")) == ()
+    assert tuple(OrderEditCountRead.for_team(comms, "colleague")) == ()
     with pytest.raises(ValueError, match="pass --artifact FILE"):
         comms.goals.todos.get("P2").order.closing_artifact()
 
@@ -384,9 +383,9 @@ def escalate(comms, notice, timestamp, body="Answer the escalation"):
     """One escalation line in the owner's voice, at a chosen time."""
     user = comms.messaging.user_identity(Checkout(comms.root))
     return comms.bus.publisher.publish_ordinary(
-        Message(user.name, "lead", body, InfoKind, timestamp=timestamp,
-                task=notice.of(comms.registry.snapshot(), "lead")),
-        destination=ThreadTarget("lead"), origin=HumanOrigin.of(user),
+        Message(user.name, "colleague", body, InfoKind, timestamp=timestamp,
+                task=notice.of(comms.registry.snapshot(), "colleague")),
+        destination=ThreadTarget("colleague"), origin=HumanOrigin.of(user),
     )
 
 
@@ -482,7 +481,7 @@ def test_merge_through_a_prerequisite_link_is_taken_back_and_the_order_changes_o
     """P935: a prerequisite PR linked to the order merged it; only that link leaves, the
     order is pending again under its own id, check, run and times, and then changes owner."""
     store = held_bus.goals.todos
-    lead = held_bus.registry.require("lead").incarnation
+    colleague = held_bus.registry.require("colleague").incarnation
     held = store.get("P1")
     prerequisite = PullRequestLink(held.repo, 3596)
     implementation = PullRequestLink(held.repo, 3700)
@@ -494,7 +493,7 @@ def test_merge_through_a_prerequisite_link_is_taken_back_and_the_order_changes_o
     reason = "the merged prerequisite pull request held none of this order's checker work"
 
     def correction(revision: int, previous: MergedLink) -> CorrectMergedLinkTodo:
-        return CorrectMergedLinkTodo(revision, lead, reason, previous=previous)
+        return CorrectMergedLinkTodo(revision, colleague, reason, previous=previous)
 
     for refused in (correction(held.revision, MergedLink(prerequisite, "33bd05c64abc")),
                     correction(merged.revision, MergedLink(PullRequestLink(held.repo, 1),
@@ -546,7 +545,7 @@ def test_unlink_takes_another_orders_pull_request_off_a_held_order(held_bus, dur
 
     def unlink(*arguments: str):
         return team('--root', str(held_bus.root), 'order', 'unlink', 'P1', *arguments,
-                    '--why', 'a claim recorded P883 work on this order', '--as', 'lead')
+                    '--why', 'a claim recorded P883 work on this order', '--as', 'colleague')
 
     refused = unlink('openhcsdev/agent-comms', '1')
     assert refused.returncode != 0 and 'does not link' in refused.stdout + refused.stderr
@@ -556,7 +555,7 @@ def test_unlink_takes_another_orders_pull_request_off_a_held_order(held_bus, dur
     corrected = store.get("P1")
     assert corrected.order.pull_requests == (own,)
     assert corrected.order.corrections[-1] == CorrectLinkTodo(
-        linked.revision, held_bus.registry.require("lead").incarnation,
+        linked.revision, held_bus.registry.require("colleague").incarnation,
         "a claim recorded P883 work on this order", previous=(foreign, own), link=foreign,
         at=corrected.order.corrections[-1].at)
     assert (replace(corrected.order, pull_requests=(), corrections=())
@@ -569,33 +568,33 @@ def test_unlink_takes_another_orders_pull_request_off_a_held_order(held_bus, dur
 
 def test_unanswered_uses_age_direct_target_and_later_answer_references(held_bus):
     now = time.time()
-    publish(held_bus, "worker", "lead", now - 7200)  # before every held order
-    publish(held_bus, "worker", "lead", now - AwaitingTeam.seconds + 30)
-    publish(held_bus, "outsider", "lead", now - 1800)  # not a holder
-    publish(held_bus, "worker", "outsider", now - 1800)  # not its lead
-    question = publish(held_bus, "worker", "lead", now - 901)
+    publish(held_bus, "worker", "colleague", now - 7200)  # before every held order
+    publish(held_bus, "worker", "colleague", now - AwaitingTeam.seconds + 30)
+    publish(held_bus, "outsider", "colleague", now - 1800)  # not a holder
+    publish(held_bus, "worker", "outsider", now - 1800)  # not its colleague
+    question = publish(held_bus, "worker", "colleague", now - 901)
     # An unrelated later answer and message text do not answer this reference.
-    publish(held_bus, "lead", "worker", now - 800)
+    publish(held_bus, "colleague", "worker", now - 800)
     violation, = unanswered(held_bus)
     assert violation.message.reference == question.reference
-    held_bus.messaging.send("lead", "worker", "Responding", answers=(question.reference,))
+    held_bus.messaging.send("colleague", "worker", "Responding", answers=(question.reference,))
     assert unanswered(held_bus) == ()
-    another = publish(held_bus, "worker", "lead", now - 950)
-    held_bus.messaging.send("lead", "outsider", "Answer in another conversation",
+    another = publish(held_bus, "worker", "colleague", now - 950)
+    held_bus.messaging.send("colleague", "outsider", "Answer in another conversation",
                             answers=(another.reference,))
     assert unanswered(held_bus) == ()
 
 
 def test_unanswered_pages_match_the_complete_answer_reference(held_bus):
     now = time.time()
-    questions = tuple(publish(held_bus, "worker", "lead", now - 900 - offset)
+    questions = tuple(publish(held_bus, "worker", "colleague", now - 900 - offset)
                       for offset in range(105))
     with pytest.raises(RelationViolationError):
-        publish(held_bus, "lead", "worker", now,
+        publish(held_bus, "colleague", "worker", now,
                 answers=(MessageReference(
                     questions[0].seq, MessageId.mint("not-the-original-hash")),))
     answered = (questions[1].reference, questions[-1].reference)
-    held_bus.messaging.send("lead", "outsider", "Answers retain their original references",
+    held_bus.messaging.send("colleague", "outsider", "Answers retain their original references",
                             answers=answered)
     assert tuple(item.message.reference for item in UnitAskUnanswered.violations(held_bus)) == tuple(
         question.reference for question in reversed(questions) if question.reference not in answered
@@ -604,25 +603,25 @@ def test_unanswered_pages_match_the_complete_answer_reference(held_bus):
 
 def test_answering_an_unrelated_peer_leaves_the_team_question_open(held_bus):
     now = time.time()
-    owed = publish(held_bus, "worker", "lead", now - 30)
+    owed = publish(held_bus, "worker", "colleague", now - 30)
     unrelated = publish(held_bus, "worker", "outsider", now - 20)
-    scope = RepliesDisplayScope(frozenset({"lead"}), frozenset({"worker"}))
+    scope = RepliesDisplayScope(frozenset({"colleague"}), frozenset({"worker"}))
     assert held_bus.bus.bus.unanswered_page(
         scope, since=now - 60, before=now, upper=unrelated.seq + 1, limit=1,
     ) == (owed,)
-    publish(held_bus, "lead", "outsider", now - 10, answers=(unrelated.reference,))
+    publish(held_bus, "colleague", "outsider", now - 10, answers=(unrelated.reference,))
     assert held_bus.bus.bus.unanswered_page(
         scope, since=now - 60, before=now, upper=unrelated.seq + 20, limit=1,
     ) == (owed,)
 
 
 @pytest.mark.parametrize("target,body,role,human,eligible", (
-    ("lead", "Direct question", ConversationRole(), False, True),
-    ("lead", "Direct informational message", NoticeRole(), False, True),
+    ("colleague", "Direct question", ConversationRole(), False, True),
+    ("colleague", "Direct informational message", NoticeRole(), False, True),
     ("outsider", "Question for another peer", ConversationRole(), False, False),
-    ("#comms", "@lead Your question", ConversationRole(), False, True),
+    ("#comms", "@colleague Your question", ConversationRole(), False, True),
     ("#comms", "@outsider Another question", ConversationRole(), False, False),
-    ("#comms", "@lead Informational notice", NoticeRole(), False, False),
+    ("#comms", "@colleague Informational notice", NoticeRole(), False, False),
     ("#comms", "Collective question", ConversationRole(), True, True),
 ))
 def test_unanswered_page_retains_the_original_response_eligibility(
@@ -635,27 +634,27 @@ def test_unanswered_page_retains_the_original_response_eligibility(
     original = held_bus.bus.publisher.publish_ordinary(
         Message(sender, target, body, InfoKind, timestamp=now - 20, role=role), destination=CommandTarget.named(target), origin=origin,
     )
-    scope = RepliesDisplayScope(frozenset({"lead"}), frozenset({sender}))
+    scope = RepliesDisplayScope(frozenset({"colleague"}), frozenset({sender}))
     assert scope.includes(original) is eligible
     assert held_bus.bus.bus.unanswered_page(
         scope, since=now - 60, before=now, upper=original.seq + 1, limit=1,
     ) == ((original,) if eligible else ())
-    reply = publish(held_bus, "lead", sender, now - 10, answers=(original.reference,))
+    reply = publish(held_bus, "colleague", sender, now - 10, answers=(original.reference,))
     assert held_bus.bus.bus.unanswered_page(
         scope, since=now - 60, before=now, upper=reply.seq + 1, limit=1,
     ) == ()
 
 
 @pytest.mark.parametrize('target,body', [
-    ('lead', 'The worker needs an answer'),
-    ('#comms', '@lead The worker needs an answer'),
+    ('colleague', 'The worker needs an answer'),
+    ('#comms', '@colleague The worker needs an answer'),
 ])
 def test_team_say_answers_an_unanswered_teammate_message(held_bus, target, body, tmp_path):
     question = held_bus.bus.publisher.publish_ordinary(
         Message(sender='worker', target=target, type=QuestionKind, body=body,
                 timestamp=time.time() - AwaitingTeam.seconds - 1), destination=CommandTarget.named(target), origin=AgentOrigin(),
     )
-    ctx = Team.read_root(held_bus.root)
+    ctx = team_as(held_bus.root, "colleague")
     reply = tmp_path / 'reply.txt'
     reply.write_text('Responding to the worker with the actual teammate command')
     say = SayVerb(units="worker", body_file=str(reply), answers=(question.message_id,))
@@ -675,8 +674,8 @@ def test_team_say_answers_an_unanswered_teammate_message(held_bus, target, body,
 
 
 def test_an_unanswered_teammate_message_gates_send_until_a_say_answers_it(held_bus, tmp_path):
-    question = publish(held_bus, "worker", "lead", time.time() - AwaitingTeam.seconds - 1)
-    ctx = Team.read_root(held_bus.root)
+    question = publish(held_bus, "worker", "colleague", time.time() - AwaitingTeam.seconds - 1)
+    ctx = team_as(held_bus.root, "colleague")
     reply = tmp_path / "reply.txt"
     reply.write_text("Waiting on the merge queue, owner unit-goalblock")
     with pytest.raises(RecordProblems, match=question.message_id):
@@ -694,7 +693,7 @@ def test_an_unanswered_teammate_message_gates_send_until_a_say_answers_it(held_b
 
 def test_an_order_to_an_archived_thread_records_nothing(held_bus, tmp_path):
     held_bus.registry.archive("outsider")
-    ctx = Team.read_root(held_bus.root)
+    ctx = team_as(held_bus.root, "colleague")
     before = {todo.id for todo in ctx.todos()}
     order = replace(held_bus.goals.todos.get("P1").order.checked(), id=OrderId.mint())
     document = OrderFile(order, "An order for a thread nobody can start.",
@@ -706,7 +705,7 @@ def test_an_order_to_an_archived_thread_records_nothing(held_bus, tmp_path):
 
 def test_withdrawing_from_an_archived_holder_releases_the_order_in_the_channel(held_bus):
     held_bus.registry.archive("worker")
-    Team.read_root(held_bus.root).withdraw(
+    team_as(held_bus.root, "colleague").withdraw(
         "P1", "This order went to a thread that was archived and can never start it.")
     assert held_bus.goals.todos.get("P1").state is DoneTodoState
     posted = held_bus.bus.bus.lookup(held_bus.bus.bus.revision())
@@ -715,9 +714,9 @@ def test_withdrawing_from_an_archived_holder_releases_the_order_in_the_channel(h
 
 def test_answering_one_owed_message_leaves_another_owed(held_bus, tmp_path, capsys):
     """An answer is never refused for the debts it leaves: they warn and stay owed."""
-    first = publish(held_bus, "worker", "lead", time.time() - AwaitingTeam.seconds - 2)
-    second = publish(held_bus, "worker", "lead", time.time() - AwaitingTeam.seconds - 1)
-    ctx = Team.read_root(held_bus.root)
+    first = publish(held_bus, "worker", "colleague", time.time() - AwaitingTeam.seconds - 2)
+    second = publish(held_bus, "worker", "colleague", time.time() - AwaitingTeam.seconds - 1)
+    ctx = team_as(held_bus.root, "colleague")
     reply = tmp_path / "reply.txt"
     reply.write_text("Waiting on the merge queue, owner unit-goalblock")
     capsys.readouterr()
@@ -733,9 +732,9 @@ def test_answering_one_owed_message_leaves_another_owed(held_bus, tmp_path, caps
 
 def test_a_refusal_lists_the_asks_still_inside_their_answer_window(held_bus, tmp_path):
     """A retry costs a call, so the refusal names the asks that fall due before it lands too."""
-    owed = publish(held_bus, "worker", "lead", time.time() - AwaitingTeam.seconds - 1)
-    ripening = publish(held_bus, "worker", "lead", time.time() - 60)
-    ctx = Team.read_root(held_bus.root)
+    owed = publish(held_bus, "worker", "colleague", time.time() - AwaitingTeam.seconds - 1)
+    ripening = publish(held_bus, "worker", "colleague", time.time() - 60)
+    ctx = team_as(held_bus.root, "colleague")
     with pytest.raises(RecordProblems) as refused:
         SendVerb(unit="worker", body_file=order_file(held_bus, tmp_path)).apply(ctx)
     assert {owed.message_id, ripening.message_id} <= set(
@@ -747,7 +746,7 @@ def test_an_owed_answer_is_a_heartbeat_line_and_never_a_vibe_check(held_bus):
     again on a second channel restated one fact, so no degraded sign carries it."""
     from agent_comms.team.vibe_check import VibeCheck
 
-    ask = publish(held_bus, "worker", "lead", time.time() - AwaitingTeam.seconds - 1)
+    ask = publish(held_bus, "worker", "colleague", time.time() - AwaitingTeam.seconds - 1)
     frame = capture_frame(held_bus, ProgressRead())
     assert [rule.message.message_id for rule in OwedAnswer.scan_observed(
         held_bus, (), frame)] == [ask.message_id]
@@ -757,8 +756,8 @@ def test_an_owed_answer_is_a_heartbeat_line_and_never_a_vibe_check(held_bus):
 def test_an_owed_vibe_check_refuses_only_verbs_that_answer_nothing(held_bus, tmp_path):
     """The vibe check waits like any owed message: a reply naming a teammate's ask still lands."""
     check = escalate(held_bus, VibeCheckNotice, time.time() - 3600)
-    ask = publish(held_bus, "worker", "lead", time.time() - AwaitingTeam.seconds - 1)
-    ctx = Team.read_root(held_bus.root)
+    ask = publish(held_bus, "worker", "colleague", time.time() - AwaitingTeam.seconds - 1)
+    ctx = team_as(held_bus.root, "colleague")
     reply = tmp_path / "reply.txt"
     reply.write_text("Waiting on the merge queue, owner unit-goalblock")
     with pytest.raises(RecordProblems, match=check.message_id):
@@ -774,22 +773,22 @@ def test_only_the_addressed_teammates_own_answer_clears_its_vibe_check(held_bus)
     check = escalate(held_bus, VibeCheckNotice, time.time() - 3600)
     held_bus.registry.declare(Thread("peer", frozenset({TeammatesTag.declared_name}),
                                      Checkout(Path.cwd())), StoppedThreadStatus())
-    peer, lead = (held_bus.registry.require(name) for name in ("peer", "lead"))
-    held_bus.messaging.send("peer", "lead", "Answered.", answers=(check.reference,),
+    peer, colleague = (held_bus.registry.require(name) for name in ("peer", "colleague"))
+    held_bus.messaging.send("peer", "colleague", "Answered.", answers=(check.reference,),
                             answerer=TeamReceipts(peer.acting_identity,
-                                                       (peer.incarnation, lead.incarnation)))
+                                                       (peer.incarnation, colleague.incarnation)))
     with held_bus.bus.bus.reading() as source:
         assert [message.reference for message in VibeCheckNotice.unanswered(
-            source, held_bus.registry.snapshot(), "lead", time.time())] == [check.reference]
-    held_bus.messaging.send("lead", "peer", "Mine, answered.", answers=(check.reference,))
+            source, held_bus.registry.snapshot(), "colleague", time.time())] == [check.reference]
+    held_bus.messaging.send("colleague", "peer", "Mine, answered.", answers=(check.reference,))
     with held_bus.bus.bus.reading() as source:
         assert VibeCheckNotice.unanswered(
-            source, held_bus.registry.snapshot(), "lead", time.time()) == ()
+            source, held_bus.registry.snapshot(), "colleague", time.time()) == ()
 
 
 def test_an_answer_sent_to_another_teammate_is_refused_and_leaves_the_ask_owed(held_bus, tmp_path):
-    question = publish(held_bus, "worker", "lead", time.time() - AwaitingTeam.seconds - 1)
-    ctx = Team.read_root(held_bus.root)
+    question = publish(held_bus, "worker", "colleague", time.time() - AwaitingTeam.seconds - 1)
+    ctx = team_as(held_bus.root, "colleague")
     reply = tmp_path / "reply.txt"
     reply.write_text("Waiting on the merge queue, owner unit-goalblock")
     revision = held_bus.bus.bus.revision()
@@ -801,8 +800,8 @@ def test_an_answer_sent_to_another_teammate_is_refused_and_leaves_the_ask_owed(h
 
 
 def test_peer_verbs_owe_own_mail_not_the_selected_storage_leads_mail(held_bus, tmp_path):
-    foreign = publish(held_bus, "worker", "lead", time.time() - AwaitingTeam.seconds - 2)
-    ctx = Team.read_root(held_bus.root)
+    foreign = publish(held_bus, "worker", "colleague", time.time() - AwaitingTeam.seconds - 2)
+    ctx = team_as(held_bus.root, "colleague")
     reply = tmp_path / "peer-reply.txt"
     reply.write_text("The independent peer is maintaining its own work.")
     peer = PeerCaller("outsider")
@@ -810,7 +809,7 @@ def test_peer_verbs_owe_own_mail_not_the_selected_storage_leads_mail(held_bus, t
     posted = held_bus.bus.bus.lookup(held_bus.bus.bus.revision())
     assert posted.sender == "outsider" and posted.answers == ()
     assert foreign.reference in {rule.message.reference for rule in OwedAnswer.opened(
-        held_bus, held_bus.registry.require("lead").incarnation)}
+        held_bus, held_bus.registry.require("colleague").incarnation)}
     with pytest.raises(RecordProblems, match="not an open ask owed by outsider"):
         SayVerb(acting_as=peer, units="worker", body_file=str(reply),
                 answers=(foreign.message_id,)).apply(ctx)
@@ -821,11 +820,11 @@ def test_peer_verbs_owe_own_mail_not_the_selected_storage_leads_mail(held_bus, t
             answers=(own.message_id,)).apply(ctx)
     assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == (own.reference,)
     assert foreign.reference in {rule.message.reference for rule in OwedAnswer.opened(
-        held_bus, held_bus.registry.require("lead").incarnation)}
+        held_bus, held_bus.registry.require("colleague").incarnation)}
 
 
 def test_bound_child_owes_actual_parents_directive_not_the_storage_leads_mail(held_bus, tmp_path):
-    foreign = publish(held_bus, "worker", "lead", time.time() - AwaitingTeam.seconds - 2)
+    foreign = publish(held_bus, "worker", "colleague", time.time() - AwaitingTeam.seconds - 2)
     directive = publish(held_bus, "outsider", "worker", time.time() - 3600)
     store = held_bus.goals.todos
     request = store.add_request(held_bus.registry.require("worker").incarnation,
@@ -833,7 +832,7 @@ def test_bound_child_owes_actual_parents_directive_not_the_storage_leads_mail(he
     store.record_directive(request.id, RequestDirective(directive.seq, time.time() - 1))
     child = ForkCaller("answer-child")
     child.join(held_bus, "worker")
-    ctx = Team.read_root(held_bus.root)
+    ctx = team_as(held_bus.root, "colleague")
     reply = tmp_path / "child-reply.txt"
     reply.write_text("The real child answers its actual parent's directive.")
     # The raw child identity has no parent authority merely from its provenance.
@@ -849,7 +848,7 @@ def test_bound_child_owes_actual_parents_directive_not_the_storage_leads_mail(he
     posted = held_bus.bus.bus.lookup(held_bus.bus.bus.revision())
     assert posted.sender == child.name and posted.answers == (directive.reference,)
     assert foreign.reference in {rule.message.reference for rule in OwedAnswer.opened(
-        held_bus, held_bus.registry.require("lead").incarnation)}
+        held_bus, held_bus.registry.require("colleague").incarnation)}
     assert not any(rule.message.reference == directive.reference
                    for rule in OwedAnswer.opened(held_bus, held_bus.registry.require("worker").incarnation))
     held_bus.registry.unregister(child.name)
@@ -857,22 +856,22 @@ def test_bound_child_owes_actual_parents_directive_not_the_storage_leads_mail(he
     assert not any(rule.message.reference == directive.reference
                    for rule in OwedAnswer.opened(held_bus, held_bus.registry.require("worker").incarnation))
     assert foreign.reference in {rule.message.reference for rule in OwedAnswer.opened(
-        held_bus, held_bus.registry.require("lead").incarnation)}
+        held_bus, held_bus.registry.require("colleague").incarnation)}
 
 
 def test_shared_request_directive_is_owed_only_by_its_frozen_recipient(held_bus):
     request = held_bus.goals.todos.add_request(
-        held_bus.registry.require("lead").incarnation, "A shared task with a private instruction.")
+        held_bus.registry.require("colleague").incarnation, "A shared task with a private instruction.")
     ConnectorSendTool(target="worker", request=request.id,
                       body="Read the shared task and report the result.").apply(
                           held_bus, DirectorCaller("outsider"))
     recorded = held_bus.goals.todos.owner_request(request.id)
     directive, = recorded.directives
     worker = held_bus.registry.require("worker").incarnation
-    lead = held_bus.registry.require("lead").incarnation
+    colleague = held_bus.registry.require("colleague").incarnation
     assert {rule.message.seq for rule in OwedAnswer.opened(held_bus, worker)} == {directive.seq}
-    assert directive.seq not in {rule.message.seq for rule in OwedAnswer.opened(held_bus, lead)}
-    assert recorded.commander == lead
+    assert directive.seq not in {rule.message.seq for rule in OwedAnswer.opened(held_bus, colleague)}
+    assert recorded.commander == colleague
 
 
 def test_answer_reader_refuses_a_reborn_parent_between_actual_registry_cuts(held_bus):
@@ -902,24 +901,24 @@ def test_answer_reader_refuses_a_reborn_parent_between_actual_registry_cuts(held
 
 def test_an_overdue_owner_directive_gates_until_answered(held_bus, tmp_path):
     directive = held_bus.bus.publisher.publish_ordinary(
-        Message(sender="outsider", target="lead", type=InfoKind, body="Ship the install now",
-                timestamp=time.time() - 3600), destination=CommandTarget.named("lead"), origin=AgentOrigin(),
+        Message(sender="outsider", target="colleague", type=InfoKind, body="Ship the install now",
+                timestamp=time.time() - 3600), destination=CommandTarget.named("colleague"), origin=AgentOrigin(),
     )
     store = held_bus.goals.todos
-    selected = NewestOpenRequest().select(store, held_bus.registry.require('lead').incarnation)
+    selected = NewestOpenRequest().select(store, held_bus.registry.require('colleague').incarnation)
     store.record_directive(selected[0].id, RequestDirective(
         directive.seq, directive.timestamp + RequestDirective.window))
-    ctx = Team.read_root(held_bus.root)
+    ctx = team_as(held_bus.root, "colleague")
     reply = tmp_path / "reply.txt"
     reply.write_text("Installing now")
     with pytest.raises(RecordProblems, match=re.escape(
-        f"ACT lead's owner directive {directive.seq}:{directive.message_id}"
+        f"ACT colleague's owner directive {directive.seq}:{directive.message_id}"
     )):
         SayVerb(units="#comms", body_file=str(reply)).apply(ctx)
     SayVerb(units="#comms", body_file=str(reply), answers=(directive.message_id,)).apply(ctx)
     SayVerb(units="#comms", body_file=str(reply)).apply(ctx)
     before = held_bus.bus.bus.revision()
-    with pytest.raises(RecordProblems, match="not an open ask owed by lead"):
+    with pytest.raises(RecordProblems, match="not an open ask owed by colleague"):
         SayVerb(units="#comms", body_file=str(reply), answers=(directive.message_id,)).apply(ctx)
     assert held_bus.bus.bus.revision() == before
     assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == ()
@@ -930,7 +929,7 @@ def test_channel_messages_without_a_team_addressee_are_not_a_question(held_bus, 
     held_bus.messaging.send('worker', '#comms', body, type=QuestionKind)
     with held_bus.bus.bus.reading() as source:
         questions = UnansweredTeammateAsks.for_orders(
-            source, held_bus.registry.snapshot(), 'lead',
+            source, held_bus.registry.snapshot(), 'colleague',
             HeldOrders.read(held_bus).holders, time.time(),
         )
     assert not any(questions.values())
@@ -966,7 +965,7 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(
 
     def cli(*arguments):
         run = team('--root', str(held_bus.root), 'order', *arguments,
-                   *(() if '--as' in arguments else ('--as', 'lead')))
+                   *(() if '--as' in arguments else ('--as', 'colleague')))
         assert run.returncode == 0, run.stdout + run.stderr
 
     # The idle outsider takes it: the worker already holds P1 and P2, and the allocation
@@ -1014,20 +1013,20 @@ def test_one_state_per_teammate_even_when_blocked_and_detached(held_bus):
 
 def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus):
     blocked_holder(held_bus)
-    question = publish(held_bus, "worker", "lead", time.time() - 901)
+    question = publish(held_bus, "worker", "colleague", time.time() - 901)
     expected = tuple(rule.line() for rule in (
         *state_cards(held_bus, Blocked), *unanswered(held_bus),
     ))
     heartbeat = TeamHeartbeat()
-    lead = held_bus.registry.require("lead")
-    held_bus.registry.register(replace(lead, process_identity=ProcessIdentity.capture(os.getpid())))
+    colleague = held_bus.registry.require("colleague")
+    held_bus.registry.register(replace(colleague, process_identity=ProcessIdentity.capture(os.getpid())))
     asyncio.run(heartbeat.run(lambda: nullcontext(held_bus)))
-    saved, = TeamUpdate.latest(held_bus, lead.incarnation)
+    saved, = TeamUpdate.latest(held_bus, colleague.incarnation)
     assert saved.handled
     assert isinstance(held_bus.registry.require("worker").goal.require().state, ActiveGoal)
     owner = held_bus.messaging.user_identity(Checkout(held_bus.root)).name
     page = MessagePageRequest(DMDisplayScope.capture(
-        owner, "lead", held_bus.registry.snapshot(),
+        owner, "colleague", held_bus.registry.snapshot(),
     )).read_opened(held_bus.bus.bus)
     message = next(message for message in page.messages if message.task == saved)
     # The compact body truncates lines; the original board entries keep every complete alert.
@@ -1037,16 +1036,16 @@ def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus):
 
 
 def test_successful_pass_health_does_not_depend_on_messages(held_bus, monkeypatch):
-    lead = held_bus.registry.require("lead")
-    held_bus.registry.register(replace(lead, process_identity=ProcessIdentity.capture(os.getpid())))
+    colleague = held_bus.registry.require("colleague")
+    held_bus.registry.register(replace(colleague, process_identity=ProcessIdentity.capture(os.getpid())))
     passes = ServicePassStore.at(held_bus.root)
     passes.passed(TeamHeartbeat.__name__)
     assert not passes.read().commander_completed
     worker = held_bus.registry.require("worker").incarnation
-    observed = (lead.incarnation, worker)
+    observed = (colleague.incarnation, worker)
     passes.heartbeat_passed((worker,), observed)
-    passes.heartbeat_passed((lead.incarnation,), observed)
-    completed = passes.read().commander_completed[lead.incarnation]
+    passes.heartbeat_passed((colleague.incarnation,), observed)
+    completed = passes.read().commander_completed[colleague.incarnation]
     assert HeartbeatSilent.violations(held_bus) == ()
     # The longest normal pass is quiet, not silent.
     monkeypatch.setattr(time, "time", lambda: completed + TeamHeartbeat.pass_duration)
@@ -1061,52 +1060,53 @@ def test_successful_pass_health_does_not_depend_on_messages(held_bus, monkeypatc
     passes.heartbeat_passed((worker,), observed)
     assert HeartbeatSilent.violations(held_bus) == (silent,)
     # A successful quiet pass clears the alarm without inventing a conversation.
-    passes.heartbeat_passed((lead.incarnation,), observed)
+    passes.heartbeat_passed((colleague.incarnation,), observed)
     assert HeartbeatSilent.violations(held_bus) == ()
     assert held_bus.bus.bus.revision() == before
 
 
 def test_pass_missing_a_restarting_team_keeps_its_completion(held_bus):
-    """An install leaves the lead's process dead for one pass, which retires nothing."""
-    lead = held_bus.registry.require("lead")
-    alive = replace(lead, process_identity=ProcessIdentity.capture(os.getpid()))
+    """An install leaves the colleague's process dead for one pass, which retires nothing."""
+    colleague = held_bus.registry.require("colleague")
+    alive = replace(colleague, process_identity=ProcessIdentity.capture(os.getpid()))
     heartbeat = TeamHeartbeat()
     held_bus.registry.register(alive)
     asyncio.run(heartbeat.run(lambda: nullcontext(held_bus)))
     passes = ServicePassStore.at(held_bus.root)
-    completed = passes.read().commander_completed[lead.incarnation]
-    held_bus.registry.register(lead)
+    completed = passes.read().commander_completed[colleague.incarnation]
+    held_bus.registry.register(colleague)
     asyncio.run(heartbeat.run(lambda: nullcontext(held_bus)))
-    assert TeamFrame.read_all(held_bus.root) == ()
+    # Stopped for one pass, it still holds the owner's open request, so it keeps its frame.
+    assert [hud.commander for hud in TeamFrame.read_all(held_bus.root)] == [colleague.incarnation]
     held_bus.registry.register(alive)
-    assert passes.read().commander_completed[lead.incarnation] == completed
+    assert passes.read().commander_completed[colleague.incarnation] >= completed
     assert HeartbeatSilent.violations(held_bus) == ()
 
 
 def test_first_pass_is_owed_from_oldest_request_and_survives_renames(held_bus, monkeypatch):
-    lead = held_bus.registry.require("lead")
-    held_bus.registry.register(replace(lead, process_identity=ProcessIdentity.capture(os.getpid())))
-    request, = TeamHeartbeat.requested_by(held_bus.registry.require("lead"), held_bus.goals)
+    colleague = held_bus.registry.require("colleague")
+    held_bus.registry.register(replace(colleague, process_identity=ProcessIdentity.capture(os.getpid())))
+    request, = TeamHeartbeat.requested_by(held_bus.registry.require("colleague"), held_bus.goals)
     due = request.created_at + HeartbeatSilent.seconds
     monkeypatch.setattr(time, "time", lambda: due + 1)
     never, = HeartbeatSilent.violations(held_bus)
     assert isinstance(never, HeartbeatNotStarted)
     assert never.request == request.id and never.since == due
-    held_bus.goals.todos.add_request(lead.incarnation, "A newer independent request")
+    held_bus.goals.todos.add_request(colleague.incarnation, "A newer independent request")
     held_bus.messaging.send_user_message(
-        ThreadTarget("lead"), "A DM is not a completed pass", worktree=Checkout(held_bus.root))
+        ThreadTarget("colleague"), "A DM is not a completed pass", worktree=Checkout(held_bus.root))
     assert HeartbeatSilent.violations(held_bus) == (never,)
     passes = ServicePassStore.at(held_bus.root)
-    observed = (lead.incarnation,)
+    observed = (colleague.incarnation,)
     passes.heartbeat_passed(observed, observed)
-    completed = passes.read().commander_completed[lead.incarnation]
+    completed = passes.read().commander_completed[colleague.incarnation]
     assert HeartbeatSilent.violations(held_bus) == ()
-    held_bus.threads._rename_thread("lead", "renamed-lead")
+    held_bus.threads._rename_thread("colleague", "renamed-colleague")
     monkeypatch.setattr(time, "time", lambda: completed + HeartbeatSilent.seconds + 1)
     silent, = HeartbeatSilent.violations(held_bus)
     assert isinstance(silent, MissedHeartbeat)
     assert silent.since == completed + HeartbeatSilent.seconds
-    renamed = (held_bus.registry.require("renamed-lead").incarnation,)
+    renamed = (held_bus.registry.require("renamed-colleague").incarnation,)
     passes.heartbeat_passed(renamed, renamed)
     assert HeartbeatSilent.violations(held_bus) == ()
 
@@ -1115,11 +1115,11 @@ def test_one_answer_covers_an_escalation_burst_sent_before_it(held_bus):
     now = time.time()
     burst = [escalate(held_bus, VibeCheckNotice, now - 30 + line) for line in range(4)]
     owner = burst[0].sender
-    assert len(VibeCheckNotice.unanswered(held_bus.bus.bus, held_bus.registry.snapshot(), "lead", time.time())) == 4
-    publish(held_bus, "lead", owner, now - 20, answers=(burst[0].reference,))
-    assert VibeCheckNotice.unanswered(held_bus.bus.bus, held_bus.registry.snapshot(), "lead", time.time()) == ()
+    assert len(VibeCheckNotice.unanswered(held_bus.bus.bus, held_bus.registry.snapshot(), "colleague", time.time())) == 4
+    publish(held_bus, "colleague", owner, now - 20, answers=(burst[0].reference,))
+    assert VibeCheckNotice.unanswered(held_bus.bus.bus, held_bus.registry.snapshot(), "colleague", time.time()) == ()
     later = escalate(held_bus, VibeCheckNotice, now - 10)
-    assert [m.message_id for m in VibeCheckNotice.unanswered(held_bus.bus.bus, held_bus.registry.snapshot(), "lead", time.time())] == [
+    assert [m.message_id for m in VibeCheckNotice.unanswered(held_bus.bus.bus, held_bus.registry.snapshot(), "colleague", time.time())] == [
         later.message_id]
 
 
@@ -1129,13 +1129,13 @@ def test_an_answer_covers_by_bus_order_whatever_its_clock_says(held_bus):
     owed even when its clock ran behind the reply's."""
     now = time.time()
     check = escalate(held_bus, VibeCheckNotice, now - 10)
-    reply = publish(held_bus, "lead", check.sender, now - 20, answers=(check.reference,))
+    reply = publish(held_bus, "colleague", check.sender, now - 20, answers=(check.reference,))
     assert reply.seq == check.seq + 1 and reply.timestamp < check.timestamp
     for beat in (time.time(), time.time() + VibeCheckUnanswered.seconds):
-        assert VibeCheckNotice.unanswered(held_bus.bus.bus, held_bus.registry.snapshot(), "lead", beat) == ()
+        assert VibeCheckNotice.unanswered(held_bus.bus.bus, held_bus.registry.snapshot(), "colleague", beat) == ()
     later = escalate(held_bus, VibeCheckNotice, now - 30)
     assert [m.reference for m in VibeCheckNotice.unanswered(
-        held_bus.bus.bus, held_bus.registry.snapshot(), "lead", time.time())] == [later.reference]
+        held_bus.bus.bus, held_bus.registry.snapshot(), "colleague", time.time())] == [later.reference]
 
 
 def test_answering_the_owner_does_not_answer_his_escalation(held_bus):
@@ -1144,10 +1144,10 @@ def test_answering_the_owner_does_not_answer_his_escalation(held_bus):
     now = time.time()
     check = escalate(held_bus, VibeCheckNotice, now - 30)
     typed = held_bus.messaging.send_user_message(
-        ThreadTarget("lead"), "Something I typed", worktree=Checkout(held_bus.root))
-    publish(held_bus, "lead", typed.sender, now - 10, answers=(typed.reference,))
+        ThreadTarget("colleague"), "Something I typed", worktree=Checkout(held_bus.root))
+    publish(held_bus, "colleague", typed.sender, now - 10, answers=(typed.reference,))
     assert [m.reference for m in VibeCheckNotice.unanswered(
-        held_bus.bus.bus, held_bus.registry.snapshot(), "lead", time.time())] == [check.reference]
+        held_bus.bus.bus, held_bus.registry.snapshot(), "colleague", time.time())] == [check.reference]
     assert tuple(check.retained_task_facts()) == ()
     assert tuple(typed.retained_task_facts()) != ()
 
@@ -1196,14 +1196,14 @@ def test_a_compliant_answer_resumes_a_held_teammate_whose_problems_closed_during
     from agent_comms.todos import ReleaseTodo, StrikeReason, WithdrawTodo
 
     held_bus.goals.update_goal("worker", ChokeholdPausedGoalAction())
-    lead = held_bus.registry.require("lead").incarnation
+    colleague = held_bus.registry.require("colleague").incarnation
     worker = held_bus.registry.require("worker")
     todos = held_bus.goals.todos
     for todo in todos.for_goal(worker.incarnation, worker.goal.require().id):
         released = todos.apply(todo.id, ReleaseTodo(todo.revision, todo.held().owner_identity, todo.held(), StrikeReason(
             "The holder explicitly releases its exact assignment before the repair moves elsewhere.")))
         todos.apply(todo.id, WithdrawTodo(
-            released.revision, lead, released.holder_state.previous_assignment(),
+            released.revision, colleague,
             "The requested repair already merged into main through another problem."))
     assert todos.for_goal(worker.incarnation, worker.goal.require().id) == ()
     held_bus.goals.update_goal(
@@ -1214,14 +1214,14 @@ def test_a_compliant_answer_resumes_a_held_teammate_whose_problems_closed_during
 def test_a_restarted_heartbeat_does_not_resend_an_escalation_burst(held_bus):
     """Deduplication sees answered and unanswered bursts through the same retained bus."""
     first = "first escalation identity"
-    VibeCheckNotice.burst_once(held_bus, held_bus.registry.require("lead").incarnation, (first,), first)
-    VibeCheckNotice.burst_once(held_bus, held_bus.registry.require("lead").incarnation, (first,), first)
-    sent = VibeCheckNotice.unanswered(held_bus.bus.bus, held_bus.registry.snapshot(), "lead", time.time())
+    VibeCheckNotice.burst_once(held_bus, held_bus.registry.require("colleague").incarnation, (first,), first)
+    VibeCheckNotice.burst_once(held_bus, held_bus.registry.require("colleague").incarnation, (first,), first)
+    sent = VibeCheckNotice.unanswered(held_bus.bus.bus, held_bus.registry.snapshot(), "colleague", time.time())
     assert len(sent) == 1
-    publish(held_bus, "lead", sent[0].sender, time.time(), answers=(sent[0].reference,))
-    VibeCheckNotice.burst_once(held_bus, held_bus.registry.require("lead").incarnation, (first,), first)
-    assert not VibeCheckNotice.unanswered(held_bus.bus.bus, held_bus.registry.snapshot(), "lead", time.time())
+    publish(held_bus, "colleague", sent[0].sender, time.time(), answers=(sent[0].reference,))
+    VibeCheckNotice.burst_once(held_bus, held_bus.registry.require("colleague").incarnation, (first,), first)
+    assert not VibeCheckNotice.unanswered(held_bus.bus.bus, held_bus.registry.snapshot(), "colleague", time.time())
     second = "second escalation identity"
-    VibeCheckNotice.burst_once(held_bus, held_bus.registry.require("lead").incarnation, (second,), second)
+    VibeCheckNotice.burst_once(held_bus, held_bus.registry.require("colleague").incarnation, (second,), second)
     assert [message.body for message in VibeCheckNotice.unanswered(
-        held_bus.bus.bus, held_bus.registry.snapshot(), "lead", time.time())] == [second]
+        held_bus.bus.bus, held_bus.registry.snapshot(), "colleague", time.time())] == [second]

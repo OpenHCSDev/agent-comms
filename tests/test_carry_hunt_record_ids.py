@@ -13,13 +13,13 @@ from agent_comms.todos import CleanHunt, HuntRecord, TodoStore
 from agent_comms.typed_table import SQLiteCatalogObject
 from conftest import maintenance_held
 
-LEAD = RecordedThreadIncarnation("claude-code", 1.0)
+COLLEAGUE = RecordedThreadIncarnation("claude-code", 1.0)
 
 
 def test_carry_reissues_hunt_ids_recorded_before_hunt_id(tmp_path):
     store = TodoStore(tmp_path)
     hunts = tuple(
-        store.record_hunt(LEAD, CleanHunt(
+        store.record_hunt(COLLEAGUE, CleanHunt(
             FileLine("src/agent_comms/todos.py", line),
             "read the hunt table and found nothing worth ordering this time",
             RecordedEventTime(1.0)))

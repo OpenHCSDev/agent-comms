@@ -103,25 +103,25 @@ def delivery(ctx, report: str) -> CommsOrderDeliverTool:
 
 def test_pathname_handoff_publishes_without_completing_the_held_work(held_team):
     comms = held_team.comms
-    lead = held_team.commander
+    colleague = held_team.commander
     original = comms.goals.todos.get(working(held_team).id)
-    goals = tuple(comms.registry.require(name).goal for name in ("worker", lead))
+    goals = tuple(comms.registry.require(name).goal for name in ("worker", colleague))
     body = (
         "Recording saved at `/home/ts/.cache/agent-scratch/probe/toad-comms-fixed`; "
         "investigation continues."
     )
 
-    committed = comms.messaging.send("worker", lead, body, HandoffKind).message
+    committed = comms.messaging.send("worker", colleague, body, HandoffKind).message
     stored = comms.bus.bus.lookup_message(committed.message_id).message
 
     assert stored.body == body
-    assert (stored.sender, stored.target, stored.type) == ("worker", lead, HandoffKind)
+    assert (stored.sender, stored.target, stored.type) == ("worker", colleague, HandoffKind)
     assert Message.from_message(stored).to_wire() == Message.from_message(committed).to_wire()
     assert stored.type.allows_automatic_reply(stored)
     assert comms.bus.bus.unanswered_references(
-        (stored.seq,), AuthoredAnswers(frozenset({lead})),
+        (stored.seq,), AuthoredAnswers(frozenset({colleague})),
     ) == (stored.reference,)
-    assert tuple(comms.registry.require(name).goal for name in ("worker", lead)) == goals
+    assert tuple(comms.registry.require(name).goal for name in ("worker", colleague)) == goals
     assert comms.goals.todos.get(original.id) == original
 
 
@@ -482,7 +482,7 @@ def test_an_unsent_claim_is_never_resent_under_a_renamed_team(held_team):
     ctx = held_team
     comms = ctx.comms
     request, claimed, before = unsent_claim(ctx)
-    comms.registry.rename(ctx.actor_name, "renamed-lead")
+    comms.registry.rename(ctx.actor_name, "renamed-colleague")
     with pytest.raises(TodoError, match="retained claim was addressed"):
         ThreadCaller("worker").invoke(request, comms)
     assert comms.bus.bus.revision() == before
@@ -641,10 +641,10 @@ def test_two_delivery_claims_warn_without_deadlocking_other_orders(
     other = thread("other", checkout, 3.0)
     comms.registry.register(other)
     comms.registry.register(thread("third", ctx.root.parent / "third", 4.0))
-    lead = comms.registry.require(ctx.actor_name)
+    colleague = comms.registry.require(ctx.actor_name)
     original = store.get("P1")
     second = store.create(
-        "P2", original.repo, "Repair the other held workflow", creator=lead,
+        "P2", original.repo, "Repair the other held workflow", creator=colleague,
         assigner=ctx.incarnation, owner=other, generation=other_order_goal_id,
         request=original.request.require(), review_at=RecordedEventTime(time.time() + 1000),
         order=replace(original.order.checked(), id=OrderId.mint()),
@@ -666,7 +666,7 @@ def test_two_delivery_claims_warn_without_deadlocking_other_orders(
         ).record(comms.goals, todo.id))
 
     reply = ctx.root / "claim-status.txt"
-    reply.write_text("Waiting on the review, owner lead.")
+    reply.write_text("Waiting on the review, owner colleague.")
     owed = {rule.message.message_id: rule for rule in OwedAnswer.opened(comms, ctx.incarnation)}
     capsys.readouterr()
     main(["say", "third", str(reply)], ctx)

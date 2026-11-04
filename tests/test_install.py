@@ -169,7 +169,7 @@ def _harnessless_home(directory: Path, monkeypatch) -> None:
 
 
 def test_an_install_on_a_bus_with_no_team_writes_no_team_config(private_directory, monkeypatch):
-    # The laptop's install failed its last step: the flag default named this machine's lead.
+    # The laptop's install failed its last step: the flag default named this machine's colleague.
     from agent_comms.cli_verbs.install import InstallCliCommand
 
     root = private_directory / "wire"
@@ -205,7 +205,7 @@ def test_an_install_without_flags_keeps_native_team_and_parked_state(
     root = (private_directory / "wire").resolve()
     root.mkdir(mode=0o700)
     comms = wire(root)
-    comms.registry.declare(Thread("lead", frozenset(), Checkout(private_directory)))
+    comms.registry.declare(Thread("colleague", frozenset(), Checkout(private_directory)))
     comms.registry.declare(Thread(
         "parked-teammate", frozenset(), Checkout(private_directory)))
     comms.registry.set_work_state("parked-teammate", ParkedThreadWorkState())

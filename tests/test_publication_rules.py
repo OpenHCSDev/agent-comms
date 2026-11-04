@@ -157,10 +157,10 @@ def test_closed_unmerged_pull_request_flags_lost_commits(head_bus, reviewed_sour
     assert judge.SupersededVerb in ClosedUnmergedPullRequest.clearing_verbs
     accepted = ReviewedHeadVerdict(VerdictReason('The owner implements the requested behavior without competing decisions.'))
     review = CommsHeadVerdictTool(request=request, operation=accepted, order=NoHeadOrder())
-    review.invoke(comms, review.arguments, caller=ThreadCaller('lead'))
+    review.invoke(comms, review.arguments, caller=ThreadCaller('colleague'))
     assert set(scan(capture())) == {lost, old_lost}
     ping = replace(RulePing.capture(lost), since=RecordedEventTime(lost.began()))
-    assert not ping.acted(TeamHistory.read(comms, frozenset(('lead',))))
+    assert not ping.acted(TeamHistory.read(comms, frozenset(('colleague',))))
     assert FieldCodec.decode(RulePing, FieldCodec.encode(ping)) == ping
 
     verdict = judge.SupersededVerb(
@@ -169,7 +169,7 @@ def test_closed_unmerged_pull_request_flags_lost_commits(head_bus, reviewed_sour
     assert verdict == SupersededHeadVerdict(VerdictReason(
         'The replacement includes the useful work and deliberately drops this obsolete implementation.'), 'P2')
     tool = CommsHeadVerdictTool(request=request, operation=verdict, order=NoHeadOrder())
-    tool.invoke(comms, tool.arguments, caller=ThreadCaller('lead'))
+    tool.invoke(comms, tool.arguments, caller=ThreadCaller('colleague'))
     assert set(scan(frame)) == {lost, old_lost}  # A later write cannot alter this snapshot.
     assert scan(capture()) == (old_lost,)
 

@@ -53,9 +53,9 @@ from test_todos import order
 
 @pytest.fixture
 def recorded_problem(comms, source_repository, tmp_path):
-    for name in ("lead", "worker"):
+    for name in ("colleague", "worker"):
         comms.registry.declare(Thread(name, frozenset({"comms"}), Checkout(tmp_path / name)))
-    actor = comms.registry.require("lead").incarnation
+    actor = comms.registry.require("colleague").incarnation
     worker = comms.registry.require("worker").incarnation
     store = comms.goals.todos
     request = store.add_request(actor, "Repair the existing record owner")
@@ -69,7 +69,7 @@ def recorded_problem(comms, source_repository, tmp_path):
 
 def story_members(comms):
     todo = comms.goals.todos.get("P1")
-    actor = comms.registry.require("lead").incarnation
+    actor = comms.registry.require("colleague").incarnation
     strike = StrikeTodo(todo.revision, actor, todo.held(),
                         "The worker left the required owner duplicated across two source paths.")
     return (
@@ -92,7 +92,7 @@ def test_story_members_round_trip_in_one_append_only_table(recorded_problem):
     store = recorded_problem.goals.todos
     events = story_members(recorded_problem)
     todo = store.get("P1")
-    actor = recorded_problem.registry.require("lead").incarnation
+    actor = recorded_problem.registry.require("colleague").incarnation
     events += (
         FailedCheckStrike.make(todo, 4000, "The declared acceptance command failed at its source owner."),
         PeerAcceptedVerdict(todo.revision, actor, todo.held(), ToolCallId("peer-call"),
@@ -127,7 +127,7 @@ def test_story_members_round_trip_in_one_append_only_table(recorded_problem):
 def test_voided_strike_uses_its_stored_sequence_and_count_returns_to_zero(recorded_problem):
     comms = recorded_problem
     store = comms.goals.todos
-    actor = comms.registry.require("lead").incarnation
+    actor = comms.registry.require("colleague").incarnation
     original = store.get("P1")
     strike = story_members(comms)[0]
     struck = store.apply(original.id, strike)
@@ -162,8 +162,8 @@ def test_team_unstrike_selects_the_newest_live_record(recorded_problem, source_r
     second = replace(first, expected_revision=struck.revision,
         reason="The worker omitted the installed application check for its changed owner.")
     store.apply("P1", second)
-    lead = Team.on_root("lead", (source_repository,), comms.root)
-    lead.unstrike("P1", "The second strike was issued in error after the required owner was repaired.")
+    colleague = Team.on_root("colleague", (source_repository,), comms.root)
+    colleague.unstrike("P1", "The second strike was issued in error after the required owner was repaired.")
     assert store.get("P1").live_strikes() == (first,)
 
 
@@ -190,7 +190,7 @@ def test_wording_writer_records_its_actual_time(recorded_problem):
 def test_board_of_forty_orders_and_two_thousand_verdicts_decodes_no_story_rows(recorded_problem):
     comms = recorded_problem
     store = comms.goals.todos
-    actor = comms.registry.require("lead").incarnation
+    actor = comms.registry.require("colleague").incarnation
     original = store.get("P1")
     with store.writing() as db:
         for number in range(1, 41):
@@ -213,7 +213,7 @@ def test_board_of_forty_orders_and_two_thousand_verdicts_decodes_no_story_rows(r
     previous = sys.getprofile()
     try:
         sys.setprofile(profile)
-        reply = CommsTodoListTool.invoke(comms, {"thread": "lead"}, caller=NoThreadCaller())
+        reply = CommsTodoListTool.invoke(comms, {"thread": "colleague"}, caller=NoThreadCaller())
     finally:
         sys.setprofile(previous)
     assert len(reply["todos"]) == 40

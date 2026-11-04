@@ -302,11 +302,11 @@ def test_notification_rank_overrides_follow_the_mro_without_changing_parent_rank
     assert SelectedConsumedProgress(100).rank() == DeliveryRank.position_of(ActiveDelivery)
 
 
-LEAD, WORKER = RecordedThreadIncarnation("lead", 1.0), RecordedThreadIncarnation("worker", 2.0)
+COLLEAGUE, WORKER = RecordedThreadIncarnation("colleague", 1.0), RecordedThreadIncarnation("worker", 2.0)
 ORDERS = (OrderId.mint(),)
 UI_ONLY_FIELDS = {"root", "request_id", "previous", "owner", "identity"}
 SHARED_UI_READS = [
-    TeammateRead(commander=LEAD, unit=WORKER, orders=ORDERS),
+    TeammateRead(frame_owner=COLLEAGUE, unit=WORKER, orders=ORDERS),
     TranscriptPageRead(thread="worker", position=EarlierThan(NativeTranscriptCursor("session.jsonl", 7)),
                        page_source=RecordedPageSource(HistorySourceKey("archive"))),
 ]

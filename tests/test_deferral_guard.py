@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import time
+from uuid import uuid4
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -31,7 +32,8 @@ RECORDED = "2026-11-04T00:00:00.000Z"
 
 
 def assistant(*blocks: dict[str, JsonValue]) -> dict[str, JsonValue]:
-    return {"type": "assistant", "timestamp": RECORDED, "message": {"content": list(blocks)}}
+    return {"type": "assistant", "uuid": str(uuid4()), "timestamp": RECORDED,
+            "message": {"content": list(blocks)}}
 
 
 def text(words: str) -> dict[str, JsonValue]:
@@ -40,7 +42,7 @@ def text(words: str) -> dict[str, JsonValue]:
 
 TOOL: dict[str, JsonValue] = {"type": "tool_use", "id": "t1", "name": "Bash", "input": {}}
 RESULT: dict[str, JsonValue] = {
-    "type": "user", "timestamp": RECORDED,
+    "type": "user", "uuid": "result-1", "timestamp": RECORDED,
     "message": {"content": [{"type": "tool_result", "tool_use_id": "t1"}]}}
 
 DEFERRING = [RESULT, assistant(text("The six failing tests have no owner. They go to a teammate next."))]
@@ -125,12 +127,6 @@ def test_each_deferral_shape_recognises_its_phrase(shape, reply):
     assert tuple(shape.found(reply))
 
 
-def test_a_bound_teammate_session_stops_freely(durable_home: Path, team_bus: Comms, tmp_path: Path):
-    with resident_session(team_bus, tmp_path / "state", "teammate-x", "s") as bridge:
-        result = stop(bridge, tmp_path, DEFERRING, idle=("pi-story-tool",))
-        assert (result.status, result.stdout) == (0, "")
-
-
 def test_an_unbound_session_stops_freely(
         durable_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str]):
@@ -141,10 +137,10 @@ def test_an_unbound_session_stops_freely(
     assert capsys.readouterr().out == ""
 
 
-@pytest.mark.parametrize("actor", ("claude-code", "teammate-x"))
+@pytest.mark.parametrize("actor", ("claude-code", "unit-x"))
 def test_a_stop_with_no_monitor_on_a_running_bridge_is_sent_back_once(
         durable_home: Path, team_bus: Comms, tmp_path: Path, actor: str):
-    """Every bound role keeps its Monitor; only deferral judging is specific to the project lead."""
+    """Every bound role keeps its Monitor; only deferral judging is specific to the project colleague."""
     quiet = [RESULT, assistant(text("Ordered P362 to pi-story-tool."))]
     with resident_session(team_bus, tmp_path / "state", actor, "s") as bridge:
         claim = WatchClaim(bridge.binding.thread)

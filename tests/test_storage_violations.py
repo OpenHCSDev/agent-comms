@@ -88,7 +88,7 @@ def test_storage_family_renders_each_broken_fact(
         json.dumps(FieldCodec.encode(StorageRule(checkout_base=base)))
     )
     comms = wire(root)
-    lead = comms.registry.declare(Thread("lead", frozenset(), Checkout(repository)))
+    colleague = comms.registry.declare(Thread("colleague", frozenset(), Checkout(repository)))
     configured_repository(comms)
     worker = comms.registry.declare(
         Thread("worker", frozenset(), Checkout(home))
@@ -97,11 +97,11 @@ def test_storage_family_renders_each_broken_fact(
         "P1",
         RepositoryName.from_wire("OpenHCSDev/agent-comms"),
         "Fix the filesystem paths",
-        creator=lead, assigner=lead.incarnation,
+        creator=colleague, assigner=colleague.incarnation,
         owner=worker,
         generation=storage_case_goal_id,
         review_at=RecordedEventTime(1000),
-        request=comms.goals.todos.add_request(lead.incarnation, "Fix the filesystem paths").id,
+        request=comms.goals.todos.add_request(colleague.incarnation, "Fix the filesystem paths").id,
         order=PendingProblemOrder(
             scope=FIX_SCOPE,
             owner=FileLine(__file__, 1),

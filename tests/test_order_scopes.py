@@ -57,19 +57,19 @@ def test_shape_references_are_class_lines_not_names_or_decorators(tmp_path):
 
 
 def assigned(comms, scope, source, problem='P1', edits=('Fix the problem',)):
-    for name in ('lead', 'worker'):
+    for name in ('colleague', 'worker'):
         comms.registry.declare(Thread(name, frozenset(), Checkout(comms.root)))
     return requested(comms, scope, source, problem, edits)
 
 
 def requested(comms, scope, source, problem='P1', edits=('Fix the problem',), owner='worker'):
-    request = comms.goals.todos.add_request(comms.registry.require('lead').incarnation,
+    request = comms.goals.todos.add_request(comms.registry.require('colleague').incarnation,
         'Classify the failing source or fix its declared parent').id
-    caller = ThreadCaller('lead')
+    caller = ThreadCaller('colleague')
     CommsTodoCreateTool(owner=owner, order=CreateProblemGoalAction(
         problem=problem, order=replace(order(source), scope=scope, edits=edits), request=request,
-        review_at=RecordedEventTime(1000), commander='lead',
-        assigner=comms.registry.require('lead').incarnation,
+        review_at=RecordedEventTime(1000),
+        assigner=comms.registry.require('colleague').incarnation,
         repo=RepositoryName.from_wire('OpenHCSDev/agent-comms'),
         text='Classify the source without changing it',
     )).apply(comms, caller)
@@ -124,12 +124,12 @@ def test_scope_accepts_only_its_declared_delivery_at_native_decode(comms, scope,
 def test_report_returns_through_the_real_cli_on_a_selected_history_copy(comms, tmp_path, source_repository):
     assigned(comms, TriageScope(), source_repository)
     comms.registry.storage_rule = replace(comms.registry.storage_rule, scratch_base=tmp_path)
-    with CheckRoot(comms, ('lead', 'worker'), tmp_path / 'journey' / 'copied').open() as copied:
+    with CheckRoot(comms, ('colleague', 'worker'), tmp_path / 'journey' / 'copied').open() as copied:
         _, current = requested(copied, TriageScope(), source_repository)
         report = 'The copied native order needs classification only; no source was changed.'
         request = CommsOrderDoneTool(problem=current.id, order_id=current.order.id,
                                      delivery=ReportDelivery(report=report), claims=())
-        result = core('--root', str(copied.root), 'tool', '--from', 'lead',
+        result = core('--root', str(copied.root), 'tool', '--from', 'colleague',
                       '--tool', request.declared_name, '--arguments', json.dumps(request.arguments))
         assert result.returncode == 0, result.stderr
         assert report in result.stdout

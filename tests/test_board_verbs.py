@@ -42,14 +42,14 @@ QUOTE = "Repair the existing owner"
 @pytest.fixture
 def board_review(head_bus):
     comms, github, request = head_bus
-    lead = comms.registry.require("lead").incarnation
+    colleague = comms.registry.require("colleague").incarnation
     worker = comms.registry.require("worker").incarnation
 
     def claim(problem="P2"):
         todo = comms.goals.todos.get(problem)
-        original = comms.messaging.send("lead", "worker", todo.order.instructions(todo)).message
+        original = comms.messaging.send("colleague", "worker", todo.order.instructions(todo)).message
         todo = comms.goals.todos.apply(todo.id, OrderMessage(
-            todo.revision, lead, original.message_id, at=RecordedEventTime(time.time())))
+            todo.revision, colleague, original.message_id, at=RecordedEventTime(time.time())))
         delivery = OrderClaim.for_order(todo, worker, PullRequestLink(todo.repo, request.pr), request.head,
                                         "Review the broken duplicated decision repair",
                                         original.reference)
@@ -66,7 +66,7 @@ def board_review(head_bus):
 
 
 def assert_review_preconditions(rule, comms, request):
-    ctx = order.Team(root=comms.root, actor=PeerCaller("lead"))  # the reviewer, by name
+    ctx = order.Team(root=comms.root, actor=PeerCaller("colleague"))  # the reviewer, by name
     observed = rule.command_values()
     todo = comms.goals.todos.get(observed.get("problem", "P2"))
     # Supply review prose once by declared argument, not a second roster of verb requirements.
@@ -118,7 +118,7 @@ def test_held_board_commands_take_the_same_verdicts_as_the_order(board_review, c
         assert_review_preconditions(timer, comms, request)
     for delivery in DeliveryAwaitingJudgement.read_open(
             comms.bus.bus, comms.registry.snapshot(), {todo.held().owner_identity: (todo,)},
-            "lead", ()):
+            "colleague", ()):
         assert_review_preconditions(delivery, comms, request)
 
 
@@ -216,7 +216,7 @@ def test_claim_link_survives_sendbacks_and_explicit_release_without_editing_goal
     assert judge.OkVerb in rule.clearing_actions()
     command, = judge.OkVerb.commands({**rule.command_values(),
         "why": shlex.quote(REASON.text), "serves": shlex.quote(QUOTE)})
-    judge.main(shlex.split(command)[1:], order.Team(root=comms.root, actor=PeerCaller("lead")))
+    judge.main(shlex.split(command)[1:], order.Team(root=comms.root, actor=PeerCaller("colleague")))
     accepted = comms.goals.todos.get(original.id)
     assert accepted.order.holds_head(request)
     assert StoredHeadReview.head_reviews(comms.goals.todos, request)[0].order.problem == original.id
@@ -261,22 +261,22 @@ def test_a_verdict_on_exactly_the_delivered_head_answers_the_delivery(board_revi
     """The delivery line names one head; only a decided verdict on that head retires it."""
     comms, request, claim, _ = board_review
     claim()
-    lead = comms.registry.require("lead").incarnation
-    opened, = DeliveryAwaitingJudgement.opened(comms, lead)
+    colleague = comms.registry.require("colleague").incarnation
+    opened, = DeliveryAwaitingJudgement.opened(comms, colleague)
     assert opened.request == request
     NoHeadOrder().record_review(comms.goals, replace(request, head="f" * 40),
-                                ReviewedHeadVerdict(REASON), lead)
-    assert DeliveryAwaitingJudgement.opened(comms, lead) == (opened,)
-    NoHeadOrder().record_review(comms.goals, request, ReviewedHeadVerdict(REASON), lead)
-    assert DeliveryAwaitingJudgement.opened(comms, lead) == ()
+                                ReviewedHeadVerdict(REASON), colleague)
+    assert DeliveryAwaitingJudgement.opened(comms, colleague) == (opened,)
+    NoHeadOrder().record_review(comms.goals, request, ReviewedHeadVerdict(REASON), colleague)
+    assert DeliveryAwaitingJudgement.opened(comms, colleague) == ()
 
 
-@pytest.mark.parametrize("reviewer", ("lead", "peer", "worker"))
+@pytest.mark.parametrize("reviewer", ("colleague", "peer", "worker"))
 def test_independent_colleagues_may_review_without_rank_tags(board_review, reviewer):
     """Native and external colleagues share scope; no colleague has extra permission."""
     comms, request, _, _ = board_review
     comms.registry.declare(Thread("peer", frozenset({"comms"}),
-                                  comms.registry.require("lead").worktree,
+                                  comms.registry.require("colleague").worktree,
                                   execution=ExternalThreadExecution))
     NoHeadOrder().require_reviewer(comms.goals, request,
                                    comms.registry.require(reviewer).incarnation)

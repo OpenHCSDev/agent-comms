@@ -113,25 +113,25 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
     claim_review_goal_id = GoalId.mint()
     request_family_goal_id = GoalId.mint()
     repository = Repo(checkout=Path.cwd(), github=RepositoryName("OpenHCSDev", "agent-comms"))
-    for name in ("claude-ai", "lead", "worker"):
+    for name in ("claude-ai", "colleague", "worker"):
         thread = Thread(name, frozenset(), Checkout(repository.checkout))
         comms.registry.declare(thread, StoppedThreadStatus())
-    lead = comms.registry.require("lead")
+    colleague = comms.registry.require("colleague")
     worker = comms.registry.require("worker")
     store = comms.goals.todos
-    ctx = Team.on_root("lead", (repository,), comms.root)
+    ctx = Team.on_root("colleague", (repository,), comms.root)
     request_main(["add", "teammate native in Core"], ctx)
     first_id = capsys.readouterr().out.strip()
     request_main(["add", "virtual bus"], ctx)
     second_id = capsys.readouterr().out.strip()
-    second, first = store.open_requests(lead.incarnation)
+    second, first = store.open_requests(colleague.incarnation)
     assert (first.id.value, second.id.value) == (first_id, second_id)
-    assert NewestOpenRequest().for_order(store, lead.incarnation) == second.id
-    assert first.id.for_order(store, lead.incarnation) == first.id
+    assert NewestOpenRequest().for_order(store, colleague.incarnation) == second.id
+    assert first.id.for_order(store, colleague.incarnation) == first.id
     assert [
         request.id
         for request in store.open_requests(
-            lead.incarnation.renamed("lead-renamed"),
+            colleague.incarnation.renamed("colleague-renamed"),
         )
     ] == [second.id, first.id]
 
@@ -148,8 +148,8 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
         "P1",
         repository.github,
         "Inspect the request owner",
-        creator=lead,
-        assigner=lead.incarnation,
+        creator=colleague,
+        assigner=colleague.incarnation,
         owner=worker,
         generation=request_family_goal_id,
         review_at=RecordedEventTime(order.at.recorded_at("Order") + 60),
@@ -166,17 +166,17 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
     )
     with pytest.raises(ValueError):
         request_main(["complete", first_id, "--why", "The work is finished."], ctx)
-    assert len(store.open_requests(lead.incarnation)) == 2
+    assert len(store.open_requests(colleague.incarnation)) == 2
     assert store.serving_orders(first.id) == (todo,)
 
     ConnectorSendTool(
-        target="lead",
+        target="colleague",
         request=first.id,
         body="Read the request records and report the result.",
     ).apply(comms, CALLER)
     named = comms.bus.bus.revision()
     ConnectorSendTool(
-        target="lead",
+        target="colleague",
         body="Read the stored orders and report the result.",
     ).apply(comms, CALLER)
     newest = comms.bus.bus.revision()
@@ -201,17 +201,17 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
     assert claim.message.target == first.commander.name
     assert claim.message.answers == (original.reference,)
     comms.messaging.send(
-        "lead",
+        "colleague",
         "claude-ai",
         "The request was read.",
         answers=(original.reference,),
     )
-    renamed = replace(first, commander=lead.incarnation.renamed("lead-renamed"))
+    renamed = replace(first, commander=colleague.incarnation.renamed("colleague-renamed"))
     with comms.bus.bus.reading() as source:
-        assert not renamed.directive_messages(source, lead.incarnation.require_recorded().lookup)
+        assert not renamed.directive_messages(source, colleague.incarnation.require_recorded().lookup)
 
     CommsSendTool(
-        target="lead",
+        target="colleague",
         body="The source records are available.",
     ).apply(comms, ThreadCaller("worker"))
     assert store.owner_request(first.id).directives == first.directives
@@ -239,7 +239,7 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
     remaining = capsys.readouterr().out
     assert first_id in remaining and "P1" in remaining
     assert second_id not in remaining
-    assert [request.id for request in store.open_requests(lead.incarnation)] == [first.id]
+    assert [request.id for request in store.open_requests(colleague.incarnation)] == [first.id]
     store.apply(
         todo.id,
         WithdrawTodo(
@@ -248,19 +248,19 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
             "The isolated request check is complete.",
         ),
     )
-    store.complete_request(lead.incarnation, first.id, "No pending order remains.")
-    assert not store.open_requests(lead.incarnation)
+    store.complete_request(colleague.incarnation, first.id, "No pending order remains.")
+    assert not store.open_requests(colleague.incarnation)
 
     awaiting = store.add_request(
-        lead.incarnation, "Wait for the teammate's delivery verdict."
+        colleague.incarnation, "Wait for the teammate's delivery verdict."
     )
     awaiting_order = order.reissued(order.at.recorded_at("Order") + 1)
     awaiting_todo = store.create(
         "P2",
         repository.github,
         "Review the holder's delivery claim",
-        creator=lead,
-        assigner=lead.incarnation,
+        creator=colleague,
+        assigner=colleague.incarnation,
         owner=worker,
         generation=claim_review_goal_id,
         request=awaiting.id,
@@ -286,7 +286,7 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
     )
     assert store.serving_orders(awaiting.id) == (claimed,)
     with pytest.raises(ValueError):
-        store.complete_request(lead.incarnation, awaiting.id, "The claim is not yet accepted.")
+        store.complete_request(colleague.incarnation, awaiting.id, "The claim is not yet accepted.")
     assert store.for_request(first.id)[0].request == first.id
-    assert comms.registry.require("lead").goal == lead.goal
+    assert comms.registry.require("colleague").goal == colleague.goal
     assert not any(thread.process_alive for thread in comms.registry.all_threads().values())

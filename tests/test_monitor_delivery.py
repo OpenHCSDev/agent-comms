@@ -1066,14 +1066,14 @@ async def test_confirmed_human_direct_request_receives_one_reply(bridge, reply_e
 
 
 def test_independent_sessions_share_the_delivered_message_reply_policy(comms, tmp_path):
-    """Storage lead and peer follow the same original-message reply policy."""
+    """Storage colleague and peer follow the same original-message reply policy."""
     from agent_comms.registry_document import RegisteredTeamProject
     from agent_comms.runtime_updates import ReplyingThreadOutput
 
-    lead, teammate = (comms.registry.declare(Thread(
-        name, frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution)) for name in ("lead", "teammate"))
+    colleague, teammate = (comms.registry.declare(Thread(
+        name, frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution)) for name in ("colleague", "teammate"))
     comms.registry.set_team_project(RegisteredTeamProject(()))
-    for speaker, sender in ((lead, teammate), (teammate, lead)):
+    for speaker, sender in ((colleague, teammate), (teammate, colleague)):
         output = ReplyingThreadOutput.for_comms(comms.transcripts.external(speaker.name), comms)
         original = comms.messaging.send(sender.name, speaker.name, "Open this answer", QuestionKind).message
         turn = NativeTurnId(f"{speaker.name}-turn")
@@ -1083,8 +1083,8 @@ def test_independent_sessions_share_the_delivered_message_reply_policy(comms, tm
             f"{speaker.name} answers", timestamp=1.0, position=item_id),)))
         output.end_turn(turn)
     replies = tuple((message.target, message.body) for message in comms.bus.bus.message_history()
-                    if message.body in {"lead answers", "teammate answers"})
-    assert replies == (("teammate", "lead answers"), ("lead", "teammate answers"))
+                    if message.body in {"colleague answers", "teammate answers"})
+    assert replies == (("teammate", "colleague answers"), ("colleague", "teammate answers"))
 
 
 @pytest.mark.parametrize(('rows', 'parts'), (

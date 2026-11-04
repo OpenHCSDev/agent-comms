@@ -145,7 +145,7 @@ def test_teammate_state_family_uses_real_records(held_bus, tmp_path, request, me
         elif member is Detached:
             comms.registry.register(comms.registry.require(teammate), StoppedThreadStatus())
         elif member is AwaitingTeam:
-            publish(comms, teammate, "lead", time.time() - AwaitingTeam.seconds - 1)
+            publish(comms, teammate, "colleague", time.time() - AwaitingTeam.seconds - 1)
         elif member is Stuck:
             with comms.goals.todos.writing() as db:
                 for todo in comms.goals.todos.held_orders():
@@ -171,7 +171,7 @@ def test_teammate_state_family_uses_real_records(held_bus, tmp_path, request, me
                     todo.id,
                     DeliverTodo(
                         todo.revision,
-                        comms.registry.require("lead").incarnation,
+                        comms.registry.require("colleague").incarnation,
                         OperationDelivery(at=RecordedEventTime(time.time())),
                         todo.order.id,
                     ),
@@ -259,7 +259,7 @@ def test_claim_is_a_team_question_not_a_verified_delivery(held_bus, claim_order)
 def test_a_stopped_child_holding_no_order_gets_no_card(held_bus):
     """Being a teammate's child earns no card: an order or a receiving executor does
     (cl49, ready, drafts and fork-triage sat on the HUD as Idle cards for five days)."""
-    child = replace(held_bus.registry.require("outsider"), parent=ForkedParent("lead"))
+    child = replace(held_bus.registry.require("outsider"), parent=ForkedParent("colleague"))
     held_bus.registry.register(child, StoppedThreadStatus())
     with LaunchRoot.from_path(held_bus.root).selected():
         states = TeammateState.current(
@@ -268,7 +268,7 @@ def test_a_stopped_child_holding_no_order_gets_no_card(held_bus):
 
 
 def test_fork_gets_no_teammate_card(held_bus):
-    fork = held_bus.registry.register_child("judge-fork", "lead", ForkExecution, held_bus.goals)
+    fork = held_bus.registry.register_child("judge-fork", "colleague", ForkExecution, held_bus.goals)
     with LaunchRoot.from_path(held_bus.root).selected():
         states = TeammateState.current(
             held_bus, capture_frame(held_bus, ProgressRead()))
@@ -344,9 +344,9 @@ def test_failed_object_preparation_is_canonical_unread_progress_not_a_normal_car
 def test_heartbeat_keeps_every_teammate_when_one_checkout_is_unreadable(
     held_bus, tmp_path, primary, broken_metadata, installed_runtime
 ):
-    lead = replace(held_bus.registry.require("lead"),
+    colleague = replace(held_bus.registry.require("colleague"),
                    process_identity=ProcessIdentity.capture(os.getpid()))
-    held_bus.registry.register(lead)
+    held_bus.registry.register(colleague)
     primary_order = held_bus.goals.todos.get("P1")
     healthy_source = SourceRepository.create(tmp_path / "healthy-source", primary_order.repo)
     outsider = replace(held_bus.registry.require("outsider"), worktree=Checkout(healthy_source.checkout))
@@ -354,7 +354,7 @@ def test_heartbeat_keeps_every_teammate_when_one_checkout_is_unreadable(
     checked = primary_order.order.checked()
     held_bus.goals.update_goal("outsider", CreateProblemGoalAction(
         problem="P3", request=primary_order.request.require(),
-        assigner=lead.incarnation, repo=primary_order.repo, text="Independent healthy work",
+        assigner=colleague.incarnation, repo=primary_order.repo, text="Independent healthy work",
         review_at=RecordedEventTime(time.time() + 3600),
         order=replace(checked, id=OrderId.mint(),
                       check=replace(checked.check, directory=outsider.project_path)),
@@ -384,11 +384,11 @@ def test_heartbeat_keeps_every_teammate_when_one_checkout_is_unreadable(
         else:
             assert not isinstance(worker, Unreadable)
         asyncio.run(ObservedHeartbeat(observed).run(lambda: nullcontext(held_bus)))
-        expected = current_hud(held_bus, lead.name, observed.frame, cards)
+        expected = current_hud(held_bus, colleague.name, observed.frame, cards)
         published, = TeamFrame.read_all(held_bus.root)
         assert published == expected
         assert tuple(unit.unit for unit in published.units) == tuple(card.unit for card in cards)
-        packets = TeamUpdate.latest(held_bus, lead.incarnation)
+        packets = TeamUpdate.latest(held_bus, colleague.incarnation)
         assert tuple(ping for packet in packets for ping in packet.handled
                      if isinstance(ping, TeammatePing)) == tuple(
             TeammatePing.capture(card) for card in cards if card.attention())

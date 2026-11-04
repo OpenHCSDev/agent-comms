@@ -157,10 +157,10 @@ def test_woken_native_turn_reads_its_selected_messages_not_the_stored_frame(tmp_
     ]
     source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
     source.chmod(0o600)
-    comms.registry.declare(Thread('lead', frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(Thread('colleague', frozenset(), Checkout(tmp_path)))
     comms.registry.declare(Thread('native', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
-    asked = comms.messaging.send('lead', 'native', 'How many opens are left?').message
-    sent_outcome = comms.messaging.send('native', 'lead', 'An earlier answer.').message
+    asked = comms.messaging.send('colleague', 'native', 'How many opens are left?').message
+    sent_outcome = comms.messaging.send('native', 'colleague', 'An earlier answer.').message
     digest = hashlib.sha256(frame.encode()).hexdigest()
     # Historical frames own their original references; new frames leave those
     # references with the per-message body. Both reconstruct the same history.

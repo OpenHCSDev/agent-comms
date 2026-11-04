@@ -29,15 +29,15 @@ from cutover.carry_rule_ping_types import RulePingTypes
 @pytest.fixture
 def carry_bus(comms: Comms, tmp_path: Path) -> Comms:
     comms.registry.register(Thread(
-        name="carry-lead", tags=frozenset(), worktree=Checkout(tmp_path),
+        name="carry-colleague", tags=frozenset(), worktree=Checkout(tmp_path),
         heartbeat_delivery=OnHeartbeatDelivery,
     ))
-    lead = comms.registry.require("carry-lead").incarnation
+    colleague = comms.registry.require("carry-colleague").incarnation
     now = time.time()
-    original = TeamUpdateNotice(lead, ())
+    original = TeamUpdateNotice(colleague, ())
     original.send(comms, ("original quiet publication",))
     TeamFrame.replace_all(comms.root, (TeamHud(
-        commander=lead, units=(), phases=(), forks=(),
+        commander=colleague, units=(), phases=(), forks=(),
         load=OverloadDegradation.from_orders((), 0, 0),
         usage=CodexUsage(UnreadableUsage(reason="carry fixture needs no account")),
         packets=(original,), open_pings=(),
@@ -45,7 +45,7 @@ def carry_bus(comms: Comms, tmp_path: Path) -> Comms:
     failure = ServicePassFailing(watch="carry-source", since=now - 120,
                                 failed_at=now - 60, error="later failure")
     latest, = TeamUpdate.report_failure(
-        lead, failure, (original,), published=(original,), now=now,
+        colleague, failure, (original,), published=(original,), now=now,
     )
     latest.send(comms, ("failure after the older HUD was saved",))
     return comms
@@ -55,11 +55,11 @@ def test_carry_preserves_indexed_failure_and_age_without_rewriting_history(
     carry_bus: Comms, tmp_path: Path,
 ) -> None:
     comms = carry_bus
-    lead = comms.registry.require("carry-lead").incarnation
-    expected = TeamUpdate.published(comms, lead)
-    stale, = TeamFrame.at(comms.root, lead).read().packets
+    colleague = comms.registry.require("carry-colleague").incarnation
+    expected = TeamUpdate.published(comms, colleague)
+    stale, = TeamFrame.at(comms.root, colleague).read().packets
     assert expected[0].handled and not stale.handled
-    store = TeamUpdateStore.for_team(comms.root, lead)
+    store = TeamUpdateStore.for_team(comms.root, colleague)
     step = TeamObservations(LiveFilesRequest(comms.root), tmp_path / "spill")
     before = Bus.digest(Bus.path_in(comms.root))
     assert step.carry(apply=False).changed == 1
@@ -76,15 +76,15 @@ def test_carry_keeps_advanced_destination_and_birth_key_across_rename_and_recrea
     carry_bus: Comms, tmp_path: Path,
 ) -> None:
     comms = carry_bus
-    lead = comms.registry.require("carry-lead").incarnation.require_recorded()
-    published, = TeamUpdate.published(comms, lead)
-    renamed = lead.renamed("renamed-carry-lead")
+    colleague = comms.registry.require("carry-colleague").incarnation.require_recorded()
+    published, = TeamUpdate.published(comms, colleague)
+    renamed = colleague.renamed("renamed-carry-colleague")
     advanced = replace(published, commander=renamed,
                        not_applied=("newer retained observation",))
     TeamUpdateStore.record(comms.root, advanced)
-    existing = TeamUpdateStore.for_team(comms.root, lead)
+    existing = TeamUpdateStore.for_team(comms.root, colleague)
     assert existing.path == TeamUpdateStore.for_team(comms.root, renamed).path
-    recreated = RecordedThreadIncarnation(lead.name, lead.created_at + 1)
+    recreated = RecordedThreadIncarnation(colleague.name, colleague.created_at + 1)
     recreated_packet = TeamUpdateNotice(recreated, ())
     TeamUpdateStore.record(comms.root, recreated_packet)
     distinct = TeamUpdateStore.for_team(comms.root, recreated)

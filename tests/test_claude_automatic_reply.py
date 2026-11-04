@@ -202,10 +202,10 @@ async def test_team_send_answers_only_the_question_that_opened_its_turn(bridge: 
     output = bridge.output_type.for_comms(comms.transcripts.external('viewer'), comms)
     session = ClaudeSession()
     opening = comms.messaging.send('peer', 'viewer', 'Please investigate', QuestionKind).message
-    await confirm_messages(bridge, output, session, (opening,), prompt_id='lead-turn')
-    output.publish_batch(list(assistant_record('lead-output', 'Investigating').updates(session)))
+    await confirm_messages(bridge, output, session, (opening,), prompt_id='colleague-turn')
+    output.publish_batch(list(assistant_record('colleague-output', 'Investigating').updates(session)))
     later = comms.messaging.send('claude-code', 'viewer', 'Another question', QuestionKind).message
-    await confirm_messages(bridge, output, session, (later,), prompt_id='lead-turn')
+    await confirm_messages(bridge, output, session, (later,), prompt_id='colleague-turn')
     assert_opening_send(comms, opening, later, session.turn.source.require_id())
     finish_reply(output, session)
     outside = comms.messaging.send('viewer', 'claude-code', 'Outside that completed turn').message
@@ -315,7 +315,7 @@ async def test_twelve_directives_require_the_final_of_the_turn_they_opened(
     bridge: ClaudeBridge, prefix: tuple[ClaudeRecord, ...], suffix: tuple[ClaudeRecord, ...], cleared: bool,
 ) -> None:
     comms = bridge.comms
-    lead = comms.registry.require('viewer')
+    colleague = comms.registry.require('viewer')
     comms.registry.declare(
         Thread('peer', frozenset({TeammatesTag.declared_name}), Checkout(Path.cwd())),
         StoppedThreadStatus(),
@@ -329,7 +329,7 @@ async def test_twelve_directives_require_the_final_of_the_turn_they_opened(
         output.publish_batch(list(record.updates(session)))
     directives = []
     for number in range(12):
-        request = comms.goals.todos.add_request(lead.incarnation, f'Independent request {number}')
+        request = comms.goals.todos.add_request(colleague.incarnation, f'Independent request {number}')
         ConnectorSendTool(target='viewer', request=request.id,
                           body=f'Explain independent request {number}.').apply(
                               comms, DirectorCaller('claude-code'))

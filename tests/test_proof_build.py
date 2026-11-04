@@ -140,13 +140,13 @@ def test_merge_in_head_cannot_close_until_the_recorded_build_contains_it(
                    cwd=checkout, check=True)
     subprocess.run(("git", "merge-base", "--is-ancestor", graph.newer, "origin/main"),
                    cwd=checkout, check=True)
-    lead = thread("lead", comms.root, 1.0)
-    comms.registry.register(lead)
+    colleague = thread("colleague", comms.root, 1.0)
+    comms.registry.register(colleague)
     merged = replace(order(graph.repository), run=run).merged(graph.newer)
     todo = comms.goals.todos.create(
         "P1", graph.repository.github, "Prove installation instead of inferring it from merge",
-        creator=lead, assigner=lead.incarnation, owner=lead, generation=fixture_goal_id,
-        request=comms.goals.todos.add_request(lead.incarnation, "Prove the installed build").id,
+        creator=colleague, assigner=colleague.incarnation, owner=colleague, generation=fixture_goal_id,
+        request=comms.goals.todos.add_request(colleague.incarnation, "Prove the installed build").id,
         review_at=RecordedEventTime(1000), order=merged,
     )
     with pytest.raises(DeliveredCommitNotInstalledError):
@@ -161,7 +161,7 @@ def test_merge_in_head_cannot_close_until_the_recorded_build_contains_it(
     works = "Open the installed application and confirm the retained order is working"
     artifact.write_text(works)
     with pytest.raises(DeliveredCommitNotInstalledError):
-        ThreadCaller("lead").invoke(CommsProblemCloseTool(
+        ThreadCaller("colleague").invoke(CommsProblemCloseTool(
             problem=todo.id, works=works, artifact=str(artifact),
         ), comms)
     assert comms.goals.todos.get(todo.id) == todo
@@ -175,7 +175,7 @@ def test_merge_in_head_cannot_close_until_the_recorded_build_contains_it(
     assert merged.installed_line(RecordedBuildIdentity.installed()).startswith(
         "Merged, installed")
     assert merged.waiting_on_install(todo, {}) == (todo,)
-    ThreadCaller("lead").invoke(CommsProblemCloseTool(
+    ThreadCaller("colleague").invoke(CommsProblemCloseTool(
         problem=todo.id, works=works, artifact=str(artifact),
     ), comms)
     closed = comms.goals.todos.get(todo.id)
@@ -276,7 +276,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
         if graph.repository.github == CorePackage.repository
     )
     source = wire(tmp_path / "bus")
-    for number, name in enumerate(("lead", "worker"), 1):
+    for number, name in enumerate(("colleague", "worker"), 1):
         source.registry.declare(
             Thread(
                 name, frozenset({"comms"}), Checkout(tmp_path), created_at=float(number)
@@ -302,13 +302,13 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
         graph.repository.git(checkout, 'push', 'origin',
                              f'{row.head}:refs/pull/{row.number}/head')
         github_cli.put(graph.repository.github, row)
-    caller = ThreadCaller("lead")
+    caller = ThreadCaller("colleague")
     holder = ThreadCaller("worker")
     works = "Open the installed application and confirm the copied goal keeps its source location."
     artifact = tmp_path / "proof.txt"
     artifact.write_text(works)
     source.registry.storage_rule = replace(source.registry.storage_rule, scratch_base=tmp_path)
-    with CheckRoot(source, ("lead", "worker"), tmp_path / "proof" / "copied").open() as copied:
+    with CheckRoot(source, ("colleague", "worker"), tmp_path / "proof" / "copied").open() as copied:
         request = copied.goals.todos.add_request(
             holder.identity(copied), "Record the copied application proof",
         ).id
@@ -407,7 +407,7 @@ def test_install_due_compares_fetched_main_to_installed_build(
     Repo.git(checkout, "update-ref", "refs/remotes/origin/main", graph.oldest)
     before = Repo.git(checkout, "rev-parse", "HEAD")
     bus = wire(tmp_path / "bus")
-    bus.registry.declare(Thread("lead", frozenset(), Checkout(checkout)))
+    bus.registry.declare(Thread("colleague", frozenset(), Checkout(checkout)))
     extras = tuple(SourceRepository.create(
         tmp_path / "qualification", RepositoryName("example", f"qualification-{number}"))
         for number in range(2 if extra_repositories else 0))
@@ -419,11 +419,11 @@ def test_install_due_compares_fetched_main_to_installed_build(
         with pytest.raises(UninstalledRepositoryError):
             RecordedBuildIdentity.installed().for_repository(extra)
     registered = (graph.repository, *extras)
-    Team.on_root("lead", registered, bus.root)
+    Team.on_root("colleague", registered, bus.root)
 
     github_cli.configure(graph.repository.github)
     pulls = ProgressRead()
-    InstallDue.prepare(bus, "lead", HeldOrders.read(bus), pulls)
+    InstallDue.prepare(bus, "colleague", HeldOrders.read(bus), pulls)
     due = InstallDue.due(bus, pulls)
 
     assert Repo.git(checkout, "rev-parse", "HEAD") == before
@@ -445,7 +445,7 @@ def test_install_due_compares_fetched_main_to_installed_build(
     resolution = RuntimeResolution.at(runtime)
     resolution.model_copy(update={"core_commit": graph.newer}).save(runtime)
     pulls = ProgressRead()
-    InstallDue.prepare(bus, "lead", HeldOrders.read(bus), pulls)
+    InstallDue.prepare(bus, "colleague", HeldOrders.read(bus), pulls)
     after_install = InstallDue.due(bus, pulls)
     assert after_install == ()
     assert Repo.git(checkout, "rev-parse", "HEAD") == before
@@ -482,18 +482,18 @@ def test_a_one_minute_old_merge_is_due_and_names_its_request_without_launching(
     github_cli.put(graph.repository.github, UnmergedListedPullRequest(
         42, "fix/next", "b" * 40, stamp, "main", reviewable_times=(stamp,), armed_times=(stamp,)))
     bus = wire(tmp_path / "bus")
-    bus.registry.declare(Thread("lead", frozenset(), Checkout(checkout)))
-    Team.on_root("lead", (graph.repository,), bus.root)
+    bus.registry.declare(Thread("colleague", frozenset(), Checkout(checkout)))
+    Team.on_root("colleague", (graph.repository,), bus.root)
     merged = int(Repo.git(checkout, "log", "-1", "--format=%ct", merge))
     monkeypatch.setattr(time, "time", lambda: merged + 60)
 
     pulls = ProgressRead()
-    InstallDue.prepare(bus, "lead", HeldOrders.read(bus), pulls)
+    InstallDue.prepare(bus, "colleague", HeldOrders.read(bus), pulls)
     (due,) = InstallDue.due(bus, pulls)
     assert due.main == merge
     assert "#41 Install what merged" in due.line() and "#42 fix/next" in due.line()
     assert "order install" in due.line().rsplit(" -> ", 1)[1]
-    due.enforce(bus, "lead")
+    due.enforce(bus, "colleague")
     assert InstallLogs(bus.root).units() == ()
 
 

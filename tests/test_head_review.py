@@ -55,6 +55,7 @@ from agent_comms_hooks import ToolRefusedError
 from github_fixture import GitHubFixture
 from integration_source_fixture import MutualSources
 from source_revision_fixture import SourceRepository
+from conftest import team_as
 
 pytest_plugins = ("test_holder_standing_rules", "github_fixture", "integration_source_fixture")
 
@@ -124,7 +125,7 @@ def linked_head_bus(head_bus):
     return head_bus
 
 
-def invoke(comms, request, verdict, order=NoHeadOrder(), *, caller=ThreadCaller("lead")):
+def invoke(comms, request, verdict, order=NoHeadOrder(), *, caller=ThreadCaller("colleague")):
     tool = CommsHeadVerdictTool(request=request, operation=verdict, order=order)
     return tool.invoke(comms, tool.arguments, caller=caller)
 
@@ -144,7 +145,7 @@ def test_qualification_records_each_open_order_cut_without_promoting_or_finishin
         linked_head_bus, claim_order):
     """A ready companion's source stage is a decision, not permission to ship its incomplete pair."""
     comms, github, request = linked_head_bus
-    context = order.Team.read_root(comms.root)
+    context = team_as(comms.root, "colleague")
 
     def qualify_unchanged():
         before = comms.goals.todos.get("P2")
@@ -214,7 +215,7 @@ def test_native_companion_link_preserves_claim_review_goal_and_is_idempotent(
     reviews = StoredHeadReview.head_reviews(comms.goals.todos, primary)
     history = tuple(comms.registry.goal_history(before.held().owner))
     link = PullRequestLink(SourceRepository.of(companion_checkout).github, primary.pr)
-    context = order.Team.read_root(comms.root)
+    context = team_as(comms.root, "colleague")
     with chdir(companion_checkout):
         order.main(["pr", before.id, "--existing", str(primary.pr)], context)
     after = comms.goals.todos.get(before.id)
@@ -258,7 +259,7 @@ def test_native_companion_adoption_is_the_same_reviewed_orders_actual_qualificat
     checkout.parent.mkdir(parents=True, exist_ok=True)
     pair.client.git(pair.client.checkout, "worktree", "add", "--detach", str(checkout), pair.client.branch_commit)
     with chdir(checkout):
-        order.main(["pr", before.id, "--existing", str(pair.client.number)], order.Team.read_root(comms.root))
+        order.main(["pr", before.id, "--existing", str(pair.client.number)], team_as(comms.root, "colleague"))
     linked = comms.goals.todos.get(before.id)
     assert linked == replace(before, revision=before.revision + 1,
                              order=before.order.checked().linked_to(pair.client.link))
@@ -286,7 +287,7 @@ def test_native_companion_creation_records_its_owned_checkout_repository_not_the
     body.write_text("The actual paired source belongs to this existing order.\n")
     with chdir(companion_checkout):
         order.main(["pr", before.id, "--title", "Migrate the paired source",
-                    "--body-file", str(body)], order.Team.read_root(comms.root))
+                    "--body-file", str(body)], team_as(comms.root, "colleague"))
     after = comms.goals.todos.get(before.id)
     link = PullRequestLink(companion.github, number)
     assert after == replace(before, revision=before.revision + 1,
@@ -303,7 +304,7 @@ def test_companion_adoption_cannot_edit_or_adopt_missing_pr(
 ) -> None:
     comms, github, primary = linked_head_bus
     before = comms.goals.todos.get("P2")
-    context = order.Team.read_root(comms.root)
+    context = team_as(comms.root, "colleague")
     with chdir(companion_checkout):
         for arguments in (
             ["--existing", str(primary.pr), "--title", "Do not edit"],
@@ -323,7 +324,7 @@ def test_companion_metadata_refuses_an_existing_but_inaccessible_remote_pr(
     companion = SourceRepository.of(companion_checkout)
     github.refuse_read(companion.github, primary.pr, "GraphQL: Resource not accessible by integration")
     with chdir(companion_checkout), pytest.raises(subprocess.CalledProcessError):
-        order.main(["pr", before.id, "--existing", str(primary.pr)], order.Team.read_root(comms.root))
+        order.main(["pr", before.id, "--existing", str(primary.pr)], team_as(comms.root, "colleague"))
     assert comms.goals.todos.get(before.id) == before
     assert not any(call[:2] in (("pr", "create"), ("pr", "edit")) for call in github.calls())
 
@@ -334,14 +335,14 @@ def test_companion_metadata_refuses_another_owners_checkout(
     comms, github, primary = linked_head_bus
     before = comms.goals.todos.get("P2")
     companion = SourceRepository.of(companion_checkout)
-    other = comms.registry.require("lead")
+    other = comms.registry.require("colleague")
     rule = comms.registry.storage_rule
     checkout = rule.repository_checkout(rule.roots_of(other), "P2", companion.github)
     checkout.parent.mkdir(parents=True, exist_ok=True)
     companion.git(companion_checkout, "worktree", "add", "--detach", str(checkout), "HEAD")
     calls = github.calls()
     with chdir(checkout), pytest.raises(ValueError, match="owned by"):
-        order.main(["pr", before.id, "--existing", str(primary.pr)], order.Team.read_root(comms.root))
+        order.main(["pr", before.id, "--existing", str(primary.pr)], team_as(comms.root, "colleague"))
     assert comms.goals.todos.get(before.id) == before
     assert github.calls() == calls
 
@@ -372,7 +373,7 @@ def test_companion_metadata_refuses_a_closed_order_without_forge_or_link_changes
     closed = comms.goals.todos.get(before.id)
     calls = github.calls()
     with chdir(companion_checkout), pytest.raises((ValueError, TodoError)):
-        order.main(["pr", before.id, "--existing", str(primary.pr)], order.Team.read_root(comms.root))
+        order.main(["pr", before.id, "--existing", str(primary.pr)], team_as(comms.root, "colleague"))
     assert comms.goals.todos.get(before.id) == closed
     assert github.calls() == calls
 
@@ -403,7 +404,7 @@ def test_qualification_withdraws_acceptance_without_claiming_to_disarm_the_reque
     arms = tuple(call for call in github.calls() if call[:2] == ("pr", "merge"))
     assert arms == () and HeadReview.accepted(request.repo, request.head)
     with pytest.raises(ToolRefusedError, match="captured combined carrier"):
-        ReviewedHeadVerdict.require_merge(request, order.Team.read_root(comms.root).repos)
+        ReviewedHeadVerdict.require_merge(request, team_as(comms.root, "colleague").repos)
     invoke(comms, request, QualifiedHeadVerdict(QUALIFIED))
     assert StoredHeadReview.current_verdict(comms.goals.todos, request) is QualifiedHeadVerdict
     assert not HeadReview.accepted(request.repo, request.head)
@@ -439,7 +440,7 @@ def test_linked_qualification_requires_the_original_order_quote(linked_head_bus,
     with pytest.raises(ToolRefusedError):
         judge.main(["qualify", "--repo", request.repo.to_wire(), "--pr", str(request.pr),
                     "--head", request.head, "--why", QUALIFIED.text, "--serves", quote],
-                   order.Team.read_root(comms.root))
+                   team_as(comms.root, "colleague"))
     assert comms.goals.todos.get(before.id) == before
     assert not StoredHeadReview.head_reviews(comms.goals.todos, request)
     assert not any("statuses/" in call[1] for call in github.calls())
@@ -622,7 +623,7 @@ def test_companion_input_changes_the_identity_of_an_unchanged_local_patch(
     assert not any(HeadReview.accepted(head.repo, head.head) for head in heads)
 
 
-@pytest.mark.parametrize("actor", ("lead", "worker"))
+@pytest.mark.parametrize("actor", ("colleague", "worker"))
 def test_pending_sources_can_compute_but_only_reviewed_other_heads_allow_carrier_promotion(
         mutual_sources: MutualSources, github_cli: GitHubFixture, actor: str) -> None:
     pair = replace(mutual_sources, context=mutual_sources.context.model_copy(
@@ -720,13 +721,13 @@ def test_integration_reads_latest_review_in_the_declared_context(github_cli, tmp
     github_cli.configure(source.github)
     request = PullRequestHead(source.github, source.number, source.branch_commit)
     assert not HeadReview.accepted(request.repo, request.head)
-    ReviewedHeadVerdict(ACCEPTED).post(request.repo, request.head, 'lead', 'integration')
+    ReviewedHeadVerdict(ACCEPTED).post(request.repo, request.head, 'colleague', 'integration')
     assert HeadReview.accepted(request.repo, request.head)
-    UnderReviewHeadVerdict().post(request.repo, request.head, 'lead', 'integration')
+    UnderReviewHeadVerdict().post(request.repo, request.head, 'colleague', 'integration')
     assert not HeadReview.accepted(request.repo, request.head)
-    ReviewedHeadVerdict(ACCEPTED).post(request.repo, request.head, 'lead', 'integration')
+    ReviewedHeadVerdict(ACCEPTED).post(request.repo, request.head, 'colleague', 'integration')
     assert HeadReview.accepted(request.repo, request.head)
-    RejectedHeadVerdict(REASON).post(request.repo, request.head, 'lead', 'integration')
+    RejectedHeadVerdict(REASON).post(request.repo, request.head, 'colleague', 'integration')
     assert not HeadReview.accepted(request.repo, request.head)
     assert not HeadReview.accepted(request.repo, 'a' * 40)
 
@@ -752,7 +753,7 @@ def test_orderless_head_family_persists_both_outcomes_and_posts_each_exact_head(
 
 def test_judge_ok_and_back_dispatch_orderless_prs_without_positional_edit_ids(head_bus):
     comms, github, request = head_bus
-    context = order.Team.read_root(comms.root)
+    context = team_as(comms.root, "colleague")
     why = ACCEPTED.text
     common = ["--repo", request.repo.to_wire(), "--pr", str(request.pr), "--head", request.head,
               "--why", why]
@@ -790,7 +791,7 @@ def test_only_explicit_combined_promotion_arms_the_reviewed_head_and_reports_for
         github_cli.refuse_arm(request.repo, request.pr, "Merge permission denied")
     arguments = ["promote", "--repo", request.repo.to_wire(), "--pr", str(request.pr),
                  "--head", request.head, "--why", ACCEPTED.text]
-    context = order.Team.read_root(comms.root)
+    context = team_as(comms.root, "colleague")
     if refused:
         with pytest.raises(ToolRefusedError, match="Merge permission denied"):
             judge.main(arguments, context)
@@ -806,7 +807,7 @@ def test_only_explicit_combined_promotion_arms_the_reviewed_head_and_reports_for
     ReviewedHeadVerdict.require_merge(request, context.repos)
     # A stale pair of green carrier statuses cannot bypass current member decisions.
     member = inputs.source(pair.client.github).heads[0]
-    QualifiedHeadVerdict(QUALIFIED).post(member.repo, member.head, "lead", "withdraw member")
+    QualifiedHeadVerdict(QUALIFIED).post(member.repo, member.head, "colleague", "withdraw member")
     assert HeadReview.accepted(request.repo, request.head)
     assert MergeHeadReview.accepted(request.repo, request.head)
     with pytest.raises(ToolRefusedError, match="no accepted exact-head source review"):
@@ -835,7 +836,7 @@ def test_failed_permission_withdrawal_preserves_the_preceding_source_record(
     assert MergeHeadReview.accepted(request.repo, request.head)
 
 
-@pytest.mark.parametrize("reviewer", ("lead", "worker"))
+@pytest.mark.parametrize("reviewer", ("colleague", "worker"))
 @pytest.mark.parametrize("state", ("accepted", "unreviewed", "rejected", "stale", "uncontained", "status-only"))
 def test_capture_derives_only_exact_saved_orderless_sources_in_the_actual_carrier(
     mutual_sources: MutualSources, github_cli: GitHubFixture, state: str, reviewer: str,
@@ -853,7 +854,7 @@ def test_capture_derives_only_exact_saved_orderless_sources_in_the_actual_carrie
     if state == "rejected":
         invoke(comms, request, RejectedHeadVerdict(REASON), caller=ThreadCaller(reviewer))
     if state == "status-only":
-        ReviewedHeadVerdict(ACCEPTED).post(request.repo, request.head, "lead", "not a saved decision")
+        ReviewedHeadVerdict(ACCEPTED).post(request.repo, request.head, "colleague", "not a saved decision")
     if state == "stale":
         commit = peer.publish_change("A later unreviewed head", *peer.write_files({
             Path("src/agent_comms/orderless.py"): "orderless = 2\n"}))
@@ -900,7 +901,7 @@ def test_failed_final_rejection_status_leaves_the_member_pending_not_old_green(
         for head in source.heads:
             invoke(comms, head, ReviewedHeadVerdict(ACCEPTED))
     invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
-    PromotedHeadReview().post(request.repo, request.head, "lead", "explicit carrier promotion")
+    PromotedHeadReview().post(request.repo, request.head, "colleague", "explicit carrier promotion")
     MergeHeadReview.require_merge(request, pair.context.repos)
     member = inputs.source(pair.client.github).heads[0]
     github_cli.refuse_status(member.repo, member.head, HeadReview.context, "final source status refused", state="failure")
@@ -914,7 +915,7 @@ def test_failed_final_rejection_status_leaves_the_member_pending_not_old_green(
 
 def test_source_acceptance_never_enqueues_and_promotion_refuses_an_individual_member(head_bus) -> None:
     comms, github, request = head_bus
-    context = order.Team.read_root(comms.root)
+    context = team_as(comms.root, "colleague")
     arguments = ["--repo", request.repo.to_wire(), "--pr", str(request.pr),
                  "--head", request.head, "--why", ACCEPTED.text]
     judge.main(["ok", *arguments], context)
@@ -928,7 +929,7 @@ def test_source_acceptance_never_enqueues_and_promotion_refuses_an_individual_me
 def test_a_verdict_lists_every_argument_refusal_in_one_run_and_records_nothing(head_bus):
     """ok with empty --serves and both edit IDs and --pr took one run per refusal."""
     comms, github, request = head_bus
-    context = order.Team.read_root(comms.root)
+    context = team_as(comms.root, "colleague")
     with pytest.raises(RecordProblems) as refused:
         judge.main(["ok", "E1:abcd", "--pr", str(request.pr), "--head", request.head,
                     "--why", ACCEPTED.text, "--serves", ""], context)
@@ -944,7 +945,7 @@ def test_judge_reviewing_after_ok_withdraws_the_accepted_status_on_that_head(
     """GitHub keeps the newest status per context on a commit, so reviewing an approved head
     holds it out of the merge queue until a new ok."""
     comms, github, request = head_bus
-    context = order.Team.read_root(comms.root)
+    context = team_as(comms.root, "colleague")
     second_checkout = tmp_path / "second-review-checkout"
     reviewed_source.git(reviewed_source.checkout, "worktree", "add", "-q", "--detach",
                         str(second_checkout))
@@ -1332,7 +1333,7 @@ def test_retained_head_verdict_precedes_the_published_lost_packet(
     assert reviewed.at.before(published)
     # A retained stale observation can be published after its exact-head verdict.
     # Publish the actual typed packet; no board rows or history records are rewritten.
-    owner = comms.registry.require('lead').incarnation
+    owner = comms.registry.require('colleague').incarnation
     ping = replace(RulePing.capture(lost), since=RecordedEventTime(published))
     packet = TeamDecisions(owner, (ping,), (ping,), ())
     TeamUpdateStore.record(comms.root, packet)
@@ -1341,8 +1342,8 @@ def test_retained_head_verdict_precedes_the_published_lost_packet(
     assert previous == (packet,)
     assert isinstance(original.task, TeamDecisions)
     assert original.task == packet
-    history = TeamHistory.read(comms, frozenset(('lead',)))
-    assert (TeamUpdate.current_board(comms, 'lead') == ()) is cleared
+    history = TeamHistory.read(comms, frozenset(('colleague',)))
+    assert (TeamUpdate.current_board(comms, 'colleague') == ()) is cleared
     assert (packet.open_pings(history) == ()) is cleared
     if cleared:
         subject, = ping.subjects
@@ -1364,7 +1365,7 @@ def test_retained_head_verdict_precedes_the_published_lost_packet(
     TeamUpdateStore.record(comms.root, delivery.packet)
     delivery.packet.send(comms, ())
     assert TeamUpdate.latest(comms, owner) == (delivery.packet,)
-    assert (TeamUpdate.current_board(comms, 'lead') == ()) is cleared
+    assert (TeamUpdate.current_board(comms, 'colleague') == ()) is cleared
     assert original.task.handled == (ping,)
 
 

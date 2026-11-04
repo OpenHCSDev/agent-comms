@@ -52,4 +52,4 @@ never here. This file holds only facts about this host and this setup.
 ## Tools
 
 - A goal the backend marked BLOCKED is retried with `comms_goal` status `retry` once its
-  owner, its commander or Tristan authorizes it.
+  owner, a teammate or Tristan authorizes it.

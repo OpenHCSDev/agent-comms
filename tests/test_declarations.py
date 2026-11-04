@@ -457,11 +457,11 @@ class TestCurrentThread:
     ):
         registry = wire(tmp_path).registry
         launched = Thread(
-            "worker", frozenset({"a", "b"}), Checkout(tmp_path / "project"), parent=ForkedParent("lead"), task=GivenThreadText("Ship it")
+            "worker", frozenset({"a", "b"}), Checkout(tmp_path / "project"), parent=ForkedParent("colleague"), task=GivenThreadText("Ship it")
         )
         for name, value in launched.launch().apply(dict(os.environ)).items():
             monkeypatch.setenv(name, value)
         thread = current_thread(registry)
         assert (thread.name, thread.tags, thread.worktree, thread.parent, thread.task) == (
-            "worker", frozenset({"a", "b"}), str(tmp_path / "project"), ForkedParent("lead"), GivenThreadText("Ship it")
+            "worker", frozenset({"a", "b"}), str(tmp_path / "project"), ForkedParent("colleague"), GivenThreadText("Ship it")
         )

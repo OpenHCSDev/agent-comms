@@ -47,7 +47,7 @@ def peer_deal(team_bus):
 
 
 def test_every_independent_thread_is_dealt_the_same_sources_once(team_bus):
-    """A lead and an untagged peer share the deal; a restart keeps its original audit."""
+    """A colleague and an untagged peer share the deal; a restart keeps its original audit."""
     for name in ("claude-code", "unit-x"):
         deal = PiRedeal.of(team_bus, team_bus.registry.require(name))
         deal.start()

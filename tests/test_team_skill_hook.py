@@ -272,11 +272,11 @@ def tool_call(hook, server, comms, db, now):
     answers as the bridge does, deriving the board from Core at the moment of asking. The
     commander's deck slices ride the same call and are not the board."""
     with ThreadPoolExecutor(1) as pool:
-        taken = pool.submit(hook.take, comms, admitted_binding(comms, "lead"), hook.count_call())
+        taken = pool.submit(hook.take, comms, admitted_binding(comms, "colleague"), hook.count_call())
         peer, _ = server.accept()
         with peer, peer.makefile("rwb") as stream:
             assert FieldCodec.decode(SessionRequest, FieldCodec.parse(stream.readline())) == ReadBoard()
-            entries = TeamUpdate.current_board(comms, "lead")
+            entries = TeamUpdate.current_board(comms, "colleague")
             reply = BoardReply(DeliveredBoardContent.deliver(db, entries, now).lines)
             stream.write(FieldCodec.compact(FieldCodec.encode(reply)).encode() + b"\n")
         return tuple(line for line in taken.result(timeout=5) if line.startswith("BOARD"))
@@ -295,7 +295,7 @@ def test_a_recorded_verdict_drops_its_board_line_on_the_next_tool_call(
     hook = BoardReminder.decode(hook_record(tmp_path / "session.jsonl"))
     claim = WatchClaim(hook.session_id)
     claim.path.parent.mkdir(parents=True)
-    record = WatchRecord("lead", str(comms.root), ("watch",), tmp_path / "inbox")
+    record = WatchRecord("colleague", str(comms.root), ("watch",), tmp_path / "inbox")
     worker = RecordedThreadIncarnation("worker", 1.0)
     rules = (*OrderlessUnreviewedHead.scan_reviews(comms.goals, ProgressRead(())),
              ReviewTimerUp("P1", worker, "order-P1", RecordedEventTime(1000.0)),
@@ -307,7 +307,7 @@ def test_a_recorded_verdict_drops_its_board_line_on_the_next_tool_call(
         server.bind(str(claim.socket_path))
         server.listen()
         server.settimeout(5)
-        assert DeckStart.decode(hook_record(tmp_path / "session.jsonl", "SessionStart")).take(comms, admitted_binding(comms, "lead"))
+        assert DeckStart.decode(hook_record(tmp_path / "session.jsonl", "SessionStart")).take(comms, admitted_binding(comms, "colleague"))
         board = tool_call(hook, server, comms, db, time.time())
         assert len(board) == len(rules)
         invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
@@ -335,7 +335,7 @@ def test_a_held_claims_absent_socket_is_one_board_line_not_a_traceback(tmp_path,
     dropped its deck slice, while LiveWatch already declared that gap an install's swap."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("HOME", "home")
-    record = WatchRecord("lead", str(tmp_path), ("watch",), tmp_path / "inbox")
+    record = WatchRecord("colleague", str(tmp_path), ("watch",), tmp_path / "inbox")
     (line,) = LiveWatch(WatchClaim("swapping"), record).board()
     assert line.startswith("BOARD:") and "swapping the session bridge" in line
 
@@ -347,24 +347,24 @@ def test_board_start_line_disappears_when_its_phase_order_is_sent(notification_b
     hook = BoardReminder.decode(hook_record(tmp_path / "session.jsonl"))
     claim = WatchClaim(hook.session_id)
     claim.path.parent.mkdir(parents=True)
-    record = WatchRecord("lead", str(comms.root), ("watch",), tmp_path / "inbox")
+    record = WatchRecord("colleague", str(comms.root), ("watch",), tmp_path / "inbox")
     reading = capture_frame(comms, ProgressRead()).plan
     beat(comms, (PlanIdle(BusWriterPhase, reading),))
     phase_name = f"{BusWriterPhase.plan.declared_name}/{BusWriterPhase.declared_name}"
-    lead = comms.registry.require("lead").incarnation
-    request = comms.goals.todos.add_request(lead, "Start the ready bus writer phase").id
+    colleague = comms.registry.require("colleague").incarnation
+    request = comms.goals.todos.add_request(colleague, "Start the ready bus writer phase").id
     original = comms.goals.todos.get("P1").order.checked()
     with (claim.held(record), claim.reader_held(), Binding.open(tmp_path / "delivery") as db,
           socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server):
         server.bind(str(claim.socket_path))
         server.listen()
         server.settimeout(5)
-        assert DeckStart.decode(hook_record(tmp_path / "session.jsonl", "SessionStart")).take(comms, admitted_binding(comms, "lead"))
+        assert DeckStart.decode(hook_record(tmp_path / "session.jsonl", "SessionStart")).take(comms, admitted_binding(comms, "colleague"))
         before = tool_call(hook, server, comms, db, time.time())
         assert sum(phase_name in line for line in before) == 1
         # The worker holds P1 and P2 already; the idle outsider takes the phase order.
         comms.goals.update_goal("outsider", CreateProblemGoalAction(
-            problem="P3", request=request, assigner=lead,
+            problem="P3", request=request, assigner=colleague,
             repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"),
             text="Start the ready bus writer phase", review_at=RecordedEventTime(time.time() + 3600),
             order=replace(original, id=OrderId.mint(), serves=BusWriterPhase,
@@ -419,15 +419,15 @@ def test_the_board_prints_changes_once_then_an_unchanged_count(notification_bus,
     from agent_comms.task_attachments.team_pings import TeamUpdateStore
 
     comms = notification_bus
-    comms.threads.set_heartbeat_delivery("lead", OffHeartbeatDelivery)
-    assert comms.registry.require("lead").heartbeat_delivery is OffHeartbeatDelivery
+    comms.threads.set_heartbeat_delivery("colleague", OffHeartbeatDelivery)
+    assert comms.registry.require("colleague").heartbeat_delivery is OffHeartbeatDelivery
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("HOME", "home")
     hook = BoardReminder.decode(hook_record(tmp_path / "session.jsonl"))
     claim = WatchClaim(hook.session_id)
     claim.path.parent.mkdir(parents=True)
-    record = WatchRecord("lead", str(comms.root), ("watch",), tmp_path / "inbox")
-    lead = comms.registry.require("lead").incarnation
+    record = WatchRecord("colleague", str(comms.root), ("watch",), tmp_path / "inbox")
+    colleague = comms.registry.require("colleague").incarnation
     worker = comms.registry.require("worker").incarnation
     began = time.time()
     first = RulePing(SpinningTeammate, TextDigest.of("first"), text="Read worker P1",
@@ -435,13 +435,13 @@ def test_the_board_prints_changes_once_then_an_unchanged_count(notification_bus,
     second = RulePing(ReviewTimerUp, TextDigest.of("second"), text="Review worker P2",
                       subjects=(TeammateSubject(worker),), since=RecordedEventTime(began))
     TeamUpdateStore.record(comms.root, TeamDecisions(
-        lead, (first, second), (first, second), ()))
+        colleague, (first, second), (first, second), ()))
     with (claim.held(record), claim.reader_held(), Binding.open(tmp_path / "delivery") as db,
           socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server):
         server.bind(str(claim.socket_path))
         server.listen()
         server.settimeout(5)
-        assert DeckStart.decode(hook_record(tmp_path / "session.jsonl", "SessionStart")).take(comms, admitted_binding(comms, "lead"))
+        assert DeckStart.decode(hook_record(tmp_path / "session.jsonl", "SessionStart")).take(comms, admitted_binding(comms, "colleague"))
         assert tool_call(hook, server, comms, db, began + 90) == (
             "BOARD: Read worker P1 (seen for 1 min)",
             "BOARD: Review worker P2 (seen for 1 min)",
@@ -451,14 +451,14 @@ def test_the_board_prints_changes_once_then_an_unchanged_count(notification_bus,
         )
         changed = replace(first, observation=TextDigest.of("changed"), since=RecordedEventTime(began + 90))
         TeamUpdateStore.record(comms.root, TeamDecisions(
-            lead, (changed, second), (changed,), ()))
+            colleague, (changed, second), (changed,), ()))
         assert tool_call(hook, server, comms, db, began + 92) == (
             "BOARD: Read worker P1 (seen for 0 min)",
             unchanged_summary((second,), began + 92),
         )
         # A fresh packet does not reset delivery, and the answer window rings only once.
         TeamUpdateStore.record(comms.root, TeamDecisions(
-            lead, (changed, second), (), ()))
+            colleague, (changed, second), (), ()))
         alarm = began + AwaitingTeam.seconds
         assert tool_call(hook, server, comms, db, alarm + 1) == (
             "BOARD: Review worker P2 (seen for 5 min)",
@@ -468,7 +468,7 @@ def test_the_board_prints_changes_once_then_an_unchanged_count(notification_bus,
             unchanged_summary((changed, second), alarm + 2),
         )
         assert DeliveredBoardContent.count(db) == 2
-        TeamUpdateStore.record(comms.root, TeamDecisions(lead, (), (), ()))
+        TeamUpdateStore.record(comms.root, TeamDecisions(colleague, (), (), ()))
         assert tool_call(hook, server, comms, db, alarm + 3) == ()
         assert DeliveredBoardContent.count(db) == 0
 

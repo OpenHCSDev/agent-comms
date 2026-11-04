@@ -122,7 +122,7 @@ def test_history_clear_is_notice_only_and_survives_rename_and_reopen(tmp_path):
 
 
 async def test_mcp_and_the_ui_read_input_delivery_from_the_live_owner_queue(tmp_path):
-    """2026-10-24: the lead hand-wrote SQL to list pi-mi's lost inputs; the tool then
+    """2026-10-24: the colleague hand-wrote SQL to list pi-mi's lost inputs; the tool then
     answered from the connector's own process, where no owner queue exists. Both boundaries
     now carry one InputDeliveryRead to the owner and receive the owner's own answer."""
     async with canonical_delivery_owner(tmp_path) as (comms, agent, _, _):

@@ -108,7 +108,7 @@ def test_option_data_does_not_select_a_merge_family(command, github_cli):
     assert QueueBypass.matching(simple) == ()
 
 
-@pytest.mark.parametrize("actor", ("lead", "worker"))
+@pytest.mark.parametrize("actor", ("colleague", "worker"))
 def test_api_merge_requires_the_pinned_recorded_ok_for_each_colleague(
         head_bus, reviewed_source, tmp_path, actor):
     comms, github, request = head_bus
@@ -146,7 +146,7 @@ def test_api_merge_requires_the_pinned_recorded_ok_for_each_colleague(
         refused(request.head)
 
 
-@pytest.mark.parametrize("actor", ("lead", "worker"))
+@pytest.mark.parametrize("actor", ("colleague", "worker"))
 @pytest.mark.parametrize("configured", (True, False))
 def test_pinned_admin_merge_keeps_repository_scope_without_rank_or_saved_ok(
         head_bus, tmp_path, actor, configured):
@@ -156,7 +156,7 @@ def test_pinned_admin_merge_keeps_repository_scope_without_rank_or_saved_ok(
                f" --match-head-commit {request.head}")
     with resident_session(comms, tmp_path / "state", actor, "s") as bridge:
         # The resident's original actor survives replacement launcher metadata.
-        replacement = "worker" if actor == "lead" else "lead"
+        replacement = "worker" if actor == "colleague" else "colleague"
         WatchClaim("s").enrol(WatchRecord(replacement, str(comms.root), (), tmp_path / "elsewhere"))
         result = resident_tool_use(command, tmp_path / "s.jsonl", bridge)
         assert result.status == 0, result.stderr
@@ -171,7 +171,7 @@ def test_pinned_admin_merge_keeps_repository_scope_without_rank_or_saved_ok(
 def test_admin_merge_requires_a_valid_head_pin(head_bus, tmp_path, pin):
     comms, _, request = head_bus
     command = f"gh pr merge {request.pr} --admin --merge --repo {request.repo.to_wire()} {pin}"
-    with resident_session(comms, tmp_path / "state", "lead", "s") as bridge:
+    with resident_session(comms, tmp_path / "state", "colleague", "s") as bridge:
         result = resident_tool_use(command, tmp_path / "s.jsonl", bridge)
         assert result.status == 0, result.stderr
         assert json.loads(result.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"

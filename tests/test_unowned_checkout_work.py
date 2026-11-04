@@ -116,15 +116,15 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
     # Two order holders never share one worktree, so the unit taking the work has its own.
     spare = tmp_path / 'idle-project'
     git(home, 'worktree', 'add', '-q', '-b', 'idle-home', str(spare))
-    for name in ('lead', 'worker'):
+    for name in ('colleague', 'worker'):
         c.registry.declare(Thread(
             name, frozenset(), Checkout(home), execution=ExternalThreadExecution))
     c.registry.declare(Thread(
         'idle', frozenset(), Checkout(spare), execution=ExternalThreadExecution,
         process_identity=ProcessIdentity.capture(os.getpid())))
     request = c.goals.todos.add_request(
-        c.registry.require('lead').incarnation, 'Keep changes with their author').id
-    lead, worker = c.registry.require('lead'), c.registry.require('worker')
+        c.registry.require('colleague').incarnation, 'Keep changes with their author').id
+    colleague, worker = c.registry.require('colleague'), c.registry.require('worker')
     now = time.time()
     order = PendingProblemOrder(
         owner=FileLine('work.py', 1), scope=FIX_SCOPE, run=MechanicalOrderRun(),
@@ -135,7 +135,7 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
     for problem in ('P1', 'P2'):
         c.goals.todos.create(
             problem, RepositoryName.from_wire('OpenHCSDev/agent-comms'),
-            'Keep changes with their author', creator=lead, assigner=lead.incarnation, owner=worker,
+            'Keep changes with their author', creator=colleague, assigner=colleague.incarnation, owner=worker,
             generation=shared_work_goal_id, review_at=RecordedEventTime(now + 3600),
             order=order, request=request)
     # The holder takes both under a new goal: one order, one write.
@@ -150,8 +150,8 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
     with c.goals.todos.writing() as db:
         Todo.ordered(
             'P3', RepositoryName.from_wire('OpenHCSDev/agent-comms'),
-            'Keep unrelated work separate', lead.incarnation,
-            Assignment.of(worker.incarnation, lead.incarnation, other_work_goal_id),
+            'Keep unrelated work separate', colleague.incarnation,
+            Assignment.of(worker.incarnation, colleague.incarnation, other_work_goal_id),
             RecordedEventTime(now + 3600), order.reissued(now + 2), request,
         ).insert_if_absent(db)
     row = c.goals.todos.get('P2')
@@ -171,7 +171,7 @@ def struck_unowned_bus(checkout_bus: Comms) -> tuple[Comms, StrikeTodo]:
     c = checkout_bus
     row = c.goals.todos.get('P1')
     strike = StrikeTodo(
-        row.revision, c.registry.require('lead').incarnation, row.held(),
+        row.revision, c.registry.require('colleague').incarnation, row.held(),
         'The worker claimed completion without delivering any of its checked implementation.',
         evidence=(row.order.checked().owner,))
     struck = c.goals.todos.apply(row.id, strike)
@@ -194,7 +194,7 @@ def test_a_concurrent_unstrike_does_not_end_the_heartbeat_pass(struck_unowned_bu
                   if rule.todo.id == 'P1')
         current = c.goals.todos.get('P1')
         fresh = c.goals.todos.apply(current.id, VoidStrikeTodo(
-            current.revision, c.registry.require('lead').incarnation, strike,
+            current.revision, c.registry.require('colleague').incarnation, strike,
             'The cited failure was incorrect and the teammate takes back this strike.'))
         following = ServicePassFailing(watch='following-rule', since=time.time(), error='independent source',
                                        failed_at=time.time())
@@ -205,10 +205,10 @@ def test_a_concurrent_unstrike_does_not_end_the_heartbeat_pass(struck_unowned_bu
         assert assigned.revision == fresh.revision + 1
         assert not assigned.strikes_against(c.registry.require('worker').incarnation)
         assert stale.redecided(c, assigned) == ()
-        update, = TeamUpdate.latest(c, c.registry.require('lead').incarnation)
+        update, = TeamUpdate.latest(c, c.registry.require('colleague').incarnation)
         assert not update.not_applied
         assert RulePing.capture(following) in update.handled
-        assert c.registry.require('lead').incarnation in (
+        assert c.registry.require('colleague').incarnation in (
             ServicePassStore.at(c.root).read().commander_completed)
 
 
@@ -229,7 +229,7 @@ def test_a_non_refreshable_todo_conflict_does_not_end_the_heartbeat_pass(checkou
                                    failed_at=time.time())
     with LaunchRoot.from_path(c.root).selected():
         run_heartbeat_rules(c, (stale, following))
-        update, = TeamUpdate.latest(c, c.registry.require('lead').incarnation)
+        update, = TeamUpdate.latest(c, c.registry.require('colleague').incarnation)
         # The rule's line counts seconds since its failure, so the pass's render and this one
         # can differ by a clock tick; the refusal and the rule it refused are the facts.
         refused, = update.not_applied
@@ -237,7 +237,7 @@ def test_a_non_refreshable_todo_conflict_does_not_end_the_heartbeat_pass(checkou
         assert stale.watch in refused
         assert RulePing.capture(stale) not in update.handled
         assert RulePing.capture(following) in update.handled
-        assert c.registry.require('lead').incarnation in (
+        assert c.registry.require('colleague').incarnation in (
             ServicePassStore.at(c.root).read().commander_completed)
 
 
@@ -256,7 +256,7 @@ def test_a_second_todo_conflict_is_reported_without_ending_the_pass(struck_unown
 
     previous = c.goals.todos.get('P1')
     current = c.goals.todos.apply(previous.id, VoidStrikeTodo(
-        previous.revision, c.registry.require('lead').incarnation, strike,
+        previous.revision, c.registry.require('colleague').incarnation, strike,
         'The cited failure was incorrect and the teammate takes back this strike.'))
     stale = ChangingRow(previous, current)
     following = ServicePassFailing(watch='following-rule', since=time.time(), error='independent source',
@@ -269,7 +269,7 @@ def test_a_second_todo_conflict_is_reported_without_ending_the_pass(struck_unown
         assert caught.value.previous == previous
         assert caught.value.current == current
         run_heartbeat_rules(c, (stale, following))
-        update, = TeamUpdate.latest(c, c.registry.require('lead').incarnation)
+        update, = TeamUpdate.latest(c, c.registry.require('colleague').incarnation)
         assert update.not_applied == (stale.rejected_line(caught.value),)
         assert RulePing.capture(stale) not in update.handled
         assert RulePing.capture(following) in update.handled

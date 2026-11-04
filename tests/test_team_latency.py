@@ -51,7 +51,7 @@ def test_team_verb_answers_under_five_seconds(
 ) -> None:
     comms.channels.create_tag("comms")
     names = tuple(f"worker-{index}" for index in range(500))
-    for index, name in enumerate((*names, "lead")):
+    for index, name in enumerate((*names, "colleague")):
         comms.registry.declare(Thread(
             name, frozenset({"comms"}), Checkout(tmp_path / name),
             created_at=10000.0 + index, execution=ExternalThreadExecution,
@@ -60,7 +60,7 @@ def test_team_verb_answers_under_five_seconds(
     configured_repository(comms)
     snapshot = comms.registry.snapshot()
     rows = (
-        (Message("lead", names[(seq - 1) % len(names)], f"retained {seq}", InfoKind,
+        (Message("colleague", names[(seq - 1) % len(names)], f"retained {seq}", InfoKind,
                  seq=seq, timestamp=30000.0), names[(seq - 1) % len(names)])
         for seq in range(1, 20001)
     )
@@ -91,16 +91,16 @@ def test_team_verb_answers_under_five_seconds(
 @pytest.fixture
 def reply_history(comms: Comms, tmp_path: Path) -> tuple[Comms, tuple[MessageReference, ...]]:
     comms.channels.create_tag("comms")
-    for index, name in enumerate(("lead", "sender", "other")):
+    for index, name in enumerate(("colleague", "sender", "other")):
         comms.registry.declare(Thread(name, frozenset({"comms"}), Checkout(tmp_path / name),
                                       created_at=10000.0 + index))
     originals = (
         Message("sender", "#comms", "channel", InfoKind, seq=1, timestamp=30000.0),
-        Message("sender", "lead", "direct", InfoKind, seq=2, timestamp=30000.0),
-        Message("other", "lead", "unrelated", InfoKind, seq=3, timestamp=30000.0),
+        Message("sender", "colleague", "direct", InfoKind, seq=2, timestamp=30000.0),
+        Message("other", "colleague", "unrelated", InfoKind, seq=3, timestamp=30000.0),
     )
     Bus.install(Bus.path_in(comms.root), history=recorded_history(
-        ((message, "lead") for message in originals), comms.registry.snapshot(),
+        ((message, "colleague") for message in originals), comms.registry.snapshot(),
     ))
     return comms, tuple(message.reference for message in originals)
 

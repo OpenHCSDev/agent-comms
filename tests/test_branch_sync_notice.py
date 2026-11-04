@@ -15,7 +15,7 @@ from conftest import declare_test_bus
 @pytest.fixture
 def branch_notice(comms: Comms, tmp_path: Path) -> tuple[Comms, BranchBehindMain]:
     declare_test_bus(comms, channels=("comms",), threads=(
-        Thread("lead", frozenset({"comms"}), Checkout(tmp_path / "lead")),
+        Thread("colleague", frozenset({"comms"}), Checkout(tmp_path / "colleague")),
         Thread("worker", frozenset({"comms"}), Checkout(tmp_path / "worker")),
     ))
     return comms, BranchBehindMain(
@@ -28,7 +28,7 @@ def branch_notice(comms: Comms, tmp_path: Path) -> tuple[Comms, BranchBehindMain
 @pytest.mark.parametrize("rename_from,rename_to,target", (
     ("", "", "worker"),
     ("worker", "renamed-worker", "renamed-worker"),
-    ("lead", "renamed-lead", "worker"),
+    ("colleague", "renamed-colleague", "worker"),
 ))
 def test_branch_notice_reaches_its_current_holder_in_cores_voice(
     branch_notice: tuple[Comms, BranchBehindMain], rename_from: str, rename_to: str, target: str,
