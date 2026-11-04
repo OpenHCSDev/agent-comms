@@ -351,11 +351,11 @@ class OwnerLifecycle:
             return tuple((thread, fenced.claim_generation(thread.name)) for thread, _ in owners)
 
     def stop(self, *names: str) -> None:
-        threads = tuple(self.registry.require(name) for name in dict.fromkeys(names))
-        for thread in threads:
-            thread.role.require_executable(RelationViolationError("Only agent threads can be stopped."))
-        names = tuple(remaining for thread in threads
-                      for remaining in thread.stop_names(self.registry.release_external))
+        # Only a live holder skips fence_stop, and Thread.__post_init__ lets only an agent hold
+        # one, so fence_stop's own check stays the one that refuses a human thread.
+        names = tuple(remaining for name in dict.fromkeys(names)
+                      for remaining in self.registry.require(name).stop_names(
+                          self.registry.release_external))
         owners = self.fence_stop(*names)
         self._stop_processes(owners)
         # Completed per-session retirement, not the early fence, permits settlement.
