@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Annotated, ClassVar
 
 from agent_comms.declared_verb import DeclaredVerb
+from agent_comms import integration
 from agent_comms.installer.declared_uv import DeclaredUv
 from agent_comms.integration import (
     CiEvent,
@@ -83,8 +84,16 @@ class LocalCheckerVerb(DeclaredVerb, affix="Verb"):
         checkout = root / "checkout"
         # The tool's own object store spares the network every object it already holds.
         objects = Repo.git(tool, "rev-parse", "--path-format=absolute", "--git-common-dir")
-        Repo.git(root, "clone", "--no-checkout", "--reference", objects.strip(),
-                 Repo.github_url(repository), str(checkout), timeout=600)
+        Repo.git(
+            root,
+            "clone",
+            "--no-checkout",
+            "--reference",
+            objects.strip(),
+            Repo.github_url(repository),
+            str(checkout),
+            timeout=600,
+        )
         Repo.git(checkout, "fetch", "origin", self.reference, timeout=600)
         tested = Repo.git(checkout, "rev-parse", "FETCH_HEAD^{commit}").strip()
         Repo.git(checkout, "checkout", "--detach", tested)
@@ -94,17 +103,37 @@ class LocalCheckerVerb(DeclaredVerb, affix="Verb"):
         reported = subprocess.run((uv, "--version"), capture_output=True, text=True, check=True)
         if not DeclaredUv.of(checkout / "pyproject.toml", uv).accepts(reported.stdout):
             raise IntegrationFailed(f"{uv} is not the uv the tested checkout declares")
-        self.step((uv, "sync", "--locked", "--all-extras"), checkout,
-                  {**os.environ, "UV_PROJECT_ENVIRONMENT": str(checker.prefix)})
+        self.step(
+            (uv, "sync", "--locked", "--all-extras"),
+            checkout,
+            {**os.environ, "UV_PROJECT_ENVIRONMENT": str(checker.prefix)},
+        )
         # CI puts the checker's bin first on PATH for every later step.
         environment = checker.environment(os.environ)
         sources = root / "paired-sources"
-        self.step((checker.interpreter, "-m", "agent_comms.integration", "--resolve-ci-inputs",
-                   sources, *CiEvent.to_arguments(event)),
-                  checkout, {**environment, "PYTHONPATH": "src"})
-        self.step((checker.interpreter, "tools/checker_stack.py", "--ci-inputs", sources,
-                   *CiRunner.to_arguments(event)),
-                  checkout, {**environment, "PYTHONPATH": "src:tools"})
+        self.step(
+            (
+                checker.interpreter,
+                "-m",
+                integration.__name__,
+                "--resolve-ci-inputs",
+                sources,
+                *CiEvent.to_arguments(event),
+            ),
+            checkout,
+            {**environment, "PYTHONPATH": "src"},
+        )
+        self.step(
+            (
+                checker.interpreter,
+                "tools/checker_stack.py",
+                "--ci-inputs",
+                sources,
+                *CiRunner.to_arguments(event),
+            ),
+            checkout,
+            {**environment, "PYTHONPATH": "src:tools"},
+        )
         return checker.interpreter
 
 
