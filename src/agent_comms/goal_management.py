@@ -144,7 +144,8 @@ class Goals(GoalRecords):
                 or f'Coordinate assigned work for {parent.name}.')
         return SetGoalAction(text=text).create(GoalActionContext(self, child))
 
-    def change_problem(self, problem, operation, actor: ThreadIncarnation):
+    def change_problem(self, problem: str, operation: TodoCommand,
+                       actor: ThreadIncarnation) -> Todo:
         """The caller's resolved identity carries its authority; a name lookup would drop it."""
         current = self.todos.get(problem)
         current.require_maintainer(actor)

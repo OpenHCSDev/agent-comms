@@ -11,7 +11,7 @@ import pytest
 from agent_comms.channel_targets import CommsTag
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.cli_bridges.session_watch import WatchClaim
-from agent_comms.task_attachments.team_pings import TeamUpdateNotice
+from agent_comms.task_attachments.team_pings import TeamUpdate
 from agent_comms.task_attachments.owner_notices import TeamNotice
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.shared import MonitorService
@@ -104,7 +104,10 @@ async def test_unconfirmed_monitor_reports_team_deaf_once(
                 update, = held_bus.bus.bus.latest_addressed(
                     frozenset({owner_thread}), frozenset({"colleague"}),
                 )
-                assert isinstance(update.task, TeamUpdateNotice)
+                # The board's open lines wake every beat (TeamUpdate.derive); reconnecting
+                # must add no line of its own.
+                assert isinstance(update.task, TeamUpdate)
+                assert update.task.new_pings() == ()
             finally:
                 writer.close()
                 await writer.wait_closed()
