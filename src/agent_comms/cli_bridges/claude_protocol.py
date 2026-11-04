@@ -1062,7 +1062,18 @@ class CompactBoundary(SystemEvent, TimedRecord, declared_name='compact_boundary'
 
 
 class StopHookSummary(SystemEvent, declared_name='stop_hook_summary'):
-    pass
+    """A cloud session writes no turn_duration (0 against 17 of these in claude-remote-d), so this
+    is the only end of its turn. A hook with output usually continues the turn: in one local
+    session, 73 of 121 such summaries were followed by more of the assistant, and 2 of 109 without
+    output were."""
+
+    has_output: bool = Field(default=True, alias='hasOutput')
+
+    def ends_turn(self) -> bool:
+        return not self.has_output
+
+    def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
+        return session.retired(AllTurnsEnded()) if self.ends_turn() else ()
 
 
 class Informational(SystemEvent, declared_name='informational'):

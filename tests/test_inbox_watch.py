@@ -153,6 +153,23 @@ async def test_activity_comes_from_the_same_lines_as_the_chat_once_the_window_ha
             assert not watch.done(), watch.result()
             await asyncio.sleep(0.05)
     assert activity().detail == "Run sleep 60"
+
+    def stop_hooks_summary(*, output: bool) -> str:
+        return json.dumps({"type": "system", "subtype": "stop_hook_summary", "uuid": str(uuid4()),
+                           "timestamp": "2026-11-04T00:00:02.000Z", "hasOutput": output})
+
+    async with asyncio.timeout(30):
+        with source.open("a") as stream:
+            stream.write(f"{stop_hooks_summary(output=True)}\n")
+            stream.write(f"{transcript_lines('the hook spoke, so the turn goes on')[1]}\n")
+        while "the hook spoke" not in await turns_of(client, token, "cloud"):
+            await asyncio.sleep(0.05)
+        assert activity().state is not ActivityState.IDLE
+        with source.open("a") as stream:
+            stream.write(f"{stop_hooks_summary(output=False)}\n")
+        while activity().state is not ActivityState.IDLE:
+            assert not watch.done(), watch.result()
+            await asyncio.sleep(0.05)
     watch.cancel()
 
 
