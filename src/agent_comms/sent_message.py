@@ -5,6 +5,7 @@ results, not another wire format or a change to native tool result producers.
 """
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Self
 
@@ -18,8 +19,34 @@ if TYPE_CHECKING:
     from .messages import Message
 
 
+class PublicationSource(ABC):
+    """Where a publication came from; each member answers sameness for its own kind."""
+
+    @abstractmethod
+    def same_publication_source(self, other: PublicationSource) -> bool: ...
+
+    def same_as_assigned(self, assigned: AssignedSourceIdentity) -> bool:
+        return False
+
+    def same_as_unassigned(self) -> bool:
+        return False
+
+
+class NoAssignedSource(PublicationSource):
+    """A publication no wire recipient was assigned to."""
+
+    def same_publication_source(self, other: PublicationSource) -> bool:
+        return other.same_as_unassigned()
+
+    def same_as_unassigned(self) -> bool:
+        return True
+
+
+NO_ASSIGNED_SOURCE = NoAssignedSource()
+
+
 @dataclass(frozen=True)
-class AssignedSourceIdentity:
+class AssignedSourceIdentity(PublicationSource):
     root: str
     recipient: ThreadIncarnation
 
@@ -28,8 +55,11 @@ class AssignedSourceIdentity:
         """Published authorship survives a rename, not a new birth or wire."""
         return self.root, self.recipient.require_recorded().created_at
 
-    def same_publication_source(self, other: AssignedSourceIdentity) -> bool:
-        return self.root == other.root and self.recipient == other.recipient
+    def same_publication_source(self, other: PublicationSource) -> bool:
+        return other.same_as_assigned(self)
+
+    def same_as_assigned(self, assigned: AssignedSourceIdentity) -> bool:
+        return self.root == assigned.root and self.recipient == assigned.recipient
 
 
 @dataclass(frozen=True, eq=False)
