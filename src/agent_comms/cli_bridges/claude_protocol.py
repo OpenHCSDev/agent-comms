@@ -73,6 +73,8 @@ from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
 
 from ..session_receipts import SessionReceipts
 from ..wire_models import WireModel
+from agent_comms.harness_delivery_states import MonitorEvidence, ReceivingMonitor, UnrecordedMonitor
+
 from .shared import (
     MONITOR_FRAME,
     ConfirmedDelivery,
@@ -147,6 +149,18 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
             pieces.append(line[:cut])
             line = line[cut:]
         return (*pieces, line)
+
+    @cached_property
+    def whole_part(self) -> MonitorPart:
+        """The one part an inline event shows: the whole message."""
+        return MonitorPart.model_validate(dict(
+            id=self.message.message_id, sender=self.message.sender, number=1, total=1,
+            body=self.message.body))
+
+    def shown_evidence(self) -> MonitorEvidence:
+        """What a route that sees only shown events waits for: the whole part one event shows,
+        or, for a message sent as a file no Read here can check, nothing."""
+        return ReceivingMonitor(self.whole_part.total) if self.fits_one_event else UnrecordedMonitor()
 
     @cached_property
     def observed(self) -> tuple[str, ...]:
@@ -292,9 +306,7 @@ class MonitorShown(MonitorFrame, declared_name='shown'):
                     await bridge.record_mismatch(
                         delivery, 'Shown lines do not equal the original message')
                     continue
-                return await MonitorPart.model_validate(dict(
-                    id=identity, sender=message.sender, number=1, total=1, body=message.body,
-                )).confirm(bridge, record)
+                return await ClaudeMonitorFrame(message).whole_part.confirm(bridge, record)
         return ()
 
 

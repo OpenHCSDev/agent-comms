@@ -39,6 +39,39 @@ from .claude_transcript import (
 from .session_watch import WatchClaim
 
 
+class PrintLedger:
+    """A session with no transcript is no session this machine can name: it keeps no ledger
+    and sends none, so a connector never replays anything to it."""
+
+    def record(self, reference: MessageReference) -> None:
+        """Nothing is kept, so nothing can be proved."""
+
+    def reports(self) -> tuple[str, ...]:
+        return ()
+
+
+@dataclass(frozen=True)
+class SessionLedger(PrintLedger):
+    """What one session's watches may have printed, one reference per line. It is the session's
+    own, so a channel message printed in one session proves nothing about another's attempt."""
+
+    path: Path
+
+    def record(self, reference: MessageReference) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with self.path.open("a") as stream:
+            stream.write(f"{reference.name}\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+
+    def reports(self) -> tuple[str, ...]:
+        try:
+            names = self.path.read_text().split()
+        except FileNotFoundError:
+            names = []
+        return (PrintedLedger(printed=tuple(MessageReference.named(name) for name in names)).line(),)
+
+
 class TranscriptRoute(ABC):
     """How this session's transcript reaches its socket."""
 
@@ -46,12 +79,18 @@ class TranscriptRoute(ABC):
     async def sent(self, socket: ClientWebSocketResponse) -> None:
         """Send until the socket ends; a route with nothing to send says why."""
 
+    def ledger(self, state: Path) -> PrintLedger:
+        return PrintLedger()
+
 
 @dataclass(frozen=True)
 class FollowedTranscript(RecentClaudeWindow, TranscriptRoute):
     """The session's own file, sent from its recent window onward as a local bridge reads it."""
 
     source: Path
+
+    def ledger(self, state: Path) -> PrintLedger:
+        return SessionLedger(state / "printed" / self.source.stem)
 
     watch_url: ClassVar[re.Pattern[str]] = re.compile(r'wss?://[^\s"\'\\]+/watch/[\w-]+')
     hidden_url: ClassVar[str] = '[inbox watch URL]'
@@ -157,16 +196,8 @@ class InboxSocket:
     side has no such confirmation, so each message gets a batch of its own."""
 
     @property
-    def ledger(self) -> Path:
-        """Every message this machine's watches may have printed, one reference per line."""
-        return self.exports.parent / "printed"
-
-    def printed(self) -> PrintedLedger:
-        try:
-            names = self.ledger.read_text().split()
-        except FileNotFoundError:
-            names = []
-        return PrintedLedger(printed=tuple(MessageReference.named(name) for name in names))
+    def ledger(self) -> PrintLedger:
+        return self.transcript.ledger(self.exports.parent)
 
     async def deliver(self, frame: str, socket: ClientWebSocketResponse) -> None:
         """Inline when one Monitor batch holds it, otherwise one notice naming its whole body.
@@ -174,11 +205,7 @@ class InboxSocket:
         never replays, never one the session saw twice."""
         message = FieldCodec.decode(Delivered, FieldCodec.parse(frame))
         _, line = ClaudeMonitorFrame(message).event(self.exports)
-        self.ledger.parent.mkdir(parents=True, exist_ok=True)
-        with self.ledger.open("a") as stream:
-            stream.write(f"{message.reference.name}\n")
-            stream.flush()
-            os.fsync(stream.fileno())
+        self.ledger.record(message.reference)
         print(line, flush=True)
         await socket.send_str(PrintedNow(printed=(message.reference,)).line())
         await asyncio.sleep(self.batch_gap_seconds)
@@ -205,7 +232,8 @@ class InboxSocket:
                 self.url, proxy=self.proxy, heartbeat=25.0
             ) as socket:
                 print("Watching your inbox; each message arrives as an event.", flush=True)
-                await socket.send_str(self.printed().line())
+                for report in self.ledger.reports():
+                    await socket.send_str(report)
                 publishing = asyncio.create_task(self.publishing(socket))
                 try:
                     async for frame in socket:

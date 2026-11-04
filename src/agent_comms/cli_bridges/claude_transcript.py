@@ -115,8 +115,7 @@ class WatchReport(TaggedWire, ABC, affix="", declared_name=None):
 
     async def received(self, pushed: PushedTranscript) -> None:
         """Each printed message's attempt is emitted: shown or about to be, never sent again."""
-        for reference in self.printed:
-            await pushed.emitted(reference)
+        await pushed.emitted(frozenset(self.printed))
 
 
 class PrintedNow(WatchReport, declared_name='printed'):
