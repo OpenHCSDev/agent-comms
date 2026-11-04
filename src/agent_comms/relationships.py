@@ -7,6 +7,8 @@ claim historical proof that a model consumed an old channel message.
 
 from __future__ import annotations
 
+from .tool_result import ToolResult
+
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
@@ -431,7 +433,7 @@ class RelationshipContext:
 
 
 @dataclass(frozen=True, slots=True)
-class ThreadCommsSnapshot:
+class ThreadCommsSnapshot(ToolResult):
     owner: str
     root: str
     groups: tuple[RelationshipGroup, ...]

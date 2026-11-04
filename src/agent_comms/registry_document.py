@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .tool_result import ToolResult
+
 import time
 from pathlib import Path
 from abc import ABC, abstractmethod
@@ -142,7 +144,7 @@ class ResolvedChannel(ResolvedTarget):
         )
 
 
-class ProjectThreadSelection(SubclassUnion, affix="ProjectThread"):
+class ProjectThreadSelection(SubclassUnion, ToolResult, affix="ProjectThread"):
     """The registry's complete answer, including absence and ambiguity. A remote UI receives
     it from Core, so each record carries its kind."""
 
@@ -1143,7 +1145,7 @@ class RegistryEntry:
 
 @SnapshotValue.required
 @dataclass(frozen=True, slots=True)
-class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadStatus]], RegistryProvenance):
+class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadStatus]], RegistryProvenance, ToolResult):
     purpose: Annotated[RootPurpose, SlicePolicy(WholeDocumentValue)]
     threads: Annotated[ThreadRows, SlicePolicy(ThreadRowsSlice)]
     statuses: Annotated[Mapping[str, ThreadStatus], SlicePolicy(MappingRowsSlice)]

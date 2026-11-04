@@ -58,23 +58,24 @@ def test_a_remote_ui_reads_the_registry_with_its_renames(tmp_path):
     """The registry Core answers survives the wire: a rename's alias still resolves remotely."""
     from agent_comms.core_access import LocalCoreAccess
     from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.tools import CommsRegistryTool, RegistryRead
+    from agent_comms.tools import CommsRegistryTool
+    from agent_comms.registry_document import RegistrySnapshot
 
     comms = wire(tmp_path / "wire")
     _declare(comms, "worker", str(tmp_path))
     comms.registry.rename("worker", "renamed")
     answer = LocalCoreAccess(comms).call(CommsRegistryTool())
-    received = FieldCodec.decode(RegistryRead, FieldCodec.encode(answer))
-    assert received.snapshot == comms.registry.snapshot()
-    assert received.snapshot.canonical_name("worker") == "renamed"
+    received = FieldCodec.decode(RegistrySnapshot, FieldCodec.encode(answer))
+    assert received == comms.registry.snapshot()
+    assert received.canonical_name("worker") == "renamed"
     # The received snapshot selects by the project path Core records, compared exactly.
     project = tmp_path.resolve()
-    assert received.snapshot.session_thread(project, "worker").name_or("worker") == "renamed"
-    assert received.snapshot.session_thread(project / "elsewhere", "worker").name_or("kept") == "kept"
+    assert received.session_thread(project, "worker").name_or("worker") == "renamed"
+    assert received.session_thread(project / "elsewhere", "worker").name_or("kept") == "kept"
     # An alias resolves only on Core's host: a detached copy elsewhere never follows it.
     alias = tmp_path.parent / f"{tmp_path.name}-alias"
     alias.symlink_to(project)
-    assert received.snapshot.session_thread(alias, "worker").name_or("kept") == "kept"
+    assert received.session_thread(alias, "worker").name_or("kept") == "kept"
     assert comms.registry.session_thread(alias, "worker").name_or("worker") == "renamed"
 
 
@@ -98,7 +99,8 @@ def test_a_ui_session_finds_its_project_thread_through_core(tmp_path):
     from agent_comms.core_access import LocalCoreAccess
     from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.registry_document import FoundProjectThread, NoProjectThread
-    from agent_comms.tools import CommsSessionThreadTool, SessionThreadSelected
+    from agent_comms.tools import CommsSessionThreadTool
+    from agent_comms.registry_document import ProjectThreadSelection
 
     comms = wire(tmp_path / "wire")
     _declare(comms, "worker", str(tmp_path))
@@ -106,29 +108,31 @@ def test_a_ui_session_finds_its_project_thread_through_core(tmp_path):
     alias.symlink_to(tmp_path.resolve())
     for project, expected in ((alias, FoundProjectThread), (tmp_path / "elsewhere", NoProjectThread)):
         answer = LocalCoreAccess(comms).call(CommsSessionThreadTool(project=str(project), preferred="worker"))
-        received = FieldCodec.decode(SessionThreadSelected, FieldCodec.encode(answer))
-        assert received == answer and isinstance(received.selection, expected)
-    assert received.selection.name_or("kept") == "kept"
+        received = FieldCodec.decode(ProjectThreadSelection, FieldCodec.encode(answer))
+        assert received == answer and isinstance(received, expected)
+    assert received.name_or("kept") == "kept"
 
 
 def test_a_ui_reads_a_threads_configuration_through_core(tmp_path):
     """The status a DM shows is Core's configuration answer, the same across the codec."""
     from agent_comms.core_access import LocalCoreAccess
     from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.tools import CommsThreadConfigurationTool, ThreadConfigured
+    from agent_comms.tools import CommsThreadConfigurationTool
+    from agent_comms.acp_extension import CoordinationChangedUpdate
 
     comms = wire(tmp_path / "wire")
     _declare(comms, "worker", str(tmp_path))
     answer = LocalCoreAccess(comms).call(CommsThreadConfigurationTool(thread="worker"))
-    received = FieldCodec.decode(ThreadConfigured, FieldCodec.encode(answer))
-    assert received.update.status_label == comms.configuration.answer("worker").status_label
+    received = FieldCodec.decode(CoordinationChangedUpdate, FieldCodec.encode(answer))
+    assert received.status_label == comms.configuration.answer("worker").status_label
 
 
 def test_a_ui_asks_core_which_open_views_lost_their_source(tmp_path):
     """A deleted thread and an unknown channel are retired; the answer crosses the codec."""
     from agent_comms.core_access import LocalCoreAccess
     from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.tools import CommsRetiredViewsTool, RetiredViewsRead
+    from agent_comms.tools import CommsRetiredViewsTool
+    from agent_comms.history_views import RetiredViews
 
     comms = wire(tmp_path / "wire")
     _declare(comms, "worker", str(tmp_path))
@@ -137,9 +141,9 @@ def test_a_ui_asks_core_which_open_views_lost_their_source(tmp_path):
     comms.registry.remove("gone")
     request = CommsRetiredViewsTool(threads=frozenset({kept, deleted}), channels=frozenset({"#all", "#nowhere"}))
     answer = LocalCoreAccess(comms).call(FieldCodec.decode(CommsRetiredViewsTool, FieldCodec.encode(request)))
-    received = FieldCodec.decode(RetiredViewsRead, FieldCodec.encode(answer))
-    assert received.retired.threads == {deleted}
-    assert received.retired.channels == {"#nowhere"}
+    received = FieldCodec.decode(RetiredViews, FieldCodec.encode(answer))
+    assert received.threads == {deleted}
+    assert received.channels == {"#nowhere"}
 
 
 def test_a_received_registry_answers_membership_under_its_aliases(tmp_path):
@@ -157,20 +161,21 @@ def test_a_ui_reads_and_orders_relationships_through_core(tmp_path):
     from agent_comms.core_access import LocalCoreAccess
     from agent_comms.display_order import ThreadSort
     from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.relationships import ChildrenRelationshipGroup
+    from agent_comms.presentation import WireRevision
+    from agent_comms.relationships import ChildrenRelationshipGroup, ThreadCommsSnapshot
     from agent_comms.tools import (
         CommsSetRelationshipOrderTool, CommsWireRevisionTool, CommsThreadRelationshipsTool,
-        RelationshipOrdered, ThreadRelationshipsRead, WireRevisionRead,
+        RelationshipOrdered,
     )
 
     comms = wire(tmp_path / "wire")
     _declare(comms, "worker", str(tmp_path))
     core = LocalCoreAccess(comms)
     revision = core.call(CommsWireRevisionTool())
-    assert FieldCodec.decode(WireRevisionRead, FieldCodec.encode(revision)) == revision
+    assert FieldCodec.decode(WireRevision, FieldCodec.encode(revision)) == revision
     read = core.call(CommsThreadRelationshipsTool(owner="worker"))
-    assert FieldCodec.decode(ThreadRelationshipsRead, FieldCodec.encode(read)) == read
-    assert read.snapshot == comms.relationships.snapshot("worker")
+    assert FieldCodec.decode(ThreadCommsSnapshot, FieldCodec.encode(read)) == read
+    assert read == comms.relationships.snapshot("worker")
     order = ThreadSort.members_with(ThreadSort)[-1]
     ordered = core.call(CommsSetRelationshipOrderTool(owner="worker", group=ChildrenRelationshipGroup, order=order))
     assert FieldCodec.decode(RelationshipOrdered, FieldCodec.encode(ordered)) == ordered

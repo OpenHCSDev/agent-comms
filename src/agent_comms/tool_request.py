@@ -285,6 +285,10 @@ class ReadTool(ReadWork, FreshIngress):
 
 
 @dataclass(frozen=True, kw_only=True)
+
+class UiRead[Result: ToolResult = ToolResult](ReadTool, ToolRequest[ToolCaller, Result], declared_name=None):
+    """A read any caller may ask of Core, answering its declared result and changing nothing."""
+
 class ThreadReadTool(ReadTool, NativeToolRequest):
     thread: Annotated[str, *tool_field("Thread to read; omit to read your own")] = (
         ""

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .tool_result import ToolResult
+
 import logging
 import time
 from abc import abstractmethod
@@ -129,7 +131,7 @@ class ThreadViewRead(ConversationPreparation):
 
 
 @dataclass(frozen=True)
-class RetiredViews:
+class RetiredViews(ToolResult):
     """Views whose source no longer exists, as Core decided from one registry read."""
 
     threads: frozenset[ThreadIncarnation]

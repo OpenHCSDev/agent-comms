@@ -644,7 +644,7 @@ class UnidentifiedInputStarted(InputStartedUpdate):
 
 
 @dataclass(frozen=True)
-class CoordinationChangedUpdate(AgentCommsUpdate):
+class CoordinationChangedUpdate(AgentCommsUpdate, ToolResult):
     thread: ThreadIncarnation
     wire_root: str
     owner: ProcessIdentity

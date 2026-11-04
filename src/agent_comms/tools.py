@@ -22,6 +22,7 @@ from .tool_request import (
     ThreadReadTool,
     ThreadContextAction,
     ThreadToolRequest,
+    UiRead,
     ToolRequest,
     NativeToolRequest,
     tool_field,
@@ -435,7 +436,7 @@ class CommsDiscoverTool(ReadTool, NativeToolRequest[ToolCaller, ToolsSelected]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsChannelTool(ReadTool, ToolRequest[ToolCaller, Channel]):
+class CommsChannelTool(UiRead[Channel]):
     """One channel as Core declares it; a UI asks it whether the channel takes input."""
 
     label = "Channel"
@@ -446,12 +447,6 @@ class CommsChannelTool(ReadTool, ToolRequest[ToolCaller, Channel]):
         return comms.bus.require_channel(self.name)
 
 
-@dataclass(frozen=True)
-class RetiredViewsRead(ToolResult):
-    """Which of a UI's open views no longer have a source, as Core decides."""
-
-    retired: RetiredViews
-
 
 @dataclass(frozen=True)
 class HistoricalThreadsRead(ToolResult):
@@ -459,7 +454,7 @@ class HistoricalThreadsRead(ToolResult):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsHistoricalThreadsTool(ReadTool, ToolRequest[ToolCaller, HistoricalThreadsRead]):
+class CommsHistoricalThreadsTool(UiRead[HistoricalThreadsRead]):
     """The preserved identities a UI's saved-sessions view lists, for every sender or one."""
 
     label = "Historical threads"
@@ -540,7 +535,7 @@ class ContextInspectionRead(ToolResult):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsContextInspectionTool(ReadTool, ToolRequest[ToolCaller, ContextInspectionRead]):
+class CommsContextInspectionTool(UiRead[ContextInspectionRead]):
     """One thread's recorded context page, with its annotations and imported sources, as a
     context explorer shows it."""
 
@@ -563,7 +558,7 @@ class CommsContextInspectionTool(ReadTool, ToolRequest[ToolCaller, ContextInspec
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsImportedSourceTool(ReadTool, ToolRequest[ToolCaller, ContextSourceText]):
+class CommsImportedSourceTool(UiRead[ContextSourceText]):
     """The public text of one source an imported thread's snapshot retained."""
 
     label = "Imported source"
@@ -576,7 +571,7 @@ class CommsImportedSourceTool(ReadTool, ToolRequest[ToolCaller, ContextSourceTex
 
 
 @dataclass(frozen=True, kw_only=True)
-class SavedManifestRead(ReadTool, ToolRequest[ToolCaller, ToolResult], declared_name=None):
+class SavedManifestRead[R: ToolResult = ToolResult](UiRead[R], declared_name=None):
     """A read of one retained context manifest of a stopped thread."""
 
     owner: Annotated[str, *tool_field("Thread whose retained manifest to read")]
@@ -588,7 +583,7 @@ class SavedManifestRead(ReadTool, ToolRequest[ToolCaller, ToolResult], declared_
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsSavedSourceTool(SavedManifestRead, ToolRequest[ToolCaller, ContextSourceText]):
+class CommsSavedSourceTool(SavedManifestRead[ContextSourceText]):
     """The public text of one source in a stopped thread's retained manifest."""
 
     label = "Saved context source"
@@ -600,7 +595,7 @@ class CommsSavedSourceTool(SavedManifestRead, ToolRequest[ToolCaller, ContextSou
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsSavedSegmentTool(SavedManifestRead, ToolRequest[ToolCaller, SegmentManifest]):
+class CommsSavedSegmentTool(SavedManifestRead[SegmentManifest]):
     """One segment of a stopped thread's retained manifest, with its selected contributors."""
 
     label = "Saved context segment"
@@ -677,7 +672,7 @@ class CommsCaptureHumanInputTool(HumanToolRequest[HumanInputOrigin]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsThreadPresentationTool(ReadTool, ToolRequest[ToolCaller, ThreadPresentation]):
+class CommsThreadPresentationTool(UiRead[ThreadPresentation]):
     """One thread's published presentation, as the sidebar and session header show it."""
 
     label = "Thread presentation"
@@ -710,20 +705,16 @@ class CommsQueueActionTool(HumanToolRequest[QueueActionApplied]):
         return QueueActionApplied(original.name)
 
 
-@dataclass(frozen=True)
-class WireRevisionRead(ToolResult):
-    revision: WireRevision
-
 
 @dataclass(frozen=True, kw_only=True)
-class CommsWireRevisionTool(ReadTool, ToolRequest[ToolCaller, WireRevisionRead]):
+class CommsWireRevisionTool(UiRead[WireRevision]):
     """What every wire view derives from; an equal revision shows the same thing."""
 
     label = "Wire revision"
     description = "The wire revision thread, relationship and conversation views derive from."
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> WireRevisionRead:
-        return WireRevisionRead(comms.views.revision())
+    def apply(self, comms: Comms, caller: ToolCaller) -> WireRevision:
+        return comms.views.revision()
 
 
 @dataclass(frozen=True)
@@ -746,21 +737,17 @@ class CommsMarkPageReadTool(HumanToolRequest[PageMarked]):
         return PageMarked(len(self.page.messages))
 
 
-@dataclass(frozen=True)
-class ThreadRelationshipsRead(ToolResult):
-    snapshot: ThreadCommsSnapshot
-
 
 @dataclass(frozen=True, kw_only=True)
-class CommsThreadRelationshipsTool(ReadTool, ToolRequest[ToolCaller, ThreadRelationshipsRead]):
+class CommsThreadRelationshipsTool(UiRead[ThreadCommsSnapshot]):
     """One thread's relationship groups, as its sidebar shows them."""
 
     label = "Thread relationships"
     description = "One thread's inbound, outbound, parent, child and collaborating threads."
     owner: Annotated[str, *tool_field("Thread whose relationships to read")]
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> ThreadRelationshipsRead:
-        return ThreadRelationshipsRead(comms.relationships.snapshot(self.owner))
+    def apply(self, comms: Comms, caller: ToolCaller) -> ThreadCommsSnapshot:
+        return comms.relationships.snapshot(self.owner)
 
 
 @dataclass(frozen=True)
@@ -788,7 +775,7 @@ class TargetActionsRead(ToolResult):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsTargetActionsTool(ReadTool, ToolRequest[ToolCaller, TargetActionsRead]):
+class CommsTargetActionsTool(UiRead[TargetActionsRead]):
     """A UI's thread or channel menu: the actions its selection offers. Opening one prepares
     its fields through CommsPrepareTargetActionTool, so listing never runs Pi."""
 
@@ -804,7 +791,7 @@ class CommsTargetActionsTool(ReadTool, ToolRequest[ToolCaller, TargetActionsRead
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsPrepareTargetActionTool(ReadTool, ToolRequest[ToolCaller, PreparedTargetAction]):
+class CommsPrepareTargetActionTool(UiRead[PreparedTargetAction]):
     """Opening a menu action, or changing its values, asks Core which choices it offers."""
 
     label = "Prepare target action"
@@ -830,7 +817,7 @@ class CommsTargetEditTool(HumanToolRequest[TargetEditResult | Channel]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsRetiredViewsTool(ReadTool, ToolRequest[ToolCaller, RetiredViewsRead]):
+class CommsRetiredViewsTool(UiRead[RetiredViews]):
     """A UI asks which of its open thread and channel views lost their source."""
 
     label = "Retired views"
@@ -838,38 +825,26 @@ class CommsRetiredViewsTool(ReadTool, ToolRequest[ToolCaller, RetiredViewsRead])
     threads: Annotated[frozenset[ThreadIncarnation], *tool_field("Open thread views")]
     channels: Annotated[frozenset[str], *tool_field("Open channel views")]
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> RetiredViewsRead:
-        return RetiredViewsRead(comms.views.retired_views(self.threads, self.channels))
+    def apply(self, comms: Comms, caller: ToolCaller) -> RetiredViews:
+        return comms.views.retired_views(self.threads, self.channels)
 
-
-@dataclass(frozen=True)
-class ThreadConfigured(ToolResult):
-    """A thread's configuration as Core answers it: model, thinking level, title, place."""
-
-    update: CoordinationChangedUpdate
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsThreadConfigurationTool(ReadTool, ToolRequest[ToolCaller, ThreadConfigured]):
+class CommsThreadConfigurationTool(UiRead[CoordinationChangedUpdate]):
     """A UI shows a thread's configuration from Core, in process or across the connector."""
 
     label = "Thread configuration"
     description = "One thread's configuration: its model, thinking level, title and worktree."
     thread: Annotated[str, *tool_field("Thread name")]
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> ThreadConfigured:
-        return ThreadConfigured(comms.configuration.answer(self.thread))
+    def apply(self, comms: Comms, caller: ToolCaller) -> CoordinationChangedUpdate:
+        return comms.configuration.answer(self.thread)
 
-
-@dataclass(frozen=True)
-class SessionThreadSelected(ToolResult):
-    """Which thread an unbound UI session at a project names, as Core's registry selects it."""
-
-    selection: ProjectThreadSelection
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsSessionThreadTool(ReadTool, ToolRequest[ToolCaller, SessionThreadSelected]):
+class CommsSessionThreadTool(UiRead[ProjectThreadSelection]):
     """An unbound UI session finds its project's thread; Core's host resolves the path its
     registry records, so a detached copy never matches through a local alias."""
 
@@ -879,8 +854,8 @@ class CommsSessionThreadTool(ReadTool, ToolRequest[ToolCaller, SessionThreadSele
     project: Annotated[str, *tool_field("Project path as the UI names it")]
     preferred: Annotated[str, *tool_field("Preferred thread name")]
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> SessionThreadSelected:
-        return SessionThreadSelected(comms.registry.session_thread(Path(self.project), self.preferred))
+    def apply(self, comms: Comms, caller: ToolCaller) -> ProjectThreadSelection:
+        return comms.registry.session_thread(Path(self.project), self.preferred)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1020,7 +995,7 @@ class CommsChannelsTool(ReadTool, NativeToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsConversationPageTool(ReadTool, ToolRequest[ToolCaller, MessagePage]):
+class CommsConversationPageTool(UiRead[MessagePage]):
     """The UI's conversation read: the same request locally and through the connector."""
 
     label = "Conversation page"
@@ -1037,7 +1012,7 @@ class CommsConversationPageTool(ReadTool, ToolRequest[ToolCaller, MessagePage]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsConversationRevisionTool(ReadTool, ToolRequest[ToolCaller, ConversationRevision]):
+class CommsConversationRevisionTool(UiRead[ConversationRevision]):
     """The UI's change check for one conversation: the same request locally and through the
     connector. The UI keeps the revision it gets back and sends it with the next check."""
 
@@ -1058,7 +1033,7 @@ class CommsConversationRevisionTool(ReadTool, ToolRequest[ToolCaller, Conversati
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsLatestSequenceTool(ReadTool, ToolRequest[ToolCaller, LatestSequence]):
+class CommsLatestSequenceTool(UiRead[LatestSequence]):
     """The bound a UI reads new messages up to, locally or through the connector."""
 
     label = "Latest sequence"
@@ -1076,7 +1051,7 @@ class ServedRoot(ToolResult):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsServedRootTool(ReadTool, ToolRequest[ToolCaller, ServedRoot]):
+class CommsServedRootTool(UiRead[ServedRoot]):
     """A remote UI keys its observation by the root the connector's Core serves."""
 
     label = "Served root"
@@ -1405,22 +1380,16 @@ class CommsThreadsTool(ReadTool, NativeToolRequest):
         return caller.listing(comms, threads.threads)
 
 
-@dataclass(frozen=True)
-class RegistryRead(ToolResult):
-    """The registry as Core holds it: names, aliases, statuses and generations."""
-
-    snapshot: RegistrySnapshot
-
 
 @dataclass(frozen=True, kw_only=True)
-class CommsRegistryTool(ReadTool, ToolRequest[ToolCaller, RegistryRead]):
+class CommsRegistryTool(UiRead[RegistrySnapshot]):
     """A remote UI resolves names, renames and recorded threads against Core's registry."""
 
     label = "Thread registry"
     description = "The thread registry snapshot: names, aliases, statuses and owner generations."
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> RegistryRead:
-        return RegistryRead(comms.registry.snapshot())
+    def apply(self, comms: Comms, caller: ToolCaller) -> RegistrySnapshot:
+        return comms.registry.snapshot()
 
 
 @dataclass(frozen=True)
