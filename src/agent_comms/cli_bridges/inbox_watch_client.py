@@ -106,7 +106,7 @@ class WatchedMonitorFrame(ClaudeMonitorFrame):
     no batch holds goes to the file. Each message already has a batch of its own
     (InboxSocket.batch_gap_seconds), so the batch cap, not the line cap, bounds what fits."""
 
-    GUARD = '​'
+    GUARD = '\u200b'
     """Monitor trims every line and drops one left empty, so a blank line or an indent would
     vanish; a zero-width space at the trimmed end keeps it, and reads as nothing."""
 
