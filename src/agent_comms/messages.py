@@ -68,7 +68,7 @@ from .wake_policy import BoundedTriageWake, PassiveWake
 if TYPE_CHECKING:
     from .bus_publication import Delivered
     from .input_disposition import InputDispositions
-    from .historical_views import HistorySource
+    from .display_references import ReferenceContext
     from .retained_task_facts import ExactTaskFact
     from .threads import Thread
 
@@ -1053,8 +1053,9 @@ class Message(MessageInput, TurnOrigin):
         return MessageId.mint(f"{self.sender}:{self.target}:{self.timestamp}:{self.body}")
 
     @property
-    def history_source(self) -> HistorySource | None:
-        return None
+    def history_source(self) -> MessageHistory:
+        """A live message was recorded by no attached history."""
+        return NO_HISTORY_SOURCE
 
     @property
     def display_metadata(self) -> dict:
@@ -1307,3 +1308,22 @@ class ClaimMessage(Claimed, Message):
         from .retained_task_facts import ClaimTaskFact
         yield from super().retained_task_facts()
         yield ClaimTaskFact(ClaimMessage.of(self, self.claim_transition))
+
+
+class MessageHistory:
+    """Where a displayed message was recorded: an attached history snapshot, or nowhere (live)."""
+
+    __slots__ = ()
+
+    def references_from(self, context: ReferenceContext) -> ReferenceContext:
+        """The names a body recorded here links through; a live message uses the current ones."""
+        return context
+
+
+class NoHistorySource(MessageHistory):
+    """A live message: no snapshot recorded it."""
+
+    __slots__ = ()
+
+
+NO_HISTORY_SOURCE = NoHistorySource()
