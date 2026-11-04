@@ -55,6 +55,8 @@ class TeamProjectLead(Carry):
         return Carried(
             1,
             rewritten=(
-                tuple(written.relative_to(self.root) for written in registry.written) if apply else ()
+                tuple(written.relative_to(self.root) for written in registry.written)
+                if apply
+                else ()
             ),
         )
