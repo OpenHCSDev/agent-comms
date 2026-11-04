@@ -2,6 +2,7 @@
 session had each refusing the paths the other demanded, then, with its bridge down, Core allowing
 only the connect call this gate refused."""
 
+import importlib.util
 import json
 import subprocess
 import sys
@@ -50,3 +51,33 @@ def test_a_bound_session_is_not_dealt_a_second_list(tmp_path: Path):
     enroll(tmp_path)
     assert hook(tmp_path, "deal", source="compact") == ""
     assert not (tmp_path / ".claude" / "state" / f"rule-gate-{SESSION}.json").exists()
+
+
+@pytest.fixture
+def running_job():
+    """A real child of this test shaped like a Claude Code background shell, so the hook, a child
+    of this test too, finds it among its parent's shells."""
+    job = subprocess.Popen(["bash", "-c", ": shell-snapshots/snapshot-job; sleep 30"])
+    yield job
+    job.kill()
+    job.wait()
+
+
+def test_a_running_job_refuses_the_first_stop_and_lets_the_next_through(tmp_path: Path, running_job):
+    """2026-11-04: no limit on the refusal, so Tristan watched it fire eight times in one wait."""
+    assert json.loads(hook(tmp_path, "idle"))["decision"] == "block"
+    assert hook(tmp_path, "idle", stop_hook_active=True) == ""
+
+
+def test_the_bus_watch_is_not_a_job_to_wait_for():
+    """The watch stays armed for the session's whole life; counting it refused every stop."""
+    spec = importlib.util.spec_from_file_location("rule_gate", GATE)
+    gate = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = gate
+    spec.loader.exec_module(gate)
+    session, hook_process, shell = "100", "101", "source /x/shell-snapshots/snapshot-bash.sh && eval"
+    watch = [["200", session, f"{shell} 'agent-comms-claude-bridge watch'"]]
+    job = [["201", session, f"{shell} 'pytest tests'"]]
+    tree = [[session, "1", "claude"], [hook_process, session, "python3 rule_gate.py idle"]]
+    assert gate.jobs_among(tree + watch, int(hook_process)) == 0
+    assert gate.jobs_among(tree + watch + job, int(hook_process)) == 1
