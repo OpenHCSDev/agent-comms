@@ -260,23 +260,20 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
             names=self.names_for(thread.name),
         )
 
-    def roster(
-        self, visibility: RosterVisibility, *, names: Iterable[str] | None = None,
-    ) -> Iterator[Thread]:
+    def roster(self, visibility: RosterVisibility) -> Iterator[Thread]:
         """Every thread whose status this roster shows, executing or not: the user is listed;
         archived and service threads are not, by their statuses' own in_view."""
-        selected = ((self.threads[name] for name, status in self.statuses.items()
-                     if status.in_view(visibility)) if names is None else
-                    (self.threads[name] for name in dict.fromkeys(map(self.canonical_name, names))
-                     if name in self.threads))
-        return (thread for thread in selected if self.status(thread.name).in_view(visibility))
+        return (self.threads[name] for name, status in self.statuses.items()
+                if status.in_view(visibility))
 
     def visible_threads(
         self, visibility: RosterVisibility, *, names: Iterable[str] | None = None,
     ) -> Iterator[Thread]:
-        """The roster's threads that execute turns."""
-        return (executor for thread in self.roster(visibility, names=names)
-                for executor in thread.role.executor(thread))
+        """The roster's threads that execute turns, or only the named ones among them."""
+        selected = (self.roster(visibility) if names is None else
+                    (self.threads[name] for name in dict.fromkeys(map(self.canonical_name, names))
+                     if name in self.threads and self.status(name).in_view(visibility)))
+        return (executor for thread in selected for executor in thread.role.executor(thread))
 
     def active_threads(self, candidates: Iterable[Thread]) -> Iterator[Thread]:
         """Select activity-bearing presences from this already acquired registry cut."""
