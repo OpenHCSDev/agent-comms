@@ -153,20 +153,28 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
                          body=self.slices[number - 2]))
                      for number, _ in shown if number > 1)
 
-    async def emit_to(self, attachment: MonitorAttachment, window_bytes: int, exports: Path) -> None:
-        """A body that fits one event goes inline. Any larger body is the private file the one
-        notice names, whole and readable, so no piece reaches the model on its own."""
+    def shown_inline(self) -> str:
+        """A bridged session confirms delivery by decoding this exact event back out of its
+        transcript, where Monitor joins nearby lines, so it is one reversible JSON string."""
+        return LineMonitorBridge.encode(self.inline)
+
+    def event(self, exports: Path) -> tuple[int, str]:
+        """The message's one Monitor event and the reservation it fills. A body that fits one
+        event goes inline. Any larger body is the private file the one notice names, whole and
+        readable, so no piece reaches the model on its own."""
         if self.fits_one_event:
-            await attachment.emit(self.message.message_id, 1, LineMonitorBridge.encode(self.inline),
-                                  window_bytes)
-            return
+            return 1, self.shown_inline()
         notice = MonitorReadFile.naming(exports, self.message.reference)
         line = notice.model_dump_json()
         if self.units(line) > self.EVENT_CHARS:
             raise ValueError(f'The read notice for {self.message.message_id} exceeds one '
                              f'Monitor event: {notice.path}')
-        await asyncio.to_thread(notice.export, self.export_lines)
-        await attachment.emit(self.message.message_id, notice.reservation, line, window_bytes)
+        notice.export(self.export_lines)
+        return notice.reservation, line
+
+    async def emit_to(self, attachment: MonitorAttachment, window_bytes: int, exports: Path) -> None:
+        number, line = await asyncio.to_thread(self.event, exports)
+        await attachment.emit(self.message.message_id, number, line, window_bytes)
 
     @classmethod
     def decode_line(cls, line: str) -> MonitorFrame:

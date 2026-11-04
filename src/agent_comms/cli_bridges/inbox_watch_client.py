@@ -1,8 +1,9 @@
 """A cloud session's end of its inbox watch: run under Monitor with the URL comms_watch returned.
 
 A cloud sandbox reaches the network only through its proxy, and Monitor's own WebSocket source
-cannot use one, so this process holds the socket. Each pushed message reaches the model exactly as
-it does on the bus host: a one-line notice naming a private file, because Monitor cuts a long line.
+cannot use one, so this process holds the socket. Each pushed message reaches the model as written
+when it fits one Monitor event, otherwise as a one-line notice naming a private file, because
+Monitor cuts a long line.
 The session's transcript goes the other way on the same socket, so its work shows on the bus as a
 local bridge's does. Every way either direction ends says so, since a silent end would look like
 an empty inbox or an idle session.
@@ -19,18 +20,19 @@ from contextlib import aclosing
 from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO, ClassVar
-from urllib.request import getproxies
 
 from aiohttp import ClientError, ClientSession, ClientWebSocketResponse, WSMsgType
+from aiohttp.helpers import get_env_proxy_for_url
+from yarl import URL
 
 from agent_comms.bus import Bus
 from agent_comms.bus_publication import Delivered
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.watched import FileSource
 
+from .claude_protocol import ClaudeMonitorFrame
 from .claude_transcript import WINDOW_ENDED, RecentClaudeWindow, RunningClaude
 from .session_watch import WatchClaim
-from .shared import IncomingFrame, MonitorReadFile
 
 
 class TranscriptRoute(ABC):
@@ -91,6 +93,14 @@ def session_transcript() -> TranscriptRoute:
         return UnfoundTranscript(f"{type(failure).__name__}: {failure}")
 
 
+class WatchedMonitorFrame(ClaudeMonitorFrame):
+    """No transcript decode confirms a watched delivery: the server records it when it sends the
+    frame. So a message that fits one event is shown exactly as written."""
+
+    def shown_inline(self) -> str:
+        return self.inline
+
+
 @dataclass(frozen=True)
 class InboxSocket:
     """One opened watch URL, where its messages are exported and what travels the other way."""
@@ -103,13 +113,13 @@ class InboxSocket:
     """Monitor joins the lines of each 200 ms into one event and cuts a long event mid-line: of 11
     notices at once, the last never reached the model though the bus recorded them as taken. A
     local bridge holds such a burst in its window until the transcript shows each one seen; this
-    side has no such confirmation, so each notice gets a batch of its own."""
+    side has no such confirmation, so each message gets a batch of its own."""
 
     async def deliver(self, frame: str) -> None:
-        message = FieldCodec.decode(Delivered, FieldCodec.parse(frame))
-        notice = MonitorReadFile.naming(self.exports, message.reference)
-        notice.export((IncomingFrame(message).text,))
-        notice.emit()
+        """Inline when it fits one Monitor event, otherwise one notice naming its whole body."""
+        _, line = WatchedMonitorFrame(FieldCodec.decode(Delivered, FieldCodec.parse(frame))).event(
+            self.exports)
+        print(line, flush=True)
         await asyncio.sleep(self.batch_gap_seconds)
 
     async def publishing(self, socket: ClientWebSocketResponse) -> None:
@@ -118,11 +128,20 @@ class InboxSocket:
         except (ClientError, OSError, ConnectionError) as failure:
             print(f"Your work stopped reaching the bus: {type(failure).__name__}: {failure}", flush=True)
 
+    @property
+    def proxy(self) -> URL | None:
+        """A wss socket rides the environment's https proxy, and the environment's bypass list
+        (NO_PROXY, loopback) still holds; aiohttp alone looks only for a wss proxy."""
+        try:
+            return get_env_proxy_for_url(URL(self.url).with_scheme("https"))[0]
+        except LookupError:
+            return None
+
     async def carried(self) -> str:
         """Deliver until the socket ends; what ended it, for the session to act on."""
         try:
             async with ClientSession() as session, session.ws_connect(
-                self.url, proxy=getproxies().get("https"), heartbeat=25.0
+                self.url, proxy=self.proxy, heartbeat=25.0
             ) as socket:
                 print("Watching your inbox; each message arrives as an event.", flush=True)
                 publishing = asyncio.create_task(self.publishing(socket))

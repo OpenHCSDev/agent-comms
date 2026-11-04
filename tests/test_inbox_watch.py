@@ -53,25 +53,46 @@ async def frame(socket) -> dict:
     return json.loads(await asyncio.wait_for(socket.receive_str(), timeout=30))
 
 
-async def test_the_cloud_client_delivers_a_message_as_a_notice_naming_its_whole_body(
+async def delivered_lines(client, token: str, comms: Comms, exports: Path, capsys, body: str):
+    """What the cloud client prints for one message, as Monitor would show it."""
+    url = str(client.make_url(await watch_path(client, token, "cloud")))
+    watch = asyncio.create_task(InboxSocket(url, exports).carried())
+    comms.messaging.send("sender", "cloud", body)
+    lines: list[str] = []
+    async with asyncio.timeout(30):
+        while not any(line.startswith(("Comms in", '{"protocol"')) for line in lines):
+            assert not watch.done(), watch.result()
+            await asyncio.sleep(0.05)
+            lines += capsys.readouterr().out.splitlines()
+    watch.cancel()
+    return lines
+
+
+async def test_the_cloud_client_shows_a_message_that_fits_one_event_as_written(
     session, comms: Comms, tmp_path: Path, capsys
 ) -> None:
     client, token = session
-    url = str(client.make_url(await watch_path(client, token, "cloud")))
     exports = tmp_path / "state" / "messages"
     exports.parent.mkdir(mode=0o700)
-    watch = asyncio.create_task(InboxSocket(url, exports).carried())
-    comms.messaging.send("sender", "cloud", "a body longer than one line\nsecond line")
-    async with asyncio.timeout(30):
-        while not (exports.is_dir() and any(exports.iterdir())):
-            assert not watch.done(), watch.result()
-            await asyncio.sleep(0.05)
-    watch.cancel()
-    lines = capsys.readouterr().out.splitlines()
-    notice = next(json.loads(line) for line in lines if line.startswith("{"))
+    lines = await delivered_lines(client, token, comms, exports, capsys, "short body\nsecond line")
+    start = next(index for index, line in enumerate(lines) if line.startswith("Comms in"))
+    assert lines[start].startswith("Comms in · sender · ") and lines[start].endswith(" · 1/1")
+    assert lines[start + 1:start + 3] == ["short body", "second line"]
+    assert not exports.exists() or not any(exports.iterdir())
+
+
+async def test_the_cloud_client_names_the_whole_body_of_a_message_too_long_for_one_event(
+    session, comms: Comms, tmp_path: Path, capsys
+) -> None:
+    client, token = session
+    exports = tmp_path / "state" / "messages"
+    exports.parent.mkdir(mode=0o700)
+    body = "a line of a long body\n" * 40
+    lines = await delivered_lines(client, token, comms, exports, capsys, body)
+    notice = next(json.loads(line) for line in lines if line.startswith('{"protocol"'))
     assert notice["type"] == "read-file"
     written = Path(notice["path"]).read_text()
-    assert "Comms in · sender" in written and "second line" in written
+    assert written.startswith("Comms in · sender · ") and written.count("a line of a long body") == 40
 
 
 async def test_a_burst_of_pushed_messages_never_shares_one_monitor_batch(
