@@ -564,8 +564,8 @@ def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_
     """Ready and done-but-held phases colleague; finished phases are one count per plan."""
     from agent_comms.team_hud import TeamPhase
     from agent_comms.plan_phases import (
-        DesignReconciledPhase, OneOrderOwnerPhase, RecordPlanePhase, RetainedStorePhase,
-        ReviewQueuePhase,
+        BusInterfacePhase, DesignReconciledPhase, OneOrderOwnerPhase, RecordPlanePhase,
+        RetainedStorePhase, ReviewQueuePhase,
     )
 
     comms = notification_bus
@@ -577,6 +577,7 @@ def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_
         TeamPhase(DesignReconciledPhase, False, False, (worker,)),
         TeamPhase(RecordPlanePhase, False, True, ()),
         TeamPhase(ReviewQueuePhase, True, False, (worker,)),
+        TeamPhase(BusInterfacePhase, True, False, ()),
     ), load=OverloadDegradation.from_orders((), 0, 0), forks=(worker,),
         usage=CodexUsage(UnreadableUsage(reason='not requested')), open_pings=())
     urgent = next(section for section in hud.groups if section.group is UrgentGroup)
@@ -589,6 +590,10 @@ def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_
     assert folded.done == 2
     # The plan still has urgent phases, so its heading must not call it finished.
     assert done_by_plan.heading() == "PHASES DONE BY PLAN · 1"
+    # A plan with nothing left to do leaves the board, and the done counts fold to a heading.
+    assert BusInterfacePhase.plan not in {record.plan for record in done_by_plan.records}
+    assert BusInterfacePhase.declared_name not in "\n".join(hud.hud_text(time.time()))
+    assert not PhasesDoneByPlanGroup.table_lines(table.folded_lines() for table in done_by_plan.tables)
     rendered = "\n".join(hud.hud_text(time.time()))
     assert all(phase.declared_name in rendered for phase in (RecordPlanePhase, ReviewQueuePhase))
 

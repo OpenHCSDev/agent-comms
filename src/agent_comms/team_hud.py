@@ -39,7 +39,7 @@ from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import OrderProgress, ProgressPoint, ProgressRead, ProgressSource, PullRequest
 from agent_comms.tool_result import ToolResult
 from agent_comms.turn_digests import LastTurns
-from agent_comms.ui_model.teammate_state import ExpandedHudGroup, HudGroup, TeammateClock, TeammateState, UrgentGroup
+from agent_comms.ui_model.teammate_state import HudGroup, TeammateClock, TeammateState, UrgentGroup
 from agent_comms.task_attachments.team_pings import (
     AlarmGroup, AlarmSection, TeamDelivery, TeamUpdate, Ping,
 )
@@ -67,9 +67,9 @@ class PlanPhasesGroup(HudGroup):
     tone = AccentTone
 
 
-class PhasesDoneByPlanGroup(ExpandedHudGroup, HudGroup):
-    """Each plan's finished-phase count. A plan appears once one phase is finished; its other
-    phases stay in their own groups, so the heading names phases, never finished plans."""
+class PhasesDoneByPlanGroup(HudGroup):
+    """Each live plan's finished-phase count, folded to its heading: finished work is not what
+    the board asks anyone to read. A plan with no unfinished phase leaves the board."""
 
 
 class HudUnavailableGroup(HudGroup):
@@ -387,7 +387,9 @@ class TeamHud(TeamLoad):
     @cached_property
     def groups(self) -> tuple[HudSection, ...]:
         finished = tuple(phase.phase for phase in self.phases if phase.finished)
-        folded = tuple(FinishedPhases(plan, phases) for plan in Plan.members_with(Plan)
+        live = frozenset(phase.phase.plan for phase in self.phases if not phase.finished)
+        folded = tuple(FinishedPhases(plan, phases)
+                       for plan in Plan.members_with(Plan) if plan in live
                        for phases in (tuple(phase for phase in finished if phase.plan is plan),)
                        if phases)
         return HudSection.partition((*self.units, *(phase for phase in self.phases if not phase.finished),
