@@ -199,7 +199,8 @@ class CatalogDocument(CatalogPreferences):
         return self.tags | frozenset(DeclaredTag.names())
 
     def channel_names(self) -> tuple[str, ...]:
-        """Every channel this catalog declares, in roster order. Names never read activity:
+        """Every channel this catalog declares, in views() order: builtins, then sorted tags,
+        then saved views; the roster's own order is list_order. Names never read activity:
         a reader that only needs to know which channels exist, such as a link context, asks
         here instead of building every channel."""
         return tuple(dict.fromkeys((
