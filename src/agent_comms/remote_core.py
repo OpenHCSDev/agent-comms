@@ -10,7 +10,6 @@ import ssl
 import threading
 import urllib.request
 from dataclasses import dataclass, replace
-from uuid import uuid4
 
 import aiohttp
 from pydantic import JsonValue
@@ -22,7 +21,7 @@ from .connector import CancelledMessage, JsonRpcId, StreamedLine, ToolsCallMessa
 from .connector_profile import HttpsMcpEndpoint, UiConnectionProfile, UiCredential
 from .core_access import CoreAccess
 from .exporting import WireExportCancelled
-from .nominal.field_codec import FieldCodec
+from .nominal.field_codec import FieldCodec, RpcCallId
 from .tool_caller import ToolCaller
 from .tool_request import ObservedToolRequest, RequestPoster, ToolRequest
 from .tool_result import ToolResult
@@ -188,7 +187,7 @@ class RemoteCoreAccess(UiConnectionProfile, CoreAccess, ConnectorClient, Request
     async def streamed[C: ToolCaller, R: ToolResult](
         self, request: ObservedToolRequest[C, R],
     ) -> dict[str, JsonValue]:
-        call_id = uuid4().hex
+        call_id = RpcCallId.mint()
         called = request.called()
         envelope = ToolsCallMessage(jsonrpc="2.0", id=call_id, params=replace(
             called, meta={**called.meta, "progressToken": call_id}))
