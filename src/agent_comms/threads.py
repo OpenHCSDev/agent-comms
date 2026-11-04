@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property
 from pathlib import Path
@@ -89,7 +89,6 @@ from .activity import ObservedActivity
 from .turn_lease import FinishedTurn, NoTurnRecord, TurnLease, TurnLeaseFence, TurnRecord, TurnState
 
 if TYPE_CHECKING:
-    from .agent_activity import RecipientActivity
     from .goal_management import Goals
     from .registry_document import RegistrySnapshot
     from .storage_rules import StorageRule
@@ -535,11 +534,6 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread")
     def presentation(self, status: ThreadStatus, ordinary: ThreadPresentation,
                      binding: ThreadOwnerBinding) -> ThreadPresentation:
         return ordinary
-
-    def observe_recipient(self, agents: Mapping[str, ObservedActivity],
-                          snapshot: RegistrySnapshot) -> RecipientActivity:
-        """The owner binding decides whether this recipient's activity is observable."""
-        return self.owner_binding(snapshot).recipient_activity(agents, snapshot, self)
 
     def holds_activity(self, status: ThreadStatus) -> bool:
         """An executing native turn keeps its last activity current."""

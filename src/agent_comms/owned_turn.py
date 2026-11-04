@@ -88,7 +88,9 @@ class TurnGoalAccount:
     has_productive_tool: bool = field(default=False, init=False)
 
     @staticmethod
-    def reserve(*, owner: NativeThread, goal: Goal, comms: Comms, autonomous: bool) -> GoalTurnPermit:
+    def reserve(
+        *, owner: NativeThread, goal: Goal, comms: Comms, autonomous: bool,
+    ) -> GoalTurnPermit:
         try:
             store = comms.goals.open_goal_store()
             with comms.registry.store.current_snapshot() as cut:

@@ -529,7 +529,8 @@ class ThreadManagement:
         with ExitStack() as cleanup:
             for original in originals:
                 try:
-                    cleanup.enter_context(ThreadDeletionClaim.for_thread(self.root, original).claimed())
+                    cleanup.enter_context(
+                        ThreadDeletionClaim.for_thread(self.root, original).claimed())
                 except ClaimHeldError as error:
                     raise RelationViolationError(
                         f"Thread {original.name!r} already has a permanent-deletion controller.") from error

@@ -78,7 +78,9 @@ class RegisteredRecipient(KnownRecipient):
         return (self.thread,)
 
     def activity(self, observations, snapshot):
-        return self.thread.observe_recipient(observations, snapshot)
+        """The owner binding decides whether this recipient's activity is observable."""
+        return self.thread.owner_binding(snapshot).recipient_activity(
+            observations, snapshot, self.thread)
 
     def input_owners(self) -> tuple[Thread, ...]:
         return (self.thread,)
