@@ -1363,8 +1363,7 @@ def test_retained_head_verdict_precedes_the_published_lost_packet(
     # Retained observations own age; actual publications own which lines were announced.
     delivery = TeamUpdate.derive(owner, (), (lost,), previous,
                                       published=TeamUpdate.published(comms, owner),
-                                      now=time.time(), history=history,
-                                      registry=comms.registry.snapshot())
+                                      now=time.time(), history=history)
     assert delivery.packet.handled[0].since == ping.since
     assert (delivery.open_pings == ()) is cleared
     TeamUpdateStore.record(comms.root, delivery.packet)

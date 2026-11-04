@@ -322,7 +322,7 @@ class TeamUpdate(OwnerNotice, declared_name=None):
                rules: tuple[StandingRule, ...],
                previous: tuple[TeamUpdate, ...], *,
                published: tuple[TeamUpdate, ...], now: float,
-               history: TeamHistory, registry: RegistrySnapshot,
+               history: TeamHistory,
                not_applied: tuple[str, ...] = ()) -> TeamDelivery:
         """The board owns ages; actual publication owns which lines were announced.
         Publication never disposes of a ping; open requests still wake on every beat.
@@ -349,7 +349,7 @@ class TeamUpdate(OwnerNotice, declared_name=None):
         opened = notice.open_pings(history)
         open_members = frozenset(opened)
         # A line waiting on a stopped thread is parked: it is kept and shown, never woken for.
-        stopped = notice.stopped(registry)
+        stopped = notice.stopped(history.snapshot)
         wakes = any(not ping.parked(stopped) for ping in (*new, *opened))
         packet = TeamDecisions(
             recipient, handled, new,

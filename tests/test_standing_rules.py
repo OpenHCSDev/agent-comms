@@ -44,8 +44,7 @@ def test_blocked_goal_leads_the_board_and_clears_when_active(comms, tmp_path, st
     previous = TeamDecisions(thread.incarnation, (old,), (old,), ())
     history = TeamHistory.read(comms, frozenset({thread.name}))
     delivery = TeamUpdate.derive(thread.incarnation, (), (rule,), (previous,),
-                                       published=(previous,), now=now, history=history,
-                                       registry=comms.registry.snapshot())
+                                       published=(previous,), now=now, history=history)
     update = delivery.packet
     assert update.handled[0].urgent
     current = comms.registry.require("paper")
@@ -55,6 +54,5 @@ def test_blocked_goal_leads_the_board_and_clears_when_active(comms, tmp_path, st
     )
     assert GoalBlocked.violations(comms) == ()
     cleared = TeamUpdate.derive(thread.incarnation, (), (), (update,),
-                                     published=(update,), now=now + 60, history=history,
-                                     registry=comms.registry.snapshot())
+                                     published=(update,), now=now + 60, history=history)
     assert cleared.packet.handled == ()

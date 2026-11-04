@@ -22,7 +22,6 @@ def test_a_teammate_with_no_packet_inherits_the_boards_earliest_start(tmp_path):
     retained = (TeamUpdateNotice(colleague, (replace(line, since=RecordedEventTime(100.0)),)),
                 TeamUpdateNotice(peer, (replace(line, since=RecordedEventTime(500.0)),)))
     delivery = TeamUpdate.derive(newcomer, (), (rule,), retained, published=(), now=1000.0,
-                                 history=TeamHistory.read(comms, frozenset()),
-                                 registry=comms.registry.snapshot())
+                                 history=TeamHistory.read(comms, frozenset()))
     handled, = delivery.packet.handled
     assert handled.since == RecordedEventTime(100.0)
