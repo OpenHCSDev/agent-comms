@@ -3,12 +3,19 @@
 set -euo pipefail
 
 usage() {
-    printf 'Usage: toad-comms [THREAD]\n       toad-comms --serve [THREAD] [TOAD SERVE OPTIONS...]\n\nOpen Agent Comms in Toad. Optionally open an existing thread.\nWith --serve, open the same session in a local web browser (toad serve).\n'
+    printf 'Usage: toad-comms [THREAD]\n       toad-comms --serve [THREAD] [TOAD SERVE OPTIONS...]\n       toad-comms --comms-profile PROFILE\n\nOpen Agent Comms in Toad. Optionally open an existing thread.\nWith --serve, open the same session in a local web browser (toad serve).\nWith --comms-profile, open the remote Core that UI profile grants.\n'
 }
 
 frontend=()
 thread=""
-if [[ "${1:-}" == --serve ]]; then
+remote=()
+if [[ "${1:-}" == --comms-profile ]]; then
+    if (( $# != 2 )); then
+        usage >&2
+        exit 2
+    fi
+    remote=("$1" "$2")
+elif [[ "${1:-}" == --serve ]]; then
     shift
     frontend=(serve)
     if (( $# )) && [[ "$1" != -* ]]; then
@@ -81,5 +88,9 @@ if [[ ! -d "$project" ]]; then
     exit 1
 fi
 
-exec "$toad" "${frontend[@]}" acp "$python -m agent_comms.acp" "$project" \
-    --title 'Agent Comms' "${session[@]}"
+surface=(acp "$python -m agent_comms.acp" "$project" --title 'Agent Comms' "${session[@]}")
+if (( ${#remote[@]} )); then
+    # Toad's own connection answers through the connector; no local agent is launched.
+    surface=("${remote[@]}" run "$project")
+fi
+exec "$toad" "${frontend[@]}" "${surface[@]}"
