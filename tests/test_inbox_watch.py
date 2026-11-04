@@ -95,13 +95,51 @@ async def test_the_cloud_client_names_the_whole_body_of_a_message_too_long_for_o
     client, token = session
     exports = tmp_path / "state" / "messages"
     exports.parent.mkdir(mode=0o700)
-    body = "a line of a long body\n" * 40
+    body = "a line of a long body\n" * 160
     lines = await delivered_lines(client, token, comms, exports, capsys, body)
     notice = next(json.loads(line) for line in lines if line.startswith('{"protocol"'))
     assert notice["type"] == "read-file"
     written = Path(notice["path"]).read_text()
     assert written.startswith("Comms in · sender (external agent) · ")
-    assert written.count("a line of a long body") == 40
+    assert written.count("a line of a long body") == 160
+
+
+async def test_the_cloud_client_shows_a_message_one_batch_holds_whole_across_wrapped_lines(
+    session, comms: Comms, tmp_path: Path, capsys
+) -> None:
+    """Monitor cuts a line at 500 units and a batch at 3000, and drops an empty line, so a
+    2500-character body arrives as written: its 1200-character line wrapped under the cap, its
+    blank line kept by a zero-width space Monitor does not trim."""
+    client, token = session
+    exports = tmp_path / "state" / "messages"
+    exports.parent.mkdir(mode=0o700)
+    long = " ".join(f"w{index:03d}" for index in range(240))
+    body = "\n".join(["first", "", long, "x" * (2500 - len(long) - 8)])
+    lines = await delivered_lines(client, token, comms, exports, capsys, body)
+    start = next(index for index, line in enumerate(lines) if line.startswith("Comms in"))
+    shown = lines[start:]
+    assert all(ClaudeMonitorFrame.units(line) <= ClaudeMonitorFrame.EVENT_CHARS for line in shown)
+    assert len("\n".join(shown)) <= ClaudeMonitorFrame.BATCH_CHARS
+    assert shown[1:3] == ["first", "\u200b"]
+    assert "".join(shown[3:6]) == long and "".join(shown[6:]) == body.rsplit("\n", 1)[1]
+    assert "\u200b" not in "".join(shown[3:])
+    assert not exports.exists() or not any(exports.iterdir())
+
+
+async def test_indented_code_goes_to_the_file_with_its_indent_byte_exact(
+    session, comms: Comms, tmp_path: Path, capsys
+) -> None:
+    """Monitor trims a line's indent, and a guard character would ride into whatever a reader
+    pastes, so a body with an indented line is the file, copied byte for byte."""
+    client, token = session
+    exports = tmp_path / "state" / "messages"
+    exports.parent.mkdir(mode=0o700)
+    code = "def indented():\n    return 'four'\n\tif tab:\n        pass"
+    lines = await delivered_lines(client, token, comms, exports, capsys, code)
+    notice = next(json.loads(line) for line in lines if line.startswith(('Comms in', '{"protocol"')))
+    assert notice["type"] == "read-file"
+    written = Path(notice["path"]).read_text()
+    assert written.endswith(code + "\n") and "\u200b" not in written
 
 
 def monitor_event_record(event: str) -> str:
@@ -149,7 +187,7 @@ async def test_a_burst_of_pushed_messages_never_shares_one_monitor_batch(
     exports.parent.mkdir(mode=0o700)
     for number in range(4):
         # Too long for one event, so each lands in a file whose time records when it was emitted.
-        comms.messaging.send("sender", "cloud", f"burst {number}\n" + "x" * 600)
+        comms.messaging.send("sender", "cloud", f"burst {number}\n" + "x" * 3100)
     watch = asyncio.create_task(InboxSocket(url, exports).carried())
     async with asyncio.timeout(30):
         while not exports.is_dir() or len(list(exports.iterdir())) < 4:

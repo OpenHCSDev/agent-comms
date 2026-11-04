@@ -1,9 +1,9 @@
 """A cloud session's end of its inbox watch: run under Monitor with the URL comms_watch returned.
 
 A cloud sandbox reaches the network only through its proxy, and Monitor's own WebSocket source
-cannot use one, so this process holds the socket. Each pushed message reaches the model as written
-when it fits one Monitor event, otherwise as a one-line notice naming a private file, because
-Monitor cuts a long line.
+cannot use one, so this process holds the socket. Each pushed message reaches the model as written,
+across the lines of one Monitor batch, when the batch holds it; otherwise as a one-line notice
+naming a private file, because Monitor cuts a long batch.
 The session's transcript goes the other way on the same socket, so its work shows on the bus as a
 local bridge's does. Every way either direction ends says so, since a silent end would look like
 an empty inbox or an idle session.
@@ -18,6 +18,7 @@ import sys
 from abc import ABC, abstractmethod
 from contextlib import aclosing
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 from typing import BinaryIO, ClassVar
 
@@ -101,10 +102,45 @@ def session_transcript() -> TranscriptRoute:
 
 class WatchedMonitorFrame(ClaudeMonitorFrame):
     """No transcript decode confirms a watched delivery: the server records it when it sends the
-    frame. So a message that fits one event is shown exactly as written."""
+    frame. So a message is shown as written across the lines of one batch, and only a message
+    no batch holds goes to the file. Each message already has a batch of its own
+    (InboxSocket.batch_gap_seconds), so the batch cap, not the line cap, bounds what fits."""
+
+    GUARD = '\u200b'
+    """Monitor trims every line and drops one left empty, so a blank line would vanish; a
+    zero-width space keeps it and reads as nothing. Nobody copies a blank line, so the guard
+    goes nowhere else: an indent would carry it into whatever a reader pastes."""
+
+    @cached_property
+    def shown_lines(self) -> tuple[str, ...]:
+        """The header and body lines, with any line Monitor would cut wrapped after its last
+        space inside the cap, or at the cap when there is none, and blank lines guarded."""
+        return tuple(self.guarded(piece) for line in self.inline.split('\n')
+                     for piece in self.wrapped(line))
+
+    @classmethod
+    def guarded(cls, line: str) -> str:
+        return line if line.strip() else cls.GUARD
+
+    @classmethod
+    def wrapped(cls, line: str) -> tuple[str, ...]:
+        pieces: list[str] = []
+        while cls.units(line) > cls.EVENT_CHARS:
+            end = cls.EVENT_CHARS
+            while cls.units(line[:end]) > cls.EVENT_CHARS:
+                end -= 1
+            space = line.rfind(' ', 0, end)
+            cut = space + 1 if space > 0 else end
+            pieces.append(line[:cut])
+            line = line[cut:]
+        return (*pieces, line)
 
     def shown_inline(self) -> str:
-        return self.inline
+        return '\n'.join(self.shown_lines)
+
+    @cached_property
+    def fits_one_event(self) -> bool:
+        return self.units(self.shown_inline()) <= self.BATCH_CHARS and self.shows_safely_inline
 
     @property
     def sender(self) -> str:
@@ -118,10 +154,11 @@ class WatchedMonitorFrame(ClaudeMonitorFrame):
 
     @property
     def shows_safely_inline(self) -> bool:
-        """Shown as written, each body line is a line of the event, and the transcript decoder
+        """Shown as written, each shown line is a line of the event, and the transcript decoder
         reads every line: a body quoting one of our frames goes to the file, where nothing
-        decodes it."""
-        return not any(self.claims(line) for line in self.message.body.split('\n'))
+        decodes it. Monitor trims a line's indent, so an indented body goes there too, where
+        a reader copies it byte for byte."""
+        return not any(self.claims(line) or line[:1].isspace() for line in self.shown_lines)
 
 
 class WatchEnd(ABC):
@@ -178,7 +215,7 @@ class InboxSocket:
     side has no such confirmation, so each message gets a batch of its own."""
 
     async def deliver(self, frame: str) -> None:
-        """Inline when it fits one Monitor event, otherwise one notice naming its whole body."""
+        """Inline when one Monitor batch holds it, otherwise one notice naming its whole body."""
         _, line = WatchedMonitorFrame(FieldCodec.decode(Delivered, FieldCodec.parse(frame))).event(
             self.exports)
         print(line, flush=True)
