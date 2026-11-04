@@ -246,10 +246,10 @@ class StalledDeliveryReadiness(DrainReadiness):
 
     oldest: float
 
-    def source_diagnostic(self):
+    def source_diagnostic(self) -> NoDrainDiagnostic:
         return NoDrainDiagnostic()
 
-    def presentation(self, ordinary):
+    def presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
         return ordinary.status.with_attention(
             f"not reading since {RecordedEventTime(self.oldest).clock()}"
         ).present_attention(ordinary)

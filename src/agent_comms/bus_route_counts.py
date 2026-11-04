@@ -15,7 +15,10 @@ from .routing import DeliveryScope
 from .typed_table import Column, Index, TypedRow
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from .bus_publication import Delivered
+    from .registry_document import RegistrySnapshot
     from .page_traversal import PageTraversal
 
 
@@ -186,13 +189,14 @@ class RouteCounts:
             counts[row.actor][conversation] = counts[row.actor].get(conversation, 0) + row.count
         return counts
 
-    def unseen_oldest(self, registry, deliveries, seen):
+    def unseen_oldest(self, registry: RegistrySnapshot, deliveries: Mapping[str, DeliveryScope],
+                      seen: Mapping[str, ReadCursor]) -> dict[str, float]:
         """When each actor's oldest message under its cursor was sent, in one read."""
         rows = self._route_rows(RouteOldest, registry, deliveries, seen, 0,
             f'''SELECT request.actor AS actor,min(message.timestamp) AS oldest
             FROM cursors AS request CROSS JOIN "{MessageInput.table.declared_name}" AS message USING(seq)
             WHERE {ReadCursor.rule_of(seen.values())} GROUP BY request.actor''')
-        return {row.actor: row.oldest for row in rows}
+        return {str(row.actor): float(row.oldest) for row in rows}
 
     def unseen_deliveries(self, registry, delivery, seen, *, after: int = 0, scope=None, limit: int = 100,
                           traversal: PageTraversal):
