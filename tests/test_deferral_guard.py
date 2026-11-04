@@ -26,8 +26,12 @@ from agent_comms_hooks import deferral
 from hook_session_fixture import resident_hook, resident_session
 
 
+RECORDED = "2026-11-04T00:00:00.000Z"
+"""Claude writes every transcript record with its original time; the decoder refuses one without."""
+
+
 def assistant(*blocks: dict[str, JsonValue]) -> dict[str, JsonValue]:
-    return {"type": "assistant", "message": {"content": list(blocks)}}
+    return {"type": "assistant", "timestamp": RECORDED, "message": {"content": list(blocks)}}
 
 
 def text(words: str) -> dict[str, JsonValue]:
@@ -36,15 +40,15 @@ def text(words: str) -> dict[str, JsonValue]:
 
 TOOL: dict[str, JsonValue] = {"type": "tool_use", "id": "t1", "name": "Bash", "input": {}}
 RESULT: dict[str, JsonValue] = {
-    "type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t1"}]}}
+    "type": "user", "timestamp": RECORDED,
+    "message": {"content": [{"type": "tool_result", "tool_use_id": "t1"}]}}
 
 DEFERRING = [RESULT, assistant(text("The six failing tests have no owner. They go to a teammate next."))]
 
 
 @pytest.fixture
 def stop_binding(durable_home: Path, team_bus: Comms, tmp_path: Path) -> Iterator[ClaudeBridge]:
-    lead = team_bus.registry.snapshot().team_project.require().commander
-    with resident_session(team_bus, tmp_path / "state", lead.name, "s") as bridge:
+    with resident_session(team_bus, tmp_path / "state", "claude-code", "s") as bridge:
         yield bridge
 
 

@@ -5,6 +5,7 @@ harness links move to it, then ``current`` does.
 """
 from __future__ import annotations
 
+import os
 import sys
 from dataclasses import dataclass
 from importlib.metadata import distribution
@@ -56,6 +57,16 @@ class RuntimePublication:
             return current / target.relative_to(self.runtime)
         return target
 
+    def retire_undeclared(self, current: Path) -> None:
+        """A runtime-owned link this publication no longer declares (a renamed console script or
+        skill) would dangle once its runtime is pruned: in every directory publication writes,
+        a link into ``current`` that no declaration names is removed."""
+        for directory in {link.parent for link in self.links}:
+            for entry in directory.iterdir():
+                if (entry.is_symlink() and entry not in self.links
+                        and Path(os.readlink(entry)).is_relative_to(current)):
+                    entry.unlink()
+
     def publish_links(self) -> None:
         """Refresh the declared installation, including an already-current runtime."""
         current = LaunchRuntime.current_pointer()
@@ -64,6 +75,7 @@ class RuntimePublication:
         ResidentManager.current().prepare_units(home=Path.home())
         for link, target in self.links.items():
             replace_link(link, self.published_target(current, target))
+        self.retire_undeclared(current)
         replace_link(current, selected)
         for harness in Harness.present(Path.home()):
             harness.configure()

@@ -289,7 +289,7 @@ class SkillPhase(TeamNativePhase):
     """The skill names no script."""
 
     after = (CutoverPhase,)
-    evidence = PatternAbsent(r"agent-comms-commander", ("src/agent_comms/skills/comms-commander",))
+    evidence = PatternAbsent(r"agent-comms-team", ("src/agent_comms/skills/comms-team",))
 
 
 OLD_LOG_READ = r"\bWireLog\b|wire_log"

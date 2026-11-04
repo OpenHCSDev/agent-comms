@@ -94,7 +94,7 @@ from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.typed_table import HeldBusFile
 from agent_comms_hooks import forks
 from hook_session_fixture import resident_hook, resident_session, resident_stdout
-from cli_command import commander
+from cli_command import team
 from source_revision_fixture import SourceRepository
 from agent_comms.thread_execution import ForkExecution
 from agent_comms.goal_actions import ReissuedOrderGoalAction
@@ -169,7 +169,7 @@ def fork_bus(tmp_path, configured_repository, monkeypatch):
 
 def command(comms, *args):
     """Exercise the real parser and state without cold-importing Core for every verb."""
-    return commander("--root", str(comms.root), *args)
+    return team("--root", str(comms.root), *args)
 
 
 def process_command(comms, *args):

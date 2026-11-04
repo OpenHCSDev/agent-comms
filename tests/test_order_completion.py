@@ -142,7 +142,7 @@ class TestOrderCompletion:
             assert refused.value.problems.keys() >= {'checkout', '--seen.run', '--seen.working'}
             assert ctx.comms.goals.todos.get('P1') == current
             result = subprocess.run(
-                [sys.executable, str(Path(sys.executable).with_name('agent-comms-commander')),
+                [sys.executable, str(Path(sys.executable).with_name('agent-comms-team')),
                  '--root', str(ctx.root), 'order', 'done', 'worker', 'P1', '--op'],
                 cwd=ctx.root, capture_output=True, text=True, timeout=30,
             )

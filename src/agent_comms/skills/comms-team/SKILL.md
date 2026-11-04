@@ -1,5 +1,5 @@
 ---
-name: comms-commander
+name: comms-team
 description: Share responsibility for coding work over agent-comms. Track real work, trace and remove slop, judge exact sources and deliver working changes without an enforced hierarchy between collaborators.
 ---
 

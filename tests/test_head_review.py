@@ -1196,7 +1196,7 @@ def test_acceptance_over_the_growth_limit_needs_a_reason_naming_each_growing_fil
 
     def cli(*arguments):
         return subprocess.run(
-            [sys.executable, str(Path(sys.executable).with_name("agent-comms-commander")),
+            [sys.executable, str(Path(sys.executable).with_name("agent-comms-team")),
              "--root", str(comms.root), *arguments],
             cwd=comms.root, capture_output=True, text=True, timeout=30,
         )

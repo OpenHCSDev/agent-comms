@@ -2607,7 +2607,7 @@ class FixScope(OrderScope[CheckedDelivery]):
     def instructions(self, problem: str) -> tuple[str, ...]:
         return ("Scope: fix", "Parents: " + ", ".join(p.to_wire() for p in self.shape.parents),
                 "Members: " + ", ".join(m.to_wire() for m in self.shape.members),
-                f"Open the PR with agent-comms-commander order pr {problem} "
+                f"Open the PR with agent-comms-team order pr {problem} "
                 "--title '<title>' --body-file <file>; Core records its link on this order.",
                 "Record the teammate's delivery claim in Core before waiting for the teammate's "
                 "verdict; a chat report does not change the order.")

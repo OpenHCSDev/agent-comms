@@ -722,9 +722,8 @@ class NoChannelSource(AbsentText, BindingChannels):
 class Watch(Inbox):
     help = "Deliver this binding's bus messages and publish its harness transcript to the bus"
 
-    # Retained external CLI/record spelling; this supplies channels, never authority.
-    commander: Annotated[
-        BindingChannels, field_codec.Argument(flags=("--commander",))
+    channels_from: Annotated[
+        BindingChannels, field_codec.Argument(flags=("--channels-from",))
     ] = NoChannelSource()
 
     @classmethod
@@ -736,7 +735,7 @@ class Watch(Inbox):
 
     async def register(self, bridge: CliBridge) -> None:
         if not bridge.comms.registry.snapshot().taken(bridge.address.bus):
-            await self.commander.register(bridge)
+            await self.channels_from.register(bridge)
 
     async def start(self, bridge: TranscriptBridge, tasks: asyncio.TaskGroup,
                     endpoint: ExitStack) -> None:

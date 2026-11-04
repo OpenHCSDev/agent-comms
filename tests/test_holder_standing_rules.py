@@ -94,7 +94,7 @@ from agent_comms.connector import ConnectorSendTool
 from agent_comms.connector_caller import DirectorCaller
 from agent_comms.turn_digests import OrderEditCountRead
 from agent_comms.ui_model.teammate_state import AwaitingTeam, Blocked, Detached, TeammateState
-from cli_command import commander
+from cli_command import team
 from conftest import declare_test_bus
 from native_backend_fixture import native_backend_fixture, wait_for
 from test_goal_execution import turn_on
@@ -545,8 +545,8 @@ def test_unlink_takes_another_orders_pull_request_off_a_held_order(held_bus, dur
     linked = store.get("P1")
 
     def unlink(*arguments: str):
-        return commander('--root', str(held_bus.root), 'order', 'unlink', 'P1', *arguments,
-                         '--why', 'a claim recorded P883 work on this order')
+        return team('--root', str(held_bus.root), 'order', 'unlink', 'P1', *arguments,
+                    '--why', 'a claim recorded P883 work on this order', '--as', 'lead')
 
     refused = unlink('openhcsdev/agent-comms', '1')
     assert refused.returncode != 0 and 'does not link' in refused.stdout + refused.stderr
@@ -965,7 +965,8 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(
     order_file.write_text(json.dumps(FieldCodec.encode(document)))
 
     def cli(*arguments):
-        run = commander('--root', str(held_bus.root), 'order', *arguments)
+        run = team('--root', str(held_bus.root), 'order', *arguments,
+                   *(() if '--as' in arguments else ('--as', 'lead')))
         assert run.returncode == 0, run.stdout + run.stderr
 
     # The idle outsider takes it: the worker already holds P1 and P2, and the allocation

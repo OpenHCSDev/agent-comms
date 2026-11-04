@@ -830,7 +830,7 @@ class ForkStalled(IndependentStandingRule, DatedStandingRule):
         return (f"STALLED fork {self.fork.name} of {self.parent} has written nothing for"
                 f" {(now - self.written) / 60:.0f} min; {self.progress.doing(now)}. who's driving it?"
                 " -> read its tool calls and send its next step (a dead one:"
-                f" `agent-comms-commander end --fork {self.fork.name}`)")
+                f" `agent-comms-team end --fork {self.fork.name}`)")
 
 
 @dataclass(frozen=True)

@@ -710,7 +710,7 @@ class Team(TeamContext):
         except MaintenanceHeldError as held:
             # A say records nothing but its post, so the whole command is the resend.
             sys.exit(f'Refused, nothing sent: {held}\nAfter the install reports finished, '
-                     'resend:\n  ' + shlex.join(('agent-comms-commander', *sys.argv[1:])))
+                     'resend:\n  ' + shlex.join(('agent-comms-team', *sys.argv[1:])))
 
     def close(self, pid, works, artifact=''):
         """Core owns closing: the installed evidence, the artifact and the no-open-order rule live on the Todo."""
@@ -945,7 +945,7 @@ class DirectiveVerb(TeamVerb):
             for asker in rule.answered_in():
                 askers.setdefault(asker, []).append(str(rule.message.message_id))
         return {f'--answers {" ".join(ids)} ({asker})':
-                f'agent-comms-commander {SayVerb.tool()} {SayVerb.declared_name} {asker} BODYFILE'
+                f'agent-comms-team {SayVerb.tool()} {SayVerb.declared_name} {asker} BODYFILE'
                 f' --answers {" ".join(ids)}'
                 for asker, ids in askers.items()}
 

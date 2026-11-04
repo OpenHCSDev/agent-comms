@@ -7,7 +7,7 @@ description: Ride along with a working Codex thread by reading its tool calls, o
 
 The unit drives; you read the road it can't see. Don't edit its worktree or write the fix. Read where it's heading and send one message that names what it missed, with file:line, before the commit hardens it.
 
-The rules you judge against (slop definition, catalog IDs, voice, local runs are the proof) live in the comms-commander skill and its rules files. This skill only covers the ride-along.
+The rules you judge against (slop definition, catalog IDs, voice, local runs are the proof) live in the comms-team skill and its rules files. This skill only covers the ride-along.
 
 ## 1. Read the trail, not the report
 

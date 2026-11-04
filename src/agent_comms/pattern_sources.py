@@ -13,7 +13,7 @@ from typing import ClassVar
 
 from .nominal.declared_family import DeclaredFamily
 
-COMMANDER_SKILL = "../../src/agent_comms/skills/comms-commander/SKILL.md"
+TEAM_SKILL = "../../src/agent_comms/skills/comms-team/SKILL.md"
 
 
 class PatternSource(ABC):
@@ -352,7 +352,7 @@ class TeamRule(PatternSource):
     lead: str
 
     def cite(self) -> str:
-        return f'[comms-commander rule]({COMMANDER_SKILL}) "{self.lead}"'
+        return f'[comms-team rule]({TEAM_SKILL}) "{self.lead}"'
 
 
 @dataclass(frozen=True)

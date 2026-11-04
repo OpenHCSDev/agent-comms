@@ -100,8 +100,8 @@ class NoThreadCaller(OperatorOutcomes, ToolCaller):
 
     def teammate(self) -> ThreadCaller:
         raise ToolRefusedError(
-            "Team verbs act as the teammate running them: pass --from NAME or run from a "
-            "session bound to the bus. There is no lead to act as.")
+            "Team verbs act as the teammate running them: pass --as NAME, or --fork NAME for a "
+            "fork acting for its teammate. There is no lead to act as.")
 
     def invoke(self, request: ToolRequest, comms: Comms) -> ToolResult:
         return request.apply_without_thread(comms, self)
@@ -273,8 +273,8 @@ class ForkCaller(ActsForTeam, SubagentCaller):
         if not self.recorded(comms):
             raise ForkRecordOwed(
                 f"{self.name} recorded nothing in Core: record a head verdict with"
-                f" `agent-comms-commander judge ... --fork {self.name}` or post what it found with"
-                f" `agent-comms-commander order say '#comms' FILE --fork {self.name}` before it stops.")
+                f" `agent-comms-team judge ... --fork {self.name}` or post what it found with"
+                f" `agent-comms-team order say '#comms' FILE --fork {self.name}` before it stops.")
         self.end(comms)
 
     def leaving(self, comms: Comms) -> None:
