@@ -3,12 +3,14 @@
 import asyncio
 import json
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from aiohttp import WSServerHandshakeError
 from aiohttp.test_utils import TestClient, TestServer
 from yarl import URL
 
+from agent_comms.cli_bridges.inbox_watch_client import FollowedTranscript, InboxSocket
 from agent_comms.comms import Comms
 from agent_comms.connector import Connector
 from agent_comms.connector_store import ConnectorStore
@@ -46,6 +48,83 @@ async def watch_path(client: TestClient, token: str, name: str) -> str:
 
 async def frame(socket) -> dict:
     return json.loads(await asyncio.wait_for(socket.receive_str(), timeout=30))
+
+
+async def test_the_cloud_client_delivers_a_message_as_a_notice_naming_its_whole_body(
+    session, comms: Comms, tmp_path: Path, capsys
+) -> None:
+    client, token = session
+    url = str(client.make_url(await watch_path(client, token, "cloud")))
+    exports = tmp_path / "state" / "messages"
+    exports.parent.mkdir(mode=0o700)
+    watch = asyncio.create_task(InboxSocket(url, exports).carried())
+    comms.messaging.send("sender", "cloud", "a body longer than one line\nsecond line")
+    async with asyncio.timeout(30):
+        while not (exports.is_dir() and any(exports.iterdir())):
+            assert not watch.done(), watch.result()
+            await asyncio.sleep(0.05)
+    watch.cancel()
+    lines = capsys.readouterr().out.splitlines()
+    notice = next(json.loads(line) for line in lines if line.startswith("{"))
+    assert notice["type"] == "read-file"
+    written = Path(notice["path"]).read_text()
+    assert "Comms in · sender" in written and "second line" in written
+
+
+async def turns_of(client: TestClient, token: str, thread: str) -> str:
+    response = await client.post("/mcp", headers={"Authorization": f"Bearer {token}"}, json={
+        "jsonrpc": "2.0", "id": 2, "method": "tools/call",
+        "params": {"name": "comms_turns", "arguments": {"thread": thread, "fork": {"name": thread}}}})
+    return json.dumps(await response.json())
+
+
+def transcript_lines(words: str) -> tuple[str, ...]:
+    recorded = "2026-11-04T00:00:00.000Z"
+    return (
+        json.dumps({"type": "user", "uuid": str(uuid4()), "timestamp": recorded, "sessionId": "s",
+                    "promptId": "p", "origin": {"kind": "human"}, "message": {"content": "start"}}),
+        json.dumps({"type": "assistant", "uuid": str(uuid4()), "timestamp": recorded,
+                    "message": {"content": [{"type": "text", "text": words}]}}),
+    )
+
+
+async def test_a_transcript_sent_up_the_socket_shows_as_that_threads_work(session, comms: Comms) -> None:
+    """Toad showed a remote session as connected with nothing in its chat."""
+    client, token = session
+    socket = await client.ws_connect(await watch_path(client, token, "cloud"))
+    for line in transcript_lines("work the session did remotely"):
+        await socket.send_str(line)
+    async with asyncio.timeout(20):
+        while "work the session did remotely" not in await turns_of(client, token, "cloud"):
+            await asyncio.sleep(0.1)
+    await socket.close()
+
+
+async def test_a_transcript_record_core_cannot_read_is_said_and_keeps_the_push(
+    session, comms: Comms
+) -> None:
+    client, token = session
+    comms.channels.create_tag("comms")
+    socket = await client.ws_connect(await watch_path(client, token, "cloud"))
+    await socket.send_str(json.dumps({"type": "assistant", "not": "a record Core knows"}))
+    await asyncio.sleep(0.5)
+    comms.messaging.send("sender", "cloud", "still pushed")
+    assert (await frame(socket))["text"] == "still pushed"
+    await socket.close()
+
+
+def test_the_cloud_client_never_sends_a_watch_url_up_to_the_bus() -> None:
+    url = "wss://ts-gaming.tail553874.ts.net/watch/AbC-d_123"
+    line = FollowedTranscript.line(json.dumps({"url": url, "command": f"watch {url}"}).encode())
+    assert "AbC-d_123" not in line
+    assert json.loads(line)["url"] == "<inbox watch URL>"
+
+
+async def test_the_cloud_client_says_out_loud_when_its_url_is_refused(session, tmp_path: Path) -> None:
+    client, _ = session
+    used = str(client.make_url("/watch/not-a-ticket"))
+    ended = await InboxSocket(used, tmp_path / "messages").carried()
+    assert ended.startswith("failed: WSServerHandshakeError")
 
 
 async def inbox_emptied(comms: Comms, thread: str) -> None:

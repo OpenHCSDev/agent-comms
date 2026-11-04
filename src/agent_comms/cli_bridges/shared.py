@@ -70,6 +70,7 @@ from agent_comms.message_reference import (
 )
 from agent_comms.registration import Registration
 from agent_comms.runtime_updates import HiddenItem, ReplyingThreadOutput, RuntimeUpdate, ThreadOutput
+from agent_comms.transcript_publication import PublishesToBus, WaitsOnBusyStore
 from agent_comms.turn_item import NoSourceTurn, SourceTurn
 from agent_comms.send_result import SendResult
 from agent_comms.threads import ExternalThread
@@ -1172,7 +1173,7 @@ class BridgeLog(io.TextIOBase):
 
 
 @dataclass(eq=False, repr=False)
-class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOptions], declared_name=None):
+class CliBridge(WaitsOnBusyStore, ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOptions], declared_name=None):
     """Core delivery and lifetime shared by CLI-specific transports."""
 
     state_directory: ClassVar[Path]
@@ -1237,10 +1238,6 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
         return '\n'.join((f'Comms out · {message.sender} → {message.target}',
                           message.body, f'Message ID: {message.message_id}', *result.notices))
 
-    @staticmethod
-    def log(text: str) -> None:
-        print(text, file=sys.stderr, flush=True)
-
     @property
     def recipient_lookup(self) -> ThreadLookup:
         return self.binding.owner.require_recorded().lookup
@@ -1277,18 +1274,6 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
             with self.comms.registry.store.coordinator_reader.reader_snapshot() as db:
                 return operation(db)
         return await self.comms.bus.when_open(read)
-
-    async def once_available[Result](
-        self, waiting: str, attempt: Callable[[], Awaitable[Result]],
-    ) -> Result:
-        """The bridge's one wait on a busy store: no write began and no snapshot was acquired,
-        so the attempt is whole and runs again. A write that began keeps its own error."""
-        while True:
-            try:
-                return await attempt()
-            except CoordinationReadUnavailable as error:
-                self.log(f'{waiting} waits for the store: {error}')
-                await asyncio.sleep(Platform.current().store_lock_interval)
 
     async def attempts(self, message_id: MessageId) -> tuple[HarnessDelivery, ...]:
         return await self.coordinator_read(lambda db: tuple(HarnessDelivery.select(
@@ -1516,45 +1501,12 @@ class WatchRecordStore(ExternalStore):
         Platform.current().sync_directory(path.parent)
 
 
-class TranscriptBridge(PublishesTranscript, CliBridge[BridgeOptions]):
+class TranscriptBridge(PublishesToBus, CliBridge[BridgeOptions]):
     """A CLI with an event subscription also publishes whole transcript items."""
 
-    output_type: ClassVar[type[ThreadOutput]] = ThreadOutput
-
-    async def confirm_delivery(self, update: ConfirmedDelivery) -> ConfirmedDelivery:
-        """A transcript this bridge did not deliver into confirms nothing."""
-        return update
-
-    async def publish_transcript(self) -> None:
-        comms = self.comms
-        output = self.output_type.for_comms(
-            await asyncio.to_thread(comms.transcripts.external, self.binding.bus), comms)
-        # This subscription can assemble only items whose start it receives.
-        # A prefix from the previous subscription cannot stand for that stream.
-        await self.once_available('Transcript start', partial(
-            comms.bus.when_open, output.transcript.end_turn))
-        # Each CLI reports its own initial state. Disk writes never stop the
-        # event reader from receiving a newer whole draft of the same item.
-        queue: asyncio.Queue[RuntimeUpdate] = asyncio.Queue()
-
-        async def read() -> None:
-            try:
-                async for update in self.transcript():
-                    queue.put_nowait(await update.observed(self))
-            finally:
-                queue.shutdown()
-
-        async with asyncio.TaskGroup() as tasks:
-            tasks.create_task(read())
-            while True:
-                try:
-                    pending = [await queue.get()]
-                except asyncio.QueueShutDown:
-                    break
-                while not queue.empty():
-                    pending.append(queue.get_nowait())
-                await self.once_available('Transcript update', partial(
-                    comms.bus.when_open, partial(output.publish_batch, pending)))
+    @property
+    def transcript_thread(self) -> str:
+        return self.binding.bus
 
 
 class MonitorFrame(TaggedWire, ABC, affix=""):

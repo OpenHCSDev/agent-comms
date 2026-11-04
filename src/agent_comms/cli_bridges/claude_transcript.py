@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import BinaryIO, Self
+from typing import BinaryIO, ClassVar, Self
 
 from agent_comms.runtime_updates import RuntimeUpdate, SessionFacts
 from agent_comms.thread_text import NoThreadText, ThreadText
@@ -86,6 +86,21 @@ class ClaudeTranscript(ClaudeJsonLines, JsonLinesFile, ClaudeHistory, OfflineHis
         """The subagent transcripts a stored session started, oldest first."""
         return tuple(sorted(session.with_suffix('').glob('subagents/agent-*.jsonl'),
                             key=lambda path: path.stat().st_mtime))
+
+
+class RecentClaudeWindow(ClaudeJsonLines):
+    """Where a running session's transcript is read from: its recent window's owning occurrence,
+    never an arbitrary mid-turn prefix."""
+
+    RECENT_BYTES: ClassVar[int] = 4 * 1024 * 1024
+
+    def history_start(self, stream: BinaryIO, boundary: int) -> int:
+        start = max(0, boundary - self.RECENT_BYTES)
+        if start:
+            stream.seek(start - 1)
+            stream.readline()
+            start = stream.tell()
+        return self.opening_before(stream, start)
 
 
 class RunningClaude(ClaudeTranscript, OnlineHistory):

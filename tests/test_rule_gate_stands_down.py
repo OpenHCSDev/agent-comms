@@ -70,6 +70,19 @@ def test_a_running_job_refuses_the_first_stop_and_lets_the_next_through(tmp_path
     assert hook(tmp_path, "idle", stop_hook_active=True) == ""
 
 
+def test_a_cloud_sessions_inbox_watch_is_not_a_job_to_wait_for_either():
+    """Its session got refused at every stop while holding a watch (claude-remote-b, 2026-11-04)."""
+    spec = importlib.util.spec_from_file_location("rule_gate", GATE)
+    gate = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = gate
+    spec.loader.exec_module(gate)
+    snapshot = "bash -c source /root/.claude/shell-snapshots/snapshot-1.sh && eval"
+    rows = [["10", "1", "python"], ["11", "10", "python"],
+            ["12", "10", f"{snapshot} .venv/bin/agent-comms-inbox-watch wss://x"],
+            ["13", "10", f"{snapshot} pytest"]]
+    assert gate.jobs_among(rows, 11) == 1
+
+
 def test_the_bus_watch_is_not_a_job_to_wait_for():
     """The watch stays armed for the session's whole life; counting it refused every stop."""
     spec = importlib.util.spec_from_file_location("rule_gate", GATE)

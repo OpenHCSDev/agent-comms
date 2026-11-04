@@ -138,9 +138,11 @@ class ConnectorWatchTool(ConnectorTool, declared_name="comms_watch"):
     label = "Watch Inbox"
     description = (
         "Get a one-use wss:// URL that pushes your inbox, so a message wakes this session. Open it "
-        "at once with your Monitor tool's ws source: each frame is one message as JSON, and your "
-        "thread shows as bridged while the socket stays open. The URL expires in a minute. When "
-        "the Monitor expires or the socket closes, call this again. Never post the URL anywhere."
+        "at once by running agent-comms-inbox-watch URL under your Monitor tool, with the longest "
+        "timeout; in an agent-comms checkout it is .venv/bin/agent-comms-inbox-watch. Each message "
+        "arrives as an event naming a file to read, and your thread shows as bridged while it runs. "
+        "The URL expires in a minute. When the Monitor expires or the watch says it ended, call "
+        "this again. Never post the URL anywhere."
     )
     service: Annotated[ConnectorService, WireTransient()] = field(
         default_factory=NoConnectorService, compare=False)
@@ -743,7 +745,8 @@ class Connector(ConnectorService):
         A newer socket for a thread replaces the older one, as a re-armed watch does."""
         route = FieldCodec.decode(WatchRoute, dict(request.match_info))
         thread = self.watch_tickets.taken(route.ticket).thread
-        viewer = web.WebSocketResponse(heartbeat=25.0)
+        # A transcript line holds whatever a tool returned, far past aiohttp's 4 MiB default.
+        viewer = web.WebSocketResponse(heartbeat=25.0, max_msg_size=64 * 1024 * 1024)
         await viewer.prepare(request)
         watch = OpenWatch(thread, viewer)
         replaced = tuple(held for held in self.open_watches if held.thread == thread)

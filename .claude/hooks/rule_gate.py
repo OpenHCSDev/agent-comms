@@ -409,9 +409,6 @@ def foreground(event: HookEvent) -> None:
              "Rerun with run_in_background: true.")
 
 
-BUS_WATCH = "agent-comms-claude-bridge watch"
-
-
 def own_background_jobs() -> int:
     import subprocess
 
@@ -423,8 +420,10 @@ def jobs_among(rows: list[list[str]], pid: int) -> int:
     """Background Bash jobs of this session still running. Claude Code runs each in a shell
     sourced from a shell snapshot, a child of the session's own process: count the snapshot
     shells whose parent is one of this hook's ancestors and that are not ancestors themselves.
-    The bus watch runs the same way but is how the session hears the bus, not work that ends;
-    counting it would mean the session could never stop."""
+    A bus listener runs the same way but is not work that ends; counting one would mean the
+    session could never stop."""
+    sys.path.insert(0, str(team_directory().parent.parent))
+    from agent_comms_hooks.shell_commands import BusListener
     parents = {int(row[0]): int(row[1]) for row in rows if len(row) >= 2}
     ancestors = set()
     # init adopts orphaned shells of sessions that died; they are never this session's jobs.
@@ -432,7 +431,7 @@ def jobs_among(rows: list[list[str]], pid: int) -> int:
         ancestors.add(pid)
         pid = parents[pid]
     return sum(1 for row in rows if len(row) == 3 and "shell-snapshots/snapshot-" in row[2]
-               and BUS_WATCH not in row[2]
+               and not BusListener.running_in(row[2])
                and int(row[1]) in ancestors and int(row[0]) not in ancestors)
 
 
