@@ -518,12 +518,12 @@ class HistoricalSenders(SubclassUnion, affix="HistoricalSender"):
     """Whose preserved threads a history lists: every sender (null) or one name."""
 
     @abstractmethod
-    def admits(self, thread: Thread, provenance: object) -> bool: ...
+    def includes(self, thread: ThreadProvenance, provenance: RegistryProvenance) -> bool: ...
 
 
 @dataclass(frozen=True)
 class AllHistoricalSenders(NullMember, HistoricalSenders):
-    def admits(self, thread: Thread, provenance: object) -> bool:
+    def includes(self, thread: ThreadProvenance, provenance: RegistryProvenance) -> bool:
         return True
 
 
@@ -531,7 +531,7 @@ class AllHistoricalSenders(NullMember, HistoricalSenders):
 class NamedHistoricalSender(SingleFieldValue, HistoricalSenders):
     name: str
 
-    def admits(self, thread: Thread, provenance: object) -> bool:
+    def includes(self, thread: ThreadProvenance, provenance: RegistryProvenance) -> bool:
         return thread.incarnation.matches_recorded_name(self.name, provenance)
 
 
@@ -724,5 +724,5 @@ class HistoryArchive(SingleFileStore, CarriedDocument[tuple[HistorySource, ...]]
             source.validate()
             result.extend(HistoricalThread(source, thread)
                           for thread in source.provenance.threads.values()
-                          if senders.admits(thread, source.provenance))
+                          if senders.includes(thread, source.provenance))
         return tuple(result)

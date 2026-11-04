@@ -95,6 +95,10 @@ from .tools import CommsSendTool, SendTool
 from .order_tools import CommsHeadVerdictTool, HeadVerdictTool, MessagePublished
 from .tool_request import ToolCall, ToolRequest, tool_field
 
+type JsonRpcId = int | str
+"""A JSON-RPC request id, as the client chose it."""
+
+
 LOOPBACK = "127.0.0.1"
 PORT = 18766
 
@@ -264,7 +268,7 @@ class McpEnvelope:
 
 @dataclass(frozen=True)
 class McpReply(McpEnvelope):
-    id: int | str
+    id: JsonRpcId
     result: McpResult
 
 
@@ -313,7 +317,7 @@ class AddressedErrorReply(McpEnvelope):
     """A refusal answering the request it refuses."""
 
     error: McpError
-    id: int | str
+    id: JsonRpcId
 
 
 @dataclass(frozen=True)
@@ -417,7 +421,7 @@ class InitializedMessage(McpNotification, declared_name="notifications/initializ
 
 @dataclass(frozen=True)
 class CancelledParams:
-    request_id: Annotated[int | str, WireName("requestId")]
+    request_id: Annotated[JsonRpcId, WireName("requestId")]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -433,7 +437,7 @@ class CancelledMessage(McpNotification, declared_name="notifications/cancelled")
 
 @dataclass(frozen=True, kw_only=True)
 class McpRequest(McpMessage):
-    id: int | str
+    id: JsonRpcId
 
     async def answer(
         self, connector: Connector, caller: ConnectorCaller, http: web.Request,
@@ -581,7 +585,7 @@ class ProgressNotice(StreamedEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class ToolsCallMessage(McpMessage, declared_name="tools/call"):
-    id: int | str
+    id: JsonRpcId
     params: ToolCall
 
     @property
@@ -682,7 +686,7 @@ class Connector:
     ] = field(
         default_factory=dict, init=False, repr=False, compare=False,
     )
-    observed: dict[int | str, CancellableWireExport] = field(
+    observed: dict[JsonRpcId, CancellableWireExport] = field(
         default_factory=dict, init=False, repr=False, compare=False,
     )
     git_children: GitChildren = field(default_factory=GitChildren, init=False, repr=False, compare=False)
@@ -759,7 +763,7 @@ class Connector:
             caller.prepare_call(comms, acting)
             return tool.decoded(comms, rest).bound(observer).replied(comms, acting)
 
-    def cancel_call(self, request_id: int | str) -> None:
+    def cancel_call(self, request_id: JsonRpcId) -> None:
         """A cancel names a running observed call by its request id; any other call runs on."""
         self.observed.get(request_id, CancellableWireExport()).cancel()
 

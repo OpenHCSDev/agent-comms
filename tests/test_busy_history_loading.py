@@ -14,7 +14,7 @@ from agent_comms.comms import wire
 from agent_comms.notification_reads import LiveNotificationRead
 from agent_comms.order_tools import TranscriptPageRead
 from agent_comms.ui_model.observation import (
-    ObservationProcess, ReadBusy, ReadNotifications, ReadTranscript,
+    LocalRouteObservation, ObservationProcess, ReadBusy, ReadNotifications, ReadTranscript,
 )
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.thread_identity import UnrecordedThreadIncarnation
@@ -144,7 +144,7 @@ def test_observer_start_failure_releases_both_real_pipe_endpoints(comms, monkeyp
     monkeypatch.setattr(Connection, "close", closing)
     monkeypatch.setattr(BaseProcess, "start", failed)
     with pytest.raises(OSError) as raised:
-        ObservationProcess(comms.route)
+        ObservationProcess(LocalRouteObservation(comms.route))
     assert raised.value is failure
     assert len(closed) == 2 and all(connection.closed for connection in closed)
     assert endpoints and endpoints[0] in closed

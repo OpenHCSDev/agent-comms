@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import get_original_bases
-from typing import TYPE_CHECKING, Self, Annotated, ClassVar, NoReturn, TypeVar, cast, get_args, get_origin
+from typing import Self, Annotated, ClassVar, NoReturn, cast, get_args, get_origin
 
 from agent_comms_hooks import ToolRefusedError
 from pydantic import JsonValue
@@ -16,7 +16,9 @@ from pydantic import JsonValue
 from .child_process import AsyncWork, ReadWork
 from .comms import Comms
 from .nominal.declared_family import DeclaredFamily
+from .exporting import WireExportObserver
 from .nominal.field_codec import (
+    WireTransient,
     ContextSource,
     DefaultNonNull,
     Description,
@@ -39,10 +41,6 @@ from .thread_execution import ThreadCommandAvailability
 from .tool_caller import NoThreadCaller, ThreadCaller, ToolCaller
 from .tool_declaration import NativeRequestTools, ToolDeclaration
 from .tool_result import ToolResult
-
-if TYPE_CHECKING:
-    from .exporting import WireExportObserver
-    from .remote_core import RemoteCoreAccess
 
 
 class ToolArgumentsRefusedError(MalformedRecord, ToolRefusedError):
@@ -144,16 +142,14 @@ class ToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResu
         own or an inherited class header, followed through every intermediate generic parent;
         a remote reply decodes into it."""
         bindings: dict[object, object] = {}
+        requests = cls.__mro__[:cls.__mro__.index(ToolRequest) + 1]
         for declaration in cls.__mro__:
-            generic = (base for base in get_original_bases(declaration)
-                       if get_args(base) and issubclass(get_origin(base), ToolRequest))
+            generic = (base for base in get_original_bases(declaration) if get_origin(base) in requests)
             for base in generic:
-                for parameter, argument in zip(get_origin(base).__parameters__, get_args(base)):
+                for parameter, argument in zip(get_origin(base).__type_params__, get_args(base)):
                     bindings.setdefault(parameter, bindings.get(argument, argument))
-        result = bindings.get(ToolRequest.__parameters__[1])
-        if result is None or isinstance(result, TypeVar):
-            raise TypeError(f"{cls.__qualname__} declares no result in its class header")
-        return cast(type[Result], result)
+        declared = ToolRequest.__type_params__[1]
+        return cast(type[Result], bindings.get(declared, declared))
 
     @classmethod
     def invoke(
@@ -179,7 +175,7 @@ class ToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResu
         """A request that reports no progress runs the same whatever observes it."""
         return self
 
-    def posted(self, remote: RemoteCoreAccess) -> dict[str, JsonValue]:
+    def posted(self, remote: RequestPoster) -> dict[str, JsonValue]:
         """How a remote access sends this request: one posted call and its reply."""
         return remote.post(self)
 
@@ -211,6 +207,40 @@ class ToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResu
         self: ToolRequest[ToolCaller, R], comms: Comms, caller: NoThreadCaller
     ) -> R:
         return self.apply(comms, caller)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ObservedToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResult](
+    ToolRequest[Caller, Result], declared_name=None,
+):
+    """A tool whose run reports progress to an observer and stops when it is cancelled. The
+    observer never crosses the wire: each end binds its own, and a remote call streams the
+    progress between them and carries a cancel back."""
+
+    observer: Annotated[WireExportObserver, WireTransient()] = field(
+        default_factory=WireExportObserver, compare=False)
+
+    def observed_by(self, observer: WireExportObserver) -> Self:
+        return replace(self, observer=observer)
+
+    def bound(self, observer: WireExportObserver) -> Self:
+        return self.observed_by(observer)
+
+    def posted(self, remote: RequestPoster) -> dict[str, JsonValue]:
+        return remote.post_observed(self)
+
+
+class RequestPoster(ABC):
+    """Who sends a request to a Core across the connector; each request picks which way it is
+    sent, plainly or with its progress and cancel streamed."""
+
+    @abstractmethod
+    def post[C: ToolCaller, R: ToolResult](self, request: ToolRequest[C, R]) -> dict[str, JsonValue]: ...
+
+    @abstractmethod
+    def post_observed[C: ToolCaller, R: ToolResult](
+        self, request: ObservedToolRequest[C, R],
+    ) -> dict[str, JsonValue]: ...
 
 
 class HumanToolRequest[Result: ToolResult = ToolResult](

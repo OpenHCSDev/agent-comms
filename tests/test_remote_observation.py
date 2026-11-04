@@ -92,7 +92,7 @@ def test_an_ended_observation_reports_its_own_cause() -> None:
 
     peer = TestConnectorSource(Endpoint(URL("http://127.0.0.1:9/mcp")), Credential("token")).observation_peer()
     try:
-        peer.join(10)
+        peer.join()
         assert not peer.thread.is_alive()
         assert "retired" not in peer.ending
         assert "Traceback: the service failed" in str(ServiceReported("Traceback: the service failed").reported_by(peer))

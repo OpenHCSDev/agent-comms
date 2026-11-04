@@ -33,7 +33,6 @@ from .sent_message import AssignedSourceIdentity
 from .view_unread import transcript_read_state
 
 if TYPE_CHECKING:
-    from .historical_views import HistoricalSenders, HistoricalThread, HistorySource
     from .registry_provenance import DeletedThread
 from agent_comms.thread_presentation import NoThreadPresentation, ThreadPresentation
 
@@ -53,7 +52,7 @@ from .exporting import (
     WireTranscriptExporter,
 )
 from .goal_management import Goals
-from .historical_views import ChannelDisplayHistory, ChannelHistory, DMDisplayHistory, DMHistory
+from .historical_views import ChannelDisplayHistory, ChannelHistory, DMDisplayHistory, DMHistory, HistorySource
 from .message_bus import MessageBus
 from .message_page import NEWEST_PAGE, MessagePage, PageBounds
 from .message_reference import MessageReference
@@ -245,9 +244,6 @@ class HistoryViews:
         with self.bus.opened_activity() as activity:
             self.channels.catalog.restore_missing(incoming, activity)
         return source
-
-    def historical_threads(self, senders: HistoricalSenders) -> tuple[HistoricalThread, ...]:
-        return self.bus.history.threads(senders)
 
     def dm_display_page(
         self, peer: ThreadTarget, *, worktree: Checkout, bounds: PageBounds = NEWEST_PAGE

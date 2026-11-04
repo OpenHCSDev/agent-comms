@@ -100,10 +100,11 @@ from agent_comms.work_branches import WorkBranchError
 
 from multiprocessing.connection import Connection
 
-if TYPE_CHECKING:
-    from aiohttp import ClientWebSocketResponse, web
+from aiohttp import ClientWebSocketResponse, WSMsgType, web
 
-    type WebSocketFrames = ClientWebSocketResponse | web.WebSocketResponse
+type WebSocketFrames = ClientWebSocketResponse | web.WebSocketResponse
+
+if TYPE_CHECKING:
     from concurrent.futures import Future
 
     from agent_comms.tool_result import ToolResult
@@ -1035,7 +1036,7 @@ class ReadAnswered(ReadOutcome, declared_name=None):
     request_id: int
     value: object
 
-    def __init_subclass__(cls, *, answers: type, **kwargs: object) -> None:
+    def __init_subclass__(cls, *, answers: type, **kwargs: str | None) -> None:
         super().__init_subclass__(**kwargs)
         ReadAnswered.answers[answers] = cls
 
@@ -1325,7 +1326,7 @@ class ObservationFailed(TaggedRecordMember, ServiceResult):
     error: str
 
     async def received(self, process: ObservationProcess, observed: Callable[[Observed], None]) -> None:
-        await Coordination.run_worker(partial(process.peer.join, 2))
+        await Coordination.run_worker(partial(process.peer.await_end, 2))
         raise process.ended(ServiceReported(self.error))
 
 
@@ -1546,7 +1547,51 @@ class RelayConnection(Connection):
         super().close()
 
 
-async def relay_frames(connection: Connection, peer: WebSocketFrames) -> str:
+class RelayEnding(ABC):
+    """How a relay between a local connection and a WebSocket ended; the observation it
+    carried reports it."""
+
+    @abstractmethod
+    def describe(self) -> str: ...
+
+
+@dataclass(frozen=True)
+class LocalSideEnded(RelayEnding):
+    """The local socket reached its end of stream."""
+
+    error: BaseException
+
+    def describe(self) -> str:
+        return f"the local side ended ({type(self.error).__name__})"
+
+
+@dataclass(frozen=True)
+class LocalSideStoppedReading(RelayEnding):
+    """A write to the local socket passed its deadline: that side stopped reading."""
+
+    error: BaseException
+
+    def describe(self) -> str:
+        return f"the local side stopped reading ({type(self.error).__name__})"
+
+
+@dataclass(frozen=True)
+class PeerSentFrame(RelayEnding):
+    """The peer sent a frame that is not a record."""
+
+    kind: str
+
+    def describe(self) -> str:
+        return f"the peer sent a {self.kind} frame"
+
+
+@dataclass(frozen=True)
+class PeerClosed(RelayEnding):
+    def describe(self) -> str:
+        return "the peer closed its socket"
+
+
+async def relay_frames(connection: Connection, peer: WebSocketFrames) -> RelayEnding:
     """Carry frames both ways between a local connection and a WebSocket until either side
     ends, then close the WebSocket, stop both directions and say which side ended first.
 
@@ -1554,14 +1599,12 @@ async def relay_frames(connection: Connection, peer: WebSocketFrames) -> str:
     it, which also wakes a worker thread still blocked on it. Socket reads and writes run in
     worker threads, so a peer that stops reading never blocks this loop. A direction that
     fails in any other way raises its own error here."""
-    from aiohttp import WSMsgType
+    ended: asyncio.Future[RelayEnding] = asyncio.get_running_loop().create_future()
 
-    ended: asyncio.Future[str] = asyncio.get_running_loop().create_future()
-
-    def end(reason: str) -> None:
+    def end(ending: RelayEnding) -> None:
         """The first side to end names the relay's end; a later one only follows it."""
         if not ended.done():
-            ended.set_result(reason)
+            ended.set_result(ending)
 
     async def outward() -> None:
         try:
@@ -1569,20 +1612,20 @@ async def relay_frames(connection: Connection, peer: WebSocketFrames) -> str:
                 await peer.send_bytes(await asyncio.to_thread(connection.recv_bytes))
         except (EOFError, OSError) as error:
             # The local socket's own end-of-stream: this is how its side ends.
-            end(f"the local side ended ({type(error).__name__})")
+            end(LocalSideEnded(error))
 
     async def inward() -> None:
         try:
             async for message in peer:
                 if message.type is not WSMsgType.BINARY:
-                    end(f"the peer sent a {message.type.name} frame")
+                    end(PeerSentFrame(message.type.name))
                     return
                 await asyncio.to_thread(connection.send_bytes, message.data)
         except OSError as error:
             # The local socket's write deadline: the local side stopped reading.
-            end(f"the local side stopped reading ({type(error).__name__})")
+            end(LocalSideStoppedReading(error))
             return
-        end("the peer closed its socket")
+        end(PeerClosed())
 
     directions = (asyncio.create_task(outward()), asyncio.create_task(inward()))
     try:
@@ -1653,6 +1696,16 @@ class ObservationSource(ABC):
     def observation_peer(self) -> ObservationPeer: ...
 
 
+@dataclass(frozen=True)
+class LocalRouteObservation(ObservationSource):
+    """A route observed in a local process on its root."""
+
+    route: CommsRoute
+
+    def observation_peer(self) -> LocalObservationPeer:
+        return LocalObservationPeer(self.route)
+
+
 class ObserverEnd(ABC):
     """How a UI learned its observation ended. The peer that served it says what that means:
     a local process reports its exit, a connector its relay's recorded end."""
@@ -1696,8 +1749,12 @@ class ObservationPeer(ABC):
     connection: Connection
 
     @abstractmethod
-    def join(self, timeout: float | None = None) -> None:
+    def join(self) -> None:
         """Wait for the service to end; never ends it."""
+
+    @abstractmethod
+    def await_end(self, seconds: float) -> None:
+        """Wait up to ``seconds`` for the service to end; never ends it."""
 
     def retire(self) -> None:
         """End this observation's service and wait for it."""
@@ -1731,8 +1788,11 @@ class LocalObservationPeer(ObservationPeer):
                 self.process.start()
             acquisition.pop_all()
 
-    def join(self, timeout: float | None = None) -> None:
-        self.process.join(timeout)
+    def join(self) -> None:
+        self.process.join()
+
+    def await_end(self, seconds: float) -> None:
+        self.process.join(seconds)
 
     def service_failed(self, traceback: str) -> ObserverDied:
         return ObserverProcessDied(self.process.pid, self.process.exitcode, traceback)
@@ -1749,13 +1809,13 @@ class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
 
     @classmethod
     def awaited(cls, route: CommsRoute) -> Self:
-        process = cls(route)
+        process = cls(LocalRouteObservation(route))
         process.start_receiving(process.observed, process.failed)
         return process
 
-    def __init__(self, source: CommsRoute | ObservationSource):
-        """``source`` names who serves the observation: a route serves it locally, a remote
-        UI profile across the connector."""
+    def __init__(self, source: ObservationSource):
+        """``source`` names who serves the observation: a route locally, a remote UI profile
+        across the connector."""
         self._resources = ExitStack()
         self.request_ids = itertools.count(1)
         self.reads: dict[int, asyncio.Future] = {}
@@ -1892,7 +1952,7 @@ class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
                 result: ServiceResult = await Coordination.run_worker(self.connection.recv)
                 await result.received(self, observed)
         except (EOFError, ConnectionResetError):
-            await Coordination.run_worker(partial(self.peer.join, 2))
+            await Coordination.run_worker(partial(self.peer.await_end, 2))
             failed(self.ended(ConnectionClosed()))
         except ObserverDied as error:
             failed(error)

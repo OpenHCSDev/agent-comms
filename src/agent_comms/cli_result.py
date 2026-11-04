@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TextIO
+from typing import TextIO, cast
+
+from pydantic import JsonValue
 
 from .nominal.field_codec import SubclassUnion
 from .pi_vocabulary import ServiceTier
@@ -65,3 +67,7 @@ class ThreadToolCatalogResult(ToolCatalogResult):
 class TargetEditResult(CliResult, ToolResult, SubclassUnion, affix="TargetEditResult"):
     """What a thread or channel action answers. A remote UI receives it from Core and decodes
     it by shape: each member is also the CLI result it already was, with its CLI form."""
+
+    def to_wire(self) -> JsonValue:
+        """Where its reply and union parents meet, it answers as its declared reply."""
+        return cast(JsonValue, ToolResult.to_wire(self))

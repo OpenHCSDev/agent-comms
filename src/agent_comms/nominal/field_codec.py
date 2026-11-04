@@ -4121,9 +4121,7 @@ class _ExceptionDecoder(ValueDecoder[BaseException]):
         return error
 
     def encode(self, value: object) -> object:
-        if not isinstance(value, self.target):
-            raise TypeError(f"Expected {self.target.__name__}, received {type(value).__name__}")
-        return FieldCodec.encode(ErrorRecord.of(value), ErrorRecord)
+        return FieldCodec.encode(ErrorRecord.of(cast(BaseException, value)), ErrorRecord)
 
 
 class _MemberDecoders(dict[object, ValueDecoder[object]]):

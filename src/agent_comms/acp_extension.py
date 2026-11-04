@@ -523,7 +523,7 @@ class QueueProjection(DeclaredFamily, affix="QueueProjection"):
         raise ValueError(self.feedback(True))
 
     def capture_human_input(self, comms, acquire_scope: Callable[[], QueueScope]) -> HumanInputOrigin:
-        """The author witness for the identity this projection admits, captured in process."""
+        """The author witness for the identity this projection accepts, captured in process."""
         return HumanInputOrigin.capture(comms, self.input_identity(acquire_scope))
 
 

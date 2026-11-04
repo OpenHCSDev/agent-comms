@@ -12,7 +12,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.native_arguments import GivenBinary
 from agent_comms.notification_reads import LiveNotificationRead
 from agent_comms.ui_model.observation import (
-    ObservationProcess,
+    LocalRouteObservation, ObservationProcess,
     ObserverDied,
     ReadNotifications,
     StopObserving,
@@ -87,7 +87,7 @@ async def test_subscriptions_share_process_and_last_close_joins_it(headless_owne
 
 
 async def test_broken_pipe_ends_subscription_with_observer_died(headless_owner):
-    process = ObservationProcess(headless_owner._comms.route)
+    process = ObservationProcess(LocalRouteObservation(headless_owner._comms.route))
     pending = asyncio.create_task(process.read(
         ReadNotifications(str(headless_owner._comms.root), LiveNotificationRead(()))))
     try:

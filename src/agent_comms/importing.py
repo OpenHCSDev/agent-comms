@@ -21,15 +21,12 @@ from .nominal.field_codec import FieldCodec, WireName
 from .harness_install import Harness
 from .thread_text import NoThreadText, ThreadText
 from .transcript_events import ImportedInput, ImportedMessage, NoRetainedRequest
-from .turn_context import CodexRolloutProvenance, ContextSourceText, Provenance
+from .turn_context import CodexRolloutProvenance
 from .turn_item import NativeItemId
 from .native_session_reopen import PiSessionId
 
 if TYPE_CHECKING:
     from .cli_bridges.history import History
-    from .comms import Comms
-    from .registration import Registration
-    from .threads import Thread
     from .runtime_updates import SessionFacts
     from .transcript_events import TranscriptEvent
 
@@ -66,14 +63,6 @@ class ImportedSessionMetadata:
         if current.session_file != owner.session_file:
             raise ValueError("Imported context selected session changed")
         return current.runtime.imported_sources()
-
-    @classmethod
-    def public_source_text(
-        cls, registry: Registration, owner: Thread, source: Provenance, comms: Comms,
-    ) -> ContextSourceText:
-        if source not in cls.sources_for_owner(registry, owner):
-            raise ValueError("Source is outside the original imported snapshot")
-        return ContextSourceText(source.public_description(), source.public_text(comms))
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

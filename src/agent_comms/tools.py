@@ -5,13 +5,14 @@ from __future__ import annotations
 import asyncio
 
 from agent_comms_hooks import ToolRefusedError
-from agent_comms.nominal.field_codec import WireExclude, WireTransient
+from agent_comms.nominal.field_codec import WireExclude
 
 from .input_key import InputKeyText
 from .agent_inbox import InboxWait, NoWait, TakenInputPosition, TakenInputStart
 
 from .tool_request import (
     HumanToolRequest,
+    ObservedToolRequest,
     ListedNames,
     LiveOwnerTool,
     OmittedNames,
@@ -36,9 +37,9 @@ import dataclasses
 import threading
 from abc import abstractmethod
 from collections.abc import Mapping
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self, Type
+from typing import TYPE_CHECKING, Annotated, ClassVar, Type
 
 from pydantic import JsonValue
 
@@ -99,7 +100,7 @@ from .context_store import (
 )
 from .turn_context import ContextManifest
 from .importing import ImportedSessionMetadata, ThreadImported
-from .exporting import WireExportFormat, WireExportLimit, WireExportObserver, WireExportProvenance, WireExportScope
+from .exporting import WireExportFormat, WireExportLimit, WireExportProvenance, WireExportScope
 from .historical_views import AllHistoricalSenders, HistoricalSenders, HistoricalThread
 from .cli_bridges.history import ExpectedSession, OfflineHistory
 from .harness_install import Harness
@@ -155,7 +156,6 @@ from .notification_reads import LiveNotificationRead
 from .work_branches import WorkBranch, WorkBranches
 
 if TYPE_CHECKING:
-    from .remote_core import RemoteCoreAccess
     from .comms import Comms
 
 
@@ -462,28 +462,7 @@ class CommsHistoricalThreadsTool(CoreRead[HistoricalThreadsRead]):
     senders: Annotated[HistoricalSenders, *tool_field("Every sender, or one name")] = AllHistoricalSenders()
 
     def apply(self, comms: Comms, caller: ToolCaller) -> HistoricalThreadsRead:
-        return HistoricalThreadsRead(comms.views.historical_threads(self.senders))
-
-
-@dataclass(frozen=True, kw_only=True)
-class ObservedToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResult](
-    ToolRequest[Caller, Result], declared_name=None,
-):
-    """A tool whose run reports progress to an observer and stops when it is cancelled. The
-    observer never crosses the wire: each end binds its own, and a remote call streams the
-    progress between them and carries a cancel back."""
-
-    observer: Annotated[WireExportObserver, WireTransient()] = field(
-        default_factory=WireExportObserver, compare=False)
-
-    def observed_by(self, observer: WireExportObserver) -> Self:
-        return replace(self, observer=observer)
-
-    def bound(self, observer: WireExportObserver) -> Self:
-        return self.observed_by(observer)
-
-    def posted(self, remote: RemoteCoreAccess) -> dict[str, JsonValue]:
-        return remote.post_observed(self)
+        return HistoricalThreadsRead(comms.bus.history.threads(self.senders))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -567,7 +546,9 @@ class CommsImportedSourceTool(CoreRead[ContextSourceText]):
     source: Annotated[Provenance, *tool_field("The retained source")]
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ContextSourceText:
-        return ImportedSessionMetadata.public_source_text(comms.registry, self.owner, self.source, comms)
+        if self.source not in ImportedSessionMetadata.sources_for_owner(comms.registry, self.owner):
+            raise ValueError("Source is outside the original imported snapshot")
+        return ContextSourceText(self.source.public_description(), self.source.public_text(comms))
 
 
 @dataclass(frozen=True, kw_only=True)

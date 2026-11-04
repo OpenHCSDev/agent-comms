@@ -140,12 +140,6 @@ class CommsRoute(ABC):
     def observe_root(self) -> Path:
         return self.root.resolve()
 
-    def observation_peer(self) -> LocalObservationPeer:
-        """A route's observation runs in a local process on its root."""
-        from agent_comms.ui_model.observation import LocalObservationPeer
-
-        return LocalObservationPeer(self)
-
     def launch(self) -> RootLaunch:
         """This root's launch, decoded from its marker and this installation's pin."""
         return RootLaunch.derive(self)

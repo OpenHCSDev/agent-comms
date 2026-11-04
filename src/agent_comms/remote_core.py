@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
 
 import asyncio
 import json
@@ -10,7 +9,7 @@ import socket
 import ssl
 import threading
 import urllib.request
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from uuid import uuid4
 
 import aiohttp
@@ -19,26 +18,57 @@ from multiprocessing.connection import Connection
 
 from yarl import URL
 
-from .connector import CancelledMessage, StreamedLine, ToolsCallMessage, ToolsCallReply
+from .connector import CancelledMessage, JsonRpcId, StreamedLine, ToolsCallMessage, ToolsCallReply
 from .connector_profile import HttpsMcpEndpoint, UiConnectionProfile, UiCredential
 from .core_access import CoreAccess
 from .errors import RelationViolationError
 from .exporting import WireExportCancelled
 from .nominal.field_codec import FieldCodec
 from .tool_caller import ToolCaller
-from .tool_request import ToolRequest
+from .tool_request import ObservedToolRequest, RequestPoster, ToolRequest
 from .tool_result import ToolResult
-from .ui_model.observation import ObservationPeer, ObservationSource, ObserverDied, RelayConnection, ViewerEnd, relay_frames
+from .ui_model.observation import (
+    ObservationPeer, ObservationSource, ObserverDied, RelayConnection, RelayEnding, ViewerEnd, relay_frames,
+)
 
-if TYPE_CHECKING:
-    from .tools import ObservedToolRequest
+
+@dataclass(frozen=True)
+class ConnectorClosed(RelayEnding):
+    def describe(self) -> str:
+        return "the connector closed the observation"
+
+
+@dataclass(frozen=True)
+class ObservationRetired(RelayEnding):
+    def describe(self) -> str:
+        return "the UI retired the observation"
+
+
+@dataclass(frozen=True)
+class ConnectorUnreachable(RelayEnding):
+    """The connector refused the observation or could not be reached."""
+
+    error: BaseException
+
+    def describe(self) -> str:
+        return f"{type(self.error).__name__}: {self.error}"
+
+
+@dataclass(frozen=True)
+class ServiceFailed(RelayEnding):
+    """Core's observation service failed and sent its traceback."""
+
+    traceback: str
+
+    def describe(self) -> str:
+        return self.traceback
 
 
 class ConnectorObserverClosed(ObserverDied):
     """The connector ended a remote UI's observation; there is no local process to describe."""
 
-    def __init__(self, url: URL, ending: str):
-        super().__init__(f"The comms observation at {url} closed:\n{ending}")
+    def __init__(self, url: URL, ending: RelayEnding):
+        super().__init__(f"The comms observation at {url} closed:\n{ending.describe()}")
 
 
 class ConnectorObservationPeer(ObservationPeer):
@@ -50,7 +80,7 @@ class ConnectorObservationPeer(ObservationPeer):
         self.url = access.endpoint.url.with_path("/observe")
         viewer, relay = socket.socketpair()
         self.connection = ViewerEnd(viewer.detach())
-        self.ending = "the connector closed the observation"
+        self.ending: RelayEnding = ConnectorClosed()
         # The relay's loop and task exist before its thread starts, so retiring the peer can
         # cancel it at any point, connection setup included.
         self.loop = asyncio.new_event_loop()
@@ -66,7 +96,7 @@ class ConnectorObservationPeer(ObservationPeer):
             self.loop.run_until_complete(self.task)
         except asyncio.CancelledError:
             # retire cancels the relay: the UI retired this observation.
-            self.ending = "the UI retired the observation"
+            self.ending = ObservationRetired()
         finally:
             with self.lifetime:
                 # The relay closed its local side, so no worker thread stays blocked on it;
@@ -83,12 +113,15 @@ class ConnectorObservationPeer(ObservationPeer):
                 self.ending = await relay_frames(local, remote)
         except (OSError, aiohttp.ClientError) as error:
             # Connecting is the boundary: the connector refused or could not be reached.
-            self.ending = f"{type(error).__name__}: {error}"
+            self.ending = ConnectorUnreachable(error)
         finally:
             local.close()
 
-    def join(self, timeout: float | None = None) -> None:
-        self.thread.join(timeout)
+    def join(self) -> None:
+        self.thread.join()
+
+    def await_end(self, seconds: float) -> None:
+        self.thread.join(seconds)
 
     def retire(self) -> None:
         """End the relay now, even while the connector is still connecting, then wait."""
@@ -98,7 +131,7 @@ class ConnectorObservationPeer(ObservationPeer):
         self.join()
 
     def service_failed(self, traceback: str) -> ObserverDied:
-        return ConnectorObserverClosed(self.url, traceback)
+        return ConnectorObserverClosed(self.url, ServiceFailed(traceback))
 
     def connection_closed(self) -> ObserverDied:
         """carry records the relay's end before it closes the local side, so the viewer's
@@ -123,7 +156,7 @@ class ConnectorClient(ObservationSource):
         return ConnectorObservationPeer(self)
 
 
-class RemoteCoreAccess(UiConnectionProfile, CoreAccess, ConnectorClient):
+class RemoteCoreAccess(UiConnectionProfile, CoreAccess, ConnectorClient, RequestPoster):
     """The owner's UI profile is the remote access: its endpoint and credential are all a
     call needs, and the server still decides scope, expiry and revocation."""
 
@@ -178,7 +211,7 @@ class RemoteCoreAccess(UiConnectionProfile, CoreAccess, ConnectorClient):
         return reply.structured()
 
     async def cancel_when_stopped[C: ToolCaller, R: ToolResult](
-        self, session: aiohttp.ClientSession, request: ObservedToolRequest[C, R], call_id: str,
+        self, session: aiohttp.ClientSession, request: ObservedToolRequest[C, R], call_id: JsonRpcId,
         cancelled: asyncio.Event,
     ) -> None:
         """The observer's stop reaches the running call on Core as one cancel."""
