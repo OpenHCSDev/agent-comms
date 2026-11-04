@@ -25,6 +25,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, Self
 
+from .history_view import OwnHistory
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import AcpSessionId, InputId
 from .native_input_proof import NativeContextProof
@@ -87,7 +88,7 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
         return frontier.cursor(source.read_key, offset)
 
     def history_locations(self, thread, registry, visited):
-        yield self, False
+        yield self, OwnHistory()
         yield from thread.inherited_history(registry, visited)
 
     def external_records(self, root, incarnation):

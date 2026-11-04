@@ -12,6 +12,7 @@ from urllib.parse import quote
 from pydantic import JsonValue
 
 from . import tool_declaration
+from .history_view import Dated
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import (
     ActivityExclude,
@@ -117,7 +118,7 @@ class ImportedReply(ImportedMessage):
 
 
 @dataclass(frozen=True, kw_only=True)
-class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
+class TranscriptEvent(EventMerge, Dated, DeclaredFamily, affix="Transcript"):
     category: ClassVar[type[MessageCategory]]
     position: int | NativeItemId
     timestamp: float
@@ -183,9 +184,6 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
 
     def edit_calls(self, thread: str, problem: str, since: float) -> tuple[tool_declaration.EditCall, ...]:
         return ()
-
-    def before(self, at: float) -> bool:
-        return self.timestamp < at
 
     def selected_input(self, selected: tuple[TranscriptEvent, ...]) -> tuple[TranscriptEvent, ...]:
         """Only the recorded input stands for the messages its wake selected."""

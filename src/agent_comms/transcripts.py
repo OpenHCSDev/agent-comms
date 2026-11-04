@@ -12,6 +12,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Callable, ClassVar, NoReturn
 
+from .history_view import HistoryView, OwnHistory
 from .agent_backend import RuntimeLocation
 from .bus import Bus
 from .bus_publication import Delivered
@@ -390,7 +391,7 @@ class ResolvedPageSource:
 
     thread: Thread
     runtime: Annotated[RuntimeLocation, WireName("session_file")]
-    inherited: bool
+    view: HistoryView
     root: Path
     bus: Bus
     routes: TranscriptRoutes
@@ -410,10 +411,10 @@ class PageSource(DeclaredFamily, affix="PageSource"):
 class LivePageSource(PageSource):
     def resolve(self, owner: Transcripts, name: str, limit: PageLimit) -> ResolvedPageSource:
         registry = owner.registry.snapshot()
-        thread, runtime, inherited = owner._thread_transcript_source(name, limit, registry=registry)
+        thread, runtime, view = owner._thread_transcript_source(name, limit, registry=registry)
         records = runtime.history_source(owner.root, thread.incarnation)
         return ResolvedPageSource(
-            thread, runtime, inherited, owner.root, owner.bus.bus, owner.routes, records,
+            thread, runtime, view, owner.root, owner.bus.bus, owner.routes, records,
             LiveTranscriptReadIdentity,
             LiveAssignedTranscriptSource.for_thread(owner.root, thread, owner.bus.bus))
 
@@ -432,7 +433,7 @@ class RecordedPageSource(PageSource):
         bus = Bus(Bus.path_in(root))
         records = runtime.history_source(root, thread.incarnation)
         return ResolvedPageSource(
-            thread, runtime, False, root, bus, TranscriptRoutes(root), records,
+            thread, runtime, OwnHistory(), root, bus, TranscriptRoutes(root), records,
             partial(RecordedTranscriptReadIdentity, source=source),
             AssignedTranscriptSource.for_recorded(root, thread, bus, records))
 
@@ -875,12 +876,12 @@ class Transcripts:
 
     def _thread_transcript_source(
         self, name: str, limit: PageLimit, *, registry: RegistrySnapshot
-    ) -> tuple[Thread, RuntimeLocation, bool]:
+    ) -> tuple[Thread, RuntimeLocation, HistoryView]:
         """Resolve a temporary inherited view without changing runtime ownership."""
         thread = registry.require(name)
-        for location, inherited in thread.runtime.history_locations(thread, registry, set()):
+        for location, view in thread.runtime.history_locations(thread, registry, set()):
             if limit.accepts_runtime(location):
-                return thread, location, inherited
+                return thread, location, view
         raise TranscriptChanged()
 
     @staticmethod
@@ -921,7 +922,7 @@ class Transcripts:
             initial = position.initial(frontier)
             with reader.projection(source, page.routes) as project:
                 consumed, records = traversal.read_records(
-                    reader, project, source, initial, frontier,
+                    reader, project, source, initial, frontier, page.view,
                     max_messages=max_messages, max_bytes=max_bytes,
                 )
             draft = reader.current_draft(page.root, thread.incarnation)
@@ -931,8 +932,9 @@ class Transcripts:
         events = traversal.finish(records)
         if requested_earlier and not events:
             raise CoordinationReadUnavailable("Waiting for the bridge's earlier transcript page")
-        if page.inherited and position.shows_fork_start(frontier):
-            events = (*events, *self._fork_start_events(thread))
+        events = page.view.framed(
+            events, self._fork_start_events(thread),
+            ends_at_fork=position.shows_fork_start(frontier), reaches_start=not has_older)
         return (
             TranscriptPage(
                 events, start, end,

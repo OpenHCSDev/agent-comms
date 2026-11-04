@@ -10,6 +10,7 @@ from conftest import installed_comms, transcript_records
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.coordination_errors import TranscriptChanged
 import json
+from datetime import UTC, datetime
 from dataclasses import replace
 
 import pytest
@@ -245,3 +246,36 @@ def test_never_started_native_child_keeps_no_native_cursor_and_no_read_mark(tmp_
     # The same cursor state retains its own external record coordinate, not a parent's.
     own = replace(checkpoint, offset=30)
     assert own.over_native((replace(own, offset=12), inherited)) == replace(own, offset=12)
+
+
+def test_fork_header_stays_at_the_fork_point_while_the_parent_grows(tmp_path):
+    """A fork shows its parent's history up to the fork, then its header, once: the parent's
+    later work is not the fork's history, and a later read must not move the header after it."""
+    parent_path = tmp_path / "parent.jsonl"
+    transcript(parent_path, 3)
+    comms = installed_comms(tmp_path / "wire")
+    comms.registry.declare(
+        NativeThread('parent', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(parent_path), comms.root))
+    )
+    comms.registry.declare(
+        NativeThread('child', frozenset(), Checkout(tmp_path), parent=ForkedParent('parent'), task=GivenThreadText('Inspect the renderer'))
+    )
+    forked_view = [
+        "Record 0",
+        "Record 1",
+        "Record 2",
+        "Forked from @parent. This thread started with:",
+        "Inspect the renderer",
+    ]
+    assert [event.text for event in comms.transcripts.capture_page_read("child").read().events] == forked_view
+
+    after_fork = datetime.fromtimestamp(comms.registry.require("child").incarnation.wire_birth + 60, UTC)
+    with parent_path.open("a") as parent_file:
+        for i in (3, 4):
+            record = transcript_records.message(
+                {"role": "assistant", "content": [{"type": "text", "text": f"Record {i}"}],
+                 "timestamp": int(after_fork.timestamp() * 1000)})
+            record["timestamp"] = after_fork.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+            parent_file.write(json.dumps(record) + "\n")
+
+    assert [event.text for event in comms.transcripts.capture_page_read("child").read().events] == forked_view
