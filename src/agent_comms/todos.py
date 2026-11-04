@@ -3785,7 +3785,8 @@ class Assignment(TodoHolder):
         if (self.owner_identity, self.generation) != (prepared.owner_identity, prepared.generation):
             raise TodoConflict(proposed)
         workplaces.require_owner(proposed, snapshot)
-        incoming.require_free(db, self.owner_identity, snapshot)
+        if not self.self_filed:
+            incoming.require_free(db, self.owner_identity, snapshot)
         worktrees = workplaces.roots_for(problem)
         for held in TodoStore._open(db, "assignment IS NOT NULL", ()):
             previous = held.held()
@@ -3796,6 +3797,12 @@ class Assignment(TodoHolder):
                 raise SharedWorktreeRefusal(
                     problem, held.id, self.owner_identity, previous.owner_identity, shared
                 )
+
+    @property
+    def self_filed(self) -> bool:
+        """A holder that files its own work consents to holding it beside what it already
+        holds; the busy-teammate refusal protects a holder from work another colleague hands it."""
+        return (self.parent, self.parent_created) == (self.owner, self.owner_created)
 
     @property
     def parent_identity(self) -> ThreadIncarnation:

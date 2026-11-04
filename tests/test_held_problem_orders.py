@@ -203,6 +203,22 @@ def test_second_unplanned_order_is_refused_without_recording(held_team, cited_so
     assert ctx.comms.registry.require("worker").goal == goal
 
 
+def test_a_teammate_files_its_own_second_row_beside_the_one_it_holds(held_team, cited_source):
+    """Every PR needs its board row, so a holder filing its own next work is never refused as busy."""
+    ctx = held_team
+    worker = ctx.comms.registry.require("worker")
+    held = ctx.comms.goals.todos.get("P1").held()
+    second = ctx.comms.goals.todos.create(
+        "P2", ctx.repos[0].github, "Repair the second workflow", creator=worker,
+        assigner=worker.incarnation, owner=worker, generation=held.generation,
+        request=ctx.comms.goals.todos.get("P1").request.require(),
+        review_at=RecordedEventTime(time.time() + 1000),
+        order=replace(order(cited_source), id=OrderId.mint()),
+    )
+    assert second.held().self_filed
+    assert {todo.id for todo in ctx.comms.goals.todos.held_by(worker.incarnation)} == {"P1", "P2"}
+
+
 def test_an_order_waiting_on_install_frees_its_holder_for_the_next_order(
     held_team, cited_source, tmp_path,
 ):
