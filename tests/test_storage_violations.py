@@ -53,6 +53,8 @@ def test_storage_family_renders_each_broken_fact(
     home = tmp_path / "declared-project"
     for arguments in (
         ("init", "-q"),
+        # A checkout's repository is its origin's (Repo.from_origin), like every real checkout.
+        ("remote", "add", "origin", "https://github.com/OpenHCSDev/agent-comms.git"),
         (
             "-c",
             "user.name=Storage fixture",
