@@ -1668,7 +1668,35 @@ class DeclaredWireType(ExternalJsonShape, WireValue):
         return FieldCodec.value_schema(cls.wire_type)
 
 
-class CapabilityUnion(ExternalJsonShape, WireValue):
+class MemberUnion(ExternalJsonShape, WireValue):
+    """A wire value that is whichever of its members it holds; the decoder, its decoding and
+    its schema all derive from that member set."""
+
+    __slots__ = ()
+
+    @classmethod
+    @abstractmethod
+    def union_members(cls) -> tuple[type, ...]:
+        """The members this union decodes into."""
+
+    @classmethod
+    def union_decoder(cls) -> UnionDecoder[object]:
+        return ValueDecoder.for_members(cls.union_members())
+
+    @classmethod
+    def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
+        return cls.union_decoder()
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        return cast(Self, cls.union_decoder().decode_bound(data, {}))
+
+    @classmethod
+    def schema(cls) -> dict[str, JsonValue]:
+        return FieldCodec.value_schema(cls.union_decoder().target)
+
+
+class CapabilityUnion(MemberUnion):
     """A capability shared by members of several declared families. Its wire value is the
     member it holds; it names the families, and each family's members with this
     capability are its members, so no member is listed by hand."""
@@ -1681,21 +1709,9 @@ class CapabilityUnion(ExternalJsonShape, WireValue):
         """The declared families whose members can hold this capability."""
 
     @classmethod
-    def capability_members(cls) -> tuple[type, ...]:
+    def union_members(cls) -> tuple[type, ...]:
         return tuple(dict.fromkeys(
             member for family in cls.capability_families() for member in family.members_with(cls)))
-
-    @classmethod
-    def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
-        return ValueDecoder.for_members(cls.capability_members())
-
-    @classmethod
-    def from_wire(cls, data: object) -> Self:
-        return cast(Self, ValueDecoder.for_members(cls.capability_members()).decode_bound(data, {}))
-
-    @classmethod
-    def schema(cls) -> dict[str, JsonValue]:
-        return FieldCodec.value_schema(ValueDecoder.for_members(cls.capability_members()).target)
 
 
 class DeclaredError(DeclaredWireType):
@@ -1717,11 +1733,12 @@ class DeclaredError(DeclaredWireType):
     def from_wire(cls, data: object) -> Self:
         """Rebuilt from its declared arguments, never through a member's narrowed constructor."""
         error = cls.__new__(cls)
-        BaseException.__init__(cast(BaseException, error), *FieldCodec.decode(cls.wire_type, data))
+        BaseException.__init__(cast(BaseException, error), *FieldCodec.decode(
+            cast(type[tuple[object, ...]], cls.wire_type), data))
         return error
 
 
-class SubclassUnion(DeclaredFamily, AcceptsNull, ExternalJsonShape, WireValue):
+class SubclassUnion(DeclaredFamily, AcceptsNull, MemberUnion):
     """An untagged wire family; each union declares its own root with affix=""."""
 
     @classmethod
@@ -1729,23 +1746,15 @@ class SubclassUnion(DeclaredFamily, AcceptsNull, ExternalJsonShape, WireValue):
         return False
 
     @classmethod
-    def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
-        return ValueDecoder.for_members(cls.members_with(cls))
-
-    @classmethod
-    def from_wire(cls, data: object) -> Self:
-        return ValueDecoder.for_members(cls.members_with(cls)).decode_bound(data, {})
-
-    @classmethod
-    def schema(cls) -> dict[str, JsonValue]:
-        return FieldCodec.value_schema(ValueDecoder.for_members(cls.members_with(cls)).target)
+    def union_members(cls) -> tuple[type, ...]:
+        return cls.members_with(cls)
 
     @classmethod
     def argument_options(cls, argument: Argument) -> dict[str, object]:
         """The union root offers its members' choices; a member offers only its own."""
         if cls.family_root is not cls:
             return super().argument_options(argument)
-        return ValueDecoder.for_members(cls.members_with(cls)).argument_options(argument)
+        return cls.union_decoder().argument_options(argument)
 
 class TaggedUnion(SubclassUnion):
     """A family whose members cross the wire as tagged records, each carrying its kind."""
