@@ -300,8 +300,8 @@ class TeamHud(TeamLoad):
 
     TodoStore owns orders, review timers and strikes; OrderEditCountRead owns edit counts;
     PullRequests owns ready/draft facts; PlanPhase owns phase state; OverloadDegradation
-    owns the load formula and decision; ThreadExecution owns which threads are forks. Nothing
-    here makes independent board decisions; its lines come from the retained observation.
+    owns the load formula and decision; ForkThread owns which threads are forks. Nothing here
+    makes independent board decisions; its lines come from the retained observation.
     """
 
     teammate: ThreadIncarnation
