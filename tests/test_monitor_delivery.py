@@ -837,6 +837,14 @@ def test_remote_control_session_record_decodes_without_updates():
     assert record.updates(ClaudeSession()) == ()
 
 
+def test_session_owner_record_decodes_without_updates():
+    record = decoded_record({'type': 'session-owner',
+        'accountUuid': '00000000-0000-4000-8000-000000000002',
+        'organizationUuid': '00000000-0000-4000-8000-000000000003',
+        'sessionId': '00000000-0000-4000-8000-000000000001'})
+    assert record.updates(ClaudeSession()) == ()
+
+
 @pytest.mark.asyncio
 async def test_wrong_complete_parts_stay_pending_without_claiming_delivery(bridge, emitted_delivery, capsys):
     message = await emitted_delivery('original')
