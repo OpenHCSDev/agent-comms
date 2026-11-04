@@ -55,7 +55,7 @@ from .runtime import RuntimeProxy
 from .runtime_requests import FreshSubscribeRuntimeRequest, SubscribeRuntimeRequest
 from .session_effects import SessionEffects
 from .session_load import ExistingSessionLoadPlan, FailedSessionLoadPlan, SessionLoadPlan
-from .thread_identity import AcpThreadRole, ClaimedIdentity, OwnerIdentity
+from .thread_identity import AcpThreadRole, ClaimedIdentity, OwnerIdentity, ThreadIncarnation
 from .thread_model import ThreadModel
 from .thread_status import ActiveThreadPresence
 from .thread_text import NoThreadText, ThreadText
@@ -71,15 +71,17 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class PublishedSession:
-    """The thread metadata a session last published, derived from its Thread."""
+    """The thread metadata a session last published, derived from its Thread. The birth it
+    was published for owns the session through every rename; a name alone does not."""
 
     name: str
     title: ThreadText
     worktree: Checkout
+    incarnation: ThreadIncarnation
 
     @classmethod
     def of(cls, thread: Thread) -> PublishedSession:
-        return cls(thread.name, thread.title, thread.worktree)
+        return cls(thread.name, thread.title, thread.worktree, thread.incarnation)
 
 
 class SessionLifecycle:
@@ -164,9 +166,10 @@ class SessionLifecycle:
         })
 
     def owned_sessions(self, entry: RegistryEntry) -> Iterator[AcpSessionId]:
-        """Published attachments belonging to this registry identity, including aliases."""
+        """Published attachments of this registry incarnation, under any of its names; a
+        same-name replacement owns none of them."""
         return (session_id for session_id, published in self.published.items()
-                if entry.matches_name(published.name))
+                if published.incarnation == entry.thread.incarnation)
 
     @staticmethod
     def reject_foreign_mcp(request: NewSessionRequest | LoadSessionRequest) -> None:
@@ -387,6 +390,10 @@ class SessionLifecycle:
                 self.comms.registry.entry, cached_name,
             ))).entry
             thread = entry.thread
+            if thread.incarnation != self.published[session_id].incarnation:
+                await self.effects.turns.close_idle_backend(session_id)
+                raise RelationViolationError(
+                    f"{cached_name!r} now names another thread; this session stays its original's")
             name = thread.name
             if (
                 name != cached_name

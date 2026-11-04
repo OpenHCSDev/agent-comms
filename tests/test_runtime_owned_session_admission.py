@@ -115,6 +115,23 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
         assert {session: published.name for session, published in owner.sessions.published.items()} == {
             "original-acp-session": "registered",
         }
+        # A same-name replacement in this process owns none of the original's loaded sessions.
+        shadowed = Thread("shadowed-owner", frozenset(), Checkout(project),
+                          process_identity=ProcessIdentity.capture(os.getpid()))
+        comms.registry.declare(shadowed)
+        loaded = comms.registry.require("shadowed-owner")
+        await owner.sessions.bind_owned(loaded, AcpSessionId("shadowed-acp-session"))
+        comms.registry.remove("shadowed-owner")
+        comms.registry.declare(Thread("shadowed-owner", frozenset(), Checkout(project),
+                                      process_identity=ProcessIdentity.capture(os.getpid())))
+        replacement = comms.registry.entry("shadowed-owner").entry
+        assert replacement.thread.incarnation != loaded.incarnation
+        with pytest.raises(Refused):
+            owner.sessions.require_owned_session(replacement)
+        comms.registry.remove("shadowed-owner")
+        comms.registry.declare(loaded)
+        assert owner.sessions.require_owned_session(
+            comms.registry.entry("shadowed-owner").entry) == "shadowed-acp-session"
         assert not (root / "native-sessions").exists()
         assert not (root / "input_dispositions.sqlite3").exists()
     finally:
