@@ -13,6 +13,8 @@ from .channel_targets import DeclaredTag
 from .child_process import NoProcess, ProcessIdentity
 from .errors import RelationViolationError
 from .nominal.field_codec import GoalId, ThreadLookup, TurnId
+from .repository_name import RepositoryName
+from .thread_identity import ThreadIncarnation
 from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .goal_scope import AllGoals, GoalScope
 from .native_input_owner import RegistryOwner
@@ -99,6 +101,16 @@ class Registration:
                 )).thread
             return current
 
+    def select_checkout(
+        self, owner: ThreadIncarnation, repository: RepositoryName, path: Path,
+    ) -> Path:
+        """Change only this incarnation's repository choice, under the registry writer."""
+        path = path.expanduser().absolute()
+        with self.store.editing() as edit:
+            edit.document.select_checkout(owner, self.storage_rule, repository, path)
+            edit.commit()
+        return path
+
     def transfer_checkout(
         self, original: Thread, source: Checkout, destination: Path, repository: Repo,
         require_target: Callable[[], None],
@@ -136,9 +148,12 @@ class Registration:
             with source.relocating(destination) as transfer:
                 require_target()
                 for moved in (current, *sharing):
-                    self._commit_registration(edit, edit.document.prepare_registration(
+                    change = edit.document.prepare_registration(
                         moved.relocated_checkout(source, Checkout(destination)),
-                        edit.document.status(moved.name), new_owner=False))
+                        edit.document.status(moved.name), new_owner=False)
+                    self._commit_registration(edit, replace(change, thread=replace(
+                        change.thread, storage_roots=rule.roots_of(moved).relocated(
+                            source.path, destination))))
                 return transfer
 
     def replace_original(self, original: Thread, replacement: Thread) -> Thread:
