@@ -152,13 +152,15 @@ class WatchDropped(WatchEnd):
 
 @dataclass(frozen=True)
 class WatchStopped(WatchEnd):
-    """The thread was stopped on the bus: re-arming would undo the stop."""
+    """The thread was stopped on the bus: re-arming now would undo the stop. The session is
+    not archived; it connects again when someone wakes it."""
 
     exit_code = 0
 
     def line(self) -> str:
-        return ("This thread was stopped on the bus. Do not call comms_watch again: tell the "
-                "person in one line that you were stopped, then stop.")
+        return ("This thread was stopped on the bus. Do not call comms_watch again now: tell the "
+                "person in one line that you were stopped, then stop. This session stays; when "
+                "someone wakes it, connect again.")
 
 
 @dataclass(frozen=True)
