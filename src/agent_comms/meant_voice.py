@@ -22,7 +22,7 @@ class BusVoice(Speaking):
     def say(self, line: str, deal: RuleDeal) -> Asked:
         """His line goes to the thread under his own thread, as every owner notice does."""
         message = MeantNotice().publish(self.comms.messaging, ThreadTarget(self.speaker()), line)
-        return Asked(message.message_id)
+        return Asked(message.message_id, line)
 
     def answered(self, question: Asked, answer: str) -> None:
         """The session's own audit answer replies to his question, so he reads it where he

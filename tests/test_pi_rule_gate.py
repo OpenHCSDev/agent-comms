@@ -486,11 +486,49 @@ def test_a_meant_refusal_names_its_one_id_and_why_the_written_answer_failed(team
     deal = PiRedeal.of(team_bus, team_bus.registry.require("unit-x"))
     deal.redeal(StartedDeal())
     question = MessageId.mint("meant-trap")
-    reason = Unmeant(deal.current(), deal.audit, Asked(question), (), "did you mean it?",
+    reason = Unmeant(deal.current(), deal.audit, Asked(question), (),
                      ("Yes", "I meant every answer I wrote and I am reading the next batch now")).reason
     assert question in reason and "none replaces it" in reason
     assert '"Yes" under this id does not count: it has 1 words, fewer than 12' in reason
     assert "does not open with yes or no" in reason
+
+
+def test_a_meant_refusal_repeats_the_words_its_id_asked_not_the_audits_newest(team_bus):
+    deal = PiRedeal.of(team_bus, team_bus.registry.require("unit-x"))
+    deal.redeal(StartedDeal())
+    asked = Asked(MessageId.mint("own-words"), "> the row this id asked about\n\ndid you mean it?")
+    deal.meant.replace(MeantRecord(open=(asked,)))
+    deal.audit.write_text(json.dumps(FieldCodec.encode(SessionAudit(
+        (RuleAudit("spine", quote="q", does="a newer row written since", why="w"),), ()))))
+    reason = deal.state().cause.reason
+    assert "the row this id asked about" in reason
+    assert "a newer row written since" not in reason
+
+
+def test_an_audit_that_does_not_parse_is_refused_out_loud_before_anything_else(team_bus):
+    """One stray brace used to read as an empty audit: the open question could never settle and
+    its refusal showed a blank quote, with nothing saying the file was broken."""
+    deal = PiRedeal.of(team_bus, team_bus.registry.require("unit-x"))
+    deal.redeal(StartedDeal())
+    question = MessageId.mint("broken-audit")
+    deal.meant.replace(MeantRecord(open=(Asked(question),)))
+    good = deal.audit.read_text()
+    deal.audit.write_text(good.replace('"rules"', '}, "rules"', 1))
+
+    blocked = deal.state().cause
+    assert "does not decode" in blocked.reason and "line 2" in blocked.reason
+    assert not blocked.permits_read(deal.audit)
+
+    deal.audit.write_text(good)
+    assert deal.state().cause.question.message_id == question
+
+
+def test_a_missing_audit_is_not_called_broken(team_bus):
+    deal = PiRedeal.of(team_bus, team_bus.registry.require("unit-x"))
+    deal.redeal(StartedDeal())
+    deal.audit.unlink()
+    assert SessionAudit.read(deal.audit).unreadable() == ""
+    assert SessionAudit.read(deal.audit).fault() == "no audit is written"
 
 
 def test_a_deal_writes_the_blank_audit_its_session_fills(team_bus):
