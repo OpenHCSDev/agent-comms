@@ -6,6 +6,7 @@ import time
 from abc import ABC, abstractmethod
 from collections import ChainMap
 from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping, Sequence
+from pathlib import Path
 from dataclasses import dataclass, field, replace
 from functools import cached_property
 from types import MappingProxyType
@@ -49,6 +50,7 @@ from .registry_provenance import (
 )
 from .repo import Checkout, Repo, RepositoryReads, RepositorySelection
 from .repository_name import RepositoryName
+from .storage_rules import StorageRule
 from .snapshot_slices import (
     MappingRowsSlice,
     OwnRow,
@@ -95,12 +97,9 @@ from .turn_lease import (
 )
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from .bus_publication import Delivered
     from .cli_command import CliCommand
     from .comms import Comms
-    from .storage_rules import StorageRule
 
 
 @dataclass(frozen=True, slots=True)
