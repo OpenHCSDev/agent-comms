@@ -13,7 +13,7 @@ from .read_ledger import ReadDocument, ReadLedger
 from .registry_document import RegistrySnapshot
 from .frozen_recipient import FrozenRecipient
 from .channel_targets import CommandTarget
-from .nominal.field_codec import MessageId, SubclassUnion, TaggedRecordMember, ThreadLookup
+from .nominal.field_codec import MessageId, TaggedUnion, TaggedRecordMember, ThreadLookup
 from .message_reference import MessageReference
 from .notification_assignment import NotificationAssignment
 from agent_comms.notification_progress import AssignmentResponse
@@ -41,13 +41,10 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class NotificationWindow(SubclassUnion, affix=""):
+class NotificationWindow(TaggedUnion, affix=""):
     """One window owns its evidence, batching and change contract. A remote UI receives
     windows as read answers, so each record carries its kind."""
 
-    @classmethod
-    def decodes_tagged_records(cls) -> bool:
-        return True
 
     outcomes: Mapping[tuple[int, MessageId], tuple[MessageNotification, ...]]
     reads: tuple[NotificationAssignmentRead, ...]

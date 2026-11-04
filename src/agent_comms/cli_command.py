@@ -38,8 +38,9 @@ from agent_comms.config_options import CatalogChoice, ConfigOptions
 from agent_comms.tool_result import ToolResult
 from agent_comms.nominal.declared_family import ModuleMembers
 from agent_comms.declared_verb import DeclaredCommand
+from agent_comms.nominal.field_codec import TaggedUnion
 from agent_comms.nominal.field_codec import (
-    FieldCodec, FieldPlan, RecordMember, SubclassUnion, TaggedRecordMember, TargetBound, WireValue,
+    FieldCodec, FieldPlan, RecordMember, TaggedRecordMember, TargetBound, WireValue,
 )
 from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, StartedOwner
 from agent_comms.lifecycle_capability import LifecycleCapability, Successful
@@ -443,14 +444,11 @@ class CommandSelectionChanged(ToolRefusedError):
 
 
 @dataclass(frozen=True)
-class TargetSelection(SubclassUnion, affix="Target"):
+class TargetSelection(TaggedUnion, affix="Target"):
     """The targets one execution runs on; each kind owns how its result comes back. A
     remote UI sends it to Core, so each record carries its kind."""
     targets: tuple[CommandTarget, ...]
 
-    @classmethod
-    def decodes_tagged_records(cls) -> bool:
-        return True
 
     def __post_init__(self) -> None:
         if not self.targets:

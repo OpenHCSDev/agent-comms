@@ -66,7 +66,8 @@ from agent_comms.history_views import RetiredViews
 from agent_comms.message_notification import NotificationPass, NotificationWindow
 from agent_comms.notification_read import NotificationsRead, UnreadableNotificationsRead
 from agent_comms.message_reference import MessageReference
-from agent_comms.nominal.field_codec import DeclaredError, FieldCodec, MessageId, SubclassUnion, TaggedRecordMember
+from agent_comms.nominal.field_codec import TaggedUnion
+from agent_comms.nominal.field_codec import DeclaredError, FieldCodec, MessageId, TaggedRecordMember
 from agent_comms.nominal.fold import Absorbs, Accumulates, Fold
 from agent_comms.notification_reads import NotificationRead
 from agent_comms.read_basis import DisplayCut, NoDisplaySelection
@@ -111,13 +112,10 @@ if TYPE_CHECKING:
     from agent_comms.transcripts import TranscriptRead
 
 
-class ObservationRequest(SubclassUnion, affix=""):
+class ObservationRequest(TaggedUnion, affix=""):
     """A UI request; each declares how the service receives it. A remote UI sends it over
     the connector, so each record carries its kind."""
 
-    @classmethod
-    def decodes_tagged_records(cls) -> bool:
-        return True
 
     @abstractmethod
     def receive(self, service: ObservationService) -> None: ...
@@ -556,13 +554,10 @@ class SubscribeTranscript(ReadTranscript):
     deferred_reads: ClassVar[tuple[type[Exception], ...]] = (StaleRevision,)
 
 
-class TranscriptPublicationState(SubclassUnion, affix=""):
+class TranscriptPublicationState(TaggedUnion, affix=""):
     """Whether a transcript read was already published; a remote UI sends it with its
     read, so each record carries its kind."""
 
-    @classmethod
-    def decodes_tagged_records(cls) -> bool:
-        return True
 
     @abstractmethod
     def result(self, read: TranscriptRead) -> TranscriptSnapshotUpdate | TranscriptDraftUpdate: ...
@@ -1011,13 +1006,10 @@ class ViewReading(Observation[ObserveViews]):
             ViewsRetired(revision, retired).publish(service)
 
 
-class ServiceResult(SubclassUnion, affix=""):
+class ServiceResult(TaggedUnion, affix=""):
     """What the service sends; each declares how the UI side receives it. A remote UI
     receives it over the connector, so each record carries its kind."""
 
-    @classmethod
-    def decodes_tagged_records(cls) -> bool:
-        return True
 
     def retire_request(self, service: ObservationService, request: ReadRequest) -> None:
         service.pending.pop(request.request_id)
@@ -1199,13 +1191,10 @@ class SidebarUnreadable(SidebarResult):
     error: UnreadableHistory
 
 
-class ThreadReadResult(PublishState, SubclassUnion, affix=""):
+class ThreadReadResult(PublishState, TaggedUnion, affix=""):
     """One thread's last read, including how to compare and display its answer. A remote
     UI receives it across the connector, so each record carries its kind."""
 
-    @classmethod
-    def decodes_tagged_records(cls) -> bool:
-        return True
 
     def same_as_presented(self, presented: ThreadPresented) -> bool:
         return False

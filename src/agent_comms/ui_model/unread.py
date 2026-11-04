@@ -6,21 +6,19 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
-from agent_comms.nominal.field_codec import SubclassUnion, TaggedRecordMember
+from agent_comms.nominal.field_codec import TaggedUnion
+from agent_comms.nominal.field_codec import TaggedRecordMember
 
 if TYPE_CHECKING:
     from agent_comms.presentation import CoordinationSnapshot
 
 
-class UnreadPresentation(SubclassUnion, affix="Unread"):
+class UnreadPresentation(TaggedUnion, affix="Unread"):
     """A row's unread count as presented. It travels with the sidebar snapshot to a remote
     UI, and several members share the same field, so each record carries its kind."""
 
     waiting: ClassVar[bool] = False
 
-    @classmethod
-    def decodes_tagged_records(cls) -> bool:
-        return True
 
     @classmethod
     def for_thread(cls, snapshot: CoordinationSnapshot, name: str) -> UnreadPresentation:

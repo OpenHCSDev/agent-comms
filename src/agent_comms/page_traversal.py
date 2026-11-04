@@ -11,6 +11,7 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
 from .tool_result import ToolResult
+from .nominal.field_codec import TaggedUnion
 from .nominal.field_codec import (
     NominalSpelling, NominalText, NullMember, RecordMember, SingleFieldValue, SubclassUnion,
     TaggedRecordMember,
@@ -130,13 +131,10 @@ class HistoryCursor(RecordMember, SequenceCursor):
         return True
 
 
-class PageTraversal(SubclassUnion, affix="Traversal"):
+class PageTraversal(TaggedUnion, affix="Traversal"):
     """Traversal order and edge meaning retain their original nominal cursor. Older and newer
     have the same shape, so each record carries its declared direction."""
 
-    @classmethod
-    def decodes_tagged_records(cls) -> bool:
-        return True
 
     cursor: PageCursor
     # The bus sequence order this traversal reads rows in.

@@ -26,13 +26,13 @@ from .channels import Channel, ChannelMemberIndex
 from .child_process import NoProcess, ProcessIdentity
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
+from .nominal.field_codec import TaggedUnion
 from .nominal.field_codec import (
     ExternalJsonShape,
     FieldCodec,
     FieldPlan,
     MalformedRecord,
     SlicePolicy,
-    SubclassUnion,
     TaggedRecordMember,
     ThreadLookup,
     WireOmitDefault,
@@ -144,13 +144,10 @@ class ResolvedChannel(ResolvedTarget):
         )
 
 
-class ProjectThreadSelection(SubclassUnion, ToolResult, affix="ProjectThread"):
+class ProjectThreadSelection(TaggedUnion, ToolResult, affix="ProjectThread"):
     """The registry's complete answer, including absence and ambiguity. A remote UI receives
     it from Core, so each record carries its kind."""
 
-    @classmethod
-    def decodes_tagged_records(cls) -> bool:
-        return True
 
     @classmethod
     def from_threads(cls, threads: tuple[Thread, ...]) -> ProjectThreadSelection:

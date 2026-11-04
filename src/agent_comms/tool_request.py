@@ -284,11 +284,11 @@ class ReadTool(ReadWork, FreshIngress):
         """Declared reads remain available to the installer's readiness checks."""
 
 
-@dataclass(frozen=True, kw_only=True)
-
-class UiRead[Result: ToolResult = ToolResult](ReadTool, ToolRequest[ToolCaller, Result], declared_name=None):
+class CoreRead[Result: ToolResult = ToolResult](ReadTool, ToolRequest[ToolCaller, Result], declared_name=None):
     """A read any caller may ask of Core, answering its declared result and changing nothing."""
 
+
+@dataclass(frozen=True, kw_only=True)
 class ThreadReadTool(ReadTool, NativeToolRequest):
     thread: Annotated[str, *tool_field("Thread to read; omit to read your own")] = (
         ""

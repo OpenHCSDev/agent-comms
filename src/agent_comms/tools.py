@@ -22,7 +22,7 @@ from .tool_request import (
     ThreadReadTool,
     ThreadContextAction,
     ThreadToolRequest,
-    UiRead,
+    CoreRead,
     ToolRequest,
     NativeToolRequest,
     tool_field,
@@ -436,7 +436,7 @@ class CommsDiscoverTool(ReadTool, NativeToolRequest[ToolCaller, ToolsSelected]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsChannelTool(UiRead[Channel]):
+class CommsChannelTool(CoreRead[Channel]):
     """One channel as Core declares it; a UI asks it whether the channel takes input."""
 
     label = "Channel"
@@ -454,7 +454,7 @@ class HistoricalThreadsRead(ToolResult):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsHistoricalThreadsTool(UiRead[HistoricalThreadsRead]):
+class CommsHistoricalThreadsTool(CoreRead[HistoricalThreadsRead]):
     """The preserved identities a UI's saved-sessions view lists, for every sender or one."""
 
     label = "Historical threads"
@@ -535,7 +535,7 @@ class ContextInspectionRead(ToolResult):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsContextInspectionTool(UiRead[ContextInspectionRead]):
+class CommsContextInspectionTool(CoreRead[ContextInspectionRead]):
     """One thread's recorded context page, with its annotations and imported sources, as a
     context explorer shows it."""
 
@@ -558,7 +558,7 @@ class CommsContextInspectionTool(UiRead[ContextInspectionRead]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsImportedSourceTool(UiRead[ContextSourceText]):
+class CommsImportedSourceTool(CoreRead[ContextSourceText]):
     """The public text of one source an imported thread's snapshot retained."""
 
     label = "Imported source"
@@ -571,7 +571,7 @@ class CommsImportedSourceTool(UiRead[ContextSourceText]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class SavedManifestRead[R: ToolResult = ToolResult](UiRead[R], declared_name=None):
+class SavedManifestRead[R: ToolResult = ToolResult](CoreRead[R], declared_name=None):
     """A read of one retained context manifest of a stopped thread."""
 
     owner: Annotated[str, *tool_field("Thread whose retained manifest to read")]
@@ -672,7 +672,7 @@ class CommsCaptureHumanInputTool(HumanToolRequest[HumanInputOrigin]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsThreadPresentationTool(UiRead[ThreadPresentation]):
+class CommsThreadPresentationTool(CoreRead[ThreadPresentation]):
     """One thread's published presentation, as the sidebar and session header show it."""
 
     label = "Thread presentation"
@@ -707,7 +707,7 @@ class CommsQueueActionTool(HumanToolRequest[QueueActionApplied]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsWireRevisionTool(UiRead[WireRevision]):
+class CommsWireRevisionTool(CoreRead[WireRevision]):
     """What every wire view derives from; an equal revision shows the same thing."""
 
     label = "Wire revision"
@@ -739,7 +739,7 @@ class CommsMarkPageReadTool(HumanToolRequest[PageMarked]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsThreadRelationshipsTool(UiRead[ThreadCommsSnapshot]):
+class CommsThreadRelationshipsTool(CoreRead[ThreadCommsSnapshot]):
     """One thread's relationship groups, as its sidebar shows them."""
 
     label = "Thread relationships"
@@ -775,7 +775,7 @@ class TargetActionsRead(ToolResult):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsTargetActionsTool(UiRead[TargetActionsRead]):
+class CommsTargetActionsTool(CoreRead[TargetActionsRead]):
     """A UI's thread or channel menu: the actions its selection offers. Opening one prepares
     its fields through CommsPrepareTargetActionTool, so listing never runs Pi."""
 
@@ -791,7 +791,7 @@ class CommsTargetActionsTool(UiRead[TargetActionsRead]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsPrepareTargetActionTool(UiRead[PreparedTargetAction]):
+class CommsPrepareTargetActionTool(CoreRead[PreparedTargetAction]):
     """Opening a menu action, or changing its values, asks Core which choices it offers."""
 
     label = "Prepare target action"
@@ -817,7 +817,7 @@ class CommsTargetEditTool(HumanToolRequest[TargetEditResult | Channel]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsRetiredViewsTool(UiRead[RetiredViews]):
+class CommsRetiredViewsTool(CoreRead[RetiredViews]):
     """A UI asks which of its open thread and channel views lost their source."""
 
     label = "Retired views"
@@ -831,7 +831,7 @@ class CommsRetiredViewsTool(UiRead[RetiredViews]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsThreadConfigurationTool(UiRead[CoordinationChangedUpdate]):
+class CommsThreadConfigurationTool(CoreRead[CoordinationChangedUpdate]):
     """A UI shows a thread's configuration from Core, in process or across the connector."""
 
     label = "Thread configuration"
@@ -844,7 +844,7 @@ class CommsThreadConfigurationTool(UiRead[CoordinationChangedUpdate]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsSessionThreadTool(UiRead[ProjectThreadSelection]):
+class CommsSessionThreadTool(CoreRead[ProjectThreadSelection]):
     """An unbound UI session finds its project's thread; Core's host resolves the path its
     registry records, so a detached copy never matches through a local alias."""
 
@@ -995,7 +995,7 @@ class CommsChannelsTool(ReadTool, NativeToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsConversationPageTool(UiRead[MessagePage]):
+class CommsConversationPageTool(CoreRead[MessagePage]):
     """The UI's conversation read: the same request locally and through the connector."""
 
     label = "Conversation page"
@@ -1012,7 +1012,7 @@ class CommsConversationPageTool(UiRead[MessagePage]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsConversationRevisionTool(UiRead[ConversationRevision]):
+class CommsConversationRevisionTool(CoreRead[ConversationRevision]):
     """The UI's change check for one conversation: the same request locally and through the
     connector. The UI keeps the revision it gets back and sends it with the next check."""
 
@@ -1033,7 +1033,7 @@ class CommsConversationRevisionTool(UiRead[ConversationRevision]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsLatestSequenceTool(UiRead[LatestSequence]):
+class CommsLatestSequenceTool(CoreRead[LatestSequence]):
     """The bound a UI reads new messages up to, locally or through the connector."""
 
     label = "Latest sequence"
@@ -1051,7 +1051,7 @@ class ServedRoot(ToolResult):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsServedRootTool(UiRead[ServedRoot]):
+class CommsServedRootTool(CoreRead[ServedRoot]):
     """A remote UI keys its observation by the root the connector's Core serves."""
 
     label = "Served root"
@@ -1382,7 +1382,7 @@ class CommsThreadsTool(ReadTool, NativeToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsRegistryTool(UiRead[RegistrySnapshot]):
+class CommsRegistryTool(CoreRead[RegistrySnapshot]):
     """A remote UI resolves names, renames and recorded threads against Core's registry."""
 
     label = "Thread registry"

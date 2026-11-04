@@ -1736,6 +1736,14 @@ class SubclassUnion(DeclaredFamily, AcceptsNull, ExternalJsonShape, WireValue):
             return super().argument_options(argument)
         return ValueDecoder.for_members(cls.members_with(cls)).argument_options(argument)
 
+class TaggedUnion(SubclassUnion):
+    """A family whose members cross the wire as tagged records, each carrying its kind."""
+
+    @classmethod
+    def decodes_tagged_records(cls) -> bool:
+        return True
+
+
 
 class PresentMember:
     """A provided member contributes itself to an optional member sequence."""
@@ -4018,13 +4026,10 @@ class ReportedError(Exception):
         return f"{self.kind}: {self.message}"
 
 
-class ErrorRecord(SubclassUnion, affix=""):
+class ErrorRecord(TaggedUnion, affix=""):
     """How an error crosses a boundary: a declared error as its declared form, any other
     as its class and message. Each record answers the error a field of ``target`` receives."""
 
-    @classmethod
-    def decodes_tagged_records(cls) -> bool:
-        return True
 
     @staticmethod
     def of(value: BaseException) -> ErrorRecord:
