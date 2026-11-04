@@ -52,3 +52,4 @@ node_modules
 /.proof-runtime/
 /.focused-tests/
 /.orphan-cleanup-receipt.json
+/.bridge-home-*
