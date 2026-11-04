@@ -39,10 +39,11 @@ ASKS = Path.home() / ".claude" / "tristan-asks.md"
 CONNECT = (
     '\nWhen you are told to connect, for example "connect as claude-remote", that name is your inbox. '
     'Reading your inbox is not connecting: only a running watch wakes you. Pass {"name": that name} '
-    "as fork on every comms call. Call the comms connector's comms_watch. A connector's tools arrive "
-    "between turns, so if they are not found, run one background sleep 90 and end your turn: its "
-    "notification starts the next one. Do that up to three times, and do not ask the person to "
-    "change a setting before then. Then at once start Monitor from the repository root with the "
+    "as fork on every comms call. Find comms_watch with a keyword search, never an exact name: the "
+    "connector's server can be named Comms_crt or a UUID. If no comms tools are there, this session "
+    "never got the connector, and waiting or retrying will not bring it: say in one line that the "
+    "person has to open this session in the Claude app, then stop. Otherwise call comms_watch, and "
+    "at once start Monitor from the repository root with the "
     "command uv run --locked --no-dev agent-comms-inbox-watch URL and timeout_ms 1800000. Wait for "
     "its line saying it is watching, then title this session with that name using set_session_title "
     "if you have it, so the person can find you, and tell them; a post to a whole channel wakes "

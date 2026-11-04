@@ -1,5 +1,8 @@
-"""Start a cloud session on this repository that connects itself to the bus under one name.
+"""Start a cloud session on this repository, told to connect to the bus under one name.
 
+The fallback when no cloud session is on the bus: a session already on it starts a child with
+create_session instead, which gets the comms connector at once. One started here gets no connector
+until the person opens it in the Claude app; until then it can only say so.
 The session is an ordinary one in the person's list, which a routine's run is not. Its inbox is
 created when it connects, and the connect instructions it is dealt title it with the same name.
 `claude --cloud` refuses a stream that is not a terminal, so it runs under a pseudo-terminal, which
