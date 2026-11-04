@@ -104,3 +104,17 @@ def test_a_compaction_inside_a_turn_stays_in_that_turn():
     session = ClaudeSession(phase=Live(), turn=KnownTurn(running))
     (finished,) = compaction_after(session)
     assert session.turn == KnownTurn(running) and finished.turn_id == running
+
+
+def test_an_assistant_record_with_no_prompt_opens_its_own_turn():
+    """2026-11-04: Claude answered a queued notification with no prompt record right after a
+    turn_duration; the live reader's raise stopped the bridge, and no message reached the session."""
+    session = ClaudeSession(phase=Live())
+    records = (
+        dict(type='system', subtype='turn_duration'),
+        dict(type='assistant', uuid=transcript_record('thinking'), timestamp='2026-11-04T20:14:11.381Z',
+             message=dict(content=[dict(type='thinking', thinking='Read the message')])),
+    )
+    for position, data in enumerate(records):
+        ClaudeJsonLines().decode_line(json.dumps(data).encode(), position).updates(session)
+    assert session.turn == KnownTurn(NativeTurnId(transcript_record('thinking')))

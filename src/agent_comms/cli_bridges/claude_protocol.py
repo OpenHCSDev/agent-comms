@@ -687,6 +687,9 @@ class AssistantRecord(ClaudeRecord, TimedRecord, declared_name='assistant'):
             block.tally(receipts)
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
+        """Claude can answer with no prompt record of its own, right after the last turn's
+        duration: a queued notification is one way. The assistant record then opens the turn."""
+        session.open_turn(self)
         updates = [update for block in self.message.content for update in block.updates(self, session)]
         events = tuple(event for block in self.message.content for event in block.events(self))
         if events:
