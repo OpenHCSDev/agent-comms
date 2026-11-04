@@ -130,8 +130,12 @@ def edit_inside(
     module = ast.parse(path.read_text())
     declaration, = (node for node in module.body
                      if isinstance(node, ast.ClassDef) and node.name == owner.__name__)
+    # @overload stubs bind the name for type checkers only; the runtime declaration is the edit.
     statement, = (node for node in declaration.body
-                   if member in ProducedTable.bound_names(ast.unparse(node)))
+                  if member in ProducedTable.bound_names(ast.unparse(node))
+                  and not (isinstance(node, ast.FunctionDef)
+                           and any(ast.unparse(decorator) == "overload"
+                                   for decorator in node.decorator_list)))
     change(statement)
     path.write_text(ast.unparse(ast.fix_missing_locations(module)) + "\n")
 
