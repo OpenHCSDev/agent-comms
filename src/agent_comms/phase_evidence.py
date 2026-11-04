@@ -454,10 +454,14 @@ class BusStorageAbsent(MainEvidence, ast.NodeVisitor):
         if isinstance(node.value, str):
             self.found |= bool(self.filenames.fullmatch(node.value))
 
+    @staticmethod
+    def prose(node: ast.Expr) -> bool:
+        """A docstring or inert prose cannot open a physical bus."""
+        return isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)
+
     def visit_Expr(self, node: ast.Expr) -> None:
-        if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
-            return  # A docstring or inert prose cannot open a physical bus.
-        self.generic_visit(node)
+        if not self.prose(node):
+            self.generic_visit(node)
 
     def visit_BinOp(self, node: ast.BinOp) -> None:
         match node:
@@ -899,7 +903,7 @@ class BusStorageProbe(BusStorageAbsent):
         """The driving walk reaches the children."""
 
     def visit_Expr(self, node: ast.Expr) -> None:
-        if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+        if self.prose(node):
             self.inert.add(node.value)
 
 
