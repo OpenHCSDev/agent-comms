@@ -33,7 +33,8 @@ from .command import Command
 from .coordinator import Coordination
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .nominal.field_codec import WireOmitDefault
+from .nominal.field_codec import NullMember, SingleFieldValue, SubclassUnion, WireOmitDefault
+from .thread_identity import ThreadIncarnation
 from .maintenance_barrier import MaintenanceHolder, NoMaintenanceHolder
 from .owner_protocol import OwnerResult
 from .tool_result import DeclaredReply
@@ -62,6 +63,33 @@ class AttachedRuntimeRequestContext(RuntimeRequestContext):
     session: AcpSessionId
 
 
+class RequestedOwner(SubclassUnion, affix="Owner"):
+    """Which owner incarnation a request may bind: whichever holds its thread name now, or
+    the one its caller captured. The bind checks it on the owner's side, so a name that
+    acquires a new birth in the same process after the caller's check is refused."""
+
+    @abstractmethod
+    def require(self, owner: Thread) -> None: ...
+
+
+class AnyOwner(NullMember, RequestedOwner):
+    """An in-process caller binds the row that holds the name."""
+
+    def require(self, owner: Thread) -> None:
+        """Nothing was captured, so the current row is the one requested."""
+
+
+@dataclass(frozen=True)
+class CapturedOwner(SingleFieldValue, RequestedOwner):
+    """A caller that checked one incarnation binds only that birth, under any of its names."""
+
+    incarnation: ThreadIncarnation
+
+    def require(self, owner: Thread) -> None:
+        if owner.incarnation != self.incarnation:
+            raise RelationViolationError("The owner incarnation changed before the request bound.")
+
+
 @dataclass(frozen=True, kw_only=True)
 class RuntimeRequest[Ctx: RuntimeRequestContext](
     DeclaredFamily, Command[Ctx, Awaitable[None]], affix="RuntimeRequest"
@@ -69,6 +97,7 @@ class RuntimeRequest[Ctx: RuntimeRequestContext](
     family_discriminator: ClassVar[str] = "action"
     thread: str
     holder: Annotated[MaintenanceHolder, WireOmitDefault()] = NoMaintenanceHolder()
+    captured: Annotated[RequestedOwner, WireOmitDefault()] = AnyOwner()
 
     @classmethod
     def proxy_payload(
@@ -87,6 +116,7 @@ class AttachedRuntimeRequest(RuntimeRequest[AttachedRuntimeRequestContext]):
         owner = entry.thread
         if not owner.process_identity.runs_here() or not entry.status.running:
             raise RelationViolationError("This process no longer owns the thread.")
+        self.captured.require(owner)
         return owner
 
     async def bind(

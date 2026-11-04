@@ -122,3 +122,31 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
         await client.shutdown()
         await owner.shutdown()
     assert not socket_path(root, os.getpid()).exists()
+
+
+def test_a_captured_owner_binds_only_its_birth_after_its_name_is_reused_in_process(tmp_path):
+    """The owner a caller checked is the owner the request binds: a same-process replacement
+    under the same name is refused at bind, and a rename of the captured owner still binds."""
+    from agent_comms.runtime_server import AnyOwner, CapturedOwner
+    from agent_comms.errors import RelationViolationError
+
+    comms = wire(tmp_path / "wire")
+    project = tmp_path / "project"
+    project.mkdir()
+    here = ProcessIdentity.capture(os.getpid())
+    original = Thread("bound-owner", frozenset(), Checkout(project), process_identity=here)
+    comms.registry.declare(original)
+    captured = comms.registry.require("bound-owner").incarnation
+
+    comms.registry.rename("bound-owner", "renamed-owner")
+    renamed = comms.registry.entry("renamed-owner").entry
+    GoalHistoryRuntimeRequest(thread="renamed-owner", captured=CapturedOwner(captured)).require_owner(renamed)
+
+    comms.registry.remove("renamed-owner")
+    comms.registry.declare(Thread("renamed-owner", frozenset(), Checkout(project), process_identity=here))
+    replacement = comms.registry.entry("renamed-owner").entry
+    assert replacement.thread.incarnation != captured
+    with pytest.raises(RelationViolationError, match="incarnation changed"):
+        GoalHistoryRuntimeRequest(thread="renamed-owner", captured=CapturedOwner(captured)).require_owner(replacement)
+    assert GoalHistoryRuntimeRequest(thread="renamed-owner", captured=AnyOwner()).require_owner(replacement) \
+        == replacement.thread
