@@ -368,22 +368,28 @@ class PlanStalled(PlanRule):
 
 @dataclass(frozen=True)
 class TeammateOwedAnswer(OwedAnswer, declared_name=None):
-    """A message one unit is owed; it belongs on that unit's observation. The teammate who
-    owes it is named too, so the row reaches the one who has to answer."""
+    """A message one unit is owed; it belongs on that unit's observation."""
 
     unit: ThreadIncarnation
-    debtor: ThreadIncarnation = field(compare=False, kw_only=True)
 
     def questions_for(self, unit: ThreadIncarnation) -> tuple[Message, ...]:
         return (self.message,) if unit == self.unit else ()
 
     def named_threads(self) -> tuple[ThreadIncarnation, ...]:
-        return tuple(dict.fromkeys((self.unit, self.debtor, *super().named_threads())))
+        return tuple(dict.fromkeys((self.unit, *super().named_threads())))
 
 
 @dataclass(frozen=True)
 class UnitAskUnanswered(TeammateOwedAnswer, UndatedStandingRule):
-    """Message debt shares its source read with unit observations."""
+    """Message debt shares its source read with unit observations. An ask is owed by the
+    teammate it was addressed to, so that teammate is part of the row: one ask to two
+    teammates is two debts, each on its own debtor's tool calls. (A delivery's verdict is
+    owed by the whole team, so DeliveryAwaitingJudgement names no debtor.)"""
+
+    debtor: ThreadIncarnation = field(kw_only=True)
+
+    def named_threads(self) -> tuple[ThreadIncarnation, ...]:
+        return tuple(dict.fromkeys((*super().named_threads(), self.debtor)))
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
@@ -434,8 +440,8 @@ class DeliveryAwaitingJudgement(TeammateOwedAnswer, UndatedStandingRule, OrderHe
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
         """The retained claim owns the report and the head owed a verdict, published or not:
         a claim whose answer never reached the bus is still owed its judgement."""
-        return tuple(cls(message=claim.message, unit=owner, debtor=debtor.incarnation,
-                         problem=todo.id, request=claim.request(), todo=todo)
+        return tuple(cls(message=claim.message, unit=owner, problem=todo.id,
+                         request=claim.request(), todo=todo)
                      for owner, todos in held.items() for todo in todos
                      for claim in todo.order.owed_claims())
 

@@ -64,7 +64,13 @@ class Ping(DeclaredFamily, affix="Ping"):
     text: str = field(compare=False, kw_only=True)
     subjects: tuple[HeartbeatSubject, ...] = field(default=(), compare=False, kw_only=True)
     since: EventTime = field(default_factory=UnrecordedEventTime, compare=False, kw_only=True)
-    threads: tuple[ThreadIncarnation, ...] = field(default=(), compare=False, kw_only=True)
+    threads: tuple[str, ...] = field(default=(), compare=False, kw_only=True)
+
+    @staticmethod
+    def stored_threads(threads: tuple[ThreadIncarnation, ...]) -> tuple[str, ...]:
+        """The threads a line names, in the shape packets on the bus already carry: names.
+        Keying them by birth changes the wire and needs a carry of those packets."""
+        return tuple(thread.name for thread in threads)
 
     @property
     def urgent(self) -> bool:
@@ -97,11 +103,11 @@ class Ping(DeclaredFamily, affix="Ping"):
         """The teammate's to dispose of, and no recorded action has yet."""
         return self.team_disposes and not self.acted(history)
 
-    def addresses(self, reader: ThreadIncarnation) -> bool:
+    def addresses(self, reader: str) -> bool:
         """Tristan's own rows address every teammate; any other row, the threads it names."""
         return self.owner_flagged or reader in self.threads
 
-    def parked(self, stopped: frozenset[ThreadIncarnation]) -> bool:
+    def parked(self, stopped: frozenset[str]) -> bool:
         """It waits on a thread that reads nothing now, so it leaves the main view."""
         return not stopped.isdisjoint(self.threads)
 
@@ -157,7 +163,7 @@ class RulePing(Ping):
     @classmethod
     def capture(cls, rule: StandingRule) -> Self:
         return cls(type(rule), rule.observation_key(), text=rule.line(), subjects=rule.subjects(),
-                   threads=rule.named_threads())
+                   threads=cls.stored_threads(rule.named_threads()))
 
 
 @dataclass(frozen=True)
@@ -197,7 +203,7 @@ class TeammatePing(Ping, declared_name="unit"):
                   for todo in state.source.todos if todo.id in state.orders),
             tuple(message.reference for message in state.owed),
             state.observation_key(), text=state.line(), subjects=state.subjects(),
-            threads=state.named_threads(),
+            threads=cls.stored_threads(state.named_threads()),
         )
 
 
@@ -267,7 +273,7 @@ class TeamUpdate(OwnerNotice, declared_name=None):
         """Any teammate's recorded action disposes of its subject on the shared board."""
         return tuple(ping.board_entry() for ping in self.open_pings(TeamHistory.of_team(comms)))
 
-    def reader_board(self, comms: Comms, reader: ThreadIncarnation) -> tuple[BoardEntry, ...]:
+    def reader_board(self, comms: Comms, reader: str) -> tuple[BoardEntry, ...]:
         """The open lines addressing ``reader`` that wait on no stopped thread: a tool call
         carries what is that session's own, and the whole board stays in comms_hud."""
         history = TeamHistory.of_team(comms)
@@ -275,7 +281,7 @@ class TeamUpdate(OwnerNotice, declared_name=None):
         return tuple(ping.board_entry() for ping in self.open_pings(history)
                      if ping.addresses(reader) and not ping.parked(stopped))
 
-    def stopped(self, snapshot: RegistrySnapshot) -> frozenset[ThreadIncarnation]:
+    def stopped(self, snapshot: RegistrySnapshot) -> frozenset[str]:
         """The threads its lines name that read nothing now."""
         return snapshot.stopped(name for ping in self.handled for name in ping.threads)
 
@@ -310,9 +316,8 @@ class TeamUpdate(OwnerNotice, declared_name=None):
     @classmethod
     def current_board(cls, comms: Comms, recipient: str) -> tuple[BoardEntry, ...]:
         """The retained observation's rows for ``recipient``'s tool calls, derived when asked."""
-        reader = comms.registry.require(recipient).incarnation
-        return tuple(entry for latest in cls.latest(comms, reader)
-                     for entry in latest.reader_board(comms, reader))
+        return tuple(entry for latest in cls.latest(comms, comms.registry.require(recipient).incarnation)
+                     for entry in latest.reader_board(comms, recipient))
 
     @classmethod
     def derive(cls, recipient: ThreadIncarnation, states: tuple[TeammateState, ...],
@@ -455,7 +460,7 @@ class AlarmGroup(ViewHeading, affix="Alarms"):
 
     @classmethod
     @abstractmethod
-    def admits(cls, ping: Ping, stopped: frozenset[ThreadIncarnation]) -> bool: ...
+    def admits(cls, ping: Ping, stopped: frozenset[str]) -> bool: ...
 
     @classmethod
     def row_lines(cls, section: AlarmSection, now: float) -> tuple[str, ...]:
@@ -465,7 +470,7 @@ class AlarmGroup(ViewHeading, affix="Alarms"):
 
     @classmethod
     def sections(cls, packets: tuple[TeamUpdate, ...], opened: tuple[Ping, ...],
-                 stopped: frozenset[ThreadIncarnation]) -> tuple[AlarmSection, ...]:
+                 stopped: frozenset[str]) -> tuple[AlarmSection, ...]:
         new = tuple(line for packet in packets for ping in packet.new_pings()
                     for line in ping.alarm_pings())
         return tuple(AlarmSection(group, members)
@@ -478,7 +483,7 @@ class MainAlarms(AlarmGroup, declared_name=None):
     """The groups of the main view: together they are what a parked line would have shown."""
 
     @classmethod
-    def admits(cls, ping: Ping, stopped: frozenset[ThreadIncarnation]) -> bool:
+    def admits(cls, ping: Ping, stopped: frozenset[str]) -> bool:
         """A line waiting on a stopped thread leaves every main-view group."""
         return not ping.parked(stopped)
 
@@ -530,7 +535,7 @@ class ParkedAlarms(AlarmGroup):
         return ()
 
     @classmethod
-    def admits(cls, ping: Ping, stopped: frozenset[ThreadIncarnation]) -> bool:
+    def admits(cls, ping: Ping, stopped: frozenset[str]) -> bool:
         return ping.parked(stopped)
 
     @classmethod

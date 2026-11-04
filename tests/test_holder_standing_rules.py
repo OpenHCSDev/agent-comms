@@ -602,6 +602,18 @@ def test_unanswered_pages_match_the_complete_answer_reference(held_bus):
     )
 
 
+def test_an_unanswered_ask_is_a_row_on_its_debtors_tool_calls(held_bus):
+    """The teammate an ask was sent to owes it: the row names that teammate, and the same
+    ask owed by two teammates is two rows, so neither debtor's row is deduplicated away."""
+    asked = publish(held_bus, "worker", "colleague", time.time() - 900)
+    owed, = (rule for rule in UnitAskUnanswered.violations(held_bus)
+             if rule.message.reference == asked.reference)
+    colleague = held_bus.registry.require("colleague").incarnation
+    assert owed.debtor == colleague and colleague in owed.named_threads()
+    other = replace(owed, debtor=held_bus.registry.require("outsider").incarnation)
+    assert other.observation_key() != owed.observation_key()
+
+
 def test_answering_an_unrelated_peer_leaves_the_team_question_open(held_bus):
     now = time.time()
     owed = publish(held_bus, "worker", "colleague", now - 30)

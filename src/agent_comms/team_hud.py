@@ -312,7 +312,7 @@ class TeamHud(TeamLoad):
     usage: CodexUsage
     packets: tuple[TeamUpdate, ...] = ()
     open_pings: tuple[Ping, ...] = field(kw_only=True)
-    stopped: frozenset[ThreadIncarnation] = field(default=frozenset(), kw_only=True)
+    stopped: frozenset[str] = field(default=frozenset(), kw_only=True)
 
     @classmethod
     def read(cls, comms: Comms, teammate: str) -> TeamHud:
