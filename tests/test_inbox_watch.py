@@ -661,3 +661,46 @@ async def test_a_watch_frozen_past_its_heartbeat_loses_nothing_and_shows_nothing
     else:
         assert (await frame(again))["text"] == message.body
     await again.close()
+
+
+def read_records(path: str, text: str) -> tuple[str, str]:
+    """The transcript records Claude writes for one Read call and its visible result."""
+    call = str(uuid4())
+    started = {"type": "assistant", "uuid": str(uuid4()), "timestamp": "2026-11-04T00:00:01.000Z",
+               "sessionId": "s", "message": {"content": [
+                   {"type": "tool_use", "id": call, "name": "Read", "input": {"file_path": path}}]}}
+    returned = {"type": "user", "uuid": str(uuid4()), "timestamp": "2026-11-04T00:00:02.000Z",
+                "sessionId": "s", "promptId": "p", "message": {"content": [
+                    {"type": "tool_result", "tool_use_id": call, "content": text, "is_error": False}]}}
+    return json.dumps(started), json.dumps(returned)
+
+
+async def test_a_cloud_message_sent_as_a_file_is_delivered_once_its_read_shows_it(
+    session, comms: Comms,
+) -> None:
+    """A message too long for one event goes to a file on the session's machine. Its Read comes
+    up the socket in the transcript, and the lines are judged against the bus message, so a
+    Read of the right name with other lines confirms nothing."""
+    client, token = session
+    socket = await client.ws_connect(await watch_path(client, token, "cloud"))
+    body = "\n".join(f"line {number} " + "x" * 60 for number in range(80))
+    whole = comms.messaging.send("sender", "cloud", body).message
+    forged = comms.messaging.send("sender", "cloud", body.replace("line 7 ", "line 7?")).message
+    for _ in range(2):
+        await frame(socket)
+    await inbox_emptied(comms, "cloud")
+    assert not ClaudeMonitorFrame(whole).fits_one_event
+
+    def numbered(lines: tuple[str, ...]) -> str:
+        return "\n".join(f"{number}\t{line}" for number, line in enumerate(lines, 1))
+
+    for message, lines in ((whole, ClaudeMonitorFrame(whole).export_lines),
+                           (forged, ClaudeMonitorFrame(whole).export_lines)):
+        path = f"/elsewhere/state/messages/{message.reference.name}.txt"
+        for record in read_records(path, numbered(lines)):
+            await socket.send_str(record)
+    async with asyncio.timeout(20):
+        while attempt_outcome(comms, whole) != "delivered":
+            await asyncio.sleep(0.05)
+    assert attempt_outcome(comms, forged) == "unconfirmed"
+    await socket.close()

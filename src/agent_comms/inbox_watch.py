@@ -30,7 +30,7 @@ from .cli_bridges.claude_transcript import (
 )
 from .cli_bridges.claude_protocol import ClaudeMonitorFrame
 from .cli_bridges.history import RemoteWatchHistory
-from .cli_bridges.shared import TranscriptConfirmsDelivery
+from .cli_bridges.shared import MonitorReadFile, TranscriptConfirmsDelivery
 from .comms import Comms, client_wire
 from .connector_store import BearerSecret, digest
 from .coordination_database import CoordinationStore
@@ -136,6 +136,13 @@ class PushedTranscript(TranscriptConfirmsDelivery, ClaudeJsonLines):
     reported: ReportedLedger = field(default_factory=lambda: ReportedLedger())
 
     delivery_kind: ClassVar[type[RemoteWatchHistory]] = RemoteWatchHistory
+    incoming_frame: ClassVar[type[ClaudeMonitorFrame]] = ClaudeMonitorFrame
+
+    def exported(self, path: str) -> tuple[MonitorReadFile, ...]:
+        """The file is on the session's machine, wherever its client keeps exports: its name
+        gives the reference and read_parts judges the lines against the bus message, so the
+        directory only locates the file and never vouches for it. The client keeps the file."""
+        return MonitorReadFile.exported_at(Path(path).parent, path)
 
     @cached_property
     def recipient_lookup(self) -> ThreadLookup:

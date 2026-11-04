@@ -42,8 +42,8 @@ from agent_comms.child_process import (
 from agent_comms.cli_arguments import CliArguments
 from agent_comms.cli_protocol import CoreError, EarlierItems, TaggedWire
 from agent_comms.harness_delivery_states import (
-    DeliveredOutcome, EmittedOutcome, FilteredOutcome, MismatchedMonitor, ObservedMonitor,
-    Outcome, ReceivingMonitor, UnconfirmedOutcome,
+    DeliveredOutcome, EmittedOutcome, FilteredOutcome, MismatchedMonitor, MonitorEvidence,
+    ObservedMonitor, Outcome, TakingLedger, UnconfirmedOutcome,
 )
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination_errors import (
@@ -1788,15 +1788,45 @@ class TranscriptConfirmsDelivery(PublishesToBus, HarnessDeliveryRecords):
     async def confirm_probe(self, probe: MonitorProbe) -> None:
         """Only a bridge that sent a probe waits on one; an old probe in a replayed window is history."""
 
-    async def read_export(self, read: ReadResultObserved) -> tuple[MessageReference, ...]:
-        """A route that exported no file confirms no Read of one."""
+    incoming_frame: ClassVar[type[MonitorIncomingFrame]]
+
+    def exported(self, path: str) -> tuple[MonitorReadFile, ...]:
+        """The notice whose export a Read showed; a route that exported no file names none."""
         return ()
+
+    async def retire_read(self, exact: HarnessDelivery, read: ReadResultObserved,
+                          notice: MonitorReadFile) -> None:
+        """A route that does not hold the export leaves it where it is."""
+
+    async def read_export(self, read: ReadResultObserved) -> tuple[MessageReference, ...]:
+        """A visible Read of this session's own export confirms the parts it shows, through the
+        same all-parts gate a Monitor event uses. The export names an exact reference: only the
+        attempt at that reference takes its parts, so a file at another sequence with the same
+        message id confirms nothing. The parts are judged against the bus message, never the
+        file: a read showing anything but the original's own lines confirms nothing."""
+        references: list[MessageReference] = []
+        for notice in self.exported(read.path):
+            identity = notice.reference.message_id
+            rows = read.rows()
+            with self.uncertain_on_contention(identity):
+                for exact in (attempt for attempt in await self.attempts(identity)
+                              if attempt.reference == notice.reference):
+                    message = await self.message(exact.reference)
+                    for part in self.incoming_frame(message).read_parts(rows):
+                        references.extend(await part.confirm(self, read.record))
+                    await self.retire_read(exact, read, notice)
+        return tuple(references)
 
 
 class MonitorIncomingFrame(IncomingFrame):
     @property
     @abstractmethod
     def parts(self) -> tuple[str, ...]: ...
+
+    def shown_evidence(self, ledger: TakingLedger) -> MonitorEvidence:
+        """What an attempt waits for, under the ledger that took it: every part, whether one
+        event shows the message whole or a Read of its export shows its slices."""
+        return ledger.receiving(len(self.parts))
 
     @abstractmethod
     async def emit_to(self, attachment: MonitorAttachment, window_bytes: int, exports: Path) -> None:
@@ -1811,7 +1841,6 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
     """Session-owned subscription and delivery journal, with replaceable readers."""
 
     output_type: ClassVar[type[ThreadOutput]] = ReplyingThreadOutput
-    incoming_frame: ClassVar[type[MonitorIncomingFrame]]
     window_bytes: ClassVar[int]
 
     def __init__(self, options: Options, address: SessionBinding, db: sqlite3.Connection) -> None:
@@ -1869,28 +1898,17 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
         """Where this session's messages too large for one event are read whole."""
         return self.options.state.absolute() / 'messages'
 
-    async def read_export(self, read: ReadResultObserved) -> tuple[MessageReference, ...]:
-        """A visible Read of this session's own export confirms the parts it shows, through the
-        same all-parts gate a Monitor event uses. The export names an exact reference: only the
-        attempt at that reference takes its parts, so a file at another sequence with the same
-        message id confirms nothing. Any other file, or a read showing anything but the exported
-        message's own lines, confirms nothing either. The export goes once that attempt, reread,
-        is consumed and no other Read of it is still running."""
-        references: list[MessageReference] = []
-        for notice in MonitorReadFile.exported_at(self.exports, read.path):
-            identity = notice.reference.message_id
-            rows = read.rows()
-            with self.uncertain_on_contention(identity):
-                attempted = await self.attempts(identity)
-                for exact in (attempt for attempt in attempted
-                              if attempt.reference == notice.reference):
-                    message = await self.message(exact.reference)
-                    for part in self.incoming_frame(message).read_parts(rows):
-                        references.extend(await part.confirm(self, read.record))
-                    for unread in read.closing(notice):
-                        for stored in await self.coordinator_read(exact.stored):
-                            stored.monitor.finished_with(unread)
-        return tuple(references)
+    def exported(self, path: str) -> tuple[MonitorReadFile, ...]:
+        """Only this session's own export directory holds a file this bridge wrote."""
+        return MonitorReadFile.exported_at(self.exports, path)
+
+    async def retire_read(self, exact: HarnessDelivery, read: ReadResultObserved,
+                          notice: MonitorReadFile) -> None:
+        """The export goes once its attempt, reread, is consumed and no other Read of it is
+        still running."""
+        for unread in read.closing(notice):
+            for stored in await self.coordinator_read(exact.stored):
+                stored.monitor.finished_with(unread)
 
     def new_attachment(self, peer: MonitorPeer, token: str) -> MonitorAttachment:
         return MonitorAttachment(peer, MonitorProbe(session=self.binding.thread, token=token))
@@ -1900,7 +1918,7 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
 
     async def deliver_to(self, attachment: MonitorAttachment, message: messages.Message) -> type[Outcome]:
         frame = self.incoming_frame(message)
-        receiving = partial(replace, monitor=ReceivingMonitor(len(frame.parts)))
+        receiving = partial(replace, monitor=frame.shown_evidence(TakingLedger()))
         attempt = self.attempt(message, UnconfirmedOutcome)
         await self.coordinator_write(partial(attempt.apply, receiving))
         await frame.emit_to(attachment, self.window_bytes, self.exports)
