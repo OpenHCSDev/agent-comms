@@ -15,6 +15,8 @@ from agent_comms.connector_store import ConnectorStore
 from agent_comms.repo import Checkout
 from agent_comms.thread_status import ConnectedThreadStatus, NoBridgeThreadStatus
 from agent_comms.threads import ExternalThread, NativeThread
+from agent_comms.tool_caller import ThreadCaller
+from agent_comms.tools import CommsInboxTool
 
 
 @pytest.fixture
@@ -46,6 +48,14 @@ async def frame(socket) -> dict:
     return json.loads(await asyncio.wait_for(socket.receive_str(), timeout=30))
 
 
+async def inbox_emptied(comms: Comms, thread: str) -> None:
+    """A frame goes out before its message is recorded as taken, so a test waits for the record."""
+    request = CommsInboxTool(thread=thread)
+    async with asyncio.timeout(10):
+        while request.apply(comms, ThreadCaller(thread)).messages:
+            await asyncio.sleep(0.05)
+
+
 async def test_a_pushed_frame_arrives_and_a_rearmed_watch_does_not_replay_it(
     session, comms: Comms,
 ) -> None:
@@ -57,6 +67,7 @@ async def test_a_pushed_frame_arrives_and_a_rearmed_watch_does_not_replay_it(
     assert (await frame(socket))["text"] == "first"
     comms.messaging.send("sender", "cloud", "second")
     assert (await frame(socket))["text"] == "second"
+    await inbox_emptied(comms, "cloud")
     await socket.close()
 
     comms.messaging.send("sender", "cloud", "third")

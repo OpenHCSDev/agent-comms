@@ -67,7 +67,8 @@ from .coordination_errors import CoordinationError, Refused
 from .work_branches import WorkBranchError
 from .nominal.field_codec import (
     Argument, FieldCodec, GitCommitText, MalformedRecord, NullMember, PathText, SingleFieldValue,
-    SubclassUnion, WireName, WireOmitDefault, WireTransient, RecordMember, boundary_decoder, projected,
+    SubclassUnion, WireName, WireOmitDefault, WireTransient, RecordMember, boundary_decoder,
+    projected,
 )
 from .exporting import CancellableWireExport, WireExportCancelled, WireExportObserver, WireExportProgress
 from agent_comms.channel_targets import NamedTarget
@@ -92,7 +93,7 @@ from .coordinator import Coordination
 from .service_passes import ServicePassStore
 from .tool_result import ToolResult
 from .task_sources import OwnerRequestAttachment
-from .inbox_watch import InboxWatch, WatchTickets
+from .inbox_watch import InboxWatch, OpenWatch, WatchRoute, WatchTickets
 from .tool_caller import ThreadCaller
 from .tools import CommsSendTool, SendTool
 from .order_tools import CommsHeadVerdictTool, HeadVerdictTool, MessagePublished
@@ -726,8 +727,8 @@ class Connector(ConnectorService):
     watch_tasks: set[asyncio.Task[None]] = field(
         default_factory=set, init=False, repr=False, compare=False,
     )
-    inbox_sockets: dict[str, web.WebSocketResponse] = field(
-        default_factory=dict, init=False, repr=False, compare=False,
+    open_watches: list[OpenWatch] = field(
+        default_factory=list, init=False, repr=False, compare=False,
     )
 
     watch_tickets: WatchTickets = field(
@@ -740,19 +741,20 @@ class Connector(ConnectorService):
     async def inbox_watch(self, request: web.Request) -> web.WebSocketResponse:
         """The ticket in the path is the only credential; log_route logs the route's template.
         A newer socket for a thread replaces the older one, as a re-armed watch does."""
-        ticket = self.watch_tickets.taken(request.match_info["ticket"])
-        socket = web.WebSocketResponse(heartbeat=25.0)
-        await socket.prepare(request)
-        replaced = self.inbox_sockets.get(ticket.thread)
-        self.inbox_sockets[ticket.thread] = socket
-        if replaced is not None:
-            await replaced.close()
+        route = FieldCodec.decode(WatchRoute, dict(request.match_info))
+        thread = self.watch_tickets.taken(route.ticket).thread
+        viewer = web.WebSocketResponse(heartbeat=25.0)
+        await viewer.prepare(request)
+        watch = OpenWatch(thread, viewer)
+        replaced = tuple(held for held in self.open_watches if held.thread == thread)
+        self.open_watches.append(watch)
+        for held in replaced:
+            await held.viewer.close()
         try:
-            await InboxWatch(ticket.thread, self.root).carried(socket)
+            await InboxWatch(thread, self.root).carried(viewer)
         finally:
-            if self.inbox_sockets.get(ticket.thread) is socket:
-                del self.inbox_sockets[ticket.thread]
-        return socket
+            self.open_watches.remove(watch)
+        return viewer
 
     def log_pending(self) -> None:
         """The existing task owners name pending work; idle watches may also be listed."""
@@ -780,8 +782,8 @@ class Connector(ConnectorService):
         retirement = self.git_children.start_shutdown()
         for task in self.watch_tasks:
             task.cancel()
-        for socket in tuple(self.inbox_sockets.values()):
-            await socket.close()
+        for watch in tuple(self.open_watches):
+            await watch.viewer.close()
         await join_retirement(retirement)
 
     async def stop_calls(self, app: web.Application) -> None:

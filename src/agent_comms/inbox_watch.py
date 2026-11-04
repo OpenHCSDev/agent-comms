@@ -24,7 +24,7 @@ from .agent_inbox import SecondsWait
 from .child_process import ProcessIdentity
 from .cli_bridges.history import RemoteWatchHistory
 from .comms import Comms, client_wire
-from .connector_store import digest
+from .connector_store import BearerSecret, digest
 from .coordination_database import CoordinationStore
 from .coordination_tables.harness_deliveries import HarnessDelivery
 from .coordinator import Coordination
@@ -59,6 +59,25 @@ class WatchTicket:
         return self.expires_at > now
 
 
+UNISSUED_TICKET = WatchTicket("", 0.0)
+"""An unknown or spent ticket is simply one that has already expired."""
+
+
+@dataclass(frozen=True)
+class WatchRoute:
+    """The path of an inbox watch, decoded once at the connector's boundary."""
+
+    ticket: BearerSecret
+
+
+@dataclass(frozen=True, eq=False)
+class OpenWatch:
+    """One thread's open socket; each is its own, so a newer one can replace it."""
+
+    thread: str
+    viewer: web.WebSocketResponse
+
+
 @dataclass
 class WatchTickets:
     held: dict[str, WatchTicket] = field(default_factory=dict)
@@ -66,16 +85,16 @@ class WatchTickets:
     def issued(self, thread: str, issuer: URL) -> InboxWatchUrl:
         now = time.time()
         self.held = {key: ticket for key, ticket in self.held.items() if ticket.live(now)}
-        token = secrets.token_urlsafe(32)
+        token = BearerSecret(secrets.token_urlsafe(32))
         ticket = WatchTicket(thread, now + WatchTicket.seconds)
         self.held[digest(token)] = ticket
         scheme = {"http": "ws", "https": "wss"}[issuer.scheme]
         return InboxWatchUrl(str(issuer.with_scheme(scheme) / "watch" / token), ticket.expires_at)
 
-    def taken(self, token: str) -> WatchTicket:
+    def taken(self, token: BearerSecret) -> WatchTicket:
         """The ticket is spent here, whatever happens to the socket it opens."""
-        ticket = self.held.pop(digest(token), None)
-        if ticket is None or not ticket.live(time.time()):
+        ticket = self.held.pop(digest(token), UNISSUED_TICKET)
+        if not ticket.live(time.time()):
             raise web.HTTPForbidden(text="Unknown, used or expired URL; call comms_watch again.")
         return ticket
 
@@ -106,11 +125,15 @@ class InboxWatch:
             reference = message.reference
             incarnation = comms.registry.require(self.thread).incarnation
             delivery = HarnessDelivery(
-                RemoteWatchHistory, incarnation.require_recorded().lookup,
-                reference.message_id, reference.seq, DeliveredOutcome)
-            with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
-                with store.session.writing() as db:
-                    delivery.begin(store.assignments, db)
+                RemoteWatchHistory,
+                incarnation.require_recorded().lookup,
+                reference.message_id,
+                reference.seq,
+                DeliveredOutcome,
+            )
+            path = str(CoordinationStore.path_in(comms.root))
+            with Coordination(path) as store, store.session.writing() as db:
+                delivery.begin(store.assignments, db)
 
     def attached(self) -> AbstractContextManager[object]:
         here = ProcessIdentity.capture(os.getpid())
@@ -141,7 +164,8 @@ class InboxWatch:
             await asyncio.to_thread(attachment.__enter__)
         except RelationViolationError as refused:
             await socket.close(
-                code=WSCloseCode.POLICY_VIOLATION, message=str(refused)[:120].encode())
+                code=WSCloseCode.POLICY_VIOLATION, message=str(refused)[:120].encode()
+            )
             return
         try:
             await self.pushed(socket)
