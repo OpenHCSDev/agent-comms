@@ -69,7 +69,11 @@ class TeamVocabulary(Carry, declared_name=None):
 
     @classmethod
     def rewrite_rows(
-        cls, db: sqlite3.Connection, row: type[TypedTable], *, apply: bool = True,
+        cls,
+        db: sqlite3.Connection,
+        row: type[TypedTable],
+        *,
+        apply: bool = True,
     ) -> int:
         """Count the actual rewrites, optionally applying them in the caller's transaction.
 

@@ -1,6 +1,6 @@
 # Where things are
 
-One page for finding every piece of agent-comms on a machine: the code, the bus, the commander, the Claude Code wiring and the connector. Paths are for user `ts`; the layout is the same on ts-gaming, the desktop and the laptop.
+One page for finding every piece of agent-comms on a machine: the code, the bus, the team's tools, the Claude Code wiring and the connector. Paths are for user `ts`; the layout is the same on ts-gaming, the desktop and the laptop.
 
 ## Code
 
@@ -24,18 +24,16 @@ Everything lives in `~/.agent-comms/`:
 
 Back up with `cp -a ~/.agent-comms <backup path>` before any upgrade step, and stop the writers first.
 
-## The commander
+## The team's tools
 
-The commander isn't built into Core yet; `plans/team-native-plan.md` moves it there.
+Every teammate uses the same tools; there is no lead.
 
 | What | Where |
 |---|---|
-| Its code | `src/agent_comms/team/`: `order.py` (orders, strikes, done, hunts), `rules.py` and `rules/` (the rule review and the rule texts), `rotate.py` (the rotation tick), `judge.py` |
-| Its state | `~/.local/state/agent-comms/commander/`: `orders/`, `problems.json`, `deadlines.json`, `done.jsonl`, `closed.jsonl`, `hunts.jsonl`, `artifacts/`, `forks/` (the beats that count as live forks), `activity.log` |
-| How to run it | `src/agent_comms/skills/comms-team/SKILL.md` |
-| The game it plays | `docs/agents/commander-game.md` |
-| Where it is going | `plans/team-native-plan.md` |
-| Who owns which work, by machine | `plans/handoff-ts-gaming-commander.md` |
+| Their code | `src/agent_comms/team/`: `order.py` (orders, strikes, done, hunts), `judge.py` (head verdicts), `standing.py` (standing rules), `vibe_check.py`, `rules/` (the rule texts) |
+| Their state | Under the bus root: `todos.sqlite3` holds orders, owner requests and hunts; each teammate's retained packet is in `team_updates/` and its HUD frame in `team_frames/` |
+| How to use them | `src/agent_comms/skills/comms-team/SKILL.md` |
+| Where they are going | `plans/team-native-plan.md` |
 
 ## Claude Code wiring
 
