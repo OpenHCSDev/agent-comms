@@ -22,6 +22,7 @@ from metaclass_registry.mro_dispatch import (
     handles,
 )
 
+from agent_comms.class_fact import Declarations
 
 
 def declared_words(stem: str) -> str:
@@ -91,6 +92,8 @@ class FamilyMeta(AutoRegisterMeta, ABCMeta):
         else:
             for family_root in roots:
                 cls.family_root = family_root
+        # Registered now: facts derived from membership are derived again on their next read.
+        Declarations.declared()
         return cast(FamilyMeta, cls)
 
     @staticmethod
