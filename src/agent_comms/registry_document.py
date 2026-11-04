@@ -263,8 +263,8 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
     def roster(
         self, visibility: RosterVisibility, *, names: Iterable[str] | None = None,
     ) -> Iterator[Thread]:
-        """Every thread whose status this roster shows, executing or not: the user and service
-        publishers are listed, archived threads are not."""
+        """Every thread whose status this roster shows, executing or not: the user is listed;
+        archived and service threads are not, by their statuses' own in_view."""
         selected = ((self.threads[name] for name, status in self.statuses.items()
                      if status.in_view(visibility)) if names is None else
                     (self.threads[name] for name in dict.fromkeys(map(self.canonical_name, names))
