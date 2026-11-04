@@ -166,9 +166,7 @@ class AgentActivity:
                     for name, thread in requested.items()}
         for name, claim in claims.items():
             observed[name] = claim.phase.project(observed[name], claim.work)
-        readers = tuple(reader for name in requested
-                        for reader in snapshot.status(name).claimed_readers(name))
-        for name, oldest in self.stalled(readers, snapshot).items():
+        for name, oldest in self.stalled(snapshot.claimed_readers(requested), snapshot).items():
             observed[name] = replace(
                 observed[name], readiness=observed[name].readiness.stalled(oldest))
         return ActivityCapture(observed, events.expires_at)

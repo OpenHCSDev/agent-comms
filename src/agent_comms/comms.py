@@ -73,9 +73,8 @@ class InboxActivity(AgentActivity):
                FileRevision.capture(self.coordination.with_name(self.coordination.name + "-wal")),
                FileRevision.capture(self.catalog))
         if not self.untaken.answers(key, snapshot):
-            readers = tuple(reader for name in snapshot.threads
-                            for reader in snapshot.status(name).claimed_readers(name))
-            self.untaken = UntakenCut(key, snapshot, self.bus.oldest_untaken(readers, snapshot))
+            self.untaken = UntakenCut(
+                key, snapshot, self.bus.oldest_untaken(snapshot.claimed_readers(), snapshot))
         return self.untaken.oldest
 
 
