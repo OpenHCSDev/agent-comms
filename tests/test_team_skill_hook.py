@@ -566,9 +566,9 @@ def test_failure_catalog_numbers_every_evidenced_member_once():
 
 def test_the_reading_order_names_exactly_the_packaged_rules_and_the_spine_leads():
     names = tuple(RuleFile.read(path).name for path in TeamPackage.rules_files())
-    assert sorted(RuleFile.reading_order) == sorted(names)
-    assert tuple(rule.name for rule in RuleFile.packaged()) == RuleFile.reading_order
-    assert RuleFile.reading_order[0] == "spine"
+    assert sorted(TeamPackage.reading_order) == sorted(names)
+    assert tuple(rule.name for rule in RuleFile.packaged()) == TeamPackage.reading_order
+    assert TeamPackage.reading_order[0] == "spine"
 
 
 def test_every_full_deal_reads_the_paper_before_any_rule():

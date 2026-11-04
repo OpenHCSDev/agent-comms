@@ -64,55 +64,16 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
         return FieldCodec.decode(cls, {**metadata, "wakeup": wakeup.rstrip(), "why": why,
                                        "body": body[opening.end():].strip(), "path": str(path)})
 
-    reading_order: ClassVar[tuple[str, ...]] = (
-        "spine",
-        "after-compaction",
-        "unnecessary",
-        "correct-maintenance",
-        "slop-and-polymorphism",
-        "owner-authority",
-        "evidence-not-claims",
-        "plain-reporting",
-        "refactor-game",
-        "no-blocking",
-        "finish-line",
-        "fork-orders",
-        "tests-and-commands",
-        "ship-and-install",
-        "hotfix",
-        "storage-and-cleanup",
-        "send-backs-and-strikes",
-        "blunt-reviews",
-        "coordination",
-        "self-correction",
-        "deadlines",
-    )
-    """The one declaration of the order every deal and unit prompt presents the rules in. The
-    papers are dealt before all of them; the spine comes next and kills the hedge on what they
-    proved, then the price of calling an abstraction unnecessary; each rule after it is set up by
-    the one before: the verdict index, the slop it defines, the owner whose positions they are,
-    evidence, reporting, the work, then how the teammate enforces it. A rule this tuple does not name still loads, after the named ones; the package test
-    holds the tuple to exactly the packaged rules."""
 
     @classmethod
     def packaged(cls) -> tuple[Self, ...]:
-        return tuple(
-            sorted(
-                (cls.read(path) for path in TeamPackage.rules_files()),
-                key=lambda rule: (cls.position(rule.name), rule.name),
-            )
-        )
+        return tuple(cls.read(path) for path in TeamPackage.rules_files())
 
     @classmethod
     def order_line(cls) -> str:
         """The order cites the same rules its holder carries, without a role split."""
         names = ", ".join(rule.name for rule in cls.packaged())
         return f"Standing rules for this work: {names} in {TeamPackage.rules()}."
-
-    @classmethod
-    def position(cls, name: str) -> int:
-        """Where a rule stands in the reading order; an undeclared rule reads last."""
-        return cls.reading_order.index(name) if name in cls.reading_order else len(cls.reading_order)
 
     @property
     def summary(self) -> str:
