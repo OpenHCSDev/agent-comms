@@ -1209,6 +1209,20 @@ async def test_a_call_that_asks_for_progress_streams_it_then_its_reply(client, s
     assert destination.exists()
 
 
+@pytest.mark.parametrize("meta, streamed", [
+    ({"claudecode/toolUseId": "toolu_1"}, False),
+    ({"progressToken": 7, "claudecode/toolUseId": "toolu_1"}, True),
+    ({"progressToken": "call-7"}, True),
+], ids=["client-key-only", "claude-code", "string-token"])
+def test_a_call_meta_reads_its_declared_key_from_an_open_object(meta, streamed):
+    """Installing cb375c3c turned every Claude Code call into a 500: its `_meta` carries a numeric
+    progressToken and its own claudecode/toolUseId, both of which MCP allows."""
+    from agent_comms.connector import NoProgress, ProgressToken, ToolCallMeta
+
+    progress = ToolCallMeta.of(meta).progress
+    assert progress == (ProgressToken(meta["progressToken"]) if streamed else NoProgress())
+
+
 async def test_a_cancel_reaches_the_running_call_it_names(connector):
     """notifications/cancelled stops the observed call with that request id and no other."""
     from agent_comms.connector import CancelledMessage
