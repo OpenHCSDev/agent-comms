@@ -1263,6 +1263,10 @@ class BridgeSession(MetadataRecord, declared_name='bridge-session'):
     """The session was opened to claude.ai by /remote-control; nothing here reaches the bus."""
 
 
+class SessionOwner(MetadataRecord, declared_name='session-owner'):
+    """The claude.ai account and organization that own the session; nothing here reaches the bus."""
+
+
 class AgentName(MetadataRecord, declared_name='agent-name'):
     """The name the session runs under as an agent."""
     agentName: str
