@@ -99,11 +99,18 @@ class InboxSocket:
     exports: Path
     transcript: TranscriptRoute = UnfoundTranscript("no transcript was given to this watch")
 
-    def deliver(self, frame: str) -> None:
+    batch_gap_seconds: ClassVar[float] = 0.25
+    """Monitor joins the lines of each 200 ms into one event and cuts a long event mid-line: of 11
+    notices at once, the last never reached the model though the bus recorded them as taken. A
+    local bridge holds such a burst in its window until the transcript shows each one seen; this
+    side has no such confirmation, so each notice gets a batch of its own."""
+
+    async def deliver(self, frame: str) -> None:
         message = FieldCodec.decode(Delivered, FieldCodec.parse(frame))
         notice = MonitorReadFile.naming(self.exports, message.reference)
         notice.export((IncomingFrame(message).text,))
         notice.emit()
+        await asyncio.sleep(self.batch_gap_seconds)
 
     async def publishing(self, socket: ClientWebSocketResponse) -> None:
         try:
@@ -122,7 +129,7 @@ class InboxSocket:
                 try:
                     async for frame in socket:
                         if frame.type is WSMsgType.TEXT:
-                            self.deliver(frame.data)
+                            await self.deliver(frame.data)
                 finally:
                     publishing.cancel()
                 return f"closed with code {socket.close_code}"

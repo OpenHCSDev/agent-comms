@@ -74,6 +74,26 @@ async def test_the_cloud_client_delivers_a_message_as_a_notice_naming_its_whole_
     assert "Comms in · sender" in written and "second line" in written
 
 
+async def test_a_burst_of_pushed_messages_never_shares_one_monitor_batch(
+    session, comms: Comms, tmp_path: Path
+) -> None:
+    """Monitor cut one joined batch of 11 notices, so the last of them never reached the session."""
+    client, token = session
+    url = str(client.make_url(await watch_path(client, token, "cloud")))
+    exports = tmp_path / "state" / "messages"
+    exports.parent.mkdir(mode=0o700)
+    for number in range(4):
+        comms.messaging.send("sender", "cloud", f"burst {number}")
+    watch = asyncio.create_task(InboxSocket(url, exports).carried())
+    async with asyncio.timeout(30):
+        while not exports.is_dir() or len(list(exports.iterdir())) < 4:
+            assert not watch.done(), watch.result()
+            await asyncio.sleep(0.05)
+    watch.cancel()
+    written = sorted(path.stat().st_mtime for path in exports.iterdir())
+    assert all(later - earlier >= 0.2 for earlier, later in zip(written, written[1:]))
+
+
 async def turns_of(client: TestClient, token: str, thread: str) -> str:
     response = await client.post("/mcp", headers={"Authorization": f"Bearer {token}"}, json={
         "jsonrpc": "2.0", "id": 2, "method": "tools/call",
