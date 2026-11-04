@@ -17,7 +17,6 @@ from agent_comms.locked_store import DocumentChange, DurableFile, LockedStore, P
 from agent_comms.store_files import DependentStateTier, SingleFileStore
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.harness_delivery_states import DeliveredOutcome, Outcome
-from agent_comms.team_service import TeamService
 from agent_comms.errors import RelationViolationError
 from agent_comms.disclosure_text import AccentTone, ViewHeading, ViewTable, WarningTone
 from agent_comms.nominal.field_codec import (
@@ -266,17 +265,14 @@ class TeamUpdate(OwnerNotice, declared_name=None):
 
     def board(self, comms: Comms) -> tuple[BoardEntry, ...]:
         """Any teammate's recorded action disposes of its subject on the shared board."""
-        return tuple(ping.board_entry() for ping in self.open_now(comms))
-
-    def open_now(self, comms: Comms) -> tuple[Ping, ...]:
-        history = TeamHistory.read(comms, TeamService.actors(comms.registry.snapshot()))
-        return self.open_pings(history)
+        return tuple(ping.board_entry() for ping in self.open_pings(TeamHistory.of_team(comms)))
 
     def reader_board(self, comms: Comms, reader: str) -> tuple[BoardEntry, ...]:
         """The open lines addressing ``reader`` that wait on no stopped thread: a tool call
         carries what is that session's own, and the whole board stays in comms_hud."""
-        stopped = self.stopped(comms.registry.snapshot())
-        return tuple(ping.board_entry() for ping in self.open_now(comms)
+        history = TeamHistory.of_team(comms)
+        stopped = self.stopped(history.snapshot)
+        return tuple(ping.board_entry() for ping in self.open_pings(history)
                      if ping.addresses(reader) and not ping.parked(stopped))
 
     def stopped(self, snapshot: RegistrySnapshot) -> frozenset[str]:

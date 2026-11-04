@@ -21,6 +21,7 @@ from agent_comms.plan_phases import PlanPhase
 from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.service_passes import ServicePasses, ServicePassStore
+from agent_comms.team_service import TeamService
 from agent_comms.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from agent_comms.todos import HeadVerdict, StoredHeadReview
 
@@ -50,7 +51,17 @@ class TeamHistory:
 
     @classmethod
     def read(cls, comms: Comms, actors: frozenset[str]) -> Self:
+        return cls.of(comms, comms.registry.snapshot(), actors)
+
+    @classmethod
+    def of_team(cls, comms: Comms) -> Self:
+        """The team's executable collaborators, read from the same snapshot this history holds:
+        one registry read, where computing the actors first read it twice."""
         snapshot = comms.registry.snapshot()
+        return cls.of(comms, snapshot, TeamService.actors(snapshot))
+
+    @classmethod
+    def of(cls, comms: Comms, snapshot: RegistrySnapshot, actors: frozenset[str]) -> Self:
         return cls(comms, snapshot, frozenset(snapshot.require(actor).incarnation for actor in actors))
 
     @cached_property
