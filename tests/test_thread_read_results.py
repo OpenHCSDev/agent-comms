@@ -97,6 +97,7 @@ def test_assignment_row_changes_attribute_only_their_view(
     batch = comms.views.thread_presentations(names)
     results = {name: ThreadPresented(batch.require(name)) for name in names}
     revision = comms.views.revision()
+    earlier_registry = comms.registry.snapshot()
     activity = comms.views.observed_activity(revision, names)
     previous = ThreadsObserved(revision, results, names, activity)
     notification_window = LiveNotificationRead((notification_source.reference,)).read(comms)
@@ -118,7 +119,10 @@ def test_assignment_row_changes_attribute_only_their_view(
     if changed_name == 'expiry':
         later = replace(later, expiry_tick=revision.expiry_tick + 60)
     assert later != revision
-    assert later.changed_threads(previous, comms, activity) == expected
+    snapshot = comms.registry.snapshot()
+    assert later.changed_threads(
+        previous, comms, activity, snapshot, earlier_registry.changed_names_to(snapshot),
+    ) == expected
     assert notification_read.live_changed(comms, NotificationPass(comms, later)) == bool(expected)
 
 
