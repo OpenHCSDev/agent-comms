@@ -53,7 +53,7 @@ class RecoveringNothingProduced extends NothingProduced {
     terminal(message) {
         // A clean provider stop completes recovery. Whether its text answers
         // the selected task belongs to Core's TrackedTerminal, not this run.
-        return message?.stopReason === 'stop'
+        return message?.stopReason === 'stop' || message?.stopReason === 'toolUse'
             ? new RecoveredProviderRequest(this.owner, this.attempt)
             : new FailedProviderRequest(this.owner, this.attempt,
                 message?.errorMessage || 'Provider retry closed before completing');
