@@ -20,8 +20,7 @@ from agent_comms.snapshot_slices import ThreadSlice
 from agent_comms.repo import Checkout
 from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import AtomicFile
-from agent_comms.thread_execution import ExternalThreadExecution
-from agent_comms.threads import Thread
+from agent_comms.threads import ExternalThreadExecution, Thread
 from agent_comms.thread_text import GivenThreadText
 
 

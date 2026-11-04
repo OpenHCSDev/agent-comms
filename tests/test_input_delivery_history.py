@@ -27,11 +27,15 @@ from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import NoGoal
 from agent_comms.order_tools import InputDeliveryRead, OwnerGoalRead
 from agent_comms.reported_turn import ReportedTurn
-from agent_comms.thread_execution import ExternalThreadExecution, NativeThreadExecution, ThreadExecution
+from agent_comms.threads import (
+    ExternalThreadExecution,
+    NativeThreadExecution,
+    ThreadExecution,
+    Thread,
+)
 from agent_comms.thread_status import ConnectedThreadStatus, RunningThreadStatus, StoppedThreadStatus, ThreadStatus
 from agent_comms.owner_connection import OwnerIdentityChangedError
 from agent_comms.coordination_errors import StaleFence, StaleRevision
-from agent_comms.threads import Thread
 from agent_comms.tool_caller import ToolCaller
 from agent_comms.ui_model.observation import ReadOwnerOperation, ReadAnswered, ReadRefused
 from bus_record_fixture import prepare_native_comms

@@ -16,7 +16,7 @@ from .read_basis import DisplayViewer, OperatorOutcomes, ReadAuthority
 from .registration import Registration
 from .notification_evidence import OutcomeViewer, OwnerOutcomes
 from .presentation import SentMessageSummary, ThreadRecord
-from .thread_execution import ForkExecution
+from .threads import ForkExecution, Thread
 from .thread_identity import ThreadIncarnation
 from .tool_result import ToolResult
 from .turn_phase import IdlePhase
@@ -24,7 +24,6 @@ from .turn_phase import IdlePhase
 if TYPE_CHECKING:
     from .comms import Comms
     from .head_review import HeadReviewOrder, PullRequestHead
-    from .threads import Thread
     from .tool_request import ToolRequest
 
 

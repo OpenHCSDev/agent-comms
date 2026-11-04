@@ -13,7 +13,12 @@ from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.channel_targets import CommandTarget, NoChannel, PerTargetChannels, ChannelTarget, ProjectTarget
 from agent_comms.catalog_document import NoCatalog
 from agent_comms.cli import main, build_parser
-from agent_comms.threads import ChosenServiceTier, NextTurnConfiguration, Thread
+from agent_comms.threads import (
+    ChosenServiceTier,
+    NextTurnConfiguration,
+    Thread,
+    ExternalThreadExecution,
+)
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from agent_comms.thread_model import UndeclaredModel
 from agent_comms.cli_command import CommandSelectionChanged, CliCommand, TargetBatchResult, TargetCompleted, TargetFailed, TargetEdit
@@ -40,7 +45,6 @@ from agent_comms.messages import SendableRole, NoticeRole
 from agent_comms.owner_lifecycle import OwnerStartResult
 from agent_comms.pi_vocabulary import ServiceTier
 from agent_comms.restart_scope import OneOwner
-from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import TurnIdentity, UserThreadRole
 from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus, RunningThreadStatus
 from agent_comms.turn_lease import ActiveTurn, RecordedGeneration, StoredTurnRecord

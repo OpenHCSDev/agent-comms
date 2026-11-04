@@ -6,9 +6,8 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .bus_publication import ServiceOrigin
 from .repo import Checkout
-from .thread_execution import ServiceThreadExecution
+from .threads import ServiceThreadExecution, Thread
 from .thread_identity import ServiceThreadRole
-from .threads import Thread
 
 if TYPE_CHECKING:
     from .registration import Registration

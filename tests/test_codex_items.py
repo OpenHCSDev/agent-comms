@@ -7,14 +7,13 @@ from agent_comms.cli_bridges.codex_protocol import (
 )
 from agent_comms.nominal.field_codec import MessageId
 from agent_comms.transcript_events import UserTranscript
-from agent_comms.threads import Thread
+from agent_comms.threads import Thread, ExternalThreadExecution
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 
 
 def _output(tmp_path):
     from agent_comms.comms import wire
     from agent_comms.runtime_updates import ThreadOutput
-    from agent_comms.thread_execution import ExternalThreadExecution
 
     comms = wire(tmp_path)
     comms.registry.declare(Thread('cli', frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution))

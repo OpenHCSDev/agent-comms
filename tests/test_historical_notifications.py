@@ -37,8 +37,7 @@ from agent_comms.read_basis import ReadCursor
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
 from agent_comms.wake_policy import FullWake
-from agent_comms.thread_execution import ExternalThreadExecution
-from agent_comms.threads import Thread
+from agent_comms.threads import ExternalThreadExecution, Thread
 
 SENDER = "sender"  # the notification carries its sender's lookup; these tests read progress only
 
@@ -458,7 +457,6 @@ def test_recorded_response_resolution_keeps_other_collective_lifecycles(
 def test_live_cli_ack_does_not_become_archived_ack(archived_notification):
     from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.agent_activity import RecipientActivity
-    from agent_comms.thread_execution import ExternalThreadExecution
 
     old, live, source, messages, _root_id = archived_notification
     old.registry.declare(replace(old.registry.require("agent"), execution=ExternalThreadExecution))

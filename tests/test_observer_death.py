@@ -25,8 +25,7 @@ from agent_comms.notification_reads import LiveNotificationRead
 from agent_comms.ui_model.observation import (
     ObservationProcess, ObserverDied, ReadNotifications, ReadOwnerOperation, StopSidebar,
 )
-from agent_comms.thread_execution import ExternalThreadExecution, NativeThreadExecution
-from agent_comms.threads import Thread
+from agent_comms.threads import ExternalThreadExecution, NativeThreadExecution, Thread
 from owner_socket_fixture import declare_owner
 
 

@@ -25,7 +25,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import ReviewTimerUp
 from agent_comms.repo import Checkout, GitCommandError, Repo
 from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.threads import ExternalThreadExecution, ForkExecution
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.thread_text import ForkedParent
 from agent_comms.task_attachments.team_pings import TeamUpdate, TeammatePing
@@ -51,7 +51,6 @@ from agent_comms.ui_model.teammate_state import (
 from agent_comms.work_branches import WorkBranchError
 from source_revision_fixture import SourceRepository
 from test_holder_standing_rules import blocked_holder, publish, state_cards
-from agent_comms.thread_execution import ForkExecution
 
 pytest_plugins = ("test_holder_standing_rules", "test_proof_build")
 

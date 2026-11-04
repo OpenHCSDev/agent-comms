@@ -39,7 +39,7 @@ from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import (
     RepeatedTodoChange, ServicePassFailing, StaleTodoDecision, StandingRule,
 )
-from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.threads import ExternalThreadExecution, Thread
 from agent_comms.errors import TodoConflict, TodoError
 from agent_comms.todos import (
     Assignment, ExpectedProblem, PendingProblemOrder, ProgressRead, ReleaseTodo, StrikeReason,
@@ -49,7 +49,6 @@ from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.ui_model.teammate_state import TeammateState, Unreadable
 from agent_comms.work_branches import UnreadableCheckoutRead, WorkBranches
-from agent_comms.threads import Thread
 
 
 def git(directory: Path, *arguments: str) -> str:

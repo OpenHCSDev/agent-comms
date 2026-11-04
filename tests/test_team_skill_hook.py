@@ -42,7 +42,7 @@ from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.task_attachments.team_pings import TeamDecisions, TeamUpdate, RulePing
 from agent_comms.thread_model import DeclaredModel
-from agent_comms.threads import Thread
+from agent_comms.threads import Thread, ForkExecution
 from agent_comms.ui_model.teammate_state import AwaitingTeam
 from agent_comms.todos import ProgressRead, ReviewedHeadVerdict
 from agent_comms_hooks.board import (
@@ -963,7 +963,6 @@ def test_a_subagent_and_an_unbound_session_are_never_gated(
     transcript.write_text("")
     assert DeckStart.decode(hook_record(transcript, "SessionStart")).take(team_bus, team_binding)
     # Claude's SubagentStart registers the child before PreToolUse reports its activity.
-    from agent_comms.thread_execution import ForkExecution
 
     team_session.registry.register_child(
         "claude-a9", "claude-code", ForkExecution, team_session.goals)
@@ -977,7 +976,6 @@ def test_two_agents_on_one_session_keep_separate_deals(
         tmp_path, capsys, team_session, team_bus, team_binding):
     """A subagent shares its session's id and transcript path; its reads never count for the
     main agent, it may not write the main agent's audit, and its own deal is its own."""
-    from agent_comms.thread_execution import ForkExecution
 
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")

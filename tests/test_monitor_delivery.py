@@ -1,6 +1,7 @@
 """Session-owned parts, not stdout writes, confirm monitor delivery."""
 from pathlib import Path
 from agent_comms.repo import Checkout
+from collections.abc import Callable
 from contextlib import asynccontextmanager, contextmanager, suppress
 from agent_comms.cli_bridges.shared import CoreWatchEnded, core_watch_failure
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError, MaintenanceOperator
@@ -62,13 +63,12 @@ from agent_comms.runtime_updates import (
 )
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.external_transcript import ExternalTurnInput
-from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.threads import ExternalThreadExecution, Thread
 from agent_comms.messages import AlertKind, InfoKind, Message, NoticeRole, QuestionKind
 from agent_comms.channel_targets import ThreadTarget
 from agent_comms.diagnostics import record_terminal_failure
 from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.turn_failure import BackendFailed
-from agent_comms.threads import Thread
 
 
 async def stored_attempts(bridge) -> tuple[HarnessDelivery, ...]:

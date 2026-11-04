@@ -17,9 +17,8 @@ from agent_comms.nominal.field_codec import AbsolutePathText, Argument, PathText
 from agent_comms.harness_install import Harness
 from agent_comms.installer.interpreter_operation import RuntimeProbe, TargetProbe
 from agent_comms.registry_document import TeamProject
-from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.threads import ExternalThreadExecution, Thread
 from agent_comms.repo import Checkout
-from agent_comms.threads import Thread
 
 
 @dataclass(frozen=True)

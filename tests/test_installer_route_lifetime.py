@@ -34,8 +34,7 @@ from agent_comms.installer.interpreter_operation import InstalledProgram
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.maintenance_barrier import MaintenanceHeldError, MaintenanceOperator
 from agent_comms.recorded_bus import RecordedBusIdentity
-from agent_comms.thread_execution import ExternalThreadExecution
-from agent_comms.threads import Thread
+from agent_comms.threads import ExternalThreadExecution, Thread
 from bus_record_fixture import prepare_native_comms
 
 

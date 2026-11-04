@@ -19,8 +19,7 @@ from agent_comms.cli_bridges.hook_requests import HookReply, StopRequest
 from agent_comms.cli_bridges.session_watch import WatchClaim, WatchRecord
 from agent_comms.comms import Comms
 from agent_comms.repo import Checkout
-from agent_comms.thread_execution import ExternalThreadExecution
-from agent_comms.threads import Thread
+from agent_comms.threads import ExternalThreadExecution, Thread
 from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms_hooks import deferral

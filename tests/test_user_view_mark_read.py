@@ -10,10 +10,9 @@ import pytest
 
 from agent_comms.comms import wire
 from conftest import installed_comms
-from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.threads import ExternalThreadExecution, Thread
 from agent_comms.ui_model.unread import ReplyUnread
 from native_unread_fixture import completed_snapshot
-from agent_comms.threads import Thread
 
 
 def answer(path, text):

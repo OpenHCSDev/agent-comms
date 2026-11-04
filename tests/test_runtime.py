@@ -28,7 +28,7 @@ from agent_comms.bus_read import OwnerReadRuntimeRequest
 from agent_comms.order_tools import InputDeliveryRead
 from agent_comms.runtime_server import RuntimeRequest
 from agent_comms.owner_connection import OwnerIdentityChangedError, OwnerReplyConnection
-from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.threads import ExternalThreadExecution, Thread
 from agent_comms.tool_caller import ToolCaller
 from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import AcpSessionId, RootId
@@ -42,7 +42,6 @@ from agent_comms.native_arguments import GivenBinary
 from delivery_owner_fixture import canonical_agent
 from owner_socket_fixture import declare_owner, silent_socket
 from stored_inputs import stored_inputs
-from agent_comms.threads import Thread
 
 
 async def test_dispatched_request_without_a_reply_remains_unknown_and_is_not_replayed(comms):

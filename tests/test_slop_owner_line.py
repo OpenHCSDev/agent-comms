@@ -12,8 +12,7 @@ from agent_comms.team.order import OrderFile
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.progress_claims import MergedClaim
 from agent_comms.slop import CreatedLine, DeclarationDerivation, ExistingLine, OwnerLine, Slop
-from agent_comms.thread_execution import ForkExecution
-from agent_comms.threads import Thread
+from agent_comms.threads import ForkExecution, Thread
 from agent_comms.errors import TodoError
 from agent_comms.todos import (
     CommitDelivery, MergedListedPullRequest, PullRequestCommit, PullRequestLink,

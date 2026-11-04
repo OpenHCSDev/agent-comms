@@ -33,7 +33,7 @@ from agent_comms.thread_status import (
 )
 from agent_comms.thread_text import GivenThreadText
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.threads import Thread
+from agent_comms.threads import Thread, OwnerLifecycleControl
 
 
 def test_captured_owner_presentation_survives_exit_until_fresh_acquisition(tmp_path):
@@ -235,7 +235,6 @@ def test_tier_only_tool_changes_next_catalog_without_changing_active_request(tmp
 def test_roster_and_controls_keep_archived_threads_dormant():
     from agent_comms.tools import CommsStartTool
     from agent_comms.tool_request import ToolRequest
-    from agent_comms.thread_execution import OwnerLifecycleControl
     from agent_comms.child_process import NoProcess
 
     archived = ArchivedThreadStatus()

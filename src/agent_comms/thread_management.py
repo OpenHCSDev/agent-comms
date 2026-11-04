@@ -27,7 +27,7 @@ from .locked_store import PatternFile, RuntimeFile
 from .registration import Registration
 from .relationships import RelationshipStore
 from .repo import Checkout, LaunchCheckout
-from .thread_execution import NativeThreadExecution
+from .threads import NativeThreadExecution, KeptModel, ModelChoice, NextTurnConfiguration, Thread
 from .thread_status import StoppedThreadStatus
 from .view_unread import transcript_read_state
 
@@ -63,7 +63,6 @@ from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
 from .thread_owned_state import ThreadOwnedState
 from .thread_text import ForkedParent, GivenThreadText, NoThreadText, ThreadText
 from .thread_catalog import ThreadCatalog
-from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread
 from .heartbeat_delivery import HeartbeatDelivery
 from .tool_declaration import NativeRequestTools
 from .native_session_reopen import PiSessionId

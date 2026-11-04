@@ -16,7 +16,7 @@ from agent_comms.read_basis import Conversation
 from agent_comms.read_ledger import ReadDocument
 from agent_comms.registration import Registration
 from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.threads import ExternalThreadExecution, Thread
 from agent_comms.thread_identity import (
     ClaimedIdentity,
     GenerationCounter,
@@ -32,7 +32,6 @@ from agent_comms.thread_status import (
     StoppedThreadStatus,
 )
 from agent_comms.thread_text import GivenThreadText, NoThreadText
-from agent_comms.threads import Thread
 from agent_comms.turn_lease import FinishedTurnFence, NoFinishedTurn, NoTurnLease
 from bus_record_fixture import OWNER_LOOKUP
 from conftest import installed_comms

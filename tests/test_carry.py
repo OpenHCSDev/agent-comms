@@ -52,9 +52,8 @@ from agent_comms.maintenance_barrier import (
 )
 from agent_comms.registry_store import RegistryStore
 from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
-from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.threads import ExternalThreadExecution, Thread
 from agent_comms.thread_status import RunningThreadStatus
-from agent_comms.threads import Thread
 from conftest import ledger_one_failure_short
 from fixture_git import IDENTITY
 

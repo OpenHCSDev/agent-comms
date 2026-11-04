@@ -25,7 +25,7 @@ from .registration import Registration
 from .registry_document import DEFAULT_ROSTER, RegistrySnapshot, RosterVisibility
 from .retained_task_facts import RetainedTaskFacts
 from .shared_ledger import LedgerDocument
-from .thread_execution import ConversationPreparation
+from .threads import ConversationPreparation, Thread, current_thread
 from .thread_identity import ThreadIncarnation
 from .sent_message import AssignedSourceIdentity
 from .view_unread import transcript_read_state
@@ -63,7 +63,6 @@ from .page_traversal import LiveCursor
 from .message_notification import MessageNotification
 from .presentation import BusPresentation, ChannelView, CoordinationSnapshot, CountedRead, InboxRead, NoRevision, ReadState, ThreadRecord, ThreadView, WireRevision
 from .read_basis import AnonymousViewer, DisplayViewer, DMDisplayBasis, NamedViewer
-from .threads import Thread, current_thread
 from .transcripts import TranscriptCursor, Transcripts
 
 _LOG = logging.getLogger(__name__)

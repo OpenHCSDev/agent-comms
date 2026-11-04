@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -12,7 +12,7 @@ from .catalog_store import ChannelCatalog
 from .channel_targets import DeclaredTag
 from .child_process import NoProcess, ProcessIdentity
 from .errors import RelationViolationError
-from .nominal.field_codec import GoalId, ThreadLookup, TurnId
+from .nominal.field_codec import ThreadLookup, TurnId
 from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .goal_scope import AllGoals, GoalScope
 from .native_input_owner import RegistryOwner
@@ -21,7 +21,7 @@ from .registry_document import RegistryDocument, RegistrySnapshot
 from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from .routing import NoTurnRouting, Routing
 from .storage_rules import StorageRule
-from .thread_execution import ExternalThreadExecution, SubagentExecution
+from .threads import ExternalThreadExecution, SubagentExecution, Thread
 from .thread_identity import GenerationCounter, UserThreadRole
 from .thread_status import (
     ConnectedThreadStatus,
@@ -31,7 +31,6 @@ from .thread_status import (
 )
 from .thread_text import ForkedParent, SubagentRole
 from .repo import Checkout, CheckoutTransfer, Repo, RepositoryReads
-from .threads import Thread
 
 if TYPE_CHECKING:
     from .catalog_document import CatalogDocument

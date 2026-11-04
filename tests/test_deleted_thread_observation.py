@@ -19,9 +19,8 @@ from agent_comms.ui_model.observation import (
 )
 from agent_comms.ui_model.status import OpenThreadStatus
 from observed_queue import ObservedQueue
-from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.threads import ExternalThreadExecution, Thread
 from agent_comms.thread_text import GivenThreadText
-from agent_comms.threads import Thread
 
 
 def declare(comms, *names):

@@ -35,7 +35,7 @@ from .native_tools import (
     CoordinationCall,
     NativeToolDeclaration,
 )
-from .thread_execution import ThreadCommandAvailability
+from .threads import ThreadCommandAvailability
 from .tool_caller import NoThreadCaller, ThreadCaller, ToolCaller
 from .tool_declaration import NativeRequestTools, ToolDeclaration
 from .tool_result import ToolResult

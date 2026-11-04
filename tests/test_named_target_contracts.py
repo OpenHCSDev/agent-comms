@@ -7,9 +7,8 @@ from agent_comms.channel_targets import CommandTarget, IncarnationThreadTarget, 
 from agent_comms.errors import HumanSendRefusedError, UnregisteredThreadError
 from agent_comms.historical_views import UnobservedConversation, DMDisplayHistory
 from agent_comms.read_basis import NamedViewer
-from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.threads import ExternalThreadExecution, Thread
 from bus_record_fixture import context_comms
-from agent_comms.threads import Thread
 
 
 @pytest.fixture

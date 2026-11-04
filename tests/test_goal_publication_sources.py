@@ -24,9 +24,8 @@ from agent_comms.goal_waits import GoalWaits
 from agent_comms.locked_store import GoalWakeFile, RegistryFile
 from agent_comms.repo import Checkout
 from agent_comms.registry_document import RegistryDocument
-from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.threads import ExternalThreadExecution, Thread
 from agent_comms.thread_text import GivenThreadText
-from agent_comms.threads import Thread
 from agent_comms.turn_phase import IdlePhase, ToolRunningPhase
 from delivery_owner_fixture import canonical_agent
 from goal_owner_fixture import canonical_goal_wire

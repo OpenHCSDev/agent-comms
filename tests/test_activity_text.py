@@ -21,8 +21,7 @@ from agent_comms.pi_payloads import (
     ReportedText,
 )
 from agent_comms.runtime_updates import ThreadOutput
-from agent_comms.thread_execution import ExternalThreadExecution
-from agent_comms.threads import Thread
+from agent_comms.threads import ExternalThreadExecution, Thread
 from agent_comms.turn_phase import FailedPhase, IdlePhase, ModelWaitPhase, ToolRunningPhase
 from agent_comms.ui_model.observation import ObserveSidebar, SidebarObserved
 from agent_comms.ui_model.sidebar import SidebarModel

@@ -16,9 +16,8 @@ from agent_comms.harness_install import Harness, PiHarness
 from agent_comms.importing import ImportLimits, KeptPiSession
 from agent_comms.repo import Checkout
 from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.threads import ExternalThreadExecution, Thread
 from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.threads import Thread
 from conftest import installed_comms
 
 

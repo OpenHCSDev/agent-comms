@@ -33,10 +33,9 @@ from agent_comms.installer.owner_starts import RefusedOwner, StartedOwner
 from agent_comms.install_choices import LiveMode, RehearsalMode
 from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime
 from agent_comms.root_runtime import RootRuntimeStore
-from agent_comms.thread_execution import ExternalThreadExecution, ServiceThreadExecution
+from agent_comms.threads import ExternalThreadExecution, ServiceThreadExecution, Thread
 from agent_comms.thread_identity import ServiceThreadRole, UserThreadRole
 from agent_comms.errors import RelationViolationError, ThreadNotStoppedError
-from agent_comms.threads import Thread
 from cli_command import core
 from conftest import declare_test_bus
 from source_revision_fixture import SourceRepository

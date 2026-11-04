@@ -61,12 +61,16 @@ from agent_comms.order_tools import CommsTeamLoadTool, CommsHudTool, CommsTodoLi
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.slop import DeclarationDerivation, ExistingLine, Slop
-from agent_comms.thread_execution import ExternalThreadExecution, NativeThreadExecution
+from agent_comms.threads import (
+    ExternalThreadExecution,
+    NativeThreadExecution,
+    Thread,
+    ForkExecution,
+)
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
 from agent_comms.thread_text import ForkedParent, SubagentRole
-from agent_comms.threads import Thread
 from agent_comms.todos import (
     Assignment,
     DraftListedPullRequest,
@@ -96,7 +100,6 @@ from agent_comms_hooks import forks
 from hook_session_fixture import resident_hook, resident_session, resident_stdout
 from cli_command import team
 from source_revision_fixture import SourceRepository
-from agent_comms.thread_execution import ForkExecution
 from agent_comms.goal_actions import ReissuedOrderGoalAction
 from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.todos import MergedProgress, NoCommitProgress

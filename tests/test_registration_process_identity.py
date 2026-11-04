@@ -13,13 +13,12 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import TurnId
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.runtime_requests import ProjectRuntimeRequest
-from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.threads import ExternalThreadExecution, Thread
 from agent_comms.maintenance_barrier import (
     InstallingPhase, MaintenanceHeldError, MaintenanceOperator, PausedPhase,
 )
 from agent_comms.thread_text import GivenThreadText
 from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.threads import Thread
 
 
 def test_cli_worktree_edit_preserves_live_external_owner(tmp_path):

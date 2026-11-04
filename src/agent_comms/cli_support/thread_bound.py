@@ -6,9 +6,8 @@ from abc import abstractmethod
 from agent_comms.catalog_document import CatalogAccess
 from agent_comms.cli_command import CliCommand
 from agent_comms.comms import Comms
-from agent_comms.thread_execution import ThreadCommandAvailability
+from agent_comms.threads import ThreadCommandAvailability, Thread
 from agent_comms.thread_status import ThreadStatus
-from agent_comms.threads import Thread
 from dataclasses import dataclass
 from typing import Self
 
