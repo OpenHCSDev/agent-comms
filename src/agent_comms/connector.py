@@ -1233,7 +1233,7 @@ class GrantUiVerb(ConnectorRootOptions, declared_name="grant-ui"):
     seconds: Annotated[
         int, Argument(flags=("--seconds",), options={
             "help": f"Lifetime, at most {UiGrantAccess.maximum_seconds} seconds"}),
-    ] = UiGrantAccess.maximum_seconds
+    ] = UiGrantAccess.default_seconds
     access: Annotated[
         type[UiGrantAccess],
         Argument(flags=("--access",), options={"help": "Declared UI grant capability"}),
