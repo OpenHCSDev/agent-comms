@@ -77,7 +77,7 @@ from .connector_caller import CALLER, ConnectorCaller, ConnectorTool, GrantRefus
 from .connector_profile import HttpsMcpEndpoint, UiGrantId
 from .registry_store import RegistryStore
 from .connector_store import (
-    ACCESS_SECONDS, CODE_SECONDS, ApprovalQueueFull, ApprovalRefused, AuthorizationQuery,
+    CODE_SECONDS, ApprovalQueueFull, ApprovalRefused, AuthorizationQuery,
     AuthorizationRequest, ClaudeCallback,
     ConnectorGrants, ConnectorStore, IssuedTokens,
     RegisteredClient, TrustedBrowser, UiGrantAccess, UiReadAccess, digest,
@@ -1233,7 +1233,7 @@ class GrantUiVerb(ConnectorRootOptions, declared_name="grant-ui"):
     seconds: Annotated[
         int, Argument(flags=("--seconds",), options={
             "help": f"Lifetime, at most {UiGrantAccess.maximum_seconds} seconds"}),
-    ] = ACCESS_SECONDS
+    ] = UiGrantAccess.default_seconds
     access: Annotated[
         type[UiGrantAccess],
         Argument(flags=("--access",), options={"help": "Declared UI grant capability"}),

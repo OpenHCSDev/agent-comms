@@ -29,7 +29,7 @@ from .typed_table import GuardedExternalStore
 ACCESS_SECONDS = 3600
 UI_GRANT_SECONDS = 7 * 24 * 3600
 """A UI grant is minted by the host owner (grant-ui on the host) and revocable by its ID, so it
-may outlive an OAuth access token; its default lifetime stays ACCESS_SECONDS."""
+may outlive an OAuth access token. UiGrantAccess declares its own default lifetime."""
 CODE_SECONDS = 300
 ClaudeCallback = Literal["https://claude.ai/api/mcp/auth_callback"]
 CALLBACK: ClaudeCallback = get_args(ClaudeCallback)[0]
@@ -189,6 +189,8 @@ class UiGrantAccess(ExpiringGrant, ConnectorAccess, declared_name=None):
     """Shared UI issuance facts; the concrete member declares its caller capability."""
 
     maximum_seconds: ClassVar[int] = UI_GRANT_SECONDS
+    default_seconds: ClassVar[int] = 3600
+    """A UI grant's own default lifetime, an hour; not the OAuth access clock, which may move."""
     caller_type: ClassVar[type[ScopedUiCaller]]
 
     grant_id: UiGrantId
@@ -373,7 +375,7 @@ class ConnectorStore(SingleFileStore, CarriedDocument[ConnectorGrants], Connecto
 
     def publish_ui_profile(
         self, namespace: RootId, endpoint: HttpsMcpEndpoint, path: Path,
-        seconds: int = ACCESS_SECONDS,
+        seconds: int = UiGrantAccess.default_seconds,
         grant_type: type[UiGrantAccess] = UiReadAccess,
     ) -> UiGrantSummary:
         """Publish the private profile before activating its bearer, in one owned edit.
