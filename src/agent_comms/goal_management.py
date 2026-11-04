@@ -44,10 +44,10 @@ from .owner_requests import NewestOpenRequest, RequestDirective
 from dataclasses import dataclass
 from .goal_failure_observation import GoalFailureEvidence
 from .registry_document import RegistryDocument, RegistrySnapshot
+from .thread_identity import ThreadIncarnation
 if TYPE_CHECKING:
     from .agent_events import GoalChange
     from .messages import Message
-    from .thread_identity import ThreadIncarnation
     from .turn_lease import TurnDeclaration
 from .goal_presentation import GoalExecution, GoalPublicationSnapshot, GoalSnapshot, IdleGoalExecution
 from .goals import Goal, GoalDeclaration
