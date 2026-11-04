@@ -6,17 +6,21 @@ import json
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
-from functools import cached_property
+from collections.abc import Callable
+from functools import cached_property, partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, Self
+from typing import TYPE_CHECKING, Annotated, Literal, Self
 from xml.etree import ElementTree
 
 from pydantic import (
     Field,
+    InstanceOf,
     JsonValue,
     ModelWrapValidatorHandler,
     field_validator,
     model_validator,
+    PlainSerializer,
+    PlainValidator,
 )
 
 from agent_comms.agent_events import TranscriptModelUsage
@@ -35,6 +39,7 @@ from agent_comms.nominal.field_codec import (
     ToolCallId,
     TranscriptRecordId,
 )
+from agent_comms.message_reference import MessageReference
 from agent_comms.pi_counts import PiCount, PiCountWire
 from agent_comms.recorded_time import EventTime
 from agent_comms.runtime_updates import (
@@ -92,50 +97,92 @@ if TYPE_CHECKING:
 
 
 class ClaudeMonitorFrame(MonitorIncomingFrame):
-    """Claude Monitor caps lines at 500 and joined batches at 3000 UTF-16 units."""
+    """Claude Monitor caps lines at 500 and joined batches at 3000 UTF-16 units, trims every
+    line and drops one left empty. A message is shown as written across the lines of one
+    batch when the batch holds it, wrapped under the line cap; any other goes to a file."""
     EVENT_CHARS = 500
     BATCH_CHARS = 3000
     READ_LINE_CHARS = 2000
     HEADER = 'Comms in'
-    PART_PREFIX = '"' + HEADER + ' · '
-    """How an encoded part's line starts, before its JSON string is decoded."""
-    JSON_TEXT = WireModel.adapter(str)
+    HEADER_PREFIX = HEADER + ' · '
+    """How a shown message's first line starts; no body line shown inline may start so."""
+    GUARD = '\u200b'
+    """A blank line would vanish; a zero-width space keeps it and reads as nothing. Nobody
+    copies a blank line, so the guard goes nowhere else: an indent would carry it into whatever
+    a reader pastes, so an indented body is the file instead."""
+    XML_UNSAFE = re.compile('[^\t\x20-퟿-�\U00010000-\U0010ffff]')
+    """What a transcript's XML envelope cannot carry as written: control characters, CR and
+    the two noncharacters."""
 
     @staticmethod
     def units(line: str) -> int:
         return len(line.encode('utf-16-le')) // 2
 
-    @classmethod
-    def event_size(cls, text: str) -> int:
-        return cls.units(json.dumps(text, ensure_ascii=False))
-
     @property
     def sender(self) -> str:
-        """The header's sender column; decode_line reads it back, and its stored observed parts
-        are compared with the message's sender."""
+        """The header's sender column; decode_event reads it back, and confirmation compares it
+        with the message's sender."""
         return self.message.sender
 
     @property
     def identity(self) -> str:
-        """The header's identity column; decode_line reads it back as the message id."""
+        """The header's identity column; decode_event reads it back as the message id."""
         return str(self.message.message_id)
 
-    def header(self, number: int, total: int) -> str:
-        return (f'{self.HEADER} · {self.sender} · '
-                f'{self.identity} · {number}/{total}\n')
+    @property
+    def header(self) -> str:
+        return f'{self.HEADER_PREFIX}{self.sender} · {self.identity}\n'
 
     @cached_property
     def inline(self) -> str:
-        return self.header(1, 1) + self.message.body
+        return self.header + self.message.body
+
+    @cached_property
+    def shown_lines(self) -> tuple[str, ...]:
+        """The header and body lines, with any line Monitor would cut wrapped after its last
+        space inside the cap, or at the cap when there is none, and blank lines guarded."""
+        return tuple(self.guarded(piece) for line in self.inline.split('\n')
+                     for piece in self.wrapped(line))
+
+    @classmethod
+    def guarded(cls, line: str) -> str:
+        return line if line.strip() else cls.GUARD
+
+    @classmethod
+    def wrapped(cls, line: str) -> tuple[str, ...]:
+        pieces: list[str] = []
+        while cls.units(line) > cls.EVENT_CHARS:
+            end = cls.EVENT_CHARS
+            while cls.units(line[:end]) > cls.EVENT_CHARS:
+                end -= 1
+            space = line.rfind(' ', 0, end)
+            cut = space + 1 if space > 0 else end
+            pieces.append(line[:cut])
+            line = line[cut:]
+        return (*pieces, line)
+
+    @cached_property
+    def observed_body(self) -> tuple[str, ...]:
+        """The body lines as a transcript records them: Monitor trims each line's end."""
+        return tuple(line.rstrip() for line in self.shown_lines[1:])
+
+    def shown_inline(self) -> str:
+        return '\n'.join(self.shown_lines)
 
     @cached_property
     def fits_one_event(self) -> bool:
-        return self.event_size(self.inline) <= self.EVENT_CHARS and self.shows_safely_inline
+        return self.units(self.shown_inline()) <= self.BATCH_CHARS and self.shows_safely_inline
 
     @property
     def shows_safely_inline(self) -> bool:
-        """One JSON string carries the whole message, so no body line reaches the decoder alone."""
-        return True
+        """Each shown line is a line of the event, and the transcript decoder reads every line:
+        a body line that would read as a header or one of our frames goes to the file, where
+        nothing decodes it. Monitor trims a line's indent, so an indented body goes there too,
+        where a reader copies it byte for byte. The transcript records every other character
+        verbatim inside an XML envelope, which cannot hold a control character raw and reads a
+        CR as a line break, so a body with one of those goes to the file as well."""
+        return not any(self.claims(line) or line[:1].isspace() or self.XML_UNSAFE.search(line)
+                       for line in self.shown_lines[1:])
 
     @cached_property
     def slices(self) -> tuple[str, ...]:
@@ -171,14 +218,9 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
                          body=self.slices[number - 2]))
                      for number, _ in shown if number > 1)
 
-    def shown_inline(self) -> str:
-        """A bridged session confirms delivery by decoding this exact event back out of its
-        transcript, where Monitor joins nearby lines, so it is one reversible JSON string."""
-        return LineMonitorBridge.encode(self.inline)
-
     def event(self, exports: Path) -> tuple[int, str]:
-        """The message's one Monitor event and the reservation it fills. A body that fits one
-        event goes inline. Any larger body is the private file the one notice names, whole and
+        """The message's one Monitor event and the reservation it fills. A body one batch holds
+        goes inline. Any larger body is the private file the one notice names, whole and
         readable, so no piece reaches the model on its own."""
         if self.fits_one_event:
             return 1, self.shown_inline()
@@ -196,44 +238,84 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
 
     @classmethod
     def claims(cls, line: str) -> bool:
-        """Whether the transcript decoder reads this line as one of our frames rather than foreign."""
-        return line.startswith((MonitorProtocolFrame.wire_prefix, cls.PART_PREFIX))
+        """Whether the transcript decoder reads this line as one of ours rather than body text."""
+        return line.startswith((MonitorProtocolFrame.wire_prefix, cls.HEADER_PREFIX))
 
     @classmethod
     def decode_line(cls, line: str) -> MonitorFrame:
-        # Old or unrelated monitor text, including truncated text, is a named foreign frame.
-        if line.startswith(MonitorProtocolFrame.wire_prefix):
-            try:
-                json.loads(line)
-            except json.JSONDecodeError:
-                return ForeignMonitorFrame(text=line)
-            return MONITOR_FRAME.validate_json(line)
-        # Classify the external header before decoding its JSON string.
-        if not line.startswith(cls.PART_PREFIX):
+        """One line read alone: a header starts a shown message; old or unrelated monitor text,
+        including truncated text, is a named foreign frame."""
+        if line.startswith(cls.HEADER_PREFIX):
+            return cls.decode_header(line)
+        if not line.startswith(MonitorProtocolFrame.wire_prefix):
             return ForeignMonitorFrame(text=line)
-        raw_header, separator, _ = line.partition(r'\n')
-        if not separator or not line.endswith('"'):
+        try:
+            json.loads(line)
+        except json.JSONDecodeError:
             return ForeignMonitorFrame(text=line)
-        columns = raw_header[1:].rsplit(' · ', 2)
-        if len(columns) != 3:
-            return ForeignMonitorFrame(text=line)
-        number, slash, total = columns[-1].partition('/')
-        if not slash or not number.isdecimal() or not total.isdecimal():
-            return ForeignMonitorFrame(text=line)
-        decoded = cls.JSON_TEXT.validate_json(line)
-        header, _, body = decoded.partition('\n')
-        sender, message_id, _ = header.removeprefix(cls.HEADER + ' · ').rsplit(' · ', 2)
+        return MONITOR_FRAME.validate_json(line)
+
+    @classmethod
+    def decode_header(cls, line: str) -> MonitorFrame:
+        sender, _, message_id = line.removeprefix(cls.HEADER_PREFIX).rpartition(' · ')
         try:
             identity = FieldCodec.decode(MessageId, message_id)
         except MalformedRecord:
             return ForeignMonitorFrame(text=line)
-        return MonitorPart(id=identity, sender=sender, number=int(number),
-                           total=int(total), body=body)
+        return MonitorShown.model_validate(dict(id=identity, sender=sender, lines=()))
 
     @classmethod
     def decode_event(cls, event: str) -> tuple[MonitorFrame, ...]:
-        """Monitor joins event lines with LF only; an encoded part may hold U+2028 or U+0085."""
-        return tuple(cls.decode_line(line) for line in event.split('\n'))
+        """Monitor joins the lines of one batch with LF, and one batch can hold several of our
+        messages: each line continues the frame before it, which a shown message does by taking
+        it as body."""
+        first, *rest = event.split('\n')
+        frames: tuple[MonitorFrame, ...] = (cls.decode_line(first),)
+        for line in rest:
+            frames = (*frames[:-1], *frames[-1].continued(line, cls.decode_line))
+        return frames
+
+
+class MonitorShown(MonitorFrame, declared_name='shown'):
+    """A message shown inline: its header, then its body lines as the transcript recorded them.
+    Wrapping and Monitor's trimming leave no body to decode, so the original is rendered again
+    and compared; only an exact match proves the whole message reached the model."""
+
+    id: InstanceOf[
+        Annotated[
+            MessageId,
+            PlainValidator(partial(FieldCodec.decode, MessageId)),
+            PlainSerializer(FieldCodec.encode),
+        ]
+    ]
+    sender: str
+    lines: tuple[str, ...]
+
+    def continued(
+        self, line: str, decode: Callable[[str], MonitorFrame],
+    ) -> tuple[MonitorFrame, ...]:
+        """A line that is none of ours is this message's next body line."""
+        if ClaudeMonitorFrame.claims(line):
+            return super().continued(line, decode)
+        return (self.model_copy(update=dict(lines=(*self.lines, line))),)
+
+    async def confirm(
+        self, bridge: LineMonitorBridge, record: ObservedMonitor,
+    ) -> tuple[MessageReference, ...]:
+        """The one whole part this event proves, confirmed as any other part; an event that is
+        not exactly the original's rendering confirms nothing and says so."""
+        with bridge.uncertain_on_contention(self.id):
+            for delivery in await bridge.attempts(self.id):
+                message = await bridge.message(delivery.reference)
+                observed = tuple(line.rstrip() for line in self.lines)
+                if ClaudeMonitorFrame(message).observed_body != observed:
+                    await bridge.record_mismatch(
+                        delivery, 'Shown lines do not equal the original message')
+                    continue
+                return await MonitorPart.model_validate(dict(
+                    id=self.id, sender=self.sender, number=1, total=1, body=message.body,
+                )).confirm(bridge, record)
+        return ()
 
 
 class ClaudeReaderPhase(ReadingPhase):

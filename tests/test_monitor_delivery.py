@@ -97,7 +97,7 @@ async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp
         async with attached_monitor(selected) as monitor_reader:
             watching = asyncio.create_task(selected.watch_bus())
             try:
-                line = (await monitor_reader.readline()).decode().rstrip('\n')
+                line = await event_from(monitor_reader)
                 for update in notification(line).updates(ClaudeSession()):
                     await update.observed(selected)
                 row, = await stored_attempts(selected)
@@ -107,7 +107,7 @@ async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp
                 assert comms.bus.reads.read() == user_reads
                 unread = comms.messaging.send(
                     'peer', 'viewer', 'delivery records this model read').message
-                line = (await monitor_reader.readline()).decode().rstrip('\n')
+                line = await event_from(monitor_reader)
                 for update in notification(line, record_id=transcript_record('second-delivery')).updates(
                         ClaudeSession()):
                     await update.observed(selected)
@@ -176,7 +176,7 @@ async def test_busy_confirmation_keeps_monitor_serving_without_replaying(bridge)
                 probe = MONITOR_FRAME.validate_json(await reader.readline())
                 await probe.confirm(bridge, ObservedMonitor(transcript_record('probe'), 1.))
                 await bridge.accept(first)
-                line = (await reader.readline()).decode().rstrip('\n')
+                line = await event_from(reader)
                 # The store's declared wait expires; no method or error is patched.
                 with closing(sqlite3.connect(path, isolation_level=None)) as held:
                     held.execute('BEGIN EXCLUSIVE')
@@ -190,7 +190,7 @@ async def test_busy_confirmation_keeps_monitor_serving_without_replaying(bridge)
                 assert uncertain.monitor == ReceivingMonitor(1)
                 assert not attachment.done()
                 await bridge.accept(second)
-                line = (await reader.readline()).decode().rstrip('\n')
+                line = await event_from(reader)
                 for update in notification(line, record_id=transcript_record('healthy-second')).updates(ClaudeSession()):
                     await update.observed(bridge)
                 confirmed, = await bridge.attempts(second.message_id)
@@ -375,7 +375,7 @@ async def test_renamed_reader_handoff_and_confirmation_share_the_prepared_owner(
         async with attached_monitor(bridge) as monitor_reader:
             accepting = asyncio.create_task(bridge.accept(message))
             try:
-                line = (await monitor_reader.readline()).decode().rstrip('\n')
+                line = await event_from(monitor_reader)
                 await accepting
                 assert type(assignment(comms, lookup, message)) is DeferredAssignment
                 for update in notification(line).updates(ClaudeSession()):
@@ -467,7 +467,7 @@ async def test_pages_require_every_line_then_reopen(bridge):
 
 def body_of(parts):
     """A body whose Claude frame has exactly this many parts."""
-    return 'x' * 50 if parts == 1 else '\n'.join(('x' * 300,) * parts)
+    return 'x' * 50 if parts == 1 else '\n'.join(('x' * 1500,) * parts)
 
 
 def read_started(session, path, label):
@@ -505,14 +505,24 @@ async def observe(bridge, updates):
         await update.observed(bridge)
 
 
+async def event_from(reader):
+    """The lines the reader gets for one message, joined as Monitor joins one batch."""
+    lines = [(await reader.readline()).decode().rstrip('\n')]
+    try:
+        while True:
+            async with asyncio.timeout(.3):
+                lines.append((await reader.readline()).decode().rstrip('\n'))
+    except TimeoutError:
+        return '\n'.join(lines)
+
+
 async def only_event(reader):
-    """The one line the reader gets for a message; any second line is a partial message."""
-    line = (await reader.readline()).decode().rstrip('\n')
-    with pytest.raises(TimeoutError):
-        async with asyncio.timeout(.3):
-            await reader.readline()
-    assert ClaudeMonitorFrame.units(line) <= ClaudeMonitorFrame.EVENT_CHARS
-    return line
+    """One message's event: every line under the line cap, the batch under the batch cap."""
+    event = await event_from(reader)
+    assert all(ClaudeMonitorFrame.units(line) <= ClaudeMonitorFrame.EVENT_CHARS
+               for line in event.split('\n'))
+    assert ClaudeMonitorFrame.units(event) <= ClaudeMonitorFrame.BATCH_CHARS
+    return event
 
 
 async def exported(bridge, body):
@@ -531,8 +541,8 @@ async def test_a_body_that_fits_one_event_goes_inline_and_exports_nothing(bridge
     async with attached_monitor(bridge) as reader:
         await bridge.accept(message)
         line = await only_event(reader)
-        part = ClaudeMonitorFrame.decode_line(line)
-        assert (part.id, part.number, part.total) == (message.message_id, 1, 1)
+        shown, = ClaudeMonitorFrame.decode_event(line)
+        assert (shown.id, shown.sender) == (message.message_id, message.sender)
         await observe(bridge, notification(line).updates(ClaudeSession()))
     confirmed, = await bridge.attempts(message.message_id)
     assert confirmed.outcome is DeliveredOutcome
@@ -656,9 +666,9 @@ async def test_a_wrong_body_in_the_export_never_confirms(bridge, capsys):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('separator', ('\u2028', '\x85', '\u2029\x1c'))
+@pytest.mark.parametrize('separator', ('\u2028', '\x85', '\u2029'))
 async def test_line_separators_inside_a_body_stay_inside_their_part(bridge, separator):
-    """Encoded parts keep U+2028, U+0085 and friends raw; only a physical LF ends a record,
+    """A transcript keeps U+2028, U+0085 and U+2029 raw; only a physical LF ends a line,
     inline in an event and in a Read result alike."""
     short = bridge.comms.messaging.send('peer', 'viewer', f'a{separator}b').message
     async with attached_monitor(bridge) as reader:
@@ -684,6 +694,16 @@ async def test_line_separators_inside_a_body_stay_inside_their_part(bridge, sepa
     observed = await bridge.coordinator_read(lambda db: HarnessObservedPart.of(db, confirmed))
     assert ''.join(part.body for part in sorted(observed, key=lambda part: part.number)) == body
     assert not export.exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('character', ('\x1c', '\r', '\x07'))
+async def test_a_character_the_xml_envelope_cannot_carry_sends_the_body_to_the_file(bridge, character):
+    """A transcript records a Monitor event inside XML, which cannot hold a control character
+    raw and reads a CR as a line break, so such a body is the file, byte for byte."""
+    body = f'a{character}b'
+    message, export = await exported(bridge, body)
+    assert export.read_text(newline='').split('\n', 1)[1] == body + '\n'
 
 
 @pytest.mark.asyncio
@@ -782,7 +802,8 @@ def test_frame_parts_rebuild_the_body_and_cut_only_at_line_ends(body, sender):
     assert ''.join(part.body for part in frame.read_parts(shown_rows))==body
     assert all(part.sender==sender for part in frame.read_parts(shown_rows))
     assert all(len(line)<=frame.READ_LINE_CHARS for line in frame.export_lines[1:])
-    assert frame.fits_one_event==(frame.event_size(frame.inline)<=frame.EVENT_CHARS)
+    assert frame.fits_one_event==(frame.units(frame.shown_inline())<=frame.BATCH_CHARS
+                                  and frame.shows_safely_inline)
 
 
 def test_a_heartbeat_sized_message_is_one_readable_file_not_fragments():
@@ -915,9 +936,9 @@ async def test_harness_outcome_lives_on_the_threads_claim_across_a_rehome(tmp_pa
         async with attached_monitor(bridge) as reader:
             assert owed() == (taken.seq, confirmed.seq, waiting.seq)
             await bridge.accept(taken)
-            await reader.readline()
+            await event_from(reader)
             await bridge.accept(confirmed)
-            line = (await reader.readline()).decode().rstrip('\n')
+            line = await event_from(reader)
             for update in notification(line).updates(ClaudeSession()):
                 await update.observed(bridge)
             await bridge.accept(taken)
@@ -971,7 +992,7 @@ async def test_a_bridge_waits_out_maintenance_and_then_records_its_delivery(tmp_
             pending = asyncio.create_task(bridge.accept(message))
             await waits_until_cleared(pending)  # the hand-off to the harness
             await asyncio.wait_for(pending, 5)
-            line = (await reader.readline()).decode().rstrip('\n')
+            line = await event_from(reader)
             holds.append(barrier.begin(MaintenanceOperator.current()))
 
             async def observed():
@@ -1121,8 +1142,8 @@ def test_a_gap_at_the_terminator_number_makes_no_line_count():
 
 
 async def delivered_line(selected, reader, record):
-    """The real monitor receives one line and confirms it, as the session would."""
-    line = (await reader.readline()).decode().rstrip('\n')
+    """The real monitor receives one message's event and confirms it, as the session would."""
+    line = await event_from(reader)
     for update in notification(line, record_id=transcript_record(record)).updates(ClaudeSession()):
         await update.observed(selected)
     return line
