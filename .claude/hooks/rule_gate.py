@@ -7,9 +7,13 @@ call. One script owns the whole gate so its pieces cannot drift:
   rule_gate.py deal    SessionStart: write this session's reading list and show it
   rule_gate.py gate    PreToolUse:   while reading is owed, allow only Reads of listed files
   rule_gate.py record  PostToolUse:  a successful Read marks the lines it returned
+  rule_gate.py remind  PostToolUse:  once the gate is open, every Nth tool call carries the next
+                                     slice of the deck resident teammates are dealt
+  rule_gate.py deck SESSION          (under the checkout's venv) write that deck once per session
   rule_gate.py fg      PreToolUse:   refuse a foreground Bash call that asks for over 15 s
   rule_gate.py idle    Stop:         refuse to end a turn while this session's background job runs
-  rule_gate.py install               write these hooks into ~/.claude/settings.json (cloud setup)
+  rule_gate.py install               build the checkout's locked venv and write these hooks into
+                                     ~/.claude/settings.json (cloud setup)
 
 Claude Code's JSON is decoded once, at the top, into a HookEvent and its ToolCall; everything
 after asks those types. A file counts once every line of it has been read by a Read that
@@ -21,6 +25,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -185,11 +190,71 @@ class HookEvent:
         return cls(str(record.get("session_id", "session")), "agent_id" in record,
                    str(record.get("source", "start")), call, bool(record.get("stop_hook_active")))
 
-    @property
-    def store(self) -> Path:
+    @staticmethod
+    def state() -> Path:
         state = Path.home() / ".claude" / "state"
         state.mkdir(parents=True, exist_ok=True)
-        return state / f"rule-gate-{self.session}.json"
+        return state
+
+    @property
+    def store(self) -> Path:
+        return self.state() / f"rule-gate-{self.session}.json"
+
+
+def checkout() -> Path:
+    """The agent-comms checkout this script belongs to."""
+    return Path(__file__).resolve().parents[2]
+
+
+def checkout_python() -> Path:
+    """The checkout's own locked environment, which `install` builds; the deck is read there."""
+    return checkout() / ".venv" / "bin" / "python"
+
+
+@dataclass(frozen=True)
+class Deck:
+    """The slices resident teammates are dealt (agent_comms_hooks.skill.DeckReader) and their
+    cadence (SliceReminder.every), written once per session by the checkout's own interpreter;
+    each later tool call only indexes into it."""
+
+    session: str
+
+    @property
+    def path(self) -> Path:
+        return HookEvent.state() / f"rule-deck-{self.session}.json"
+
+    @property
+    def count(self) -> Path:
+        return HookEvent.state() / f"rule-deck-{self.session}.count"
+
+    def deal(self) -> str:
+        """Start writing the deck without holding SessionStart; say plainly when it cannot be."""
+        python = checkout_python()
+        if not python.is_file():
+            return (f"\nNo rule reminders this session: {python} is missing; "
+                    f"run `python3 {Path(__file__).resolve()} install`.")
+        self.count.unlink(missing_ok=True)
+        subprocess.Popen([str(python), str(Path(__file__).resolve()), "deck", self.session],
+                         start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return ""
+
+    def write(self) -> None:
+        sys.path.insert(0, str(checkout() / "src"))
+        from agent_comms.cli_bridges.hook_reread import SliceReminder
+        from agent_comms_hooks.skill import DeckReader
+        self.path.write_text(json.dumps({"every": SliceReminder.every, "slices": DeckReader.slices()}))
+
+    def due(self) -> str | None:
+        """The slice this tool call carries, if it is the Nth since the gate opened."""
+        if not self.path.is_file():
+            return None
+        deck = json.loads(self.path.read_text())
+        number = int(self.count.read_text()) + 1 if self.count.is_file() else 1
+        self.count.write_text(str(number))
+        if number % deck["every"]:
+            return None
+        slices = deck["slices"]
+        return slices[(number // deck["every"] - 1) % len(slices)]
 
 
 def core_gates(event: HookEvent) -> bool:
@@ -215,12 +280,13 @@ def deal(event: HookEvent) -> None:
         return
     reading = Reading.dealt(event.store)
     reading.save()
+    missing = Deck(event.session).deal()
     print(
         f"Session {event.source}: Tristan's standing order. Before ANY other tool call, read "
         "both papers, then every rule, in this order, and engage with them seriously. After a "
         "compaction, calibrate against what you did before it; the summary is not to be "
         "trusted. A gate refuses every other tool until every line of these is read (parallel "
-        "Reads are fine):\n" + "\n".join(map(str, reading.files)))
+        "Reads are fine):\n" + "\n".join(map(str, reading.files)) + missing)
 
 
 def gate(event: HookEvent) -> None:
@@ -246,6 +312,15 @@ def record(event: HookEvent) -> None:
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PostToolUse",
         "additionalContext": "Rule reading complete: every listed line is read. The gate is open."}}))
+
+
+def remind(event: HookEvent) -> None:
+    """Once every dealt line is read, the deck keeps the rules awake between reads."""
+    if event.subagent or event.store.is_file():
+        return
+    if (text := Deck(event.session).due()) is not None:
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse",
+                                                 "additionalContext": text}}))
 
 
 def foreground(event: HookEvent) -> None:
@@ -293,7 +368,7 @@ def idle(event: HookEvent) -> None:
             "its notification resumes you.")}))
 
 
-VERBS = {"deal": deal, "gate": gate, "record": record, "fg": foreground, "idle": idle}
+VERBS = {"deal": deal, "gate": gate, "record": record, "remind": remind, "fg": foreground, "idle": idle}
 USER_FLAG = "--user"
 
 
@@ -303,6 +378,8 @@ def install() -> None:
     settings; its environment setup script runs this once. The hooks are this checkout's own
     .claude/settings.json with the script's path made absolute, so that file stays the owner."""
     script = Path(__file__).resolve()
+    # The deck is read by the checkout's own interpreter: build its locked environment first.
+    subprocess.run(["uv", "sync", "--locked", "--no-dev", "--project", str(checkout())], check=True)
     project = json.loads((script.parent.parent / "settings.json").read_text())["hooks"]
     relative = '"$CLAUDE_PROJECT_DIR/.claude/hooks/rule_gate.py"'
     settings = Path.home() / ".claude" / "settings.json"
@@ -328,6 +405,9 @@ def project_gates() -> bool:
 def main() -> None:
     if sys.argv[1] == "install":
         install()
+        return
+    if sys.argv[1] == "deck":
+        Deck(sys.argv[2]).write()
         return
     try:
         if USER_FLAG in sys.argv and project_gates():
