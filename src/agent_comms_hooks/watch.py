@@ -47,7 +47,9 @@ class NoSessionBridge(SessionCommandError):
     def __init__(self, session: str) -> None:
         super().__init__(
             f'No session bridge is running for session {session}; its log names why it stopped. '
-            f'Start it with {ConnectCommand.program.name} {ConnectCommand.command_name()}.')
+            f'Start it with {ConnectCommand.program.name} {ConnectCommand.command_name()} as a Bash '
+            'call of its own: no pipe, redirection or second command, the one call allowed while '
+            'it is down.')
 
 
 class HookBridgeUnavailable(RuntimeError, SessionFailure):

@@ -13,8 +13,8 @@ call. One script owns the whole gate so its pieces cannot drift:
 
 Claude Code's JSON is decoded once, at the top, into a HookEvent and its ToolCall; everything
 after asks those types. A file counts once every line of it has been read by a Read that
-succeeded. Subagents and sessions Core launched are never gated. Any failure inside a hook
-allows the call: a gate bug must never lock a session.
+succeeded. Subagents and sessions Core launched or bound are never gated here. Any failure
+inside a hook allows the call: a gate bug must never lock a session.
 """
 
 from __future__ import annotations
@@ -191,12 +191,16 @@ class HookEvent:
         return state / f"rule-gate-{self.session}.json"
 
 
-def launched_by_core() -> bool:
-    """A session Core launched (claude-comms) carries the deal in its system prompt and answers
-    Core's own audit; this gate stands down for it rather than gate it twice."""
+def core_gates(event: HookEvent) -> bool:
+    """A session Core launched (claude-comms) or bound to the bus (connect) answers Core's own
+    gate and audit, whose list names the installed runtime's copies. This gate stands down rather
+    than gate it twice: each refused the paths the other demanded, and with the bridge down, Core
+    allows only the connect call this gate refuses."""
     sys.path.insert(0, str(team_directory().parent.parent))
     from agent_comms_hooks import LaunchedPrompt
-    return LaunchedPrompt.variable in os.environ
+    from agent_comms_hooks.watch import SessionEndpoint
+    enrolled = SessionEndpoint(event.session).session().when_bound(lambda: False, lambda: True)
+    return enrolled or LaunchedPrompt.variable in os.environ
 
 
 def deny(reason: str) -> None:
@@ -206,7 +210,7 @@ def deny(reason: str) -> None:
 
 
 def deal(event: HookEvent) -> None:
-    if event.subagent or launched_by_core():
+    if event.subagent or core_gates(event):
         return
     reading = Reading.dealt(event.store)
     reading.save()
@@ -219,7 +223,7 @@ def deal(event: HookEvent) -> None:
 
 
 def gate(event: HookEvent) -> None:
-    if event.subagent or (reading := Reading.owed(event.store)) is None:
+    if event.subagent or (reading := Reading.owed(event.store)) is None or core_gates(event):
         return
     if event.call.allowed_while_owed(reading):
         return
