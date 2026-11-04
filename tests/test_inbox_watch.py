@@ -15,6 +15,7 @@ from yarl import URL
 from agent_comms.activity import ActivityState, ObservedActivity
 from agent_comms.cli_bridges.claude_protocol import ClaudeMonitorFrame
 from agent_comms.cli_bridges.claude_protocol import MonitorTaskNotification, TaskEnvelope
+from agent_comms.cli_bridges.claude_transcript import PrintedLedger
 from agent_comms.cli_bridges.inbox_watch_client import (
     FollowedTranscript, InboxSocket, WatchDropped, WatchEnd, WatchStopped,
 )
@@ -505,3 +506,58 @@ async def test_a_pushed_message_is_delivered_only_once_the_transcript_shows_it(
             await asyncio.sleep(0.05)
     assert attempt_outcome(comms, mangled) == "unconfirmed"
     await socket.close()
+
+
+def ledger_line(*messages) -> str:
+    return PrintedLedger(printed=tuple(message.reference for message in messages)).line()
+
+
+async def outcome_becomes(comms: Comms, message, outcome: str) -> None:
+    async with asyncio.timeout(20):
+        while attempt_outcome(comms, message) != outcome:
+            await asyncio.sleep(0.05)
+
+
+async def test_a_message_the_client_printed_reads_emitted(session, comms: Comms, tmp_path: Path, capsys) -> None:
+    client, token = session
+    url = str(client.make_url(await watch_path(client, token, "cloud")))
+    watch = asyncio.create_task(InboxSocket(url, tmp_path / "cloud" / "messages").carried())
+    message = comms.messaging.send("sender", "cloud", "printed here").message
+    await outcome_becomes(comms, message, "emitted")
+    assert (tmp_path / "cloud" / "printed").read_text().split() == [message.reference.name]
+    watch.cancel()
+
+
+async def test_a_message_taken_but_never_printed_is_replayed_once_the_ledger_proves_it(
+    session, comms: Comms,
+) -> None:
+    """62380: a frozen watch took it, the socket died, and it was gone for good."""
+    client, token = session
+    lost = comms.messaging.send("sender", "cloud", "taken, never printed").message
+    shown = comms.messaging.send("sender", "cloud", "printed before the freeze").message
+    frozen = await client.ws_connect(await watch_path(client, token, "cloud"))
+    assert [(await frame(frozen))["text"] for _ in range(2)] == [lost.body, shown.body]
+    await inbox_emptied(comms, "cloud")
+    await frozen.close()
+
+    again = await client.ws_connect(await watch_path(client, token, "cloud"))
+    await again.send_str(ledger_line(shown))
+    assert (await frame(again))["text"] == lost.body
+    await outcome_becomes(comms, shown, "emitted")
+    assert attempt_outcome(comms, lost) == "unconfirmed"
+    with pytest.raises(TimeoutError):
+        await asyncio.wait_for(again.receive_str(), timeout=1)
+    await again.close()
+
+
+async def test_no_ledger_is_no_proof_so_nothing_is_replayed(session, comms: Comms) -> None:
+    client, token = session
+    comms.messaging.send("sender", "cloud", "taken by an old client")
+    old = await client.ws_connect(await watch_path(client, token, "cloud"))
+    await frame(old)
+    await inbox_emptied(comms, "cloud")
+    await old.close()
+    again = await client.ws_connect(await watch_path(client, token, "cloud"))
+    with pytest.raises(TimeoutError):
+        await asyncio.wait_for(again.receive_str(), timeout=2)
+    await again.close()

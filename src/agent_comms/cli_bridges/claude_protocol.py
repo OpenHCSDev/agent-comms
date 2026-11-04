@@ -7,20 +7,17 @@ import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from collections.abc import Callable
-from functools import cached_property, partial
+from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Literal, Self
+from typing import TYPE_CHECKING, Literal, Self
 from xml.etree import ElementTree
 
 from pydantic import (
     Field,
-    InstanceOf,
     JsonValue,
     ModelWrapValidatorHandler,
     field_validator,
     model_validator,
-    PlainSerializer,
-    PlainValidator,
 )
 
 from agent_comms.agent_events import TranscriptModelUsage
@@ -33,7 +30,6 @@ from agent_comms.cli_protocol import (
     WireHeader,
 )
 from agent_comms.nominal.field_codec import (
-    FieldCodec,
     MalformedRecord,
     ToolCallId,
     TranscriptRecordId,
@@ -89,6 +85,7 @@ from .shared import (
     MonitorReadFile,
     ObservedMonitor,
     TranscriptConfirmsDelivery,
+    WireReference,
 )
 
 if TYPE_CHECKING:
@@ -269,13 +266,7 @@ class MonitorShown(MonitorFrame, declared_name='shown'):
     and Monitor's trimming leave no body to decode, so the original is rendered again and
     compared, header and all; only an exact match proves the whole message reached the model."""
 
-    reference: InstanceOf[
-        Annotated[
-            MessageReference,
-            PlainValidator(partial(FieldCodec.decode, MessageReference)),
-            PlainSerializer(FieldCodec.encode),
-        ]
-    ]
+    reference: WireReference
     lines: tuple[str, ...]
 
     def continued(

@@ -81,3 +81,18 @@ A/B/A return with reader/draft retention, fork/first input and reply/status/hist
 without skipping intermediate user actions. Actual live opening check before
 activation is required. Focused tests support it. Ship usable coherent tranches
 without waiting for final latency, full refactor scope or deferred CI.
+
+## 2026-11-04: a cloud delivery is replayed only with proof it was never shown
+
+Tristan, relayed by claude-a-toad in 62402: "replay with proof".
+
+Evidence: a cloud watch frozen past its 25 s heartbeat took message 62380. The connector
+recorded it delivered when `send_str` returned, the socket died, and the session never saw it;
+nothing ever sent it again. (#4076, P1290.)
+
+A cloud attempt is recorded unconfirmed when its frame goes out. The client appends the
+message's reference to its `printed` ledger before printing the Monitor event and acks it
+(emitted); the session's own transcript confirms it (delivered). When a new watch of the same
+incarnation connects, the client sends its ledger first. Only an attempt still plainly
+unconfirmed after that ledger, taken before this socket opened, is sent again. A client that
+sends no ledger proves nothing, so nothing is replayed, and no rule here depends on a timer.

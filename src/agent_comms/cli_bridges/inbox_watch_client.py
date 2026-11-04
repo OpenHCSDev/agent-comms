@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import re
 import sys
 from abc import ABC, abstractmethod
@@ -27,11 +28,14 @@ from yarl import URL
 
 from agent_comms.bus import Bus
 from agent_comms.bus_publication import Delivered
+from agent_comms.message_reference import MessageReference
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.watched import FileSource
 
 from .claude_protocol import ClaudeMonitorFrame
-from .claude_transcript import WATCH_STOPPED, WINDOW_ENDED, RecentClaudeWindow, RunningClaude
+from .claude_transcript import (
+    WATCH_STOPPED, WINDOW_ENDED, PrintedLedger, PrintedNow, RecentClaudeWindow, RunningClaude,
+)
 from .session_watch import WatchClaim
 
 
@@ -152,11 +156,31 @@ class InboxSocket:
     local bridge holds such a burst in its window until the transcript shows each one seen; this
     side has no such confirmation, so each message gets a batch of its own."""
 
-    async def deliver(self, frame: str) -> None:
-        """Inline when one Monitor batch holds it, otherwise one notice naming its whole body."""
-        _, line = ClaudeMonitorFrame(FieldCodec.decode(Delivered, FieldCodec.parse(frame))).event(
-            self.exports)
+    @property
+    def ledger(self) -> Path:
+        """Every message this machine's watches may have printed, one reference per line."""
+        return self.exports.parent / "printed"
+
+    def printed(self) -> PrintedLedger:
+        try:
+            names = self.ledger.read_text().split()
+        except FileNotFoundError:
+            names = []
+        return PrintedLedger(printed=tuple(MessageReference.named(name) for name in names))
+
+    async def deliver(self, frame: str, socket: ClientWebSocketResponse) -> None:
+        """Inline when one Monitor batch holds it, otherwise one notice naming its whole body.
+        The ledger is written first: a freeze between it and the print leaves a message the bus
+        never replays, never one the session saw twice."""
+        message = FieldCodec.decode(Delivered, FieldCodec.parse(frame))
+        _, line = ClaudeMonitorFrame(message).event(self.exports)
+        self.ledger.parent.mkdir(parents=True, exist_ok=True)
+        with self.ledger.open("a") as stream:
+            stream.write(f"{message.reference.name}\n")
+            stream.flush()
+            os.fsync(stream.fileno())
         print(line, flush=True)
+        await socket.send_str(PrintedNow(printed=(message.reference,)).line())
         await asyncio.sleep(self.batch_gap_seconds)
 
     async def publishing(self, socket: ClientWebSocketResponse) -> None:
@@ -181,11 +205,12 @@ class InboxSocket:
                 self.url, proxy=self.proxy, heartbeat=25.0
             ) as socket:
                 print("Watching your inbox; each message arrives as an event.", flush=True)
+                await socket.send_str(self.printed().line())
                 publishing = asyncio.create_task(self.publishing(socket))
                 try:
                     async for frame in socket:
                         if frame.type is WSMsgType.TEXT:
-                            await self.deliver(frame.data)
+                            await self.deliver(frame.data, socket)
                 finally:
                     publishing.cancel()
                 return WatchEnd.closed(socket.close_code)

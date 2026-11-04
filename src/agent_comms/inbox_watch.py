@@ -15,8 +15,8 @@ import secrets
 import time
 from collections.abc import AsyncIterator, Iterator
 from contextlib import AbstractContextManager, contextmanager
-from dataclasses import dataclass, field
-from functools import cached_property
+from dataclasses import dataclass, field, replace
+from functools import cached_property, partial
 from pathlib import Path
 from typing import ClassVar
 
@@ -25,7 +25,9 @@ from yarl import URL
 
 from .agent_inbox import SecondsWait, TakenInputPosition, TakenInputStart
 from .child_process import ProcessIdentity
-from .cli_bridges.claude_transcript import WATCH_STOPPED, WINDOW_ENDED, ClaudeJsonLines
+from .cli_bridges.claude_transcript import (
+    WATCH_REPORT, WATCH_STOPPED, WINDOW_ENDED, ClaudeJsonLines, WatchReport,
+)
 from .cli_bridges.claude_protocol import ClaudeMonitorFrame
 from .cli_bridges.history import RemoteWatchHistory
 from .cli_bridges.shared import TranscriptConfirmsDelivery
@@ -35,7 +37,8 @@ from .coordination_database import CoordinationStore
 from .coordination_tables.harness_deliveries import HarnessDelivery
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .harness_delivery_states import ReceivingMonitor, UnconfirmedOutcome, UnrecordedMonitor
+from .harness_delivery_states import EmittedOutcome, ReceivingMonitor, UnconfirmedOutcome, UnrecordedMonitor
+from .message_reference import MessageReference
 from .messages import Message
 from .nominal.field_codec import FieldCodec, ThreadLookup
 from .runtime_updates import RuntimeUpdate
@@ -117,6 +120,8 @@ class PushedTranscript(TranscriptConfirmsDelivery, ClaudeJsonLines):
     comms: Comms
     transcript_thread: str
     socket: web.WebSocketResponse
+    ledger_read: asyncio.Event = field(default_factory=asyncio.Event)
+    """Set once the client's ledger is in: only then is an unconfirmed attempt provably unshown."""
 
     delivery_kind: ClassVar[type[RemoteWatchHistory]] = RemoteWatchHistory
 
@@ -125,10 +130,18 @@ class PushedTranscript(TranscriptConfirmsDelivery, ClaudeJsonLines):
         """The ticket's thread, decoded once for the socket's life."""
         return self.comms.registry.require(self.transcript_thread).incarnation.require_recorded().lookup
 
+    async def emitted(self, reference: MessageReference) -> None:
+        """The client printed this message, or was about to: its attempt is never sent again."""
+        for delivery in await self.attempts(reference.message_id):
+            if delivery.reference == reference:
+                await self.finish(delivery, partial(replace, outcome=EmittedOutcome))
+
     async def transcript(self) -> AsyncIterator[RuntimeUpdate]:
         state, offset = self.start_state(), 0
         async for frame in self.socket:
-            if frame.type is WSMsgType.TEXT and frame.data == WINDOW_ENDED:
+            if frame.type is WSMsgType.TEXT and frame.data.startswith(WatchReport.wire_prefix):
+                await WATCH_REPORT.validate_json(frame.data).received(self)
+            elif frame.type is WSMsgType.TEXT and frame.data == WINDOW_ENDED:
                 # The same gate a local bridge opens after replaying its window: without it the
                 # reader stays in replay, so chat publishes and activity never does.
                 for update in state.phase.window_ended(state):
@@ -192,10 +205,35 @@ class InboxWatch:
         with self.wire() as comms:
             return comms.registry.require(self.thread).same_local_process(here)
 
+    def unshown(self) -> tuple[Message, ...]:
+        """The messages a socket of this incarnation took and no client has said it printed."""
+        with self.wire() as comms:
+            lookup = comms.registry.require(self.thread).incarnation.require_recorded().lookup
+            with comms.registry.store.coordinator_reader.reader_snapshot() as db:
+                attempts = HarnessDelivery.select(
+                    db, bridge=RemoteWatchHistory, recipient_lookup=lookup, outcome=UnconfirmedOutcome)
+            references = tuple(sorted((attempt.reference for attempt in attempts), key=lambda r: r.seq))
+            return tuple(comms.bus.bus.messages_for_references(references)) if references else ()
+
+    async def replayed(self, socket: web.WebSocketResponse, candidates: tuple[Message, ...],
+                       ledger_read: asyncio.Event) -> None:
+        """Tristan's replay with proof: a message taken before this socket opened goes again only
+        once the client's ledger shows no client printed it. A client that sends no ledger proves
+        nothing, so nothing is replayed."""
+        await ledger_read.wait()
+        still = {message.reference for message in await asyncio.to_thread(self.unshown)}
+        for message in candidates:
+            if message.reference in still:
+                await socket.send_str(FieldCodec.compact(FieldCodec.encode(message)))
+
     async def pushed(self, socket: web.WebSocketResponse, here: ProcessIdentity) -> None:
         """Frames until it closes, or until the thread is stopped on the bus; a reader must run
-        for the socket to notice closing."""
-        reader = asyncio.create_task(self.read_until_closed(socket))
+        for the socket to notice closing. What earlier sockets took unshown is read before this
+        one sends anything, so a message this socket sends is never replayed by it."""
+        ledger_read = asyncio.Event()
+        candidates = await asyncio.to_thread(self.unshown)
+        reader = asyncio.create_task(self.read_until_closed(socket, ledger_read))
+        replay = asyncio.create_task(self.replayed(socket, candidates, ledger_read))
         after: TakenInputPosition = TakenInputStart()
         try:
             while not socket.closed:
@@ -209,13 +247,14 @@ class InboxWatch:
             return
         finally:
             reader.cancel()
+            replay.cancel()
 
-    async def read_until_closed(self, socket: web.WebSocketResponse) -> None:
+    async def read_until_closed(self, socket: web.WebSocketResponse, ledger_read: asyncio.Event) -> None:
         """Publish what the session sends. A failure there must not cost it its push, so it is
         said on the bus and the socket keeps being read."""
         with self.wire() as comms:
             try:
-                await PushedTranscript(comms, self.thread, socket).publish_transcript()
+                await PushedTranscript(comms, self.thread, socket, ledger_read).publish_transcript()
             except* Exception as failures:
                 logging.exception("Transcript from %s stopped", self.thread)
                 # A decoder's first line lists its whole union, so what went wrong is at the end.
