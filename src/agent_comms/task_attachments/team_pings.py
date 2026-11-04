@@ -255,7 +255,7 @@ class TeamUpdate(OwnerNotice, declared_name=None):
             "BOARD (Core heartbeat; Tristan's own words never arrive in this format)",
             "Each rule prints its shared words once; '…' in a header is each row's own words.",
             *hud, "",
-            "Full evidence: comms_hud board/open_pings, or Toad /recipient original details",
+            "Full evidence: comms_hud board/open_pings, or Toad /team",
         ))
 
     def board(self, comms: Comms) -> tuple[BoardEntry, ...]:
