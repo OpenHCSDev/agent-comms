@@ -520,6 +520,17 @@ def ledger_line(*messages, ledger: PrintLedgerId = TOOK_IT) -> str:
     return PrintedLedger(ledger=ledger, printed=tuple(message.reference for message in messages)).line()
 
 
+async def ledger_reported(socket, client: TestClient, token: str, words: str) -> None:
+    """The reader takes the socket's frames in order: once a line sent after the ledger shows
+    as the session's work, the ledger was handled before it."""
+    await socket.send_str(ledger_line())
+    for line in transcript_lines(words):
+        await socket.send_str(line)
+    async with asyncio.timeout(20):
+        while words not in await turns_of(client, token, "cloud"):
+            await asyncio.sleep(0.05)
+
+
 async def bridged(comms: Comms, thread: str) -> None:
     async with asyncio.timeout(20):
         while not isinstance(comms.registry.snapshot().entry(thread).status, ConnectedThreadStatus):
@@ -555,9 +566,8 @@ async def test_a_message_taken_but_never_printed_is_replayed_once_the_ledger_pro
     """62380: a frozen watch took it, the socket died, and it was gone for good."""
     client, token = session
     frozen = await client.ws_connect(await watch_path(client, token, "cloud"))
-    await frozen.send_str(ledger_line())
     await bridged(comms, "cloud")
-    await asyncio.sleep(0.5)
+    await ledger_reported(frozen, client, token, "ledger in before the freeze")
     lost = comms.messaging.send("sender", "cloud", "taken, never printed").message
     shown = comms.messaging.send("sender", "cloud", "printed before the freeze").message
     assert [(await frame(frozen))["text"] for _ in range(2)] == [lost.body, shown.body]
@@ -579,9 +589,8 @@ async def test_a_fresh_containers_empty_ledger_proves_nothing(session, comms: Co
     under the same session id. That ledger never took the attempt, so its silence is no proof."""
     client, token = session
     reclaimed = await client.ws_connect(await watch_path(client, token, "cloud"))
-    await reclaimed.send_str(ledger_line())
     await bridged(comms, "cloud")
-    await asyncio.sleep(0.5)
+    await ledger_reported(reclaimed, client, token, "ledger in before the reclaim")
     comms.messaging.send("sender", "cloud", "printed in the reclaimed container")
     await frame(reclaimed)
     await inbox_emptied(comms, "cloud")
