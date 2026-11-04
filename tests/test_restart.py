@@ -18,7 +18,7 @@ from agent_comms.routing import NoTurnRouting
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.session_file import RegistrySessionLocation
 from native_backend_fixture import native_backend_fixture
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 async def test_real_idle_owner_is_replaced_without_losing_session(
@@ -28,7 +28,7 @@ async def test_real_idle_owner_is_replaced_without_losing_session(
         monkeypatch.setenv('AGENT_COMMS_AGENT_MODELS', 'response-local/fixture')
         comms = wire(native.root)
         with LaunchRoot.from_path(comms.root).selected():
-            comms.registry.declare(Thread(
+            comms.registry.declare(NativeThread(
                 'worker', frozenset(), Checkout(native.project), session_file=RegistrySessionLocation.from_path(str(native.session), comms.root)))
             comms.agents.observe_runtime_info('worker', ContextUsageObservation(
                 context_used=PiCount.from_wire(23)))
@@ -74,7 +74,7 @@ async def test_busy_owner_restart_queues_and_runs_at_idle(
         comms = wire(native.root)
         with LaunchRoot.from_path(comms.root).selected():
             session = RegistrySessionLocation.from_path(str(native.session), comms.root)
-            comms.registry.declare(Thread('worker', frozenset(), Checkout(native.project),
+            comms.registry.declare(NativeThread('worker', frozenset(), Checkout(native.project),
                                           session_file=session))
             owner = await asyncio.to_thread(comms.owners.ensure_owner, 'worker', agent_bin='pi')
             process = owner.require_process()

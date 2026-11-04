@@ -3,7 +3,7 @@ from agent_comms.nominal.field_codec import GoalId
 from agent_comms.messages import ConversationRole, Message, InfoKind
 from agent_comms.response_policy import ResponseEligibility, ResponsePolicy
 from agent_comms.routing import ScheduledTurn
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.goal_scope import OneGoal
 
 
@@ -61,7 +61,7 @@ def test_autonomous_turns_keep_message_batches_and_delivery_keys_separate(tmp_pa
     assert ScheduledTurn.take_batch([first, second, goal]) == ([first, second], [goal])
     assert ScheduledTurn.take_batch([direct, direct]) == ([direct], [direct])
 
-    owner = Thread("owner", frozenset(), Checkout(tmp_path))
+    owner = NativeThread("owner", frozenset(), Checkout(tmp_path))
     dispositions = InputDispositions(tmp_path)
     assert goal.origin.messages() == ()
     assert goal.origin.bus_keys(dispositions, owner) == ()

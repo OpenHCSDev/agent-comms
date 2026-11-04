@@ -37,8 +37,7 @@ from agent_comms.read_basis import ReadCursor
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
 from agent_comms.wake_policy import FullWake
-from agent_comms.thread_execution import ExternalThreadExecution
-from agent_comms.threads import Thread
+from agent_comms.threads import ExternalThread, NativeThread
 
 SENDER = "sender"  # the notification carries its sender's lookup; these tests read progress only
 
@@ -47,9 +46,9 @@ SENDER = "sender"  # the notification carries its sender's lookup; these tests r
 def archived_notification(tmp_path, *, thread_registration):
     old, live = (prepare_native_comms(wire(tmp_path / name)) for name in ("old", "live"))
     for comms in (old, live):
-        comms.registry.declare(Thread('sender', frozenset(), Checkout(tmp_path), created_at=10.0))
-        comms.registry.declare(Thread('reader', frozenset(), Checkout(tmp_path), created_at=11.0, role=AgentThreadRole if comms is old else UserThreadRole))
-        comms.registry.declare(Thread('agent', frozenset(), Checkout(tmp_path), created_at=12.0 if comms is old else 212.0))
+        comms.registry.declare(NativeThread('sender', frozenset(), Checkout(tmp_path), created_at=10.0))
+        comms.registry.declare(NativeThread('reader', frozenset(), Checkout(tmp_path), created_at=11.0, role=AgentThreadRole if comms is old else UserThreadRole))
+        comms.registry.declare(NativeThread('agent', frozenset(), Checkout(tmp_path), created_at=12.0 if comms is old else 212.0))
     root_id = old.registry.store.prepare_native_root().namespace
     messages = (
         publish_initial(old, "sender", "agent", "authored pending delivery"),
@@ -99,9 +98,9 @@ def test_harness_consumption_survives_human_display(archived_notification):
     # A Claude harness receives through a CLI bridge, so this case's agent is an external thread;
     # the UI then reads its dialogue through ThreadViewRead.external, not a native transcript.
     native = live.registry.require("agent")
-    live.registry.register(replace(native, execution=ExternalThreadExecution))
+    live.registry.register(native.as_member(ExternalThread))
     agent = live.registry.require("agent")
-    assert agent.execution is ExternalThreadExecution and agent.role is AgentThreadRole
+    assert type(agent) is ExternalThread and agent.role is AgentThreadRole
     assert agent.incarnation == native.incarnation
     # The human's own message to the agent is what the UI's human/agent dialogue page shows.
     shown = live.messaging.send_user_message(
@@ -458,10 +457,9 @@ def test_recorded_response_resolution_keeps_other_collective_lifecycles(
 def test_live_cli_ack_does_not_become_archived_ack(archived_notification):
     from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.agent_activity import RecipientActivity
-    from agent_comms.thread_execution import ExternalThreadExecution
 
     old, live, source, messages, _root_id = archived_notification
-    old.registry.declare(replace(old.registry.require("agent"), execution=ExternalThreadExecution))
+    old.registry.declare(old.registry.require("agent").as_member(ExternalThread))
     unread = old.bus.inbox("agent").page.messages
     lookup = old.registry.snapshot().threads["agent"].incarnation.require_recorded().lookup
     # The bridge's own path: the attempt and the claim step it proves commit together.

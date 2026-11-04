@@ -61,12 +61,11 @@ from agent_comms.order_tools import CommsTeamLoadTool, CommsHudTool, CommsTodoLi
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.slop import DeclarationDerivation, ExistingLine, Slop
-from agent_comms.thread_execution import ExternalThreadExecution, NativeThreadExecution
+from agent_comms.threads import ExternalThread, NativeThread, ForkThread
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
 from agent_comms.thread_text import ForkedParent, SubagentRole
-from agent_comms.threads import Thread
 from agent_comms.todos import (
     Assignment,
     DraftListedPullRequest,
@@ -94,9 +93,8 @@ from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.typed_table import HeldBusFile
 from agent_comms_hooks import forks
 from hook_session_fixture import resident_hook, resident_session, resident_stdout
-from cli_command import commander
+from cli_command import team
 from source_revision_fixture import SourceRepository
-from agent_comms.thread_execution import ForkExecution
 from agent_comms.goal_actions import ReissuedOrderGoalAction
 from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.todos import MergedProgress, NoCommitProgress
@@ -117,21 +115,19 @@ def fork_bus(tmp_path, configured_repository, monkeypatch):
     teammates = tuple((name, tmp_path / f"{name}-checkout") for name in ("worker", "other", "retained"))
     for name, worktree in teammates:
         source.git(source.checkout, "worktree", "add", "-q", "-b", f"{name}-work", str(worktree))
-    for name, worktree in (("lead", source.checkout), *teammates):
+    for name, worktree in (("colleague", source.checkout), *teammates):
         comms.registry.declare(
-            Thread(
+            ExternalThread(
                 name,
                 frozenset({"comms"}),
                 Checkout(worktree),
-                model=DeclaredModel("anthropic/claude-opus-4-6"),
-                execution=ExternalThreadExecution,
-            )
+                model=DeclaredModel("anthropic/claude-opus-4-6"))
         )
     comms.goals.update_goal(
-        "lead", SetGoalAction(text="Repair the teammate workflow", goal_id=request_goal_id)
+        "colleague", SetGoalAction(text="Repair the teammate workflow", goal_id=request_goal_id)
     )
     request = comms.goals.todos.add_request(
-        comms.registry.require("lead").incarnation, "Repair the teammate workflow"
+        comms.registry.require("colleague").incarnation, "Repair the teammate workflow"
     )
     configured_repository(comms, source)
     now = time.time()
@@ -146,14 +142,14 @@ def fork_bus(tmp_path, configured_repository, monkeypatch):
         at=RecordedEventTime(now),
         first_call_deadline=RecordedEventTime(now + 600),
     )
-    lead = comms.registry.require("lead")
+    colleague = comms.registry.require("colleague")
     comms.goals.todos.create(
         "P40",
         source.github,
         "Existing parent problem",
-        creator=lead,
+        creator=colleague,
         owner=comms.registry.require("retained"),
-        assigner=lead.incarnation,
+        assigner=colleague.incarnation,
         generation=retained_goal_id,
         review_at=RecordedEventTime(now + 600),
         order=replace(order, id=OrderId.mint()),
@@ -161,15 +157,15 @@ def fork_bus(tmp_path, configured_repository, monkeypatch):
     )
     copied = tmp_path / "copied-bus"
     StoreBackup.copy_tree(comms.root, copied)
-    # The forks run in lead's Claude session: one no hook registered takes lead as parent.
-    WatchClaim("lead-session").enrol(WatchRecord("lead", str(copied), (), tmp_path / "state"))
-    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "lead-session")
+    # The forks run in colleague's Claude session: one no hook registered takes colleague as parent.
+    WatchClaim("colleague-session").enrol(WatchRecord("colleague", str(copied), (), tmp_path / "state"))
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "colleague-session")
     return wire(copied), source, order
 
 
 def command(comms, *args):
     """Exercise the real parser and state without cold-importing Core for every verb."""
-    return commander("--root", str(comms.root), *args)
+    return team("--root", str(comms.root), *args)
 
 
 def process_command(comms, *args):
@@ -221,7 +217,7 @@ def document(path, order, problems=()):
 def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path, installed_runtime):
     comms, source, order = fork_bus
     store = comms.goals.todos
-    parent = comms.registry.require("lead")
+    parent = comms.registry.require("colleague")
     original = store.get("P40")
     store.apply(
         original.id,
@@ -240,7 +236,7 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     fork = comms.registry.require("fork-one")
     saved = store.get("P40")
     assert saved.creator_identity == parent.incarnation
-    assert store.owner_request(saved.request.require()).commander == parent.incarnation
+    assert store.owner_request(saved.request.require()).teammate == parent.incarnation
     assert saved.held().parent_identity == fork.incarnation
     assert saved.latest_message.actor == fork.incarnation
     assert fork.parent.named(parent.name)
@@ -255,12 +251,12 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     ctx = TeamContext.read_root(comms.root).model_copy(
         update={"actor": ForkCaller(fork.name)}
     )
-    frame = capture_frame(comms, parent.name, ProgressRead())
-    states = TeammateState.current(comms, parent.name, frame)
-    observed = TeamObservation(parent, frame, (), states)
-    asyncio.run(ObservedHeartbeat((observed,)).run(lambda: nullcontext(comms)))
+    frame = capture_frame(comms, ProgressRead())
+    states = TeammateState.current(comms, frame)
+    observed = TeamObservation(frame, (), states)
+    asyncio.run(ObservedHeartbeat(observed).run(lambda: nullcontext(comms)))
     hud = ctx.call(CommsHudTool(thread=ctx.actor_name))
-    assert hud.commander == parent.incarnation
+    assert hud.teammate == parent.incarnation
     assert [(unit.unit, tuple(order.problem for order in unit.orders)) for unit in hud.units] == [
         (saved.held().owner_identity, ("P40",))
     ]
@@ -269,16 +265,20 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     assert ctx.call(CommsTodoListTool(thread=ctx.actor_name)).todos == (saved,)
     load = ctx.call(CommsTeamLoadTool(thread=ctx.actor_name))
     assert load.load.owed == 1 and load.load.timers_up == 0 and load.load.unjudged == 0
-    refused = command(comms, "order", "send", "worker", body, "--fork", "fork-two")
-    assert refused.returncode != 0 and consent_refused(comms, "fork-two") in refused.stderr
-    assert store.get("P40") == saved
+    # Another fork of the same teammate corrects P40's order; worker keeps it under its goal.
+    corrected = command(comms, "order", "send", "worker", body, "--fork", "fork-two")
+    assert corrected.returncode == 0, corrected.stderr
+    resent = store.get("P40")
+    assert (resent.held().owner_identity, resent.held().generation) == (
+        saved.held().owner_identity, saved.held().generation)
+    saved = resent
     interim = tmp_path / "interim.txt"
     interim.write_text("The first review is complete; another check remains.")
     posted = command(comms, "order", "say", "#comms", str(interim), "--fork", "fork-one")
     assert posted.returncode == 0, posted.stderr
     assert comms.registry.status("fork-one").receiving
     assert store.get("P40") == saved
-    refused = command(comms, "order", "retire")
+    refused = command(comms, "order", "retire", "--as", "colleague")
     assert refused.returncode != 0 and "Only a teammate fork can retire" in refused.stderr
     retired = command(comms, "order", "retire", "--fork", "fork-one")
     assert retired.returncode == 0, retired.stderr
@@ -324,7 +324,7 @@ def record_edits(comms, source, count):
 def test_fork_and_parent_judge_show_same_unjudged_edits(fork_bus):
     comms, source, order = fork_bus
     record_edits(comms, source, 1)
-    own = command(comms, "judge", "show")
+    own = command(comms, "judge", "show", "--as", "colleague")
     fork = command(comms, "judge", "show", "--fork", "review-fork")
     for result in (own, fork):
         assert result.returncode == 0, result.stderr
@@ -335,8 +335,8 @@ def test_fork_and_parent_judge_show_same_unjudged_edits(fork_bus):
 def test_unjudged_reminder_names_each_order_with_edits(fork_bus):
     comms, source, _ = fork_bus
     record_edits(comms, source, Unjudged.limit + 1)
-    frame = capture_frame(comms, "lead", ProgressRead())
-    assert Unjudged.reason(comms, "lead", frame) == (
+    frame = capture_frame(comms, ProgressRead())
+    assert Unjudged.reason(comms, frame) == (
         f"{Unjudged.limit + 1} edits since each order's last head verdict: "
         f"retained P40 {Unjudged.limit + 1}")
 
@@ -386,10 +386,10 @@ def save_edit_order(comms, todo):
 def another_edit_order(comms):
     """A saved multi-order state, supported for records predating one-unit/one-order."""
     original = comms.goals.todos.get("P40")
-    lead = comms.registry.require("lead").incarnation
+    colleague = comms.registry.require("colleague").incarnation
     return Todo.ordered(
-        "P41", original.repo, "Independent second source change", lead,
-        Assignment.of(comms.registry.require("retained").incarnation, lead, GoalId.mint()),
+        "P41", original.repo, "Independent second source change", colleague,
+        Assignment.of(comms.registry.require("retained").incarnation, colleague, GoalId.mint()),
         RecordedEventTime(time.time() + 600),
         replace(original.order.checked(), id=OrderId.mint(),
                 at=RecordedEventTime(time.time() + 10)), original.request.require(),
@@ -423,7 +423,7 @@ def captured_edit_sources(comms, paths, session):
     return calls
 
 
-@pytest.mark.parametrize("execution", (NativeThreadExecution, ExternalThreadExecution))
+@pytest.mark.parametrize("execution", (NativeThread, ExternalThread))
 def test_edit_membership_preserves_native_and_external_foreign_records(edit_sources, tmp_path, execution):
     comms, source, foreign, primary = edit_sources
     scratch = StorageRule.load(comms.root).roots_of(comms.registry.require("retained")).scratch
@@ -439,7 +439,7 @@ def test_edit_membership_preserves_native_and_external_foreign_records(edit_sour
     before = comms.goals.todos.get("P40")
     holds, workplaces = edit_workplaces(comms)
     hold, = holds
-    holder = replace(hold.holder, execution=execution,
+    holder = hold.holder.as_member(execution,
                      session_file=RegistrySessionLocation.from_path(session, comms.root))
     read = OrderEditsRead(
         comms.root, holder, TurnsSince(before.order.checked().at.recorded_at("An order")),
@@ -573,10 +573,12 @@ def test_ambiguous_pre_pr_work_never_picks_latest(edit_sources, tmp_path):
     save_edit_order(comms, another_edit_order(comms))
     session = tmp_path / "ambiguous.jsonl"
     calls = captured_edit_sources(comms, (source.checkout / "owner.py", primary / "new.py"), session)
-    shown = command(comms, "judge", "show")
+    # One owned tree per teammate and repository: P41 reuses P40's allocated checkout, so
+    # edits in either tree belong to two held orders and neither is picked for review.
+    shown = command(comms, "judge", "show", "--as", "colleague")
     assert shown.returncode == 0, shown.stderr
-    assert calls[0][0] not in shown.stdout and calls[1][0] in shown.stdout
-    assert shown.stdout.splitlines()[-1] == "1 unjudged"
+    assert calls[0][0] not in shown.stdout and calls[1][0] not in shown.stdout
+    assert shown.stdout.splitlines()[-1] == "0 unjudged"
     assert all(not todo.judged_calls for todo in comms.goals.todos.board_history())
 
 
@@ -645,7 +647,7 @@ def test_a_sibling_fork_assigns_a_holder_whose_order_waits_on_install(fork_bus):
 def test_a_value_error_refusal_prints_instead_of_a_traceback(fork_bus):
     """The team CLI fails on the comms CLI's one failure set."""
     comms, _, _ = fork_bus
-    refused = command(comms, "order", "done", "retained", "P40")
+    refused = command(comms, "order", "done", "retained", "P40", "--as", "colleague")
     assert refused.returncode == 1
     assert refused.stderr.startswith("Refused: P40 has no merged pull request"), refused.stderr
 
@@ -669,7 +671,7 @@ def test_two_teammates_allocate_distinct_global_problem_ids(fork_bus, tmp_path):
         if todo.id != "P40"
     )
     assert {todo.id for todo in todos} == {"P41", "P42"}
-    assert {todo.creator for todo in todos} == {"lead"}
+    assert {todo.creator for todo in todos} == {"colleague"}
     assert {todo.held().parent for todo in todos} == {"fork-a", "fork-b"}
 
 
@@ -720,10 +722,10 @@ def occupied(holder, todo):
 
 
 def open_problem(comms, source, order, pid, owner):
-    """A problem the lead ordered to ``owner`` under its own order."""
-    lead = comms.registry.require("lead")
+    """A problem the colleague ordered to ``owner`` under its own order."""
+    colleague = comms.registry.require("colleague")
     return comms.goals.todos.create(
-        pid, source.github, f"Repair {pid}", creator=lead, assigner=lead.incarnation,
+        pid, source.github, f"Repair {pid}", creator=colleague, assigner=colleague.incarnation,
         owner=comms.registry.require(owner), generation=GoalId.mint(),
         review_at=RecordedEventTime(time.time() + 600), order=replace(order, id=OrderId.mint()),
         request=comms.goals.todos.get("P40").request.require(),
@@ -784,7 +786,7 @@ def test_unrelated_held_work_refuses_the_same_assigner(fork_bus, tmp_path):
     goal = comms.registry.require("worker").goal
     refused = command(comms, "order", "send", "worker",
                       document(tmp_path / "other.json", replace(order, id=OrderId.mint()),
-                               (fresh.id,)))
+                               (fresh.id,)), "--as", "colleague")
     assert refused.returncode != 0 and occupied("worker", held) in refused.stderr
     assert (store.get(fresh.id), store.get(held.id)) == (fresh, held)
     assert comms.registry.require("worker").goal == goal
@@ -816,13 +818,13 @@ def test_a_stale_later_member_rolls_back_the_written_first_member(fork_bus, tmp_
     store = comms.goals.todos
     first = released(comms, store.get("P40"))
     stale = released(comms, open_problem(comms, source, order, "P41", "other"))
-    lead = comms.registry.require("lead")
+    colleague = comms.registry.require("colleague")
     goal = comms.registry.require("worker").goal
     with pytest.raises(TodoConflict):
         comms.goals.update_goal("worker", OrderGoalAction(
             problem=first.id, expected_revision=first.revision,
             together=(ExpectedProblem(stale.id, stale.revision - 1),),
-            assigner=lead.incarnation, request=first.request.require(), review_at=RecordedEventTime(time.time() + 600),
+            assigner=colleague.incarnation, request=first.request.require(), review_at=RecordedEventTime(time.time() + 600),
             order=replace(order, id=OrderId.mint())))
     assert (store.get(first.id), store.get(stale.id)) == (first, stale)
     assert comms.registry.require("worker").goal == goal
@@ -867,7 +869,7 @@ def test_created_ids_live_only_on_todos_and_allocation_uses_numeric_index(fork_b
     direct_goal_id = GoalId.mint()
     comms, source, order = fork_bus
     store = comms.goals.todos
-    lead = comms.registry.require("lead")
+    colleague = comms.registry.require("colleague")
     retained = store.get("P40")
     issued = store.allocate_problem()
     assert issued == "P41"
@@ -875,8 +877,8 @@ def test_created_ids_live_only_on_todos_and_allocation_uses_numeric_index(fork_b
         issued,
         source.github,
         "Create a real problem",
-        creator=lead,
-        assigner=lead.incarnation,
+        creator=colleague,
+        assigner=colleague.incarnation,
         owner=comms.registry.require("other"),
         generation=created_goal_id,
         request=retained.request.require(),
@@ -890,8 +892,8 @@ def test_created_ids_live_only_on_todos_and_allocation_uses_numeric_index(fork_b
         "P120",
         source.github,
         "Exercise numeric ordering",
-        creator=lead,
-        assigner=lead.incarnation,
+        creator=colleague,
+        assigner=colleague.incarnation,
         owner=comms.registry.require("worker"),
         generation=direct_goal_id,
         request=retained.request.require(),
@@ -922,20 +924,20 @@ def test_fork_superseded_verdict_reads_its_teammates_orders(fork_bus):
     worker_goal_id = GoalId.mint()
     comms, source, order = fork_bus
     store = comms.goals.todos
-    lead = comms.registry.require("lead")
+    colleague = comms.registry.require("colleague")
     store.create(
         "P41",
         source.github,
         "Replacing parent problem",
-        creator=lead,
+        creator=colleague,
         owner=comms.registry.require("worker"),
-        assigner=lead.incarnation,
+        assigner=colleague.incarnation,
         generation=worker_goal_id,
         review_at=RecordedEventTime(time.time() + 600),
         order=replace(order, id=OrderId.mint()),
         request=store.get("P40").request.require(),
     )
-    comms.registry.register_child("fork-one", "lead", ForkExecution, comms.goals)
+    comms.registry.register_child("fork-one", "colleague", ForkThread, comms.goals)
     actor = ForkCaller("fork-one").identity(comms)
     current = store.get("P40")
     verdict = SupersededVerdict(
@@ -956,14 +958,14 @@ def test_fork_superseded_verdict_reads_its_teammates_orders(fork_bus):
 def subagent_bridge(durable_home: Path, fork_bus: tuple[Comms, SourceRepository, PendingProblemOrder],
                     tmp_path: Path) -> Iterator[ClaudeBridge]:
     """Own a real binding; a shell wrapper must not hide a resident callback's wrong bus."""
-    with resident_session(fork_bus[0], tmp_path / "state", "lead", "lead-session") as bridge:
+    with resident_session(fork_bus[0], tmp_path / "state", "colleague", "colleague-session") as bridge:
         yield bridge
 
 
 @pytest.fixture
 def subagent_hook(subagent_bridge: ClaudeBridge, tmp_path: Path) -> "tuple[Comms, partial[str]]":
     return subagent_bridge.comms, partial(
-        resident_stdout, subagent_bridge, transcript=tmp_path / "lead-session.jsonl",
+        resident_stdout, subagent_bridge, transcript=tmp_path / "colleague-session.jsonl",
         agent_id="a1", agent_type="general-purpose")
 
 
@@ -973,7 +975,7 @@ def test_a_subagent_start_registers_its_fork_and_a_resume_reuses_the_archived_th
     told = json.loads(run(SubagentStartRequest))["hookSpecificOutput"]
     assert "--fork claude-a1" in told["additionalContext"]
     fork = comms.registry.require("claude-a1")
-    assert fork.parent.named("lead") and comms.registry.status("claude-a1").receiving
+    assert fork.parent.named("colleague") and comms.registry.status("claude-a1").receiving
     assert comms.agents.activity.current(fork.name).state is ActivityState.THINKING
     assert run(ReadGateRequest, tool_name="Bash", tool_input={"command": "pwd"}) == ""
     activity = comms.agents.activity.current(fork.name)
@@ -990,13 +992,12 @@ def test_a_subagent_start_registers_its_fork_and_a_resume_reuses_the_archived_th
 
 def test_a_hook_registered_fork_stays_its_sessions_child_under_another_recorded_team(
         subagent_hook, tmp_path):
-    """The bus records lead as the team lead; a fork the hook registered under a peer lead's
+    """The bus records colleague as the team colleague; a fork the hook registered under a peer colleague's
     session acts through a team verb and stays that peer's child."""
     comms, _ = subagent_hook
-    comms.registry.declare(Thread("peer", frozenset({"comms", TeammatesTag.declared_name}),
-                                  comms.registry.require("lead").worktree,
-                                  model=DeclaredModel("anthropic/claude-opus-4-6"),
-                                  execution=ExternalThreadExecution))
+    comms.registry.declare(ExternalThread("peer", frozenset({"comms", TeammatesTag.declared_name}),
+                                  comms.registry.require("colleague").worktree,
+                                  model=DeclaredModel("anthropic/claude-opus-4-6")))
     # A bound session answers its hooks only through its own resident bridge.
     with resident_session(comms, tmp_path / "peer-state", "peer", "peer-session") as peer:
         resident_stdout(peer, SubagentStartRequest, tmp_path / "peer.jsonl",
@@ -1028,7 +1029,7 @@ def test_a_sent_back_stop_ends_a_fork_that_recorded_nothing_and_reports_it_missi
     assert json.loads(run(SubagentStopRequest, stop_hook_active=False))["decision"] == "block"
     assert run(SubagentStopRequest, stop_hook_active=True) == ""
     assert isinstance(comms.registry.status("claude-a1"), ArchivedThreadStatus)
-    report, = comms.bus.bus.latest_addressed(frozenset({"claude-a1"}), frozenset({"lead"}))
+    report, = comms.bus.bus.latest_addressed(frozenset({"claude-a1"}), frozenset({"colleague"}))
     assert "stopped without recording what it found" in report.body
 
 
@@ -1036,18 +1037,18 @@ def test_a_team_session_end_ends_each_subagent_core_still_has(subagent_hook, sub
     """A subagent killed without a SubagentStop ends with its session, once."""
     comms, run = subagent_hook
     run(SubagentStartRequest)
-    subagents = tmp_path / "lead-session" / "subagents"
+    subagents = tmp_path / "colleague-session" / "subagents"
     subagents.mkdir(parents=True)
     for agent in ("a1", "never-joined"):
         (subagents / f"agent-{agent}.jsonl").write_text("")
     session = SessionSubagents.decode({
-        "session_id": "lead-session", "hook_event_name": "SessionEnd",
-        "transcript_path": str(tmp_path / "lead-session.jsonl")})
+        "session_id": "colleague-session", "hook_event_name": "SessionEnd",
+        "transcript_path": str(tmp_path / "colleague-session.jsonl")})
     for _ in range(2):
         assert session.end_subagents(comms, subagent_bridge.binding) == ()
         assert isinstance(comms.registry.status("claude-a1"), ArchivedThreadStatus)
     assert "claude-never-joined" not in comms.registry
-    report, = comms.bus.bus.latest_addressed(frozenset({"claude-a1"}), frozenset({"lead"}))
+    report, = comms.bus.bus.latest_addressed(frozenset({"claude-a1"}), frozenset({"colleague"}))
     assert "its work is missing" in report.body
 
 
@@ -1074,8 +1075,7 @@ def test_an_untagged_peers_sdk_children_keep_real_ids_and_parent_delegation(
         for agent in ("a2", "a3"):
             told = json.loads(run(SubagentStartRequest, agent_id=agent))["hookSpecificOutput"]
             assert f"--fork claude-{agent}" in told["additionalContext"]
-            child = comms.registry.require(f"claude-{agent}")
-            child.execution.require_fork()
+            child = comms.registry.require_member(f"claude-{agent}", ForkThread)
             assert child.parent.named("worker")
             assert comms.registry.status(child.name).receiving
         assert run(ReadGateRequest, agent_id="a2", tool_name="Read",
@@ -1127,7 +1127,7 @@ def test_only_a_subagent_slot_is_retired_and_a_stopped_stranger_is_no_slot(fork_
     comms = fork_bus[0]
     with pytest.raises(RelationViolationError, match="not a declared subagent"):
         SubagentCaller("worker").retire(comms)
-    comms.registry.declare(Thread("other-explore", frozenset(), Checkout(Path("/tmp")),
+    comms.registry.declare(NativeThread("other-explore", frozenset(), Checkout(Path("/tmp")),
                                   parent=ForkedParent("other")), status=StoppedThreadStatus())
     with pytest.raises(RelationViolationError, match="not a declared subagent"):
         comms.registry.claim_slot("other", SubagentRole("Explore"), comms.goals)
@@ -1138,7 +1138,7 @@ def test_a_sent_message_is_not_refused_when_its_delivery_read_is_busy(fork_bus, 
         raise CoordinationReadUnavailable(CoordinationReadUnavailable.busy_message)
 
     comms = fork_bus[0]
-    sent = comms.messaging.send("lead", "worker", "Published before its delivery read").message
+    sent = comms.messaging.send("colleague", "worker", "Published before its delivery read").message
     monkeypatch.setattr(MessageNotification, "references", busy)
     reported = Team.read_root(comms.root).delivery(sent.reference)
     assert reported == f"delivery unread: {CoordinationReadUnavailable.busy_message}"

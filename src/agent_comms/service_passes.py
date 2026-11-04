@@ -58,7 +58,7 @@ class FailingPass:
 @dataclass(frozen=True)
 class ServicePasses:
     failing: dict[str, FailingPass] = field(default_factory=dict)
-    commander_completed: dict[RecordedThreadIncarnation, float] = field(default_factory=dict)
+    teammate_completed: dict[RecordedThreadIncarnation, float] = field(default_factory=dict)
     """Last observation completed for each teammate, including quiet observations."""
 
     def failure_lines(self, now: float) -> tuple[str, ...]:
@@ -66,10 +66,10 @@ class ServicePasses:
         return tuple(f'{failure.failure_line(watch)} ({RecordedEventTime(failure.since).age(now)})'
                      for watch, failure in sorted(self.failing.items()))
 
-    def heartbeat_completed_at(self, commander: RecordedThreadIncarnation) -> EventTime:
+    def heartbeat_completed_at(self, recipient: RecordedThreadIncarnation) -> EventTime:
         """The original completion clock, or its declared unrecorded state."""
-        if commander in self.commander_completed:
-            return RecordedEventTime(self.commander_completed[commander])
+        if recipient in self.teammate_completed:
+            return RecordedEventTime(self.teammate_completed[recipient])
         return UnrecordedEventTime()
 
     def heartbeat_current(self, heartbeat: EventTime) -> bool:
@@ -144,19 +144,19 @@ class ServicePassStore(SingleFileStore, DurableFile, LockedStore[ServicePasses],
             )
 
     def heartbeat_passed(
-        self, commanders: Iterable[ThreadIncarnation], registered: Iterable[ThreadIncarnation]
+        self, recipients: Iterable[ThreadIncarnation], registered: Iterable[ThreadIncarnation]
     ) -> None:
         """Only a retired incarnation loses its completion; a missed live one keeps it."""
         current = frozenset(registered)
-        completed = {owner.require_recorded(): time.time() for owner in commanders}
+        completed = {owner.require_recorded(): time.time() for owner in recipients}
 
         def change(passes: ServicePasses) -> DocumentChange[ServicePasses, ServicePasses]:
-            retained = {owner: at for owner, at in passes.commander_completed.items()
+            retained = {owner: at for owner, at in passes.teammate_completed.items()
                         if owner in current}
             updated = retained | completed
             return DocumentChange.to(
-                passes if updated == passes.commander_completed
-                else replace(passes, commander_completed=updated)
+                passes if updated == passes.teammate_completed
+                else replace(passes, teammate_completed=updated)
             )
 
         self.update(change)

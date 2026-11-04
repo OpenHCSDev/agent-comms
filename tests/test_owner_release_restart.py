@@ -30,7 +30,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.owner_restart import FencedOwnerBatch, StoppedOwnerFailure
 from agent_comms.store_files import ExclusiveLock, StoreLockContention, _store_lock
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 def wait_for(path: Path) -> None:
@@ -79,7 +79,7 @@ def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
     from agent_comms.child_process import NoProcess, ProcessIdentity
 
     comms = wire(tmp_path / "wire")
-    declared = comms.registry.declare(Thread('worker', frozenset(), Checkout(tmp_path)))
+    declared = comms.registry.declare(NativeThread('worker', frozenset(), Checkout(tmp_path)))
     generation = comms.registry.snapshot().claim_generation(declared.name)
     comms.owners.stop(declared.name)
     snapshot = comms.registry.snapshot()
@@ -90,7 +90,7 @@ def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
     assert not release.current(snapshot, declared, generation)
     assert snapshot.claim_generation(declared.name) > generation
 
-    waiting = comms.registry.declare(Thread('waiting', frozenset(), Checkout(tmp_path)))
+    waiting = comms.registry.declare(NativeThread('waiting', frozenset(), Checkout(tmp_path)))
     before = comms.registry.snapshot().claim_generation(waiting.name)
     comms.registry.register(
         replace(waiting, process_identity=ProcessIdentity.capture(os.getpid())),

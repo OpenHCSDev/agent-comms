@@ -25,7 +25,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import ReviewTimerUp
 from agent_comms.repo import Checkout, GitCommandError, Repo
 from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.threads import ExternalThread, ForkThread
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.thread_text import ForkedParent
 from agent_comms.task_attachments.team_pings import TeamUpdate, TeammatePing
@@ -51,7 +51,6 @@ from agent_comms.ui_model.teammate_state import (
 from agent_comms.work_branches import WorkBranchError
 from source_revision_fixture import SourceRepository
 from test_holder_standing_rules import blocked_holder, publish, state_cards
-from agent_comms.thread_execution import ForkExecution
 
 pytest_plugins = ("test_holder_standing_rules", "test_proof_build")
 
@@ -145,7 +144,7 @@ def test_teammate_state_family_uses_real_records(held_bus, tmp_path, request, me
         elif member is Detached:
             comms.registry.register(comms.registry.require(teammate), StoppedThreadStatus())
         elif member is AwaitingTeam:
-            publish(comms, teammate, "lead", time.time() - AwaitingTeam.seconds - 1)
+            publish(comms, teammate, "colleague", time.time() - AwaitingTeam.seconds - 1)
         elif member is Stuck:
             with comms.goals.todos.writing() as db:
                 for todo in comms.goals.todos.held_orders():
@@ -171,7 +170,7 @@ def test_teammate_state_family_uses_real_records(held_bus, tmp_path, request, me
                     todo.id,
                     DeliverTodo(
                         todo.revision,
-                        comms.registry.require("lead").incarnation,
+                        comms.registry.require("colleague").incarnation,
                         OperationDelivery(at=RecordedEventTime(time.time())),
                         todo.order.id,
                     ),
@@ -196,9 +195,9 @@ def test_teammate_state_family_uses_real_records(held_bus, tmp_path, request, me
             pass  # Assigned work, before its first-call deadline.
         else:
             pytest.fail(f"New TeammateState needs its real-record scenario: {member}")
-        frame = capture_frame(comms, "lead", ProgressRead())
+        frame = capture_frame(comms, ProgressRead())
         assert tuple(ReviewTimerUp.conditions(comms, frame)) == frame.review_timers
-        states = TeammateState.current(comms, "lead", frame)
+        states = TeammateState.current(comms, frame)
         (state,) = (state for state in states if state.unit.name == teammate)
         assert isinstance(state, member)
         assert state.unit == comms.registry.require(teammate).incarnation
@@ -218,7 +217,7 @@ def test_teammate_state_family_uses_real_records(held_bus, tmp_path, request, me
 
 def test_started_turn_on_delivered_order_is_moving_not_stalled(held_bus):
     turn_turn_id = NativeTurnId('turn')
-    worker = replace(held_bus.registry.require("worker"), execution=ExternalThreadExecution)
+    worker = held_bus.registry.require("worker").as_member(ExternalThread)
     held_bus.registry.register(worker)
     ExternalTranscript(held_bus.root, worker.incarnation).finish(
         turn_id=turn_turn_id,
@@ -238,7 +237,7 @@ def test_started_turn_on_delivered_order_is_moving_not_stalled(held_bus):
         (state,) = (
             state
             for state in TeammateState.current(
-                held_bus, "lead", capture_frame(held_bus, "lead", ProgressRead())
+                held_bus, capture_frame(held_bus, ProgressRead())
             )
             if state.unit.name == "worker"
         )
@@ -259,19 +258,19 @@ def test_claim_is_a_team_question_not_a_verified_delivery(held_bus, claim_order)
 def test_a_stopped_child_holding_no_order_gets_no_card(held_bus):
     """Being a teammate's child earns no card: an order or a receiving executor does
     (cl49, ready, drafts and fork-triage sat on the HUD as Idle cards for five days)."""
-    child = replace(held_bus.registry.require("outsider"), parent=ForkedParent("lead"))
+    child = replace(held_bus.registry.require("outsider"), parent=ForkedParent("colleague"))
     held_bus.registry.register(child, StoppedThreadStatus())
     with LaunchRoot.from_path(held_bus.root).selected():
         states = TeammateState.current(
-            held_bus, "lead", capture_frame(held_bus, "lead", ProgressRead()))
+            held_bus, capture_frame(held_bus, ProgressRead()))
     assert child.incarnation not in {state.unit for state in states}
 
 
 def test_fork_gets_no_teammate_card(held_bus):
-    fork = held_bus.registry.register_child("judge-fork", "lead", ForkExecution, held_bus.goals)
+    fork = held_bus.registry.register_child("judge-fork", "colleague", ForkThread, held_bus.goals)
     with LaunchRoot.from_path(held_bus.root).selected():
         states = TeammateState.current(
-            held_bus, "lead", capture_frame(held_bus, "lead", ProgressRead()))
+            held_bus, capture_frame(held_bus, ProgressRead()))
     assert fork.incarnation not in {state.unit for state in states}
 
 
@@ -287,7 +286,7 @@ def test_only_the_same_call_failing_twice_is_spinning(held_bus, errors, paths, s
     with LaunchRoot.from_path(held_bus.root).selected():
         recorded_turn(held_bus, errors, paths)
         states = TeammateState.current(
-            held_bus, "lead", capture_frame(held_bus, "lead", ProgressRead()))
+            held_bus, capture_frame(held_bus, ProgressRead()))
         (state,) = (state for state in states if state.unit.name == "worker")
         assert isinstance(state, Spinning) is spinning
 
@@ -323,12 +322,12 @@ def test_failed_object_preparation_is_canonical_unread_progress_not_a_normal_car
     Repo.git(directory, "config", f"branch.{branch}.merge", "refs/heads/main")
     plans = TeamHeartbeat()
     with LaunchRoot.from_path(held_bus.root).selected():
-        prepared = TeamInputs.prepare(held_bus, "lead", ProgressRead(), plans)
+        prepared = TeamInputs.prepare(held_bus, held_bus.registry.snapshot().team_project.require(), ProgressRead(), plans)
         progress = prepared.pulls.progress((todo,), held_bus.registry)[todo.id]
         assert isinstance(progress, UnreadProgress)
         assert str(directory) in progress.reason and str(missing) in progress.reason
         observed = TeamObservation.read(
-            held_bus, held_bus.registry.require("lead"), prepared, plans=plans)
+            held_bus, prepared, plans=plans)
     (unread,) = (state for state in observed.states if state.unit.name == todo.held().owner)
     assert isinstance(unread, Unreadable)
     assert progress.reason == unread.reason
@@ -344,9 +343,9 @@ def test_failed_object_preparation_is_canonical_unread_progress_not_a_normal_car
 def test_heartbeat_keeps_every_teammate_when_one_checkout_is_unreadable(
     held_bus, tmp_path, primary, broken_metadata, installed_runtime
 ):
-    lead = replace(held_bus.registry.require("lead"),
+    colleague = replace(held_bus.registry.require("colleague"),
                    process_identity=ProcessIdentity.capture(os.getpid()))
-    held_bus.registry.register(lead)
+    held_bus.registry.register(colleague)
     primary_order = held_bus.goals.todos.get("P1")
     healthy_source = SourceRepository.create(tmp_path / "healthy-source", primary_order.repo)
     outsider = replace(held_bus.registry.require("outsider"), worktree=Checkout(healthy_source.checkout))
@@ -354,13 +353,13 @@ def test_heartbeat_keeps_every_teammate_when_one_checkout_is_unreadable(
     checked = primary_order.order.checked()
     held_bus.goals.update_goal("outsider", CreateProblemGoalAction(
         problem="P3", request=primary_order.request.require(),
-        assigner=lead.incarnation, repo=primary_order.repo, text="Independent healthy work",
+        assigner=colleague.incarnation, repo=primary_order.repo, text="Independent healthy work",
         review_at=RecordedEventTime(time.time() + 3600),
         order=replace(checked, id=OrderId.mint(),
                       check=replace(checked.check, directory=outsider.project_path)),
     ))
     with LaunchRoot.from_path(held_bus.root).selected():
-        baseline = observe_team(held_bus, lead, ProgressRead())
+        baseline = observe_team(held_bus, ProgressRead())
         healthy, = (card for card in baseline.states if card.unit == outsider.incarnation)
         if primary:
             checkout = checked.check.directory
@@ -370,7 +369,7 @@ def test_heartbeat_keeps_every_teammate_when_one_checkout_is_unreadable(
             unread_checkout(held_bus, tmp_path)
         if not broken_metadata:
             (held_bus.registry.require("worker").project_path / ".git").unlink()
-        observed = observe_team(held_bus, lead, ProgressRead())
+        observed = observe_team(held_bus, ProgressRead())
         cards = observed.states
         worker, = (card for card in cards if card.unit.name == "worker")
         assert {card.unit.name for card in cards} >= {"worker", "outsider"}
@@ -383,12 +382,12 @@ def test_heartbeat_keeps_every_teammate_when_one_checkout_is_unreadable(
             assert worker.reason == str(source_failure.value)
         else:
             assert not isinstance(worker, Unreadable)
-        asyncio.run(ObservedHeartbeat((observed,)).run(lambda: nullcontext(held_bus)))
-        expected = current_hud(held_bus, lead.name, observed.frame, cards)
+        asyncio.run(ObservedHeartbeat(observed).run(lambda: nullcontext(held_bus)))
+        expected = current_hud(held_bus, colleague.name, observed.frame, cards)
         published, = TeamFrame.read_all(held_bus.root)
         assert published == expected
         assert tuple(unit.unit for unit in published.units) == tuple(card.unit for card in cards)
-        packets = TeamUpdate.latest(held_bus, lead.incarnation)
+        packets = TeamUpdate.latest(held_bus, colleague.incarnation)
         assert tuple(ping for packet in packets for ping in packet.handled
                      if isinstance(ping, TeammatePing)) == tuple(
             TeammatePing.capture(card) for card in cards if card.attention())

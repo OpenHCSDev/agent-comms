@@ -16,7 +16,7 @@ from agent_comms.goals import Goal
 from agent_comms.nominal.field_codec import GoalId, TurnId
 from agent_comms.repo import Checkout
 from agent_comms.thread_identity import RecordedThreadIncarnation, TurnIdentity
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.turn_failure import BackendFailed, FailedTurnResolution, FinalStopMissing
 from agent_comms.turn_lease import FinishedTurn, StoredTurnRecord, TurnLeaseFence
 
@@ -28,11 +28,10 @@ def bound(tmp_path, *, thread_registration):
     store = GoalAttemptStore.initialize(root)
     goal_id = GoalId.mint()
     goal = Goal("private goal prose", goal_id, published_seq=0, revision=2)
-    owner = Thread(
+    owner = NativeThread(
         'owner', frozenset(), Checkout(Path('/private-worktree')),
         process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0,
-        goal=goal, turn_generation=7, turn_record=FinishedTurn(TurnId('a' * 32)),
-    )
+        goal=goal, turn_generation=7, turn_record=FinishedTurn(TurnId('a' * 32)))
     store.create_goal(goal.id)
     permit = store.claim_launch(store.reserve(goal.id, 1))
     identity = TurnIdentity(owner.incarnation, 7)

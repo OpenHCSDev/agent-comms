@@ -257,7 +257,7 @@ class TeammateState(UndatedStandingRule, FamilyScan, declared_name=None):
 
     @classmethod
     def scan_observed(
-        cls, comms: Comms, commander: str, observed: Sequence[TeammateState], frame: HeartbeatFrame
+        cls, comms: Comms, observed: Sequence[TeammateState], frame: HeartbeatFrame
     ) -> tuple[Self, ...]:
         # States are already read; ordinary scans consume them rather than emit them again.
         return ()
@@ -281,7 +281,7 @@ class TeammateState(UndatedStandingRule, FamilyScan, declared_name=None):
 
     @classmethod
     def observations(
-        cls, comms: Comms, commander: str, frame: HeartbeatFrame
+        cls, comms: Comms, frame: HeartbeatFrame
     ) -> tuple[TeammateObservation, ...]:
         snapshot, now = comms.registry.snapshot(), time.time()
         held = frame.holders
@@ -305,8 +305,7 @@ class TeammateState(UndatedStandingRule, FamilyScan, declared_name=None):
         candidates = tuple(
             reading
             for reading in readings
-            if reading.thread.name != commander
-            for _ in reading.thread.execution.independent_threads(reading.thread)
+            for _ in reading.thread.independent_threads()
         )
         eligible = set(held)
         eligible.update(
@@ -317,8 +316,8 @@ class TeammateState(UndatedStandingRule, FamilyScan, declared_name=None):
         return tuple(reading for reading in readings if reading.thread.incarnation in eligible)
 
     @classmethod
-    def current(cls, comms: Comms, commander: str, frame: HeartbeatFrame) -> tuple[TeammateState, ...]:
-        states = tuple(cls.read(source) for source in cls.observations(comms, commander, frame))
+    def current(cls, comms: Comms, frame: HeartbeatFrame) -> tuple[TeammateState, ...]:
+        states = tuple(cls.read(source) for source in cls.observations(comms, frame))
         return tuple(sorted(states, key=lambda state: state.declared_position()))
 
     @classmethod
@@ -441,7 +440,7 @@ class Detached(NeedsTeamAttention, TeammateState):
 
 
 @dataclass(frozen=True)
-class AwaitingTeam(NeedsTeamAttention, TeammateState, declared_name="awaiting_commander"):
+class AwaitingTeam(NeedsTeamAttention, TeammateState, declared_name="awaiting_team"):
     seconds: ClassVar[int] = 5 * 60
     question = "it asked you. why is it still waiting?"
     action = "answer the original message"

@@ -13,14 +13,14 @@ from agent_comms.page_traversal import LiveCursor
 from agent_comms.read_basis import ConversationCursor, NamedViewer, ReadCursor
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.routing import DeliveryScope
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 @pytest.fixture
 def routed(comms, tmp_path):
     comms.channels.create_tag("team")
     for name in ("sender", "recipient"):
-        comms.registry.declare(Thread(name, frozenset({"team"}), Checkout(tmp_path)))
+        comms.registry.declare(NativeThread(name, frozenset({"team"}), Checkout(tmp_path)))
     return comms
 
 
@@ -52,9 +52,8 @@ def test_current_inbox_bulk_and_index_exclude_rebound_history(routed, rebound):
     original = comms.registry.require(rebound)
     comms.registry.unregister(rebound)
     comms.registry.remove(rebound)
-    comms.registry.declare(Thread(
-        rebound, original.tags, original.worktree,
-    ))
+    comms.registry.declare(NativeThread(
+        rebound, original.tags, original.worktree))
     new = comms.messaging.send("sender", "recipient", "current input").message
     comms.messaging.send("sender", "#team", "current channel input")
     current = wire(comms.root)

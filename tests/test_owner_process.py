@@ -35,7 +35,7 @@ from agent_comms.restart_scope import OwnersNamed
 from agent_comms.session_file import NoSessionFile
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_text import GivenThreadText
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.turn_failure import BackendFailed
 from delivery_owner_fixture import canonical_agent
 from fixture_git import IDENTITY
@@ -52,7 +52,7 @@ async def native_workers(tmp_path, native_runtime_package, source_programs):
 
 async def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path, native_workers) -> None:
     comms = wire(native_workers.root)
-    declared = Thread('worker', frozenset(), Checkout(tmp_path), task=GivenThreadText('retained task'))
+    declared = NativeThread('worker', frozenset(), Checkout(tmp_path), task=GivenThreadText('retained task'))
     comms.registry.declare(declared)
     (first,) = await Coordination.run_worker(partial(
         comms.owners.start_many, ("worker",), agent_bin=GivenBinary("pi"), agent_args=GivenArguments(()),
@@ -135,7 +135,7 @@ async def test_team_memory_stays_under_its_cap(tmp_path, native_workers, owner_c
         return result
     try:
         for name in names:
-            comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path),
+            comms.registry.declare(NativeThread(name, frozenset(), Checkout(tmp_path),
                                           model=DeclaredModel("response-local/fixture")))
             await Coordination.run_worker(partial(
                 comms.owners.start_many, (name,),
@@ -224,7 +224,7 @@ def test_stale_stored_birth_does_not_signal_real_process(tmp_path: Path) -> None
     try:
         comms = wire(tmp_path)
         comms.registry.declare(
-            Thread('stale', frozenset(), Checkout(tmp_path), process_identity=replace(child.identity, start_time=child.identity.start_time + 1))
+            NativeThread('stale', frozenset(), Checkout(tmp_path), process_identity=replace(child.identity, start_time=child.identity.start_time + 1))
         )
         with pytest.raises(RelationViolationError):
             comms.owners.restart_owners(OwnersNamed(("stale",)))
@@ -301,7 +301,7 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
             client = canonical_agent(comms, agent_bin=GivenBinary(str(package / 'dist' / 'cli.js')), auto_wake=False)
             lifetime.push_async_callback(client.shutdown)
             catalog = client.inputs.configuration.catalog_for(ThinkingLevelConfigOption)
-            return await catalog.choices(Thread('catalog', frozenset(), Checkout(tmp_path), model=DeclaredModel(model)))
+            return await catalog.choices(NativeThread('catalog', frozenset(), Checkout(tmp_path), model=DeclaredModel(model)))
 
     declared_options = await thinking_options()
     thinking = compile_decoder(ThinkingLevelField).decode(declared_options[0].value)
@@ -350,7 +350,7 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
             goals = comms.goals.open_goal_store()
             goals.create_goal(goal.id)
             goals.reserve(goal.id, 1).fail(goals, FailedTurnResolution(BackendFailed))
-            comms.registry.declare(Thread(name, frozenset({name}), Checkout(tmp_path), model=DeclaredModel(model), thinking_level=thinking, goal=goal, task=GivenThreadText('retained task ' + name)))
+            comms.registry.declare(NativeThread(name, frozenset({name}), Checkout(tmp_path), model=DeclaredModel(model), thinking_level=thinking, goal=goal, task=GivenThreadText('retained task ' + name)))
             with monkeypatch.context() as patch:
                 patch.setenv("BATCH_OWNER_CREDENTIAL", credential)
                 patch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / (name + "-config")))

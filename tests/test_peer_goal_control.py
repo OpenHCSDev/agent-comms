@@ -10,7 +10,7 @@ from agent_comms.goal_states import ModelPause, PausedGoal
 from agent_comms.goals import NoGoal
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.repo import Checkout
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import invoke_tool
 
@@ -19,7 +19,7 @@ OWNER, PEER = ThreadCaller("owner"), ThreadCaller("peer")
 
 def _owner_goal(comms) -> dict:
     for name in ("owner", "peer"):
-        comms.registry.declare(Thread(name=name, tags=frozenset(), worktree=Checkout(Path("/wt"))))
+        comms.registry.declare(NativeThread(name=name, tags=frozenset(), worktree=Checkout(Path("/wt"))))
     return invoke_tool(comms, "comms_set_goal", {"text": "keep working"}, caller=OWNER)["goal"]
 
 

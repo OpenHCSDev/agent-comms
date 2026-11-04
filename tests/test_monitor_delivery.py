@@ -1,6 +1,7 @@
 """Session-owned parts, not stdout writes, confirm monitor delivery."""
 from pathlib import Path
 from agent_comms.repo import Checkout
+from collections.abc import Callable
 from contextlib import asynccontextmanager, contextmanager, suppress
 from agent_comms.cli_bridges.shared import CoreWatchEnded, core_watch_failure
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError, MaintenanceOperator
@@ -62,13 +63,12 @@ from agent_comms.runtime_updates import (
 )
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.external_transcript import ExternalTurnInput
-from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.threads import ExternalThread, NativeThread
 from agent_comms.messages import AlertKind, InfoKind, Message, NoticeRole, QuestionKind
 from agent_comms.channel_targets import ThreadTarget
 from agent_comms.diagnostics import record_terminal_failure
 from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.turn_failure import BackendFailed
-from agent_comms.threads import Thread
 
 
 async def stored_attempts(bridge) -> tuple[HarnessDelivery, ...]:
@@ -80,7 +80,7 @@ async def stored_attempts(bridge) -> tuple[HarnessDelivery, ...]:
 @pytest.mark.asyncio
 async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp_path):
     declare_test_bus(comms, threads=tuple(
-        Thread(name, frozenset(), Checkout(tmp_path)) for name in ('viewer', 'peer')
+        NativeThread(name, frozenset(), Checkout(tmp_path)) for name in ('viewer', 'peer')
     ))
     before = comms.messaging.send('peer', 'viewer', 'before this session was bound').message
     state = tmp_path / 'bridge-state'
@@ -127,10 +127,10 @@ async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp
 @pytest.fixture
 def bridge(comms, tmp_path):
     declare_test_bus(comms, threads=(
-        Thread('claude-code', frozenset(), Checkout(tmp_path)),
+        NativeThread('claude-code', frozenset(), Checkout(tmp_path)),
         # A production bridge's session is external: its answers live in the external store.
-        Thread('viewer', frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution),
-        Thread('peer', frozenset(), Checkout(tmp_path)),
+        ExternalThread('viewer', frozenset(), Checkout(tmp_path)),
+        NativeThread('peer', frozenset(), Checkout(tmp_path)),
     ))
     practice = PracticeCopy(comms.root, tmp_path / 'copied-bus')
     practice.include(tuple(RootFile.existing_in(practice.root)))
@@ -330,9 +330,9 @@ def coordination(comms):
 def native_viewer(tmp_path):
     """A native-root bus whose external viewer is a committed coordination participant."""
     comms = prepare_native_comms(wire(tmp_path / 'wire'))
-    comms.registry.declare(Thread('peer', frozenset(), Checkout(tmp_path)))
-    viewer = comms.registry.declare(Thread(
-        'viewer', frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution))
+    comms.registry.declare(NativeThread('peer', frozenset(), Checkout(tmp_path)))
+    viewer = comms.registry.declare(ExternalThread(
+        'viewer', frozenset(), Checkout(tmp_path)))
     lookup = viewer.incarnation.require_recorded().lookup
     root_id = comms.registry.store.prepare_native_root().namespace
     with coordination(comms) as store:
@@ -1044,7 +1044,8 @@ async def confirm_and_finish_reply(
 async def test_diagnostic_notice_is_consumed_without_replying_to_the_failed_sender(bridge, reply_end):
     diagnostic = record_terminal_failure(
         bridge.comms.root, subject=InputId.mint(), thread='peer',
-        failure=BackendFailed, sequences=(), source_error=RuntimeError('native request failed'))
+        failure=BackendFailed('native request failed'), sequences=(),
+        source_error=RuntimeError('native request failed'))
     message = bridge.comms.messaging.send(
         'peer', 'viewer', f'Request failed. No automatic retry. [Open diagnostic]({diagnostic.as_uri()})',
         AlertKind, role=NoticeRole()).message
@@ -1074,14 +1075,14 @@ async def test_confirmed_human_direct_request_receives_one_reply(bridge, reply_e
 
 
 def test_independent_sessions_share_the_delivered_message_reply_policy(comms, tmp_path):
-    """Storage lead and peer follow the same original-message reply policy."""
+    """Storage colleague and peer follow the same original-message reply policy."""
     from agent_comms.registry_document import RegisteredTeamProject
     from agent_comms.runtime_updates import ReplyingThreadOutput
 
-    lead, teammate = (comms.registry.declare(Thread(
-        name, frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution)) for name in ("lead", "teammate"))
-    comms.registry.set_team_project(RegisteredTeamProject(lead.incarnation, ()))
-    for speaker, sender in ((lead, teammate), (teammate, lead)):
+    colleague, teammate = (comms.registry.declare(ExternalThread(
+        name, frozenset(), Checkout(tmp_path))) for name in ("colleague", "teammate"))
+    comms.registry.set_team_project(RegisteredTeamProject(()))
+    for speaker, sender in ((colleague, teammate), (teammate, colleague)):
         output = ReplyingThreadOutput.for_comms(comms.transcripts.external(speaker.name), comms)
         original = comms.messaging.send(sender.name, speaker.name, "Open this answer", QuestionKind).message
         turn = NativeTurnId(f"{speaker.name}-turn")
@@ -1091,8 +1092,8 @@ def test_independent_sessions_share_the_delivered_message_reply_policy(comms, tm
             f"{speaker.name} answers", timestamp=1.0, position=item_id),)))
         output.end_turn(turn)
     replies = tuple((message.target, message.body) for message in comms.bus.bus.message_history()
-                    if message.body in {"lead answers", "teammate answers"})
-    assert replies == (("teammate", "lead answers"), ("lead", "teammate answers"))
+                    if message.body in {"colleague answers", "teammate answers"})
+    assert replies == (("teammate", "colleague answers"), ("colleague", "teammate answers"))
 
 
 @pytest.mark.parametrize(('rows', 'parts'), (

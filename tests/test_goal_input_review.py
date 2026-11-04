@@ -27,7 +27,7 @@ from agent_comms.tools import CommsGoalTool, CommsInboxTool
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.read_basis import NamedViewer
 from stored_inputs import stored_inputs
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.goal_scope import OneGoal
 
 
@@ -39,7 +39,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     comms = wire(tmp_path / "wire")
     for name in ("worker", "parent", "other"):
         comms.registry.declare(
-            Thread(name, frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+            NativeThread(name, frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
     comms.agents.begin_turn("parent", TurnId('aa7988bb017ade70857b6b2966e64ea2'))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Delegate and wait"))
@@ -132,13 +132,13 @@ def test_standby_excludes_retained_rebound_history_but_retains_rename(tmp_path, 
     comms = installed_comms(tmp_path)
     for name in ("worker", "parent"):
         comms.registry.declare(
-            Thread(name, frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+            NativeThread(name, frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
     old = comms.messaging.send("parent", "worker", "Old incarnation").message
     comms.registry.unregister(rebound)
     comms.registry.remove(rebound)
     comms.registry.declare(
-        Thread(rebound, frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+        NativeThread(rebound, frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     comms.agents.begin_turn("parent", TurnId('18ab1892f9f48635ac465d11156044ce'))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Current goal"))
@@ -170,7 +170,7 @@ def test_standby_accepts_inbox_keys_delivered_since_the_inbox_cut(tmp_path, monk
     comms = wire(tmp_path / "wire")
     for name in ("worker", "parent"):
         comms.registry.declare(
-            Thread(name, frozenset(), Checkout(tmp_path),
+            NativeThread(name, frozenset(), Checkout(tmp_path),
                    process_identity=ProcessIdentity.capture(os.getpid()))
         )
     comms.agents.begin_turn("parent", TurnId('aa7988bb017ade70857b6b2966e64ea2'))

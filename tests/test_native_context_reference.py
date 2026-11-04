@@ -46,7 +46,7 @@ from agent_comms.selected_triage import (
     FullSelectedTriage,
     IgnoreSelectedTriage,
 )
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.native_session_reopen import PiSessionId
 
 
@@ -152,7 +152,7 @@ def native_source(recorded):
 def test_cursor_owner_enforces_exact_settlement_without_restricting_refresh(
     tmp_path, recorded, native_source, make_owner, permitted,
 ):
-    thread = Thread("owner", frozenset(), Checkout(tmp_path))
+    thread = NativeThread("owner", frozenset(), Checkout(tmp_path))
     original = replace(
         recorded, owner_lookup=thread.incarnation.require_recorded().lookup,
         verdict=DecidedTriageRecord(IgnoreSelectedTriage),
@@ -216,7 +216,7 @@ def test_a_restarted_claim_advances_past_the_inputs_its_earlier_claim_sent(
     tmp_path, recorded, native_source,
 ):
     """Every install mints a new claim; the thread's cursor and its inputs stay its own."""
-    thread = Thread("owner", frozenset(), Checkout(tmp_path))
+    thread = NativeThread("owner", frozenset(), Checkout(tmp_path))
     lookup = thread.incarnation.require_recorded().lookup
     root = FieldCodec.decode(RootId, "a" * 32)
     sent = replace(recorded, owner_lookup=lookup, verdict=DecidedTriageRecord(IgnoreSelectedTriage))
@@ -261,7 +261,7 @@ def test_a_retried_participant_generation_advances_past_the_inputs_its_earlier_a
     tmp_path, recorded, native_source,
 ):
     """A retry advances the participant generation (selected_participant.py prepare_attempt); same participant."""
-    thread = Thread("owner", frozenset(), Checkout(tmp_path))
+    thread = NativeThread("owner", frozenset(), Checkout(tmp_path))
     lookup = thread.incarnation.require_recorded().lookup
     root = FieldCodec.decode(RootId, "a" * 32)
     sent = replace(recorded, owner_lookup=lookup, verdict=DecidedTriageRecord(IgnoreSelectedTriage))

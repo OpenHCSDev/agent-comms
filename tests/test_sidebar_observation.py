@@ -21,7 +21,7 @@ from agent_comms.registry_document import HistoricalRootPurpose, ThreadRows
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.ui_model.sidebar import SidebarModel
 from agent_comms.ui_model.unread import ExactUnread, UnobservedUnread
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 def test_sidebar_apply_and_failure_publish_their_original_answers(comms):
@@ -48,9 +48,8 @@ def test_sidebar_apply_and_failure_publish_their_original_answers(comms):
 @pytest.fixture
 def declare_reference(comms):
     def declare(name="reference", status=StoppedThreadStatus()):
-        return comms.registry.declare(Thread(
-            name=name, tags=frozenset(), worktree=Checkout(comms.root.parent),
-        ), status=status)
+        return comms.registry.declare(NativeThread(
+            name=name, tags=frozenset(), worktree=Checkout(comms.root.parent)), status=status)
     return declare
 
 

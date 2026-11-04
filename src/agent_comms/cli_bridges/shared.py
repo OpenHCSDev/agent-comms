@@ -72,13 +72,12 @@ from agent_comms.registration import Registration
 from agent_comms.runtime_updates import HiddenItem, ReplyingThreadOutput, RuntimeUpdate, ThreadOutput
 from agent_comms.turn_item import NoSourceTurn, SourceTurn
 from agent_comms.send_result import SendResult
-from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.threads import ExternalThread
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.task_attachments.team_pings import TeamUpdate
 from agent_comms.thread_status import ThreadStatus
 from agent_comms.thread_text import AbsentText, GivenText, TextChoice
 from agent_comms.repo import Checkout
-from agent_comms.threads import Thread
 from agent_comms.typed_table import (
     Column,
     DurableTables,
@@ -711,10 +710,9 @@ class NoChannelSource(AbsentText, BindingChannels):
     """An independent endpoint starts without copied channel membership."""
 
     async def register(self, bridge: CliBridge) -> None:
-        thread = Thread(
+        thread = ExternalThread(
             bridge.address.bus, frozenset(), await bridge.session_worktree(),
-            process_identity=bridge.session_process(), execution=ExternalThreadExecution,
-        )
+            process_identity=bridge.session_process())
         await bridge.comms.bus.when_open(partial(bridge.comms.registry.declare, thread))
 
 
@@ -722,9 +720,8 @@ class NoChannelSource(AbsentText, BindingChannels):
 class Watch(Inbox):
     help = "Deliver this binding's bus messages and publish its harness transcript to the bus"
 
-    # Retained external CLI/record spelling; this supplies channels, never authority.
-    commander: Annotated[
-        BindingChannels, field_codec.Argument(flags=("--commander",))
+    channels_from: Annotated[
+        BindingChannels, field_codec.Argument(flags=("--channels-from",))
     ] = NoChannelSource()
 
     @classmethod
@@ -736,7 +733,7 @@ class Watch(Inbox):
 
     async def register(self, bridge: CliBridge) -> None:
         if not bridge.comms.registry.snapshot().taken(bridge.address.bus):
-            await self.commander.register(bridge)
+            await self.channels_from.register(bridge)
 
     async def start(self, bridge: TranscriptBridge, tasks: asyncio.TaskGroup,
                     endpoint: ExitStack) -> None:

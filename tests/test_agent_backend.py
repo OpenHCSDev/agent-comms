@@ -20,7 +20,7 @@ from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.native_arguments import NativeArguments
 from agent_comms.pi_durable_backend import PiDurableBackend
 from agent_comms.pi_native_backend import PI_0_85_1_EVENT_KINDS, PiNativeBackend, PiSessionFile
-from agent_comms.threads import Thread
+from agent_comms.threads import Thread, NativeThread
 from agent_comms.unstarted_runtime import UnstartedRuntime
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.session_file import NoSessionFile, RegistrySessionLocation
@@ -50,7 +50,7 @@ def test_a_backend_declared_after_sealing_fails_loud():
     (NoSessionFile(), UnstartedRuntime(PiNativeBackend)),
 ])
 def test_runtime_location_round_trip_uses_declared_backend(session_file, location, *, thread_registration):
-    thread = thread_registration.declare(Thread('location', frozenset(), Checkout(Path('/home/ts/wt/test')), session_file=session_file))
+    thread = thread_registration.declare(NativeThread('location', frozenset(), Checkout(Path('/home/ts/wt/test')), session_file=session_file))
     restored = FieldCodec.decode(Thread, FieldCodec.encode(thread))
     restored = replace(restored, session_file=restored.session_file.bound_to(Path("/home/ts/wt")))
     assert restored.runtime == location
@@ -210,7 +210,7 @@ def test_pi_event_family_matches_pi_0_85_1_when_imported_fresh():
 
 
 def test_thread_declares_its_backend_once_and_keeps_it_on_reregistration(*, thread_registration):
-    thread = thread_registration.declare(Thread('owner', frozenset(), Checkout(Path('/tmp/owner'))))
+    thread = thread_registration.declare(NativeThread('owner', frozenset(), Checkout(Path('/tmp/owner'))))
     assert thread.backend is PiNativeBackend
     encoded = FieldCodec.encode(thread)
     assert "backend" not in encoded
@@ -230,8 +230,8 @@ def test_cli_registry_reads_do_not_load_the_pi_runtime(tmp_path):
         [sys.executable, "-c", (
             "import sys, agent_comms.cli\n"
             "from pathlib import Path\n"
-            "from agent_comms.threads import Thread\n"
-            "Thread('a', frozenset(), '/tmp').backend\n"
+            "from agent_comms.threads import NativeThread\n"
+            "NativeThread('a', frozenset(), '/tmp').backend\n"
             "assert 'agent_comms.backend' not in sys.modules\n"
             "assert 'agent_comms.tracked_turn' not in sys.modules\n"
             "assert 'agent_comms.turn_watchdog' not in sys.modules\n"
@@ -258,10 +258,9 @@ async def test_runner_obtains_one_backend_per_session_from_the_thread_declaratio
     )
     try:
         for name in ("session", "other"):
-            thread = comms.registry.declare(Thread(
+            thread = comms.registry.declare(NativeThread(
                 name, frozenset(), Checkout(comms.root.parent), model=DeclaredModel('p/m'),
-                process_identity=ProcessIdentity.capture(os.getpid()),
-            ))
+                process_identity=ProcessIdentity.capture(os.getpid())))
             await agent.sessions.bind_owned(thread, AcpSessionId(name))
         session = agent.inputs.state("session").owned()
         other = agent.inputs.state("other").owned()

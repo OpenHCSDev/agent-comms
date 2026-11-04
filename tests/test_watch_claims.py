@@ -19,7 +19,7 @@ from agent_comms.cli_bridges.session_watch import (
 )
 
 RECORD = WatchRecord(
-    "lead", "/bus", ("agent-comms-claude-bridge", "watch", "--state", "/bus with spaces"),
+    "colleague", "/bus", ("agent-comms-claude-bridge", "watch", "--state", "/bus with spaces"),
     Path("/bus with spaces"),
 )
 

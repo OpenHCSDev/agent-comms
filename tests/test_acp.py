@@ -39,7 +39,7 @@ from agent_comms.native_arguments import GivenArguments
 from agent_comms.pi_counts import PiCount
 from agent_comms.read_basis import NamedViewer
 from agent_comms.thread_model import DeclaredModel
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from conftest import installed_comms
 from delivery_owner_fixture import canonical_agent
 
@@ -243,7 +243,7 @@ class TestHandlers:
 
     async def test_new_session_starts_after_existing_wire_history(self, tmp_path, native_runtime_package):
         agent = canonical_agent(wire(tmp_path / "wire"))
-        agent._comms.registry.declare(Thread(name='peer', tags=frozenset(), worktree=Checkout(Path('/wt'))))
+        agent._comms.registry.declare(NativeThread(name='peer', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         agent._comms.messaging.send("peer", "#all", "old message")
         response = await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         assert agent._comms.bus.inbox(response.session_id).page.messages == ()
@@ -364,7 +364,7 @@ class TestHandlers:
     async def test_cancel_preserves_unbound_inbox(self, tmp_path, native_runtime_package):
         agent = self._agent(tmp_path)
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
-        agent._comms.registry.declare(Thread(name='peer', tags=frozenset(), worktree=Checkout(Path('/wt'))))
+        agent._comms.registry.declare(NativeThread(name='peer', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         agent._comms.messaging.send("peer", "proj", "hello")
         await agent.cancel(session_id="proj")
         assert agent._comms.bus.pending_count("proj") == 1
@@ -489,8 +489,8 @@ class TestLiveDrain:
 class TestFullHistory:
     def test_full_history_is_everything_in_order(self, tmp_path):
         comms = installed_comms(tmp_path / "wire")
-        comms.registry.declare(Thread(name='a', tags=frozenset({'x'}), worktree=Checkout(Path('/wt'))))
-        comms.registry.declare(Thread(name='b', tags=frozenset(), worktree=Checkout(Path('/wt'))))
+        comms.registry.declare(NativeThread(name='a', tags=frozenset({'x'}), worktree=Checkout(Path('/wt'))))
+        comms.registry.declare(NativeThread(name='b', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         comms.messaging.send("a", "#all", "one")
         comms.messaging.send("a", "b", "dm")
         comms.messaging.send("b", "#x", "tagged")
@@ -504,10 +504,9 @@ class TestActivityLayer:
         from agent_comms.presentation import WireRevision
         from agent_comms.turn_phase import ToolRunningPhase
 
-        wired.registry.declare(Thread(
+        wired.registry.declare(NativeThread(
             "activity-owner", frozenset(), Checkout(wired.root),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-        ))
+            process_identity=ProcessIdentity.capture(os.getpid())))
         owner = wired.agents.begin_turn(
             "activity-owner", TurnId('fb5e210a764598099d8e8d358c83aadc')
         )
@@ -571,7 +570,7 @@ class TestTargetPrefix:
 
     async def test_dm_prompt_reaches_only_target(self, wired, native_runtime_package):
         agent = canonical_agent(wired)
-        wired.registry.declare(Thread(name='peer', tags=frozenset(), worktree=Checkout(Path('/wt'))))
+        wired.registry.declare(NativeThread(name='peer', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         await agent.prompt(
             session_id="proj", prompt=[TextContentBlock(type="text", text="@peer hi peer")]

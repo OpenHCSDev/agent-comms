@@ -55,7 +55,7 @@ class UnansweredTeammateAsks(SenderMessages):
 
     @classmethod
     def for_orders(
-        cls, source: BusReader, snapshot: RegistrySnapshot, commander: str,
+        cls, source: BusReader, snapshot: RegistrySnapshot, teammate: str,
         held: Mapping[ThreadIncarnation, Sequence[Todo]], before: float,
     ) -> dict[ThreadIncarnation, tuple[Message, ...]]:
         if not held:
@@ -66,7 +66,7 @@ class UnansweredTeammateAsks(SenderMessages):
             for todos in held.values() for todo in todos
         )
         questions = cls(
-            RepliesDisplayScope(snapshot.names_for(commander), peers), since, before,
+            RepliesDisplayScope(snapshot.names_for(teammate), peers), since, before,
         ).read_opened(source)
         return {
             owner: tuple(message for message in questions

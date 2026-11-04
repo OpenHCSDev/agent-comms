@@ -234,7 +234,7 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
         A birthless member (Core's watcher) carries its own authority."""
         return self
 
-    def commands(self, creator: ThreadIncarnation) -> bool:
+    def acts_for(self, creator: ThreadIncarnation) -> bool:
         """Shared work maintenance; this does not authorize taking its holder's work."""
         return creator == self.acting_identity
 
@@ -320,7 +320,7 @@ class RecordedThreadIncarnation(ThreadIncarnation, ParticipantIdentity):
     def answerable(self, owners: Sequence[ThreadIncarnation]) -> tuple[ThreadLookup, ...]:
         """Its own receipts, and those of every owner it acts for."""
         return (self.lookup, *(owner.require_recorded().lookup
-                               for owner in owners if self.commands(owner)))
+                               for owner in owners if self.acts_for(owner)))
 
     def acting_for(self, authority: ThreadIncarnation) -> ForkIdentity:
         return ForkIdentity(self.name, self.created_at, authority)
@@ -357,9 +357,9 @@ class ForkIdentity(RecordedThreadIncarnation):
     def acting_identity(self) -> ThreadIncarnation:
         return self.authority.acting_identity
 
-    def commands(self, creator: ThreadIncarnation) -> bool:
+    def acts_for(self, creator: ThreadIncarnation) -> bool:
         """A fork acts with its parent's authority, a teammate peer's included."""
-        return self.authority.commands(creator)
+        return self.authority.acts_for(creator)
 
     @property
     def represented_owners(self) -> tuple[ThreadIncarnation, ...]:
@@ -374,7 +374,7 @@ class PeerIdentity(RecordedThreadIncarnation):
     Storage selection remains explicit; the recorded incarnation names who acted.
     """
 
-    def commands(self, creator: ThreadIncarnation) -> bool:
+    def acts_for(self, creator: ThreadIncarnation) -> bool:
         return True
 
 
@@ -437,7 +437,7 @@ class CoreWatcherIncarnation(BirthlessIncarnation):
     WIRE_BIRTH: ClassVar[float] = -2.0
     hands_out_released_work: ClassVar[bool] = True
 
-    def commands(self, creator: ThreadIncarnation) -> bool:
+    def acts_for(self, creator: ThreadIncarnation) -> bool:
         """Core maintains shared work, but owns no colleague's assignment or receipts."""
         return True
 
@@ -645,7 +645,7 @@ class ThreadRole(DeclaredFamily, ProjectionSource, affix="ThreadRole"):
     def independent_threads(cls, thread: Thread) -> tuple[Thread, ...]:
         """Derive work actors from this role's executors and their declared independence."""
         return tuple(peer for executor in cls.executor(thread)
-                     for peer in executor.execution.independent_threads(executor))
+                     for peer in executor.independent_threads())
 
     @classmethod
     def allows_automatic_reply(cls) -> bool:

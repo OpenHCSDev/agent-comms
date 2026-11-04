@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import os
+import time
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
-from .channel_targets import Tag
+from .channel_targets import DeclaredTag, Tag
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .context_segments.wake_values import WakeWorkContext
 from .nominal.declared_family import DeclaredFamily
@@ -51,7 +53,6 @@ from .repo import Checkout, RepositoryReads
 from .session_file import NoSessionFile, SessionFile
 from .task_sources import TaskScope
 from .thread_creation import CreationSeconds, CreationTime, GeneratedCreationTime
-from .thread_execution import NativeThreadExecution, ThreadExecution
 from .thread_identity import (
     AgentThreadRole,
     ObservedTurn,
@@ -72,19 +73,77 @@ from .thread_model import (
     UndeclaredModel,
     UnselectedModel,
 )
+from .thread_presentation import (
+    ThreadOwnerBinding,
+    ThreadPresentation,
+    UnavailableThreadOwnerBinding,
+)
+from .thread_status import ServiceThreadStatus, ThreadStatus
 from .thread_storage import (
     AssignedStorageRoots,
-    StoragePath,
     ThreadStorage,
     UnassignedThreadStorage,
 )
 from .thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
+from .activity import ObservedActivity
 from .turn_lease import FinishedTurn, NoTurnRecord, TurnLease, TurnLeaseFence, TurnRecord, TurnState
 
 if TYPE_CHECKING:
     from .goal_management import Goals
-    from .launch_runtime import ThreadLaunch
+    from .registry_document import RegistrySnapshot
     from .storage_rules import StorageRule
+
+
+class ThreadCommandAvailability:
+    @classmethod
+    def available_for(cls, status: ThreadStatus, *, process: ProcessState) -> bool:
+        return True
+
+    @classmethod
+    def available_for_thread(cls, thread: Thread, status: ThreadStatus) -> bool:
+        return cls.available_for(status, process=thread.process_identity)
+
+
+class NativeOwnerCommand(ThreadCommandAvailability):
+    @classmethod
+    def available_for_thread(cls, thread: Thread, status: ThreadStatus) -> bool:
+        return thread.native_command_available(cls, status)
+
+
+class OwnerLifecycleControl(ThreadCommandAvailability):
+    @classmethod
+    def available_for(cls, status: ThreadStatus, *, process: ProcessState) -> bool:
+        return status.allows_owner_control()
+
+
+class StartOwnerControl(OwnerLifecycleControl):
+    @classmethod
+    def available_for(cls, status: ThreadStatus, *, process: ProcessState) -> bool:
+        return status.allows_owner_start(process=process)
+
+
+class ArchiveOwnerControl(OwnerLifecycleControl):
+    @classmethod
+    def available_for(cls, status: ThreadStatus, *, process: ProcessState) -> bool:
+        return status.stopped
+
+
+class ConversationPreparation[T](ABC):
+    @abstractmethod
+    def native(self) -> T: ...
+
+    @abstractmethod
+    def external(self) -> T: ...
+
+
+class NoChannelInbox:
+    """A producer or parent-bound child has no independent channel inbox."""
+
+    __slots__ = ()
+
+    def channel_recipients(self) -> tuple[Thread, ...]:
+        return ()
+
 
 
 @dataclass(frozen=True)
@@ -262,8 +321,15 @@ class ThreadCatalogFile(DurableFile, PatternFile):
 
 
 @dataclass(frozen=True, slots=True)
-class Thread(ThreadProvenance, CatalogSelection):
-    """Declares one agent thread's identity and provenance."""
+class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread"):
+    """Declares one agent thread's identity and provenance; each member is how it executes.
+
+    The registration owns transport intent; presence does not imply an RPC.
+    """
+
+    family_discriminator: ClassVar[str] = "execution"
+    # What a refusal says when an operation needs this member and the thread is another.
+    required_refusal: ClassVar[str] = "This thread does not have the execution this needs."
 
     @property
     def acting_identity(self) -> ThreadIncarnation:
@@ -321,9 +387,6 @@ class Thread(ThreadProvenance, CatalogSelection):
     ] = False
     role: Annotated[type[ThreadRole], RegistrationPolicy(ThreadRole)] = (
         AgentThreadRole
-    )
-    execution: Annotated[type[ThreadExecution], WireOmitDefault()] = field(
-        default=NativeThreadExecution, kw_only=True
     )
     turn_record: TurnRecord = field(default_factory=NoTurnRecord)
     channel_scope_generation: int = 0
@@ -423,8 +486,79 @@ class Thread(ThreadProvenance, CatalogSelection):
     def turn_state(self) -> TurnState:
         return self.turn_record.state()
 
-    def restart_candidates(self, status):
-        return self.execution.restart_candidates(self, status)
+    def restart_candidates(self, status: ThreadStatus) -> tuple[Thread, ...]:
+        return ()
+
+    def teammate(self) -> str:
+        """The teammate whose turn this thread works in: its board, its authority and its
+        requests. An independent session is its own."""
+        return self.name
+
+    def prepare_conversation[T](self, preparation: ConversationPreparation[T]) -> T:
+        return preparation.external()
+
+    def native_command_available(self, command: type[ThreadCommandAvailability],
+                                 status: ThreadStatus) -> bool:
+        return False
+
+    def registered_status(self, requested: ThreadStatus) -> ThreadStatus:
+        """The lifecycle a registration installs; Core launched this owner."""
+        return requested
+
+    def withdrawn(self) -> Thread:
+        """Unregistered: no session runs anywhere, so the row keeps no process binding."""
+        return replace(self, process_identity=NoProcess())
+
+    def order_candidates(self) -> tuple[Thread, ...]:
+        """Ready executors with a free goal slot; idle time is not consent to replace work."""
+        return tuple(candidate for executor in self.role.executor(self)
+                     for ready in self.work_state.candidates(executor)
+                     for candidate in ready.goal.work_candidates(ready))
+
+    def channel_recipients(self) -> tuple[Thread, ...]:
+        """The thread receives channel messages independently of its parent."""
+        return (self,)
+
+    def independent_threads(self) -> tuple[Thread, ...]:
+        """An independent session owns its actions, regardless of its fork ancestry;
+        only an executable role contributes one."""
+        return self.role.executor(self)
+
+    def forks(self) -> tuple[Thread, ...]:
+        """The thread when it is a fork working inside its teammate's turn."""
+        return ()
+
+    def owner_binding(self, snapshot: RegistrySnapshot) -> ThreadOwnerBinding:
+        return UnavailableThreadOwnerBinding()
+
+    def presentation(self, status: ThreadStatus, ordinary: ThreadPresentation,
+                     binding: ThreadOwnerBinding) -> ThreadPresentation:
+        return ordinary
+
+    def holds_activity(self, status: ThreadStatus) -> bool:
+        """An executing native turn keeps its last activity current."""
+        return self.executing
+
+    def project_activity(self, activity: ObservedActivity) -> ObservedActivity:
+        """External participants report their own activity events."""
+        return activity
+
+    @classmethod
+    def stored[Kind: Thread](cls: type[Kind], thread: ThreadProvenance) -> Kind:
+        """The one narrowing of a stored declaration to the member an operation needs: a
+        registry holds threads as stored data, so their member is tested here, once."""
+        if isinstance(thread, cls):
+            return thread
+        raise RelationViolationError(cls.required_refusal)
+
+    def same_execution(self, other: Thread) -> bool:
+        """Two declarations of one member; the class is the execution's identity."""
+        return type(self) is type(other)
+
+    def as_member(self, member: type[Thread], **changes: object) -> Thread:
+        """The same declaration under another execution; replace() keeps the class."""
+        return member(**{**{item.name: getattr(self, item.name) for item in fields(self)
+                            if item.init}, **changes})
 
     def require_restart_owner(self, status) -> None:
         if not self.restart_candidates(status):
@@ -493,11 +627,6 @@ class Thread(ThreadProvenance, CatalogSelection):
     def process_alive(self) -> bool:
         return self.process_identity.alive()
 
-    @classmethod
-    def require_declaration(cls, value: Thread) -> None:
-        if type(value) is not cls:
-            raise ValueError("live owner requires an exact thread declaration")
-
     def same_local_process(self, process: ProcessIdentity) -> bool:
         return self.process_identity == process
 
@@ -545,7 +674,7 @@ class Thread(ThreadProvenance, CatalogSelection):
         """
         def launch(thread: Thread):
             return (thread.incarnation, thread.process_identity, thread.role, thread.runtime,
-                    thread.worktree, thread.execution, thread.model, thread.thinking_level)
+                    thread.worktree, type(thread), thread.model, thread.thinking_level)
         return launch(self) == launch(other)
 
     def same_turn(self, other: Thread) -> bool:
@@ -662,17 +791,132 @@ class Thread(ThreadProvenance, CatalogSelection):
         return FieldCodec.encode(self)
 
 
+class NativeThread(Thread):
+    __slots__ = ()
+    required_refusal = "This participant checks its CLI inbox; it has no native prompt transport."
+
+    def native_command_available(self, command: type[ThreadCommandAvailability],
+                                 status: ThreadStatus) -> bool:
+        return command.available_for(status, process=self.process_identity)
+
+    def restart_candidates(self, status: ThreadStatus) -> tuple[Thread, ...]:
+        if self.process_identity.runs_here():
+            return ()
+        return status.restart_candidates(self)
+
+    def prepare_conversation[T](self, preparation: ConversationPreparation[T]) -> T:
+        return preparation.native()
+
+    def owner_binding(self, snapshot: RegistrySnapshot) -> ThreadOwnerBinding:
+        return snapshot.status(self.name).native_owner_binding(snapshot, self)
+
+    def presentation(self, status: ThreadStatus, ordinary: ThreadPresentation,
+                     binding: ThreadOwnerBinding) -> ThreadPresentation:
+        return status.native_presentation(self.process_identity, ordinary, binding)
+
+    def project_activity(self, activity: ObservedActivity) -> ObservedActivity:
+        """A running native owner displays its current turn phase."""
+        return self.turn_record.read().project_activity(activity)
+
+
+class ExternalThread(Thread):
+    __slots__ = ()
+    required_refusal = "Only an external CLI can publish a bridge process."
+
+    def withdrawn(self) -> Thread:
+        """The CLI bridge owns its binding and releases it as that process leaves
+        (Registration.external_process); unregistering never frees the endpoint for a
+        second bridge while the first still reads."""
+        return self
+
+    def registered_status(self, requested: ThreadStatus) -> ThreadStatus:
+        return requested.external_registered(self, time.time())
+
+    def presentation(self, status: ThreadStatus, ordinary: ThreadPresentation,
+                     binding: ThreadOwnerBinding) -> ThreadPresentation:
+        return status.external_presentation(self.process_identity, ordinary)
+
+
+class ServiceThread(NoChannelInbox, Thread):
+    """A platform publisher has neither a prompt executor nor a CLI bridge."""
+
+    __slots__ = ()
+
+    def registered_status(self, requested: ThreadStatus) -> ThreadStatus:
+        return ServiceThreadStatus()
+
+
+class SubagentThread(ExternalThread, declared_name="subagent_execution"):
+    """A child working inside its parent session's turn: it reads its CLI inbox, holds no
+    order and has no independent card, and starts with inherited channel membership."""
+
+    __slots__ = ()
+    required_refusal = "This thread is not a declared subagent."
+
+    def holds_activity(self, status: ThreadStatus) -> bool:
+        """The occupied registration lasts until SubagentStop or SessionEnd retires it."""
+        return status.receiving
+
+    def registered_status(self, requested: ThreadStatus) -> ThreadStatus:
+        return requested
+
+    def order_candidates(self) -> tuple[Thread, ...]:
+        """A child works inside its parent's turn and never holds an order."""
+        return ()
+
+    def independent_threads(self) -> tuple[Thread, ...]:
+        """A genuine in-turn child acts through its parent, not as another session."""
+        return ()
+
+    def teammate(self) -> str:
+        """A genuine in-turn child works inside its parent's turn."""
+        parent, = self.parent.names()
+        return parent
+
+    @classmethod
+    def child_of(cls, parent: Thread, child: Thread) -> Thread:
+        return replace(child, tags=DeclaredTag.for_child(parent.tags))
+
+    @classmethod
+    def child_goal(cls, goals: Goals, parent: Thread) -> Callable[[Thread], GoalDeclaration]:
+        return lambda prepared: prepared.goal
+
+
+
+class ForkThread(NoChannelInbox, SubagentThread, declared_name="fork_execution"):
+    """An SDK child borrows its bound parent's context and records its own fork goal.
+
+    Any independent parent can declare it; the stored execution identity stays stable.
+    """
+
+    __slots__ = ()
+    required_refusal = "This thread is not a declared teammate fork."
+
+    def forks(self) -> tuple[Thread, ...]:
+        return (self,)
+
+    @classmethod
+    def child_of(cls, parent: Thread, child: Thread) -> Thread:
+        """A fork acts for its teammate, so it carries every tag the teammate carries,
+        #teammates included: it is seen where its teammate is."""
+        return replace(child, tags=parent.tags)
+
+    @classmethod
+    def child_goal(cls, goals: Goals, parent: Thread) -> Callable[[Thread], GoalDeclaration]:
+        return lambda prepared: goals.fork_goal(parent, prepared)
+
+
+
 def current_thread(registry) -> Thread:
     """Declare the current thread from its owner launch environment."""
     launch = ThreadLaunch.current()
-    return Thread(
+    return NativeThread(
         name=launch.name,
         tags=launch.tags,
         worktree=launch.worktree,
         parent=launch.parent,
         task=launch.task,
-        process_identity=ProcessIdentity.capture(os.getpid()),
-    )
+        process_identity=ProcessIdentity.capture(os.getpid()))
 
 
 # Thread's backend field is the lookup boundary. Declare both implementations

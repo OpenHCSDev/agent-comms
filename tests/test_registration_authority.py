@@ -20,13 +20,13 @@ from agent_comms.thread_identity import UserThreadRole
 from agent_comms.thread_text import GivenThreadText
 from agent_comms.turn_lease import RecordedGeneration
 from agent_comms.turn_phase import PreparingPhase
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 def registered(root):
     g_goal_id = GoalId.mint()
     comms = wire(root)
-    comms.registry.register(Thread('owner', frozenset({'team'}), Checkout(root),
+    comms.registry.register(NativeThread('owner', frozenset({'team'}), Checkout(root),
         process_identity=ProcessIdentity.capture(os.getpid()),
         goal=Goal('task', g_goal_id, published_seq=0)))
     return comms.registry

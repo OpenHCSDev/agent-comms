@@ -14,7 +14,7 @@ from agent_comms.messages import Message, InfoKind
 from agent_comms.read_basis import NamedViewer
 from bus_history import read_history
 from agent_comms.thread_text import ForkedParent, GivenThreadText
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 @pytest.fixture
@@ -25,9 +25,9 @@ def chat(comms):
     from conftest import declare_test_bus
 
     return declare_test_bus(comms, channels=("ci", "docs"), threads=(
-        Thread('PR111', frozenset({'ci'}), Checkout(Path('/tmp/wt1')), process_identity=ProcessIdentity.capture(os.getpid())),
-        Thread('fixer', frozenset({'ci'}), Checkout(Path('/tmp/wt1')), parent=ForkedParent('PR111'), task=GivenThreadText('fix auth')),
-        Thread('PR112', frozenset({'docs'}), Checkout(Path('/tmp/wt2'))),
+        NativeThread('PR111', frozenset({'ci'}), Checkout(Path('/tmp/wt1')), process_identity=ProcessIdentity.capture(os.getpid())),
+        NativeThread('fixer', frozenset({'ci'}), Checkout(Path('/tmp/wt1')), parent=ForkedParent('PR111'), task=GivenThreadText('fix auth')),
+        NativeThread('PR112', frozenset({'docs'}), Checkout(Path('/tmp/wt2'))),
     ))
 
 
@@ -55,7 +55,7 @@ class TestChannelDelivery:
         ("PR112", {"PR112"}),  # a DM ignores tags
     ])
     def test_delivery_reaches_exactly_the_target_audience(self, chat, target, reached):
-        chat.registry.declare(Thread(name='loner', tags=frozenset(), worktree=Checkout(Path('/wt'))))
+        chat.registry.declare(NativeThread(name='loner', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         chat.messaging.send("PR111", target, "x")
         assert {name for name in ("PR111", "fixer", "PR112", "loner")
                 if chat.bus.pending_count(name)} == reached
@@ -105,7 +105,7 @@ class TestChannelsDerived:
 class TestPresence:
     def test_heartbeat_updates_last_seen(self, tmp_path):
         registry = Registration(tmp_path / "r.json")
-        registry.register(Thread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
+        registry.register(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         before = registry.last_seen("a")
         import time
 
@@ -121,7 +121,7 @@ class TestPresence:
     def test_last_seen_persists(self, tmp_path):
         path = tmp_path / "r.json"
         registry = Registration(path)
-        registry.register(Thread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
+        registry.register(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         seen = registry.last_seen("a")
         assert seen > 0 and Registration(path).last_seen("a") == seen
 

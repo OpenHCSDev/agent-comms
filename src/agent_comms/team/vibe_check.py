@@ -1,10 +1,10 @@
-"""When the fleet's signals degrade, the heartbeat stops the commander with its pattern catalog.
+"""When the team's signals degrade, the heartbeat stops every teammate with its pattern catalog.
 
 A degraded signal is a fact Core already reads that no heartbeat line states: a load past the
-ceiling. An owed answer or a stalled plan phase is a heartbeat line already, on the board the
-commander's tool calls print, so it never stops the commander a second time here. The
-vibe-check sender puts the pattern catalog in front of the commander, and every verb that answers
-nothing is refused until the commander answers that message (the OwedAnswer gate)."""
+ceiling. An owed answer or a stalled plan phase is a heartbeat line already, on the board every
+teammate's tool calls print, so it never stops anyone a second time here. There is no lead: the
+vibe check goes to each live teammate, each owes its own answer (the OwedAnswer gate refuses
+that teammate's verbs that answer nothing), and only a teammate who ignores its own is paused."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from typing import ClassVar, Self
 
 from agent_comms.bus import BusReader
 from agent_comms.team.package import TeamPackage
+from agent_comms.team_service import TeamService
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import projected
 from agent_comms.heartbeat_frame import HeartbeatFrame
@@ -26,6 +27,7 @@ from agent_comms.goal_actions import (
     CompliedGoalAction,
     OwnerInvocable,
 )
+from agent_comms.errors import BirthChangedError
 from agent_comms.messages import Message
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegistrySnapshot
@@ -66,11 +68,11 @@ class Escalation:
 
 @dataclass(frozen=True)
 class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
-    """More owed orders, expired timers and unjudged edits than one commander keeps up with.
+    """More owed orders, expired timers and unjudged edits than the team keeps up with.
     Every edit a verdict can still clear is a point, so one unit running unwatched trips it
     alone; edits under a merged order are nobody's review and count nothing. Forks relieve it
     by judging and ordering, which lowers the debt; load moves every beat, so it stops the
-    commander once per round while it stays over."""
+    team once per round while it stays over."""
 
     ceiling: ClassVar[float] = 100.0
     round_seconds: ClassVar[int] = 30 * 60
@@ -80,7 +82,7 @@ class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
     unjudged: int
 
     @classmethod
-    def from_frame(cls, comms: Comms, commander: str, frame: HeartbeatFrame) -> Self:
+    def from_frame(cls, comms: Comms, frame: HeartbeatFrame) -> Self:
         return cls.from_orders(
             frame.todos,
             len(tuple(ReviewTimerUp.conditions(comms, frame))),
@@ -107,8 +109,8 @@ class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
         )
 
     @classmethod
-    def found(cls, comms: Comms, commander: str, frame: HeartbeatFrame) -> tuple[Sign, ...]:
-        load = cls.from_frame(comms, commander, frame)
+    def found(cls, comms: Comms, frame: HeartbeatFrame) -> tuple[Sign, ...]:
+        load = cls.from_frame(comms, frame)
         if not load.overloaded:
             return ()
         return (Sign(cls, (int(time.time() // cls.round_seconds),),
@@ -118,27 +120,31 @@ class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
 @dataclass(frozen=True)
 class VibeCheck(UndatedStandingRule):
     """Each degraded sign breaks it once: the heartbeat enforces a rule when it newly breaks, so a
-    sign that persists stops the commander once, and a new message, a newly stalled phase or a
+    sign that persists stops the team once, and a new message, a newly stalled phase or a
     doubled stall stops it again. Pings are decisions, each once."""
 
     sign: Sign
 
     @classmethod
-    def scan_observed(cls, comms: Comms, commander: str,
+    def scan_observed(cls, comms: Comms,
                       observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
         return tuple(
             cls(sign)
             for member in Degradation.members_with(Degradation)
-            for sign in member.found(comms, commander, frame)
+            for sign in member.found(comms, frame)
         )
 
-    def enforce(self, comms: Comms, commander: str) -> None:
+    def enforce(self, comms: Comms) -> None:
+        """The degraded team is everyone's: each running teammate gets the burst and owes its
+        answer."""
         burst = self.burst()
-        VibeCheckNotice.burst_once(comms, commander, burst, burst[0])
+        for teammate in TeamService.running(comms.registry.snapshot()):
+            VibeCheckNotice.burst_once(comms, teammate.incarnation, burst, burst[0])
 
     def burst(self) -> tuple[str, ...]:
         return (
-            f"VIBE CHECK ({self.sign.mark}). This is about you, right now, not the teammates.",
+            f"VIBE CHECK ({self.sign.mark}). This is about you, right now: every teammate gets"
+            " this burst and answers for itself.",
             self.sign.line,
             f"Stop. Reread {TeamPackage.patterns()} in full. You are writing one of its copies,"
             " this hour.",
@@ -163,16 +169,17 @@ class VibeCheckUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
-                  held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str,
+                  held: Mapping[ThreadIncarnation, Sequence[Todo]], debtor: str,
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
         return tuple(cls(message) for message in
-                     VibeCheckNotice.unanswered(source, snapshot, commander, time.time()))
+                     VibeCheckNotice.unanswered(source, snapshot, debtor, time.time()))
 
     def due(self, now: float) -> bool:
         return self.message.timestamp <= now - self.seconds
 
     def line(self) -> str:
-        return (f"vibe check {self.cited} from {RecordedEventTime(self.message.timestamp).stamp()}."
+        return (f"vibe check {self.cited} to {self.message.target} from"
+                f" {RecordedEventTime(self.message.timestamp).stamp()}."
                 " still ignoring it? -> answer it")
 
 
@@ -200,29 +207,34 @@ class Chokehold(IndependentStandingRule, UndatedStandingRule):
     """A vibe check ignored past its window: the teammate who ignored it is paused, never the
     teammates whose work shares its board, and told in a burst it cannot skim what resumes it."""
 
+    teammate: ThreadIncarnation = field(compare=False)
+    """Whose check was ignored. Its check message is already that birth's, so an occurrence
+    keeps its identity (and age) whatever this adds."""
     check: Message
     after: ClassVar[int] = 10 * 60
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        return cls.scan_checks(comms, commander)
-
-    @classmethod
-    def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
-        return cls.scan_checks(comms, commander)
-
-    @classmethod
-    def scan_checks(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+    def violations(cls, comms: Comms) -> tuple[Self, ...]:
+        """One chokehold per teammate who ignored its own vibe check, for its oldest one."""
         snapshot = comms.registry.snapshot()
         with comms.bus.bus.reading() as source:
-            ignored = VibeCheckNotice.unanswered(source, snapshot, commander, time.time() - cls.after)
-        return tuple(cls(message) for message in ignored[:1])
+            return tuple(
+                cls(teammate.incarnation, message)
+                for teammate in TeamService.running(snapshot)
+                for message in VibeCheckNotice.unanswered(
+                    source, snapshot, teammate.name, time.time() - cls.after)[:1]
+            )
 
-    def enforce(self, comms: Comms, commander: str) -> None:
-        if not any(goal.state.protected for goal in comms.registry.require(commander).goal):
-            comms.goals.update_goal(commander, ChokeholdPausedGoalAction())
-        ChokeholdNotice.burst_once(comms, commander, self.burst(), self.ignored())
+    def enforce(self, comms: Comms) -> None:
+        """Only the birth that ignored its check is paused or told: a thread that replaced it
+        under the same name is refused at the read and again inside the goal write."""
+        births = comms.registry.snapshot().threads_for(self.teammate.require_recorded())
+        if not births:
+            raise BirthChangedError()
+        (current,) = births
+        if not any(goal.state.protected for goal in current.goal):
+            comms.goals.update_born_goal(self.teammate, ChokeholdPausedGoalAction())
+        ChokeholdNotice.burst_once(comms, self.teammate, self.burst(), self.ignored())
 
     def ignored(self) -> str:
         return f"Ignored: vibe check {self.check.seq}:{self.check.message_id}."
@@ -248,69 +260,77 @@ class Chokehold(IndependentStandingRule, UndatedStandingRule):
 
     def line(self) -> str:
         return (
-            f"vibe check {self.check.seq}:{self.check.message_id} ignored, so its goal is"
-            f" paused. happy now? -> answer the {ChokeholdNotice.title} burst by its protocol"
+            f"{self.teammate.name} ignored vibe check {self.check.seq}:{self.check.message_id},"
+            " so its"
+            f" goal is paused. happy now? -> answer the {ChokeholdNotice.title} burst"
+            " by its protocol"
         )
 
 
 @dataclass(frozen=True)
 class ChokeholdUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
-    """Every chokehold message gates the commander from the moment it lands."""
+    """Every chokehold message gates the teammate it paused from the moment it lands."""
 
     notice = ChokeholdNotice
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
-                  held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str,
+                  held: Mapping[ThreadIncarnation, Sequence[Todo]], debtor: str,
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
         return tuple(cls(message) for message in
-                     ChokeholdNotice.unanswered(source, snapshot, commander, time.time()))
+                     ChokeholdNotice.unanswered(source, snapshot, debtor, time.time()))
 
     def line(self) -> str:
-        return f"chokehold {self.cited} is still unanswered. why? -> answer it by the protocol"
+        return (f"chokehold {self.cited} to {self.message.target} is still unanswered. why?"
+                " -> answer it by the protocol")
 
 
 @dataclass(frozen=True)
 class ChokeholdAnswer(UndatedStandingRule, FamilyScan, declared_name=None):
-    """The commander's newest answer to a chokehold, once every chokehold message is answered.
-    The family judges each answer against one read of the signs still blocking release."""
+    """A paused teammate's newest answer to its chokehold, once every chokehold message to it is
+    answered. The family judges each answer against one read of the signs still blocking release."""
 
+    teammate: ThreadIncarnation = field(compare=False)
     answer: Message
     blocking: tuple[Sign, ...] = field(compare=False)
 
     @classmethod
-    def scan_observed(cls, comms: Comms, commander: str,
+    def scan_observed(cls, comms: Comms,
                       observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
-        if not cls.held(comms, commander):
-            return ()
-        blocking = cls.blocking_signs(comms, commander, frame)
+        held = tuple(teammate.incarnation
+                     for teammate in TeamService.teammates(comms.registry.snapshot(), comms.goals)
+                     if cls.held(comms, teammate.name))
+        blocking = cls.blocking_signs(comms, frame) if held else ()
         return tuple(
             rule
-            for answer in cls.newest(comms, commander)
+            for teammate in held
+            for answer in cls.newest(comms, teammate.name)
             for member in cls.members_with(cls)
-            for rule in member.judged(answer, blocking)
+            for rule in member.judged(teammate, answer, blocking)
         )
 
     @classmethod
     @abstractmethod
-    def judged(cls, answer: Message, blocking: tuple[Sign, ...]) -> tuple[Self, ...]: ...
+    def judged(cls, teammate: ThreadIncarnation, answer: Message,
+               blocking: tuple[Sign, ...]) -> tuple[Self, ...]: ...
 
     @staticmethod
-    def newest(comms: Comms, commander: str) -> tuple[Message, ...]:
+    def newest(comms: Comms, teammate: str) -> tuple[Message, ...]:
         snapshot = comms.registry.snapshot()
         with comms.bus.bus.reading() as source:
-            if ChokeholdNotice.unanswered(source, snapshot, commander, time.time()):
+            if ChokeholdNotice.unanswered(source, snapshot, teammate, time.time()):
                 return ()
             return ChokeholdNotice.newest_answer(
-                source, snapshot, commander, ChokeholdNotice.lines(source, snapshot, commander, time.time()))
+                source, snapshot, teammate,
+                ChokeholdNotice.lines(source, snapshot, teammate, time.time()))
 
     @staticmethod
-    def blocking_signs(comms: Comms, commander: str, frame: HeartbeatFrame) -> tuple[Sign, ...]:
+    def blocking_signs(comms: Comms, frame: HeartbeatFrame) -> tuple[Sign, ...]:
         """The signs still degraded that a quote does not clear."""
         return tuple(
             sign
             for member in Degradation.members_with(BlocksRelease)
-            for sign in member.found(comms, commander, frame)
+            for sign in member.found(comms, frame)
         )
 
     @staticmethod
@@ -324,15 +344,17 @@ class ChokeholdReleased(ChokeholdAnswer):
     """The answer quotes the pattern catalog: Core resumes the goal the chokehold paused."""
 
     @classmethod
-    def judged(cls, answer: Message, blocking: tuple[Sign, ...]) -> tuple[Self, ...]:
-        return (cls(answer, blocking),) if not blocking and PatternCatalog.quoted(answer.body) else ()
+    def judged(cls, teammate: ThreadIncarnation, answer: Message,
+               blocking: tuple[Sign, ...]) -> tuple[Self, ...]:
+        return ((cls(teammate, answer, blocking),)
+                if not blocking and PatternCatalog.quoted(answer.body) else ())
 
-    def enforce(self, comms: Comms, commander: str) -> None:
-        comms.goals.update_goal(
-            commander, CompliedGoalAction(witness=self.answer.message_id), actor=OwnerInvocable)
+    def enforce(self, comms: Comms) -> None:
+        comms.goals.update_born_goal(
+            self.teammate, CompliedGoalAction(witness=self.answer.message_id), actor=OwnerInvocable)
         ChokeholdNotice.burst(
             comms,
-            commander,
+            self.teammate,
             ("You quoted it. Goal resumed.", "Now do the structural change you named, this turn."),
         )
 
@@ -343,17 +365,19 @@ class ChokeholdReleased(ChokeholdAnswer):
 @dataclass(frozen=True)
 class ChokeholdHeld(ChokeholdAnswer):
     """The answer quotes the pattern catalog while load stays degraded: the units stay
-    paused until those clear, and the commander is told which."""
+    paused until those clear, and the paused teammate is told which."""
 
     @classmethod
-    def judged(cls, answer: Message, blocking: tuple[Sign, ...]) -> tuple[Self, ...]:
-        return (cls(answer, blocking),) if blocking and PatternCatalog.quoted(answer.body) else ()
+    def judged(cls, teammate: ThreadIncarnation, answer: Message,
+               blocking: tuple[Sign, ...]) -> tuple[Self, ...]:
+        return ((cls(teammate, answer, blocking),)
+                if blocking and PatternCatalog.quoted(answer.body) else ())
 
-    def enforce(self, comms: Comms, commander: str) -> None:
+    def enforce(self, comms: Comms) -> None:
         verdict = f"Quoted, and still degraded: {self.answer.seq}:{self.answer.message_id}."
         ChokeholdNotice.burst_once(
             comms,
-            commander,
+            self.teammate,
             (
                 verdict,
                 *(sign.line for sign in self.blocking),
@@ -370,17 +394,18 @@ class ChokeholdHeld(ChokeholdAnswer):
 
 @dataclass(frozen=True)
 class ChokeholdRefused(ChokeholdAnswer):
-    """The answer quotes nothing: the units stay paused and the commander is choked again."""
+    """The answer quotes nothing: the teammate stays paused and is choked again."""
 
     @classmethod
-    def judged(cls, answer: Message, blocking: tuple[Sign, ...]) -> tuple[Self, ...]:
-        return () if PatternCatalog.quoted(answer.body) else (cls(answer, blocking),)
+    def judged(cls, teammate: ThreadIncarnation, answer: Message,
+               blocking: tuple[Sign, ...]) -> tuple[Self, ...]:
+        return () if PatternCatalog.quoted(answer.body) else (cls(teammate, answer, blocking),)
 
-    def enforce(self, comms: Comms, commander: str) -> None:
+    def enforce(self, comms: Comms) -> None:
         verdict = f"That's not a quote: {self.answer.seq}:{self.answer.message_id}."
         ChokeholdNotice.burst_once(
             comms,
-            commander,
+            self.teammate,
             (
                 verdict,
                 f"{PatternCatalog.words}+ words, word for word, from the pattern catalog. Not a paraphrase.",

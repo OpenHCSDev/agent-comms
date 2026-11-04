@@ -24,7 +24,7 @@ from .private_send_rules import (
 )
 from .reservation_rules import ReservationViolationError
 from .turn_goal_permission import GoalPermission, OwnerGoalPermission
-from .threads import Thread
+from .threads import NativeThread, Thread
 
 if TYPE_CHECKING:
     from .goals import Goal
@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True, kw_only=True)
 class RegistryOwner:
     check_type: ClassVar[type[RegistryIdentityCheck]] = GoalRegistryClaimCheck
-    thread: Thread
+    thread: NativeThread
     claimed_generation: int
 
     @property
@@ -51,7 +51,8 @@ class RegistryOwner:
     @classmethod
     def capture_local(cls, snapshot: RegistrySnapshot, name: str) -> RegistryOwner:
         """Read local executable authority from this single locked snapshot."""
-        thread = snapshot.require_active(name)
+        snapshot.require_active(name)
+        thread = snapshot.require_member(name, NativeThread)
         thread.require_local_process(ProcessIdentity.capture(os.getpid()))
         claim_scope = snapshot.claim_generation(thread.name)
         thread.turn_record.read().require_current(claim_scope, thread.turn_generation)
@@ -74,7 +75,6 @@ class RegistryOwner:
         self.thread.role.require_executable(StaleFence("registry owner is not executable"))
         try:
             turn = self.thread.turn_record.read().require_active()
-            self.thread.execution.require_native()
         except RelationViolationError as error:
             raise StaleFence("registry owner is not executable") from error
         if not turn.owned_by(self.thread.require_process(), self.claimed_generation):
@@ -84,8 +84,8 @@ class RegistryOwner:
     @classmethod
     def capture(cls, snapshot: RegistrySnapshot, name: str, reason: str) -> RegistryOwner:
         try:
-            thread = snapshot.require(name)
-        except UnregisteredThreadError as error:
+            thread = snapshot.require_member(name, NativeThread)
+        except (UnregisteredThreadError, RelationViolationError) as error:
             raise StaleFence(reason) from error
         owner = cls(thread=thread, claimed_generation=snapshot.claim_generation(name))
         owner.require_snapshot(snapshot, reason)
@@ -190,7 +190,3 @@ class ParticipantOwner:
         if self.thread.process_identity != ProcessIdentity.capture(os.getpid()):
             raise StaleFence("cohort recipient is not this live registered owner generation")
         self.thread.role.require_executable(StaleFence("cohort participant is not executable"))
-        try:
-            self.thread.execution.require_native()
-        except RelationViolationError as error:
-            raise StaleFence("cohort participant is not executable") from error

@@ -13,7 +13,12 @@ from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.channel_targets import CommandTarget, NoChannel, PerTargetChannels, ChannelTarget, ProjectTarget
 from agent_comms.catalog_document import NoCatalog
 from agent_comms.cli import main, build_parser
-from agent_comms.threads import ChosenServiceTier, NextTurnConfiguration, Thread
+from agent_comms.threads import (
+    ChosenServiceTier,
+    NextTurnConfiguration,
+    ExternalThread,
+    NativeThread,
+)
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from agent_comms.thread_model import UndeclaredModel
 from agent_comms.cli_command import CommandSelectionChanged, CliCommand, TargetBatchResult, TargetCompleted, TargetFailed, TargetEdit
@@ -40,7 +45,6 @@ from agent_comms.messages import SendableRole, NoticeRole
 from agent_comms.owner_lifecycle import OwnerStartResult
 from agent_comms.pi_vocabulary import ServiceTier
 from agent_comms.restart_scope import OneOwner
-from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import TurnIdentity, UserThreadRole
 from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus, RunningThreadStatus
 from agent_comms.turn_lease import ActiveTurn, RecordedGeneration, StoredTurnRecord
@@ -137,7 +141,7 @@ class TestCliSuccess:
         comms.channels.create_tag("comms")
         for name in ("sender", "one", "two"):
             tags = frozenset() if name == "sender" else frozenset({"comms"})
-            comms.registry.declare(Thread(name, tags, Checkout(comms.root)))
+            comms.registry.declare(NativeThread(name, tags, Checkout(comms.root)))
         for role, expected in (("notice", PassiveWake()), ("conversation", BoundedTriageWake())):
             code, sent = cli(comms.root, "send", "--from", "sender", "--to", "#comms",
                              "--body", "public record", "--role", role)
@@ -265,7 +269,7 @@ class TestSelectedTargetActions:
 
         comms = installed_comms(root)
         for name, tags in (("alpha", {"team"}), ("beta", {"other"})):
-            comms.registry.declare(Thread(name, frozenset(tags), Checkout(root)), StoppedThreadStatus())
+            comms.registry.declare(NativeThread(name, frozenset(tags), Checkout(root)), StoppedThreadStatus())
         return comms
 
     def test_catalog_absent_view_actor_has_no_backend_actions(self, tmp_path):
@@ -279,7 +283,7 @@ class TestSelectedTargetActions:
                              {}, project=Checkout(tmp_path)).apply(comms)
         failed, = refused.outcomes
         assert failed.error_type == UnregisteredThreadError.__name__
-        comms.registry.declare(Thread('project', frozenset(), Checkout(tmp_path)), StoppedThreadStatus())
+        comms.registry.declare(NativeThread('project', frozenset(), Checkout(tmp_path)), StoppedThreadStatus())
         actions = CliCommand.target_catalog(
             comms, CliCommand.selected_targets((CommandTarget.named('project'),)),
             project=Checkout(tmp_path))
@@ -327,7 +331,7 @@ class TestSelectedTargetActions:
         assert not QueueRestartCliCommand.thread_bindings(comms,
             replace(owner, process_identity=ProcessIdentity.capture(os.getpid())), status, NoChannel(), catalog=NoCatalog())
         assert not QueueRestartCliCommand.thread_bindings(comms,
-            replace(owner, execution=ExternalThreadExecution), status, NoChannel(), catalog=NoCatalog())
+            owner.as_member(ExternalThread), status, NoChannel(), catalog=NoCatalog())
 
     def test_tag_batch_requires_each_confirmation_before_removing_any_tag(self, tmp_path):
 
@@ -397,7 +401,7 @@ class TestSelectedTargetActions:
     def test_mixed_archive_reports_partial_results_in_selection_order(self, cli, tmp_path):
 
         comms = self.declared(tmp_path)
-        comms.registry.declare(Thread('active', frozenset({'team'}), Checkout(tmp_path)),
+        comms.registry.declare(NativeThread('active', frozenset({'team'}), Checkout(tmp_path)),
                                RunningThreadStatus())
         code, result = cli(tmp_path, "target-action", "--project", str(tmp_path), "--targets", "alpha", "active", "#team",
                            "--operation", "archive", "--confirmed")
@@ -445,10 +449,10 @@ class TestSelectedTargetActions:
     def test_channel_start_uses_native_visible_roster_without_launching(self, tmp_path):
 
         comms = self.declared(tmp_path)
-        comms.registry.declare(Thread('external', frozenset({'team'}), Checkout(tmp_path), execution=ExternalThreadExecution), StoppedThreadStatus())
-        comms.registry.declare(Thread('archived', frozenset({'team'}), Checkout(tmp_path)),
+        comms.registry.declare(ExternalThread('external', frozenset({'team'}), Checkout(tmp_path)), StoppedThreadStatus())
+        comms.registry.declare(NativeThread('archived', frozenset({'team'}), Checkout(tmp_path)),
                                ArchivedThreadStatus())
-        comms.registry.declare(Thread('human', frozenset({'team'}), Checkout(tmp_path), role=UserThreadRole),
+        comms.registry.declare(NativeThread('human', frozenset({'team'}), Checkout(tmp_path), role=UserThreadRole),
                                StoppedThreadStatus())
 
         snapshot = comms.registry.snapshot()
@@ -524,7 +528,7 @@ class TestSelectedTargetActions:
         source.write_text(json.dumps({'type': 'message', 'timestamp': '2026-09-20T00:00:01Z', 'message': {
             'role': 'assistant', 'content': [{'type': 'text', 'text': 'Saved reply'}],
         }}) + '\n')
-        comms.registry.declare(Thread('alpha', frozenset({'team'}), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
+        comms.registry.declare(NativeThread('alpha', frozenset({'team'}), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
         comms.channels.update_tags('beta', add=frozenset({'team'}))
         viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
         comms.messaging.send('alpha', 'beta', 'Executor message').message.message_id

@@ -7,7 +7,6 @@ from collections import OrderedDict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
-from datetime import datetime
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
@@ -17,9 +16,7 @@ from .activity import Activity, ActivityData, ActivityState, ObservedActivity
 from .activity_clocks import ChannelActivity
 from .agent_activity import (
     AgentActivity,
-    RecordedRecipientActivity,
 )
-from .frozen_recipient import FrozenRecipient
 from .bus import DisplayUnread
 from .channel_targets import CommandTarget
 from .channels import Channel, ChannelMemberIndex, Channels
@@ -36,7 +33,6 @@ from .nominal.field_codec import (
     JsonShapeFamily,
     JsonShapeMember,
     PresenceExclude,
-    ThreadLookup,
     WatchPaths,
     WatchViews,
     WireExclude,
@@ -54,24 +50,12 @@ from .message_page import (
     PageBounds,
 )
 from .message_reference import MessageReference
-from .messages import Message
 from .notification_assignment import NotificationAssignment
-from agent_comms.notification_progress import AssignmentResponse
-from agent_comms.message_notification import NotificationPass, NotificationWindow
-from agent_comms.notification_assignment import NotificationAssignmentRead, NotificationReadMark
-from .notification_evidence import FirstRecipient, OutcomeViewer, RecipientCursor, RecipientLimit
-from .notification_progress import (
-    ConsumedDelivery,
-    ConsumingProgress,
-    DeliveryProgress,
-    HumanReadProgress,
-    WorkingTakenProgress,
-)
-from agent_comms.message_notification import CapturedNotificationWindow
+from agent_comms.message_notification import NotificationPass
 from .private_path import FileRevision
 from .read_selection import CapturedSelection
 from .read_basis import AnonymousViewer, ChannelDisplayScope, DisplayViewer, NamedViewer
-from .read_ledger import NoReadNotice, ReadLedger, ReadNotice
+from .read_ledger import NoReadNotice, ReadNotice
 from .recorded_bus import NoRecordedBus, RecordedBusIdentity
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
 from .revision_views import (
@@ -89,33 +73,28 @@ from .revision_views import (
 )
 from .runtime_info import RuntimeInfo
 from .storage_room import RoomLedger
-from .thread_identity import ThreadIncarnation
 from .thread_presentation import ThreadOwnerBinding, UnavailableThreadOwnerBinding
 from .thread_presentation import ThreadPresentation
 from .thread_status import ActiveThreadPresence, ThreadStatus, ThreadStatusName
 from .threads import Thread
 from .tool_result import ToolResult
-from .transcript_sources import AssignedTranscriptSource
 from .ui_model.unread import ExactUnread, IndexingUnread, UnobservedUnread, UnreadPresentation
 
 from .message_notification import MessageNotification
 
 if TYPE_CHECKING:
-    from .agent_activity import AgentActivity, RecipientActivity
-    from .bus import Bus, BusSnapshot
-    from .bus_publication import Delivered
+    from .agent_activity import AgentActivity
+    from .bus import BusSnapshot
     from .catalog_document import CatalogDocument
     from .catalog_store import ChannelCatalog
     from .comms import Comms
     from .goal_management import Goals
     from .history_views import HistoryViews
     from .message_bus import MessageBus
-    from .messages import Message
     from .pi_counts import PiCount
-    from .read_ledger import ReadLedger
     from .registration import Registration
     from .registry_document import RegistrySnapshot
-    from .registry_provenance import DeletedThread, RegistryProvenance
+    from .registry_provenance import DeletedThread
     from .ui_model.observation import ThreadsObserved
 
 
@@ -418,7 +397,7 @@ class ThreadView(ThreadRecord):
         """One declaration-owned interpretation for every thread view."""
         ordinary = self.status.presentation(self.thread.display_title, self.activity,
                                             self._idle_presentation)
-        return replace(self.thread.execution.presentation(self.thread, self.status, ordinary, self.binding),
+        return replace(self.thread.presentation(self.status, ordinary, self.binding),
                        binding=self.binding)
 
     def _idle_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
@@ -643,7 +622,7 @@ class WireRevision(ReadState):
         tuple[FileRevision, ...],
         *revision_source(external_transcript_paths, StoresView, ExternalTranscriptsView),
     ]
-    commander_frames: Annotated[
+    team_frames: Annotated[
         tuple[FileRevision, ...],
         *revision_source(team_frame_paths, TeamFramesView),
     ]

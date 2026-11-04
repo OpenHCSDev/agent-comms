@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """The external gh boundary for local pull-request fixtures; never contacts GitHub."""
 
+import fcntl
 import json
 import os
 import re
@@ -25,6 +26,21 @@ def follow_git(request):
                         f"refs/pull/{row['number']}/head", row["head"]), check=True)
 
 
+def hold(directory):
+    """One gh call or fixture change at a time over the forge state: Core reads each
+    repository's forge side by side, and every call rewrites the state."""
+    lock = (directory / "pull_requests.lock").open("w")
+    fcntl.flock(lock, fcntl.LOCK_EX)
+    return lock
+
+
+def store(directory, repositories):
+    """Replace the fixture's forge state whole, so a reader never sees a truncated file."""
+    staged = directory / "pull_requests.json.tmp"
+    staged.write_text(json.dumps(repositories))
+    os.replace(staged, directory / "pull_requests.json")
+
+
 def main():
     directory = Path(sys.argv[0]).parent
     arguments = sys.argv[1:]
@@ -35,11 +51,12 @@ def main():
         if executable is None:
             raise FileNotFoundError("The actual gh executable is required for its option declarations.")
         os.execv(executable, [executable, *arguments])
+    _held = hold(directory)  # released when this process exits
     repositories = json.loads((directory / "pull_requests.json").read_text())
     for repository in repositories.values():
         for request in repository["requests"].values():
             follow_git(request)
-    (directory / "pull_requests.json").write_text(json.dumps(repositories))
+    store(directory, repositories)
     with (directory / "calls.jsonl").open("a") as calls:
         calls.write(json.dumps(arguments) + "\n")
     if arguments[:2] == ["pr", "create"]:
@@ -52,7 +69,7 @@ def main():
         follow_git(request)
         request["lag_reads"] = creation["lag_reads"]
         data["requests"][str(row["number"])] = request
-        (directory / "pull_requests.json").write_text(json.dumps(repositories))
+        store(directory, repositories)
         if creation["reply_refusal"]:
             sys.exit(creation["reply_refusal"])
         print(f"https://github.com/{repository}/pull/{row['number']}")
@@ -81,7 +98,7 @@ def main():
             listed = request["listed"]
             observations = request.get("observations", [])
             observed = observations.pop(0) if observations else listed["head"]
-            (directory / "pull_requests.json").write_text(json.dumps(repositories))
+            store(directory, repositories)
             state = "open" if listed["kind"] in data["open_kinds"] else "closed"
             print(observed, listed["base"], str(listed["kind"] == "draft").lower(), state)
         elif len(parts) == 3 and parts[0] == "commits" and parts[2] == "pulls":
@@ -97,7 +114,7 @@ def main():
                 if not refusal["state"] or refusal["state"] == fields["state"]:
                     sys.exit(refusal["message"])
             data.setdefault("statuses", {}).setdefault(parts[1], {})[fields["context"]] = fields["state"]
-            (directory / "pull_requests.json").write_text(json.dumps(repositories))
+            store(directory, repositories)
             print("{}")
         elif len(parts) == 3 and parts[0] == "commits" and parts[2] == "status":
             query = arguments[arguments.index("--jq") + 1]

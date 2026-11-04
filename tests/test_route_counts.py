@@ -15,7 +15,7 @@ from agent_comms.repo import Checkout
 from agent_comms.nominal.field_codec import ThreadLookup
 from agent_comms.messages import InfoKind, Message
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.wake import OrdinaryControl, resolve_wake_cohort
 
 
@@ -41,12 +41,11 @@ def test_pending_counts_need_no_python_callback(
     human, later = names[:2]
     roles = (UserThreadRole, LaterThreadRole) + (AgentThreadRole,) * (len(names) - 2)
     for index, (name, role) in enumerate(zip(names, roles, strict=True)):
-        comms.registry.declare(Thread(
+        comms.registry.declare(NativeThread(
             name, frozenset({"comms"}), Checkout(tmp_path / name),
             created_at=10000.0 + index,
-            role=role,
-        ))
-    comms.registry.declare(Thread("old-sender", frozenset({"comms"}), Checkout(tmp_path / "sender"),
+            role=role))
+    comms.registry.declare(NativeThread("old-sender", frozenset({"comms"}), Checkout(tmp_path / "sender"),
                                   created_at=20000.0, role=UserThreadRole))
     with comms.registry.store.editing() as edit:
         edit.document.rename("old-sender", "sender")

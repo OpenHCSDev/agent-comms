@@ -18,13 +18,12 @@ from agent_comms.storage_projection import StorageProjection
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import StorageRule
-from agent_comms.thread_execution import ExternalThreadExecution, NativeThreadExecution
-from agent_comms.threads import Thread
+from agent_comms.threads import ExternalThread, NativeThread, Thread
 from cli_command import core_process
 from source_revision_fixture import SourceRepository
 
 
-@pytest.mark.parametrize("execution", (NativeThreadExecution, ExternalThreadExecution), ids=("native", "external"))
+@pytest.mark.parametrize("execution", (NativeThread, ExternalThread), ids=("native", "external"))
 def test_goal_checkout_uses_origin_default_and_retires(
     private_comms, tmp_path, monkeypatch, execution,
 ):
@@ -39,9 +38,8 @@ def test_goal_checkout_uses_origin_default_and_retires(
     rule = StorageRule(checkout_base=tmp_path / "checkouts",
                        scratch_base=tmp_path / "scratch", floor_gib=0)
     StorageRule.path_in(comms.root).write_text(FieldCodec.compact(FieldCodec.encode(rule)))
-    worker = comms.registry.declare(Thread(
-        "worker", frozenset(), Checkout(repository.checkout), execution=execution,
-    ))
+    worker = comms.registry.declare(execution(
+        "worker", frozenset(), Checkout(repository.checkout)))
     goal = comms.goals.update_goal(worker.name, SetGoalAction(text="Work in OpenMFD"))
     monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
     monkeypatch.delenv("PI_WORKTREE", raising=False)
@@ -111,9 +109,8 @@ def remote_goal_checkout(private_comms: Comms, tmp_path: Path,
     rule = StorageRule(checkout_base=tmp_path / 'checkouts',
                        scratch_base=tmp_path / 'scratch', floor_gib=0)
     StorageRule.path_in(private_comms.root).write_text(FieldCodec.compact(FieldCodec.encode(rule)))
-    worker = private_comms.registry.declare(Thread(
-        'worker', frozenset(), Checkout(repository.checkout), execution=ExternalThreadExecution,
-    ))
+    worker = private_comms.registry.declare(ExternalThread(
+        'worker', frozenset(), Checkout(repository.checkout)))
     goal = private_comms.goals.update_goal(worker.name, SetGoalAction(text='Work on the remote'))
     worker = private_comms.registry.require(worker.name)
     return RemoteGoalCheckout(private_comms, repository, rule, worker, goal)
@@ -123,11 +120,11 @@ def test_first_remote_goal_checkout_uses_master_and_preserves_its_donor(
     remote_goal_checkout: RemoteGoalCheckout,
 ) -> None:
     case = remote_goal_checkout
-    project = case.comms.registry.snapshot().commander_project
+    project = case.comms.registry.snapshot().team_project
     assert case.repository.github not in project.repository_names()
     created = case.run()
     assert created.returncode == 0, created.stdout + created.stderr
-    assert case.comms.registry.snapshot().commander_project == project
+    assert case.comms.registry.snapshot().team_project == project
     assert Repo.qualified_github(case.path, case.repository.github).default_branch() == 'master'
     assert Checkout(case.path).common_dir == case.donor / '.git'
     assert case.repository.git(case.path, 'rev-parse', 'HEAD').strip() == case.repository.git(
@@ -297,9 +294,8 @@ def test_remote_goal_checkout_keeps_independent_owners_separate(
     remote_goal_checkout: RemoteGoalCheckout,
 ) -> None:
     case = remote_goal_checkout
-    peer = case.comms.registry.declare(Thread(
-        'peer', frozenset(), Checkout(case.repository.checkout), execution=ExternalThreadExecution,
-    ))
+    peer = case.comms.registry.declare(ExternalThread(
+        'peer', frozenset(), Checkout(case.repository.checkout)))
     goal = case.comms.goals.update_goal(peer.name, SetGoalAction(text='Independent remote work'))
     peer = case.comms.registry.require(peer.name)
     other = RemoteGoalCheckout(case.comms, case.repository, case.rule, peer, goal)

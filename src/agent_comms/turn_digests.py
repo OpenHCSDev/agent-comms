@@ -24,9 +24,8 @@ from .message_reference import MessageReference
 from .private_registry_guard import RegistryPrivacy
 from .order_work import OrderWork
 from .problem_number import ProblemNumber
-from .thread_execution import ConversationPreparation
+from .threads import ConversationPreparation, Thread
 from .thread_identity import ThreadIncarnation
-from .threads import Thread
 from .todos import (
     EditWorkplaces, NoCommitProgress, OrderProgress, ProgressRead, Todo, TodoStore,
 )
@@ -39,7 +38,6 @@ from .work_branches import WorkBranchError
 
 if TYPE_CHECKING:
     from .comms import Comms
-    from .registry_document import RegistrySnapshot
     from .transcript_sources import TranscriptSource
 
 
@@ -216,7 +214,7 @@ class ThreadRead[Result](ConversationPreparation):
     thread: Thread
 
     def read(self) -> Result:
-        return self.thread.execution.prepare_conversation(self)
+        return self.thread.prepare_conversation(self)
 
 
 @dataclass(frozen=True)
@@ -304,7 +302,7 @@ class OrderEditRead[Result](OrderRead[Result]):
         return self.when_readable(super().read)
 
     @classmethod
-    def for_team(cls, comms: Comms, commander: str) -> Iterator[Self]:
+    def for_team(cls, comms: Comms, teammate: str) -> Iterator[Self]:
         snapshot = comms.registry.snapshot()
         held = HeldOrders.of(comms.goals.todos, snapshot)
         history = comms.goals.todos.board_history()

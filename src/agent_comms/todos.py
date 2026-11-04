@@ -78,6 +78,7 @@ from agent_comms.nominal.field_codec import (
     RecordProblems,
     SingleFieldValue,
     SubclassUnion,
+    ThreadLookup,
     ToolCallId,
     WireOmitDefault,
     WireTransient,
@@ -93,7 +94,6 @@ from agent_comms.head_review import (
     IntegrationInput,
     MergeArm,
     MergeHeadReview,
-    OpenPullRequestHead,
     PreparedHeadReview,
     PullRequestHead,
     ReadPullRequestHead,
@@ -415,7 +415,7 @@ class CheckedDelivery(EvidenceRequirements, OrderDelivery, declared_name=None):
             try:
                 await asyncio.to_thread(
                     line.require_exists,
-                    order.source_roots(registry.snapshot().commander_project),
+                    order.source_roots(registry.snapshot().team_project),
                     revision)
             except MissingSourceLine as error:
                 raise TodoError(f"The order creates {line.to_wire()}; {error}") from error
@@ -1172,7 +1172,7 @@ class PullRequests(RepositoryReads):
         """The registered threads with the request's branch checked out: who is working on it
         when no order says so. One worktree read per local checkout in this frame."""
         snapshot = goals.registry.snapshot()
-        repository = Repo.selected(snapshot.commander_project.require().repos, repo.to_wire())
+        repository = Repo.selected(snapshot.team_project.require().repos, repo.to_wire())
         reader = WorkBranches(repository.checkout, reads=self)
         return tuple(dict.fromkeys(
             snapshot.require(name).incarnation
@@ -1181,7 +1181,7 @@ class PullRequests(RepositoryReads):
 
     def carry_reviews(self, goals: Goals, repo: RepositoryName) -> None:
         """Advance the frame's forge facts only after the existing verdict posts its carry."""
-        project = goals.registry.snapshot().commander_project.require()
+        project = goals.registry.snapshot().team_project.require()
         repository = Repo.selected(project.repos, repo.to_wire())
         reader = WorkBranches(repository.checkout, reads=self)
         for row in self.open(repo):
@@ -2607,7 +2607,7 @@ class FixScope(OrderScope[CheckedDelivery]):
     def instructions(self, problem: str) -> tuple[str, ...]:
         return ("Scope: fix", "Parents: " + ", ".join(p.to_wire() for p in self.shape.parents),
                 "Members: " + ", ".join(m.to_wire() for m in self.shape.members),
-                f"Open the PR with agent-comms-commander order pr {problem} "
+                f"Open the PR with agent-comms-team order pr {problem} "
                 "--title '<title>' --body-file <file>; Core records its link on this order.",
                 "Record the teammate's delivery claim in Core before waiting for the teammate's "
                 "verdict; a chat report does not change the order.")
@@ -2869,7 +2869,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         """Create once; retain and return its nominal identity, never reparse our own URL."""
         todo.require_actor(actor, todo.held().generation)
         self.require_linkable()
-        RecordPullRequest.require_repository(store.registry_cut().commander_project,
+        RecordPullRequest.require_repository(store.registry_cut().team_project,
                                              todo, source.github)
         created = subprocess.run(
             ("gh", "pr", "create", "--draft", "-R", source.github.to_wire(),
@@ -3514,7 +3514,7 @@ class Hunt(DeclaredFamily, affix="Hunt"):
             raise TodoError("Describe the inspected code and verdict in ten or more words.")
         self.at.require_recorded("A hunt")
 
-    def require_maintainer(self, store: TodoStore, commander: ThreadIncarnation) -> None:
+    def require_maintainer(self, store: TodoStore, actor: ThreadIncarnation) -> None:
         """Validate source references before recording shared inspection evidence."""
 
 
@@ -3527,8 +3527,8 @@ class CleanHunt(Hunt):
 class OrderedHunt(Hunt):
     sent: str
 
-    def require_maintainer(self, store: TodoStore, commander: ThreadIncarnation) -> None:
-        super().require_maintainer(store, commander)
+    def require_maintainer(self, store: TodoStore, actor: ThreadIncarnation) -> None:
+        super().require_maintainer(store, actor)
         if not any(todo.id == self.sent
                    for todo in store.held_orders()):
             raise TodoError("The hunt must name a current shared order.")
@@ -3541,7 +3541,7 @@ class TodoStoreRows(StoreRows):
 @dataclass(frozen=True)
 class HuntRecord(TodoStoreRows, TypedTable):
     id: Annotated[HuntId, Column(primary_key=True)]
-    commander: Annotated[ThreadIncarnation, Column(index=True)]
+    teammate: Annotated[ThreadIncarnation, Column(index=True)]
     hunt: Hunt
 
 
@@ -3721,7 +3721,7 @@ class IncomingWork:
             candidate.name
             for thread in snapshot.active_threads(snapshot.active_candidates())
             if thread.name not in occupied
-            for candidate in thread.execution.order_candidates(thread)))
+            for candidate in thread.order_candidates()))
 
 
 @dataclass(frozen=True, slots=True)
@@ -4084,18 +4084,22 @@ class AssignTodo(ReleasesHold, TodoOperation):
         return replace(self, actor=actor, proposed=replace(self.proposed,
                        parent=actor.name, parent_created=actor.wire_birth))
 
-    def changes_work(self, current: Todo, proposed: Assignment) -> bool:
-        return (current.assignment, current.order) != (proposed, self.order)
+    def moves_hold(self, current: Todo, proposed: Assignment) -> bool:
+        """A corrected order to the holder already doing this problem under the same goal keeps
+        that hold; only a new holder or goal moves it. The requester corrects its own order:
+        the holder cannot serve that request, so asking it would leave no one able to."""
+        return not current.current_holder.owned_by(proposed.owner_identity, proposed.generation)
 
     def require_hold_release(self, current: Todo, snapshot: RegistrySnapshot) -> None:
-        """Only an assignment that changes the work asks its current holder."""
-        if self.changes_work(current, current.proposed_assignment(self.proposed)):
+        """Only an assignment that moves the hold asks its current holder."""
+        if self.moves_hold(current, current.proposed_assignment(self.proposed)):
             super().require_hold_release(current, snapshot)
 
     def require_receiving_work(
         self, current: Todo, proposed: Assignment, snapshot: RegistrySnapshot,
     ) -> None:
-        if self.changes_work(current, proposed):
+        """Only an assignment that moves the hold asks the receiver's goal."""
+        if self.moves_hold(current, proposed):
             proposed.require_receiving_work(self.actor, snapshot)
 
     def proposed_work(self, store: TodoStore, problem: str) -> tuple[Todo, ...]:
@@ -4149,7 +4153,7 @@ class CitedEvidence:
     def require_evidence(self, goals: Goals, current: Todo) -> None:
         order = current.order.checked()
         self.require_cited(
-            order.source_roots(goals.registry.snapshot().commander_project),
+            order.source_roots(goals.registry.snapshot().team_project),
             order.cited_revision)
 
     def require_cited(self, roots: SourceRoots, source: SourceText) -> None:
@@ -4543,7 +4547,7 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
         return GrownHeadVerdict(reason, growth)
 
     def subject(self, goals: Goals, request: ReadPullRequestHead) -> str:
-        project = goals.registry.snapshot().commander_project.require()
+        project = goals.registry.snapshot().team_project.require()
         growth = WorkBranches(Repo.selected(project.repos, request.repo.to_wire()).checkout
                               ).reviewed_growth(request.pr, request.head, request.base)
         growth.require_parsed()
@@ -5068,7 +5072,7 @@ class EditVerdict(ToolCallVerdict, declared_name=None):
         rule = goals.registry.storage_rule
         roots = rule.roots_of(goals.registry.require(self.previous.owner))
         edited = Path(self.path).absolute()
-        for repo in goals.registry.snapshot().commander_project.require().repos:
+        for repo in goals.registry.snapshot().team_project.require().repos:
             fresh = (rule.order_checkout(roots, current.id) if repo.github == current.repo
                      else rule.repository_checkout(roots, current.id, repo.github))
             allocated = rule.reused_checkout(goals.registry.require(self.previous.owner),
@@ -5192,7 +5196,7 @@ class EditSendBackVerdict(SendBackVerdict, EditVerdict):
 
     def prepare(self, goals: Goals, current: Todo) -> Self:
         self.require_cited(
-            OrderRoots(self.edited(goals, current)[1], goals.registry.snapshot().commander_project),
+            OrderRoots(self.edited(goals, current)[1], goals.registry.snapshot().team_project),
             WorkingTree())
         return self
 
@@ -5433,13 +5437,13 @@ class RecordPullRequest(TodoCommand):
 
     def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
         """A companion link is checked against the registered project under the write."""
-        self.require_repository(store.registry_cut().commander_project, current, self.link.repo)
+        self.require_repository(store.registry_cut().team_project, current, self.link.repo)
 
     @staticmethod
     def require_repository(project: TeamProject, todo: Todo, repository: RepositoryName) -> None:
         """Creation preflight and the stored link share the project's repository rule."""
         if repository not in project.linkable(todo.repo):
-            raise TodoError(f"{repository.to_wire()} is not a repository of this teammate "
+            raise TodoError(f"{repository.to_wire()} is not a repository of this team's "
                             f"project; {todo.id} links only registered repositories.")
 
     def changed(self, current: Todo) -> Todo:
@@ -5639,12 +5643,12 @@ class ChangeTodoState(TodoOperation):
 class OwnerRequest(TodoStoreRows, TypedTable, SharedFileTables, DurableTables):
     """One owner's request, independent of any current turn goal."""
 
-    indexes = (Index(("commander_created_at", "state", "created_at")),)
+    indexes = (Index(("teammate_created_at", "state", "created_at")),)
 
     id: Annotated[OwnerRequestId, Column(primary_key=True, storage=TextStorage)]
-    commander: RecordedThreadIncarnation
-    commander_created_at: ClassVar[Generated] = Generated(
-        float, Column(generated="json_extract({commander}, '$.created_at')"),
+    teammate: RecordedThreadIncarnation
+    teammate_created_at: ClassVar[Generated] = Generated(
+        float, Column(generated="json_extract({teammate}, '$.created_at')"),
     )
     text: str
     state: RequestState = OpenRequestState()
@@ -5656,15 +5660,15 @@ class OwnerRequest(TodoStoreRows, TypedTable, SharedFileTables, DurableTables):
             raise TodoError("An owner request needs its text.")
 
     @classmethod
-    def new(cls, commander: ThreadIncarnation, text: str) -> Self:
-        return cls(OwnerRequestId.new(), commander.require_recorded(), text)
+    def new(cls, requester: ThreadIncarnation, text: str) -> Self:
+        return cls(OwnerRequestId.new(), requester.require_recorded(), text)
 
-    def require_maintainer(self, commander: ThreadIncarnation) -> None:
-        if not commander.commands(self.commander):
+    def require_maintainer(self, actor: ThreadIncarnation) -> None:
+        if not actor.acts_for(self.teammate):
             raise ForeignRequest(f"Request {self.id.value} is outside this actor's work scope.")
 
-    def require_open(self, commander: ThreadIncarnation) -> OpenRequestState:
-        self.require_maintainer(commander)
+    def require_open(self, actor: ThreadIncarnation) -> OpenRequestState:
+        self.require_maintainer(actor)
         return self.state.require_open(self.id)
 
     def at_revision(self, directives: tuple[RequestDirective, ...]) -> RequestAtRevision:
@@ -5690,7 +5694,7 @@ class OwnerRequest(TodoStoreRows, TypedTable, SharedFileTables, DurableTables):
 @dataclass(frozen=True, slots=True)
 class Todo(TodoStoreRows, TypedTable):
     unit_index: ClassVar[ExpressionIndex] = ExpressionIndex((
-        Assignment.sql_field('owner'), Assignment.sql_field('owner_created'), '{state}',
+        Assignment.sql_field('owner_created'), '{state}',
     ))
     problem_index: ClassVar[ExpressionIndex] = ExpressionIndex((ProblemNumber.sql_number('{id}'),))
     serving_request: ClassVar[str] = (
@@ -5912,12 +5916,12 @@ class Todo(TodoStoreRows, TypedTable):
         self.order.folded(target.id, why)
 
     def require_maintainer(self, actor: ThreadIncarnation) -> None:
-        if not (actor.commands(self.creator_identity)
+        if not (actor.acts_for(self.creator_identity)
                 or self.current_holder.represented_by(actor)):
             raise NotWorkMaintainer(self, actor)
 
     def require_actor(self, actor: ThreadIncarnation, generation: GoalId | None) -> None:
-        if not actor.commands(self.creator_identity):
+        if not actor.acts_for(self.creator_identity):
             self.require_assignee(actor, generation)
 
     def require_same_creation(self, proposed: Todo) -> None:
@@ -6266,7 +6270,7 @@ class TodoHistory:
     """Shared history queries; a board snapshot overrides only its aggregate lookup."""
 
     def phases_checked(
-        self, commanders: frozenset[ThreadIncarnation],
+        self, teammates: frozenset[ThreadIncarnation],
     ) -> dict[type[OrderPhase], float]:
         """The latest checked declaration per phase, including declarations retained by folds.
 
@@ -6276,9 +6280,9 @@ class TodoHistory:
         serves = f"""json_extract(value, '$.{FieldCodec.record_key(CheckedProblemOrder, 'serves')}')"""
         at = (f"""json_extract(value, '$.{FieldCodec.record_key(CheckedProblemOrder, 'at')}"""
               f""".{FieldCodec.record_key(RecordedEventTime, 'at')}')""")
-        if not commanders:
+        if not teammates:
             return {}
-        creators = ", ".join("(?, ?)" for _ in commanders)
+        creators = ", ".join("(?, ?)" for _ in teammates)
         with self.snapshot() as db:
             rows = db.execute(
                 f'WITH RECURSIVE declarations(value) AS ('
@@ -6291,8 +6295,8 @@ class TodoHistory:
                 f"SELECT COALESCE({serves}, ?), MAX({at}) FROM declarations "
                 f"WHERE json_extract(value, '$.{ProblemOrder.family_discriminator}') "
                 f"IN {CheckedProblemOrder.sql_choices()} AND {at} IS NOT NULL GROUP BY 1",
-                tuple(value for commander in commanders
-                      for value in (commander.name, commander.wire_birth))
+                tuple(value for teammate in teammates
+                      for value in (teammate.name, teammate.wire_birth))
                 + (FieldCodec.encode(UnplannedPhase),)).fetchall()
         return {FieldCodec.decode(type[OrderPhase], phase): at for phase, at in rows}
 
@@ -6345,8 +6349,8 @@ class TransactionTodoHistory(TodoHistory):
 class OwnerRequestStore(DurableStore):
     """Request lifetime and serving-work queries share the store's transaction."""
 
-    def add_request(self, commander: ThreadIncarnation, text: str) -> OwnerRequest:
-        request = OwnerRequest.new(commander, text)
+    def add_request(self, requester: ThreadIncarnation, text: str) -> OwnerRequest:
+        request = OwnerRequest.new(requester, text)
         with self.writing() as db:
             request.insert(db)
         return request
@@ -6356,16 +6360,23 @@ class OwnerRequestStore(DurableStore):
             return OwnerRequest.require(db, id=request)
 
     def open_requests(
-        self, commander: ThreadIncarnation, *, limit: int = -1, descending: bool = True,
+        self, teammate: ThreadIncarnation, *, limit: int = -1, descending: bool = True,
     ) -> tuple[OwnerRequest, ...]:
         with self.snapshot() as db:
             requests = (
                 request for request in OwnerRequest.stream(
                     db, state=OpenRequestState(),
                     order_by=("created_at", "id"), descending=descending,
-                ) if commander.commands(request.commander)
+                ) if teammate.acts_for(request.teammate)
             )
             return tuple(islice(requests, None if limit < 0 else limit))
+
+    def requesters(self) -> tuple[ThreadIncarnation, ...]:
+        """Each owner an open request waits on, once: read from the requests, never by asking
+        every thread the registry has ever held."""
+        with self.snapshot() as db:
+            return tuple(dict.fromkeys(
+                request.teammate for request in OwnerRequest.stream(db, state=OpenRequestState())))
 
     def record_directive(self, request: OwnerRequestId, directive: RequestDirective) -> None:
         with self.writing() as db:
@@ -6374,11 +6385,11 @@ class OwnerRequestStore(DurableStore):
             replace(current, directives=(*current.directives, directive)).upsert(db)
 
     def complete_request(
-        self, commander: ThreadIncarnation, request: OwnerRequestId, reason: str,
+        self, actor: ThreadIncarnation, request: OwnerRequestId, reason: str,
     ) -> OwnerRequest:
         with self.writing() as db:
             current = OwnerRequest.require(db, id=request)
-            state = current.require_open(commander)
+            state = current.require_open(actor)
             completed = replace(current, state=state.complete(
                 request, TransactionTodoHistory(db).attach(
                     Todo.capture_rows(db, *self._serving(request))), reason,
@@ -6470,9 +6481,9 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         with self.writing() as db:
             return str(ProblemAllocation.allocate(db))
 
-    def record_hunt(self, commander: ThreadIncarnation, hunt: Hunt) -> HuntRecord:
-        hunt.require_maintainer(self, commander)
-        recorded = HuntRecord(HuntId.mint(), commander, hunt)
+    def record_hunt(self, actor: ThreadIncarnation, hunt: Hunt) -> HuntRecord:
+        hunt.require_maintainer(self, actor)
+        recorded = HuntRecord(HuntId.mint(), actor, hunt)
         with self.writing() as db:
             recorded.upsert(db)
         return recorded
@@ -6482,37 +6493,37 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         with self.snapshot() as db:
             return tuple(record.hunt for record in HuntRecord.select(db))
 
-    def resolve_order(self, commander: ThreadIncarnation, unit: str, problem: str) -> Todo:
+    def resolve_order(self, actor: ThreadIncarnation, unit: str, problem: str) -> Todo:
         found = self._select('id=?', (problem,), reader=self._open)
         if (len(found) != 1
                 or found[0].holder_state.previous_assignment().owner != unit):
             raise TodoError(f'{unit} holds no order on {problem}')
-        commander.require_may_change(found[0])
+        actor.require_may_change(found[0])
         return found[0]
 
-    def drop(self, commander: ThreadIncarnation, unit: str, problem: str, by: str) -> Todo:
-        old = self.resolve_order(commander, unit, problem)
-        newer = self.resolve_order(commander, unit, by)
+    def drop(self, actor: ThreadIncarnation, unit: str, problem: str, by: str) -> Todo:
+        old = self.resolve_order(actor, unit, problem)
+        newer = self.resolve_order(actor, unit, by)
         if not old.pending or not newer.pending or newer.order.at.at <= old.order.at.at:
             raise TodoError('Only a live newer order to the same teammate replaces an old one.')
         return self.apply_together((ProblemCommand(old.id, DropTodo(
-            old.revision, commander, ExpectedProblem(newer.id, newer.revision),
+            old.revision, actor, ExpectedProblem(newer.id, newer.revision),
             newer.latest_message.message_id)),))[0]
 
-    def fold(self, commander: ThreadIncarnation, problem: str, into: str, why: str) -> None:
+    def fold(self, actor: ThreadIncarnation, problem: str, into: str, why: str) -> None:
         source, target = self.get(problem), self.get(into)
         self.apply_together((
             ProblemCommand(source.id, FoldSourceTodo(
-                source.revision, commander, ExpectedProblem(target.id, target.revision), why)),
-            ProblemCommand(target.id, FoldTargetTodo(target.revision, commander, source.id, source.text)),
+                source.revision, actor, ExpectedProblem(target.id, target.revision), why)),
+            ProblemCommand(target.id, FoldTargetTodo(target.revision, actor, source.id, source.text)),
         ))
 
     def link(
-        self, commander: ThreadIncarnation, problem: str, unit: str, held_problem: str
+        self, actor: ThreadIncarnation, problem: str, unit: str, held_problem: str
     ) -> None:
-        sent = self.resolve_order(commander, unit, held_problem)
+        sent = self.resolve_order(actor, unit, held_problem)
         target = self.get(problem)
-        self.apply_together((ProblemCommand(target.id, LinkTodo(target.revision, commander, sent, unit)),))
+        self.apply_together((ProblemCommand(target.id, LinkTodo(target.revision, actor, sent, unit)),))
 
     @staticmethod
     def _open(db: sqlite3.Connection, where: str, parameters: tuple,
@@ -6528,7 +6539,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         terms = Todo.unit_index.terms[:-1]
         match = f"({', '.join(terms)})=({','.join('?' for term in terms)})"
         return cls._open(db, f'{match} AND ({where})',
-                         (unit.name, unit.wire_birth, *parameters))
+                         (unit.wire_birth, *parameters))
 
     @classmethod
     def _one(cls, rows: tuple[Todo, ...], todo_id: str) -> Todo:
@@ -6850,7 +6861,7 @@ class EditWorkplaces:
         if not holds:
             return {}
         prepared = cls.for_assignment(comms.root, snapshot, tuple(hold.todo for hold in holds), ())
-        repositories = snapshot.commander_project.require().repos
+        repositories = snapshot.team_project.require().repos
         registered = frozenset(repo.github for repo in repositories)
         rule = prepared.rule
         declared = {todo.id: todo.order.source_repositories() for todo in prepared.orders.values()}

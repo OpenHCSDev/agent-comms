@@ -18,7 +18,7 @@ from aiohttp import ClientSession
 from agent_comms.comms import Comms
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.repo import Checkout
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from connector_readiness import ConnectorReadiness
 from connector_shutdown_fixture import ShutdownReadTool, ShutdownWriteTool
 from watch_shutdown_fixture import ShutdownWatch
@@ -37,7 +37,7 @@ class ShutdownServer:
     @asynccontextmanager
     async def launch(cls, comms: Comms, tmp_path: Path, module: str, *arguments: str) -> AsyncIterator[ShutdownServer]:
         for name in ("worker", "claude-ai"):
-            comms.registry.declare(Thread(name, frozenset(), Checkout(comms.root)))
+            comms.registry.declare(NativeThread(name, frozenset(), Checkout(comms.root)))
         auth = tmp_path / "auth"
         token = ConnectorStore.at(auth).thread_granted("claude-ai")
         control = tmp_path / "call"

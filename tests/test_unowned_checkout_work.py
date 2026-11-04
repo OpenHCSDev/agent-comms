@@ -39,7 +39,7 @@ from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import (
     RepeatedTodoChange, ServicePassFailing, StaleTodoDecision, StandingRule,
 )
-from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.threads import ExternalThread, NativeThread
 from agent_comms.errors import TodoConflict, TodoError
 from agent_comms.todos import (
     Assignment, ExpectedProblem, PendingProblemOrder, ProgressRead, ReleaseTodo, StrikeReason,
@@ -49,7 +49,6 @@ from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.ui_model.teammate_state import TeammateState, Unreadable
 from agent_comms.work_branches import UnreadableCheckoutRead, WorkBranches
-from agent_comms.threads import Thread
 
 
 def git(directory: Path, *arguments: str) -> str:
@@ -116,15 +115,15 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
     # Two order holders never share one worktree, so the unit taking the work has its own.
     spare = tmp_path / 'idle-project'
     git(home, 'worktree', 'add', '-q', '-b', 'idle-home', str(spare))
-    for name in ('lead', 'worker'):
-        c.registry.declare(Thread(
-            name, frozenset(), Checkout(home), execution=ExternalThreadExecution))
-    c.registry.declare(Thread(
-        'idle', frozenset(), Checkout(spare), execution=ExternalThreadExecution,
+    for name in ('colleague', 'worker'):
+        c.registry.declare(ExternalThread(
+            name, frozenset(), Checkout(home)))
+    c.registry.declare(ExternalThread(
+        'idle', frozenset(), Checkout(spare),
         process_identity=ProcessIdentity.capture(os.getpid())))
     request = c.goals.todos.add_request(
-        c.registry.require('lead').incarnation, 'Keep changes with their author').id
-    lead, worker = c.registry.require('lead'), c.registry.require('worker')
+        c.registry.require('colleague').incarnation, 'Keep changes with their author').id
+    colleague, worker = c.registry.require('colleague'), c.registry.require('worker')
     now = time.time()
     order = PendingProblemOrder(
         owner=FileLine('work.py', 1), scope=FIX_SCOPE, run=MechanicalOrderRun(),
@@ -135,7 +134,7 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
     for problem in ('P1', 'P2'):
         c.goals.todos.create(
             problem, RepositoryName.from_wire('OpenHCSDev/agent-comms'),
-            'Keep changes with their author', creator=lead, assigner=lead.incarnation, owner=worker,
+            'Keep changes with their author', creator=colleague, assigner=colleague.incarnation, owner=worker,
             generation=shared_work_goal_id, review_at=RecordedEventTime(now + 3600),
             order=order, request=request)
     # The holder takes both under a new goal: one order, one write.
@@ -150,8 +149,8 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
     with c.goals.todos.writing() as db:
         Todo.ordered(
             'P3', RepositoryName.from_wire('OpenHCSDev/agent-comms'),
-            'Keep unrelated work separate', lead.incarnation,
-            Assignment.of(worker.incarnation, lead.incarnation, other_work_goal_id),
+            'Keep unrelated work separate', colleague.incarnation,
+            Assignment.of(worker.incarnation, colleague.incarnation, other_work_goal_id),
             RecordedEventTime(now + 3600), order.reissued(now + 2), request,
         ).insert_if_absent(db)
     row = c.goals.todos.get('P2')
@@ -171,7 +170,7 @@ def struck_unowned_bus(checkout_bus: Comms) -> tuple[Comms, StrikeTodo]:
     c = checkout_bus
     row = c.goals.todos.get('P1')
     strike = StrikeTodo(
-        row.revision, c.registry.require('lead').incarnation, row.held(),
+        row.revision, c.registry.require('colleague').incarnation, row.held(),
         'The worker claimed completion without delivering any of its checked implementation.',
         evidence=(row.order.checked().owner,))
     struck = c.goals.todos.apply(row.id, strike)
@@ -182,20 +181,19 @@ def struck_unowned_bus(checkout_bus: Comms) -> tuple[Comms, StrikeTodo]:
 
 
 def run_heartbeat_rules(c: Comms, rules: tuple[StandingRule, ...]) -> None:
-    lead = c.registry.require('lead')
-    frame = capture_frame(c, lead.name, ProgressRead())
-    observed = TeamObservation(lead, frame, rules, ())
-    asyncio.run(ObservedHeartbeat((observed,)).run(lambda: nullcontext(c)))
+    frame = capture_frame(c, ProgressRead())
+    observed = TeamObservation(frame, rules, ())
+    asyncio.run(ObservedHeartbeat(observed).run(lambda: nullcontext(c)))
 
 
 def test_a_concurrent_unstrike_does_not_end_the_heartbeat_pass(struck_unowned_bus):
     c, strike = struck_unowned_bus
     with LaunchRoot.from_path(c.root).selected():
-        stale, = (rule for rule in UnownedWheelSpin.violations(c, 'lead')
+        stale, = (rule for rule in UnownedWheelSpin.violations(c)
                   if rule.todo.id == 'P1')
         current = c.goals.todos.get('P1')
         fresh = c.goals.todos.apply(current.id, VoidStrikeTodo(
-            current.revision, c.registry.require('lead').incarnation, strike,
+            current.revision, c.registry.require('colleague').incarnation, strike,
             'The cited failure was incorrect and the teammate takes back this strike.'))
         following = ServicePassFailing(watch='following-rule', since=time.time(), error='independent source',
                                        failed_at=time.time())
@@ -205,12 +203,12 @@ def test_a_concurrent_unstrike_does_not_end_the_heartbeat_pass(struck_unowned_bu
         assert assigned.holder == 'idle'
         assert assigned.revision == fresh.revision + 1
         assert not assigned.strikes_against(c.registry.require('worker').incarnation)
-        assert stale.redecided(c, 'lead', assigned) == ()
-        update, = TeamUpdate.latest(c, c.registry.require('lead').incarnation)
+        assert stale.redecided(c, assigned) == ()
+        update, = TeamUpdate.latest(c, c.registry.require('colleague').incarnation)
         assert not update.not_applied
         assert RulePing.capture(following) in update.handled
-        assert c.registry.require('lead').incarnation in (
-            ServicePassStore.at(c.root).read().commander_completed)
+        assert c.registry.require('colleague').incarnation in (
+            ServicePassStore.at(c.root).read().teammate_completed)
 
 
 def test_a_non_refreshable_todo_conflict_does_not_end_the_heartbeat_pass(checkout_bus):
@@ -220,7 +218,7 @@ def test_a_non_refreshable_todo_conflict_does_not_end_the_heartbeat_pass(checkou
     class ConflictingServicePass(ServicePassFailing):
         current: Todo
 
-        def enforce(self, comms: Comms, commander: str) -> None:
+        def enforce(self, comms: Comms) -> None:
             raise TodoConflict(self.current)
 
     current = c.goals.todos.get('P1')
@@ -230,7 +228,7 @@ def test_a_non_refreshable_todo_conflict_does_not_end_the_heartbeat_pass(checkou
                                    failed_at=time.time())
     with LaunchRoot.from_path(c.root).selected():
         run_heartbeat_rules(c, (stale, following))
-        update, = TeamUpdate.latest(c, c.registry.require('lead').incarnation)
+        update, = TeamUpdate.latest(c, c.registry.require('colleague').incarnation)
         # The rule's line counts seconds since its failure, so the pass's render and this one
         # can differ by a clock tick; the refusal and the rule it refused are the facts.
         refused, = update.not_applied
@@ -238,8 +236,8 @@ def test_a_non_refreshable_todo_conflict_does_not_end_the_heartbeat_pass(checkou
         assert stale.watch in refused
         assert RulePing.capture(stale) not in update.handled
         assert RulePing.capture(following) in update.handled
-        assert c.registry.require('lead').incarnation in (
-            ServicePassStore.at(c.root).read().commander_completed)
+        assert c.registry.require('colleague').incarnation in (
+            ServicePassStore.at(c.root).read().teammate_completed)
 
 
 def test_a_second_todo_conflict_is_reported_without_ending_the_pass(struck_unowned_bus):
@@ -249,29 +247,28 @@ def test_a_second_todo_conflict_is_reported_without_ending_the_pass(struck_unown
     class ChangingRow(UnownedWheelSpin):
         next_row: Todo
 
-        def enforce(self, comms: Comms, commander: str) -> None:
+        def enforce(self, comms: Comms) -> None:
             raise TodoConflict(self.todo)
 
-        def redecided(self, comms: Comms, commander: str,
-                      current: Todo) -> tuple[StandingRule, ...]:
+        def redecided(self, comms: Comms, current: Todo) -> tuple[StandingRule, ...]:
             return (type(self)(self.next_row, self.next_row),)
 
     previous = c.goals.todos.get('P1')
     current = c.goals.todos.apply(previous.id, VoidStrikeTodo(
-        previous.revision, c.registry.require('lead').incarnation, strike,
+        previous.revision, c.registry.require('colleague').incarnation, strike,
         'The cited failure was incorrect and the teammate takes back this strike.'))
     stale = ChangingRow(previous, current)
     following = ServicePassFailing(watch='following-rule', since=time.time(), error='independent source',
                                    failed_at=time.time())
     with LaunchRoot.from_path(c.root).selected():
-        rejected = StandingRule.enforce_all(c, 'lead', (stale, following))
+        rejected = StandingRule.enforce_all(c, (stale, following))
         error, = rejected.values()
         with pytest.raises(RepeatedTodoChange) as caught:
             raise error
         assert caught.value.previous == previous
         assert caught.value.current == current
         run_heartbeat_rules(c, (stale, following))
-        update, = TeamUpdate.latest(c, c.registry.require('lead').incarnation)
+        update, = TeamUpdate.latest(c, c.registry.require('colleague').incarnation)
         assert update.not_applied == (stale.rejected_line(caught.value),)
         assert RulePing.capture(stale) not in update.handled
         assert RulePing.capture(following) in update.handled
@@ -291,7 +288,7 @@ def test_unreadable_checkout_is_its_holders_state_and_the_pass_carries_on(
         read = WorkBranches(checkout).read_checkout()
         assert isinstance(read, UnreadableCheckoutRead) and read.holds_work
         unreadable, = (state for state in TeammateState.current(
-            c, 'lead', capture_frame(c, 'lead', ProgressRead()))
+            c, capture_frame(c, ProgressRead()))
                       if isinstance(state, Unreadable))
         assert unreadable.unit == c.registry.require('worker').incarnation
         assert str(checkout) in unreadable.reason
@@ -305,8 +302,8 @@ def test_order_closed_after_the_frame_read_does_not_fail_the_merge_read(
     practice.include(tuple(RootFile.existing_in(practice.root)))
     c = wire(practice.path)
     with LaunchRoot.from_path(practice.path).selected():
-        frame = capture_frame(c, 'lead', ProgressRead())
-        worker, = (state for state in TeammateState.current(c, 'lead', frame)
+        frame = capture_frame(c, ProgressRead())
+        worker, = (state for state in TeammateState.current(c, frame)
                    if state.unit == c.registry.require('worker').incarnation)
         assert 'P1' in worker.orders and not isinstance(worker, Unreadable)
         row = c.goals.todos.get('P1')
@@ -320,7 +317,7 @@ def test_order_closed_after_the_frame_read_does_not_fail_the_merge_read(
 def test_a_renamed_holder_keeps_its_order_checkouts(tmp_path):
     rule = StorageRule(checkout_base=tmp_path / 'checkouts',
                        scratch_base=tmp_path / 'scratch', volume=tmp_path, floor_gib=0)
-    born = Thread('unit-mi', frozenset(), Checkout(tmp_path / 'home'),
+    born = NativeThread('unit-mi', frozenset(), Checkout(tmp_path / 'home'),
                   storage_roots=rule.initial_roots('unit-mi'))
     renamed = replace(born, name='codex-mi')
     checkout = rule.order_checkout(rule.roots_of(renamed), 'P1')

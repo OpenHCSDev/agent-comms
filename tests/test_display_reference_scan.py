@@ -9,7 +9,7 @@ from agent_comms.messages import NO_HISTORY_SOURCE
 from agent_comms.messages import InfoKind, Message, PublicRecord
 from agent_comms.repo import Checkout
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 def spans(text: str) -> list[str]:
@@ -34,9 +34,8 @@ def test_no_targets_finds_nothing():
 
 def test_source_projection_reuses_real_captures_without_merging_revisions(comms: Comms) -> None:
     comms.channels.create_tag("team")
-    original = comms.registry.declare(Thread(
-        name="reference", tags=frozenset(), worktree=Checkout(comms.root.parent),
-    ))
+    original = comms.registry.declare(NativeThread(
+        name="reference", tags=frozenset(), worktree=Checkout(comms.root.parent)))
     references = CurrentDisplayReferences.from_registry(
         str(comms.root), comms.registry.snapshot(), ("#team",))
     earlier = HistorySource.capture_original(comms.root)

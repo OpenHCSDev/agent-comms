@@ -25,7 +25,7 @@ from .registration import Registration
 from .registry_document import DEFAULT_ROSTER, RegistrySnapshot, RosterVisibility
 from .retained_task_facts import RetainedTaskFacts
 from .shared_ledger import LedgerDocument
-from .thread_execution import ConversationPreparation
+from .threads import ConversationPreparation, Thread, current_thread
 from .thread_identity import ThreadIncarnation
 from .sent_message import AssignedSourceIdentity
 from .view_unread import transcript_read_state
@@ -63,7 +63,6 @@ from .page_traversal import LiveCursor
 from .message_notification import MessageNotification
 from .presentation import BusPresentation, ChannelView, CoordinationSnapshot, CountedRead, InboxRead, NoRevision, ReadState, ThreadRecord, ThreadView, WireRevision
 from .read_basis import AnonymousViewer, DisplayViewer, DMDisplayBasis, NamedViewer
-from .threads import Thread, current_thread
 from .transcripts import TranscriptCursor, Transcripts
 
 _LOG = logging.getLogger(__name__)
@@ -438,7 +437,7 @@ class HistoryViews:
     def mark_thread_view_read(self, name: str, *, worktree: Checkout, through: TranscriptCursor) -> None:
         """Acknowledge the displayed position through the thread's receiving contract."""
         thread = self.registry.require(name)
-        thread.execution.prepare_conversation(ThreadViewRead(
+        thread.prepare_conversation(ThreadViewRead(
             self, thread, self.messaging.user_identity(worktree), through,
         ))
 
@@ -455,7 +454,7 @@ class HistoryViews:
         viewer = self.messaging.user_identity(worktree).name
         thread = self.registry.require(target)
         checkpoint = self.transcripts.transcript_checkpoint(thread.name)
-        thread.execution.prepare_conversation(ThreadViewRead(
+        thread.prepare_conversation(ThreadViewRead(
             self, thread, self.registry.require(viewer), checkpoint,
         ))
         self.bus.mark_read_through(

@@ -604,7 +604,7 @@ class ChannelTarget(NamedTarget):
     ) -> tuple[NamedTarget, Message, list[str]]:
         channel = require_channel(self.name)
         names = [recipient.name for thread in snapshot.channel_audience()
-                 for recipient in thread.execution.channel_recipients(thread)
+                 for recipient in thread.channel_recipients()
                  if recipient.name != sender and channel.matches(recipient.tags)]
         return self, message, names
 
@@ -696,5 +696,5 @@ class CommsTag(DeclaredTag):
     and the teammate's posts address it."""
 
 
-class TeammatesTag(DeclaredTag, declared_name="commanders"):
+class TeammatesTag(DeclaredTag, declared_name="teammates"):
     """A coordination channel identity, never a permission or execution role."""

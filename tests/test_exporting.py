@@ -30,7 +30,7 @@ from agent_comms.bus import Bus, ClaimRecord
 from agent_comms.envelope_claim_transitions import UnscopedClaims
 from agent_comms.nominal.field_codec import ClaimId
 from agent_comms.messages import ClaimNoticeKind, Message, InfoKind
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 def message(sequence: int, body: str, *, timestamp: float | None = None) -> Message:
@@ -48,7 +48,7 @@ def message(sequence: int, body: str, *, timestamp: float | None = None) -> Mess
 def export_comms(comms: Comms, tmp_path) -> Comms:
     comms.channels.create_tag("team")
     for name in ("alice", "bob"):
-        comms.registry.declare(Thread(
+        comms.registry.declare(NativeThread(
             name, frozenset({"team"}), Checkout(tmp_path)))
     return comms
 

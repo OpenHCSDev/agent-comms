@@ -34,7 +34,7 @@ from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.restart_scope import OwnersNamed
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.turn_lease import NoTurnRecord
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from bus_history import read_history
 from bus_record_fixture import prepare_native_comms
 
@@ -238,7 +238,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
         project.mkdir()
         projects[name] = project
         comms.registry.declare(
-            Thread(name, frozenset({'team'}), Checkout(project), model=DeclaredModel(f'roundtrip-local/{name}' if broadcast else 'roundtrip-local/fixture'), thinking_level=OffThinkingLevel)
+            NativeThread(name, frozenset({'team'}), Checkout(project), model=DeclaredModel(f'roundtrip-local/{name}' if broadcast else 'roundtrip-local/fixture'), thinking_level=OffThinkingLevel)
         )
     root_id = comms.registry.store.prepare_native_root().namespace
     attachment = CommsClient(

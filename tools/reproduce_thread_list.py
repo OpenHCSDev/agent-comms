@@ -18,18 +18,17 @@ from agent_comms.thread_management import GivenDirectory
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.thread_storage import StorageRoots
 from agent_comms.thread_text import GivenThreadText
-from agent_comms.threads import Thread
+from agent_comms.threads import Thread, NativeThread
 from agent_comms.ui_model.observation import ObserveSidebar, SidebarObserved, SidebarUnreadable
 
 
 def declaration(root: Path, name: str, created_at: float = 1) -> Thread:
-    return Thread(
+    return NativeThread(
         name,
         frozenset({"proof"}),
         Checkout(root),
         created_at=created_at,
-        storage_roots=StorageRoots(root / "scratch" / name),
-    )
+        storage_roots=StorageRoots(root / "scratch" / name))
 
 
 def writer(root: Path, stop: Event, result: Queue[int], imports: bool) -> None:

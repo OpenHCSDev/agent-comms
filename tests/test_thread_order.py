@@ -7,14 +7,14 @@ from agent_comms.activity import Activity, ActivityState
 from agent_comms.comms import wire
 from conftest import installed_comms
 from agent_comms.messages import Message, InfoKind
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.tool_caller import ThreadCaller
 
 
 def test_sort_metadata_survives_selection_heartbeat_and_rename(tmp_path):
     comms = installed_comms(tmp_path)
-    comms.registry.declare(Thread(name='alpha', tags=frozenset(), worktree=Checkout(tmp_path), created_at=100))
-    comms.registry.declare(Thread(name='beta', tags=frozenset(), worktree=Checkout(tmp_path), created_at=200))
+    comms.registry.declare(NativeThread(name='alpha', tags=frozenset(), worktree=Checkout(tmp_path), created_at=100))
+    comms.registry.declare(NativeThread(name='beta', tags=frozenset(), worktree=Checkout(tmp_path), created_at=200))
     comms.agents.activity.emit(Activity(thread="alpha", state=ActivityState.WORKING, timestamp=300))
     comms.bus.publisher.publish_ordinary(
         Message(
@@ -30,7 +30,7 @@ def test_sort_metadata_survives_selection_heartbeat_and_rename(tmp_path):
         assert comms.views.last_sent_timestamps(clocks.sent.items(), registry=comms.registry.snapshot()) == {"alpha": 400, "beta": 500}
     comms.owners.acquire_thread("alpha")
     comms.threads.heartbeat("alpha")
-    comms.registry.declare(Thread(name='alpha', tags=frozenset(), worktree=Checkout(tmp_path)))
+    comms.registry.declare(NativeThread(name='alpha', tags=frozenset(), worktree=Checkout(tmp_path)))
     people = {person.thread.name: person.to_wire() for person in comms.views.presence()}
     assert people["alpha"]["created_at"] == 100
     assert people["alpha"]["last_activity"] == 300

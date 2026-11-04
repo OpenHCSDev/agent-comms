@@ -88,9 +88,11 @@ class TeammateTalkRule(HolderLine, FamilyScan, declared_name=None):
 
     @classmethod
     def scan_observed(
-        cls, comms: Comms, commander: str, observed: Sequence[TeammateState], frame: HeartbeatFrame
+        cls, comms: Comms, observed: Sequence[TeammateState], frame: HeartbeatFrame
     ) -> tuple[Self, ...]:
-        talks = tuple(TeammateTalk(state.source) for state in observed)
+        # An unreadable source has no readable unit, so its talk is never re-read here.
+        talks = tuple(TeammateTalk(state.source)
+                      for state in observed for _unit in state.readable_units())
         return tuple(
             rule
             for member in cls.members_with(cls)

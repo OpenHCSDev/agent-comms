@@ -16,7 +16,7 @@ from .read_basis import DisplayViewer, OperatorOutcomes, ReadAuthority
 from .registration import Registration
 from .notification_evidence import OutcomeViewer, OwnerOutcomes
 from .presentation import SentMessageSummary, ThreadRecord
-from .thread_execution import ForkExecution
+from .threads import ForkThread, SubagentThread, Thread
 from .thread_identity import ThreadIncarnation
 from .tool_result import ToolResult
 from .turn_phase import IdlePhase
@@ -24,7 +24,6 @@ from .turn_phase import IdlePhase
 if TYPE_CHECKING:
     from .comms import Comms
     from .head_review import HeadReviewOrder, PullRequestHead
-    from .threads import Thread
     from .tool_request import ToolRequest
 
 
@@ -58,7 +57,7 @@ class ToolCaller(ReadAuthority):
     def from_flag(self) -> tuple[str, ...]:
         """The command line's --from argument naming this caller, if it names a thread."""
 
-    def commanding(self, comms: Comms) -> None:
+    def rejoin(self, comms: Comms) -> None:
         """An ordinary caller needs no teammate-child registration."""
         return None
 
@@ -100,8 +99,8 @@ class NoThreadCaller(OperatorOutcomes, ToolCaller):
 
     def teammate(self) -> ThreadCaller:
         raise ToolRefusedError(
-            "Team verbs act as the teammate running them: pass --from NAME or run from a "
-            "session bound to the bus. There is no lead to act as.")
+            "Team verbs act as the teammate running them: pass --as NAME, or --fork NAME for a "
+            "fork acting for its teammate. There is no lead to act as.")
 
     def invoke(self, request: ToolRequest, comms: Comms) -> ToolResult:
         return request.apply_without_thread(comms, self)
@@ -135,7 +134,7 @@ class ThreadCaller(ToolCaller):
     def teammate(self) -> ThreadCaller:
         return self
 
-    def commander(self, comms: Comms) -> Thread:
+    def authority(self, comms: Comms) -> Thread:
         return comms.registry.require(self.name)
 
     def identity(self, comms: Comms) -> ThreadIncarnation:
@@ -185,7 +184,7 @@ class SubagentCaller(ThreadCaller):
         already archived has already ended."""
         if comms.registry.status(self.name).archived:
             return
-        comms.registry.require(self.name).execution.require_subagent()
+        comms.registry.require_member(self.name, SubagentThread)
         self.leaving(comms)
         comms.agents.enter_phase(self.name, IdlePhase())
         comms.registry.unregister(self.name)
@@ -200,11 +199,11 @@ class ActsForTeam(ThreadCaller):
     verbs accept its orders and verdicts as the teammate's, and the record names who acted."""
 
     @abstractmethod
-    def commander(self, comms: Comms) -> Thread: ...
+    def authority(self, comms: Comms) -> Thread: ...
 
     def identity(self, comms: Comms) -> ThreadIncarnation:
         own = comms.registry.require(self.name).incarnation
-        return own.require_recorded().acting_for(self.commander(comms).acting_identity)
+        return own.require_recorded().acting_for(self.authority(comms).acting_identity)
 
 
 @dataclass(frozen=True)
@@ -222,7 +221,7 @@ class ForkRecordOwed(ToolRefusedError):
 class ForkCaller(ActsForTeam, SubagentCaller):
     """Team verbs use a registered child without copying registry procedures."""
 
-    def commanding(self, comms: Comms) -> None:
+    def rejoin(self, comms: Comms) -> None:
         """A verb resumes the fork under the parent that spawned it, never under whichever
         thread the bus records as teammate."""
         self.join(comms, self.spawner(comms))
@@ -231,7 +230,7 @@ class ForkCaller(ActsForTeam, SubagentCaller):
         """The SubagentStart hook declares the fork under the session that spawned it, in its
         own process, before the fork's first call; the child inherits that parent's tags.
         A connector grant names its holder, so a fork of another parent is refused."""
-        comms.registry.register_child(self.name, parent, ForkExecution, comms.goals)
+        comms.registry.register_child(self.name, parent, ForkThread, comms.goals)
 
     def spawner(self, comms: Comms) -> str:
         """The parent the hook registered; before it has, the bus thread the calling Claude
@@ -248,7 +247,7 @@ class ForkCaller(ActsForTeam, SubagentCaller):
         binding, = bindings
         return binding.bus
 
-    def commander(self, comms: Comms) -> Thread:
+    def authority(self, comms: Comms) -> Thread:
         fork = comms.registry.require(self.name)
         parent, = fork.parent.names()
         return comms.registry.require(parent)
@@ -273,14 +272,14 @@ class ForkCaller(ActsForTeam, SubagentCaller):
         if not self.recorded(comms):
             raise ForkRecordOwed(
                 f"{self.name} recorded nothing in Core: record a head verdict with"
-                f" `agent-comms-commander judge ... --fork {self.name}` or post what it found with"
-                f" `agent-comms-commander order say '#comms' FILE --fork {self.name}` before it stops.")
+                f" `agent-comms-team judge ... --fork {self.name}` or post what it found with"
+                f" `agent-comms-team order say '#comms' FILE --fork {self.name}` before it stops.")
         self.end(comms)
 
     def leaving(self, comms: Comms) -> None:
         """A fork that recorded nothing tells its teammate the work is missing."""
         if not self.recorded(comms):
-            commander = self.commander(comms).name
-            comms.messaging.send(self.name, commander, (
+            teammate = self.authority(comms).name
+            comms.messaging.send(self.name, teammate, (
                 f"{self.name} stopped without recording what it found: its work is missing."
                 " Read its transcript or give the work to another fork."))

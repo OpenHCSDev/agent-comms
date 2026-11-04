@@ -58,7 +58,6 @@ from agent_comms.cli_verbs.threads import ThreadsCliCommand
 from .cli_result import CliResult
 from .coordination_tables.refusals import SendRefusal
 from .display_order import ChannelSort, ThreadSort
-from .errors import RelationViolationError
 from .nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion, WireForm, WireName, WireOmitDefault, projected, GoalId
 from .goal_actions import (
     ActiveGoalAction, ClearGoalAction, EditGoalAction, GoalAction, GoalActor, GoalPrecondition,
@@ -108,11 +107,16 @@ from .task_sources import (
     TaskChange,
     TaskScopeSelection,
 )
-from .thread_execution import ArchiveOwnerControl, NativeOwnerCommand, OwnerLifecycleControl, StartOwnerControl
+from .threads import (
+    ArchiveOwnerControl,
+    NativeOwnerCommand,
+    OwnerLifecycleControl,
+    StartOwnerControl,
+    NextTurnConfiguration,
+)
 from .thread_management import InheritedTags, RenameThreadResult, TagChoice
 from .thread_identity import ToolName
 from .thread_model import ThreadModel
-from .threads import NextTurnConfiguration
 from .tool_caller import ThreadCaller, ThreadListing, ToolCaller
 from .tool_result import ToolResult
 from .notification_reads import LiveNotificationRead
@@ -1366,7 +1370,7 @@ class CommsInstallTool(NativeToolRequest):
     )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> InstallLaunches:
-        return InstallLaunches(InstallDue.launch_due(comms, caller.name))
+        return InstallLaunches(InstallDue.launch_due(comms))
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -33,7 +33,7 @@ def example_hud() -> TeamHud:
         RecordedThreadIncarnation("screen", 2.0), Moving, NoPendingClock(),
         (order,), 0, (), (),
     )
-    lead = RecordedThreadIncarnation("lead", 1.0)
+    colleague = RecordedThreadIncarnation("colleague", 1.0)
     old = replace(RulePing.capture(ServicePassFailing(watch="source", since=900, error="read refused",
                                                       failed_at=900)),
                   since=RecordedEventTime(900))
@@ -41,14 +41,14 @@ def example_hud() -> TeamHud:
                                                       failed_at=1000)),
                   since=RecordedEventTime(1000))
     return TeamHud(
-        commander=lead, units=(
+        teammate=colleague, units=(
             worker,
             replace(worker, unit=RecordedThreadIncarnation("blocked", 3.0), state=Stuck),
             replace(worker, unit=RecordedThreadIncarnation("run-next", 4.0), state=AwaitingApplicationRun),
             replace(worker, unit=RecordedThreadIncarnation("idle", 5.0), state=Idle, orders=()),
         ), phases=(), load=OverloadDegradation(3, 1, 2), forks=(),
         usage=CodexUsage(UnreadableUsage(reason="not requested in source example")),
-        packets=(TeamDecisions(lead, (old, new), (new,), (old,)),),
+        packets=(TeamDecisions(colleague, (old, new), (new,), (old,)),),
         heartbeat=RecordedEventTime(990), open_pings=(),
     )
 

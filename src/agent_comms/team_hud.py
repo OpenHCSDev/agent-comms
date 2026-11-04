@@ -266,7 +266,7 @@ class TeamStatus(DisclosedRecord):
 
 @dataclass(frozen=True)
 class HudDisplayFacts:
-    commander: ThreadIncarnation
+    teammate: ThreadIncarnation
     status: ViewFacts
     groups: tuple[ViewSectionFacts, ...]
     alarms: tuple[ViewSectionFacts, ...]
@@ -300,11 +300,11 @@ class TeamHud(TeamLoad):
 
     TodoStore owns orders, review timers and strikes; OrderEditCountRead owns edit counts;
     PullRequests owns ready/draft facts; PlanPhase owns phase state; OverloadDegradation
-    owns the load formula and decision; ThreadExecution owns which threads are forks. Nothing
-    here makes independent board decisions; its lines come from the retained observation.
+    owns the load formula and decision; ForkThread owns which threads are forks. Nothing here
+    makes independent board decisions; its lines come from the retained observation.
     """
 
-    commander: ThreadIncarnation
+    teammate: ThreadIncarnation
     units: tuple[Teammate, ...]
     phases: tuple[TeamPhase, ...]
     forks: tuple[ThreadIncarnation, ...]
@@ -313,16 +313,18 @@ class TeamHud(TeamLoad):
     open_pings: tuple[Ping, ...] = field(kw_only=True)
 
     @classmethod
-    def read(cls, comms: Comms, commander: str) -> TeamHud:
-        return TeamFrame.current(comms, commander)
+    def read(cls, comms: Comms, teammate: str) -> TeamHud:
+        return TeamFrame.current(comms, teammate)
 
     @classmethod
-    def of(cls, comms: Comms, commander: str, frame: HeartbeatFrame,
+    def of(cls, comms: Comms, frame: HeartbeatFrame,
            states: tuple[TeammateState, ...], *, delivery: TeamDelivery,
            usage: CodexUsage) -> TeamHud:
-        """Cards follow ``states``, already in the TeammateState family's declared order."""
+        """The one team board, prepared with its first teammate's delivery; for_delivery gives
+        every other teammate the same board. Cards follow ``states``, already in the
+        TeammateState family's declared order."""
         snapshot = comms.registry.snapshot()
-        owner = snapshot.require(commander).incarnation.require_recorded()
+        owner = delivery.packet.teammate.require_recorded()
         pulls, reading = frame.pulls, frame.plan
         todo_history = reading.todos
         held = frame.todos
@@ -354,10 +356,11 @@ class TeamHud(TeamLoad):
             phase, phase.done(reading), phase.ready(reading),
             tuple(dict.fromkeys(todo.held().owner_identity for todo in phase.holding(reading))),
         ) for phase in PlanPhase.members_with(PlanPhase))
-        forks = tuple(fork.incarnation for fork in TeamService.forks(snapshot, commander)
+        forks = tuple(fork.incarnation
+                      for fork in TeamService.forks(snapshot, TeamService.running(snapshot))
                       if snapshot.status(fork.name).receiving)
         passes = ServicePassStore.at(comms.root).read()
-        return cls(commander=owner, units=tuple(units), phases=phases,
+        return cls(teammate=owner, units=tuple(units), phases=phases,
                    load=OverloadDegradation.from_orders(held, len(timers), sum(edits.values())),
                    forks=forks, usage=usage, packets=(delivery.packet,),
                    open_pings=delivery.open_pings, services=passes,
@@ -365,8 +368,8 @@ class TeamHud(TeamLoad):
 
     def for_delivery(self, delivery: TeamDelivery) -> TeamHud:
         """Keep the prepared shared board; packet history and completion belong to its recipient."""
-        owner = delivery.packet.commander.require_recorded()
-        return replace(self, commander=owner, packets=(delivery.packet,),
+        owner = delivery.packet.teammate.require_recorded()
+        return replace(self, teammate=owner, packets=(delivery.packet,),
                        open_pings=delivery.open_pings).with_services(self.services, owner)
 
     @property
@@ -401,7 +404,7 @@ class TeamHud(TeamLoad):
         """Compare declared displayed cells, not excluded tool clocks or paint-time ages."""
         alarms = self.alarms
         return HudDisplayFacts(
-            self.commander, self.status_table(0).facts,
+            self.teammate, self.status_table(0).facts,
             tuple(ViewSectionFacts(section.heading(), tuple(table.facts for table in section.tables))
                   for section in self.groups),
             tuple(ViewSectionFacts(section.heading(), tuple(table.facts for table in section.tables(0)))
@@ -467,20 +470,23 @@ class TeamFrame(TeamFrameFile, JsonDocument[TeamHud]):
     record_type = TeamHud
 
     @classmethod
-    def at(cls, root: Path, commander: ThreadIncarnation) -> Self:
-        return cls(cls.path_in(root, lookup=str(commander.require_recorded().lookup)))
+    def at(cls, root: Path, recipient: ThreadIncarnation) -> Self:
+        return cls(cls.path_in(root, lookup=str(recipient.require_recorded().lookup)))
 
     def empty(self) -> TeamHud:
         raise BoardUnavailable(self.reading, f'Tristan frame missing: {self.path}')
 
     @classmethod
-    def current(cls, comms: Comms, commander: str) -> TeamHud:
-        """Read the heartbeat's publication, never repeat its forge and history work."""
-        owner = comms.registry.require(commander).incarnation.require_recorded()
+    def current(cls, comms: Comms, recipient: str) -> TeamHud:
+        """Read the heartbeat's publication, never repeat its forge and history work. A fork
+        reads the board of the teammate whose turn it works inside."""
+        thread = comms.registry.require(recipient)
+        owner = comms.registry.require(
+            thread.teammate()).incarnation.require_recorded()
         passes = ServicePassStore.at(comms.root).read()
         health = ServiceReading().with_services(passes, owner)
         hud = cls(cls.path_in(comms.root, lookup=str(owner.lookup)), reading=health).read()
-        if hud.commander != owner:
+        if hud.teammate != owner:
             raise BoardUnavailable(health, f'Tristan frame belongs to another incarnation of {owner.name}')
         return hud.with_services(passes, owner)
 
@@ -489,7 +495,7 @@ class TeamFrame(TeamFrameFile, JsonDocument[TeamHud]):
         """Write one frame per teammate; a teammate no longer beating loses its frame."""
         written = set()
         for hud in huds:
-            frame = cls.at(root, hud.commander)
+            frame = cls.at(root, hud.teammate)
             frame.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             frame._publish_unlocked(hud)
             written.add(frame.path)
@@ -500,9 +506,9 @@ class TeamFrame(TeamFrameFile, JsonDocument[TeamHud]):
     def read_all(cls, root: Path) -> tuple[TeamHud, ...]:
         passes = ServicePassStore.at(root).read()
         health = ServiceReading(services=passes)
-        huds = tuple(sorted((hud.with_services(passes, hud.commander.require_recorded())
+        huds = tuple(sorted((hud.with_services(passes, hud.teammate.require_recorded())
             for path in cls.matching_in(root) for hud in (cls(path, reading=health).read(),)),
-            key=lambda hud: hud.commander.name))
+            key=lambda hud: hud.teammate.name))
         if not huds and passes.failing:
             raise BoardUnavailable(health, 'no published teammate frame.')
         return huds

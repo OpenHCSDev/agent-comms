@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from agent_comms.cli_verbs.restore_owner import RestoreOwnerCliCommand
-from agent_comms.thread_execution import StartOwnerControl
+from agent_comms.threads import StartOwnerControl
 from dataclasses import dataclass
 
 

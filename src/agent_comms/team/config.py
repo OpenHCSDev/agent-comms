@@ -2,41 +2,13 @@
 
 from __future__ import annotations
 
-from abc import abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Self
+from typing import Self
 
-from ..nominal.field_codec import AbsolutePathText, BoundedText, DeclaredWireType, FieldCodec, NullMember, SubclassUnion
-from agent_comms.installer.refusals import UpgradeRefused
-from ..registry_document import TeamProject, RegistrySnapshot
+from ..nominal.field_codec import AbsolutePathText, DeclaredWireType, FieldCodec, NullMember, SubclassUnion
 from ..repo import Repo, RepositorySelection
-from ..thread_text import AbsentText, GivenText, TextChoice
-
-
-class TeamChoice(SubclassUnion, TextChoice, affix="Team"):
-    """An explicit teammate or preservation of this bus's native project."""
-
-    @abstractmethod
-    def configured(self, recorded: TeamProject, repos: RepoChoice,
-                   snapshot: RegistrySnapshot) -> TeamProject: ...
-
-
-@dataclass(frozen=True, slots=True)
-class NamedTeam(GivenText, TeamChoice):
-    text: Annotated[str, BoundedText]
-
-    def configured(self, recorded: TeamProject, repos: RepoChoice,
-                   snapshot: RegistrySnapshot) -> TeamProject:
-        commander = snapshot.require(self.text)
-        return recorded.named(commander.incarnation, repos)
-
-
-@dataclass(frozen=True, slots=True)
-class KeptTeam(AbsentText, TeamChoice):
-    def configured(self, recorded: TeamProject, repos: RepoChoice,
-                   snapshot: RegistrySnapshot) -> TeamProject:
-        return recorded.reconfigured(repos)
 
 
 class RepoChoice(RepositorySelection, SubclassUnion, affix="Repos"):
@@ -60,12 +32,8 @@ class GivenRepos(DeclaredWireType, RepoChoice):
     def applied(self, recorded: tuple[Repo, ...]) -> tuple[Repo, ...]:
         return tuple(Repo.of(checkout) for checkout in self.checkouts)
 
-    def founding(self, commander: str) -> tuple[Repo, ...]:
-        return self.applied(())
-
-    def without_team(self) -> None:
-        raise UpgradeRefused("--repos names a teammate's repositories; this bus records no "
-                             "teammate, so name one with --commander")
+    def founded[A, F](self, absent: A, found: Callable[[tuple[Repo, ...]], F]) -> A | F:
+        return found(self.applied(()))
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,10 +41,6 @@ class KeptRepos(NullMember, RepoChoice):
     def applied(self, recorded: tuple[Repo, ...]) -> tuple[Repo, ...]:
         return recorded
 
-    def founding(self, commander: str) -> tuple[Repo, ...]:
-        raise UpgradeRefused(f"--commander {commander} starts this bus's teammate record, "
-                             "which needs the repositories it commands: pass --repos")
-
-    def without_team(self) -> None:
-        pass
+    def founded[A, F](self, absent: A, found: Callable[[tuple[Repo, ...]], F]) -> A | F:
+        return absent
 

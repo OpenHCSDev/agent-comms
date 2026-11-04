@@ -30,7 +30,7 @@ from agent_comms.routing import MessageRoute, TurnRouting
 from agent_comms.transcript_routes import DisplayText
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.store_files import StoreOwner
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 from agent_comms.nominal.field_codec import FieldCodec
@@ -62,8 +62,8 @@ def test_missing_catalogue_is_empty_without_creating_it(tmp_path):
 
 def setup(root, count=5):
     comms = wire(root)
-    comms.registry.declare(Thread('alice', frozenset({'team'}), Checkout(root), created_at=10.0))
-    comms.registry.declare(Thread('bob', frozenset({'team'}), Checkout(root), created_at=11.0))
+    comms.registry.declare(NativeThread('alice', frozenset({'team'}), Checkout(root), created_at=10.0))
+    comms.registry.declare(NativeThread('bob', frozenset({'team'}), Checkout(root), created_at=11.0))
     viewer = comms.messaging.user_identity(Checkout(root)).name
     for i in range(count):
         comms.messaging.send("alice", "#team", f"{root.name} channel {i}").message.message_id

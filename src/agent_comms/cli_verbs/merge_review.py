@@ -25,7 +25,7 @@ class ReviewedMerge:
     def reviewed_merges(self, ctx: Comms, snapshot: RegistrySnapshot,
                         actor: RecordedThreadIncarnation,
                         bypasses: tuple[QueueBypass, ...]) -> MergeReviewResult:
-        project = snapshot.commander_project
+        project = snapshot.team_project
         project.require_actor(snapshot, actor)
         heads = []
         for bypass in bypasses:
@@ -59,5 +59,5 @@ class MergeReviewCliCommand(ReviewedMerge, CliCommand[MergeReviewResult], declar
         actor, *others = (snapshot.require(binding.bus).incarnation.require_recorded()
                           for binding in bindings)
         for other in others:
-            snapshot.commander_project.require_actor(snapshot, other)
+            snapshot.team_project.require_actor(snapshot, other)
         return self.reviewed_merges(ctx, snapshot, actor, QueueBypassGuard.bypasses(self.bash))

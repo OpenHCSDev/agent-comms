@@ -13,15 +13,15 @@ from agent_comms.message_page import PageBounds
 from agent_comms.messages import InfoKind, Message
 from agent_comms.page_traversal import HistoryCursor
 from agent_comms.read_basis import NamedViewer
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 @pytest.fixture
 def history(tmp_path):
     old = wire(tmp_path / "old")
-    old.registry.declare(Thread('alice-old', frozenset({'api'}), Checkout(old.root), created_at=10))
+    old.registry.declare(NativeThread('alice-old', frozenset({'api'}), Checkout(old.root), created_at=10))
     for created, name in enumerate(("bob", "carol"), start=11):
-        old.registry.declare(Thread(name, frozenset({'ops'}), Checkout(old.root), created_at=created))
+        old.registry.declare(NativeThread(name, frozenset({'ops'}), Checkout(old.root), created_at=created))
     old.registry.rename("alice-old", "alice")
     rows = []
     for seq in range(1, 241):
@@ -50,8 +50,8 @@ def history(tmp_path):
         rows.append(Message.from_message(published))
     live = wire(tmp_path / "live")
     # Deliberately different membership: source scope must not use live tags.
-    live.registry.declare(Thread('alice', frozenset({'ops'}), Checkout(live.root), created_at=500))
-    live.registry.declare(Thread('alice-old', frozenset({'api'}), Checkout(live.root), created_at=501))
+    live.registry.declare(NativeThread('alice', frozenset({'ops'}), Checkout(live.root), created_at=500))
+    live.registry.declare(NativeThread('alice-old', frozenset({'api'}), Checkout(live.root), created_at=501))
     live.registry.rename("alice-old", "carol")
     source = live.views.attach_history(old.root)
     return live, source, rows

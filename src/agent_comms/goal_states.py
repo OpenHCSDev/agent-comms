@@ -184,6 +184,13 @@ class PausedGoal(OpenGoal, FromOpenGoal):
         self.require_model_resume()
         super().require_work(actor, owner)
 
+    def accept_order(
+        self, action: ProblemOrderGoalAction, goal: Goal, ctx: GoalActionContext,
+    ) -> Goal:
+        """A pause holds off every order, a correction of one the goal already serves included."""
+        self.require_model_resume()
+        return super().accept_order(action, goal, ctx)
+
 
 class BlockedState(GoalState, FromOpenGoal, declared_name=None):
     @property

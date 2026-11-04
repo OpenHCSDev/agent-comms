@@ -14,10 +14,9 @@ from agent_comms.errors import UnreceivedAnswerError
 from agent_comms.head_review import PullRequestHead
 from agent_comms.messaging import TeamReceipts
 from agent_comms.repo import Checkout
-from agent_comms.thread_execution import ExternalThreadExecution, SubagentExecution
+from agent_comms.threads import ExternalThread, SubagentThread
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.standing_rules import DirectiveUnacted
-from agent_comms.threads import Thread
 from agent_comms.todos import NoHeadOrder, RequestDirective, ReviewedHeadVerdict, VerdictAudience, VerdictReason
 from agent_comms.tool_caller import ForkCaller, PeerCaller
 
@@ -28,9 +27,9 @@ REASON = VerdictReason("The existing class owns this behavior without another co
 
 def test_shared_record_maintenance_does_not_make_a_successor_the_private_recipient(fork_bus):
     comms, source, _ = fork_bus
-    comms.registry.declare(Thread(
+    comms.registry.declare(ExternalThread(
         "successor", frozenset({"comms", TeammatesTag.declared_name}), Checkout(source.checkout),
-        model=DeclaredModel("anthropic/claude-opus-4-6"), execution=ExternalThreadExecution))
+        model=DeclaredModel("anthropic/claude-opus-4-6")))
     retired = comms.registry.require("retained").incarnation
     comms.goals.todos.add_request(retired, "The retired teammate's request")
     ask = comms.messaging.send_user_message(
@@ -38,12 +37,12 @@ def test_shared_record_maintenance_does_not_make_a_successor_the_private_recipie
         worktree=Checkout(source.checkout))
     ctx = TeamContext.read_root(comms.root).model_copy(update={"actor": PeerCaller("successor")})
     with pytest.raises(UnreceivedAnswerError, match=f"successor never received {ask.message_id}"):
-        comms.messaging.send("successor", "lead", "Answered", answers=(ask.reference,),
+        comms.messaging.send("successor", "colleague", "Answered", answers=(ask.reference,),
                              answerer=TeamReceipts(ctx.actor_identity, (ctx.incarnation,)))
     with pytest.raises(UnreceivedAnswerError, match=f"successor never received {ask.message_id}"):
-        comms.messaging.send("successor", "lead", "Answered", answers=(ask.reference,),
+        comms.messaging.send("successor", "colleague", "Answered", answers=(ask.reference,),
                              answerer=ctx.receipts)
-    reply = comms.messaging.send("retained", "lead", "Answered", answers=(ask.reference,),
+    reply = comms.messaging.send("retained", "colleague", "Answered", answers=(ask.reference,),
                                  answerer=TeamReceipts(retired, (retired,))).message
     assert comms.bus.bus.lookup(reply.seq).answers == (ask.reference,)
 
@@ -51,9 +50,9 @@ def test_shared_record_maintenance_does_not_make_a_successor_the_private_recipie
 def test_retained_owners_private_directive_does_not_become_every_peers_debt(fork_bus):
     comms, source, _ = fork_bus
     for name in ("peer-one", "peer-two"):
-        comms.registry.declare(Thread(
+        comms.registry.declare(ExternalThread(
             name, frozenset({"comms", TeammatesTag.declared_name}), Checkout(source.checkout),
-            model=DeclaredModel("anthropic/claude-opus-4-6"), execution=ExternalThreadExecution))
+            model=DeclaredModel("anthropic/claude-opus-4-6")))
     retired = comms.registry.require("retained").incarnation
     request = comms.goals.todos.add_request(retired, "The retired teammate's request")
     ask = comms.messaging.send_user_message(
@@ -67,10 +66,10 @@ def test_retained_owners_private_directive_does_not_become_every_peers_debt(fork
     ctx = TeamContext.read_root(comms.root).model_copy(
         update={"actor": PeerCaller("peer-one")})
     with pytest.raises(UnreceivedAnswerError, match=f"peer-one never received {ask.message_id}"):
-        comms.messaging.send("peer-one", "lead", "Answered", answers=(ask.reference,),
+        comms.messaging.send("peer-one", "colleague", "Answered", answers=(ask.reference,),
                              answerer=ctx.receipts)
     assert ask.message_id in owed("retained")
-    comms.messaging.send("retained", "lead", "Answered", answers=(ask.reference,),
+    comms.messaging.send("retained", "colleague", "Answered", answers=(ask.reference,),
                          answerer=TeamReceipts(retired, (retired,)))
     assert ask.message_id not in owed("retained")
 
@@ -78,17 +77,17 @@ def test_retained_owners_private_directive_does_not_become_every_peers_debt(fork
 @pytest.mark.parametrize("fork_count", (1, 3))
 def test_channel_delivery_excludes_forks_but_keeps_rosters_and_team_answers(fork_bus, fork_count):
     comms, _, _ = fork_bus
-    parent = comms.registry.require("lead")
+    parent = comms.registry.require("colleague")
     comms.registry.register(replace(
         parent, tags=parent.tags | {TeammatesTag.declared_name}))
-    comms.registry.register_child("slot", "lead", SubagentExecution, comms.goals)
+    comms.registry.register_child("slot", "colleague", SubagentThread, comms.goals)
     forks = tuple(ForkCaller(f"review-{index}") for index in range(fork_count))
     for fork in forks:
-        fork.join(comms, "lead")
+        fork.join(comms, "colleague")
 
     snapshot = comms.registry.snapshot()
     for fork in forks:
-        assert snapshot.require(fork.name).tags == snapshot.require("lead").tags
+        assert snapshot.require(fork.name).tags == snapshot.require("colleague").tags
         for channel in ("#comms", TeammatesTag.channel()):
             roster = CommandTarget.named(channel).resolve(snapshot, comms.bus.require_channel)
             assert fork.name in {member.thread.name for member in roster.members}
@@ -96,7 +95,7 @@ def test_channel_delivery_excludes_forks_but_keeps_rosters_and_team_answers(fork
     ask = comms.messaging.send("worker", "#comms", "Review the owner change").message
     delivery = comms.bus.bus.delivery(ask.seq)
     assert {row.canonical_thread for row in delivery.recipients} == {
-        "lead", "other", "retained", "slot"}
+        "colleague", "other", "retained", "slot"}
     for fork in forks:
         # A fresh channel post gives the fork no receipt of its own.
         with pytest.raises(UnreceivedAnswerError):
@@ -116,7 +115,7 @@ def test_channel_delivery_excludes_forks_but_keeps_rosters_and_team_answers(fork
 
 def test_a_fork_whose_record_is_a_head_verdict_may_stop(fork_bus):
     comms, source, _ = fork_bus
-    ForkCaller("fork-verdict").join(comms, "lead")
+    ForkCaller("fork-verdict").join(comms, "colleague")
     refused = command(comms, "order", "retire", "--fork", "fork-verdict")
     assert refused.returncode != 0 and "recorded nothing in Core" in refused.stderr
     fork = comms.registry.require("fork-verdict").incarnation

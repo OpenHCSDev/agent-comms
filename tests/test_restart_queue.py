@@ -7,7 +7,7 @@ from dataclasses import replace
 
 import agent_comms.restart_queue as queue
 from agent_comms.repo import Checkout
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.bus import Bus
 from agent_comms.nominal.field_codec import FieldCodec, RestartId
 from agent_comms.watched import FileSource
@@ -52,7 +52,7 @@ async def test_restore_owner_keeps_blocked_goal_unchanged(
 
     source_programs.bind(tmp_path)
     comms = private_comms
-    comms.registry.declare(Thread('worker', frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(NativeThread('worker', frozenset(), Checkout(tmp_path)))
     comms.goals.update_goal('worker', SetGoalAction(text='Preserve this blocked task'))
     blocked = comms.goals.update_goal(
         'worker', BlockedGoalAction(block_reason='Await an explicit owner retry'))
@@ -103,7 +103,7 @@ async def test_inotify_wakes_for_registry_and_queue_changes(private_comms, dead_
                *(FileSource(path) for path in type(store).source_paths(comms.root)))
     async with aclosing(Bus.watch_sources(*sources)) as observations:
         await anext(observations)
-        comms.registry.declare(Thread('wake', frozenset(), Checkout(comms.root)))
+        comms.registry.declare(NativeThread('wake', frozenset(), Checkout(comms.root)))
         await asyncio.wait_for(anext(observations), 1)
         with store.writing() as db:
             dead_owner_restart.insert(db)

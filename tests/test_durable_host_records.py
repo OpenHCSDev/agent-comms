@@ -30,7 +30,7 @@ from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.recorded_time import UnrecordedTimeError
 from agent_comms.repo import Checkout
 from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.tool_declaration import ReadAction
 from agent_comms.turn_item import PiRequestKey
 
@@ -124,7 +124,7 @@ def test_real_host_context_and_request_error_remain_typed_and_live(tmp_path, thr
     async def journey():
         backend = PiDurableBackend()
         location = DurableDatabase(str(tmp_path / 'records.sqlite3'))
-        thread = Thread('records', frozenset(), Checkout(tmp_path), backend=PiDurableBackend,
+        thread = NativeThread('records', frozenset(), Checkout(tmp_path), backend=PiDurableBackend,
                         session_file=RegistrySessionLocation.from_path(location.path, tmp_path))
         try:
             outcome = await backend.compact(thread, 'retain the empty plan')

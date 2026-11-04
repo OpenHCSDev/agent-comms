@@ -13,13 +13,11 @@ from agent_comms.nominal.field_codec import Argument
 from agent_comms.nominal.field_codec import Editor
 from agent_comms.nominal.field_codec import Normalize
 from agent_comms.target_fields import ChoiceTargetField
-from agent_comms.thread_execution import ExternalThreadExecution
-from agent_comms.thread_execution import ThreadExecution
+from agent_comms.threads import ExternalThread, Thread
 from agent_comms.thread_text import NoParent
 from agent_comms.thread_text import NoThreadText
 from agent_comms.thread_text import ThreadParent
 from agent_comms.thread_text import ThreadText
-from agent_comms.threads import Thread
 from dataclasses import dataclass
 from typing import Annotated
 import dataclasses
@@ -46,23 +44,22 @@ class RegisterCliCommand(NameArgument, CliCommand):
         ),
     ] = dataclasses.field(default_factory=NoProcess)
     execution: Annotated[
-        type[ThreadExecution],
+        type[Thread],
         Editor(ChoiceTargetField),
         Argument(
             flags=("--execution",),
         ),
-    ] = ExternalThreadExecution
+    ] = ExternalThread
 
     def apply(self, ctx: Comms) -> CliResult:
 
-        thread = Thread(
+        thread = self.execution(
             name=self.name,
             tags=self.tags,
             worktree=self.worktree,
             parent=self.parent,
             task=self.task,
             process_identity=self.process,
-            execution=self.execution,
         )
         ctx.registry.declare(thread)
         return RegisteredResult(self.name)

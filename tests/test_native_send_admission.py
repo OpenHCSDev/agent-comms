@@ -41,7 +41,7 @@ from agent_comms.native_prompt_send import (
 from agent_comms.store_files import StoreBusy, store_lock_path
 from conftest import installed_comms
 from test_coordinated_runtime import tmp_path as private_root_fixture
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 tmp_path = private_root_fixture
 
@@ -157,10 +157,9 @@ class PreflightDrainWriteCase(PromptWriteCase):
 async def _same_loop_backpressure_case(directory: Path, case_name: str):
     case = PromptWriteCase.member_named(case_name)()
     comms = installed_comms(directory / "wire")
-    comms.registry.declare(Thread(
+    comms.registry.declare(NativeThread(
         "owner", frozenset(), Checkout(directory),
-        process_identity=ProcessIdentity.capture(os.getpid()),
-    ))
+        process_identity=ProcessIdentity.capture(os.getpid())))
     # The external process owns a real non-reading pipe. It impersonates no Pi
     # response or input acknowledgement; this test exercises the pipe owner.
     child = await AttachedChild.start((

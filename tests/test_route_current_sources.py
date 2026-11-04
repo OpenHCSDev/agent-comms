@@ -6,13 +6,13 @@ from agent_comms.page_traversal import OlderTraversal
 import pytest
 
 from agent_comms.routing import DeliveryScope
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 @pytest.mark.parametrize('rebound', [False, True])
 def test_discovery_ignores_retired_source_history(tmp_path, rebound, comms):
     c = comms
-    c.registry.declare(Thread('sender', frozenset(), Checkout(tmp_path)))
+    c.registry.declare(NativeThread('sender', frozenset(), Checkout(tmp_path)))
     viewer = c.messaging.user_identity(Checkout(tmp_path)).name
     original = c.messaging.send('sender', viewer, 'current source').message
 
@@ -40,7 +40,7 @@ def test_discovery_ignores_retired_source_history(tmp_path, rebound, comms):
             if rebound:
                 c.registry.unregister(name)
                 c.registry.remove(name)
-            c.registry.declare(Thread(name, frozenset(), Checkout(tmp_path)))
+            c.registry.declare(NativeThread(name, frozenset(), Checkout(tmp_path)))
             published = c.messaging.send(name, viewer, 'current source').message
             if rebound:
                 original = published

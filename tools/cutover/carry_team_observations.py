@@ -28,7 +28,7 @@ class TeamObservations(Carry):
         for path in Bus.matching_in(self.root):
             with closing(Bus.read_snapshot(path)) as db:
                 lookups = db.execute(TeamUpdatePosition._sql(
-                    'SELECT DISTINCT {commander_lookup} FROM '
+                    'SELECT DISTINCT {teammate_lookup} FROM '
                     f'"{TeamUpdatePosition.declared_name}"'))
                 for raw, in lookups:
                     lookup = FieldCodec.decode(ThreadLookup, raw)
@@ -36,11 +36,11 @@ class TeamObservations(Carry):
                         for packet in message.task.team_update(lookup):
                             packets[lookup] = packet
         missing = tuple(packet for packet in packets.values()
-                        if not TeamUpdateStore.for_team(self.root, packet.commander).path.exists())
+                        if not TeamUpdateStore.for_team(self.root, packet.teammate).path.exists())
         if apply:
             for packet in missing:
                 TeamUpdateStore.record(self.root, packet)
         return Carried(len(missing), detail={"observations": len(missing)}, rewritten=tuple(
-            TeamUpdateStore.for_team(self.root, packet.commander).path.relative_to(self.root)
+            TeamUpdateStore.for_team(self.root, packet.teammate).path.relative_to(self.root)
             for packet in missing
         ) if apply else ())

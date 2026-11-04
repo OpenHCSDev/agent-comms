@@ -11,12 +11,12 @@ from agent_comms.channel_targets import ThreadTarget
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
-from agent_comms.nominal.field_codec import FieldCodec, RootId, TurnId
+from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, RootId, TurnId
 from agent_comms.read_basis import Conversation
 from agent_comms.read_ledger import ReadDocument
 from agent_comms.registration import Registration
 from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.threads import ExternalThread, NativeThread
 from agent_comms.thread_identity import (
     ClaimedIdentity,
     GenerationCounter,
@@ -32,7 +32,6 @@ from agent_comms.thread_status import (
     StoppedThreadStatus,
 )
 from agent_comms.thread_text import GivenThreadText, NoThreadText
-from agent_comms.threads import Thread
 from agent_comms.turn_lease import FinishedTurnFence, NoFinishedTurn, NoTurnLease
 from bus_record_fixture import OWNER_LOOKUP
 from conftest import installed_comms
@@ -40,7 +39,7 @@ from conftest import installed_comms
 
 def registry_with_owner(tmp_path):
     registry = Registration(tmp_path / "registry.json")
-    registry.register(Thread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
+    registry.register(NativeThread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     return registry
 
 
@@ -50,9 +49,8 @@ def test_saved_thread_text_round_trips_null_and_supplied_values(tmp_path):
         ("untitled", NoThreadText(), NoThreadText()),
         ("named", GivenThreadText("A title"), GivenThreadText("An assignment")),
     ):
-        thread = Thread(
-            name, frozenset({"team"}), Checkout(tmp_path), title=title, task=task,
-        )
+        thread = NativeThread(
+            name, frozenset({"team"}), Checkout(tmp_path), title=title, task=task)
         thread = comms.registry.declare(thread)
         encoded = json.dumps(FieldCodec.encode(thread), sort_keys=True, separators=(",", ":"))
         saved = wire(tmp_path).registry.require(name)
@@ -115,7 +113,7 @@ def test_delete_and_rebind_changes_identity_and_keeps_counter_tombstone(tmp_path
     before = registry.snapshot().owner_identity("owner")
     registry.unregister("owner")
     registry.remove("owner")
-    registry.register(Thread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
+    registry.register(NativeThread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     after = registry.snapshot().owner_identity("owner")
     assert after.incarnation != before.incarnation
     assert after.generation > before.generation
@@ -133,7 +131,7 @@ def test_same_process_idle_presence_does_not_rotate_identity(tmp_path):
 
 def test_exact_turn_identity_survives_alias_but_not_reused_turn_id(tmp_path):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.registry.declare(NativeThread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     first = comms.agents.begin_turn("owner", TurnId('7ad47c54939ef72323893e6c952c5f3a')).turn_lease
     assert first.identity.incarnation == comms.registry.require("owner").incarnation
     comms.registry.rename("owner", "renamed")
@@ -173,7 +171,7 @@ def test_read_ledger_roundtrip_preserves_historical_identity(tmp_path, *, thread
     assert conversation.current(registry.snapshot())
     registry.unregister("owner")
     registry.remove("owner")
-    registry.register(Thread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
+    registry.register(NativeThread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     assert not conversation.current(registry.snapshot())
 
 
@@ -203,6 +201,8 @@ def test_claim_scope_cannot_decode_a_registry_process_owner(tmp_path):
     context = QueuedInputContext.capture(owner, claim_scope)
     assert context.owns(claim_scope)
     assert not context.owns(registry_owner)
+    # Unregistering drops the row's process binding; the scopes keep the one it had.
+    process = owner.require_process()
     # Repeated revocation advances claim_scope without a second owner replacement.
     registry.unregister("owner")
     registry.unregister("owner")
@@ -216,11 +216,12 @@ def test_claim_scope_cannot_decode_a_registry_process_owner(tmp_path):
     assert not original_binding.superseded_by(snapshot.owner_binding("owner"))
     for scope in (
         LiveQueueScope(
-            session_id="official-session", claimed_identity=claim_scope, owner=owner.require_process(),
+            session_id=AcpSessionId("official-session"), claimed_identity=claim_scope,
+            owner=process,
         ),
         LiveCursorScope(
-            session_id="official-session", wire_root_id=RootId("a" * 32),
-            claimed_identity=claim_scope, owner=owner.require_process(),
+            session_id=AcpSessionId("official-session"), wire_root_id=RootId("a" * 32),
+            claimed_identity=claim_scope, owner=process,
         ),
     ):
         encoded = FieldCodec.encode(scope)
@@ -254,7 +255,7 @@ def test_coordination_assignment_generation_is_independent_of_registry_process(t
 
 def test_saved_read_ledger_survives_reopen_and_new_ack(tmp_path):
     comms = installed_comms(tmp_path)
-    comms.registry.declare(Thread('owner', frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(NativeThread('owner', frozenset(), Checkout(tmp_path)))
     viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
     message = comms.messaging.send("owner", viewer, "already painted").message
     page = comms.views.dm_display_page(ThreadTarget("owner"), worktree=Checkout(tmp_path))
@@ -279,7 +280,9 @@ def test_saved_read_ledger_survives_reopen_and_new_ack(tmp_path):
 
 @pytest.mark.parametrize("withdrawals", [
     pytest.param((Registration.unregister, Registration.unregister, Registration.archive,
-                  Registration.begin_delete, Registration.remove), id="stop-archive-delete"),
+                  Registration.begin_delete,
+                  lambda registry, name: registry.remove_originals((registry.require(name),))),
+                 id="stop-archive-delete"),
     pytest.param((Registration.archive, Registration.remove), id="archive-remove"),
     pytest.param((Registration.remove,), id="remove"),
 ])
@@ -309,10 +312,9 @@ def test_withdrawal_revokes_only_an_existing_owner(tmp_path, withdrawals, status
 
 def test_external_unregister_revokes_owner_while_bridge_remains_connected(tmp_path):
     registry = Registration(tmp_path / "registry.json")
-    registry.register(Thread(
-        "owner", frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution,
-        process_identity=ProcessIdentity.capture(os.getpid()),
-    ))
+    registry.register(ExternalThread(
+        "owner", frozenset(), Checkout(tmp_path),
+        process_identity=ProcessIdentity.capture(os.getpid())))
     before = registry.snapshot()
     assert before.status("owner") == ConnectedThreadStatus()
     registry.unregister("owner")
@@ -324,7 +326,7 @@ def test_external_unregister_revokes_owner_while_bridge_remains_connected(tmp_pa
 
 def test_same_launch_ignores_metadata_and_follows_process_session_and_model(tmp_path, *, thread_registration):
     process = ProcessIdentity.capture(os.getpid())
-    thread = Thread('owner', frozenset(), Checkout(tmp_path), process_identity=process, session_file=RegistrySessionLocation.from_path(str(tmp_path / 'a.jsonl'), tmp_path), model=DeclaredModel('model-a'), created_at=1.0)
+    thread = NativeThread('owner', frozenset(), Checkout(tmp_path), process_identity=process, session_file=RegistrySessionLocation.from_path(str(tmp_path / 'a.jsonl'), tmp_path), model=DeclaredModel('model-a'), created_at=1.0)
 
     assert thread.same_launch(replace(thread, title=GivenThreadText("Renamed"), tags=frozenset({"team"}), turn_generation=3))
     for changed in (

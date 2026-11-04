@@ -214,7 +214,7 @@ class WrongMeasurePattern(BehaviourPattern):
     sources = (SeedCatalog(4), MeasuredWrongThingFailure())
 
 
-class TeamOverloadedPattern(BehaviourPattern, declared_name="commander_overloaded"):
+class TeamOverloadedPattern(BehaviourPattern, declared_name="team_overloaded"):
     signature = (
         "The teammate's unread backlog is over the limit while no second teammate is forked"
         " to share it."

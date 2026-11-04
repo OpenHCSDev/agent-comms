@@ -19,14 +19,13 @@ from agent_comms.ui_model.observation import (
 )
 from agent_comms.ui_model.status import OpenThreadStatus
 from observed_queue import ObservedQueue
-from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.threads import ExternalThread, NativeThread
 from agent_comms.thread_text import GivenThreadText
-from agent_comms.threads import Thread
 
 
 def declare(comms, *names):
     for name in names:
-        comms.registry.declare(Thread(name, frozenset(), Checkout(comms.root.parent)))
+        comms.registry.declare(NativeThread(name, frozenset(), Checkout(comms.root.parent)))
 
 
 def observe(reading, comms):
@@ -131,8 +130,7 @@ def test_a_busy_capture_ends_when_its_row_turns_stale_on_an_unchanged_revision(c
     external thread working forever. The capture now expires with its earliest busy row."""
     clock = [1_000_000.0]
     monkeypatch.setattr(activity, 'time', SimpleNamespace(time=lambda: clock[0]))
-    comms.registry.declare(Thread('cli', frozenset(), Checkout(comms.root.parent),
-                                  execution=ExternalThreadExecution))
+    comms.registry.declare(ExternalThread('cli', frozenset(), Checkout(comms.root.parent)))
     comms.agents.set_activity('cli', ActivityState.WORKING)
     revision = comms.views.revision()
     assert comms.views.observed_activity(revision, ('cli',))['cli'].state.busy

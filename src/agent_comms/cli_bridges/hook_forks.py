@@ -33,7 +33,7 @@ class SubagentHook(SubagentActivity):
         fork = self.agent_id.fork
         ForkCaller(fork).join(comms, actor.name)
         self.warn(f"Core registered you as in-turn fork {fork}: pass `--fork {fork}`"
-                  " on every agent-comms-commander verb; the action keeps your parent authority"
+                  " on every agent-comms-team verb; the action keeps your parent authority"
                   " and records your own incarnation. Record what you found before stopping.")
         self.enter(comms, binding, ModelWaitPhase())
 

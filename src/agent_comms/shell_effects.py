@@ -152,7 +152,7 @@ class RemoveCheckoutStorageEffect(StorageEffect):
         if self.path == projection.thread.project_path:
             projection.rule.deny(f'{self.path} is where {projection.thread.name} runs; choose another existing project first: agent-comms set-project {projection.thread.name} <existing-project>')
         if any(repository.checkout.resolve() == self.path
-               for repository in projection.snapshot.commander_project.unique_repositories()):
+               for repository in projection.snapshot.team_project.unique_repositories()):
             projection.rule.deny(f'{self.path} is a registered repository, not a disposable checkout')
         projection.rule.require_isolated_checkout(
             projection.thread, self.path, projection.snapshot.threads.values(), projection.reads)

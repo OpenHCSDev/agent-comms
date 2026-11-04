@@ -17,7 +17,7 @@ from agent_comms.coordination_errors import DMScopeChanged
 from agent_comms.message_page import PageBounds
 from agent_comms.read_basis import DMSelection
 from agent_comms.thread_identity import UserThreadRole
-from agent_comms.threads import Thread
+from agent_comms.threads import Thread, NativeThread
 from bus_record_fixture import prepare_native_comms
 
 
@@ -27,7 +27,7 @@ def installed_bus(tmp_path: Path):
 
 
 def _peer(root: Path, name: str) -> Thread:
-    return Thread(name, frozenset({'talk'}), Checkout(root), process_identity=ProcessIdentity.capture(os.getpid()))
+    return NativeThread(name, frozenset({'talk'}), Checkout(root), process_identity=ProcessIdentity.capture(os.getpid()))
 
 
 def _ledger(root: Path) -> bytes | None:
@@ -98,7 +98,7 @@ def test_viewer_rebind_and_foreign_worktree_reject_old_basis(tmp_path: Path):
         comms.views.mark_page_read(page, worktree=Checkout(tmp_path / "foreign"))
     comms.registry.unregister(viewer)
     comms.registry.remove(viewer)
-    comms.registry.declare(Thread(viewer, frozenset(), Checkout(tmp_path), role=UserThreadRole))
+    comms.registry.declare(NativeThread(viewer, frozenset(), Checkout(tmp_path), role=UserThreadRole))
     comms.messaging.send("peer", viewer, "new viewer unseen")
     before = comms.bus.pending_count(viewer, CommandTarget.named("peer"))
     assert before == 1
@@ -114,7 +114,7 @@ def test_old_viewer_alive_but_new_human_selected_rejects_stale_basis(tmp_path: P
     comms.messaging.send("peer", old_viewer, "old viewer painted")
     page = comms.views.dm_display_page(ThreadTarget("peer"), worktree=Checkout(tmp_path))
     assert isinstance(page.selection, DMSelection) and page.selection.basis.viewer == old_viewer
-    comms.registry.declare(Thread('new_user', frozenset(), Checkout(tmp_path), role=UserThreadRole))
+    comms.registry.declare(NativeThread('new_user', frozenset(), Checkout(tmp_path), role=UserThreadRole))
     # Normal registry rename retains the old human declaration but moves its
     # insertion position behind new_user. user_identity now selects new_user.
     comms.registry.rename(old_viewer, "old_user")

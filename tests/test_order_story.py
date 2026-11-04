@@ -31,7 +31,7 @@ from agent_comms.order_tools import (
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.registry_document import RegisteredTeamProject
 from agent_comms.repository_name import RepositoryName
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.todos import (
     AcceptedVerdict,
     DoneTodoState,
@@ -58,19 +58,19 @@ def board_read(tool, comms, caller):
 
 def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     source = SourceRepository.create(tmp_path / 'source')
-    for name in ("lead", "worker"):
-        comms.registry.declare(Thread(name, frozenset({"comms"}), Checkout(tmp_path)))
+    for name in ("colleague", "worker"):
+        comms.registry.declare(NativeThread(name, frozenset({"comms"}), Checkout(tmp_path)))
     request = comms.goals.todos.add_request(
-        comms.registry.require('lead').incarnation, 'Repair the worker').id
-    caller = ThreadCaller("lead")
+        comms.registry.require('colleague').incarnation, 'Repair the worker').id
+    caller = ThreadCaller("colleague")
     caller.invoke(CommsTodoCreateTool(owner="worker", order=CreateProblemGoalAction(
         problem="P1", order=replace(order(source), edits=("Repair the existing record owner",)),
         request=request, review_at=RecordedEventTime(1000),
-        assigner=comms.registry.require('lead').incarnation,
+        assigner=comms.registry.require('colleague').incarnation,
         repo=RepositoryName.from_wire("org/repo"), text="Repair the worker")), comms)
     todo = comms.goals.todos.get("P1")
     first_order_id = todo.order.checked().id
-    actor = comms.registry.require("lead").incarnation
+    actor = comms.registry.require("colleague").incarnation
     reason = "The worker changed the wrong owner and left the decision duplicated."
     standalone = "The worker omitted the requested application check during the final review."
     comms.goals.todos.apply("P1", StrikeTodo(todo.revision, actor, todo.held(), standalone,
@@ -146,7 +146,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
         StrikeReason("The copied holder releases its order so original public history can be checked."),
     ))
     withdrawn = copied.goals.todos.apply(current.id, WithdrawTodo(
-        released.revision, actor, previous,
+        released.revision, actor,
         "This copied order is withdrawn after checking its original recorded public events.",
     ))
     assert withdrawn.state is DoneTodoState
@@ -160,17 +160,17 @@ def edit_order(comms, tmp_path):
     """An order on one registered repository whose holder edits a second one."""
     source = SourceRepository.create(tmp_path / 'source')
     other = SourceRepository.create(tmp_path / 'other', RepositoryName.from_wire("org/other"))
-    for name in ("lead", "worker"):
-        comms.registry.declare(Thread(name, frozenset({"comms"}), Checkout(tmp_path)))
-    lead = comms.registry.require('lead').incarnation
-    request = comms.goals.todos.add_request(lead, 'Repair the worker').id
-    caller = ThreadCaller("lead")
+    for name in ("colleague", "worker"):
+        comms.registry.declare(NativeThread(name, frozenset({"comms"}), Checkout(tmp_path)))
+    colleague = comms.registry.require('colleague').incarnation
+    request = comms.goals.todos.add_request(colleague, 'Repair the worker').id
+    caller = ThreadCaller("colleague")
     caller.invoke(CommsTodoCreateTool(owner="worker", order=CreateProblemGoalAction(
         problem="P1", order=replace(order(source), edits=("Repair the existing record owner",)),
         request=request, review_at=RecordedEventTime(1000),
-        assigner=lead, repo=source.github, text="Repair the worker")), comms)
+        assigner=colleague, repo=source.github, text="Repair the worker")), comms)
     # Registered after the order is sent: the edit's repository is found among these.
-    comms.registry.set_team_project(RegisteredTeamProject(lead, (source, other)))
+    comms.registry.set_team_project(RegisteredTeamProject((source, other)))
     (other.checkout / "other_module.py").write_text("first\nsecond\n")
     return caller, other
 
@@ -178,7 +178,7 @@ def edit_order(comms, tmp_path):
 def sent_back(comms, other, call: ToolCallId, line: int, at: EventTime) -> JudgedCall:
     todo = comms.goals.todos.get("P1")
     return JudgedCall("P1", EditSendBackVerdict(
-        todo.revision, comms.registry.require("lead").incarnation, todo.held(), call,
+        todo.revision, comms.registry.require("colleague").incarnation, todo.held(), call,
         StrikeReason("The worker wrote the same marker decision twice in one module."),
         evidence=(FileLine("other_module.py", line),),
         path=str(other.checkout / "other_module.py"), at=at))
@@ -189,7 +189,7 @@ def test_one_send_back_over_two_edits_cites_their_checkout_and_strikes_once(comm
     checkout the edits were made in, and two edits judged by one call are one miss."""
     caller, other = edit_order(comms, tmp_path)
     todo = comms.goals.todos.get("P1")
-    actor = comms.registry.require("lead").incarnation
+    actor = comms.registry.require("colleague").incarnation
     reason = StrikeReason("The worker wrote the same marker decision twice in one module.")
     at = EventTime.capture(time.time())
     with pytest.raises(MissingSourceLine, match="other_module.py:3 does not exist"):

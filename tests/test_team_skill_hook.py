@@ -1,7 +1,7 @@
 """The real SessionStart command works before a teammate connects to the bus."""
 
 
-from agent_comms.repo import Checkout
+from agent_comms.repo import Checkout, Repo
 import inspect
 import io
 import json
@@ -42,7 +42,7 @@ from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.task_attachments.team_pings import TeamDecisions, TeamUpdate, RulePing
 from agent_comms.thread_model import DeclaredModel
-from agent_comms.threads import Thread
+from agent_comms.threads import ForkThread, NativeThread
 from agent_comms.ui_model.teammate_state import AwaitingTeam
 from agent_comms.todos import ProgressRead, ReviewedHeadVerdict
 from agent_comms_hooks.board import (
@@ -111,7 +111,7 @@ def test_session_wire_keeps_keyword_only_fields_and_resident_output(
 
 
 def test_light_prime_executes_through_the_resident_request(
-        tmp_path: Path, commanding_session: Comms, team_bus: Comms,
+        tmp_path: Path, team_session: Comms, team_bus: Comms,
         team_binding: Binding) -> None:
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
@@ -148,7 +148,7 @@ def test_an_unbound_session_start_gets_no_team_sources(tmp_path, monkeypatch, so
 
 
 @pytest.mark.parametrize("source", ["startup", "resume", "compact"])
-def test_the_team_session_start_reads_all_package_files(tmp_path, source, commanding_session, team_bus, team_binding):
+def test_the_team_session_start_reads_all_package_files(tmp_path, source, team_session, team_bus, team_binding):
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
     result = session_start(transcript, source, comms=team_bus, binding=team_binding)
@@ -156,7 +156,7 @@ def test_the_team_session_start_reads_all_package_files(tmp_path, source, comman
     context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
     trigger = {"startup": StartedDeal(), "resume": StartedDeal(),
                "compact": UnstampedCompactionDeal()}[source]
-    assert context.startswith(trigger.reason() + " Storage lead: claude-code.")
+    assert context.startswith(trigger.reason() + " ")
     assert "WHAT TRISTAN ACTUALLY SAID LAST" in context
     assert ("FUCK YOUR COMPACTION" in context) == (source == "compact")
     dealt = dealt_sources(transcript)
@@ -215,7 +215,7 @@ def test_no_deck_no_slices_outside_a_team_session(tmp_path, monkeypatch, capsys)
     assert not transcript.with_suffix(".calls").exists()
 
 
-def test_a_slice_every_few_calls_rotating_and_dealt_again_at_compaction(tmp_path, commanding_session, team_bus, team_binding):
+def test_a_slice_every_few_calls_rotating_and_dealt_again_at_compaction(tmp_path, team_session, team_bus, team_binding):
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
     start = DeckStart.decode(hook_record(transcript, "SessionStart"))
@@ -231,8 +231,8 @@ def test_a_slice_every_few_calls_rotating_and_dealt_again_at_compaction(tmp_path
 
 @pytest.mark.parametrize("actor", ("claude-code", "unit-x"))
 def test_rearm_rides_every_tool_call_while_a_running_bridge_has_no_monitor(
-        tmp_path: Path, commanding_session, team_bus: Comms, actor: str):
-    """The storage lead and an untagged peer share the re-arm behaviour."""
+        tmp_path: Path, team_session, team_bus: Comms, actor: str):
+    """A tagged teammate and an untagged peer share the re-arm behaviour."""
     binding = admitted_binding(team_bus, actor)
     hook = DeafReminder.decode(hook_record(tmp_path / "session.jsonl"))
     claim = WatchClaim(hook.session_id)
@@ -270,13 +270,13 @@ def test_only_the_bus_monitor_may_cross_an_unfinished_deal(command: str, allowed
 def tool_call(hook, server, comms, db, now):
     """One tool call's board lines: the hook asks over the session socket while this thread
     answers as the bridge does, deriving the board from Core at the moment of asking. The
-    commander's deck slices ride the same call and are not the board."""
+    teammate's deck slices ride the same call and are not the board."""
     with ThreadPoolExecutor(1) as pool:
-        taken = pool.submit(hook.take, comms, admitted_binding(comms, "lead"), hook.count_call())
+        taken = pool.submit(hook.take, comms, admitted_binding(comms, "colleague"), hook.count_call())
         peer, _ = server.accept()
         with peer, peer.makefile("rwb") as stream:
             assert FieldCodec.decode(SessionRequest, FieldCodec.parse(stream.readline())) == ReadBoard()
-            entries = TeamUpdate.current_board(comms, "lead")
+            entries = TeamUpdate.current_board(comms, "colleague")
             reply = BoardReply(DeliveredBoardContent.deliver(db, entries, now).lines)
             stream.write(FieldCodec.compact(FieldCodec.encode(reply)).encode() + b"\n")
         return tuple(line for line in taken.result(timeout=5) if line.startswith("BOARD"))
@@ -295,9 +295,9 @@ def test_a_recorded_verdict_drops_its_board_line_on_the_next_tool_call(
     hook = BoardReminder.decode(hook_record(tmp_path / "session.jsonl"))
     claim = WatchClaim(hook.session_id)
     claim.path.parent.mkdir(parents=True)
-    record = WatchRecord("lead", str(comms.root), ("watch",), tmp_path / "inbox")
+    record = WatchRecord("colleague", str(comms.root), ("watch",), tmp_path / "inbox")
     worker = RecordedThreadIncarnation("worker", 1.0)
-    rules = (*OrderlessUnreviewedHead.scan_reviews(comms.goals, "lead", ProgressRead(())),
+    rules = (*OrderlessUnreviewedHead.scan_reviews(comms.goals, ProgressRead(())),
              ReviewTimerUp("P1", worker, "order-P1", RecordedEventTime(1000.0)),
              SpinningTeammate("P2", worker, 92))
     beat(comms, rules)
@@ -307,7 +307,7 @@ def test_a_recorded_verdict_drops_its_board_line_on_the_next_tool_call(
         server.bind(str(claim.socket_path))
         server.listen()
         server.settimeout(5)
-        assert DeckStart.decode(hook_record(tmp_path / "session.jsonl", "SessionStart")).take(comms, admitted_binding(comms, "lead"))
+        assert DeckStart.decode(hook_record(tmp_path / "session.jsonl", "SessionStart")).take(comms, admitted_binding(comms, "colleague"))
         board = tool_call(hook, server, comms, db, time.time())
         assert len(board) == len(rules)
         invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
@@ -335,7 +335,7 @@ def test_a_held_claims_absent_socket_is_one_board_line_not_a_traceback(tmp_path,
     dropped its deck slice, while LiveWatch already declared that gap an install's swap."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("HOME", "home")
-    record = WatchRecord("lead", str(tmp_path), ("watch",), tmp_path / "inbox")
+    record = WatchRecord("colleague", str(tmp_path), ("watch",), tmp_path / "inbox")
     (line,) = LiveWatch(WatchClaim("swapping"), record).board()
     assert line.startswith("BOARD:") and "swapping the session bridge" in line
 
@@ -347,24 +347,24 @@ def test_board_start_line_disappears_when_its_phase_order_is_sent(notification_b
     hook = BoardReminder.decode(hook_record(tmp_path / "session.jsonl"))
     claim = WatchClaim(hook.session_id)
     claim.path.parent.mkdir(parents=True)
-    record = WatchRecord("lead", str(comms.root), ("watch",), tmp_path / "inbox")
-    reading = capture_frame(comms, "lead", ProgressRead()).plan
+    record = WatchRecord("colleague", str(comms.root), ("watch",), tmp_path / "inbox")
+    reading = capture_frame(comms, ProgressRead()).plan
     beat(comms, (PlanIdle(BusWriterPhase, reading),))
     phase_name = f"{BusWriterPhase.plan.declared_name}/{BusWriterPhase.declared_name}"
-    lead = comms.registry.require("lead").incarnation
-    request = comms.goals.todos.add_request(lead, "Start the ready bus writer phase").id
+    colleague = comms.registry.require("colleague").incarnation
+    request = comms.goals.todos.add_request(colleague, "Start the ready bus writer phase").id
     original = comms.goals.todos.get("P1").order.checked()
     with (claim.held(record), claim.reader_held(), Binding.open(tmp_path / "delivery") as db,
           socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server):
         server.bind(str(claim.socket_path))
         server.listen()
         server.settimeout(5)
-        assert DeckStart.decode(hook_record(tmp_path / "session.jsonl", "SessionStart")).take(comms, admitted_binding(comms, "lead"))
+        assert DeckStart.decode(hook_record(tmp_path / "session.jsonl", "SessionStart")).take(comms, admitted_binding(comms, "colleague"))
         before = tool_call(hook, server, comms, db, time.time())
         assert sum(phase_name in line for line in before) == 1
         # The worker holds P1 and P2 already; the idle outsider takes the phase order.
         comms.goals.update_goal("outsider", CreateProblemGoalAction(
-            problem="P3", request=request, assigner=lead,
+            problem="P3", request=request, assigner=colleague,
             repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"),
             text="Start the ready bus writer phase", review_at=RecordedEventTime(time.time() + 3600),
             order=replace(original, id=OrderId.mint(), serves=BusWriterPhase,
@@ -419,15 +419,15 @@ def test_the_board_prints_changes_once_then_an_unchanged_count(notification_bus,
     from agent_comms.task_attachments.team_pings import TeamUpdateStore
 
     comms = notification_bus
-    comms.threads.set_heartbeat_delivery("lead", OffHeartbeatDelivery)
-    assert comms.registry.require("lead").heartbeat_delivery is OffHeartbeatDelivery
+    comms.threads.set_heartbeat_delivery("colleague", OffHeartbeatDelivery)
+    assert comms.registry.require("colleague").heartbeat_delivery is OffHeartbeatDelivery
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("HOME", "home")
     hook = BoardReminder.decode(hook_record(tmp_path / "session.jsonl"))
     claim = WatchClaim(hook.session_id)
     claim.path.parent.mkdir(parents=True)
-    record = WatchRecord("lead", str(comms.root), ("watch",), tmp_path / "inbox")
-    lead = comms.registry.require("lead").incarnation
+    record = WatchRecord("colleague", str(comms.root), ("watch",), tmp_path / "inbox")
+    colleague = comms.registry.require("colleague").incarnation
     worker = comms.registry.require("worker").incarnation
     began = time.time()
     first = RulePing(SpinningTeammate, TextDigest.of("first"), text="Read worker P1",
@@ -435,13 +435,13 @@ def test_the_board_prints_changes_once_then_an_unchanged_count(notification_bus,
     second = RulePing(ReviewTimerUp, TextDigest.of("second"), text="Review worker P2",
                       subjects=(TeammateSubject(worker),), since=RecordedEventTime(began))
     TeamUpdateStore.record(comms.root, TeamDecisions(
-        lead, (first, second), (first, second), ()))
+        colleague, (first, second), (first, second), ()))
     with (claim.held(record), claim.reader_held(), Binding.open(tmp_path / "delivery") as db,
           socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server):
         server.bind(str(claim.socket_path))
         server.listen()
         server.settimeout(5)
-        assert DeckStart.decode(hook_record(tmp_path / "session.jsonl", "SessionStart")).take(comms, admitted_binding(comms, "lead"))
+        assert DeckStart.decode(hook_record(tmp_path / "session.jsonl", "SessionStart")).take(comms, admitted_binding(comms, "colleague"))
         assert tool_call(hook, server, comms, db, began + 90) == (
             "BOARD: Read worker P1 (seen for 1 min)",
             "BOARD: Review worker P2 (seen for 1 min)",
@@ -451,14 +451,14 @@ def test_the_board_prints_changes_once_then_an_unchanged_count(notification_bus,
         )
         changed = replace(first, observation=TextDigest.of("changed"), since=RecordedEventTime(began + 90))
         TeamUpdateStore.record(comms.root, TeamDecisions(
-            lead, (changed, second), (changed,), ()))
+            colleague, (changed, second), (changed,), ()))
         assert tool_call(hook, server, comms, db, began + 92) == (
             "BOARD: Read worker P1 (seen for 0 min)",
             unchanged_summary((second,), began + 92),
         )
         # A fresh packet does not reset delivery, and the answer window rings only once.
         TeamUpdateStore.record(comms.root, TeamDecisions(
-            lead, (changed, second), (), ()))
+            colleague, (changed, second), (), ()))
         alarm = began + AwaitingTeam.seconds
         assert tool_call(hook, server, comms, db, alarm + 1) == (
             "BOARD: Review worker P2 (seen for 5 min)",
@@ -468,7 +468,7 @@ def test_the_board_prints_changes_once_then_an_unchanged_count(notification_bus,
             unchanged_summary((changed, second), alarm + 2),
         )
         assert DeliveredBoardContent.count(db) == 2
-        TeamUpdateStore.record(comms.root, TeamDecisions(lead, (), (), ()))
+        TeamUpdateStore.record(comms.root, TeamDecisions(colleague, (), (), ()))
         assert tool_call(hook, server, comms, db, alarm + 3) == ()
         assert DeliveredBoardContent.count(db) == 0
 
@@ -496,7 +496,7 @@ def run_resident(monkeypatch, capsys, transcript, comms: Comms, binding: Binding
 
 
 def test_the_resident_commands_order_the_reads_once_then_put_slices_inline(
-        tmp_path, monkeypatch, capsys, commanding_session, team_bus, team_binding):
+        tmp_path, monkeypatch, capsys, team_session, team_bus, team_binding):
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
     run = run_resident(monkeypatch, capsys, transcript, comms=team_bus, binding=team_binding)
@@ -607,15 +607,16 @@ def test_prime_in_a_session_no_bus_thread_holds_is_refused_out_loud(tmp_path, mo
         SessionEndpoint("loose").session().require_bound()
 
 
-def test_changing_storage_lead_preserves_the_peer_deal_and_real_child_delegation(
-        tmp_path, capsys, commanding_session, team_bus, team_binding):
-    """Moving storage ownership neither demotes a peer nor changes its retained context."""
+def test_changing_the_team_project_preserves_the_peer_deal_and_real_child_delegation(
+        tmp_path, capsys, team_session, team_bus, team_binding):
+    """Changing the team's repositories neither demotes a peer nor changes its retained
+    context."""
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
     assert DeckStart.decode(hook_record(transcript, "SessionStart")).take(team_bus, team_binding)
     assert transcript.with_suffix(".deck.json").exists()
-    commanding_session.registry.set_team_project(RegisteredTeamProject(
-        commanding_session.registry.require("unit-x").incarnation, ()))
+    team_session.registry.set_team_project(RegisteredTeamProject((Repo(
+        checkout=tmp_path, github=RepositoryName.from_wire("owner/repo")),)))
     dealt = transcript.with_suffix(".deal.json").read_bytes()
     reminder = BoardReminder.decode(hook_record(transcript))
     assert [reminder.take(team_bus, team_binding, reminder.count_call()) for _ in range(SliceReminder.every - 1)] == [()] * (SliceReminder.every - 1)
@@ -628,39 +629,36 @@ def test_changing_storage_lead_preserves_the_peer_deal_and_real_child_delegation
                          "transcript_path": str(transcript), "agent_id": "a9",
                          "agent_type": "Explore"}).register(team_bus, team_binding)
     assert "in-turn fork claude-a9" in capsys.readouterr().out
-    child = commanding_session.registry.require("claude-a9")
-    child.execution.require_fork()
+    child = team_session.registry.require_member("claude-a9", ForkThread)
     assert tuple(child.parent.names()) == ("claude-code",)
     assert transcript.with_suffix(".deck.json").exists()
 
 
 def test_a_fork_registers_under_the_session_that_spawned_it(
-        tmp_path, capsys, commanding_session, team_bus, team_binding):
+        tmp_path, capsys, team_session, team_bus, team_binding):
     """No CLI subprocess: the hook declares the fork in its own process as a child of the
-    session's own bus thread, carrying every tag that thread carries (#commanders included),
-    even when that thread is a co-commander and not the registry's lead."""
-    commanding_session.registry.declare(Thread(
+    session's own bus thread, carrying every tag that thread carries (#teammates included)."""
+    team_session.registry.declare(NativeThread(
         "claude-nra", frozenset({TeammatesTag.declared_name}), Checkout(tmp_path),
         model=DeclaredModel("anthropic/claude-opus-4-6")))
     WatchClaim("s2").enrol(WatchRecord(
-        "claude-nra", str(commanding_session.root), (), tmp_path / "state2"))
+        "claude-nra", str(team_session.root), (), tmp_path / "state2"))
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
     for session, agent, actor in (("s", "a7", "claude-code"), ("s2", "a8", "claude-nra")):
         SubagentHook.decode({"hook_event_name": "SubagentStart", "session_id": session,
                              "transcript_path": str(transcript), "agent_id": agent,
                              "agent_type": "fork"}).register(
-                                 commanding_session, admitted_binding(commanding_session, actor, session))
+                                 team_session, admitted_binding(team_session, actor, session))
         assert f"in-turn fork claude-{agent}" in capsys.readouterr().out
-    snapshot = commanding_session.registry.snapshot()
+    snapshot = team_session.registry.snapshot()
     for agent, parent in (("a7", "claude-code"), ("a8", "claude-nra")):
-        fork = snapshot.require(f"claude-{agent}")
-        fork.execution.require_fork()
+        fork = snapshot.require_member(f"claude-{agent}", ForkThread)
         assert tuple(fork.parent.names()) == (parent,)
         assert fork.tags == snapshot.require(parent).tags
     assert TeammatesTag.declared_name in snapshot.require("claude-a8").tags
     assert {"claude-a7", "claude-a8"}.isdisjoint(
-        thread.name for thread in snapshot.commander_project.commanders(snapshot))
+        thread.name for thread in snapshot.team_project.colleagues(snapshot))
 
 
 def gated(transcript, tool, tool_input, *, comms: Comms, binding: Binding, **extra):
@@ -677,7 +675,7 @@ def refused(capsys, call):
 
 def answered_audit(reader, read=None, owner_words=()):
     """The audit answering every dealt file owed an answer among `read`, by default every one
-    the reader owes (its rules and, for a commander, its skill), as a session writes it."""
+    the reader owes (its rules and, for a teammate, its skill), as a session writes it."""
     owed = reader.answered() if read is None else {rule.name for rule in read}
     return json.dumps({"rules": [engaged(source.stem, source.resolve())
                                  for source in reader.sources() if source.stem in owed],
@@ -685,8 +683,8 @@ def answered_audit(reader, read=None, owner_words=()):
 
 
 @pytest.fixture
-def dealt_session(tmp_path, commanding_session, team_bus, team_binding):
-    """A commander session just dealt its deck: its transcript and the deal."""
+def dealt_session(tmp_path, team_session, team_bus, team_binding):
+    """A teammate session just dealt its deck: its transcript and the deal."""
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
     start = DeckStart.decode(hook_record(transcript, "SessionStart"))
@@ -842,7 +840,7 @@ def test_a_quote_outside_the_greentext_is_refused(tmp_path, quote):
     assert RuleAudit("rule", quote="> the greentext", does="d", why="w").unengaged(source) == ""
 
 
-def test_the_full_audit_and_the_owners_words_open_the_gate(capsys, tmp_path, commanding_session, team_bus, team_binding):
+def test_the_full_audit_and_the_owners_words_open_the_gate(capsys, tmp_path, team_session, team_bus, team_binding):
     transcript = tmp_path / "session.jsonl"
     words = ("fix the gate",)
     transcript.write_text(json.dumps({"type": "user", "message": {"content": words[0]}}) + "\n")
@@ -859,7 +857,7 @@ def test_the_full_audit_and_the_owners_words_open_the_gate(capsys, tmp_path, com
 
 
 def test_the_deal_teaches_the_three_fields_by_a_real_answer_once(
-        tmp_path, capsys, commanding_session, team_bus, team_binding):
+        tmp_path, capsys, team_session, team_bus, team_binding):
     """The hook's order prints the one template; the first refusal does not print it again."""
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
@@ -875,7 +873,7 @@ def test_the_deal_teaches_the_three_fields_by_a_real_answer_once(
 
 
 def test_every_tool_but_read_waits_for_each_dealt_rule_file_then_its_audit(
-        tmp_path, capsys, commanding_session, team_bus, team_binding):
+        tmp_path, capsys, team_session, team_bus, team_binding):
     """The deal names the packaged rule files themselves; PreToolUse only judges, and a file
     counts as read only when a Read covering all of it completes (PostToolUse). Then only the
     audit may be written until it answers every dealt rule."""
@@ -958,15 +956,14 @@ def test_the_audit_answers_each_shown_prompt_by_its_own_words_with_an_action():
 
 
 def test_a_subagent_and_an_unbound_session_are_never_gated(
-        tmp_path, monkeypatch, capsys, commanding_session, team_bus, team_binding):
+        tmp_path, monkeypatch, capsys, team_session, team_bus, team_binding):
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
     assert DeckStart.decode(hook_record(transcript, "SessionStart")).take(team_bus, team_binding)
     # Claude's SubagentStart registers the child before PreToolUse reports its activity.
-    from agent_comms.thread_execution import ForkExecution
 
-    commanding_session.registry.register_child(
-        "claude-a9", "claude-code", ForkExecution, commanding_session.goals)
+    team_session.registry.register_child(
+        "claude-a9", "claude-code", ForkThread, team_session.goals)
     assert not refused(capsys, gated(transcript, "Bash", {"command": "ls"}, agent_id="a9", comms=team_bus, binding=team_binding))
     elsewhere = tmp_path / "other.jsonl"
     elsewhere.write_text("")
@@ -974,16 +971,15 @@ def test_a_subagent_and_an_unbound_session_are_never_gated(
 
 
 def test_two_agents_on_one_session_keep_separate_deals(
-        tmp_path, capsys, commanding_session, team_bus, team_binding):
+        tmp_path, capsys, team_session, team_bus, team_binding):
     """A subagent shares its session's id and transcript path; its reads never count for the
     main agent, it may not write the main agent's audit, and its own deal is its own."""
-    from agent_comms.thread_execution import ForkExecution
 
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
     assert DeckStart.decode(hook_record(transcript, "SessionStart")).take(team_bus, team_binding)
-    commanding_session.registry.register_child(
-        "claude-a9", "claude-code", ForkExecution, commanding_session.goals)
+    team_session.registry.register_child(
+        "claude-a9", "claude-code", ForkThread, team_session.goals)
     for part in dealt_sources(transcript):
         gated(transcript, "Read", {"file_path": str(part)}, agent_id="a9", comms=team_bus, binding=team_binding).completed()
     assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}, comms=team_bus, binding=team_binding))  # main still unread
@@ -998,7 +994,7 @@ def test_two_agents_on_one_session_keep_separate_deals(
 
 
 @pytest.mark.parametrize("retired", [False, True])
-def test_a_resume_keeps_the_deal_its_session_is_answering(tmp_path, commanding_session, retired, team_bus, team_binding):
+def test_a_resume_keeps_the_deal_its_session_is_answering(tmp_path, team_session, retired, team_bus, team_binding):
     """A resume keeps the context it had: the reads made and the audit written stay, where a
     re-deal on 2026-10-30 unlinked claude-code's audit mid-gate and demanded 23 reads again."""
     transcript = tmp_path / "session.jsonl"
@@ -1020,8 +1016,8 @@ def test_a_resume_keeps_the_deal_its_session_is_answering(tmp_path, commanding_s
     assert start.current().read_by(start) == ()
 
 
-def test_a_subagent_compaction_deals_the_subagent_not_its_session(tmp_path, commanding_session, team_bus, team_binding):
-    """A subagent's events name its session's transcript; on 2026-10-30 a commander fork's
+def test_a_subagent_compaction_deals_the_subagent_not_its_session(tmp_path, team_session, team_bus, team_binding):
+    """A subagent's events name its session's transcript; on 2026-10-30 a teammate fork's
     compaction dealt the main agent's stem, whose audit was mid-answer."""
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
@@ -1036,7 +1032,7 @@ def test_a_subagent_compaction_deals_the_subagent_not_its_session(tmp_path, comm
     assert sub.record.exists() and str(sub.audit) in result.stdout
 
 
-def test_a_compaction_deal_opens_with_when_it_compacted(tmp_path, commanding_session, team_bus, team_binding):
+def test_a_compaction_deal_opens_with_when_it_compacted(tmp_path, team_session, team_bus, team_binding):
     """A fresh context cannot remember compacting, so the deal says when, from the transcript's
     own compact boundary: claude-code called real compactions a gate bug four times."""
     transcript = tmp_path / "session.jsonl"

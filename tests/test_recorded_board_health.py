@@ -36,44 +36,43 @@ def published_board(fork_bus, installed_runtime):
     comms, source, _ = fork_bus
     from test_forks import record_edits
     record_edits(comms, source, 1)
-    parent = comms.registry.require('lead')
-    frame = capture_frame(comms, parent.name, ProgressRead())
-    states = TeammateState.current(comms, parent.name, frame)
-    observation = TeamObservation(parent, frame, (), states)
-    asyncio.run(ObservedHeartbeat((observation,)).run(lambda: nullcontext(comms)))
+    frame = capture_frame(comms, ProgressRead())
+    states = TeammateState.current(comms, frame)
+    observation = TeamObservation(frame, (), states)
+    asyncio.run(ObservedHeartbeat(observation).run(lambda: nullcontext(comms)))
     return comms
 
 
 def test_recorded_failure_precedes_stale_board_and_load_without_changing_retained_data(published_board):
     comms = published_board
-    owner = comms.registry.require('lead').incarnation.require_recorded()
+    owner = comms.registry.require('colleague').incarnation.require_recorded()
     services = ServicePassStore.at(comms.root)
-    original = TeamFrame.current(comms, 'lead')
+    original = TeamFrame.current(comms, 'colleague')
     old_completion = time.time() - 3600
     services.update(lambda passes: DocumentChange.to(replace(
-        passes, commander_completed=passes.commander_completed | {owner: old_completion})))
+        passes, teammate_completed=passes.teammate_completed | {owner: old_completion})))
     services.failed('TeamHeartbeat', KeyError('original branch read failed'))
     failure = services.read().failing['TeamHeartbeat']
-    hud = ThreadCaller('lead').invoke(CommsHudTool(), comms)
-    load = ThreadCaller('lead').invoke(CommsTeamLoadTool(), comms)
+    hud = ThreadCaller('colleague').invoke(CommsHudTool(), comms)
+    load = ThreadCaller('colleague').invoke(CommsTeamLoadTool(), comms)
     assert hud.units == original.units and hud.load == original.load
     assert hud.heartbeat == RecordedEventTime(old_completion)
     assert load.load == original.load and load.heartbeat == hud.heartbeat
-    board = ThreadCaller('lead').invoke(CommsBoardTool(), comms)
+    board = ThreadCaller('colleague').invoke(CommsBoardTool(), comms)
     for lines in (hud.frame, load.header, board.lines):
         assert 'original branch read failed' in lines[0]
-        assert 'elapsed' in lines[0]
+        assert lines[0].endswith(' ago)')  # the failure's age, painted when the line is read
         assert 'last completed' in lines[1]
         assert any('STALE retained' in line for line in lines)
-    edits = ThreadCaller('lead').invoke(CommsUnjudgedTool(), comms)
+    edits = ThreadCaller('colleague').invoke(CommsUnjudgedTool(), comms)
     assert 'original branch read failed' in edits.service_status[0]
     assert edits.complete and edits.unavailable == ()
     assert len(edits.edits) == 1 and edits.edits[0].id == ToolCallId('parent-edit-0')
     assert services.read().failing['TeamHeartbeat'] == failure
-    assert services.read().commander_completed[owner] == old_completion
+    assert services.read().teammate_completed[owner] == old_completion
     services.failed('TeamHeartbeat', ValueError('newest failure'))
     assert services.read().failing['TeamHeartbeat'].since == failure.since
-    assert 'newest failure' in TeamFrame.current(comms, 'lead').frame[0]
+    assert 'newest failure' in TeamFrame.current(comms, 'colleague').frame[0]
     published_before = tuple((path, path.read_bytes()) for path in TeamFrame.matching_in(comms.root))
 
     async def recover():
@@ -89,26 +88,26 @@ def test_recorded_failure_precedes_stale_board_and_load_without_changing_retaine
                 await task
 
     asyncio.run(recover())
-    recovered = TeamFrame.current(comms, 'lead')
+    recovered = TeamFrame.current(comms, 'colleague')
     assert recovered.services.failing == {}
     assert recovered.heartbeat.since(old_completion)
     assert any(path.read_bytes() != before for path, before in published_before)
-    assert recovered.heartbeat == RecordedEventTime(services.read().commander_completed[owner])
+    assert recovered.heartbeat == RecordedEventTime(services.read().teammate_completed[owner])
 
 
 def test_stopped_heartbeat_without_failure_explains_stale_board_and_refuses_details(published_board):
     comms = published_board
-    owner = comms.registry.require('lead').incarnation.require_recorded()
+    owner = comms.registry.require('colleague').incarnation.require_recorded()
     services = ServicePassStore.at(comms.root)
     services.update(lambda passes: DocumentChange.to(replace(
-        passes, commander_completed=passes.commander_completed | {owner: time.time() - 3600})))
-    hud = TeamFrame.current(comms, 'lead')
+        passes, teammate_completed=passes.teammate_completed | {owner: time.time() - 3600})))
+    hud = TeamFrame.current(comms, 'colleague')
     assert not hud.services.failing
     assert hud.header[0] == 'no failure recorded, so no heartbeat is running'
     assert 'STALE retained' in hud.retained_status()
     card = hud.units[0]
     request = ReadOperation(str(comms.root), TeammateRead(
-        commander=owner, unit=card.unit,
+        frame_owner=owner, unit=card.unit,
         orders=tuple(dict.fromkeys(order.order for order in card.orders))))
     with pytest.raises(ToolRefusedError, match='no failure recorded, so no heartbeat is running'):
         request.read(comms)
@@ -117,11 +116,11 @@ def test_stopped_heartbeat_without_failure_explains_stale_board_and_refuses_deta
 def test_a_pass_still_inside_its_declared_duration_is_not_called_dead(published_board):
     comms = published_board
     services = ServicePassStore.at(comms.root)
-    owner = comms.registry.require('lead').incarnation.require_recorded()
+    owner = comms.registry.require('colleague').incarnation.require_recorded()
     services.update(lambda passes: DocumentChange.to(replace(
-        passes, commander_completed=passes.commander_completed | {
+        passes, teammate_completed=passes.teammate_completed | {
             owner: time.time() - TeamHeartbeat.pass_duration})))
-    hud = TeamFrame.current(comms, 'lead')
+    hud = TeamFrame.current(comms, 'colleague')
     assert hud.header[0] != 'no failure recorded, so no heartbeat is running'
     assert hud.retained_status() == 'Retained board rows and load:'
     hud.require_current()
@@ -130,10 +129,10 @@ def test_a_pass_still_inside_its_declared_duration_is_not_called_dead(published_
 def test_failing_watch_does_not_make_a_fresh_heartbeat_stale(published_board):
     comms = published_board
     services = ServicePassStore.at(comms.root)
-    owner = comms.registry.require('lead').incarnation.require_recorded()
+    owner = comms.registry.require('colleague').incarnation.require_recorded()
     services.heartbeat_passed((owner,), (owner,))
     services.failed('another-watch', OSError('independent watch failed'))
-    hud = TeamFrame.current(comms, 'lead')
+    hud = TeamFrame.current(comms, 'colleague')
     assert 'independent watch failed' in hud.header[0]
     assert hud.retained_status() == 'Retained board rows and load:'
     hud.require_current()
@@ -144,7 +143,7 @@ def test_missing_frame_reports_recorded_failure_without_fabricating_a_board(fork
     services = ServicePassStore.at(comms.root)
     services.failed('TeamHeartbeat', KeyError('no readable publication'))
     with pytest.raises(ToolRefusedError) as refused:
-        TeamFrame.current(comms, 'lead')
+        TeamFrame.current(comms, 'colleague')
     lines = str(refused.value).splitlines()
     assert 'no readable publication' in lines[0]
     assert 'Board unavailable:' in lines[-1]
@@ -156,15 +155,14 @@ def test_missing_frame_reports_recorded_failure_without_fabricating_a_board(fork
 def test_one_unreadable_source_preserves_the_other_original_edit(published_board, fork_bus, tmp_path):
     from agent_comms.repo import Checkout
     from agent_comms.storage_rules import StorageRule
-    from agent_comms.thread_execution import ExternalThreadExecution
+    from agent_comms.threads import ExternalThread
     from agent_comms.thread_model import DeclaredModel
-    from agent_comms.threads import Thread
     from test_edit_allocations import issue
 
     comms, source, template = fork_bus
-    worker = comms.registry.declare(Thread(
+    worker = comms.registry.declare(ExternalThread(
         'unreadable-worker', frozenset({'comms'}), Checkout(source.checkout),
-        model=DeclaredModel('anthropic/claude-opus-4-6'), execution=ExternalThreadExecution))
+        model=DeclaredModel('anthropic/claude-opus-4-6')))
     rule = StorageRule.load(comms.root)
     checkout = rule.order_checkout(rule.roots_of(worker), 'P41')
     checkout.parent.mkdir(parents=True, exist_ok=True)
@@ -175,7 +173,7 @@ def test_one_unreadable_source_preserves_the_other_original_edit(published_board
     retained_metadata = tmp_path / 'unreadable-source-metadata'
     metadata.rename(retained_metadata)
     try:
-        result = ThreadCaller('lead').invoke(CommsUnjudgedTool(), comms)
+        result = ThreadCaller('colleague').invoke(CommsUnjudgedTool(), comms)
     finally:
         retained_metadata.rename(metadata)
     assert not result.complete

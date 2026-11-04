@@ -44,7 +44,7 @@ from agent_comms.messages import (
 )
 from agent_comms.registration import Registration
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.typed_table import ProjectionProducer, TypedTable
 from bus_record_fixture import publication_processes, record_from
 
@@ -103,9 +103,8 @@ def claims(tmp_path: Path) -> ClaimBus:
     turns = {}
     for name in ("alice", "bob"):
         turns[name] = TurnId.mint()
-        registry.declare(Thread(
-            name, frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()),
-        ), RunningThreadStatus())
+        registry.declare(NativeThread(
+            name, frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())), RunningThreadStatus())
     bus = Bus.install(Bus.path_in(root))
     with bus.writing():
         pass

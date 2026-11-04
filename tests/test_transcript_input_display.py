@@ -16,7 +16,7 @@ from conftest import installed_comms
 from agent_comms.native_entries import TranscriptProjection
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.pi_payloads import PiMessage, UserMessage
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.turn_item import FreshNativeIdText
 from agent_comms.transcript_routes import DisplayText, InputDisplay, NoDisplayText, SentInputText
 from bus_record_fixture import FIRST_INPUT_ID, SECOND_INPUT_ID, THIRD_INPUT_ID
@@ -40,7 +40,7 @@ def saved_row(native_id, text, *, images=False, role="user"):
 
 def test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen(tmp_path):
     comms = installed_comms(tmp_path / "wire")
-    comms.registry.declare(Thread('worker', frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(NativeThread('worker', frozenset(), Checkout(tmp_path)))
     # These annotations are committed before sending, before Pi creates its first file.
     comms.transcripts.routes.record_input_display(FIRST_INPUT_ID, NoDisplayText())
     comms.transcripts.routes.record_input_display(
@@ -107,7 +107,7 @@ async def test_acp_saved_transcript_replay_hides_only_owned_internal_input(tmp_p
             ]
         )
     )
-    comms.registry.declare(Thread('worker', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(session), comms.root)))
+    comms.registry.declare(NativeThread('worker', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(session), comms.root)))
     comms.transcripts.routes.record_input_display(FIRST_INPUT_ID, NoDisplayText())
     comms.transcripts.routes.record_input_display(SECOND_INPUT_ID, DisplayText("test2"))
     agent = CommsAgent(wire(comms.root))

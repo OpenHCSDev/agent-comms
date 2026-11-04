@@ -4,17 +4,15 @@ import pytest
 
 from agent_comms.repo import Checkout
 from conftest import installed_comms
-from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.threads import ExternalThread
 from agent_comms.ui_model.sidebar import SidebarModel
 from agent_comms.ui_model.unread import ExactUnread, IndexingUnread, UnreadPresentation
-from agent_comms.threads import Thread
 
 
 def test_indexing_roster_and_exact_count_share_required_maps(tmp_path):
     comms = installed_comms(tmp_path)
-    comms.registry.declare(Thread(
-        "peer", frozenset(), Checkout(tmp_path / "peer"), execution=ExternalThreadExecution,
-    ))
+    comms.registry.declare(ExternalThread(
+        "peer", frozenset(), Checkout(tmp_path / "peer")))
     viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
     roster = comms.views.presentation.roster(viewer)
     assert isinstance(roster.unread["peer"], IndexingUnread)

@@ -52,7 +52,7 @@ from agent_comms.turn_context import RecordedContextManifest
 from agent_comms_hooks import ToolRefusedError
 from observed_queue import ObservedQueue
 from test_turn_context_wire import corrupt_context_kind, manifest
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 @dataclass(frozen=True)
@@ -64,7 +64,7 @@ class ReadRecordedContext(ReadRequest):
 
 
 def saved_row(comms):
-    owner = Thread('saved', frozenset(), Checkout(comms.root.parent), created_at=17003.0)
+    owner = NativeThread('saved', frozenset(), Checkout(comms.root.parent), created_at=17003.0)
     comms.registry.declare(owner)
     comms.contexts.record_after(UNREAD_CONTEXT, manifest(owner))
     with comms.contexts.snapshot() as db:

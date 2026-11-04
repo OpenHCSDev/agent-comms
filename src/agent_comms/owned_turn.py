@@ -66,7 +66,7 @@ from dataclasses import field
 from .turn_item import UsageChargeId
 from .tools import CommsSetGoalTool
 from .turn_lease import TurnLeaseFence
-from .threads import Thread
+from .threads import NativeThread, Thread
 from agent_comms.pi_wire import PiUsage
 from .comms import Comms
 if TYPE_CHECKING:
@@ -88,7 +88,9 @@ class TurnGoalAccount:
     has_productive_tool: bool = field(default=False, init=False)
 
     @staticmethod
-    def reserve(*, owner: Thread, goal: Goal, comms: Comms, autonomous: bool) -> GoalTurnPermit:
+    def reserve(
+        *, owner: NativeThread, goal: Goal, comms: Comms, autonomous: bool,
+    ) -> GoalTurnPermit:
         try:
             store = comms.goals.open_goal_store()
             with comms.registry.store.current_snapshot() as cut:
@@ -125,12 +127,12 @@ class TurnGoalAccount:
         if event.name != CommsSetGoalTool.declared_name or event.ok is not True:
             return
         with self.comms.registry.store.current_snapshot() as cut:
-            owner = cut.snapshot.require(self.owner.name)
+            owner = cut.snapshot.require_member(self.owner.name, NativeThread)
             claimed = tuple(permit for goal in owner.goal for permit in self._reserve_origin(owner, goal))
         for permit in claimed:
             self._record_origin_usage(permit)
 
-    def _reserve_origin(self, owner: Thread, goal: Goal) -> tuple[LaunchPermit, ...]:
+    def _reserve_origin(self, owner: NativeThread, goal: Goal) -> tuple[LaunchPermit, ...]:
         if goal.id in self.originated:
             return ()
         store = self.comms.goals.open_goal_store()
@@ -275,6 +277,14 @@ class OwnedTurn:
         return True
 
     def begin(self, resources: AsyncExitStack, permits: ExitStack) -> bool:
+        """Prepare the turn under its lease, then reserve the inputs it prepared."""
+        if not self.prepare(resources, permits):
+            return False
+        self.reserve_input(self.prepared)
+        return True
+
+    def prepare(self, resources: AsyncExitStack, permits: ExitStack) -> bool:
+        """Take the lease and goal account and build the prompt; reservation follows."""
         self.turn_id = TurnId.mint()
         self.routing = TurnRouting(
             tuple(origin.reference for origin in self.origins),
@@ -334,7 +344,7 @@ class OwnedTurn:
             document,
         )
         self.prepare_prompt(batch)
-        self.reserve_input(batch)
+        self.prepared = batch
         return True
 
     def _prepare_goal_permit(self, goal: Goal, permits: ExitStack) -> bool:

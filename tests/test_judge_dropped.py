@@ -156,8 +156,7 @@ def test_rewritten_reads_the_repository_the_edit_was_made_in(discarded_and_kept,
     ctx = discarded_and_kept
     other = next(graph.repository for graph in proof_build_checkouts
                  if graph.repository.github != ctx.repos[0].github)
-    lead = ctx.comms.registry.require(ctx.actor_name).incarnation
-    ctx.comms.registry.set_team_project(RegisteredTeamProject(lead, (*ctx.repos, other)))
+    ctx.comms.registry.set_team_project(RegisteredTeamProject((*ctx.repos, other)))
     rule = ctx.comms.registry.storage_rule
     allocated = rule.repository_checkout(rule.roots_of(ctx.comms.registry.require("worker")),
                                          "P1", other.github)

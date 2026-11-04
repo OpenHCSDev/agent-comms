@@ -15,7 +15,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.repo import Checkout
 from agent_comms.thread_model import DeclaredModel
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from bus_record_fixture import prepare_native_comms
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
@@ -26,9 +26,9 @@ def _private_comms(tmp_path):
     root = tmp_path / "wire"
     comms = prepare_native_comms(wire(root))
     comms.registry.declare(
-        Thread('sender', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+        NativeThread('sender', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
-    owner = comms.registry.declare(Thread('beta', frozenset({'team'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('test/model')))
+    owner = comms.registry.declare(NativeThread('beta', frozenset({'team'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('test/model')))
     root_id = comms.registry.store.prepare_native_root().namespace
     with Coordination(str(root / "coordination.sqlite3")) as store:
         store.participants.register(

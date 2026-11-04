@@ -60,7 +60,7 @@ from .thread_model import ThreadModel
 from .thread_status import ActiveThreadPresence
 from .thread_text import NoThreadText, ThreadText
 from .repo import Checkout
-from .threads import Thread
+from .threads import NativeThread, Thread
 from .transcript_updates import TranscriptReplay
 
 
@@ -200,8 +200,7 @@ class SessionLifecycle:
         return self.comms.owners.acquire_thread(thread.name)
 
     def validated_thread(self, cwd: Checkout, session_id: AcpSessionId) -> Thread:
-        thread = self.comms.registry.require(session_id)
-        thread.execution.require_native()
+        thread = self.comms.registry.require_member(session_id, NativeThread)
         if not thread.contains_worktree(cwd, self.comms.registry.storage_rule):
             raise Refused.invalid_params(
                 {"reason": "The saved thread belongs to a different working directory."}

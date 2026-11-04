@@ -9,6 +9,7 @@ from .agent_events import (
 
 from .errors import StaleAttemptError
 import logging
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import replace
@@ -18,7 +19,7 @@ from typing import TYPE_CHECKING
 from agent_comms.nominal.field_codec import GoalId
 from .agent_activity import AgentActivity
 from .coordination_errors import StaleFence
-from .errors import RelationViolationError
+from .errors import BirthChangedError, RelationViolationError, UnregisteredThreadError
 from .goal_records import GoalRecords
 from .goal_actions import (
     GoalAction,
@@ -42,7 +43,7 @@ from .owner_requests import NewestOpenRequest, RequestDirective
 
 from dataclasses import dataclass
 from .goal_failure_observation import GoalFailureEvidence
-from .registry_document import RegistrySnapshot
+from .registry_document import RegistryDocument, RegistrySnapshot
 if TYPE_CHECKING:
     from .agent_events import GoalChange
     from .messages import Message
@@ -56,7 +57,7 @@ from .input_attempt import (
     UnresolvedInput,
 )
 from .input_disposition import DeliveryOverview
-from .threads import Thread
+from .threads import NativeThread, Thread
 from .errors import TodoError
 from .todos import SendBackVerdict, StrikeReason, Todo, JudgedCall, TodoBatch, TodoCommand, TodoStore
 
@@ -85,6 +86,48 @@ class GoalExecutionSource:
 
     def execution(self) -> GoalExecution:
         return self.goal.state.execution(self)
+
+
+class GoalTarget(ABC):
+    """Which thread a goal write selects inside the registry edit that publishes it."""
+
+    name: str
+
+    @abstractmethod
+    def select(self, document: RegistryDocument) -> Thread:
+        """The thread this write applies to, read under the edit's lock."""
+
+
+@dataclass(frozen=True)
+class NamedGoalTarget(GoalTarget):
+    """Whichever thread holds the name when the edit opens."""
+
+    name: str
+
+    def select(self, document: RegistryDocument) -> Thread:
+        return document.require(self.name)
+
+
+@dataclass(frozen=True)
+class BornGoalTarget(GoalTarget):
+    """Exactly one birth: a decision made for it never lands on a thread that replaced it
+    under the same name before the write."""
+
+    birth: ThreadIncarnation
+
+    @property
+    def name(self) -> str:  # type: ignore[override]
+        return self.birth.name
+
+    def select(self, document: RegistryDocument) -> Thread:
+        """The name follows renames (aliases); a removed or replaced birth is refused alike."""
+        try:
+            thread = document.require(self.birth.name)
+        except UnregisteredThreadError as error:
+            raise BirthChangedError() from error
+        if thread.incarnation != self.birth:
+            raise BirthChangedError()
+        return thread
 
 
 class Goals(GoalRecords):
@@ -157,7 +200,7 @@ class Goals(GoalRecords):
         return store.fire(owner, actor, reason)
 
     def ready_goal_grant_locked(
-        self, owner: Thread, claim_scope: int, generation: Generation
+        self, owner: NativeThread, claim_scope: int, generation: Generation
     ) -> str:
         """Caller holds registry; recover only this owner's original unused READY grant."""
         try:
@@ -273,24 +316,36 @@ class Goals(GoalRecords):
         actor: type = RuntimeInvocable,
     ) -> Result:
         """Return the exact declaration written by this action."""
-        with self._updating_goal(name, action, actor=actor) as goal:
+        with self._updating_goal(NamedGoalTarget(name), action, actor=actor) as goal:
+            return goal
+
+    def update_born_goal[Result: GoalDeclaration](
+        self,
+        birth: ThreadIncarnation,
+        action: GoalAction[Result],
+        *,
+        actor: type = RuntimeInvocable,
+    ) -> Result:
+        """Update exactly this birth's goal: the registry edit refuses a thread replaced under
+        its name between the decision and the write (BirthChangedError)."""
+        with self._updating_goal(BornGoalTarget(birth), action, actor=actor) as goal:
             return goal
 
     def update_goal_snapshot[Result: GoalDeclaration](
         self, name: str, action: GoalAction[Result], *, actor: type,
     ) -> GoalSnapshot:
         """Return this publication and its schedule before another owner can change it."""
-        with self._updating_goal(name, action, actor=actor):
+        with self._updating_goal(NamedGoalTarget(name), action, actor=actor):
             return self._goal_snapshot(name)
 
     @contextmanager
     def _updating_goal[Result: GoalDeclaration](
-        self, name: str, action: GoalAction[Result], *, actor: type,
+        self, target: GoalTarget, action: GoalAction[Result], *, actor: type,
     ) -> Iterator[Result]:
         """Run checks before locking, then recheck the original goal at publication."""
         action.require_actor(actor)
-        action = action.prepare(self, name, actor)
+        action = action.prepare(self, target.name, actor)
         with self.registry.store.editing() as edit:
             yield action.apply(GoalPublicationContext(
-                self, edit.document.require(name), actor, edit=edit,
+                self, target.select(edit.document), actor, edit=edit,
             ))

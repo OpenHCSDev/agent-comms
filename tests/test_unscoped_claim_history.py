@@ -16,16 +16,16 @@ from agent_comms.envelope_claim_transitions import (
 )
 from agent_comms.nominal.field_codec import ClaimId, FieldCodec, InputId, MalformedRecord, MessageId, TurnId
 from agent_comms.thread_status import RunningThreadStatus
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 G1, G2 = ClaimId("a" * 32), ClaimId("b" * 32)
 
 
 def test_unscoped_history_row_decodes_projects_never_live_and_releases(tmp_path):
     comms = wire(tmp_path / "wire")
-    comms.registry.declare(Thread("owner", frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(NativeThread("owner", frozenset(), Checkout(tmp_path)))
     comms.registry.register(comms.registry.require("owner"), RunningThreadStatus())
-    comms.registry.declare(Thread("peer", frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(NativeThread("peer", frozenset(), Checkout(tmp_path)))
     owner = comms.registry.require("owner")
     resource = str(tmp_path / "held.py")
     message_id = MessageId.mint("msg-1")

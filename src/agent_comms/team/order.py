@@ -359,17 +359,15 @@ class TeamContext(BaseModel):
         return cls(root=Path(root).resolve())
 
     @classmethod
-    def on_root(cls, commander: str, repos: tuple[Repo, ...], root: Path) -> Self:
+    def on_root(cls, actor: str, repos: tuple[Repo, ...], root: Path) -> Self:
         context = cls.read_root(root)
-        thread = context.comms.registry.require(commander)
-        context.comms.registry.set_team_project(
-            RegisteredTeamProject(thread.incarnation, repos)
-        )
-        return context.model_copy(update={'actor': PeerCaller(commander)})
+        context.comms.registry.require(actor)
+        context.comms.registry.set_team_project(RegisteredTeamProject(repos))
+        return context.model_copy(update={'actor': PeerCaller(actor)})
 
     @property
     def project(self) -> RegisteredTeamProject:
-        return self.comms.registry.snapshot().commander_project.require()
+        return self.comms.registry.snapshot().team_project.require()
 
     @property
     def repos(self) -> tuple[Repo, ...]:
@@ -712,7 +710,7 @@ class Team(TeamContext):
         except MaintenanceHeldError as held:
             # A say records nothing but its post, so the whole command is the resend.
             sys.exit(f'Refused, nothing sent: {held}\nAfter the install reports finished, '
-                     'resend:\n  ' + shlex.join(('agent-comms-commander', *sys.argv[1:])))
+                     'resend:\n  ' + shlex.join(('agent-comms-team', *sys.argv[1:])))
 
     def close(self, pid, works, artifact=''):
         """Core owns closing: the installed evidence, the artifact and the no-open-order rule live on the Todo."""
@@ -842,7 +840,7 @@ class TeamVerb(ClearingVerb, affix="Verb"):
         Normalize(FieldCodec.encode),
         Argument(flags=("--as",), options={
             "type": PeerCaller,
-            "help": "another teammate in #commanders acting under its own name"}),
+            "help": "another teammate in #teammates acting under its own name"}),
     ] = NoThreadCaller()
 
     @property
@@ -862,8 +860,10 @@ class TeamVerb(ClearingVerb, affix="Verb"):
         return ctx.actor_name
 
     def apply(self, ctx: Team) -> None:
-        self.actor.commanding(ctx.comms)
-        ctx = ctx.model_copy(update={'actor': self.actor})
+        # A verb naming no --fork or --as acts as the context's own teammate.
+        actor = self.actor.acting_caller(ctx.actor)
+        actor.rejoin(ctx.comms)
+        ctx = ctx.model_copy(update={'actor': actor})
         self.act(ctx)
 
     def act(self, ctx: Team) -> None:
@@ -899,8 +899,8 @@ class DirectiveVerb(TeamVerb):
         the replies that answer all of them at once, so one round trip clears the gate.
         """
         now = time.time()
-        # Debt and reply receipts follow the same exact represented owners, not the
-        # project's storage lead or every request the actor may maintain.
+        # Debts and replies follow the exact represented owners, not every request the
+        # actor may maintain.
         owers = ctx.actor_identity.represented_owners
         opened = tuple(rule for owner in owers for rule in OwedAnswer.opened(ctx.comms, owner))
         owed = frozenset(rule.message.message_id for rule in opened)
@@ -945,7 +945,7 @@ class DirectiveVerb(TeamVerb):
             for asker in rule.answered_in():
                 askers.setdefault(asker, []).append(str(rule.message.message_id))
         return {f'--answers {" ".join(ids)} ({asker})':
-                f'agent-comms-commander {SayVerb.tool()} {SayVerb.declared_name} {asker} BODYFILE'
+                f'agent-comms-team {SayVerb.tool()} {SayVerb.declared_name} {asker} BODYFILE'
                 f' --answers {" ".join(ids)}'
                 for asker, ids in askers.items()}
 
@@ -1178,6 +1178,9 @@ class ExistingPullRequestSelection(PullRequestSelection):
             title: str, body_file: str) -> str:
         if title or body_file:
             raise ValueError("--existing does not create or edit the PR; omit title and body.")
+        # The project's repository rule refuses before any forge read, as creation does.
+        RecordPullRequest.require_repository(
+            ctx.comms.registry.snapshot().team_project, todo, source.github)
         link = PullRequestLink.existing(source.github, self.number)
         ctx.comms.goals.todos.apply(todo.id, RecordPullRequest.for_order(
             todo, ctx.incarnation, link))
@@ -1317,7 +1320,7 @@ class EndsForkVerb(OrderVerb):
     registry write lock for a whole registration, past every unit's 5 s lock budget."""
 
     def apply(self, ctx: Team) -> None:
-        ctx = ctx.model_copy(update={'actor': self.actor})
+        ctx = ctx.model_copy(update={'actor': self.actor.acting_caller(ctx.actor)})
         if ctx.actor_name not in ctx.comms.registry:
             print(f'{ctx.actor_name} never joined; nothing to end')
             return
@@ -1493,7 +1496,7 @@ class InstallVerb(OrderVerb):
     clears = (InstallDue,)
 
     def run(self, ctx: Team) -> None:
-        for launch in InstallDue.launch_due(ctx.comms, ctx.actor_name):
+        for launch in InstallDue.launch_due(ctx.comms):
             print(launch)
 
 

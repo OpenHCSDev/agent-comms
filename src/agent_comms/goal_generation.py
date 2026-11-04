@@ -35,7 +35,7 @@ if TYPE_CHECKING:
     from agent_comms.goal_management import GoalExecutionSource
     from .goal_presentation import GoalExecution
     from .goals import Goal
-    from .threads import Thread
+    from .threads import NativeThread
 
 
 @dataclass(frozen=True)
@@ -65,7 +65,7 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
         self,
         store: GoalAttemptStore,
         goals: Goals,
-        owner: Thread,
+        owner: NativeThread,
         claim_scope: int,
         generation: Generation,
     ) -> GoalTurnPermit:
@@ -107,7 +107,7 @@ class ReadyGeneration(GenerationState):
         self,
         store: GoalAttemptStore,
         goals: Goals,
-        owner: Thread,
+        owner: NativeThread,
         claim_scope: int,
         generation: Generation,
     ) -> GoalTurnPermit:

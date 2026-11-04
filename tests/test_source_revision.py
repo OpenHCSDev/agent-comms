@@ -108,7 +108,7 @@ def test_order_derives_its_only_source_revision_from_its_pull_request(tmp_path):
         request=OwnerRequestId(OwnerRequestKey.mint()),
         review_at=RecordedEventTime(1000),
         expected_revision=1,
-        assigner=RecordedThreadIncarnation("lead", 1.0),
+        assigner=RecordedThreadIncarnation("colleague", 1.0),
     )
     action.require_sendable(source.project)
     with pytest.raises(MissingSourceLine):

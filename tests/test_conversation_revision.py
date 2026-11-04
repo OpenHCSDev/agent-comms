@@ -13,12 +13,12 @@ from agent_comms.historical_views import (
 )
 from agent_comms.private_path import FileRevision
 from bus_record_fixture import prepare_native_comms
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 def declared_wire(root):
     comms = prepare_native_comms(wire(root))
-    comms.registry.declare(Thread(name='peer', tags=frozenset({'comms'}), worktree=Checkout(root)))
+    comms.registry.declare(NativeThread(name='peer', tags=frozenset({'comms'}), worktree=Checkout(root)))
     return comms
 
 
@@ -40,7 +40,7 @@ def test_revision_keeps_the_typed_history_catalogue_observation(tmp_path, view, 
 def test_unrelated_registration_does_not_replace_display(tmp_path, view, target):
     comms = declared_wire(tmp_path)
     before = view.revision(comms.views, target, UnobservedConversation(), worktree=Checkout(tmp_path))
-    comms.registry.declare(Thread(name='unrelated', tags=frozenset({'other'}), worktree=Checkout(tmp_path)))
+    comms.registry.declare(NativeThread(name='unrelated', tags=frozenset({'other'}), worktree=Checkout(tmp_path)))
     after = view.revision(comms.views, target, before, worktree=Checkout(tmp_path))
 
     assert before.stores.registry != after.stores.registry

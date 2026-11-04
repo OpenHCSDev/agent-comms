@@ -75,7 +75,7 @@ from agent_comms.tools import ChannelListing, CommsChannelsTool, CommsPinChannel
 from agent_comms.tool_caller import HumanCaller, NoThreadCaller, ThreadCaller
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.tool_request import ReadTool, ToolCall, ToolRequest
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 import subprocess
 import site
 import socket
@@ -113,7 +113,7 @@ def test_real_connector_refusals_and_replaced_source(tmp_path, source_programs):
 @pytest.mark.parametrize("registered", [True, False])
 def test_connector_round_trip_reads_this_bus_as_its_caller(comms, tmp_path, registered):
 
-    original = comms.registry.declare(Thread("claude-ai", frozenset(), Checkout(comms.root)))
+    original = comms.registry.declare(NativeThread("claude-ai", frozenset(), Checkout(comms.root)))
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
@@ -159,7 +159,7 @@ def store(tmp_path: Path) -> ConnectorStore:
 @pytest.fixture
 def connector(store: ConnectorStore, root: Path, comms: Comms):
     for created_at, name in enumerate(("worker", "claude-ai"), start=1):
-        comms.registry.declare(Thread(name, frozenset(), Checkout(root), created_at=created_at))
+        comms.registry.declare(NativeThread(name, frozenset(), Checkout(root), created_at=created_at))
     return Connector(store, "http://127.0.0.1:18766", root)
 
 
@@ -490,7 +490,7 @@ def test_fresh_connector_publication_refuses_before_entering_held_stores(connect
 def test_publishing_tool_held_mid_call_refuses_at_once(comms):
     """The native call bypasses fresh connector ingress; its actual store still refuses."""
     for name in (CALLER.name, "worker"):
-        comms.registry.declare(Thread(name, frozenset(), Checkout(comms.root)))
+        comms.registry.declare(NativeThread(name, frozenset(), Checkout(comms.root)))
     before = comms.bus.bus.revision()
     barrier = MaintenanceBarrier(comms.registry.store.path)
     held = barrier.advance(barrier.advance(
@@ -536,13 +536,13 @@ async def test_watch_pass_logs_real_failures_with_tracebacks(connector, caplog):
     assert error.exc_info[0] is RuntimeError
     assert str(error.exc_info[1]) == "A real watch failure"
     assert error.exc_info[2] is not None
-    failing, = ServicePassFailing.violations(wire(connector.root), "worker")
+    failing, = ServicePassFailing.violations(wire(connector.root))
     assert failing.watch == "FailingWatch"
     stored = passes.read().failing["FailingWatch"]
     assert (failing.since, failing.error) == (stored.since, stored.error)
     passes.passed("FailingWatch")
     assert passes.read().failing == {}
-    assert ServicePassFailing.violations(wire(connector.root), "worker") == ()
+    assert ServicePassFailing.violations(wire(connector.root)) == ()
 
 
 async def test_registration_accepts_only_the_claude_callback(client):
@@ -595,10 +595,10 @@ async def test_connector_lists_every_tool(client, store, comms):
 
 
 async def test_connector_reads_two_newest_first_conversation_pages(client, store, comms):
-    comms.registry.declare(Thread("commander", frozenset(), Checkout(comms.root)))
+    comms.registry.declare(NativeThread("teammate", frozenset(), Checkout(comms.root)))
     originals = [comms.messaging.send("worker", "claude-ai", f"history {number}").message
                  for number in range(5)]
-    comms.messaging.send("commander", "claude-ai", "not this conversation")
+    comms.messaging.send("teammate", "claude-ai", "not this conversation")
     headers = {"Authorization": f"Bearer {await approved_token(client, comms)}"}
 
     async def page(arguments):
@@ -1025,7 +1025,7 @@ async def test_ui_mcp_publishes_with_the_durable_human_identity(
     store: ConnectorStore, comms: Comms,
 ) -> None:
     prepare_native_comms(comms)
-    comms.registry.declare(Thread("recipient", frozenset(), Checkout(comms.root)))
+    comms.registry.declare(NativeThread("recipient", frozenset(), Checkout(comms.root)))
     before = comms.registry.snapshot()
     local = FieldCodec.decode(MessagePublished, FieldCodec.encode(HumanCaller().invoke(
         CommsUserSendTool(target="recipient", body="local human input"), comms).to_wire()))
@@ -1058,7 +1058,7 @@ async def test_ui_mcp_publishes_with_the_durable_human_identity(
 def test_a_cloud_session_on_the_claude_ai_grant_acts_under_its_own_name(comms):
     """Several remote Claude sessions share claude-ai's grant; each names itself with the fork
     argument and is registered as claude-ai's child under that name, so its work is its own."""
-    comms.registry.declare(Thread(CALLER.name, frozenset(), Checkout(comms.root)))
+    comms.registry.declare(NativeThread(CALLER.name, frozenset(), Checkout(comms.root)))
     acting, rest = CALLER.acting({"fork": {"name": "claude-cloud-1"}, "thread": "worker"})
     assert rest == {"thread": "worker"}
     CALLER.prepare_call(comms, acting)
@@ -1083,7 +1083,7 @@ async def test_a_ui_reads_one_conversation_page_the_same_locally_and_remotely(cl
     from agent_comms.core_access import LocalCoreAccess
     from agent_comms.tools import CommsConversationPageTool
 
-    comms.registry.declare(Thread(CALLER.name, frozenset(), Checkout(comms.root)))
+    comms.registry.declare(NativeThread(CALLER.name, frozenset(), Checkout(comms.root)))
     sent = comms.messaging.send_user_message(
         ThreadTarget("worker"), "page through the boundary", worktree=Checkout(comms.root))
     project = Checkout(comms.root)
@@ -1109,7 +1109,7 @@ async def test_a_ui_checks_a_conversation_for_changes_the_same_locally_and_remot
     from agent_comms.core_access import LocalCoreAccess
     from agent_comms.tools import CommsConversationRevisionTool, CommsLatestSequenceTool
 
-    comms.registry.declare(Thread(CALLER.name, frozenset({"comms"}), Checkout(comms.root)))
+    comms.registry.declare(NativeThread(CALLER.name, frozenset({"comms"}), Checkout(comms.root)))
     comms.messaging.send_user_message(
         conversation, "check through the boundary", worktree=Checkout(comms.root))
     local_core, token = LocalCoreAccess(comms), await approved_token(client, comms)
@@ -1138,7 +1138,7 @@ async def test_an_inbox_read_after_its_place_the_same_locally_and_remotely(
     from agent_comms.core_access import LocalCoreAccess
     from agent_comms.tools import CommsInboxTool
 
-    comms.registry.declare(Thread(CALLER.name, frozenset(), Checkout(comms.root)))
+    comms.registry.declare(NativeThread(CALLER.name, frozenset(), Checkout(comms.root)))
     first = comms.messaging.send(CALLER.name, "worker", "first").message
     comms.messaging.send(CALLER.name, "worker", "second")
     request = CommsInboxTool(

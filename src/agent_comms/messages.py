@@ -124,22 +124,22 @@ class BusRow(BusTables):
 
 
 @dataclass(frozen=True)
-class TeamUpdatePosition(BusProjectionTables, declared_name="commander_update_position"):
+class TeamUpdatePosition(BusProjectionTables, declared_name="team_update_position"):
     """Where each typed teammate packet sits, by the teammate birth it addresses. A rebuildable
     search projection: the packet's content stays on its original message's task."""
 
     seq: Annotated[int, Column(primary_key=True, references=TableReference(BusRow, ("seq",)))]
-    commander_lookup: ThreadLookup
-    indexes = (Index(("commander_lookup", "seq")),)
+    teammate_lookup: ThreadLookup
+    indexes = (Index(("teammate_lookup", "seq")),)
 
     @classmethod
-    def latest(cls, db: sqlite3.Connection, commander: ThreadLookup) -> tuple[BusRecord, ...]:
+    def latest(cls, db: sqlite3.Connection, recipient: ThreadLookup) -> tuple[BusRecord, ...]:
         """The newest packet for that teammate through the covering index, decoded from its one
         original record; a teammate with no packet has none."""
         positions = db.execute(
-            cls._sql(f'SELECT {{seq}} FROM "{cls.declared_name}" WHERE {{commander_lookup}}=? '
+            cls._sql(f'SELECT {{seq}} FROM "{cls.declared_name}" WHERE {{teammate_lookup}}=? '
                      'ORDER BY {seq} DESC LIMIT 1'),
-            (FieldCodec.encode(commander),))
+            (FieldCodec.encode(recipient),))
         headers = (BusRow.require(db, seq=FieldCodec.decode(int, seq)) for seq, in positions)
         return tuple(header.kind.read_from(db, header.seq) for header in headers)
 
@@ -151,18 +151,18 @@ class EscalationPosition(BusProjectionTables):
     the sender, finds a burst; which burst a line belongs to stays on its original message's task."""
 
     seq: Annotated[int, Column(primary_key=True, references=TableReference(BusRow, ("seq",)))]
-    commander_lookup: ThreadLookup
+    teammate_lookup: ThreadLookup
     at: float
-    indexes = (Index(("commander_lookup", "at")),)
+    indexes = (Index(("teammate_lookup", "at")),)
 
     @classmethod
-    def sent(cls, db: sqlite3.Connection, commander: ThreadLookup, since: float,
+    def sent(cls, db: sqlite3.Connection, recipient: ThreadLookup, since: float,
              before: float) -> tuple[BusRecord, ...]:
         """Every escalation line to that teammate birth in [since, before], newest first."""
         positions = db.execute(
-            cls._sql(f'SELECT {{seq}} FROM "{cls.declared_name}" WHERE {{commander_lookup}}=? '
+            cls._sql(f'SELECT {{seq}} FROM "{cls.declared_name}" WHERE {{teammate_lookup}}=? '
                      'AND {at} >= ? AND {at} <= ? ORDER BY {seq} DESC'),
-            (FieldCodec.encode(commander), since, before))
+            (FieldCodec.encode(recipient), since, before))
         headers = (BusRow.require(db, seq=FieldCodec.decode(int, seq)) for seq, in positions)
         return tuple(header.kind.read_from(db, header.seq) for header in headers)
 

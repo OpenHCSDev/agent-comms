@@ -27,7 +27,7 @@ from .locked_store import PatternFile, RuntimeFile
 from .registration import Registration
 from .relationships import RelationshipStore
 from .repo import Checkout, LaunchCheckout
-from .thread_execution import NativeThreadExecution
+from .threads import ExternalThread, NativeThread, KeptModel, ModelChoice, NextTurnConfiguration, Thread
 from .thread_status import StoppedThreadStatus
 from .view_unread import transcript_read_state
 
@@ -63,7 +63,6 @@ from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
 from .thread_owned_state import ThreadOwnedState
 from .thread_text import ForkedParent, GivenThreadText, NoThreadText, ThreadText
 from .thread_catalog import ThreadCatalog
-from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread
 from .heartbeat_delivery import HeartbeatDelivery
 from .tool_declaration import NativeRequestTools
 from .native_session_reopen import PiSessionId
@@ -167,7 +166,7 @@ class NewThreadSpec:
         return cls(task=TaskLaunchInput(task) if task else LaunchInput(), **values)
 
     def declaration(self) -> Thread:
-        return Thread(name=self.name, task=self.task.thread_text(), tags=self.tags.for_new(),
+        return NativeThread(name=self.name, task=self.task.thread_text(), tags=self.tags.for_new(),
                       worktree=self.project, model=self.model, thinking_level=self.thinking_level)
 
     def declare(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Thread:
@@ -186,8 +185,7 @@ class ForkSpec(NewThreadSpec):
     parent: str
 
     def _parent(self, threads: ThreadManagement) -> Thread:
-        parent = threads.registry.require(self.parent)
-        parent.execution.require_native()
+        parent = threads.registry.require_member(self.parent, NativeThread)
         parent.runtime.require_forkable()
         return parent
 
@@ -261,13 +259,12 @@ class ThreadManagement:
         if not project.is_dir():
             raise ValueError("The imported project does not exist locally; supply --worktree.")
         session_path = ImportedSessionWriter.path_in(self.root, session_id=PiSessionId.fresh())
-        thread = model.configured(Thread(
+        thread = model.configured(NativeThread(
             name,
             tags,
             Checkout(project),
             session_file=RegistrySessionLocation.from_path(session_path, self.root),
-            title=snapshot.title,
-        ))
+            title=snapshot.title))
         self.registry.snapshot().require_fresh_name(name)
         self.registry.require_declaration_available(thread, StoppedThreadStatus())
         with ImportedSessionWriter.preparing(session_path, snapshot, project) as publish:
@@ -296,15 +293,14 @@ class ThreadManagement:
         snapshot = history.imported(limits)
         session_path = ImportedSessionWriter.path_in(self.root, session_id=PiSessionId.fresh())
         selected = self.registry.snapshot()
-        original = selected.require(name)
-        original.execution.require_external()
+        original = selected.require_member(name, ExternalThread)
         with ImportedSessionWriter.preparing(session_path, snapshot, original.worktree.path) as publish:
             with self.registry.store.editing() as edit:
                 current = edit.document.require(name)
                 if not edit.original.snapshot.same_thread(current, selected, original):
                     raise RelationViolationError("External owner changed while preparing its native session.")
-                rehomed = replace(
-                    current, execution=NativeThreadExecution, process_identity=NO_PROCESS,
+                rehomed = current.as_member(
+                    NativeThread, process_identity=NO_PROCESS,
                     session_file=RegistrySessionLocation.from_path(session_path, self.root),
                 )
                 self.registry.require_declaration_available(rehomed, StoppedThreadStatus())
@@ -331,7 +327,7 @@ class ThreadManagement:
         role: type[ThreadRole] = AgentThreadRole,
     ) -> Thread:
         """Atomically register a unique thread; its inbox starts at its creation."""
-        thread = Thread(
+        thread = NativeThread(
             name=RegistryNames.thread_slug(wanted),
             tags=tags,
             worktree=worktree,
@@ -339,8 +335,7 @@ class ThreadManagement:
             model=model,
             thinking_level=thinking_level,
             auto_title_pending=auto_title_pending,
-            role=role,
-        )
+            role=role)
         return self.registry._claim_unlocked(thread)
 
     def rename_self(self, new_name: str, *, caller: ThreadCaller) -> RenameThreadResult:
@@ -437,14 +432,11 @@ class ThreadManagement:
         Progress and goals belong to the current document. A changed selection
         or project invalidates the native settings result acquired by the caller.
         """
-        Thread.require_declaration(original)
-
-        def configure(thread: Thread) -> Thread:
+        def configure(thread: NativeThread) -> Thread:
             thread.require_original_model_configuration(original)
-            thread.execution.require_native()
             return configuration.configured(thread)
 
-        updated = self.registry.update_thread(original.name, configure)
+        updated = self.registry.update_member(original.name, NativeThread, configure)
         ThreadCatalog.publish(updated, self.root)
         return updated
 
@@ -537,7 +529,8 @@ class ThreadManagement:
         with ExitStack() as cleanup:
             for original in originals:
                 try:
-                    cleanup.enter_context(ThreadDeletionClaim.for_thread(self.root, original).claimed())
+                    cleanup.enter_context(
+                        ThreadDeletionClaim.for_thread(self.root, original).claimed())
                 except ClaimHeldError as error:
                     raise RelationViolationError(
                         f"Thread {original.name!r} already has a permanent-deletion controller.") from error
@@ -562,9 +555,7 @@ class ThreadManagement:
                 state.remove_threads(originals)
             # A failure from here leaves a Deleting declaration to retry, not orphans.
             freed = {name: sum(item.delete() for item in files) for name, files in sessions.items()}
-            with self.registry.store.editing() as edit:
-                detached = edit.document.remove_originals(originals)
-                edit.commit()
+            detached = self.registry.remove_originals(originals)
             return tuple(
                 ThreadDeleted(original.name, freed.get(original.name, 0), detached[original.name])
                 for original in originals

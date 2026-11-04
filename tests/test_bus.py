@@ -617,34 +617,34 @@ def test_scoped_and_frozen_source_queries_are_sequence_bounded(bus):
 @pytest.mark.parametrize("offset", (0, 100))
 def test_unanswered_reference_selection_requires_the_recorded_original_and_exact_owner_answer(bus, offset):
     original = bus.append(lambda seq, db: PublicRecord.from_message(
-        Message("owner", "lead", "Recorded directive", InfoKind, seq=seq)))
+        Message("owner", "colleague", "Recorded directive", InfoKind, seq=seq)))
     with pytest.raises(RelationViolationError):
         bus.append(lambda seq, db: PublicRecord.from_message(
-            Message("lead", "#comms", "Wrong original reference", InfoKind, seq=seq,
+            Message("colleague", "#comms", "Wrong original reference", InfoKind, seq=seq,
                     answers=(MessageReference(
                         original.seq + offset, MessageId.mint("wrong-hash")),))))
     assert bus.revision() == original.seq
     bus.append(lambda seq, db: PublicRecord.from_message(
         Message("another-teammate", "#comms", "Someone else's answer", InfoKind, seq=seq,
                 answers=(original.reference,))))
-    assert bus.unanswered_references((original.seq,), AuthoredAnswers(frozenset({"lead"}))) == (original.reference,)
+    assert bus.unanswered_references((original.seq,), AuthoredAnswers(frozenset({"colleague"}))) == (original.reference,)
     assert bus.unanswered_references((original.seq,)) == ()
     with bus.reading() as before_reply:
         bus.append(lambda seq, db: PublicRecord.from_message(
-            Message("renamed-lead", "#comms", "The owner's answer", InfoKind, seq=seq,
+            Message("renamed-colleague", "#comms", "The owner's answer", InfoKind, seq=seq,
                     answers=(original.reference,))))
-        assert before_reply.unanswered_references((original.seq,), AuthoredAnswers(frozenset({"lead", "renamed-lead"}))) == (
+        assert before_reply.unanswered_references((original.seq,), AuthoredAnswers(frozenset({"colleague", "renamed-colleague"}))) == (
             original.reference,)
-    assert bus.unanswered_references((original.seq,), AuthoredAnswers(frozenset({"lead", "renamed-lead"}))) == ()
+    assert bus.unanswered_references((original.seq,), AuthoredAnswers(frozenset({"colleague", "renamed-colleague"}))) == ()
     with pytest.raises(RowNotFoundError):
-        bus.unanswered_references((original.seq, bus.revision() + 1), AuthoredAnswers(frozenset({"lead"})))
+        bus.unanswered_references((original.seq, bus.revision() + 1), AuthoredAnswers(frozenset({"colleague"})))
 
 
 def test_answer_projection_rebuild_preserves_sequence_links_and_public_references(bus):
     original = bus.append(lambda seq, db: PublicRecord.from_message(
-        Message("owner", "lead", "Recorded question", InfoKind, seq=seq)))
+        Message("owner", "colleague", "Recorded question", InfoKind, seq=seq)))
     reply = bus.append(lambda seq, db: PublicRecord.from_message(
-        Message("lead", "owner", "Recorded answer", InfoKind, seq=seq,
+        Message("colleague", "owner", "Recorded answer", InfoKind, seq=seq,
                 answers=(original.reference,))))
     with bus.writing() as db:
         BusProjectionTables.reset_schema(db)
@@ -656,7 +656,7 @@ def test_answer_projection_rebuild_preserves_sequence_links_and_public_reference
         assert db.execute("PRAGMA foreign_key_check").fetchall() == []
     assert bus.lookup(reply.seq).answers == (original.reference,)
     assert bus.replies((original.reference,)) == (reply,)
-    assert bus.unanswered_references((original.seq,), AuthoredAnswers(frozenset({"lead"}))) == ()
+    assert bus.unanswered_references((original.seq,), AuthoredAnswers(frozenset({"colleague"}))) == ()
 
 
 def team_packet(bus, holder, body):
@@ -668,10 +668,10 @@ def team_packet(bus, holder, body):
 def test_team_packet_positions_append_with_their_message_and_rebuild_from_it(bus, tmp_path):
     """Each typed packet's position is written in its own append; a taskless message from the
     same sender writes none, and only that table rebuilds from the original records."""
-    lead, other = RecordedThreadIncarnation("lead", 1.0), RecordedThreadIncarnation("other", 2.0)
-    first = team_packet(bus, lead, "first board")
+    colleague, other = RecordedThreadIncarnation("colleague", 1.0), RecordedThreadIncarnation("other", 2.0)
+    first = team_packet(bus, colleague, "first board")
     raw = bus.append(lambda seq, db: PublicRecord.from_message(
-        Message("user", "lead", "independent instruction", InfoKind, seq=seq)))
+        Message("user", "colleague", "independent instruction", InfoKind, seq=seq)))
     theirs = team_packet(bus, other, "another teammate's board")
 
     def positions():
@@ -679,12 +679,12 @@ def test_team_packet_positions_append_with_their_message_and_rebuild_from_it(bus
             return TeamUpdatePosition.select(db, order_by=("seq",))
 
     appended = positions()
-    assert appended == [TeamUpdatePosition(first.seq, lead.lookup),
+    assert appended == [TeamUpdatePosition(first.seq, colleague.lookup),
                         TeamUpdatePosition(theirs.seq, other.lookup)]
     with bus.observing() as db:
-        assert TeamUpdatePosition.latest(db, lead.lookup) == (first,)
+        assert TeamUpdatePosition.latest(db, colleague.lookup) == (first,)
         assert TeamUpdatePosition.latest(db, other.lookup) == (theirs,)
-        assert TeamUpdatePosition.latest(db, RecordedThreadIncarnation("lead", 3.0).lookup) == ()
+        assert TeamUpdatePosition.latest(db, RecordedThreadIncarnation("colleague", 3.0).lookup) == ()
     with bus.writer_connection() as db:
         ProjectionProducer.update(
             db, where="{projection}=?", parameters=(TeamUpdatePosition.declared_name,),
@@ -705,7 +705,7 @@ def test_team_packet_positions_append_with_their_message_and_rebuild_from_it(bus
     copied = Bus.install(Bus.path_in(tmp_path / "history"), history=(first, raw, theirs))
     with copied.observing() as db:
         assert TeamUpdatePosition.select(db, order_by=("seq",)) == appended
-        assert TeamUpdatePosition.latest(db, lead.lookup) == (first.history_record,)
+        assert TeamUpdatePosition.latest(db, colleague.lookup) == (first.history_record,)
         assert TeamUpdatePosition.latest(db, other.lookup) == (theirs.history_record,)
     for original in (first, raw, theirs):
         kept = copied.lookup(original.seq)
@@ -715,13 +715,13 @@ def test_team_packet_positions_append_with_their_message_and_rebuild_from_it(bus
 def test_a_late_constraint_refusal_rolls_back_the_team_position(tmp_path, bus):
     """The position is written inside the packet's own transaction; a real SQLite refusal
     after it takes the header, task and position back together."""
-    lead = RecordedThreadIncarnation("lead", 1.0)
+    colleague = RecordedThreadIncarnation("colleague", 1.0)
     written = []
 
     def build(seq, db):
         record_from(PrivateRecord, Message(
-            "user", "lead", "not committed", InfoKind, seq=seq,
-            task=TeamUpdateNotice(lead, ())),
+            "user", "colleague", "not committed", InfoKind, seq=seq,
+            task=TeamUpdateNotice(colleague, ())),
         ).append_to(db, seq)
         written.append((seq, TeamUpdatePosition.select(db)))
         BusRow.require(db, seq=seq).insert(db)
@@ -732,7 +732,7 @@ def test_a_late_constraint_refusal_rolls_back_the_team_position(tmp_path, bus):
     assert type(cause) is sqlite3.IntegrityError
     assert "UNIQUE constraint failed: bus.seq" in str(cause)
     (seq, positions), = written
-    assert positions == [TeamUpdatePosition(seq, lead.lookup)]
+    assert positions == [TeamUpdatePosition(seq, colleague.lookup)]
     with closing(sqlite3.connect(bus.path)) as db:
         assert TeamUpdatePosition.count(db) == 0
         assert all(table.count(db) == 0 for table in TypedTable.members_with(BusTables))

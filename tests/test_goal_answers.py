@@ -26,15 +26,14 @@ from agent_comms.goals import NoGoal
 from agent_comms.pi_wire import PiUsage
 from agent_comms.owned_turn import TurnGoalAccount
 from agent_comms.turn_terminal import EndedWithoutResult, OperatorStopped
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 @contextmanager
 def goal_turn(comms, original_goal):
-    comms.registry.declare(Thread(
+    comms.registry.declare(NativeThread(
         "worker", frozenset(), Checkout(comms.root.parent),
-        process_identity=ProcessIdentity.capture(os.getpid()),
-    ))
+        process_identity=ProcessIdentity.capture(os.getpid())))
     if original_goal:
         goal = comms.goals.update_goal("worker", SetGoalAction(text="Original work"))
     turn = TurnId.mint()

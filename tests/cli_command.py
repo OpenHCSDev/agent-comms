@@ -31,9 +31,9 @@ def core_process(*argv: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def commander(*argv: str) -> subprocess.CompletedProcess[str]:
-    """``agent-comms-commander ARGV``, which reads its arguments from sys.argv."""
-    argv = ('agent-comms-commander', *argv)
+def team(*argv: str) -> subprocess.CompletedProcess[str]:
+    """``agent-comms-team ARGV``, which reads its arguments from sys.argv."""
+    argv = ('agent-comms-team', *argv)
     output, error = StringIO(), StringIO()
     code = 0
     with patch.object(sys, 'argv', list(argv)), redirect_stdout(output), redirect_stderr(error):

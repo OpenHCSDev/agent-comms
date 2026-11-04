@@ -31,15 +31,15 @@ pytest_plugins = ("test_held_problem_orders",)
 def two_orders(held_team, cited_source):
     """The worker holds P1 and a newer P2; each problem has its own declared checkout."""
     ctx = held_team
-    lead = ctx.comms.registry.require(ctx.actor_name)
+    colleague = ctx.comms.registry.require(ctx.actor_name)
     worker = ctx.comms.registry.require("worker")
     # Core refuses a unit a second, unrelated order; a bus saved before that rule can hold
     # one, so the newer P2 is written as that saved row.
-    request = NewestOpenRequest().for_order(ctx.comms.goals.todos, lead.incarnation)
+    request = NewestOpenRequest().for_order(ctx.comms.goals.todos, colleague.incarnation)
     with ctx.comms.goals.todos.writing() as db:
         Todo.ordered(
-            "P2", ctx.repos[0].github, "Repair the second workflow", lead.incarnation,
-            Assignment.of(worker.incarnation, lead.incarnation, GoalId.mint()),
+            "P2", ctx.repos[0].github, "Repair the second workflow", colleague.incarnation,
+            Assignment.of(worker.incarnation, colleague.incarnation, GoalId.mint()),
             RecordedEventTime(time.time() + 1000),
             replace(order(cited_source), id=OrderId.mint(), at=RecordedEventTime(20.0)),
             request,
@@ -71,9 +71,9 @@ def test_a_send_back_leaves_the_edits_it_does_not_name_unjudged(two_orders):
     current = ctx.comms.goals.todos.get("P1")
     ctx.comms.goals.update_goal("worker", SetGoalAction(
         text=ProblemGoalOrder.text, order=ProblemGoalOrder(), goal_id=current.held().generation))
-    lead = ctx.comms.registry.require(ctx.actor_name).incarnation
+    colleague = ctx.comms.registry.require(ctx.actor_name).incarnation
     reissued = ThreadCaller(ctx.actor_name).invoke(CommsVerdictTool(problem="P1", operation=SendBackVerdict(
-        current.revision, lead, current.held(), ToolCallId("sent-call"),
+        current.revision, colleague, current.held(), ToolCallId("sent-call"),
         reason=StrikeReason("The worker restated the owner's decision in a second copied branch."),
         evidence=(current.order.checked().owner,))), ctx.comms).todo
     assert reissued.order.id != current.order.id
@@ -84,9 +84,9 @@ def test_a_second_verdict_on_one_edit_is_refused(two_orders):
     ctx, checkout = two_orders
     recorded_edit(ctx, ToolCallId("judged-call"), str(checkout["P1"] / "judged.py"), "JUDGED = 'once'")
     store = ctx.comms.goals.todos
-    lead = ctx.comms.registry.require(ctx.actor_name).incarnation
+    colleague = ctx.comms.registry.require(ctx.actor_name).incarnation
     current = store.get("P1")
-    verdict = AcceptedVerdict(current.revision, lead, current.held(), ToolCallId("judged-call"),
+    verdict = AcceptedVerdict(current.revision, colleague, current.held(), ToolCallId("judged-call"),
                               quote="Report the delivered commit")
     judged = store.apply("P1", verdict)
     with pytest.raises(TodoError, match="already has a verdict"):

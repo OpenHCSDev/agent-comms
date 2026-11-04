@@ -14,14 +14,14 @@ from agent_comms.envelope_claim_transitions import NativeClaim, WakeClaims
 from agent_comms.nominal.field_codec import ClaimId, InputId, TurnId
 from agent_comms.messages import ClaimNoticeKind
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 def test_stopped_incarnation_claims_expire_on_next_transition(comms, tmp_path):
     turns = {}
     for name in ("old", "next"):
         turns[name] = TurnId.mint()
-        thread = Thread(name, frozenset(), Checkout(tmp_path))
+        thread = NativeThread(name, frozenset(), Checkout(tmp_path))
         comms.registry.declare(
             replace(thread, process_identity=ProcessIdentity.capture(os.getpid())),
             RunningThreadStatus(),

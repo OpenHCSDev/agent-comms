@@ -17,7 +17,7 @@ class PhaseTask(ABC):
 
     @abstractmethod
     def start(
-        self, comms: Comms, commander: Thread, phase: type[PlanPhase], reading: PlanReading
+        self, comms: Comms, assigner: Thread, phase: type[PlanPhase], reading: PlanReading
     ) -> None: ...
 
 
@@ -25,6 +25,6 @@ class UnspecifiedPhaseTask(PhaseTask):
     instruction = "no checked task declared; supply its source, check and brief"
 
     def start(
-        self, comms: Comms, commander: Thread, phase: type[PlanPhase], reading: PlanReading
+        self, comms: Comms, assigner: Thread, phase: type[PlanPhase], reading: PlanReading
     ) -> None:
         """Readiness alone cannot authorize a fabricated order."""

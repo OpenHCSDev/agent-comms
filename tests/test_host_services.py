@@ -52,7 +52,7 @@ from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.locked_store import DocumentChange
 from agent_comms.recorded_bus import RecordedBusIdentity
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from connector_readiness import ConnectorReadiness
 
 
@@ -300,7 +300,7 @@ def test_codex_inbox_template_publication_reloads_each_launcher_home_change(tmp_
 def connector_service(comms, tmp_path, monkeypatch, pinned_native, user_manager):
     """A real supervisor on a copied bus; only systemd's process control is replaced."""
     for name in ("claude-ai", "worker"):
-        comms.registry.declare(Thread(name, frozenset(), Checkout(comms.root)))
+        comms.registry.declare(NativeThread(name, frozenset(), Checkout(comms.root)))
     copied = tmp_path / "copied-bus"
     StoreBackup.copy_tree(comms.root, copied)
     with client_wire(copied) as copied_comms:
@@ -487,10 +487,9 @@ def test_connector_accepts_bus_writes_during_its_proof(connector_service, monkey
             yield response
         with client_wire(service.launch.path) as comms:
             comms.channels.create_tag("proof-race")
-            comms.registry.declare(Thread(
+            comms.registry.declare(NativeThread(
                 name="proof-writer", tags=frozenset({"proof-race"}),
-                worktree=Checkout(service.launch.path),
-            ))
+                worktree=Checkout(service.launch.path)))
 
     monkeypatch.setattr(urllib.request, "urlopen", read_then_write)
     service.serves()

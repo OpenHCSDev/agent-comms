@@ -151,7 +151,7 @@ def source_pair(
         github_cli.put(source.github, DraftListedPullRequest(
             source.number, "feature", source.branch_commit, stamp, "main", reviewable_times=(stamp,),
         ))
-    checkout = MutualSources.owned_checkout(context, core, "lead", "P2")
+    checkout = MutualSources.owned_checkout(context, core, "colleague", "P2")
     return MutualSources(context, core, client, checkout, tmp_path / "qualified-inputs", github_cli)
 
 
@@ -167,13 +167,12 @@ def materialized_clients(test_uv: Path) -> Callable[[Path, IntegrationInput], Ma
 def mutual_sources(source_pair: MutualSources) -> MutualSources:
     """The same source owner, with its companion linked by a separate real checked order.
 
-    The worker's goal slot is occupied, so the worker accepts the companion itself, acting
-    within the lead's storage as any receiving owner does."""
+    The worker's goal slot is occupied, so the worker accepts the companion itself."""
     comms = source_pair.context.comms
     primary = comms.goals.todos.get("P2")
     creation = CreateProblemGoalAction(
         problem="P3", request=primary.request,
-        assigner=comms.registry.require("lead").incarnation,
+        assigner=comms.registry.require("colleague").incarnation,
         repo=source_pair.client.github, text="Migrate the paired source client",
         order=replace(primary.order.checked(), pull_requests=(source_pair.client.link,),
                       check=replace(primary.order.check, directory=source_pair.client.checkout)),

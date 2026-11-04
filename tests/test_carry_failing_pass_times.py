@@ -16,8 +16,8 @@ def test_carry_gives_a_stored_failure_its_first_failure_time_once(tmp_path):
         json.dumps(
             {
                 "failing": {"TeamHeartbeat": {"since": 1793331540.0, "error": "TypeError: x"}},
-                "commander_completed": [
-                    [{"name": "lead", "created_at": 1792300653.5}, 1793350616.1]
+                "teammate_completed": [
+                    [{"name": "colleague", "created_at": 1792300653.5}, 1793350616.1]
                 ],
             }
         )

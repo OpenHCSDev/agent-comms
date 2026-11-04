@@ -1,5 +1,5 @@
 """An order's progress is read from its holder's checkout and PRs; no clock strikes or releases it.
-The lead's review timer comes back every window until delivery, and the holder never sees it."""
+The colleague's review timer comes back every window until delivery, and the holder never sees it."""
 
 
 from agent_comms.repo import Checkout
@@ -24,7 +24,7 @@ from agent_comms.order_tools import CommsTodoCreateTool
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import GitCommandError
 from agent_comms.repository_name import RepositoryName
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.todos import (
     EditingProgress,
     NoCommitProgress,
@@ -87,7 +87,7 @@ def test_a_deleted_file_is_no_edit_time(tmp_path):
 
 def test_a_submodule_with_a_missing_git_directory_does_not_stop_reading_edits(tmp_path):
     """10:09 on 2026-10-21: one holder checkout whose submodule pointed at a removed git directory
-    failed every lead heartbeat pass, and comms_todo_list for every caller, for half an hour.
+    failed every colleague heartbeat pass, and comms_todo_list for every caller, for half an hour.
     Both readers of a holder's uncommitted files ask the one owner."""
     package = holder_checkout(tmp_path / 'package')
     worktree = holder_checkout(tmp_path / 'worker--P1')
@@ -109,13 +109,12 @@ def held(tmp_path):
     source = SourceRepository.create(tmp_path / 'source')
     (root / 'storage.json').write_text(json.dumps({'checkout_base': str(tmp_path / 'wt')}))
     comms = wire(root)
-    for name in ('lead', 'worker'):
-        comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path)))
+    for name in ('colleague', 'worker'):
+        comms.registry.declare(NativeThread(name, frozenset(), Checkout(tmp_path)))
     request = comms.goals.todos.add_request(
-        comms.registry.require('lead').incarnation, 'Repair the worker').id
-    ThreadCaller('lead').invoke(CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(
-        problem='P1', order=order(source), request=request, review_at=RecordedEventTime(1000),
-        commander='lead', assigner=comms.registry.require('lead').incarnation,
+        comms.registry.require('colleague').incarnation, 'Repair the worker').id
+    ThreadCaller('colleague').invoke(CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(
+        problem='P1', order=order(source), request=request, review_at=RecordedEventTime(1000), assigner=comms.registry.require('colleague').incarnation,
         repo=RepositoryName.from_wire('org/repo'), text='Repair the worker')), comms)
     return comms, holder_checkout(tmp_path / 'wt' / 'worker--P1')
 
@@ -148,30 +147,30 @@ def test_deleted_branch_marks_one_card_unreadable(held_bus):
     checkout = comms.goals.todos.get('P1').order.checked().check.directory
     branch = 'work/worker--P1'
     git(checkout, 'switch', '-c', branch)
-    lead = replace(comms.registry.require('lead'),
+    colleague = replace(comms.registry.require('colleague'),
                    process_identity=ProcessIdentity.capture(os.getpid()))
-    comms.registry.register(lead)
+    comms.registry.register(colleague)
 
     plans = TeamHeartbeat()
     with LaunchRoot.from_path(comms.root).selected():
-        before = observe_team(comms, lead, ProgressRead(), plans=plans)
+        before = observe_team(comms, ProgressRead(), plans=plans)
         healthy = tuple(card for card in before.states if card.unit.name != 'worker')
         git(checkout, 'update-ref', '-d', f'refs/heads/{branch}')
-        interrupted = observe_team(comms, lead, ProgressRead(), plans=plans)
-        asyncio.run(ObservedHeartbeat((interrupted,)).run(lambda: nullcontext(comms)))
+        interrupted = observe_team(comms, ProgressRead(), plans=plans)
+        asyncio.run(ObservedHeartbeat(interrupted).run(lambda: nullcontext(comms)))
         published, = TeamFrame.read_all(comms.root)
         assert tuple(card.unit for card in published.units) == tuple(card.unit for card in interrupted.states)
         assert branch not in WorkBranches(checkout).worktrees()
         for _ in range(2):
-            frame = observe_team(comms, lead, ProgressRead(), plans=plans)
+            frame = observe_team(comms, ProgressRead(), plans=plans)
             (broken,) = (card for card in frame.states if card.unit.name == 'worker')
             assert isinstance(broken, Unreadable)
             with pytest.raises((GitCommandError, WorkBranchError)) as source_failure:
                 broken.source.require_read()
             assert broken.reason == str(source_failure.value)
             assert tuple(card for card in frame.states if card.unit.name != 'worker') == healthy
-            asyncio.run(ObservedHeartbeat((frame,)).run(lambda: nullcontext(comms)))
-            expected = current_hud(comms, lead.name, frame.frame, frame.states)
+            asyncio.run(ObservedHeartbeat(frame).run(lambda: nullcontext(comms)))
+            expected = current_hud(comms, colleague.name, frame.frame, frame.states)
             assert TeamFrame.read_all(comms.root) == (expected,)
 
 

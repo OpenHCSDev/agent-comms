@@ -10,7 +10,7 @@ from agent_comms.locked_store import RegistryFile
 from agent_comms.comms import wire
 from agent_comms.registration import Registration
 from bus_record_fixture import append_reply
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 @pytest.mark.asyncio
@@ -18,7 +18,7 @@ async def test_real_message_bus_watch_recipient_suffix_and_rollback(bus):
     root = bus.path.parent
     registry = Registration(RegistryFile.path_in(root))
     people = {
-        name: registry.declare(Thread(
+        name: registry.declare(NativeThread(
             name, frozenset(), Checkout(root))).incarnation.require_recorded()
         for name in ("sender", "target", "idle")
     }
