@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, ClassVar, NoReturn
 
 from .frozen_recipient import FrozenRecipient
 from .bus import Bus
-from .coordination_database import CoordinationStore
+from .coordination_database import CoordinationStore, StoreFile
 from .coordination_tables.assignments import WakeAssignment
 from .coordination_tables.executions import CurrentExecutions
 from .coordination_tables.harness_deliveries import HarnessDelivery
@@ -355,13 +355,14 @@ class NotificationAssignment(NotificationSource):
         )
 
     @classmethod
-    def changed(cls, reads: Iterable[NotificationAssignmentRead], root: Path) -> tuple[NotificationAssignmentRead, ...]:
-        """Acquire fresh bounded rows once; retained reads own their equality."""
+    def changed(
+        cls, reads: Iterable[NotificationAssignmentRead], source: AssignmentSource,
+    ) -> tuple[NotificationAssignmentRead, ...]:
+        """Fresh bounded rows for each retained read through one source; retained reads own
+        their equality."""
         # A retained read owns its recipient cut. Re-reading a different viewer's
         # superset would both decode it and report a permanent false change.
-        return tuple(
-            read for read in reads if read.differs_from(cls.read(root, read.selection).evidence)
-        )
+        return tuple(read for read in reads if read.differs_from(source.read(read.selection).evidence))
 
     @classmethod
     def resolve(cls, read: NotificationAssignmentRead) -> tuple[NotificationAssignment, ...]:
@@ -519,14 +520,7 @@ class NotificationAssignment(NotificationSource):
     def read(cls, root: Path, selection: NotificationSelection) -> NotificationAssignmentRead:
         """Capture this viewer's assignment evidence through the single observing
         connection owner."""
-        privacy = RegistryStore.at(root).privacy()
-        with CoordinationStore.observed(CoordinationStore.path_in(root)).observing(
-            cls,
-            selection,
-            privacy,
-        ) as result:
-            captured = result
-        return cls.capture_detached(root, captured)
+        return AssignmentSource(root).read(selection)
 
     @classmethod
     def missing_store(
@@ -560,3 +554,25 @@ class NotificationAssignment(NotificationSource):
             updated_at_ms=self.assignment.updated_at_ms,
             triage_inflight=self.activity.triage_inflight,
         )
+
+
+@dataclass(frozen=True)
+class AssignmentSource:
+    """One root's assignment evidence: its coordinator classified once and its registry
+    privacy decoded once, for every selection read through it (a notification pass reads
+    many windows' selections through one)."""
+
+    root: Path
+
+    @cached_property
+    def coordinator(self) -> StoreFile:
+        return CoordinationStore.observed(CoordinationStore.path_in(self.root))
+
+    @cached_property
+    def privacy(self) -> RegistryPrivacy:
+        return RegistryStore.at(self.root).privacy()
+
+    def read(self, selection: NotificationSelection) -> NotificationAssignmentRead:
+        with self.coordinator.observing(NotificationAssignment, selection, self.privacy) as result:
+            captured = result
+        return NotificationAssignment.capture_detached(self.root, captured)
