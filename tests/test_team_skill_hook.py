@@ -267,6 +267,16 @@ def test_only_the_bus_monitor_may_cross_an_unfinished_deal(command: str, allowed
     assert MonitorInput(command).watches_bus() is allowed
 
 
+def test_loading_the_monitors_schema_may_cross_an_unfinished_deal(
+        dealt_session, capsys, team_session, team_binding):
+    """The gate permits the bus watch, so it cannot refuse the one call that makes it callable."""
+    transcript = dealt_session[0]
+    assert not refused(capsys, gated(transcript, "ToolSearch", {"query": "select:Monitor"},
+                                     comms=team_session, binding=team_binding))
+    assert refused(capsys, gated(transcript, "Bash", {"command": "true"},
+                                 comms=team_session, binding=team_binding))
+
+
 def tool_call(hook, server, comms, db, now):
     """One tool call's board lines: the hook asks over the session socket while this thread
     answers as the bridge does, deriving the board from Core at the moment of asking. The

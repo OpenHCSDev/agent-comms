@@ -105,6 +105,15 @@ class MonitorTool(ToolMeaning, declared_name="Monitor"):
             call.judge_tool(call.tool_name)
 
 
+class ToolSearchTool(ToolMeaning, declared_name="ToolSearch"):
+    """Loading a tool's schema runs nothing, and a session cannot call the Monitor this gate
+    permits until its schema is loaded. Gating it left a session's bus watch dead through a whole
+    deal on 2026-11-04, with the gate's own RE-ARM line asking for the call it refused."""
+
+    def judge(self, call: GatedCall) -> None:
+        return
+
+
 class WriteTool(ToolMeaning, declared_name="Write"):
     """Writing the audit itself is the way through the gate; ask once its write completes."""
 

@@ -124,9 +124,13 @@ class OpenedReadsStore(SingleFileStore, LockedStore[OpenedReads], DependentState
 
 @dataclass(frozen=True)
 class Asked:
-    """One line the gate published in the owner's voice, identified by its original message."""
+    """One line the gate published in the owner's voice: its original message and what it said.
+    A refusal repeats these words rather than quoting the audit as it stands now, so the session
+    sees the row this id asked about. On 2026-11-04 a session answered four ids about the wrong
+    rows, because every refusal quoted the audit's newest answer under the old id."""
 
     message_id: MessageId
+    line: str = "did you mean it?"
 
 
 @dataclass(frozen=True)
@@ -143,7 +147,7 @@ class MeantRecord:
     asked: frozenset[str] = frozenset()
     open: tuple[Asked, ...] = ()
 
-    question: ClassVar[str] = "did you mean it?"
+    question: ClassVar[str] = Asked.line
     answer: ClassVar[re.Pattern[str]] = re.compile(r"^[\W_]*(yes|yeah|yep|yup|no|nope)\b", re.I)
     answer_words: ClassVar[int] = 12
 
@@ -292,7 +296,8 @@ class DealDelivery:
 
     open_meanwhile: ClassVar[str] = (
         "Until the deal is read and answered, the gate refuses every tool except reading these"
-        " files and the audit, writing the audit, and a Monitor running the bus watch."
+        " files and the audit, writing the audit, loading a tool's schema, and a Monitor running"
+        " the bus watch."
     )
 
     def reads(self) -> tuple[DealtRead, ...]:
@@ -414,6 +419,11 @@ class SessionAudit:
         """Why nothing written here can answer anything; a decoded audit has no such fault."""
         return ""
 
+    def unreadable(self) -> str:
+        """Why the file on disk is not an audit at all. A missing audit is not this: the deal
+        writes it, and a blank one is simply unanswered."""
+        return ""
+
     def answers_for(self, question: MessageId) -> tuple[str, ...]:
         """Written answers naming this question, in the session's original order."""
         return tuple(entry.answer for entry in self.meant if entry.asked == question)
@@ -468,6 +478,9 @@ class UndecodableAudit(SessionAudit):
 
     def fault(self) -> str:
         return f"the audit does not decode: {self.error}"
+
+    def unreadable(self) -> str:
+        return self.fault()
 
 
 @dataclass(frozen=True)
@@ -958,7 +971,6 @@ class Unmeant(Owed):
 
     question: Asked
     read: tuple[Path, ...]
-    asking: str
     written: tuple[str, ...]
     """What the audit already answers under this question's id."""
 
@@ -971,13 +983,13 @@ class Unmeant(Owed):
             return
         audit = SessionAudit.read(deal.audit)
         yield cls(record, deal.audit, meant.open[0], record.opened_by(deal, opened),
-                  audit.his_question(), audit.answers_for(meant.open[0].message_id))
+                  audit.answers_for(meant.open[0].message_id))
 
     @property
     def reason(self) -> str:
         """The original question id is available even when the first template predated it."""
         entry = MeantAnswer(self.question.message_id)
-        return (f"Tristan asks:\n\n{self.asking}\n\n"
+        return (f"Tristan asks:\n\n{self.question.line}\n\n"
                 "The gate: write the answer into this entry of the audit's meant list, keeping"
                 f" the other entries, and save {self.audit}:\n"
                 f"{json.dumps(FieldCodec.encode(entry), ensure_ascii=False)}\n"
@@ -1060,6 +1072,32 @@ class Unaudited(Owed):
     @property
     def reason(self) -> str:
         return f"Reading is passive; {self.refusal}."
+
+
+@dataclass(frozen=True)
+class UnreadableAudit(Owed):
+    """The audit on disk does not parse, so nothing written in it can answer anything. This is
+    owed first and says so, with the parser's own position. On 2026-11-04 one stray brace from an
+    edit left the gate reading an empty audit: every saved answer counted for nothing and each
+    refusal repeated a question with a blank quote, until the owner had to turn the hooks off."""
+
+    fault: str
+
+    before: ClassVar[str] = "repairing your audit"
+
+    @classmethod
+    def owed_by(cls, deal: RuleDeal, record: DealRecord, opened: OpenedReads) -> Iterator[Self]:
+        fault = SessionAudit.read(deal.audit).unreadable()
+        if fault:
+            yield cls(record, deal.audit, fault)
+
+    @property
+    def reason(self) -> str:
+        return (f"Nothing in {self.audit} counts until it parses: {self.fault}. Repair that spot"
+                " in the file; your saved answers come back with it.")
+
+    def permits_read(self, path: Path) -> bool:
+        return False
 
 
 class RuleDeal(State, DealtCalls):
@@ -1288,6 +1326,10 @@ class ToolGate(RuleDeal):
         """Deliver this refusal to the model the way the backend refuses a tool call."""
 
 
+class ParsesItsAudit(ToolGate, owes=(UnreadableAudit,)):
+    """An audit that does not parse is said out loud before anything else is asked of it."""
+
+
 class AsksIfMeant(ToolGate, owes=(Unmeant,)):
     """Each batch answered is followed by Tristan's "did you mean it?"; nothing new opens until
     the session says yes or no. A mute deal never asks, so it never owes this."""
@@ -1305,7 +1347,8 @@ class AuditsDealtRules(ToolGate, owes=(Unaudited,)):
     """After reading, the audit answers every dealt rule and prompt."""
 
 
-class DealtRuleGate(AsksIfMeant, AnswersDealtRules, ReadsDealtSources, AuditsDealtRules):
+class DealtRuleGate(ParsesItsAudit, AsksIfMeant, AnswersDealtRules, ReadsDealtSources,
+                    AuditsDealtRules):
     """Read a batch, answer it, say whether you meant it, read the next, then finish the audit:
     the gate every backend runs."""
 
