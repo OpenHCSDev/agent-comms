@@ -1184,7 +1184,8 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
 
     def affected_by(self, name: str, changed: frozenset[str]) -> bool:
         """Whether a change to ``changed`` reaches ``name``'s presentation: its own rows, the
-        alias it was asked by, or a parent whose history a fork reads."""
+        alias it was asked by, or a parent whose history a fork reads. The walk goes up only,
+        because a presentation reads no child's row; one that shows its forks must walk down."""
         seen: set[str] = set()
         pending = [name, self.canonical_name(name)]
         while pending:
