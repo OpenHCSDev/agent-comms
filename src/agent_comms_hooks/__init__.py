@@ -20,7 +20,6 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import ClassVar, NoReturn, Self, get_type_hints
 
-from .shell_commands import ConnectCommand
 
 
 class ToolRefusedError(ValueError):
@@ -257,12 +256,9 @@ class PermissionHookProgram(ClaudeHookProgram, ABC):
 
     @classmethod
     def absent(cls, record: Mapping[str, object], error: BaseException) -> None:
-        """Only a standalone connect command can repair the missing resident owner."""
-        hook = ClaudeToolHook.decode(record)
-        if hook.tool_name == Bash.__name__ and ConnectCommand.permits(Bash.decode(hook.tool_input).command):
-            cls.unbound(record)
-            return
-        cls.failed(error)
+        """A down bridge stops bus delivery, not the session: each program keeps what it can
+        answer alone, as it does in a session with no bus. The merge guard judges locally."""
+        cls.unbound(record)
 
 
 class ClaudeToolHookProgram(ClaudeHookProgram, ABC):

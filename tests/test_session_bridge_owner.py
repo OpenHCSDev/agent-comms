@@ -31,7 +31,8 @@ from agent_comms.cli_bridges import hook_session
 from agent_comms.cli_bridges.hook_requests import SkillRequest
 from agent_comms.cli_bridges.session_watch import SessionRefusedError
 from agent_comms_hooks.shell_commands import ConnectCommand
-from agent_comms_hooks.watch import HookAnswer, SessionHookProgram
+from agent_comms_hooks.queue_bypass import QueueBypassGuard
+from agent_comms_hooks.watch import HookAnswer, SessionHookProgram, SwappingSession
 from agent_comms_hooks.read_gate import ReadGateProgram
 from conftest import installed_comms
 
@@ -131,15 +132,14 @@ def test_session_start_hook_exit_preserves_the_recorded_owner_for_install_pause(
     program for declaration in SessionHookProgram.descendants()
     for program in declaration.installation_members() if program.failure_status() == 2
 ))
-@pytest.mark.parametrize(("suffix", "tool", "expected"), (
-    ("", "Bash", 0),
-    ("; echo unrelated", "Bash", 2),
-    (" > unrelated-file", "Bash", 2),
-    ("", "Read", 2),
+@pytest.mark.parametrize(("suffix", "tool"), (
+    ("", "Bash"),
+    ("; echo unrelated", "Bash"),
+    ("", "Read"),
 ))
-def test_lapsed_hook_permission_admits_only_the_connect_declaration(
-        tmp_path, bridge_home, source_programs, program, suffix, tool, expected):
-    """The tool that repairs the bridge stays usable; another tool or shell effect does not."""
+def test_a_lapsed_bridge_stops_no_tool(
+        tmp_path, bridge_home, source_programs, program, suffix, tool):
+    """A down bridge stops bus delivery, not the session, including the call that repairs it."""
     session = 'lapsed-permission'
     claim = WatchClaim(session, bridge_home)
     claim.enrol(WatchRecord('copy', str(tmp_path / 'bus'), (), tmp_path / 'state'))
@@ -150,8 +150,42 @@ def test_lapsed_hook_permission_admits_only_the_connect_declaration(
     result = subprocess.run((str(source_programs.script(program.main)),),
                             input=json.dumps(packet), capture_output=True, text=True,
                             env={**os.environ, 'HOME': str(bridge_home)}, timeout=10)
-    assert result.returncode == expected, result.stderr
-    assert not result.stdout
+    assert result.returncode == 0, result.stderr
+
+
+def down_packet(session, claim, tmp_path, tool, command):
+    claim.enrol(WatchRecord('copy', str(tmp_path / 'bus'), (), tmp_path / 'state'))
+    return dict(session_id=session, hook_event_name='PreToolUse',
+                transcript_path=str(tmp_path / 'session.jsonl'), tool_name=tool,
+                tool_input={'command': command})
+
+
+def test_a_lapsed_bridge_still_refuses_a_merge_bypass(tmp_path, bridge_home, source_programs):
+    """The merge guard needs no bridge to judge a command, so an outage does not open it."""
+    session = 'lapsed-merge'
+    packet = down_packet(session, WatchClaim(session, bridge_home), tmp_path, 'Bash',
+                         'gh pr merge 1 --admin --merge')
+    result = subprocess.run((str(source_programs.script(QueueBypassGuard.main)),),
+                            input=json.dumps(packet), capture_output=True, text=True,
+                            env={**os.environ, 'HOME': str(bridge_home)}, timeout=30)
+    assert 'Merge bypass refused' in result.stdout + result.stderr
+
+
+def test_a_stuck_bridge_holding_its_claim_stops_no_tool(tmp_path, bridge_home, source_programs):
+    """2026-11-04: an install left the old bridge alive with no socket, and every tool call waited
+    30 seconds and then failed, the command that would repair it included."""
+    session = 'stuck-permission'
+    claim = WatchClaim(session, bridge_home)
+    packet = down_packet(session, claim, tmp_path, 'Read', ':')
+    with claim.claim.claimed():
+        started = time.monotonic()
+        result = subprocess.run((str(source_programs.script(ReadGateProgram.main)),),
+                                input=json.dumps(packet), capture_output=True, text=True,
+                                env={**os.environ, 'HOME': str(bridge_home)}, timeout=20)
+    assert result.returncode == 0, result.stderr
+    assert time.monotonic() - started < SwappingSession.wait + 5
+    assert ConnectCommand.command_name() in json.loads(
+        result.stdout)['hookSpecificOutput']['additionalContext']
 
 
 def test_held_hook_waits_for_the_socket_successor(tmp_path, bridge_home, source_programs):
