@@ -133,7 +133,6 @@ class RemoteCoreAccess(UiConnectionProfile, CoreAccess, ConnectorClient):
 
     timeout_seconds = 30
 
-    cancel_poll_seconds = 0.2
 
     def call[R: ToolResult](self, request: ToolRequest[ToolCaller, R]) -> R:
         return FieldCodec.decode(request.result_type(), request.posted(self))
@@ -166,7 +165,7 @@ class RemoteCoreAccess(UiConnectionProfile, CoreAccess, ConnectorClient):
             called, meta={**called.meta, "progressToken": call_id}))
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=self.tls())) as session:
             cancelled = asyncio.Event()
-            watcher = asyncio.create_task(self.cancel_when_checked(session, request, call_id, cancelled))
+            watcher = asyncio.create_task(self.cancel_when_stopped(session, request, call_id, cancelled))
             try:
                 async with session.post(
                     str(self.endpoint.url), data=FieldCodec.compact(FieldCodec.encode(envelope)),
@@ -182,18 +181,14 @@ class RemoteCoreAccess(UiConnectionProfile, CoreAccess, ConnectorClient):
             raise WireExportCancelled("Wire export cancelled")
         return reply.structured()
 
-    async def cancel_when_checked[C: ToolCaller, R: ToolResult](
+    async def cancel_when_stopped[C: ToolCaller, R: ToolResult](
         self, session: aiohttp.ClientSession, request: ObservedToolRequest[C, R], call_id: str,
         cancelled: asyncio.Event,
     ) -> None:
-        """The observer's own check decides when to stop; one cancel then reaches Core."""
-        while True:
-            try:
-                request.observer.check()
-            except WireExportCancelled:
-                cancelled.set()
-                notice = CancelledMessage(jsonrpc="2.0", params={"requestId": call_id})
-                async with session.post(str(self.endpoint.url), data=FieldCodec.compact(
-                        FieldCodec.encode(notice)), headers=self.headers):
-                    return
-            await asyncio.sleep(self.cancel_poll_seconds)
+        """The observer's stop reaches the running call on Core as one cancel."""
+        await request.observer.stopped()
+        cancelled.set()
+        notice = CancelledMessage(jsonrpc="2.0", params={"requestId": call_id})
+        async with session.post(str(self.endpoint.url), data=FieldCodec.compact(
+                FieldCodec.encode(notice)), headers=self.headers):
+            return
