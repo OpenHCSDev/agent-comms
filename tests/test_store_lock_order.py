@@ -16,9 +16,7 @@ def test_source_acquisitions_follow_store_tiers():
     owners = {}
     for name in graph.ranks:
         module, declaration = graph.declaration(name)
-        imported = import_module(
-            module.path.removeprefix("src/").removesuffix(".py").replace("/", ".")
-        )
+        imported = import_module(module.module_name)
         owners[name] = vars(imported)[declaration.name]
     failures = []
     checked = 0
