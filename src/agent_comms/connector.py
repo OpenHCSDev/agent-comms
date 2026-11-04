@@ -1255,6 +1255,17 @@ class RevokeUiVerb(ConnectorVerb, declared_name="revoke-ui"):
 
 
 @dataclass(frozen=True, kw_only=True)
+class RevokeThreadVerb(ConnectorVerb, declared_name="revoke-thread"):
+    help = "Revoke one thread's token, leaving every other grant untouched"
+
+    thread: Annotated[str, Argument(flags=("--thread",), options={"help": "Bus thread whose token to revoke"})]
+
+    def apply(self, ctx: ConnectorStore) -> int | str:
+        ctx.thread_revoked(self.thread)
+        return 0
+
+
+@dataclass(frozen=True, kw_only=True)
 class RevokeVerb(ConnectorVerb):
     help = "Revoke every issued token, code and trusted browser"
 

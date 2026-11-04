@@ -881,6 +881,14 @@ async def test_owner_browser_approval_lifecycle(client, store, comms):
     assert len(comms.bus.inbox(owner.name).page.messages) == 5
 
 
+def test_revoking_one_thread_leaves_every_other_grant(store):
+    """`revoke` wipes the claude.ai login too, so retiring one thread's token needs its own verb."""
+    store.thread_granted("kept")
+    store.thread_granted("retired")
+    assert ConnectorVerb.parse(["revoke-thread", "--thread", "retired"]).apply(store) == 0
+    assert store.read().thread_held("kept") and not store.read().thread_held("retired")
+
+
 async def test_a_revoked_token_is_refused(client, store, comms):
     token = await approved_token(client, comms)
     assert RevokeVerb().apply(store) == 0
