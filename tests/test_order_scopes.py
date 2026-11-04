@@ -1,5 +1,6 @@
 """Order scope is decoded once and owns its allowed delivery all the way to storage."""
-from agent_comms.repo import Checkout
+from agent_comms.repo import Checkout, Repo
+from pathlib import Path
 from dataclasses import replace
 import json
 
@@ -10,6 +11,8 @@ from test_todos import order
 from source_revision_fixture import SourceRepository
 from agent_comms.todos import PullRequestHeadRevision
 from agent_comms.change_report import FileLine
+from agent_comms.goals import OrderCheck
+from agent_comms.registry_document import NoTeamProject, RegisteredTeamProject
 from agent_comms.errors import MissingSourceLine
 from agent_comms.check_root import CheckRoot
 from agent_comms.team.order import OrderFile
@@ -135,3 +138,19 @@ def test_report_returns_through_the_real_cli_on_a_selected_history_copy(comms, t
         assert report in result.stdout
         assert copied.goals.todos.get(current.id).state is DoneTodoState
     assert comms.goals.todos.get('P1').pending
+
+
+def test_a_check_named_by_repository_runs_in_its_registered_checkout(tmp_path):
+    """A cloud session cannot know the host path, so it names the repository; the order binds
+    it where it enters, as `order send` does. Before, comms_todo_create kept "agent-comms" and
+    git failed to cd into it inside the connector, an HTTP 500 the client saw as a lost
+    connection."""
+    core = Repo(checkout=tmp_path / "agent-comms", github=RepositoryName.from_wire("OpenHCSDev/agent-comms"))
+    toad = Repo(checkout=tmp_path / "toad", github=RepositoryName.from_wire("OpenHCSDev/toad"))
+    project = RegisteredTeamProject(repos=(core, toad))
+    assert OrderCheck(Path("OpenHCSDev/toad"), "true").bound_in(project).directory == toad.checkout
+    assert OrderCheck(core.checkout, "true").bound_in(project).directory == core.checkout
+    with pytest.raises(ValueError):
+        OrderCheck(Path("nowhere"), "true").bound_in(project)
+    # A bus with no team project keeps the written directory, as before.
+    assert OrderCheck(tmp_path / "x", "true").bound_in(NoTeamProject()).directory == tmp_path / "x"

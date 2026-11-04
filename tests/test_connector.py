@@ -78,6 +78,7 @@ from agent_comms.thread_identity import UserThreadRole
 from agent_comms.tool_request import ReadTool, ToolCall, ToolRequest
 from agent_comms.threads import NativeThread
 import subprocess
+from agent_comms.repo import FailedGitCommand
 import site
 import socket
 import sys
@@ -1242,3 +1243,24 @@ async def test_a_cancel_reaches_the_running_call_it_names(connector):
     message = CancelledMessage(jsonrpc="2.0", params={"requestId": "export-1"})
     assert (await message.answer(connector, None, None)).status == 202
     assert named.cancelled() and not other.cancelled()
+
+
+async def test_an_invalid_order_or_a_failed_git_command_is_a_refusal_not_a_lost_connection(
+    client, comms, monkeypatch,
+):
+    """comms_todo_create raised ValueError, UnrecordedTimeError and FailedGitCommand past the
+    handler: HTTP 500, which the client reports as "MCP server connection lost", so the caller
+    never learned the field to fix. Invalid input and any CommandFailure answer as refusals."""
+    token = await approved_token(client, comms)
+    failures = (
+        (51, ValueError("The order check directory does not exist."), "does not exist"),
+        (52, FailedGitCommand("agent-comms", subprocess.CompletedProcess(
+            ("git",), 128, b"", b"fatal: cannot change to 'agent-comms'\n")), "cannot change to"),
+    )
+    for call_id, error, shown in failures:
+        async def raising(self, *args, error=error, **kwargs):
+            raise error
+        monkeypatch.setattr(Connector, "call", raising)
+        status, reply = await tool_call(client, token, call_id, CommsChannelsTool.declared_name, {})
+        assert (status, reply["id"], reply["result"]["isError"]) == (200, call_id, True)
+        assert shown in reply["result"]["content"][0]["text"]

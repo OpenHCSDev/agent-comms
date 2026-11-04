@@ -649,6 +649,11 @@ class NoTeamProject(TeamProject):
     def require(self) -> RegisteredTeamProject:
         raise ToolRefusedError("This bus has no registered team project.")
 
+    def checkout_named(self, name: str) -> Path:
+        """No registered checkout to name: the written directory stands, and a relative one is
+        refused where the check is written."""
+        return Path(name)
+
     def reconfigured(self, repositories: RepositorySelection) -> TeamProject:
         """Given repositories found the team; no thread is recorded as its lead."""
         return repositories.founded(self, RegisteredTeamProject)

@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.goals import OrderCheck
+from agent_comms.registry_document import RegisteredTeamProject
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 
@@ -55,8 +56,9 @@ def test_order_check_named_by_repository_binds_its_checkout_from_any_directory(
     written = OrderCheck(Path("agent-comms"), "grep -c x src")
     with pytest.raises(ValueError):
         written.require_writable()
-    bound = written.registered(configured_repositories)
+    bound = written.bound_in(RegisteredTeamProject(repos=configured_repositories))
     assert bound.directory == agent_comms.checkout
     bound.require_writable()
     with pytest.raises(ValueError):
-        OrderCheck(Path("unregistered"), "grep -c x src").registered(configured_repositories)
+        OrderCheck(Path("unregistered"), "grep -c x src").bound_in(
+            RegisteredTeamProject(repos=configured_repositories))

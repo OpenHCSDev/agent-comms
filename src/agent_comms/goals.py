@@ -16,6 +16,7 @@ from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from agent_comms.lifecycle_capability import Active
 from agent_comms_hooks.shell_commands import ShellCommand
 
+from .change_report import CitationProject
 from .child_process import (
     BoundedRun,
     CheckPrinted,
@@ -378,10 +379,9 @@ class OrderCheck(CheckCommand):
     result: CheckResult = field(default_factory=SilentCheckResult)
     timeout: ClassVar[int] = 300
 
-    def registered(self, repos: tuple[Repo, ...]) -> OrderCheck:
-        """The written directory names a registered repository, by name or checkout path; every
-        reader runs in that repository's absolute checkout, whatever directory it was sent from."""
-        return replace(self, directory=Repo.selected(repos, str(self.directory)).checkout)
+    def bound_in(self, project: CitationProject) -> OrderCheck:
+        """The written directory as the project's registered checkout."""
+        return replace(self, directory=project.checkout_named(str(self.directory)))
 
     def require_writable(self) -> None:
         """A relative directory means the cwd of whoever reads it next: the connector's

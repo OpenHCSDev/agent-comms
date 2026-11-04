@@ -54,6 +54,7 @@ from .lifecycle_capability import Settled
 from .owner_requests import OwnerRequestId
 from .progress_claims import ProgressClaim
 from .recorded_time import EventTime
+from .change_report import CitationProject
 from .repository_name import RepositoryName
 from .thread_identity import CoreWatcherIncarnation, ThreadIncarnation
 from .threads import Thread
@@ -608,6 +609,9 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
 
     def bound_to(self, actor: ThreadIncarnation) -> ProblemOrderGoalAction:
         return replace(self, assigner=actor)
+
+    def bound_in(self, project: CitationProject) -> ProblemOrderGoalAction:
+        return replace(self, order=self.order.bound_in(project))
 
     def sender_teammate(self, ctx: GoalActionContext) -> Thread:
         """The teammate whose authority sends the order, read from the registry: the sender
