@@ -1101,6 +1101,19 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
         self.threads.require_distinct_births()
 
     @cached_property
+    def _names_by_canonical(self) -> Mapping[str, frozenset[str]]:
+        """One derived alias index belongs to this deeply frozen namespace cut."""
+        grouped: dict[str, set[str]] = {}
+        for alias, canonical in self.aliases.items():
+            grouped.setdefault(canonical, {canonical}).add(alias)
+        return MappingProxyType({name: frozenset(names) for name, names in grouped.items()})
+
+    def names_for(self, name: str) -> frozenset[str]:
+        """Snapshot row readers never rescan every alias for each selected name."""
+        canonical = self.canonical_name(name)
+        return self._names_by_canonical.get(canonical, frozenset((canonical,)))
+
+    @cached_property
     def lookup_names(self) -> Mapping[ThreadLookup, str]:
         return MappingProxyType(self.threads.lookup_names())
 

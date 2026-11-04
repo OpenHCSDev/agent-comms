@@ -520,7 +520,7 @@ class QueueProjection(DeclaredFamily, affix="QueueProjection"):
     def without_scope(self) -> None:
         """Do not offer queue access while its state is missing or still loading."""
 
-    def input_scope(self, acquire_scope: Callable[[], LiveAttachmentScope]) -> LiveAttachmentScope:
+    def input_identity(self, acquire_scope: Callable[[], LiveAttachmentScope]) -> ClaimedIdentity:
         """Refuse input until the queue's current state has been read."""
         raise ValueError(self.feedback(True))
 
@@ -570,8 +570,8 @@ class AvailableQueueProjection(QueueProjection):
     def without_scope(self) -> None:
         raise ValueError('Available input queue has no original attachment scope.')
 
-    def input_scope(self, acquire_scope: Callable[[], LiveAttachmentScope]) -> LiveAttachmentScope:
-        return acquire_scope()
+    def input_identity(self, acquire_scope: Callable[[], LiveAttachmentScope]) -> ClaimedIdentity:
+        return acquire_scope().claimed_identity
 
 
 @dataclass(frozen=True)
