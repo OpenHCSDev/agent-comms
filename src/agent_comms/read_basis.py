@@ -25,6 +25,7 @@ from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
 from .nominal.field_codec import (
+    CapabilityUnion,
     FieldCodec,
     NullMember,
     PathText,
@@ -172,10 +173,14 @@ class OperatorOutcomes(ReadAuthority):
         return AllOutcomes()
 
 
-class DisplayCut(OperatorOutcomes, ABC):
+class DisplayCut(OperatorOutcomes, CapabilityUnion, ABC):
     """The selected display cut, including the absence of a painted display."""
 
     __slots__ = ()
+
+    @classmethod
+    def capability_families(cls) -> tuple[type[DeclaredFamily], ...]:
+        return (DisplayIdentity, SelectedDisplay)
 
     @property
     @abstractmethod
