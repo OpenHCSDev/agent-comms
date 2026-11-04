@@ -5,7 +5,6 @@ from __future__ import annotations
 from .tool_result import ToolResult
 
 import time
-from pathlib import Path
 from abc import ABC, abstractmethod
 from collections import ChainMap
 from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping, Sequence

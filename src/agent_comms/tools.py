@@ -607,7 +607,7 @@ class CommsOwnerRequestTool(HumanToolRequest[OwnerAnswered]):
         thread = comms.registry.require(self.owner.name)
         if thread.incarnation != self.owner:
             raise ValueError("Selected thread incarnation changed")
-        return OwnerAnswered(FieldCodec.decode(JsonValue, OwnerConnection.ask(
+        return OwnerAnswered(FieldCodec.decode(JsonValue, OwnerConnection.exchange_at(
             comms.root, thread, self.request)))
 
 

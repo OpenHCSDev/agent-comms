@@ -24,6 +24,7 @@ import os
 import socket
 import struct
 import signal
+from multiprocessing.process import BaseProcess
 import sys
 import time
 import traceback
@@ -1385,9 +1386,10 @@ class ObserverDied(CoordinationError, ObserverStatus):
 
 
 class ObserverProcessDied(ObserverDied):
-    """The local observation process ended."""
+    """The local observation process ended; it reports its own pid and exit status."""
 
-    def __init__(self, pid: int, exit_status: int | None, error: str | None):
+    def __init__(self, process: BaseProcess, error: str | None):
+        pid, exit_status = process.pid, process.exitcode
         self.pid, self.exit_status, self.error = pid, exit_status, error
         if exit_status is None:
             how = "closed its pipe and has not exited"
@@ -1795,13 +1797,13 @@ class LocalObservationPeer(ObservationPeer):
         self.process.join(seconds)
 
     def service_failed(self, traceback: str) -> ObserverDied:
-        return ObserverProcessDied(self.process.pid, self.process.exitcode, traceback)
+        return ObserverProcessDied(self.process, traceback)
 
     def connection_closed(self) -> ObserverDied:
-        return ObserverProcessDied(self.process.pid, self.process.exitcode, None)
+        return ObserverProcessDied(self.process, None)
 
     def connection_broken(self, error: str) -> ObserverDied:
-        return ObserverProcessDied(self.process.pid, self.process.exitcode, error)
+        return ObserverProcessDied(self.process, error)
 
 
 class ObservationProcess(AbstractAsyncContextManager, MroDispatch):

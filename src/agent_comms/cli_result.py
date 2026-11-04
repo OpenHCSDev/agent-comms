@@ -68,6 +68,6 @@ class TargetEditResult(CliResult, ToolResult, SubclassUnion, affix="TargetEditRe
     """What a thread or channel action answers. A remote UI receives it from Core and decodes
     it by shape: each member is also the CLI result it already was, with its CLI form."""
 
-    def to_wire(self) -> JsonValue:
-        """Where its reply and union parents meet, it answers as its declared reply."""
-        return cast(JsonValue, ToolResult.to_wire(self))
+    def to_wire(self) -> dict[str, JsonValue]:
+        """Where its reply and record parents meet, it answers as its declared reply record."""
+        return cast(dict[str, JsonValue], ToolResult.to_wire(self))

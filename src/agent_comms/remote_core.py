@@ -21,7 +21,6 @@ from yarl import URL
 from .connector import CancelledMessage, JsonRpcId, StreamedLine, ToolsCallMessage, ToolsCallReply
 from .connector_profile import HttpsMcpEndpoint, UiConnectionProfile, UiCredential
 from .core_access import CoreAccess
-from .errors import RelationViolationError
 from .exporting import WireExportCancelled
 from .nominal.field_codec import FieldCodec
 from .tool_caller import ToolCaller

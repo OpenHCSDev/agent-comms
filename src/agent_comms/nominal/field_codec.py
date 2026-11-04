@@ -1862,7 +1862,7 @@ class RecordMember(WireValue):
     def schema(cls) -> dict[str, JsonValue]:
         return FieldCodec.record_schema(cls)
 
-    def to_wire(self) -> dict[str, object]:
+    def to_wire(self) -> dict[str, JsonValue]:
         return FieldCodec.encode_record(self)
 
 

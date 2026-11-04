@@ -44,7 +44,7 @@ from types import MappingProxyType
 from typing import Annotated, ClassVar, Literal, Self, cast
 
 from agent_comms_hooks import ToolRefusedError
-from aiohttp import WSMsgType, web
+from aiohttp import web
 from aiohttp.typedefs import Handler
 from aiohttp.web_urldispatcher import AbstractResource, ResourceRoute, SystemRoute
 from pydantic import JsonValue

@@ -60,10 +60,11 @@ from .threads import Thread
 from .reported_turn import ReportedTurnState
 from .registry_store import RegistryEdit
 from .attempt_resolution import ComplianceDecision, OrderDecision, RetryDecision
+from .owner_connection import CapturedOwner
+from .runtime_server import AttachedRuntimeRequest
+from pydantic import JsonValue
 
 if TYPE_CHECKING:
-    from pydantic import JsonValue
-    from .runtime_server import AttachedRuntimeRequest
     from .goal_management import Goals
     from .registry_document import TeamProject
     from .goal_presentation import GoalSnapshot
@@ -202,9 +203,7 @@ class GoalAction[Result: GoalDeclaration](
         cls, thread: ThreadIncarnation,
         invoke: Callable[[AttachedRuntimeRequest], Awaitable[JsonValue]], goal: Goal,
     ) -> GoalDeclaration:
-        from .acp_extension import GoalSnapshotReply
-        from .owner_connection import CapturedOwner
-        from .runtime_requests import UpdateGoalRuntimeRequest
+        from .runtime_requests import GoalSnapshotReply, UpdateGoalRuntimeRequest
 
         reply = await invoke(UpdateGoalRuntimeRequest(
             thread=thread.name, captured=CapturedOwner(thread), status=cls, goal_id=goal.id, expected_revision=goal.revision,
@@ -570,7 +569,6 @@ class SetGoalAction(ReplacementGoalAction[Goal], OwnerInvocable, RuntimeInvocabl
         observe: Callable[[], Awaitable[GoalSnapshot]],
         invoke: Callable[[AttachedRuntimeRequest], Awaitable[JsonValue]], text: str = "",
     ) -> GoalDeclaration:
-        from .owner_connection import CapturedOwner
         from .runtime_requests import GoalReply, SetGoalRuntimeRequest
 
         reply = await invoke(SetGoalRuntimeRequest(thread=thread.name, captured=CapturedOwner(thread), text=text))
@@ -771,7 +769,6 @@ class RetryGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, Runt
         cls, thread: ThreadIncarnation,
         invoke: Callable[[AttachedRuntimeRequest], Awaitable[JsonValue]], goal: Goal,
     ) -> GoalDeclaration:
-        from .owner_connection import CapturedOwner
         from .runtime_requests import GoalReply, RetryGoalRuntimeRequest
 
         reply = await invoke(RetryGoalRuntimeRequest(

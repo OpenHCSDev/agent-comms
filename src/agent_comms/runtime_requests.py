@@ -256,7 +256,7 @@ class QueueActionRuntimeRequest(AttachedResultRuntimeRequest, declared_name=None
     @classmethod
     def at_owner(cls, root: Path, thread: Thread) -> None:
         """Ask the thread's live owner process to apply this action to its queued inputs."""
-        OwnerConnection.ask(root, thread, cls(thread=thread.name))
+        OwnerConnection.exchange_at(root, thread, cls(thread=thread.name))
 
 
 @dataclass(frozen=True, kw_only=True)

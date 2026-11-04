@@ -94,7 +94,7 @@ class OwnerConnection:
             return cls.reply(response)
 
     @classmethod
-    def ask(cls, root: Path, owner: Thread, request: RuntimeRequest) -> object:
+    def exchange_at(cls, root: Path, owner: Thread, request: RuntimeRequest) -> object:
         """Ask this exact incarnation's owner process; the owner refuses a replacement that
         took the name after the caller read it."""
         return cls.exchange(root, owner.require_process(),

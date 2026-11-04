@@ -46,7 +46,7 @@ from .nominal.field_codec import (
 )
 from .goal_presentation import GoalSnapshot, GoalExecution
 from .input_attempt import InputAttempt
-from .input_origin import HumanInputOrigin, InputOrigin, UnattributedInputOrigin
+from .input_origin import InputOrigin, UnattributedInputOrigin
 from .native_runtime_input import CurrentNativeCursor
 from .owner_protocol import IncompatibleOwner
 from agent_comms.pi_wire import McpLiveAcknowledgement
