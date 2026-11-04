@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from agent_comms.cli_commands import ReconciledStoresResult
+from agent_comms.cli_commands import ReconciledStoresResult, StoreDifference
 from agent_comms.cli_support.store_reconcile import StoreReconcileCliCommand
 from agent_comms.nominal.field_codec import Argument
 from agent_comms.typed_table import HeldBusFile
@@ -22,7 +22,11 @@ class ReconcileStoresCliCommand(
     practice: Annotated[Practice, Argument(flags=("--practice-root",))] = NoPractice()
 
     def answer(self, root: Path) -> ReconciledStoresResult:
-        return ReconciledStoresResult(tuple(
-            path.relative_to(root)
+        reconciled = tuple(
+            (path.relative_to(root), differences)
             for path, owner in sorted(ReconciledFile.existing_in(root).items())
-            if owner.reconcile_at(path, self.practice)))
+            if (differences := owner.reconcile_at(path, self.practice)))
+        return ReconciledStoresResult(
+            tuple(path for path, _ in reconciled),
+            tuple(StoreDifference(path, str(difference))
+                  for path, differences in reconciled for difference in differences))

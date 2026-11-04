@@ -364,10 +364,21 @@ class WorktreeArgument:
 
 
 @dataclass(frozen=True)
+class StoreDifference:
+    """One schema object a reconcile rebuilt a store for, in the store's own words."""
+
+    path: Annotated[Path, PathText]
+    difference: str
+
+
+@dataclass(frozen=True)
 class ReconciledStoresResult(CliResult):
-    """The bus files whose schema the reconcile changed, relative to the bus root."""
+    """The bus files whose schema the reconcile changed, relative to the bus root, and the
+    objects that made each one differ. An outgoing runtime's reply names no differences: the
+    installer's restore (installer/upgrade.py restore_stores) decodes it with this class."""
 
     rewritten: tuple[Annotated[Path, PathText], ...]
+    differences: tuple[StoreDifference, ...] = ()
 
 
 @dataclass(frozen=True)
