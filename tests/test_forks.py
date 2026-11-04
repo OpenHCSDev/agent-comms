@@ -240,7 +240,7 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     fork = comms.registry.require("fork-one")
     saved = store.get("P40")
     assert saved.creator_identity == parent.incarnation
-    assert store.owner_request(saved.request.require()).commander == parent.incarnation
+    assert store.owner_request(saved.request.require()).teammate == parent.incarnation
     assert saved.held().parent_identity == fork.incarnation
     assert saved.latest_message.actor == fork.incarnation
     assert fork.parent.named(parent.name)
@@ -260,7 +260,7 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     observed = TeamObservation(frame, (), states)
     asyncio.run(ObservedHeartbeat(observed).run(lambda: nullcontext(comms)))
     hud = ctx.call(CommsHudTool(thread=ctx.actor_name))
-    assert hud.commander == parent.incarnation
+    assert hud.teammate == parent.incarnation
     assert [(unit.unit, tuple(order.problem for order in unit.orders)) for unit in hud.units] == [
         (saved.held().owner_identity, ("P40",))
     ]

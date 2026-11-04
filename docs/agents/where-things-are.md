@@ -8,7 +8,7 @@ One page for finding every piece of agent-comms on a machine: the code, the bus,
 |---|---|
 | The repository | `~/code/projects/agent-comms` (main) |
 | Its Python environment | `~/code/projects/agent-comms/.venv` |
-| Installed commands (`agent-comms`, `agent-comms-commander`, `agent-comms-claude-bridge`, `toad`) | `~/.local/bin/`, each running the repo's `.venv` |
+| Installed commands (`agent-comms`, `agent-comms-team`, `agent-comms-claude-bridge`, `toad`) | `~/.local/bin/`, each running the repo's `.venv` |
 | Toad and the other packages it runs with | `~/code/projects/agent-comms/stack`, synced with `uv sync --locked` after each pull |
 | Unit worktrees, one per order | `/home/ts/wt/<unit>--P<n>` |
 | Unit home checkouts | `~/code/projects/agent-comms-wt/<unit>` |
@@ -26,23 +26,23 @@ Back up with `cp -a ~/.agent-comms <backup path>` before any upgrade step, and s
 
 ## The commander
 
-The commander isn't built into Core yet; `plans/commander-native-plan.md` moves it there.
+The commander isn't built into Core yet; `plans/team-native-plan.md` moves it there.
 
 | What | Where |
 |---|---|
 | Its code | `src/agent_comms/team/`: `order.py` (orders, strikes, done, hunts), `rules.py` and `rules/` (the rule review and the rule texts), `rotate.py` (the rotation tick), `judge.py` |
 | Its state | `~/.local/state/agent-comms/commander/`: `orders/`, `problems.json`, `deadlines.json`, `done.jsonl`, `closed.jsonl`, `hunts.jsonl`, `artifacts/`, `forks/` (the beats that count as live forks), `activity.log` |
-| How to run it | `src/agent_comms/skills/comms-commander/SKILL.md` |
+| How to run it | `src/agent_comms/skills/comms-team/SKILL.md` |
 | The game it plays | `docs/agents/commander-game.md` |
-| Where it is going | `plans/commander-native-plan.md` |
+| Where it is going | `plans/team-native-plan.md` |
 | Who owns which work, by machine | `plans/handoff-ts-gaming-commander.md` |
 
 ## Claude Code wiring
 
 | What | Where |
 |---|---|
-| Skills | `~/.claude/skills/comms` and `~/.claude/skills/comms-commander`, which link into `src/agent_comms/skills/` |
-| Hooks, in `~/.claude/settings.json` | `agent-comms-commander send-guard` refuses a raw `agent-comms send`; `~/.claude/hooks/tests-in-background.py` refuses a test run that blocks |
+| Skills | `~/.claude/skills/comms` and `~/.claude/skills/comms-team`, which link into `src/agent_comms/skills/` |
+| Hooks, in `~/.claude/settings.json` | `agent-comms-team send-guard` refuses a raw `agent-comms send`; `~/.claude/hooks/tests-in-background.py` refuses a test run that blocks |
 | Bus to Claude Code bridge state | `~/.local/state/agent-comms/claude-bridge-<unit>/` |
 
 ## The claude.ai connector (ts-gaming)

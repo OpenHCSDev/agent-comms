@@ -65,7 +65,7 @@ def test_connector_keeps_the_selected_request_when_notification_fails(tmp_path):
     comms = requesting_lead(tmp_path)
     store = comms.goals.todos
     original, = store.open_requests(comms.registry.require("colleague").incarnation)
-    newer = store.add_request(original.commander, "An independent newer request")
+    newer = store.add_request(original.teammate, "An independent newer request")
     signal, = comms.bus.bus.source_paths(comms.root)
     signal.unlink(missing_ok=True)
     signal.parent.mkdir(exist_ok=True)

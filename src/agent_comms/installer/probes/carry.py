@@ -110,15 +110,14 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
         updates: Iterable[tuple[object, object]],
     ) -> None:
         """Inside the caller's write transaction, carry stored values of a guarded row:
-        its declared mutation guards are lifted and recreated from the same declaration."""
-        (key,) = (field.name for field in row._fields if field.column.primary_key)
+        its declared mutation guards are lifted and recreated from the same declaration. Each
+        update is the new value followed by the row's primary key, one value per key column."""
+        keys = " AND ".join(f'"{field.wire_name}"=?' for field in row._fields if field.column.primary_key)
         guards = row.triggers()
         for name in guards:
             TriggerKind.drop(db, name)
-        db.executemany(
-            row._sql(f'UPDATE "{row.declared_name}" SET {{{column.name}}}=? WHERE {{{key}}}=?'),
-            updates,
-        )
+        db.executemany(row._sql(f'UPDATE "{row.declared_name}" SET {{{column.name}}}=? WHERE {keys}'),
+                       updates)
         for sql in guards.values():
             db.execute(sql)
 

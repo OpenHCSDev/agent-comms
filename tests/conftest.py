@@ -641,7 +641,7 @@ def team_bus(tmp_path):
 
 
 @pytest.fixture
-def commanding_session(tmp_path, monkeypatch, team_bus):
+def team_session(tmp_path, monkeypatch, team_bus):
     """Claude session `s` bound to the teammate `claude-code`, so hooks see the thread the
     registry holds."""
     monkeypatch.setenv("HOME", str(tmp_path / "home"))

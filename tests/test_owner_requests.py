@@ -60,7 +60,7 @@ def test_retired_team_requests_follow_peer_authority(
     own = store.add_request(outsider.acting_identity, "The outsider's own request.")
     newest = store.add_request(author.acting_identity, "A later author request.")
     comms.registry.update_thread(author.name, lambda thread: replace(thread, tags=frozenset()))
-    assert store.owner_request(first.id).commander == author.incarnation
+    assert store.owner_request(first.id).teammate == author.incarnation
     assert store.open_requests(peer.acting_identity) == (newest, own, first)
     assert store.open_requests(peer.acting_identity, limit=1, descending=False) == (first,)
     assert store.open_requests(outsider.acting_identity, limit=1) == (newest,)
@@ -82,7 +82,7 @@ def test_retired_team_requests_follow_peer_authority(
     assert first.id not in {
         rule.request.id for rule in RequestStalled.violations(comms)
     }
-    assert store.owner_request(first.id).commander == author.incarnation
+    assert store.owner_request(first.id).teammate == author.incarnation
 
 
 def test_shared_request_maintenance_does_not_transfer_directive_debt(comms: Comms) -> None:
@@ -198,7 +198,7 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
         "The request owner was inspected.",
         original.reference,
     )
-    assert claim.message.target == first.commander.name
+    assert claim.message.target == first.teammate.name
     assert claim.message.answers == (original.reference,)
     comms.messaging.send(
         "colleague",
@@ -206,7 +206,7 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
         "The request was read.",
         answers=(original.reference,),
     )
-    renamed = replace(first, commander=colleague.incarnation.renamed("colleague-renamed"))
+    renamed = replace(first, teammate=colleague.incarnation.renamed("colleague-renamed"))
     with comms.bus.bus.reading() as source:
         assert not renamed.directive_messages(source, colleague.incarnation.require_recorded().lookup)
 

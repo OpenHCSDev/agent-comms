@@ -72,7 +72,7 @@ pytest_plugins = ("github_fixture",)
 
 @dataclass
 class Team:
-    """One commander, one repository and the units its seeds add."""
+    """One teammate, one repository and the units its seeds add."""
 
     comms: Comms
     source: SourceRepository
@@ -81,7 +81,7 @@ class Team:
     request: str
     github: GitHubFixture
     problems: dict[str, str] = field(default_factory=dict)
-    commander: ClassVar[str] = "colleague"
+    teammate: ClassVar[str] = "colleague"
 
     @property
     def repository(self) -> RepositoryName:
@@ -155,7 +155,7 @@ class Team:
             CreateProblemGoalAction(
                 problem=problem,
                 request=self.request,
-                assigner=self.thread(self.commander).incarnation,
+                assigner=self.thread(self.teammate).incarnation,
                 repo=self.repository,
                 text=f"Repair {name}",
                 review_at=RecordedEventTime(time.time() + 3600),
@@ -176,10 +176,10 @@ class Team:
 
     def claim(self, todo: Todo, number: int, head: str, *, at: float) -> OrderClaim:
         """The unit delivers through the claim writer, linking its pull request to the order."""
-        colleague = self.thread(self.commander).incarnation
+        colleague = self.thread(self.teammate).incarnation
         unit = self.thread(todo.held().owner).incarnation
         original = self.comms.messaging.send(
-            self.commander, unit.name, todo.order.instructions(todo)
+            self.teammate, unit.name, todo.order.instructions(todo)
         ).message
         todo = self.comms.goals.todos.apply(
             todo.id, OrderMessage(todo.revision, colleague, original.message_id, at=RecordedEventTime(time.time()))
@@ -416,7 +416,7 @@ class LostToolsSeed(IncidentSeed):
                     name="restarted",
                     tags=frozenset({"comms"}),
                     worktree=Checkout(fleet.source.checkout),
-                    parent=ForkedParent(fleet.commander),
+                    parent=ForkedParent(fleet.teammate),
                 ),
             ),
         )
@@ -444,11 +444,11 @@ def fleet(comms, tmp_path, configured_repository, installed_runtime, github_cli)
         comms,
         channels=("comms",),
         threads=(
-            Thread(name=Team.commander, tags=frozenset({"comms"}), worktree=Checkout(source.checkout)),
+            Thread(name=Team.teammate, tags=frozenset({"comms"}), worktree=Checkout(source.checkout)),
         ),
     )
     request = comms.goals.todos.add_request(
-        comms.registry.require(Team.commander).incarnation, "Keep the team on its plans"
+        comms.registry.require(Team.teammate).incarnation, "Keep the team on its plans"
     ).id
     project = configured_repository(comms)
     github_cli.configure(source.github, *(repo.github for repo in project.repos))
@@ -711,7 +711,7 @@ def test_a_merged_order_running_its_proof_is_not_spinning(fleet):
     # This fixture's repository is no installed package: the HUD line says so, never raises.
     observed = built.observe()
     assert not any(type(rule) is SpinningTeammate for rule in observed.rules)
-    hud = current_hud(built.comms, Team.commander, observed.frame, observed.states)
+    hud = current_hud(built.comms, Team.teammate, observed.frame, observed.states)
     assert any(order.state == "Merged, no runtime install, waiting on the run"
                for unit in hud.units for order in unit.orders)
 

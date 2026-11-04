@@ -3541,7 +3541,7 @@ class TodoStoreRows(StoreRows):
 @dataclass(frozen=True)
 class HuntRecord(TodoStoreRows, TypedTable):
     id: Annotated[HuntId, Column(primary_key=True)]
-    commander: Annotated[ThreadIncarnation, Column(index=True)]
+    teammate: Annotated[ThreadIncarnation, Column(index=True)]
     hunt: Hunt
 
 
@@ -5639,12 +5639,12 @@ class ChangeTodoState(TodoOperation):
 class OwnerRequest(TodoStoreRows, TypedTable, SharedFileTables, DurableTables):
     """One owner's request, independent of any current turn goal."""
 
-    indexes = (Index(("commander_created_at", "state", "created_at")),)
+    indexes = (Index(("teammate_created_at", "state", "created_at")),)
 
     id: Annotated[OwnerRequestId, Column(primary_key=True, storage=TextStorage)]
-    commander: RecordedThreadIncarnation
-    commander_created_at: ClassVar[Generated] = Generated(
-        float, Column(generated="json_extract({commander}, '$.created_at')"),
+    teammate: RecordedThreadIncarnation
+    teammate_created_at: ClassVar[Generated] = Generated(
+        float, Column(generated="json_extract({teammate}, '$.created_at')"),
     )
     text: str
     state: RequestState = OpenRequestState()
@@ -5660,7 +5660,7 @@ class OwnerRequest(TodoStoreRows, TypedTable, SharedFileTables, DurableTables):
         return cls(OwnerRequestId.new(), requester.require_recorded(), text)
 
     def require_maintainer(self, actor: ThreadIncarnation) -> None:
-        if not actor.acts_for(self.commander):
+        if not actor.acts_for(self.teammate):
             raise ForeignRequest(f"Request {self.id.value} is outside this actor's work scope.")
 
     def require_open(self, actor: ThreadIncarnation) -> OpenRequestState:
@@ -6363,7 +6363,7 @@ class OwnerRequestStore(DurableStore):
                 request for request in OwnerRequest.stream(
                     db, state=OpenRequestState(),
                     order_by=("created_at", "id"), descending=descending,
-                ) if teammate.acts_for(request.commander)
+                ) if teammate.acts_for(request.teammate)
             )
             return tuple(islice(requests, None if limit < 0 else limit))
 
@@ -6372,7 +6372,7 @@ class OwnerRequestStore(DurableStore):
         every thread the registry has ever held."""
         with self.snapshot() as db:
             return tuple(dict.fromkeys(
-                request.commander for request in OwnerRequest.stream(db, state=OpenRequestState())))
+                request.teammate for request in OwnerRequest.stream(db, state=OpenRequestState())))
 
     def record_directive(self, request: OwnerRequestId, directive: RequestDirective) -> None:
         with self.writing() as db:

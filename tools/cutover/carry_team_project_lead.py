@@ -1,10 +1,12 @@
-"""Drop the stored lead from the registry's team project, which now belongs to the team.
+"""Drop the stored lead from the registry, whose project now belongs to the team.
 
 The registry kept the project under ``commander_project`` with a ``commander`` incarnation:
 one thread recorded as the team's lead. The project is now ``team_project`` with only its
-repositories, and the version-2 decoder refuses version 1, so this step stamps every
-registry version 2, moving a stored project to its new key without its lead. Delete this
-step after the live installation.
+repositories, the teammates' channel tag is ``teammates`` and a fork runs a plain
+``fork_execution``. The version-2 decoder refuses version 1, so this step stamps every
+registry version 2, moving a stored project to its new key without its lead and renaming those
+tags as TeamVocabulary renames them everywhere else. Delete this step after the live
+installation.
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceHolde
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.registry_store import RegistryStore
+from cutover.carry_team_vocabulary import TeamVocabulary
 
 
 class TeamProjectLead(Carry):
@@ -41,6 +44,7 @@ class TeamProjectLead(Carry):
             project = FieldCodec.decode(dict[str, JsonValue], document.pop(self.retired_key))
             project.pop(self.retired_field)
             document[FieldCodec.record_key(RegistryDocument, "team_project")] = project
+        document = FieldCodec.decode(dict[str, JsonValue], TeamVocabulary.renamed(document))
         document[version] = RegistryDocument.version
         if apply:
             MaintenanceBarrier(path).read().require_held_by(

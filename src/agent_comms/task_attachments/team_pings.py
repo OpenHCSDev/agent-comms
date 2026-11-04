@@ -224,7 +224,7 @@ class PublishedFacts(PublicationFacts):
 
 @dataclass(frozen=True)
 class TeamUpdate(OwnerNotice, declared_name=None):
-    commander: ThreadIncarnation
+    teammate: ThreadIncarnation
     handled: tuple[Ping, ...]
     not_applied: tuple[str, ...] = field(default=(), kw_only=True)
     publication: PublicationFacts = field(default_factory=UnpublishedFacts, compare=False, kw_only=True)
@@ -234,10 +234,10 @@ class TeamUpdate(OwnerNotice, declared_name=None):
 
     def projections(self, message: Message) -> Iterator[TypedTable]:
         """The packet's position under the teammate birth it was published for."""
-        yield TeamUpdatePosition(message.seq, self.commander.require_recorded().lookup)
+        yield TeamUpdatePosition(message.seq, self.teammate.require_recorded().lookup)
 
     def team_update(self, recipient: ThreadLookup) -> tuple[TeamUpdate, ...]:
-        return (self,) if self.commander.require_recorded().lookup == recipient else ()
+        return (self,) if self.teammate.require_recorded().lookup == recipient else ()
 
     def category(self, spoken: type[MessageCategory]) -> type[MessageCategory]:
         """A board packet speaks in the owner's voice yet is not his words: its own category."""
@@ -278,7 +278,7 @@ class TeamUpdate(OwnerNotice, declared_name=None):
         return tuple(ping for ping in self.handled if ping.undisposed(history, cut))
 
     def require_target(self, target: str, registry: RegistrySnapshot) -> None:
-        if registry.require(target).incarnation != self.commander:
+        if registry.require(target).incarnation != self.teammate:
             raise RelationViolationError("Team observations changed recipient incarnation")
 
     @classmethod
@@ -362,16 +362,16 @@ class TeamUpdate(OwnerNotice, declared_name=None):
 
     def send(self, comms: Comms, hud: tuple[str, ...], *,
              publication: PublicationFacts = UnpublishedFacts()) -> tuple[Message, ...]:
-        recipient = comms.registry.require(self.commander.name)
+        recipient = comms.registry.require(self.teammate.name)
         packet = replace(self, publication=publication)
         return comms.registry.status(recipient.name).publish_heartbeat(
             lambda: recipient.heartbeat_delivery.publish(lambda: packet.publish(
-                comms.messaging, ThreadTarget(packet.commander.name), packet.body(hud))), ())
+                comms.messaging, ThreadTarget(packet.teammate.name), packet.body(hud))), ())
 
 
 
 @dataclass(frozen=True)
-class TeamUpdateNotice(TeamUpdate, declared_name="commander_notice"):
+class TeamUpdateNotice(TeamUpdate, declared_name="team_notice"):
     """Publish a changed quiet frame once, without waking for an identical copy."""
 
     role = NoticeRole()
@@ -385,7 +385,7 @@ class TeamUpdateNotice(TeamUpdate, declared_name="commander_notice"):
 
 
 @dataclass(frozen=True)
-class TeamDecisions(TeamUpdate, declared_name="commander_decisions"):
+class TeamDecisions(TeamUpdate, declared_name="team_decisions"):
     """The new lines first, then the lines still undisposed, oldest first."""
 
     decisions: tuple[Ping, ...]
@@ -401,14 +401,14 @@ class TeamDecisions(TeamUpdate, declared_name="commander_decisions"):
 
 @dataclass(frozen=True, slots=True)
 class TeamUpdateStore(PatternFile, SingleFileStore, DurableFile,
-                           LockedStore[tuple[TeamUpdate, ...]], DependentStateTier, declared_name="commander_update_store"):
+                           LockedStore[tuple[TeamUpdate, ...]], DependentStateTier, declared_name="team_update_store"):
     """The last observation for one teammate birth, not a message or a disposable view.
 
     The packet declarations supply the complete stored shape through FieldCodec. Only the
     heartbeat writes it; failed publication and muted delivery do not erase observations.
     """
 
-    filename: ClassVar[str] = "commander_updates/{lookup}.json"
+    filename: ClassVar[str] = "team_updates/{lookup}.json"
     record_type = tuple[TeamUpdate, ...]
 
     @classmethod
@@ -420,7 +420,7 @@ class TeamUpdateStore(PatternFile, SingleFileStore, DurableFile,
 
     @classmethod
     def record(cls, root: Path, packet: TeamUpdate) -> None:
-        store = cls.for_team(root, packet.commander)
+        store = cls.for_team(root, packet.teammate)
         store.update(lambda previous: DocumentChange.to((packet,)))
 
 

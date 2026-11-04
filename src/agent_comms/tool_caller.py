@@ -58,7 +58,7 @@ class ToolCaller(ReadAuthority):
     def from_flag(self) -> tuple[str, ...]:
         """The command line's --from argument naming this caller, if it names a thread."""
 
-    def commanding(self, comms: Comms) -> None:
+    def rejoin(self, comms: Comms) -> None:
         """An ordinary caller needs no teammate-child registration."""
         return None
 
@@ -222,7 +222,7 @@ class ForkRecordOwed(ToolRefusedError):
 class ForkCaller(ActsForTeam, SubagentCaller):
     """Team verbs use a registered child without copying registry procedures."""
 
-    def commanding(self, comms: Comms) -> None:
+    def rejoin(self, comms: Comms) -> None:
         """A verb resumes the fork under the parent that spawned it, never under whichever
         thread the bus records as teammate."""
         self.join(comms, self.spawner(comms))

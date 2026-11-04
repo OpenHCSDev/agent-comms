@@ -440,7 +440,7 @@ class Detached(NeedsTeamAttention, TeammateState):
 
 
 @dataclass(frozen=True)
-class AwaitingTeam(NeedsTeamAttention, TeammateState, declared_name="awaiting_commander"):
+class AwaitingTeam(NeedsTeamAttention, TeammateState, declared_name="awaiting_team"):
     seconds: ClassVar[int] = 5 * 60
     question = "it asked you. why is it still waiting?"
     action = "answer the original message"

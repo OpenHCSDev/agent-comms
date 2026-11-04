@@ -36,8 +36,8 @@ class Plan(DeclaredFamily, affix="Plan"):
     document: ClassVar[str]
 
 
-class TeamNativePlan(Plan, declared_name="commander_native"):
-    document = "plans/commander-native-plan.md"
+class TeamNativePlan(Plan, declared_name="team_native"):
+    document = "plans/team-native-plan.md"
 
 
 class VirtualBusPlan(Plan):
@@ -259,7 +259,7 @@ class StoryPhase(TeamNativePhase):
     )
 
 
-class TeamPagePhase(TeamNativePhase, declared_name="commander_page"):
+class TeamPagePhase(TeamNativePhase, declared_name="team_page"):
     """A view of the native records and control plane, independent of cutover."""
 
     after = (RecordPlanePhase, ControlPlanePhase)
@@ -1026,7 +1026,7 @@ class LoadingSpinnerPhase(ToadAskPhase):
     """The top loading spinner is back; both were removed instead of keeping it."""
 
 
-class TeamLatencyPhase(OwnerAsksPhase, declared_name="commander_latency"):
+class TeamLatencyPhase(OwnerAsksPhase, declared_name="team_latency"):
     """Each teammate verb answers in under 5 s; they take about 30 s."""
 
     evidence = FunctionDeclared("test_team_verb_answers_under_five_seconds", ("tests",))

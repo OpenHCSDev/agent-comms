@@ -60,7 +60,7 @@ class NotificationEvidenceView(RevisionView):
     """Assignment and human read evidence, independent of timed status refreshes."""
 
 
-class TeamFramesView(RevisionView, declared_name="commander_frames"):
+class TeamFramesView(RevisionView, declared_name="team_frames"):
     """The heartbeat's newest frame per teammate; nothing else feeds the team page."""
 
 

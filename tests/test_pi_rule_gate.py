@@ -89,7 +89,7 @@ def test_a_compacted_pi_thread_reads_every_dealt_rule_then_writes_its_audit(
         )
         # Core's notice publishes under the owner's thread, but nobody typed it.
         RestartNotice().publish(team_bus.messaging, CommandTarget.named("unit-x"),
-                                "COMMANDER · unit-x · continue your orders")
+                                "TEAM · unit-x · continue your orders")
     bash = call("bash", {"command": "ls"})
     bash.judge_under(peer_deal)  # never dealt: nothing to read
     events.CompactionAbort().deal_rules(peer_deal)

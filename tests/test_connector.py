@@ -595,10 +595,10 @@ async def test_connector_lists_every_tool(client, store, comms):
 
 
 async def test_connector_reads_two_newest_first_conversation_pages(client, store, comms):
-    comms.registry.declare(Thread("commander", frozenset(), Checkout(comms.root)))
+    comms.registry.declare(Thread("teammate", frozenset(), Checkout(comms.root)))
     originals = [comms.messaging.send("worker", "claude-ai", f"history {number}").message
                  for number in range(5)]
-    comms.messaging.send("commander", "claude-ai", "not this conversation")
+    comms.messaging.send("teammate", "claude-ai", "not this conversation")
     headers = {"Authorization": f"Bearer {await approved_token(client, comms)}"}
 
     async def page(arguments):

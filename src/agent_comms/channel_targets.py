@@ -696,5 +696,5 @@ class CommsTag(DeclaredTag):
     and the teammate's posts address it."""
 
 
-class TeammatesTag(DeclaredTag, declared_name="commanders"):
+class TeammatesTag(DeclaredTag, declared_name="teammates"):
     """A coordination channel identity, never a permission or execution role."""

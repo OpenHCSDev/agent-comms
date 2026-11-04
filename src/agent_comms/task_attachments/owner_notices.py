@@ -86,7 +86,7 @@ class EscalationNotice(OwnerNotice, declared_name=None):
     a beat apart, so each lands as its own input: one wall of text is skimmed, a burst is not.
     An answer naming any line covers every line of that burst sent before it."""
 
-    commander: ThreadIncarnation
+    teammate: ThreadIncarnation
     gap: ClassVar[float] = 2.0
     horizon: ClassVar[int] = 6 * 60 * 60
     title: ClassVar[str]
@@ -94,10 +94,10 @@ class EscalationNotice(OwnerNotice, declared_name=None):
     writes: ClassVar[tuple[type[ProducedRow], ...]] = (EscalationPosition,)
 
     def projections(self, message: Message) -> Iterator[TypedTable]:
-        yield EscalationPosition(message.seq, self.commander.require_recorded().lookup, message.timestamp)
+        yield EscalationPosition(message.seq, self.teammate.require_recorded().lookup, message.timestamp)
 
     def require_target(self, target: str, registry: RegistrySnapshot) -> None:
-        if registry.require(target).incarnation != self.commander:
+        if registry.require(target).incarnation != self.teammate:
             raise RelationViolationError("An escalation changed recipient incarnation")
 
     @classmethod
@@ -131,7 +131,7 @@ class EscalationNotice(OwnerNotice, declared_name=None):
         notice = cls.of(snapshot, teammate)
         with source.observing() as db:
             sent = EscalationPosition.sent(
-                db, notice.commander.require_recorded().lookup, time.time() - cls.horizon, before)
+                db, notice.teammate.require_recorded().lookup, time.time() - cls.horizon, before)
         return tuple(message for message in sent if message.task == notice)
 
     @classmethod

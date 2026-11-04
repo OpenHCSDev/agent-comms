@@ -280,7 +280,7 @@ class SubagentExecution(ExternalThreadExecution):
         existing.execution.require_subagent()
 
 
-class ForkExecution(NoChannelInbox, SubagentExecution, declared_name="commander_fork_execution"):
+class ForkExecution(NoChannelInbox, SubagentExecution, declared_name="fork_execution"):
     """An SDK child borrows its bound parent's context and records its own fork goal.
 
     Any independent parent can declare it; the stored execution identity stays stable.

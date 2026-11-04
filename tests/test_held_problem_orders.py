@@ -1,4 +1,4 @@
-"""Problem ids select held orders through real commander commands on copied state."""
+"""Problem ids select held orders through real teammate commands on copied state."""
 from contextlib import chdir
 from dataclasses import replace
 import json

@@ -41,7 +41,7 @@ def example_hud() -> TeamHud:
                                                       failed_at=1000)),
                   since=RecordedEventTime(1000))
     return TeamHud(
-        commander=colleague, units=(
+        teammate=colleague, units=(
             worker,
             replace(worker, unit=RecordedThreadIncarnation("blocked", 3.0), state=Stuck),
             replace(worker, unit=RecordedThreadIncarnation("run-next", 4.0), state=AwaitingApplicationRun),

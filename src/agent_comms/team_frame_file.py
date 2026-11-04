@@ -14,7 +14,7 @@ class TeamFrameFile(RuntimeFile, PatternFile):
 
     __slots__ = ()
 
-    filename = "commander_frames/{lookup}.json"
+    filename = "team_frames/{lookup}.json"
 
     @classmethod
     def source_paths(cls, root: Path) -> tuple[Path, ...]:

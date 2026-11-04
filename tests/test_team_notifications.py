@@ -114,12 +114,12 @@ def test_disabled_heartbeat_failure_retains_service_error_without_bus_publicatio
     comms.threads.set_heartbeat_delivery("colleague", OffHeartbeatDelivery)
     failed_pass(comms, RuntimeError("muted service failure"))
     assert notifications(comms) == ()
-    commander = comms.registry.require("colleague").incarnation
-    retained, = TeamUpdate.latest(comms, commander)
+    teammate = comms.registry.require("colleague").incarnation
+    retained, = TeamUpdate.latest(comms, teammate)
     assert retained.handled == (RulePing.capture(retained_failure(comms)),)
     BrokenHeartbeat().failed(lambda: nullcontext(comms), RuntimeError("muted service failure"))
-    assert TeamUpdate.latest(comms, commander) == (retained,)
-    assert TeamUpdate.published(comms, commander) == ()
+    assert TeamUpdate.latest(comms, teammate) == (retained,)
+    assert TeamUpdate.published(comms, teammate) == ()
     assert notifications(comms) == ()
     comms.threads.set_heartbeat_delivery("colleague", OnHeartbeatDelivery)
     BrokenHeartbeat().failed(lambda: nullcontext(comms), RuntimeError("muted service failure"))
@@ -134,7 +134,7 @@ def test_muted_pending_work_keeps_its_age_and_wakes_when_enabled(notification_bu
     from agent_comms.heartbeat_delivery import OffHeartbeatDelivery, OnHeartbeatDelivery
 
     comms = notification_bus
-    commander = comms.registry.require("colleague")
+    teammate = comms.registry.require("colleague")
     todo = comms.goals.todos.get("P1")
     rule = ReviewTimerUp(
         problem=todo.id, holder=comms.registry.require("worker").incarnation,
@@ -151,8 +151,8 @@ def test_muted_pending_work_keeps_its_age_and_wakes_when_enabled(notification_bu
     message, = notifications(comms)
     assert message.role.counts_as_conversation()
     assert aged(message.task.handled) == aged(first.packets[0].handled)
-    assert enabled.commander == commander.incarnation
-    assert TeamUpdate.latest(comms, commander.incarnation) == enabled.packets
+    assert enabled.teammate == teammate.incarnation
+    assert TeamUpdate.latest(comms, teammate.incarnation) == enabled.packets
 
 
 def test_muted_changed_quiet_display_publishes_once_when_enabled(notification_bus):
@@ -195,9 +195,9 @@ def owner(comms):
     return comms.messaging.user_identity(Checkout(comms.root))
 
 
-def notifications(comms, commander="colleague"):
+def notifications(comms, teammate="colleague"):
     page = MessagePageRequest(DMDisplayScope.capture(
-        owner(comms).name, commander, comms.registry.snapshot(),
+        owner(comms).name, teammate, comms.registry.snapshot(),
     )).read_opened(comms.bus.bus)
     return tuple(message for message in page.messages if isinstance(message.task, TeamUpdate))
 
@@ -244,9 +244,9 @@ def test_expanded_unit_reads_original_orders_and_bounded_activity_then_refuses_s
     recorded_turn(comms, (False,) * 10)
     original = (comms.root / 'state-source.jsonl').read_bytes()
     hud = beat(comms, states=state_cards(comms, TeammateState))
-    ServicePassStore.at(comms.root).heartbeat_passed((hud.commander,), (hud.commander,))
+    ServicePassStore.at(comms.root).heartbeat_passed((hud.teammate,), (hud.teammate,))
     card = next(card for card in hud.units if card.unit.name == 'worker')
-    operation = TeammateRead(frame_owner=hud.commander, unit=card.unit,
+    operation = TeammateRead(frame_owner=hud.teammate, unit=card.unit,
                                   orders=tuple(dict.fromkeys(order.order for order in card.orders)))
     request = ReadOperation(str(comms.root), operation)
     direct = operation.read(comms)
@@ -378,20 +378,20 @@ def test_each_team_gets_its_own_failure_packet(notification_bus):
     failure = retained_failure(comms)
     now = time.time()
     for name in ("colleague", "worker"):
-        commander = comms.registry.require(name).incarnation
-        update, = TeamUpdate.report_failure(commander, failure, (), published=(), now=now)
+        teammate = comms.registry.require(name).incarnation
+        update, = TeamUpdate.report_failure(teammate, failure, (), published=(), now=now)
         TeamUpdateStore.record(comms.root, update)
         update.send(comms, ())
-        latest, = TeamUpdate.latest(comms, commander)
-        assert latest.commander == commander
+        latest, = TeamUpdate.latest(comms, teammate)
+        assert latest.teammate == teammate
         assert latest.handled == (RulePing.capture(failure),)
         assert TeamUpdate.report_failure(
-            commander, failure, (latest,), published=TeamUpdate.published(comms, commander),
+            teammate, failure, (latest,), published=TeamUpdate.published(comms, teammate),
             now=now + 1) == ()
     # The worker's later packet is not the colleague's board.
     colleague = comms.registry.require("colleague").incarnation
     lead_board, = TeamUpdate.latest(comms, colleague)
-    assert lead_board.commander == colleague
+    assert lead_board.teammate == colleague
 
 
 def independent_instruction(comms, body):
@@ -416,7 +416,7 @@ def test_hidden_tool_time_keeps_publication_display_facts(notification_bus):
         later = beat(comms, states=state_cards(comms, TeammateState))
         assert tuple(card.clock for card in hud.units) != tuple(card.clock for card in later.units)
         assert hud.display_facts == later.display_facts
-        # A unit may still need a commander action; a hidden clock is not a new display fact.
+        # A unit may still need a teammate action; a hidden clock is not a new display fact.
         assert first.task.publication == PublishedFacts.of(later.display_facts)
 
 
@@ -515,15 +515,15 @@ def test_a_recreated_team_inherits_no_board(notification_bus):
     comms.registry.remove("colleague")
     comms.registry.declare(Thread("colleague", frozenset({"comms"}), worktree))
     reborn = comms.registry.require("colleague").incarnation
-    assert reborn != board.task.commander
+    assert reborn != board.task.teammate
     assert TeamUpdate.latest(comms, reborn) == ()
-    assert TeamUpdate.latest(comms, board.task.commander) == (board.task,)
+    assert TeamUpdate.latest(comms, board.task.teammate) == (board.task,)
     now = time.time()
     update, = TeamUpdate.report_failure(reborn, failing, (), published=(), now=now)
     TeamUpdateStore.record(comms.root, update)
     update.send(comms, ())
     latest, = TeamUpdate.latest(comms, reborn)
-    assert latest.commander == reborn and latest.handled == update.handled
+    assert latest.teammate == reborn and latest.handled == update.handled
 
 
 def test_only_the_heartbeat_publishes_a_packet_for_its_exact_team(notification_bus):
@@ -531,12 +531,12 @@ def test_only_the_heartbeat_publishes_a_packet_for_its_exact_team(notification_b
     colleague = comms.registry.require("colleague").incarnation
     worker = comms.registry.require("worker").incarnation
     user = owner(comms)
-    for sender, origin, commander in (("worker", AgentOrigin(), colleague),
+    for sender, origin, teammate in (("worker", AgentOrigin(), colleague),
                                       (user.name, HumanOrigin.of(user), worker)):
         with pytest.raises(RelationViolationError):
             comms.bus.publisher.publish_ordinary(
                 Message(sender=sender, target="colleague", body="forged board", type=InfoKind,
-                        role=TeamUpdateNotice.role, task=TeamUpdateNotice(commander, ())),
+                        role=TeamUpdateNotice.role, task=TeamUpdateNotice(teammate, ())),
                 origin=origin, destination=ThreadTarget("colleague"),
             )
     assert TeamUpdate.latest(comms, colleague) == ()
@@ -568,7 +568,7 @@ def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_
     comms = notification_bus
     colleague = comms.registry.require("colleague").incarnation
     worker = comms.registry.require("worker").incarnation
-    hud = TeamHud(commander=colleague, units=(), phases=(
+    hud = TeamHud(teammate=colleague, units=(), phases=(
         TeamPhase(RetainedStorePhase, True, False, ()),
         TeamPhase(OneOrderOwnerPhase, True, False, ()),
         TeamPhase(DesignReconciledPhase, False, False, (worker,)),
@@ -606,7 +606,7 @@ def test_frame_keeps_original_ping_order_and_folded_idle_records(tmp_path):
     owner = RecordedThreadIncarnation("colleague", 3.0)
     packet = TeamDecisions(owner, pings, pings, ())
     hud = TeamHud(
-        commander=owner, units=(idle, stuck), phases=(),
+        teammate=owner, units=(idle, stuck), phases=(),
         load=OverloadDegradation.from_orders((), 0, 0), forks=(),
         usage=CodexUsage(UnreadableUsage(reason="not requested")),
         packets=(packet,), open_pings=pings,
@@ -644,7 +644,7 @@ def test_quiet_completion_is_per_teammate_even_when_a_later_recipient_fails(
         patched.setattr(TeamHeartbeat, "served", classmethod(lambda cls, registry, goals: (colleague, missing)))
         with pytest.raises(UnregisteredThreadError):
             asyncio.run(ObservedHeartbeat(observed).run(lambda: nullcontext(comms)))
-    completed = ServicePassStore.at(comms.root).read().commander_completed
+    completed = ServicePassStore.at(comms.root).read().teammate_completed
     assert set(completed) == {colleague.incarnation}
     assert missing.incarnation not in completed
     # A quiet pass still completes and keeps the original alarm visibly open.
@@ -653,12 +653,12 @@ def test_quiet_completion_is_per_teammate_even_when_a_later_recipient_fails(
     # A pass with no board retires the frames and no teammate's completion.
     asyncio.run(ObservedHeartbeat().run(lambda: nullcontext(comms)))
     assert TeamFrame.read_all(comms.root) == ()
-    assert set(ServicePassStore.at(comms.root).read().commander_completed) == {colleague.incarnation}
+    assert set(ServicePassStore.at(comms.root).read().teammate_completed) == {colleague.incarnation}
     # Only the registry retiring the incarnation drops its completion.
     comms.registry.unregister("colleague")
     comms.registry.remove("colleague")
     asyncio.run(ObservedHeartbeat().run(lambda: nullcontext(comms)))
-    assert not ServicePassStore.at(comms.root).read().commander_completed
+    assert not ServicePassStore.at(comms.root).read().teammate_completed
 
 
 def test_recreated_watcher_retains_non_disposable_observation_without_nagging(notification_bus):
@@ -716,7 +716,7 @@ def test_occupied_unit_refusal_is_published_and_later_rule_still_runs(notificati
     assert RulePing.capture(rules[0]) not in message.task.handled
     assert RulePing.capture(rules[1]) in message.task.handled
     assert comms.registry.require("colleague").incarnation in (
-        ServicePassStore.at(comms.root).read().commander_completed)
+        ServicePassStore.at(comms.root).read().teammate_completed)
 
 
 def test_rule_packets_compact_new_lines_keep_originals_then_repeat_without_a_new_wake(notification_bus):
@@ -889,7 +889,7 @@ def test_waiting_notification_keeps_actionable_subjects_overflow_and_original_ev
     beat(comms, rules)
     original, = notifications(comms)
     packet = TeamDecisions(
-        original.task.commander, original.task.handled, (), original.task.handled,
+        original.task.teammate, original.task.handled, (), original.task.handled,
     )
     hud = replace(lead_hud(comms), packets=(packet,), open_pings=packet.handled)
     message, = packet.send(comms, hud.hud_text(time.time()))
@@ -1052,7 +1052,7 @@ def test_a_closed_session_leaves_the_board_for_the_live_teammates(notification_b
                                     error="independent source", failed_at=time.time()),))
     worker = comms.registry.require("worker").incarnation
     assert TeamUpdate.latest(comms, worker)
-    assert TeamFrame.current(comms, "worker").commander == worker
+    assert TeamFrame.current(comms, "worker").teammate == worker
 
 
 def test_one_pass_gives_every_team_its_own_packet(notification_bus):
@@ -1075,14 +1075,14 @@ def test_one_pass_gives_every_team_its_own_packet(notification_bus):
     outsider = comms.registry.require("outsider").incarnation
     for colleague in (worker, outsider):
         packet, = TeamUpdate.latest(comms, colleague)
-        assert packet.commander == colleague
+        assert packet.teammate == colleague
         assert packet.handled == lead_packet.handled == (RulePing.capture(failing),)
     assert TeamUpdate.latest(comms, comms.registry.require("worker-fork").incarnation) == ()
-    served = (lead_packet.commander, worker, outsider)
-    assert set(ServicePassStore.at(comms.root).read().commander_completed) == set(served)
+    served = (lead_packet.teammate, worker, outsider)
+    assert set(ServicePassStore.at(comms.root).read().teammate_completed) == set(served)
     for recipient in served:
         hud = TeamFrame.current(comms, recipient.name)
-        assert hud.commander == recipient
+        assert hud.teammate == recipient
         assert hud.packets == TeamUpdate.latest(comms, recipient)
         assert len(notifications(comms, recipient.name)) == 1
     # Every recipient owns its quiet-publication receipt; the prepared board is shared.
@@ -1091,7 +1091,7 @@ def test_one_pass_gives_every_team_its_own_packet(notification_bus):
     for recipient in served:
         first, quiet = notifications(comms, recipient.name)
         assert isinstance(quiet.task, TeamUpdateNotice)
-        assert quiet.task.commander == recipient
+        assert quiet.task.teammate == recipient
         assert aged(quiet.task.handled) == aged(first.task.handled)
         assert TeamFrame.current(comms, recipient.name).packets == (quiet.task,)
 

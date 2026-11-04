@@ -102,10 +102,10 @@ class CountReads:
 
 
 @pytest.mark.parametrize('member,interest,own_field,unrelated_field', [
-    (SidebarReading, ObserveSidebar(Checkout(Path('worktree')), True, True), 'bus_seq', 'commander_frames'),
-    (TeamHudReading, ObserveTeamHud(), 'commander_frames', 'bus_seq'),
-    (NotificationReading, ObserveNotifications(frozenset()), 'reads', 'commander_frames'),
-    (ThreadReading, ObserveThreads(frozenset()), 'bus_seq', 'commander_frames'),
+    (SidebarReading, ObserveSidebar(Checkout(Path('worktree')), True, True), 'bus_seq', 'team_frames'),
+    (TeamHudReading, ObserveTeamHud(), 'team_frames', 'bus_seq'),
+    (NotificationReading, ObserveNotifications(frozenset()), 'reads', 'team_frames'),
+    (ThreadReading, ObserveThreads(frozenset()), 'bus_seq', 'team_frames'),
 ])
 async def test_reading_family_only_advances_for_its_declared_view(
     comms, tmp_path, member, interest, own_field, unrelated_field,
@@ -113,7 +113,7 @@ async def test_reading_family_only_advances_for_its_declared_view(
     marker = tmp_path / 'changed-source'
     marker.write_text('changed')
     file_revision = FileRevision.capture(marker).revisions()
-    changes = {'bus_seq': 1, 'commander_frames': file_revision, 'reads': file_revision}
+    changes = {'bus_seq': 1, 'team_frames': file_revision, 'reads': file_revision}
     counted = type(f'Counted{member.__name__}', (CountReads, member), {})
     reading = counted(interest)
     reading.visits = 0

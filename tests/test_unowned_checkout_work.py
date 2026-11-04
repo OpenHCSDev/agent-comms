@@ -209,7 +209,7 @@ def test_a_concurrent_unstrike_does_not_end_the_heartbeat_pass(struck_unowned_bu
         assert not update.not_applied
         assert RulePing.capture(following) in update.handled
         assert c.registry.require('colleague').incarnation in (
-            ServicePassStore.at(c.root).read().commander_completed)
+            ServicePassStore.at(c.root).read().teammate_completed)
 
 
 def test_a_non_refreshable_todo_conflict_does_not_end_the_heartbeat_pass(checkout_bus):
@@ -238,7 +238,7 @@ def test_a_non_refreshable_todo_conflict_does_not_end_the_heartbeat_pass(checkou
         assert RulePing.capture(stale) not in update.handled
         assert RulePing.capture(following) in update.handled
         assert c.registry.require('colleague').incarnation in (
-            ServicePassStore.at(c.root).read().commander_completed)
+            ServicePassStore.at(c.root).read().teammate_completed)
 
 
 def test_a_second_todo_conflict_is_reported_without_ending_the_pass(struck_unowned_bus):

@@ -37,7 +37,7 @@ def carry_bus(comms: Comms, tmp_path: Path) -> Comms:
     original = TeamUpdateNotice(colleague, ())
     original.send(comms, ("original quiet publication",))
     TeamFrame.replace_all(comms.root, (TeamHud(
-        commander=colleague, units=(), phases=(), forks=(),
+        teammate=colleague, units=(), phases=(), forks=(),
         load=OverloadDegradation.from_orders((), 0, 0),
         usage=CodexUsage(UnreadableUsage(reason="carry fixture needs no account")),
         packets=(original,), open_pings=(),
@@ -79,7 +79,7 @@ def test_carry_keeps_advanced_destination_and_birth_key_across_rename_and_recrea
     colleague = comms.registry.require("carry-colleague").incarnation.require_recorded()
     published, = TeamUpdate.published(comms, colleague)
     renamed = colleague.renamed("renamed-carry-colleague")
-    advanced = replace(published, commander=renamed,
+    advanced = replace(published, teammate=renamed,
                        not_applied=("newer retained observation",))
     TeamUpdateStore.record(comms.root, advanced)
     existing = TeamUpdateStore.for_team(comms.root, colleague)

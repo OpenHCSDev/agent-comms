@@ -164,7 +164,7 @@ async def test_goal_published_during_preparation_is_current_at_reservation(tmp_p
         OrdinaryGoalRule.require(old.original.goal_permission, replaced)
 
     # Exercise the real lease-to-reservation boundary without replacing any methods.
-    # A second commander publication during preparation makes the leased snapshot stale.
+    # A second teammate publication during preparation makes the leased snapshot stale.
     current = OwnedTurn(agent.turns, WORKER_SESSION, 'worker', 'next input',
                         original_owner_input=True, original_goal_id=replaced.id,
                         acceptance=NoTurnAcceptance())

@@ -50,7 +50,7 @@ def test_recorded_failure_precedes_stale_board_and_load_without_changing_retaine
     original = TeamFrame.current(comms, 'colleague')
     old_completion = time.time() - 3600
     services.update(lambda passes: DocumentChange.to(replace(
-        passes, commander_completed=passes.commander_completed | {owner: old_completion})))
+        passes, teammate_completed=passes.teammate_completed | {owner: old_completion})))
     services.failed('TeamHeartbeat', KeyError('original branch read failed'))
     failure = services.read().failing['TeamHeartbeat']
     hud = ThreadCaller('colleague').invoke(CommsHudTool(), comms)
@@ -69,7 +69,7 @@ def test_recorded_failure_precedes_stale_board_and_load_without_changing_retaine
     assert edits.complete and edits.unavailable == ()
     assert len(edits.edits) == 1 and edits.edits[0].id == ToolCallId('parent-edit-0')
     assert services.read().failing['TeamHeartbeat'] == failure
-    assert services.read().commander_completed[owner] == old_completion
+    assert services.read().teammate_completed[owner] == old_completion
     services.failed('TeamHeartbeat', ValueError('newest failure'))
     assert services.read().failing['TeamHeartbeat'].since == failure.since
     assert 'newest failure' in TeamFrame.current(comms, 'colleague').frame[0]
@@ -92,7 +92,7 @@ def test_recorded_failure_precedes_stale_board_and_load_without_changing_retaine
     assert recovered.services.failing == {}
     assert recovered.heartbeat.since(old_completion)
     assert any(path.read_bytes() != before for path, before in published_before)
-    assert recovered.heartbeat == RecordedEventTime(services.read().commander_completed[owner])
+    assert recovered.heartbeat == RecordedEventTime(services.read().teammate_completed[owner])
 
 
 def test_stopped_heartbeat_without_failure_explains_stale_board_and_refuses_details(published_board):
@@ -100,7 +100,7 @@ def test_stopped_heartbeat_without_failure_explains_stale_board_and_refuses_deta
     owner = comms.registry.require('colleague').incarnation.require_recorded()
     services = ServicePassStore.at(comms.root)
     services.update(lambda passes: DocumentChange.to(replace(
-        passes, commander_completed=passes.commander_completed | {owner: time.time() - 3600})))
+        passes, teammate_completed=passes.teammate_completed | {owner: time.time() - 3600})))
     hud = TeamFrame.current(comms, 'colleague')
     assert not hud.services.failing
     assert hud.header[0] == 'no failure recorded, so no heartbeat is running'
@@ -118,7 +118,7 @@ def test_a_pass_still_inside_its_declared_duration_is_not_called_dead(published_
     services = ServicePassStore.at(comms.root)
     owner = comms.registry.require('colleague').incarnation.require_recorded()
     services.update(lambda passes: DocumentChange.to(replace(
-        passes, commander_completed=passes.commander_completed | {
+        passes, teammate_completed=passes.teammate_completed | {
             owner: time.time() - TeamHeartbeat.pass_duration})))
     hud = TeamFrame.current(comms, 'colleague')
     assert hud.header[0] != 'no failure recorded, so no heartbeat is running'

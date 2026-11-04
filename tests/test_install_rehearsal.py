@@ -123,7 +123,7 @@ def test_runtime_producer_digests_ignore_foreign_source(installed_home, tmp_path
     source = foreign / "src/agent_comms/messages.py"
     # A producer digest covers column declarations, not reader source (P978), so the
     # dirty review retypes one projection column.
-    declared = '    commander_lookup: ThreadLookup\n    indexes = (Index(("commander_lookup", "seq")),)\n'
+    declared = '    teammate_lookup: ThreadLookup\n    indexes = (Index(("teammate_lookup", "seq")),)\n'
     text = source.read_text()
     assert text.count(declared) == 1
     source.write_text(text.replace(declared, declared.replace("ThreadLookup", "str")))
@@ -366,7 +366,7 @@ def test_installed_entry_reports_completion_after_target_source_retirement(
     assert len(history) == (1 if fresh else 2)
     assert history[-1].sender == "installer"
     assert history[-1].body.startswith("Install finished")
-    # The installer no longer waits on a commander pass, so neither its phases nor its post claim one.
+    # The installer no longer waits on a teammate pass, so neither its phases nor its post claim one.
     assert not any("heartbeat" in timing.line().lower() for timing in result.phases)
     assert "heartbeat" not in history[-1].body.lower()
     if not fresh:

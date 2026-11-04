@@ -840,7 +840,7 @@ class TeamVerb(ClearingVerb, affix="Verb"):
         Normalize(FieldCodec.encode),
         Argument(flags=("--as",), options={
             "type": PeerCaller,
-            "help": "another teammate in #commanders acting under its own name"}),
+            "help": "another teammate in #teammates acting under its own name"}),
     ] = NoThreadCaller()
 
     @property
@@ -862,7 +862,7 @@ class TeamVerb(ClearingVerb, affix="Verb"):
     def apply(self, ctx: Team) -> None:
         # A verb naming no --fork or --as acts as the context's own teammate.
         actor = self.actor.acting_caller(ctx.actor)
-        actor.commanding(ctx.comms)
+        actor.rejoin(ctx.comms)
         ctx = ctx.model_copy(update={'actor': actor})
         self.act(ctx)
 

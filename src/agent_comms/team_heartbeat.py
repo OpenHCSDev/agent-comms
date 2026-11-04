@@ -62,7 +62,7 @@ class TeamObservation:
 class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamService,
                          TeamPass,
                          PreparedWatchPass[tuple[TeamInputs, ...], tuple[TeamObservation, ...]],
-                         declared_name="commander_heartbeat"):
+                         declared_name="team_heartbeat"):
 
     def failed(self, opened_wire: Callable[[], AbstractContextManager[Comms]],
                error: Exception) -> None:
@@ -149,7 +149,7 @@ class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
                                    delivery=deliveries[0], usage=usage)
                 for delivery in deliveries:
                     hud = board.for_delivery(delivery)
-                    recipient = delivery.packet.commander
+                    recipient = delivery.packet.teammate
                     TeamUpdateStore.record(comms.root, delivery.packet)
                     huds[recipient] = hud
                     facts = PublishedFacts.of(hud.display_facts)

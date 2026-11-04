@@ -871,7 +871,7 @@ def test_shared_request_directive_is_owed_only_by_its_frozen_recipient(held_bus)
     colleague = held_bus.registry.require("colleague").incarnation
     assert {rule.message.seq for rule in OwedAnswer.opened(held_bus, worker)} == {directive.seq}
     assert directive.seq not in {rule.message.seq for rule in OwedAnswer.opened(held_bus, colleague)}
-    assert recorded.commander == colleague
+    assert recorded.teammate == colleague
 
 
 def test_answer_reader_refuses_a_reborn_parent_between_actual_registry_cuts(held_bus):
@@ -1040,12 +1040,12 @@ def test_successful_pass_health_does_not_depend_on_messages(held_bus, monkeypatc
     held_bus.registry.register(replace(colleague, process_identity=ProcessIdentity.capture(os.getpid())))
     passes = ServicePassStore.at(held_bus.root)
     passes.passed(TeamHeartbeat.__name__)
-    assert not passes.read().commander_completed
+    assert not passes.read().teammate_completed
     worker = held_bus.registry.require("worker").incarnation
     observed = (colleague.incarnation, worker)
     passes.heartbeat_passed((worker,), observed)
     passes.heartbeat_passed((colleague.incarnation,), observed)
-    completed = passes.read().commander_completed[colleague.incarnation]
+    completed = passes.read().teammate_completed[colleague.incarnation]
     assert HeartbeatSilent.violations(held_bus) == ()
     # The longest normal pass is quiet, not silent.
     monkeypatch.setattr(time, "time", lambda: completed + TeamHeartbeat.pass_duration)
@@ -1073,13 +1073,13 @@ def test_pass_missing_a_restarting_team_keeps_its_completion(held_bus):
     held_bus.registry.register(alive)
     asyncio.run(heartbeat.run(lambda: nullcontext(held_bus)))
     passes = ServicePassStore.at(held_bus.root)
-    completed = passes.read().commander_completed[colleague.incarnation]
+    completed = passes.read().teammate_completed[colleague.incarnation]
     held_bus.registry.register(colleague)
     asyncio.run(heartbeat.run(lambda: nullcontext(held_bus)))
     # Stopped for one pass, it still holds the owner's open request, so it keeps its frame.
-    assert [hud.commander for hud in TeamFrame.read_all(held_bus.root)] == [colleague.incarnation]
+    assert [hud.teammate for hud in TeamFrame.read_all(held_bus.root)] == [colleague.incarnation]
     held_bus.registry.register(alive)
-    assert passes.read().commander_completed[colleague.incarnation] >= completed
+    assert passes.read().teammate_completed[colleague.incarnation] >= completed
     assert HeartbeatSilent.violations(held_bus) == ()
 
 
@@ -1099,7 +1099,7 @@ def test_first_pass_is_owed_from_oldest_request_and_survives_renames(held_bus, m
     passes = ServicePassStore.at(held_bus.root)
     observed = (colleague.incarnation,)
     passes.heartbeat_passed(observed, observed)
-    completed = passes.read().commander_completed[colleague.incarnation]
+    completed = passes.read().teammate_completed[colleague.incarnation]
     assert HeartbeatSilent.violations(held_bus) == ()
     held_bus.threads._rename_thread("colleague", "renamed-colleague")
     monkeypatch.setattr(time, "time", lambda: completed + HeartbeatSilent.seconds + 1)

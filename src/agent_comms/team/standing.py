@@ -661,10 +661,10 @@ class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, FamilyScan, de
     seconds: ClassVar[float] = TeamHeartbeat.completion_ceiling()
     """A pass, the loop's sleep and a pass of slack: the heartbeat declares how long it takes."""
     since: float
-    commander: RecordedThreadIncarnation
+    teammate: RecordedThreadIncarnation
 
     def subjects(self) -> tuple[HeartbeatSubject, ...]:
-        return (PassSubject(self.commander),)
+        return (PassSubject(self.teammate),)
 
     @classmethod
     def violations(cls, comms: Comms) -> tuple[HeartbeatSilent, ...]:
@@ -675,7 +675,7 @@ class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, FamilyScan, de
         rule: HeartbeatSilent
         for owner in TeamService.running(comms.registry.snapshot()):
             incarnation = owner.incarnation.require_recorded()
-            completed = passes.commander_completed.get(incarnation)
+            completed = passes.teammate_completed.get(incarnation)
             for request in TeamService.requested_by(owner, comms.goals):
                 if completed is None or completed < request.created_at:
                     rule = HeartbeatNotStarted(
@@ -734,7 +734,7 @@ class InboxUnavailable(IndependentStandingRule, DatedStandingRule, declared_name
 
 
 @dataclass(frozen=True)
-class TeamDeaf(InboxUnavailable, declared_name="commander_deaf"):
+class TeamDeaf(InboxUnavailable, declared_name="team_deaf"):
     """A running teammate's session bridge has no confirmed Monitor; its own registration dates
     the pause. Every running teammate is watched, never one lead; a closed session is stopped,
     not deaf."""

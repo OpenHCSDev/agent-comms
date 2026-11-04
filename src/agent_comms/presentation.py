@@ -643,7 +643,7 @@ class WireRevision(ReadState):
         tuple[FileRevision, ...],
         *revision_source(external_transcript_paths, StoresView, ExternalTranscriptsView),
     ]
-    commander_frames: Annotated[
+    team_frames: Annotated[
         tuple[FileRevision, ...],
         *revision_source(team_frame_paths, TeamFramesView),
     ]
