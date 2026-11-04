@@ -933,7 +933,7 @@ class Transcripts:
         if requested_earlier and not events:
             raise CoordinationReadUnavailable("Waiting for the bridge's earlier transcript page")
         events = page.view.framed(
-            events, self._fork_start_events(thread),
+            events, partial(self._fork_start_events, thread),
             ends_at_fork=position.shows_fork_start(frontier), reaches_start=not has_older)
         return (
             TranscriptPage(
