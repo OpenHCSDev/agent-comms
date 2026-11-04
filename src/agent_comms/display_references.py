@@ -16,6 +16,7 @@ from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import SlicePolicy
 from agent_comms.snapshot_slices import MappingRowsSlice, SnapshotRestored, WholeDocumentValue
 from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.tool_result import ToolResult
 
 if TYPE_CHECKING:
     from agent_comms.historical_views import HistorySource
@@ -274,8 +275,8 @@ class CurrentDisplayReferences(SnapshotRestored, DisplayReferences):
     channels: Annotated[tuple[str, ...], SlicePolicy(WholeDocumentValue)] = ()
 
     @classmethod
-    def from_registry(cls, root: str, registry: RegistrySnapshot, channels: tuple[str, ...] = ()) -> Self:
-        return cls(root, dict(registry.named_incarnations()), channels)
+    def from_registry(cls, root: str, registry: RegistrySnapshot, channels: tuple[str, ...] = ()) -> CurrentDisplayReferences:
+        return ReferenceNames.of(registry, channels).references(root)
 
     def __post_init__(self) -> None:
         """Restoring a packet copies the member map; lookups derive from it when asked."""
@@ -291,3 +292,23 @@ class CurrentDisplayReferences(SnapshotRestored, DisplayReferences):
     def thread(self, incarnation: ThreadIncarnation) -> ThreadDisplayReference:
         """Resolve an exact birth to its current name; a missing birth fails."""
         return ThreadDisplayReference(self.root, self.current[incarnation.require_recorded().wire_birth])
+
+
+@dataclass(frozen=True)
+class ReferenceNames(ToolResult):
+    """The names a UI links through: each registry name's incarnation and every declared channel.
+
+    A remote UI reads this instead of the whole registry (megabytes of thread
+    records over a tunnel) when all it needs is which names are linkable.
+    """
+
+    members: Mapping[str, ThreadIncarnation]
+    channels: tuple[str, ...]
+
+    @classmethod
+    def of(cls, registry: RegistrySnapshot, channels: tuple[str, ...] = ()) -> ReferenceNames:
+        """The one construction of the linkable names; the registry decodes no row for it."""
+        return cls(dict(registry.named_incarnations()), channels)
+
+    def references(self, root: str) -> CurrentDisplayReferences:
+        return CurrentDisplayReferences(root, self.members, self.channels)

@@ -154,7 +154,7 @@ from .tool_caller import ThreadCaller, ThreadListing, ToolCaller
 from .acp_extension import CoordinationChangedUpdate
 from .history_views import RetiredViews
 from .thread_identity import ThreadIncarnation
-from .display_references import CurrentDisplayReferences
+from .display_references import ReferenceNames
 from .registry_document import ProjectThreadSelection, RegistrySnapshot
 from .transcripts import TranscriptCursor
 from .tool_result import ToolResult
@@ -1379,21 +1379,6 @@ class CommsRegistryTool(CoreRead[RegistrySnapshot]):
         return comms.registry.snapshot()
 
 
-@dataclass(frozen=True)
-class ReferenceNames(ToolResult):
-    """The names a UI links through: each registry name's incarnation and every declared channel.
-
-    A remote UI reads this instead of the whole registry (megabytes of thread
-    records over a tunnel) when all it needs is which names are linkable.
-    """
-
-    members: Mapping[str, ThreadIncarnation]
-    channels: tuple[str, ...]
-
-    def references(self, root: str) -> CurrentDisplayReferences:
-        return CurrentDisplayReferences(root, self.members, self.channels)
-
-
 @dataclass(frozen=True, kw_only=True)
 class CommsReferenceNamesTool(CoreRead[ReferenceNames]):
     """A UI resolves @thread and #channel links without the registry or channel activity."""
@@ -1402,8 +1387,7 @@ class CommsReferenceNamesTool(CoreRead[ReferenceNames]):
     description = "Every linkable thread name with its incarnation, and every channel name, without thread records."
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ReferenceNames:
-        return ReferenceNames(dict(comms.registry.snapshot().named_incarnations()),
-                              comms.channels.catalog.read().channel_names())
+        return ReferenceNames.of(comms.registry.snapshot(), comms.channels.catalog.read().channel_names())
 
 
 @dataclass(frozen=True)
