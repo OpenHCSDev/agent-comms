@@ -561,9 +561,7 @@ class ThreadManagement:
                 state.remove_threads(originals)
             # A failure from here leaves a Deleting declaration to retry, not orphans.
             freed = {name: sum(item.delete() for item in files) for name, files in sessions.items()}
-            with self.registry.store.editing() as edit:
-                detached = edit.document.remove_originals(originals)
-                edit.commit()
+            detached = self.registry.remove_originals(originals)
             return tuple(
                 ThreadDeleted(original.name, freed.get(original.name, 0), detached[original.name])
                 for original in originals

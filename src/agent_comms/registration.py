@@ -400,6 +400,7 @@ class Registration:
     archive = changing(RegistryDocument.archive)
     begin_delete = changing(RegistryDocument.begin_delete)
     remove = changing(RegistryDocument.remove)
+    remove_originals = changing(RegistryDocument.remove_originals)
     heartbeat = changing(RegistryDocument.heartbeat)
     release_turn = changing(RegistryDocument.release_turn)
 

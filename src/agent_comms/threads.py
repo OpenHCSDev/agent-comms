@@ -172,6 +172,11 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
         return requested
 
     @classmethod
+    def withdrawn(cls, thread: Thread) -> Thread:
+        """Unregistered: no session runs anywhere, so the row keeps no process binding."""
+        return replace(thread, process_identity=NoProcess())
+
+    @classmethod
     def require_fork(cls) -> None:
         raise RelationViolationError('This thread is not a declared teammate fork.')
 
@@ -279,6 +284,13 @@ class ExternalThreadExecution(ThreadExecution):
     @classmethod
     def require_external(cls) -> None:
         pass
+
+    @classmethod
+    def withdrawn(cls, thread: Thread) -> Thread:
+        """The CLI bridge owns its binding and releases it as that process leaves
+        (Registration.external_process); unregistering never frees the endpoint for a
+        second bridge while the first still reads."""
+        return thread
 
     @classmethod
     def registered_status(cls, thread: Thread, requested: ThreadStatus) -> ThreadStatus:

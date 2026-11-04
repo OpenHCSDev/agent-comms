@@ -20,7 +20,7 @@ from .catalog_document import CatalogAccess
 from .change_report import CitationProject
 from .channel_targets import TeammatesTag, ResolvedTarget, SurroundingChannel
 from .channels import Channel, ChannelMemberIndex
-from .child_process import NoProcess, ProcessIdentity
+from .child_process import ProcessIdentity
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
 from .nominal.field_codec import (
@@ -895,9 +895,9 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         return self.claims.generations[expected.name]
 
     def unregister(self, name: str) -> None:
-        """Stopped: no session runs anywhere, so the row keeps no process binding."""
+        """Stopped; the execution decides whether the row keeps its process binding."""
         thread = self._withdraw(name, StoppedThreadStatus())
-        self.threads[thread.name] = replace(thread, process_identity=NoProcess())
+        self.threads[thread.name] = thread.execution.withdrawn(thread)
 
     def fence_owner(self, name: str) -> None:
         """Refuse new work while the host completes the session; the binding stays."""
