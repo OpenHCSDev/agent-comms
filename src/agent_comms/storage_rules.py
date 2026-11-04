@@ -30,6 +30,7 @@ from agent_comms.work_branches import WorkBranches
 
 from .tool_denial import StorageDenied
 from .thread_storage import (
+    CheckoutReuse,
     StoragePath,
     StorageRoots,
 )
@@ -421,7 +422,7 @@ class StorageRule(RoomAllocation, DurableFile):
         A stored repository choice wins independently of the current project.
         """
         return self.roots_of(owner).choice(repository).reused_checkout(
-            CheckoutReuse(self, owner, repository, fresh, reads))
+            RuleCheckoutReuse(self, owner, repository, fresh, reads))
 
     def require_selectable_checkout(self, owner: Thread, path: Path,
                                     repository: RepositoryName, reads: RepositoryReads) -> Path:
@@ -694,9 +695,8 @@ class StorageRule(RoomAllocation, DurableFile):
 
 
 @dataclass(frozen=True)
-class CheckoutReuse:
-    """One request to reuse an owner's existing tree for a repository; the owner's stored
-    RepositoryChoice answers it."""
+class RuleCheckoutReuse(CheckoutReuse):
+    """The storage rule's answer to one reuse request for an owner's repository tree."""
 
     rule: StorageRule
     owner: Thread

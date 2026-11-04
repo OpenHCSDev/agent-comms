@@ -21,7 +21,7 @@ from .nominal.field_codec import (
 from .repository_name import RepositoryName
 
 if TYPE_CHECKING:
-    from .storage_rules import CheckoutReuse, StorageRule
+    from .storage_rules import StorageRule
 
 StoragePath = Annotated[Path, PathText]
 
@@ -36,6 +36,19 @@ class ThreadStorage(SubclassUnion, affix="ThreadStorage"):
     @abstractmethod
     def stored(self) -> StorageRoots:
         """The roots a registry row records."""
+
+
+class CheckoutReuse(ABC):
+    """One request to reuse an owner's existing tree for a repository. A RepositoryChoice
+    answers it; the storage rule that can check trees implements it."""
+
+    @abstractmethod
+    def selected(self, path: Path) -> Path:
+        """The chosen tree, once it is still an owned editable checkout of the repository."""
+
+    @abstractmethod
+    def unselected(self) -> Path:
+        """The tree reused when no choice was stored."""
 
 
 class RepositoryChoice(ABC):
