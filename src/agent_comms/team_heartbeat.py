@@ -141,7 +141,7 @@ class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
                 retained = tuple(packet for packets in held.values() for packet in packets)
                 deliveries = tuple(TeamUpdate.derive(
                     recipient, states, rules, retained, published=announced[recipient],
-                    now=now, history=history,
+                    now=now, history=history, registry=comms.registry.snapshot(),
                     not_applied=not_applied,
                 ) for recipient in held)
                 if not deliveries:
