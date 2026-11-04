@@ -399,15 +399,20 @@ class StorageRule(RoomAllocation, DurableFile):
         _, name = repository.key
         return checkout.with_name(f'{checkout.name}{self.checkout_separator}{name}')
 
+    def owns_editable_checkout(self, owner: Thread, path: Path,
+                               repository: RepositoryName, reads: RepositoryReads) -> bool:
+        """Qualify this exact reuse target, without inventorying unrelated history."""
+        return ((path / '.git').is_file() and not path.is_symlink()
+                and any(allocation.reserves_boundary()
+                        and allocation.owns_present(self, owner, path, reads)
+                        for allocation in CheckoutAllocation.for_path(self, owner, path))
+                and reads.repository(path).github == repository)
+
     def owned_checkouts(self, owner: Thread, repository: RepositoryName,
                         reads: RepositoryReads) -> tuple[Path, ...]:
         """Physical, editable allocations whose Git identity matches this repository."""
         return tuple(path for path in self.checkout_paths(owner, reads)
-                     if (path / '.git').is_file() and not path.is_symlink()
-                     and any(allocation.reserves_boundary()
-                             and allocation.owns_present(self, owner, path, reads)
-                             for allocation in CheckoutAllocation.for_path(self, owner, path))
-                     and reads.repository(path).github == repository)
+                     if self.owns_editable_checkout(owner, path, repository, reads))
 
     def reused_checkout(self, owner: Thread, repository: RepositoryName,
                         fresh: Path, reads: RepositoryReads) -> Path:
@@ -417,9 +422,9 @@ class StorageRule(RoomAllocation, DurableFile):
         several retained trees require their owner to select/retire them, never
         silently create another or pick an arbitrary source.
         """
-        candidates = self.owned_checkouts(owner, repository, reads)
-        if owner.project_path in candidates:
+        if self.owns_editable_checkout(owner, owner.project_path, repository, reads):
             return owner.project_path
+        candidates = self.owned_checkouts(owner, repository, reads)
         if len(candidates) > 1:
             self.deny('Multiple owned checkouts already exist for '
                       f'{repository}: ' + ', '.join(map(str, candidates))
@@ -466,7 +471,8 @@ class StorageRule(RoomAllocation, DurableFile):
         reads = RepositoryReads()
         roots: set[Path] = set()
         for repository, paths in declared.items():
-            existing = paths.intersection(self.owned_checkouts(owner, repository, reads))
+            existing = {path for path in paths
+                        if self.owns_editable_checkout(owner, path, repository, reads)}
             roots.update(existing or (self.reused_checkout(owner, repository, path, reads)
                                       for path in paths))
         return frozenset(path.resolve() for path in roots)
