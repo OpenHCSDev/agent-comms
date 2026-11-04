@@ -345,8 +345,20 @@ class StoppedThreadStatus(Visible, ThreadStatus):
     def require_stopped(self) -> None:
         pass
 
+    def require_hold_consent(self, require_consent: Callable[[], None]) -> None:
+        """A stopped thread cannot answer, and work must not wait on one: any teammate may
+        release or withdraw what it held."""
+
     def in_view(self, visibility: RosterVisibility) -> bool:
         return visibility.stopped
+
+
+class AbsentReaderPresence(StoppedThreadStatus, declared_name=None):
+    """A session whose bridge has dropped is still working and comes back on its own, so it
+    keeps its holds."""
+
+    def require_hold_consent(self, require_consent: Callable[[], None]) -> None:
+        require_consent()
 
 
 class StoppingThreadStatus(HostBoundPresence, StoppedThreadStatus):
@@ -392,7 +404,7 @@ class ConnectedThreadStatus(DeclaredReaderPresence, RunningThreadStatus):
     """A CLI inbox whose bridge process is watching it."""
 
 
-class PausedBridgeThreadStatus(SelfRenaming, DeclaredReaderPresence, StoppedThreadStatus):
+class PausedBridgeThreadStatus(SelfRenaming, DeclaredReaderPresence, AbsentReaderPresence):
     """A live session bridge waiting for a Monitor to confirm its probe."""
 
     def registered(self, thread: Thread, last_seen: float) -> ThreadStatus:
@@ -408,7 +420,7 @@ class PausedBridgeThreadStatus(SelfRenaming, DeclaredReaderPresence, StoppedThre
         return True
 
 
-class NoBridgeThreadStatus(SelfRenaming, CliInboxPresence, StoppedThreadStatus):
+class NoBridgeThreadStatus(SelfRenaming, CliInboxPresence, AbsentReaderPresence):
     """A CLI inbox with no bridge attached; its messages wait unread.
 
     It has no launched process to stop or restart, so it stays in every view.
