@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.child_process import ObservedProcess, SpawnedProcess
+from agent_comms.child_process import DetachedChildStdio, ObservedProcess, SpawnedProcess
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms_project import AgentCommsProject, ClientTypeErrors
 from nominal_refactor_advisor import audit
@@ -79,7 +79,7 @@ class Checkout:
         command = (sys.executable, str(SOURCE / "tools/nra_gate.py"),
                    *self.arguments(base, head))
         with SpawnedProcess.launch(command, cwd=self.path, env=gate_environment(),
-                                   output=subprocess.PIPE) as child:
+                                   stdio=DetachedChildStdio(stdout=subprocess.PIPE)) as child:
             yield child
 
     def compare(self, base: str, head: str, *measured: type[audit.gate.Compared]) -> tuple[int, dict]:
