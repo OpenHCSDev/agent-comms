@@ -218,3 +218,24 @@ def test_a_fork_row_bound_by_its_own_process_is_an_independent_session(tmp_path)
         assert bound.parent == forked.parent
         assert bound.incarnation == forked.incarnation
     assert registry.require('session').independent_threads() == (registry.require('session'),)
+
+
+def test_a_bound_session_keeps_its_name_on_its_parents_grant_and_no_other(tmp_path):
+    """2026-11-04: once bound, the session's own grant was refused the name as "not a declared
+    teammate fork", so its calls fell back to the shared grant and were recorded under that."""
+    comms = wire(tmp_path)
+    registry = comms.registry
+    for grant in ('parent', 'stranger'):
+        registry.declare(ExternalThread(grant, frozenset(), Checkout(tmp_path)))
+    registry.register_child('session', 'parent', ForkThread, comms.goals)
+    with registry.external_process('session', ProcessIdentity.capture(os.getpid())):
+        bound = registry.require('session')
+        assert registry.register_child('session', 'parent', ForkThread, comms.goals) == bound
+        assert registry.require('session').process_identity == bound.process_identity
+        with pytest.raises(RelationViolationError, match='not a child of'):
+            registry.register_child('session', 'stranger', ForkThread, comms.goals)
+    with pytest.raises(RelationViolationError, match='not a child of'):
+        registry.register_child('parent', 'stranger', ForkThread, comms.goals)
+    native = registry.declare(NativeThread('native', frozenset(), Checkout(tmp_path)))
+    with pytest.raises(RelationViolationError, match='not a declared teammate fork'):
+        registry.register_child(native.name, 'parent', ForkThread, comms.goals)
