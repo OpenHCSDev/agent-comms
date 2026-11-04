@@ -176,13 +176,14 @@ class HookEvent:
     subagent: bool
     source: str
     call: ToolCall
+    already_stopped_once: bool
 
     @classmethod
     def decode(cls, record: dict) -> HookEvent:
         kind = ToolCall.by_tool.get(str(record.get("tool_name")), OtherCall)
         call = kind.decode(record.get("tool_input") or {}, record.get("tool_response"))
         return cls(str(record.get("session_id", "session")), "agent_id" in record,
-                   str(record.get("source", "start")), call)
+                   str(record.get("source", "start")), call, bool(record.get("stop_hook_active")))
 
     @property
     def store(self) -> Path:
@@ -253,26 +254,37 @@ def foreground(event: HookEvent) -> None:
              "Rerun with run_in_background: true.")
 
 
+BUS_WATCH = "agent-comms-claude-bridge watch"
+
+
 def own_background_jobs() -> int:
-    """Background Bash jobs of this session still running. Claude Code runs each in a shell
-    sourced from a shell snapshot, a child of the session's own process: count the snapshot
-    shells whose parent is one of this hook's ancestors and that are not ancestors themselves."""
     import subprocess
 
-    rows = [line.split(None, 2) for line in
-            subprocess.run(["ps", "-eo", "pid=,ppid=,args="], capture_output=True, text=True).stdout.splitlines()]
+    return jobs_among([line.split(None, 2) for line in subprocess.run(
+        ["ps", "-eo", "pid=,ppid=,args="], capture_output=True, text=True).stdout.splitlines()], os.getpid())
+
+
+def jobs_among(rows: list[list[str]], pid: int) -> int:
+    """Background Bash jobs of this session still running. Claude Code runs each in a shell
+    sourced from a shell snapshot, a child of the session's own process: count the snapshot
+    shells whose parent is one of this hook's ancestors and that are not ancestors themselves.
+    The bus watch runs the same way but is how the session hears the bus, not work that ends;
+    counting it would mean the session could never stop."""
     parents = {int(row[0]): int(row[1]) for row in rows if len(row) >= 2}
-    ancestors, pid = set(), os.getpid()
+    ancestors = set()
     # init adopts orphaned shells of sessions that died; they are never this session's jobs.
     while pid in parents and pid not in ancestors and pid > 1:
         ancestors.add(pid)
         pid = parents[pid]
     return sum(1 for row in rows if len(row) == 3 and "shell-snapshots/snapshot-" in row[2]
+               and BUS_WATCH not in row[2]
                and int(row[1]) in ancestors and int(row[0]) not in ancestors)
 
 
 def idle(event: HookEvent) -> None:
-    if event.subagent:
+    """One nudge per wait: a stop this hook already refused goes through, and the job's
+    notification resumes the session."""
+    if event.subagent or event.already_stopped_once:
         return
     if own_background_jobs():
         print(json.dumps({"decision": "block", "reason": (
