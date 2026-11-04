@@ -194,6 +194,14 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
     statuses: StatusMap
     last_seen: Mapping[str, float]
 
+    def named_incarnations(self) -> Iterator[tuple[str, ThreadIncarnation]]:
+        """Every current and retained name with its identity. A UI asks on each registry
+        revision, and the revision changes constantly, so this decodes no row."""
+        for name in self.threads:
+            yield name, self.threads.incarnation(name)
+        for alias in self.aliases:
+            yield alias, self.threads.incarnation(self.canonical_name(alias))
+
     def children(self, name: str) -> tuple[Thread, ...]:
         return self.threads.children(self.canonical_name(name))
 
@@ -437,14 +445,14 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
     def births(self) -> set[float]:
         return {self.birth(name) for name in self}
 
+    def incarnation(self, name: str) -> ThreadIncarnation:
+        """One row's identity, read from its name and birth alone."""
+        return ThreadIncarnationRecord(name, self.birth(name).to_wire()).incarnation()
+
     def lookup_names(self) -> dict[ThreadLookup, str]:
         """Each row's creation lookup, read from its birth alone: resolving one owner never
         decodes the other threads."""
-        return {
-            ThreadIncarnationRecord(name, self.birth(name).to_wire()).incarnation()
-            .require_recorded().lookup: name
-            for name in self
-        }
+        return {self.incarnation(name).require_recorded().lookup: name for name in self}
 
     def require_distinct_births(self) -> None:
         """Rows decode late, so a read of one thread never sees two sharing a creation lookup."""
