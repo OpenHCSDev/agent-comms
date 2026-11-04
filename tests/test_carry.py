@@ -145,12 +145,12 @@ CHOICES = "    choices: Annotated[tuple[Choice, ...], WireOmitDefault()] = ()\n"
 
 
 @pytest.mark.refactor_guard
-@pytest.mark.parametrize("fields, uncarried", [
-    (CHOICES + PAIRS, 0),
-    (CHOICES + PAIRS.replace("label: str", "label: int"), 1),
-    (CHOICES.replace(" = ()", "") + PAIRS, 1),
-])
-def test_a_new_shared_type_never_reads_as_a_renamed_stored_field(tmp_path, fields, uncarried):
+@pytest.mark.parametrize("head, uncarried", [
+    (SHARED + CHOICES + PAIRS, 0),
+    (SHARED.replace("label: str", "label: int") + CHOICES + PAIRS, 1),
+    (SHARED + CHOICES.replace(" = ()", "") + PAIRS, 1),
+], ids=["optional-new-type", "changed-shared-type", "required-new-field"])
+def test_a_new_shared_type_never_reads_as_a_renamed_stored_field(tmp_path, head, uncarried):
     """#3999: FieldCodec numbers a schema's shared definitions in the order a build meets them,
     so an optional field of a new type, rendered first, renumbered Pair's reference from d0 to
     d1 while every stored record still decodes. The reader inlines its definitions; a newly
@@ -160,10 +160,10 @@ def test_a_new_shared_type_never_reads_as_a_renamed_stored_field(tmp_path, field
     record = tmp_path / "src" / "agent_comms" / "record.py"
     record.write_text(SHARED + PAIRS)
     base = repo.commit({})
-    record.write_text(SHARED + fields)
-    head = repo.commit({})
+    record.write_text(head)
+    tested = repo.commit({})
     assert audit.project_measures.UncarriedRecordFormat.counted(
-        AgentCommsProject(tmp_path), base, head, {"src/agent_comms/record.py"}, "src/agent_comms",
+        AgentCommsProject(tmp_path), base, tested, {"src/agent_comms/record.py"}, "src/agent_comms",
     ) == ({audit.project_measures.UncarriedRecordFormat.total(): 0},
           {audit.project_measures.UncarriedRecordFormat.total(): uncarried})
 
