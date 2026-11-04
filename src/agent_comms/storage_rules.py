@@ -404,10 +404,11 @@ class StorageRule(RoomAllocation, DurableFile):
                                repository: RepositoryName, reads: RepositoryReads) -> bool:
         """Qualify this exact reuse target, without inventorying unrelated history."""
         return ((path / '.git').is_file() and not path.is_symlink()
+                # An unreadable checkout is its unit's own state, never a failed pass.
+                and WorkBranches(path, reads=reads).read_checkout().edits(repository)
                 and any(allocation.reserves_boundary()
                         and allocation.owns_present(self, owner, path, reads)
-                        for allocation in CheckoutAllocation.for_path(self, owner, path))
-                and reads.repository(path).github == repository)
+                        for allocation in CheckoutAllocation.for_path(self, owner, path)))
 
     def owned_checkouts(self, owner: Thread, repository: RepositoryName,
                         reads: RepositoryReads) -> tuple[Path, ...]:

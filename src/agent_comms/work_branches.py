@@ -724,6 +724,10 @@ class CheckoutRead(DeclaredFamily, affix="CheckoutRead"):
     def worktrees(self) -> tuple[Path, ...]:
         """Every checkout of this repository, as Git lists it."""
 
+    @abstractmethod
+    def edits(self, repository: RepositoryName) -> bool:
+        """Whether a unit can edit this checkout as one of that repository."""
+
 
 @dataclass(frozen=True)
 class ReadableCheckoutRead(CheckoutRead):
@@ -741,6 +745,9 @@ class ReadableCheckoutRead(CheckoutRead):
 
     def worktrees(self) -> tuple[Path, ...]:
         return tuple(self.branches.history.heads)
+
+    def edits(self, repository: RepositoryName) -> bool:
+        return self.branches.history.repository.github == repository
 
 
 @dataclass(frozen=True)
@@ -763,3 +770,7 @@ class UnreadableCheckoutRead(CheckoutRead):
     def worktrees(self) -> tuple[Path, ...]:
         """Git cannot list its siblings, so the checkout stands as its own until repaired."""
         return (self.checkout.resolve(),)
+
+    def edits(self, repository: RepositoryName) -> bool:
+        """Git refuses it, so nothing edits it until its unit repairs it."""
+        return False
