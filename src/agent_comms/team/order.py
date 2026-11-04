@@ -859,11 +859,13 @@ class TeamVerb(ClearingVerb, affix="Verb"):
     def who(self, ctx: Team) -> str:
         return ctx.actor_name
 
+    def acting(self, ctx: Team) -> Team:
+        """The verb acts as the teammate its arguments name, else as the one its context holds."""
+        return ctx.model_copy(update={'actor': self.actor.acting_caller(ctx.actor)})
+
     def apply(self, ctx: Team) -> None:
-        # A verb naming no --fork or --as acts as the context's own teammate.
-        actor = self.actor.acting_caller(ctx.actor)
-        actor.rejoin(ctx.comms)
-        ctx = ctx.model_copy(update={'actor': actor})
+        ctx = self.acting(ctx)
+        ctx.actor.rejoin(ctx.comms)
         self.act(ctx)
 
     def act(self, ctx: Team) -> None:
@@ -1320,7 +1322,7 @@ class EndsForkVerb(OrderVerb):
     registry write lock for a whole registration, past every unit's 5 s lock budget."""
 
     def apply(self, ctx: Team) -> None:
-        ctx = ctx.model_copy(update={'actor': self.actor.acting_caller(ctx.actor)})
+        ctx = self.acting(ctx)
         if ctx.actor_name not in ctx.comms.registry:
             print(f'{ctx.actor_name} never joined; nothing to end')
             return
