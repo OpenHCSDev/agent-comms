@@ -780,7 +780,8 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         return updated
 
     def select_checkout(
-        self, identity: ThreadIncarnation, rule: StorageRule, repository: RepositoryName, path: Path,
+        self, identity: ThreadIncarnation, rule: StorageRule, repository: RepositoryName,
+        path: Path,
     ) -> Thread:
         """Change only this incarnation's repository choice for one selectable checkout."""
         current = self.require(identity.name)
@@ -1249,7 +1250,8 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
 
     def claimed_identity(self, name: str) -> ClaimedIdentity:
         canonical = self.canonical_name(name)
-        return ClaimedIdentity(self.threads[canonical].incarnation, self.claim_generation(canonical))
+        return ClaimedIdentity(
+            self.threads[canonical].incarnation, self.claim_generation(canonical))
 
     def same_thread(self, actual: Thread, other: RegistrySnapshot, expected: Thread) -> bool:
         """Keep one launch, turn and authority across preparation; ignore display metadata."""

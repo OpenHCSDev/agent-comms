@@ -1,4 +1,5 @@
 """Select an existing owned checkout without moving the conversation's project."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -17,12 +18,14 @@ from agent_comms.tool_caller import ThreadCaller
 class SelectCheckoutCliCommand(CliCommand, declared_name="select-checkout"):
     help = "Choose this repository's owned editable checkout, keeping other choices"
     caller: Annotated[
-        ThreadCaller, Normalize(FieldCodec.encode),
+        ThreadCaller,
+        Normalize(FieldCodec.encode),
         Argument(flags=("--from",), options={"type": ThreadCaller}),
     ]
     repository: Annotated[RepositoryName, Argument(flags=("repository",))]
     path: Annotated[Path, PathText, Argument(flags=("path",))]
 
     def apply(self, ctx: Comms) -> CheckoutResult:
-        return CheckoutResult(ctx.registry.select_checkout(
-            self.caller.identity(ctx), self.repository, self.path))
+        return CheckoutResult(
+            ctx.registry.select_checkout(self.caller.identity(ctx), self.repository, self.path)
+        )
