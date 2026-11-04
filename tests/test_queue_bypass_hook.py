@@ -65,6 +65,18 @@ def test_queue_merges_and_reads_pass(command):
 
 
 @pytest.mark.parametrize("command", [
+    'h=$(git rev-parse HEAD); echo "$h"',
+    "gh pr merge `cat n` --admin --merge",
+])
+def test_a_command_outside_the_grammar_is_refused_with_its_reason(command):
+    result = pre_tool_use(command)
+    assert result.returncode == 0, result.stderr
+    decision = json.loads(result.stdout)["hookSpecificOutput"]
+    assert decision["permissionDecision"] == "deny"
+    assert "Command substitution is not admitted" in decision["permissionDecisionReason"]
+
+
+@pytest.mark.parametrize("command", [
     "gh pr merge 7 --admin -R OpenHCSDev/agent-comms --match-head-commit {head} -A author@example.com",
     "gh pr merge -A author@example.com 7 --admin --repo=OpenHCSDev/agent-comms --match-head-commit={head}",
     "gh pr --repo OpenHCSDev/agent-comms merge 7 --admin --match-head-commit {head}",
