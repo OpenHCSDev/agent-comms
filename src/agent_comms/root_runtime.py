@@ -75,6 +75,11 @@ class RootHost(DeclaredFamily, affix="RootHost"):
     def retire(self, root: Path, ready: Callable[[ProcessIdentity], bool]) -> bool:
         return True
 
+    def retired_through(self, store: RootRuntimeStore) -> RootHost:
+        """Nothing runs, so no owner's registry row can matter: an install's target asks after
+        the outgoing runtime retired the host, before a carry lets the target read that registry."""
+        return self
+
     def require_retired(self, root: Path) -> None:
         if self.observed(root).alive():
             raise ForeignRuntimeError("Retire the root's worker host before changing runtime")
@@ -98,6 +103,11 @@ class RecordedRootHost(RootHost):
                 return False
             ObservedProcess(process).stop_sync()
         return True
+
+    def retired_through(self, store: RootRuntimeStore) -> RootHost:
+        if self.observed(store.path.parent).alive():
+            return store.host_retired_once_ownerless()
+        return super().retired_through(store)
 
     def observed(self, root: Path) -> ProcessState:
         # A copied store cannot borrow the source root's live process.
@@ -151,9 +161,11 @@ class RootRuntimeStore(SingleFileStore, LockedStore[RootRuntime], RollbackRetain
         raise FileNotFoundError(self.path)
 
     def retire_host(self) -> RootHost:
-        """Retire this root's physical host only after its logical owners detached.
+        """Retire this root's physical host only after its logical owners detached."""
+        return self.read().host.retired_through(self)
 
-        Keep the registry cut current through the host write: no new owner may
+    def host_retired_once_ownerless(self) -> RootHost:
+        """Keep the registry cut current through the host write: no new owner may
         attach between the ownership decision and the physical retirement.
         """
         with RegistryStore.at(self.path.parent).current_snapshot() as cut:
