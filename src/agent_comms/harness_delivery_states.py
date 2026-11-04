@@ -21,7 +21,7 @@ from .notification_progress import HarnessConsumedProgress
 if TYPE_CHECKING:
     from .assignment_states import AssignmentState
     from .assignment_store import AssignmentStore
-    from .cli_bridges.shared import LineMonitorBridge, MonitorPart, MonitorReadFile
+    from .cli_bridges.shared import MonitorPart, MonitorReadFile, TranscriptConfirmsDelivery
     from .coordination_tables.harness_deliveries import HarnessDelivery
     from .notification_progress import DeliveryProgress
 
@@ -74,7 +74,7 @@ class EmittedOutcome(UnconfirmedOutcome):
 class MonitorEvidence(ConsumptionEvidence, DeclaredFamily):
     """Unsent and terminal observations cannot accept another delivery."""
 
-    async def confirm(self, bridge: LineMonitorBridge, delivery: HarnessDelivery,
+    async def confirm(self, bridge: TranscriptConfirmsDelivery, delivery: HarnessDelivery,
                       notification: MonitorPart, record: ObservedMonitor) -> tuple[MessageReference, ...]:
         return ()
 
@@ -102,7 +102,7 @@ class UnrecordedMonitor(MonitorEvidence):
 class ReceivingMonitor(MonitorEvidence):
     total: int
 
-    async def confirm(self, bridge: LineMonitorBridge, delivery: HarnessDelivery,
+    async def confirm(self, bridge: TranscriptConfirmsDelivery, delivery: HarnessDelivery,
                       notification: MonitorPart, record: ObservedMonitor) -> tuple[MessageReference, ...]:
         if notification.total != self.total:
             return ()
@@ -115,7 +115,7 @@ class ReceivingMonitor(MonitorEvidence):
             await bridge.record_mismatch(delivery, 'Observed parts do not equal the original message')
             return ()
         await bridge.finish(delivery, partial(replace, outcome=DeliveredOutcome, monitor=record))
-        return message.opening_references(bridge.binding.bus)
+        return message.opening_references(bridge.transcript_thread)
 
 
 @dataclass(frozen=True)

@@ -81,7 +81,6 @@ from .shared import (
     MONITOR_FRAME,
     ConfirmedDelivery,
     ForeignMonitorFrame,
-    LineMonitorBridge,
     MonitorFrame,
     MonitorIncomingFrame,
     MonitorObservation,
@@ -89,6 +88,7 @@ from .shared import (
     MonitorProtocolFrame,
     MonitorReadFile,
     ObservedMonitor,
+    TranscriptConfirmsDelivery,
 )
 
 if TYPE_CHECKING:
@@ -287,7 +287,7 @@ class MonitorShown(MonitorFrame, declared_name='shown'):
         return (self.model_copy(update=dict(lines=(*self.lines, line))),)
 
     async def confirm(
-        self, bridge: LineMonitorBridge, record: ObservedMonitor,
+        self, bridge: TranscriptConfirmsDelivery, record: ObservedMonitor,
     ) -> tuple[MessageReference, ...]:
         """The one whole part this event proves, confirmed as any other part; an event that is
         not exactly the original's rendering confirms nothing and says so. Only
@@ -995,7 +995,7 @@ class ReadResultObserved(ConfirmedDelivery):
         consecutive = all(later[0] == earlier[0] + 1 for earlier, later in zip(rows, rows[1:], strict=False))
         return tuple(rows) if consecutive else ()
 
-    async def confirmed_by(self, bridge: LineMonitorBridge) -> ConfirmedDelivery:
+    async def confirmed_by(self, bridge: TranscriptConfirmsDelivery) -> ConfirmedDelivery:
         return replace(self, references=await bridge.read_export(self))
 
 

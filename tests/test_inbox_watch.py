@@ -22,6 +22,7 @@ from agent_comms.comms import Comms
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.connector import Connector
 from agent_comms.connector_store import ConnectorStore
+from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery
 from agent_comms.repo import Checkout
 from agent_comms.thread_status import ConnectedThreadStatus, NoBridgeThreadStatus
 from agent_comms.threads import ExternalThread, NativeThread
@@ -471,3 +472,34 @@ def test_an_install_or_a_newer_watch_still_says_rearm() -> None:
     assert WatchEnd.closed(1000) == WatchDropped("closed with code 1000")
     assert WatchEnd.closed(None).exit_code == 1
     assert "start this again" in WatchEnd.closed(1006).line()
+
+
+def attempt_outcome(comms: Comms, message) -> str:
+    with comms.registry.store.coordinator_reader.reader_snapshot() as db:
+        attempt, = HarnessDelivery.select(db, message_id=message.message_id)
+    return attempt.outcome.declared_name
+
+
+async def test_a_pushed_message_is_delivered_only_once_the_transcript_shows_it(
+    session, comms: Comms,
+) -> None:
+    """A frozen watch past its heartbeat took message 62380 and never showed it; the bus said
+    delivered because the socket write returned. The write proves nothing: only the session's
+    own Monitor event does, and a mangled one proves nothing either."""
+    client, token = session
+    socket = await client.ws_connect(await watch_path(client, token, "cloud"))
+    shown = comms.messaging.send("sender", "cloud", "shown as written").message
+    mangled = comms.messaging.send("sender", "cloud", "shown wrong").message
+    for _ in range(2):
+        await frame(socket)
+    await inbox_emptied(comms, "cloud")
+    assert {attempt_outcome(comms, shown), attempt_outcome(comms, mangled)} == {"unconfirmed"}
+
+    await socket.send_str(monitor_event_record(ClaudeMonitorFrame(shown).shown_inline()))
+    await socket.send_str(monitor_event_record(
+        ClaudeMonitorFrame(mangled).shown_inline().replace("wrong", "otherwise")))
+    async with asyncio.timeout(20):
+        while attempt_outcome(comms, shown) != "delivered":
+            await asyncio.sleep(0.05)
+    assert attempt_outcome(comms, mangled) == "unconfirmed"
+    await socket.close()
