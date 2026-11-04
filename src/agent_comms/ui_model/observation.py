@@ -1037,7 +1037,7 @@ class ReadAnswered(ReadOutcome, declared_name=None):
     request_id: int
     value: object
 
-    def __init_subclass__(cls, *, answers: type, **kwargs: str | None) -> None:
+    def __init_subclass__(cls, *, answers: type, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
         ReadAnswered.answers[answers] = cls
 
@@ -1386,18 +1386,23 @@ class ObserverDied(CoordinationError, ObserverStatus):
 
 
 class ObserverProcessDied(ObserverDied):
-    """The local observation process ended; it reports its own pid and exit status."""
+    """The local observation process ended; it reports its own pid and how it ended."""
 
-    def __init__(self, process: BaseProcess, error: str | None):
-        pid, exit_status = process.pid, process.exitcode
-        self.pid, self.exit_status, self.error = pid, exit_status, error
-        if exit_status is None:
-            how = "closed its pipe and has not exited"
-        elif exit_status < 0:
-            how = f"was killed by signal {-exit_status} ({signal.strsignal(-exit_status)})"
-        else:
-            how = f"exited with status {exit_status}"
-        super().__init__(f"The comms observer (pid {pid}) {how}" + (f":\n{error}" if error else ""))
+    def __init__(self, process: BaseProcess, error: str = ""):
+        self.process, self.error = process, error
+        super().__init__(f"The comms observer (pid {process.pid}) {self.ending(process)}"
+                         + (f":\n{error}" if error else ""))
+
+    @staticmethod
+    def ending(process: BaseProcess) -> str:
+        """multiprocessing's exit code, decoded once: a signal, a status, or still running."""
+        match process.exitcode:
+            case int(status) if status < 0:
+                return f"was killed by signal {-status} ({signal.strsignal(-status)})"
+            case int(status):
+                return f"exited with status {status}"
+            case _:
+                return "closed its pipe and has not exited"
 
 
 class ObservationService:
@@ -1800,7 +1805,7 @@ class LocalObservationPeer(ObservationPeer):
         return ObserverProcessDied(self.process, traceback)
 
     def connection_closed(self) -> ObserverDied:
-        return ObserverProcessDied(self.process, None)
+        return ObserverProcessDied(self.process)
 
     def connection_broken(self, error: str) -> ObserverDied:
         return ObserverProcessDied(self.process, error)

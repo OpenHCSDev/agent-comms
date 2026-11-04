@@ -64,7 +64,7 @@ async def test_a_killed_observer_is_reported_once_with_its_signal_and_fails_awai
                 os.kill(child, signal.SIGKILL)
             waiting.cancel()
             await asyncio.gather(waiting, return_exceptions=True)
-        assert died.value.pid == child and died.value.exit_status == -signal.SIGKILL
+        assert died.value.process.pid == child and died.value.process.exitcode == -signal.SIGKILL
         with pytest.raises(ObserverDied) as stopping:
             process.request(StopSidebar())  # what a closing view sends
         assert stopping.value is died.value
@@ -165,6 +165,6 @@ async def test_an_observer_that_failed_is_reported_with_its_own_traceback_and_ex
         with pytest.raises(ObserverDied) as died:
             async with asyncio.timeout(30):
                 await process.read(empty_window(not_a_wire))
-    assert died.value.exit_status == 1
+    assert died.value.process.exitcode == 1
     assert "Traceback" in died.value.error and "serve" in died.value.error
     assert died.value.error in str(died.value)
