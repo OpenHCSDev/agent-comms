@@ -24,7 +24,7 @@ from yarl import URL
 
 from .agent_inbox import SecondsWait
 from .child_process import ProcessIdentity
-from .cli_bridges.claude_transcript import WINDOW_ENDED, ClaudeJsonLines
+from .cli_bridges.claude_transcript import WATCH_STOPPED, WINDOW_ENDED, ClaudeJsonLines
 from .cli_bridges.history import RemoteWatchHistory
 from .comms import Comms, client_wire
 from .connector_store import BearerSecret, digest
@@ -167,19 +167,26 @@ class InboxWatch:
             with Coordination(path) as store, store.session.writing() as db:
                 delivery.begin(store.assignments, db)
 
-    def attached(self) -> AbstractContextManager[object]:
-        here = ProcessIdentity.capture(os.getpid())
+    def attached(self, here: ProcessIdentity) -> AbstractContextManager[object]:
         with self.wire() as comms:
             return comms.registry.external_process(self.thread, here)
 
-    async def pushed(self, socket: web.WebSocketResponse) -> None:
-        """Frames until it closes; a reader must run for the socket to notice closing."""
+    def holds(self, here: ProcessIdentity) -> bool:
+        """Whether this watch still holds its thread; a stop on the bus releases it."""
+        with self.wire() as comms:
+            return comms.registry.require(self.thread).same_local_process(here)
+
+    async def pushed(self, socket: web.WebSocketResponse, here: ProcessIdentity) -> None:
+        """Frames until it closes, or until the thread is stopped on the bus; a reader must run
+        for the socket to notice closing."""
         reader = asyncio.create_task(self.read_until_closed(socket))
         try:
             while not socket.closed:
                 for message in await asyncio.to_thread(self.untaken):
                     await socket.send_str(FieldCodec.compact(FieldCodec.encode(message)))
                     await asyncio.to_thread(self.taken, message)
+                if not await asyncio.to_thread(self.holds, here):
+                    await socket.close(code=WATCH_STOPPED, message=b"stopped on the bus")
         except ConnectionResetError:
             return
         finally:
@@ -203,7 +210,8 @@ class InboxWatch:
             pass
 
     async def carried(self, socket: web.WebSocketResponse) -> None:
-        attachment = self.attached()
+        here = ProcessIdentity.capture(os.getpid())
+        attachment = self.attached(here)
         try:
             await asyncio.to_thread(attachment.__enter__)
         except RelationViolationError as refused:
@@ -212,6 +220,6 @@ class InboxWatch:
             )
             return
         try:
-            await self.pushed(socket)
+            await self.pushed(socket, here)
         finally:
             await asyncio.to_thread(attachment.__exit__, None, None, None)

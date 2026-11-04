@@ -31,7 +31,7 @@ from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.watched import FileSource
 
 from .claude_protocol import ClaudeMonitorFrame
-from .claude_transcript import WINDOW_ENDED, RecentClaudeWindow, RunningClaude
+from .claude_transcript import WATCH_STOPPED, WINDOW_ENDED, RecentClaudeWindow, RunningClaude
 from .session_watch import WatchClaim
 
 
@@ -124,6 +124,45 @@ class WatchedMonitorFrame(ClaudeMonitorFrame):
         return not any(self.claims(line) for line in self.message.body.split('\n'))
 
 
+class WatchEnd(ABC):
+    """How a watch ended, and what the session does about it."""
+
+    exit_code: ClassVar[int]
+
+    @abstractmethod
+    def line(self) -> str: ...
+
+    @classmethod
+    def closed(cls, code: int | None) -> WatchEnd:
+        """The close code is decided once, here, where it arrives."""
+        return WatchStopped() if code == WATCH_STOPPED else WatchDropped(f"closed with code {code}")
+
+
+@dataclass(frozen=True)
+class WatchDropped(WatchEnd):
+    """An install, a network drop or a newer watch: the session is still wanted on the bus."""
+
+    reason: str
+    exit_code = 1
+
+    def line(self) -> str:
+        return (f"Your inbox watch {self.reason}. You are off the bus: call comms_watch and start "
+                "this again.")
+
+
+@dataclass(frozen=True)
+class WatchStopped(WatchEnd):
+    """The thread was stopped on the bus: re-arming now would undo the stop. The session is
+    not archived; it connects again when someone wakes it."""
+
+    exit_code = 0
+
+    def line(self) -> str:
+        return ("This thread was stopped on the bus. Do not call comms_watch again now: tell the "
+                "person in one line that you were stopped, then stop. This session stays; when "
+                "someone wakes it, connect again.")
+
+
 @dataclass(frozen=True)
 class InboxSocket:
     """One opened watch URL, where its messages are exported and what travels the other way."""
@@ -160,7 +199,7 @@ class InboxSocket:
         except LookupError:
             return None
 
-    async def carried(self) -> str:
+    async def carried(self) -> WatchEnd:
         """Deliver until the socket ends; what ended it, for the session to act on."""
         try:
             async with ClientSession() as session, session.ws_connect(
@@ -174,9 +213,10 @@ class InboxSocket:
                             await self.deliver(frame.data)
                 finally:
                     publishing.cancel()
-                return f"closed with code {socket.close_code}"
+                return WatchEnd.closed(socket.close_code)
         except (ClientError, OSError) as failure:
-            return f"failed: {type(failure).__name__}: {FollowedTranscript.hidden(str(failure))}"
+            return WatchDropped(
+                f"failed: {type(failure).__name__}: {FollowedTranscript.hidden(str(failure))}")
 
 
 def main() -> None:
@@ -185,6 +225,5 @@ def main() -> None:
     exports = Path.home() / ".local" / "state" / "claude-comms-inbox" / "cloud" / "messages"
     socket = InboxSocket(parser.parse_args().url, exports, session_transcript())
     ended = asyncio.run(socket.carried())
-    print(f"Your inbox watch {ended}. You are off the bus: call comms_watch and start this again.",
-          flush=True)
-    sys.exit(1)
+    print(ended.line(), flush=True)
+    sys.exit(ended.exit_code)

@@ -631,6 +631,11 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread")
     def process_alive(self) -> bool:
         return self.process_identity.alive()
 
+    def stop_names(self, release_external: Callable[[str], None]) -> tuple[str, ...]:
+        """The names this thread leaves to the ordinary stop: an agent's owner is fenced and
+        its runtime retires it."""
+        return (self.name,)
+
     def same_local_process(self, process: ProcessIdentity) -> bool:
         return self.process_identity == process
 
@@ -836,6 +841,13 @@ class ExternalThread(Thread):
     def serving_its_own_session(self) -> ExternalThread:
         """What this thread is once a process of its own serves it."""
         return self
+
+    def stop_names(self, release_external: Callable[[str], None]) -> tuple[str, ...]:
+        """No owner runtime serves an external endpoint (only RuntimeServer binds the socket a
+        stop request dials, and no CLI bridge or inbox watch runs one), so fencing it would
+        strand it: its holder's binding is released instead."""
+        return self.process_identity.held_external_stop(
+            lambda: release_external(self.name), self.name)
 
     def redeclared_child(self, execution: type[SubagentThread]) -> Thread:
         """A child that came to serve its own session keeps its name on its parent's grant;
