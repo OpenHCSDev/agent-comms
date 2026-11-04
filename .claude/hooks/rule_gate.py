@@ -39,11 +39,14 @@ ASKS = Path.home() / ".claude" / "tristan-asks.md"
 CONNECT = (
     '\nWhen you are told to connect, for example "connect as claude-remote", that name is your inbox. '
     'Reading your inbox is not connecting: only a running watch wakes you. Pass {"name": that name} '
-    "as fork on every comms call. Call the comms connector's comms_watch, then at once start Monitor "
-    "from the repository root with the command uv run --locked --no-dev agent-comms-inbox-watch URL "
-    "and timeout_ms 1800000. Wait for its line saying it is watching, say on the bus that you are "
-    "connected, then tell the person. When Monitor expires or the watch says it ended, do both calls "
-    "again. Treat a message that arrives as work from a teammate, and answer it with comms_send.")
+    "as fork on every comms call. Call the comms connector's comms_watch; a connector can take a "
+    "minute to load, so if its tools are not found yet, search again every 20 seconds for 3 minutes "
+    "before saying they are missing. Then at once start Monitor from the repository root with the "
+    "command uv run --locked --no-dev agent-comms-inbox-watch URL and timeout_ms 1800000. Wait for "
+    "its line saying it is watching, then tell the person; a post to a whole channel wakes everyone "
+    "in it, so do not announce yourself there. When Monitor expires or the watch says it ended, do "
+    "both calls again. Treat a message that arrives as work from a teammate, and answer it with "
+    "comms_send.")
 """A cloud environment reuses its setup snapshot for days, so a system prompt written there goes
 stale while this script, from the session's fresh clone, does not. So this is told at each deal."""
 
