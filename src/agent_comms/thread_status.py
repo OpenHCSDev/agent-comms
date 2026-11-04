@@ -353,15 +353,15 @@ class StoppedThreadStatus(Visible, ThreadStatus):
         return visibility.stopped
 
 
-class AbsentReaderPresence(StoppedThreadStatus, declared_name=None):
-    """A session whose bridge has dropped is still working and comes back on its own, so it
-    keeps its holds."""
+class StillActingPresence(StoppedThreadStatus, declared_name=None):
+    """Not stopped for good: a session finishing its last turn can still write to what it holds,
+    and one whose bridge dropped comes back on its own. Each keeps its holds."""
 
     def require_hold_consent(self, require_consent: Callable[[], None]) -> None:
         require_consent()
 
 
-class StoppingThreadStatus(HostBoundPresence, StoppedThreadStatus):
+class StoppingThreadStatus(HostBoundPresence, StillActingPresence):
     """Fenced against new work while its host completes the session. The binding stays
     until that completion, so a restart cannot race it; a stop sent again completes a
     session the host no longer holds. It is stored as stopped: the kept binding is what
@@ -404,7 +404,7 @@ class ConnectedThreadStatus(DeclaredReaderPresence, RunningThreadStatus):
     """A CLI inbox whose bridge process is watching it."""
 
 
-class PausedBridgeThreadStatus(SelfRenaming, DeclaredReaderPresence, AbsentReaderPresence):
+class PausedBridgeThreadStatus(SelfRenaming, DeclaredReaderPresence, StillActingPresence):
     """A live session bridge waiting for a Monitor to confirm its probe."""
 
     def registered(self, thread: Thread, last_seen: float) -> ThreadStatus:
@@ -420,7 +420,7 @@ class PausedBridgeThreadStatus(SelfRenaming, DeclaredReaderPresence, AbsentReade
         return True
 
 
-class NoBridgeThreadStatus(SelfRenaming, CliInboxPresence, AbsentReaderPresence):
+class NoBridgeThreadStatus(SelfRenaming, CliInboxPresence, StillActingPresence):
     """A CLI inbox with no bridge attached; its messages wait unread.
 
     It has no launched process to stop or restart, so it stays in every view.

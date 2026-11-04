@@ -14,7 +14,9 @@ from agent_comms.order_tools import CommsChangeProblemTool, CommsOrderTool, Comm
 from agent_comms.nominal.field_codec import GoalId, OrderId
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_identity import CoreWatcherIncarnation, RecordedThreadIncarnation
-from agent_comms.thread_status import NoBridgeThreadStatus, PausedBridgeThreadStatus, StoppedThreadStatus
+from agent_comms.thread_status import (
+    NoBridgeThreadStatus, PausedBridgeThreadStatus, StoppedThreadStatus, StoppingThreadStatus,
+)
 from agent_comms.threads import ParkedThreadWorkState
 from agent_comms.todos import AssignTodo, HolderConsentRequired, ReleaseTodo, StrikeReason
 from agent_comms.tool_caller import ForkCaller, PeerCaller, ThreadCaller
@@ -434,7 +436,7 @@ def test_a_stopped_holders_work_does_not_wait_on_it():
     StoppedThreadStatus().require_hold_consent(_ask_consent)
 
 
-@pytest.mark.parametrize("status", (NoBridgeThreadStatus(), PausedBridgeThreadStatus()))
-def test_a_session_whose_bridge_dropped_keeps_its_holds(status):
+@pytest.mark.parametrize("status", (NoBridgeThreadStatus(), PausedBridgeThreadStatus(), StoppingThreadStatus()))
+def test_a_session_that_can_still_act_keeps_its_holds(status):
     with pytest.raises(ConsentAsked):
         status.require_hold_consent(_ask_consent)
