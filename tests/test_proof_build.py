@@ -493,7 +493,7 @@ def test_a_one_minute_old_merge_is_due_and_names_its_request_without_launching(
     assert due.main == merge
     assert "#41 Install what merged" in due.line() and "#42 fix/next" in due.line()
     assert "order install" in due.line().rsplit(" -> ", 1)[1]
-    due.enforce(bus, "colleague")
+    due.enforce(bus)
     assert InstallLogs(bus.root).units() == ()
 
 

@@ -70,6 +70,9 @@ class MainTree:
     bindings: dict[tuple[tuple[str, ...], str], ModuleBindings] = field(
         default_factory=dict, compare=False, repr=False, kw_only=True,
     )
+    facts: dict[str, SourceFacts] = field(
+        default_factory=dict, compare=False, repr=False, kw_only=True,
+    )
 
     def __post_init__(self) -> None:
         self.history.include(self.commit)
@@ -177,21 +180,50 @@ class MainTree:
                             strict=True))
         for blob, name in blobs:
             if name in contents:
-                module, package = DeclaredScopes.dotted(name, roots)
-                bindings = ModuleBindings(name, module, package, blob=blob)
-                bindings.visit(ast.parse(contents[name].decode(), filename=name))
-                self.bindings[roots, name] = bindings
+                tree = self.parse(name, blob, contents[name])
+                if (roots, name) not in self.bindings or not self.bindings[roots, name].retained(self):
+                    self.bind(roots, name, blob, tree)
             yield self.bindings[roots, name]
+
+    shared_roots: ClassVar[tuple[str, ...]] = ("src",)
+    """The import roots nearly every evidence reads: one parse records their bindings too."""
+
+    def parse(self, name: str, blob: str, content: bytes) -> ast.Module:
+        """One parse per blob for every ``src``-wide reader: its source facts and its bindings
+        under the shared roots are recorded from the same tree."""
+        tree = ast.parse(content.decode(), filename=name)
+        self.facts[name] = SourceFacts.of(name, blob, tree)
+        if any(PurePosixPath(name).is_relative_to(root) for root in self.shared_roots):
+            self.bind(self.shared_roots, name, blob, tree)
+        return tree
+
+    def bind(self, roots: tuple[str, ...], name: str, blob: str, tree: ast.Module) -> None:
+        module, package = DeclaredScopes.dotted(name, roots)
+        bindings = ModuleBindings(name, module, package, blob=blob)
+        bindings.visit(tree)
+        self.bindings[roots, name] = bindings
+
+    def source_facts(self, paths: tuple[str, ...]) -> Iterator[SourceFacts]:
+        """Each Python blob's whole-module facts under ``paths``, from one parse per blob that
+        every evidence shares: a later tree parses only the blobs it changed."""
+        blobs = self.selected(paths)
+        fresh = tuple((blob, name) for blob, name in blobs
+                      if name not in self.facts or not self.facts[name].retained(self))
+        contents = Repo.blobs(self.repo.checkout, *(blob for blob, _ in fresh))
+        for (blob, name), content in zip(fresh, contents, strict=True):
+            self.parse(name, blob, content)
+        for _, name in blobs:
+            yield self.facts[name]
 
     def following(self, current: MainTree) -> MainTree:
         """Carry only facts whose source blob the next tree still holds; the same commit holds
         every blob, so its facts carry without listing the tree again."""
         if current == self:
-            return replace(current, bindings=dict(self.bindings))
+            return replace(current, bindings=dict(self.bindings), facts=dict(self.facts))
         return replace(current, bindings={
             key: bindings for key, bindings in self.bindings.items()
             if bindings.retained(current)
-        })
+        }, facts={name: facts for name, facts in self.facts.items() if facts.retained(current)})
 
     def contains(self, sha: str) -> bool:
         return self.history.contains(sha, self.commit)
@@ -384,10 +416,7 @@ class BusStorageAbsent(MainEvidence, ast.NodeVisitor):
     found = False
 
     def read(self, main: MainTree) -> bool:
-        scan = type(self)()
-        for module in main.modules(("src",)):
-            scan.visit(module.module)
-        return not scan.found
+        return not any(facts.bus_storage for facts in main.source_facts(("src",)))
 
     def describe(self) -> str:
         return "no known physical bus symbols, file literals or lock paths in Python source on main"
@@ -845,9 +874,38 @@ class ClassChecks(ast.NodeVisitor):
                 self.checked.append((self.path, node.lineno, frozenset(NamedClasses.of((target,)))))
         self.generic_visit(node)
 
-    def owned(self) -> tuple[tuple[str, int], ...]:
-        """The path and line of each check naming a class the visited modules declare."""
-        return tuple((path, line) for path, line, named in self.checked if named & self.declared)
+
+@dataclass(frozen=True)
+class SourceFacts:
+    """One blob's whole-module facts that ``src``-wide evidence reads, from one parse: no tree
+    keeps syntax, and the facts carry to later trees while the path holds this blob."""
+
+    path: str
+    blob: str
+    bus_storage: bool
+    declared: frozenset[str]
+    checked: tuple[tuple[int, frozenset[str]], ...]
+    classes: tuple[tuple[str, frozenset[str]], ...]
+
+    @classmethod
+    def of(cls, path: str, blob: str, tree: ast.Module) -> SourceFacts:
+        bus = BusStorageAbsent()
+        bus.visit(tree)
+        checks = ClassChecks()
+        checks.path = path
+        checks.visit(tree)
+        return cls(path, blob, bus.found, frozenset(checks.declared),
+                   tuple((line, named) for _, line, named in checks.checked),
+                   tuple((node.name, frozenset(NamedClasses.of(node.bases)))
+                         for node in Classes.of((tree,))))
+
+    def retained(self, main: MainTree) -> bool:
+        """These facts remain valid exactly while this path holds their original blob."""
+        return main.files.get(self.path) == self.blob
+
+    def owned(self, declared: frozenset[str]) -> tuple[int, ...]:
+        """The line of each ``isinstance`` here that names one of the ``declared`` classes."""
+        return tuple(line for line, named in self.checked if named & declared)
 
 
 @dataclass(frozen=True)
@@ -859,15 +917,11 @@ class OwnClassChecksAbsent(MainEvidence):
         return not self.located(main)
 
     def located(self, main: MainTree) -> tuple[str, ...]:
-        return tuple(f"{path}:{line}" for path, line in self.checks(main).owned())
-
-    @staticmethod
-    def checks(main: MainTree) -> ClassChecks:
-        checks = ClassChecks()
-        for module in main.modules(("src",)):
-            checks.path = module.file_path
-            checks.visit(module.module)
-        return checks
+        """The path and line of each check naming a class ``src`` declares."""
+        facts = tuple(main.source_facts(("src",)))
+        declared = frozenset().union(*(module.declared for module in facts))
+        return tuple(f"{module.path}:{line}" for module in facts
+                     for line in module.owned(declared))
 
     def describe(self) -> str:
         return "no isinstance against a class declared in src on main"
@@ -882,20 +936,10 @@ class ParentsShared(MainEvidence):
     paths: tuple[str, ...] = ()
 
     def read(self, main: MainTree) -> bool:
-        declared = {
-            *self.names,
-            *(
-                declared.name
-                for declared in Classes.of(
-                    module.module for module in main.present_modules(self.paths)
-                )
-            ),
-        }
-        members = Counter(
-            base
-            for member in Classes.of(module.module for module in main.modules(("src",)))
-            for base in NamedClasses.of(member.bases) & declared
-        )
+        declared = {*self.names, *(name for module in main.source_facts(self.paths)
+                                   for name, _ in module.classes)}
+        members = Counter(base for module in main.source_facts(("src",))
+                          for _, bases in module.classes for base in bases & declared)
         return all(members[name] >= 2 for name in declared)
 
     def describe(self) -> str:
