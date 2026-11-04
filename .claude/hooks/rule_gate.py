@@ -36,6 +36,16 @@ from pathlib import Path
 from typing import ClassVar
 
 ASKS = Path.home() / ".claude" / "tristan-asks.md"
+CONNECT = (
+    '\nWhen you are told to connect, for example "connect as claude-remote", that name is your inbox. '
+    'Reading your inbox is not connecting: only a running watch wakes you. Pass {"name": that name} '
+    "as fork on every comms call. Call the comms connector's comms_watch, then at once start Monitor "
+    "from the repository root with the command uv run --locked --no-dev agent-comms-inbox-watch URL "
+    "and timeout_ms 1800000. Wait for its line saying it is watching, say on the bus that you are "
+    "connected, then tell the person. When Monitor expires or the watch says it ended, do both calls "
+    "again. Treat a message that arrives as work from a teammate, and answer it with comms_send.")
+"""A cloud environment reuses its setup snapshot for days, so a system prompt written there goes
+stale while this script, from the session's fresh clone, does not. So this is told at each deal."""
 
 
 def team_directory() -> Path:
@@ -343,6 +353,10 @@ def core_gates(event: HookEvent) -> bool:
     return enrolled or LaunchedPrompt.variable in os.environ
 
 
+def add_context(event_name: str, text: str) -> None:
+    print(json.dumps({"hookSpecificOutput": {"hookEventName": event_name, "additionalContext": text}}))
+
+
 def deny(reason: str) -> None:
     print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
                                              "permissionDecision": "deny",
@@ -356,7 +370,7 @@ def start_deal(event: HookEvent) -> str:
     event.dealt.touch()
     reading = Reading.dealt(event.store)
     reading.save()
-    return reading.told(event.source) + Deck(event.session).deal()
+    return reading.told(event.source) + CONNECT + Deck(event.session).deal()
 
 
 def deal(event: HookEvent) -> None:
@@ -368,16 +382,18 @@ def deal(event: HookEvent) -> None:
 def gate(event: HookEvent) -> None:
     if event.subagent:
         return
+    told = ""
     if not event.dealt.is_file() and not core_gates(event):
-        start_deal(event)
-    if (reading := Reading.owed(event.store)) is None or core_gates(event):
-        return
-    if event.call.allowed_while_owed(reading):
+        told = start_deal(event)
+    if (reading := Reading.owed(event.store)) is None or core_gates(event) or (
+            event.call.allowed_while_owed(reading)):
+        if told:
+            add_context("PreToolUse", told)
         return
     remaining = reading.remaining()
     deny(f"Rule reading owed: {len(remaining)} of {len(reading.files)} files still have unread "
          "lines. Read them before anything else, papers first, then rules. Next: "
-         + ", ".join(map(str, remaining[:8])))
+         + ", ".join(map(str, remaining[:8])) + told)
 
 
 def record(event: HookEvent) -> None:
@@ -389,9 +405,7 @@ def record(event: HookEvent) -> None:
         reading.save()
         return
     event.store.unlink()
-    print(json.dumps({"hookSpecificOutput": {
-        "hookEventName": "PostToolUse",
-        "additionalContext": "Rule reading complete: every listed line is read. The gate is open."}}))
+    add_context("PostToolUse", "Rule reading complete: every listed line is read. The gate is open.")
 
 
 def remind(event: HookEvent) -> None:
@@ -399,8 +413,7 @@ def remind(event: HookEvent) -> None:
     if event.subagent or event.store.is_file():
         return
     if (text := Deck(event.session).due()) is not None:
-        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse",
-                                                 "additionalContext": text}}))
+        add_context("PostToolUse", text)
 
 
 def foreground(event: HookEvent) -> None:
@@ -484,6 +497,16 @@ def project_gates() -> bool:
     return settings.is_file() and "rule_gate.py" in settings.read_text()
 
 
+def under_checkout_python() -> None:
+    """A hook starts under whatever python3 the machine has, and the gate imports code that needs
+    the project's Python. A cloud sandbox's is older: on 2026-11-04 every hook there died on a
+    SyntaxError in agent_comms_hooks.watch, so its gate allowed everything and its SessionStart said
+    nothing, and only #4026's loud failure showed why. Standard input carries over."""
+    python = checkout_python()
+    if python.is_file() and Path(sys.executable) != python:
+        os.execv(python, [str(python), str(Path(__file__).resolve()), *sys.argv[1:]])
+
+
 def main() -> None:
     if sys.argv[1] == "install":
         install()
@@ -494,6 +517,7 @@ def main() -> None:
     if sys.argv[1] == "carry":
         CarriedDeal().write()
         return
+    under_checkout_python()
     try:
         if USER_FLAG in sys.argv and project_gates():
             return
