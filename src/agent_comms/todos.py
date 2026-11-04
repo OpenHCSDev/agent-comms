@@ -124,7 +124,7 @@ from agent_comms.recorded_time import (
     UnrecordedEventTime,
 )
 from agent_comms.registry_store import RegistryStore
-from agent_comms.repo import Checkout, GitCommandError, Repo, RepositoryReads
+from agent_comms.repo import Checkout, FailedGitCommand, GitCommandError, Repo, RepositoryReads
 from agent_comms.repository_name import RepositoryName
 from agent_comms.slop import DeclarationDerivation, Slop
 from agent_comms.storage_rules import CheckoutAllocation, StorageRule
@@ -6830,7 +6830,8 @@ class ObservedBoundaryRead(AssignedBoundaryRead):
                    generation: GoalId) -> frozenset[Path]:
         try:
             return super().boundaries(rule, owner, todo, generation)
-        except GitCommandError:
+        except FailedGitCommand:
+            # Git ran and refused the checkout; a timeout or launch failure still fails loud.
             return frozenset()
 
 
