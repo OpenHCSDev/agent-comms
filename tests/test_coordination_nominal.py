@@ -12,7 +12,6 @@ from agent_comms.coordination_tables.executions import (
 )
 from agent_comms.execution_states import (
     ActiveExecution,
-    ExecutionState,
     PendingExecution,
 )
 from agent_comms.nominal.field_codec import AssignmentId, FieldCodec, MessageId
@@ -69,7 +68,7 @@ def test_execution_extension_is_stored_and_transitioned(tmp_path):
             )
             assert isinstance(store.get("e").execution.lifecycle, PendingExecution)
     finally:
-        ExecutionState.__registry__.pop("paused")
+        PausedExecution.withdraw()
 
 
 def test_new_response_state_roundtrips_real_store(tmp_path):
@@ -116,7 +115,7 @@ def test_new_response_state_roundtrips_real_store(tmp_path):
             settled, = store.get("e").obligations
             assert isinstance(settled.lifecycle, SilentResponse)
     finally:
-        ResponseState.__registry__.pop("reviewed")
+        ReviewedResponse.withdraw()
 
 
 def test_assignment_extension_derives_sql_projection_and_transitions(tmp_path):
@@ -154,7 +153,7 @@ def test_assignment_extension_derives_sql_projection_and_transitions(tmp_path):
             assert settled.lifecycle.mode == assignment.lifecycle.mode
             assert store.assignments.get(AssignmentId("assignment")) == settled
     finally:
-        AssignmentState.__registry__.pop("awaiting")
+        AwaitingAssignment.withdraw()
 
 
 def test_original_target_and_receipt_legality_is_owned_by_current_variants():

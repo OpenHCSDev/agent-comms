@@ -22,6 +22,7 @@ from metaclass_registry.mro_dispatch import (
     handles,
 )
 
+from agent_comms.class_fact import Declarations
 
 
 def declared_words(stem: str) -> str:
@@ -91,6 +92,8 @@ class FamilyMeta(AutoRegisterMeta, ABCMeta):
         else:
             for family_root in roots:
                 cls.family_root = family_root
+        # Registered now: facts derived from membership are derived again on their next read.
+        Declarations.changed()
         return cast(FamilyMeta, cls)
 
     @staticmethod
@@ -171,6 +174,13 @@ class DeclaredFamily(FamilyMember, ABC, metaclass=FamilyMeta):
     ) -> None:
         # The metaclass consumes these declaration options before ABC creation.
         super().__init_subclass__()
+
+    @classmethod
+    def withdraw(cls) -> None:
+        """Remove this declaration from its family, as declaring added it: facts derived from
+        membership (a table's CHECK choices) derive again on their next read."""
+        del cls.__registry__[cls.declared_name]
+        Declarations.changed()
 
     @classmethod
     def decodes_tagged_records(cls) -> bool:

@@ -68,7 +68,6 @@ from .nominal.field_codec import (
 from .lifecycle import LifecycleState
 from .locked_store import (
     DeclaredFile,
-    DurableFile,
     ExternalFile,
     FilesRequest,
     PublishedSQLiteFile,
@@ -2276,11 +2275,24 @@ class DeclaredSchemaFacts(TypedRow, FamilyMember):
             expression = expression.replace("{" + item.name + "}", item.wire_name)
         return expression
 
+    @ClassFact
+    @staticmethod
+    def _schema_variants(cls: type[DeclaredSchemaFacts]) -> dict[bool, dict[str, str]]:
+        """Each built variant of the declared SQL, held while the declarations it read stand."""
+        return {}
+
     @classmethod
-    @cache
     def schema_objects(cls, *, if_not_exists: bool = False) -> dict[str, str]:
-        """The table's declared SQL: a function of its class alone, built once per class.
+        """The table's declared SQL: a function of its class and of the families its columns
+        choose from (CHECK ... IN lists every member), built once per declaration generation.
         Every snapshot compares the stored schema against it."""
+        variants = cls._schema_variants
+        if if_not_exists not in variants:
+            variants[if_not_exists] = cls._built_schema(if_not_exists=if_not_exists)
+        return variants[if_not_exists]
+
+    @classmethod
+    def _built_schema(cls, *, if_not_exists: bool) -> dict[str, str]:
         statements = {cls.declared_name: cls._table_sql(if_not_exists=if_not_exists)}
         indexes = cls.indexes + tuple(
             Index((item.name,)) for item in cls._columns if item.column.index
