@@ -6804,6 +6804,36 @@ class TodoStore(OwnerRequestStore, TodoHistory):
             for expected in problems))
 
 
+class BoundaryRead(ABC):
+    """How one held order's edit boundaries are read, and what an unreadable checkout means."""
+
+    @abstractmethod
+    def boundaries(self, rule: StorageRule, owner: Thread, todo: Todo,
+                   generation: GoalId) -> frozenset[Path]: ...
+
+
+class AssignedBoundaryRead(BoundaryRead):
+    """Assigning work selects a checkout, so unreadable historical work refuses: it is never
+    discarded or allocated around."""
+
+    def boundaries(self, rule: StorageRule, owner: Thread, todo: Todo,
+                   generation: GoalId) -> frozenset[Path]:
+        return rule.edit_boundaries(owner, todo.id, todo.repo,
+                                    todo.order.source_repositories(), generation)
+
+
+class ObservedBoundaryRead(AssignedBoundaryRead):
+    """The heartbeat reads every unit: one unit's unreadable checkout is that unit's own
+    Unreadable state, never a failed pass for every other unit (2026-10-21 10:08)."""
+
+    def boundaries(self, rule: StorageRule, owner: Thread, todo: Todo,
+                   generation: GoalId) -> frozenset[Path]:
+        try:
+            return super().boundaries(rule, owner, todo, generation)
+        except GitCommandError:
+            return frozenset()
+
+
 @dataclass(frozen=True)
 class EditWorkplaces:
     """Allocation edit ownership plus retained edit-review evidence, captured for one operation.
@@ -6824,17 +6854,16 @@ class EditWorkplaces:
 
     @classmethod
     def for_assignment(cls, root: Path, snapshot: RegistrySnapshot, held: tuple[Todo, ...],
-                       proposed: tuple[Todo, ...]) -> Self:
+                       proposed: tuple[Todo, ...],
+                       reading: BoundaryRead = AssignedBoundaryRead()) -> Self:
         """Capture declared physical boundaries without forge reads or a Todo write lock."""
         rule = StorageRule.load(root)
         orders = {todo.id: todo for todo in (*held, *proposed)}
         allocated: dict[Path, set[str]] = {}
         for todo in orders.values():
-            companions = todo.order.source_repositories()
             for assignment in todo.current_holder.current_assignments():
                 for owner in assignment.holder_in(snapshot):
-                    for path in rule.edit_boundaries(owner, todo.id, todo.repo, companions,
-                                                     assignment.generation):
+                    for path in reading.boundaries(rule, owner, todo, assignment.generation):
                         allocated.setdefault(path, set()).add(todo.id)
         return cls(rule, cls.owner_threads(snapshot),
                    {path: frozenset(problems) for path, problems in allocated.items()},
@@ -6868,7 +6897,8 @@ class EditWorkplaces:
         holds = tuple(holds)
         if not holds:
             return {}
-        prepared = cls.for_assignment(comms.root, snapshot, tuple(hold.todo for hold in holds), ())
+        prepared = cls.for_assignment(comms.root, snapshot, tuple(hold.todo for hold in holds), (),
+                                      ObservedBoundaryRead())
         repositories = snapshot.team_project.require().repos
         registered = frozenset(repo.github for repo in repositories)
         rule = prepared.rule

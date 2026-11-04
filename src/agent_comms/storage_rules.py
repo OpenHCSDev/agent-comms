@@ -8,7 +8,6 @@ import time
 from abc import abstractmethod
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
@@ -401,15 +400,10 @@ class StorageRule(RoomAllocation, DurableFile):
         _, name = repository.key
         return checkout.with_name(f'{checkout.name}{self.checkout_separator}{name}')
 
-    @staticmethod
-    def holds_checkout(path: Path) -> bool:
-        """A physical worktree is present here, read without asking git."""
-        return (path / '.git').is_file() and not path.is_symlink()
-
     def owns_editable_checkout(self, owner: Thread, path: Path,
                                repository: RepositoryName, reads: RepositoryReads) -> bool:
         """Qualify this exact reuse target, without inventorying unrelated history."""
-        return (self.holds_checkout(path)
+        return ((path / '.git').is_file() and not path.is_symlink()
                 and any(allocation.reserves_boundary()
                         and allocation.owns_present(self, owner, path, reads)
                         for allocation in CheckoutAllocation.for_path(self, owner, path))
@@ -480,9 +474,7 @@ class StorageRule(RoomAllocation, DurableFile):
         roots: set[Path] = set()
         for repository, paths in declared.items():
             existing = {path for path in paths
-                        if self.holds_checkout(path)
-                        and WorkBranches(path, reads=reads).read_checkout().keeps_boundary(
-                            partial(self.owns_editable_checkout, owner, path, repository, reads))}
+                        if self.owns_editable_checkout(owner, path, repository, reads)}
             roots.update(existing or (self.reused_checkout(owner, repository, path, reads)
                                       for path in paths))
         return frozenset(path.resolve() for path in roots)

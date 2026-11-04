@@ -11,7 +11,7 @@ from __future__ import annotations
 from agent_comms.nominal.field_codec import WireExclude
 
 from abc import abstractmethod
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from functools import cached_property, lru_cache
@@ -724,11 +724,6 @@ class CheckoutRead(DeclaredFamily, affix="CheckoutRead"):
     def worktrees(self) -> tuple[Path, ...]:
         """Every checkout of this repository, as Git lists it."""
 
-    @abstractmethod
-    def keeps_boundary(self, owned: Callable[[], bool]) -> bool:
-        """Whether this declared checkout stays its work's edit boundary; ``owned`` qualifies
-        a checkout git can read."""
-
 
 @dataclass(frozen=True)
 class ReadableCheckoutRead(CheckoutRead):
@@ -746,9 +741,6 @@ class ReadableCheckoutRead(CheckoutRead):
 
     def worktrees(self) -> tuple[Path, ...]:
         return tuple(self.branches.history.heads)
-
-    def keeps_boundary(self, owned: Callable[[], bool]) -> bool:
-        return owned()
 
 
 @dataclass(frozen=True)
@@ -771,8 +763,3 @@ class UnreadableCheckoutRead(CheckoutRead):
     def worktrees(self) -> tuple[Path, ...]:
         """Git cannot list its siblings, so the checkout stands as its own until repaired."""
         return (self.checkout.resolve(),)
-
-    def keeps_boundary(self, owned: Callable[[], bool]) -> bool:
-        """Its unit's work stays where it is: reading the boundary never fails the pass, and
-        nothing is allocated around it."""
-        return True
