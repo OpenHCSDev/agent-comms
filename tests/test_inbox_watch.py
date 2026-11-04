@@ -490,16 +490,18 @@ async def test_a_pushed_message_is_delivered_only_once_the_transcript_shows_it(
     socket = await client.ws_connect(await watch_path(client, token, "cloud"))
     shown = comms.messaging.send("sender", "cloud", "shown as written").message
     mangled = comms.messaging.send("sender", "cloud", "shown wrong").message
-    for _ in range(2):
+    wrapped = comms.messaging.send("sender", "cloud", "word " * 240 + "\n\nafter a blank line").message
+    for _ in range(3):
         await frame(socket)
     await inbox_emptied(comms, "cloud")
-    assert {attempt_outcome(comms, shown), attempt_outcome(comms, mangled)} == {"unconfirmed"}
+    assert {attempt_outcome(comms, message) for message in (shown, mangled, wrapped)} == {"unconfirmed"}
 
     await socket.send_str(monitor_event_record(ClaudeMonitorFrame(shown).shown_inline()))
     await socket.send_str(monitor_event_record(
         ClaudeMonitorFrame(mangled).shown_inline().replace("wrong", "otherwise")))
+    await socket.send_str(monitor_event_record(ClaudeMonitorFrame(wrapped).shown_inline()))
     async with asyncio.timeout(20):
-        while attempt_outcome(comms, shown) != "delivered":
+        while {attempt_outcome(comms, shown), attempt_outcome(comms, wrapped)} != {"delivered"}:
             await asyncio.sleep(0.05)
     assert attempt_outcome(comms, mangled) == "unconfirmed"
     await socket.close()
