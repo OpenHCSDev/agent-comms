@@ -13,7 +13,7 @@ import pytest
 
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.context_reading import ContextUsage, UnmeasuredContext
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
@@ -101,10 +101,10 @@ class TestGoalRevision:
 
 
 class TestThreadDeclaration:
-    @pytest.mark.parametrize(("name", "worktree"), [("bad name!", "/wt"), ("", "/wt"), ("a", "")])
-    def test_rejects_bad_name_or_worktree(self, name, worktree, *, thread_registration):
+    @pytest.mark.parametrize("name", ["bad name!", ""])
+    def test_rejects_bad_name(self, name, *, thread_registration):
         with pytest.raises(ValueError):
-            NativeThread(name=name, tags=frozenset(), worktree=Checkout(Path(worktree)))
+            NativeThread(name=name, tags=frozenset(), worktree=Checkout(Path("/wt")))
 
     def test_rejects_self_parent(self, *, thread_registration):
         with pytest.raises(RelationViolationError):
@@ -413,11 +413,12 @@ class TestRegistration:
         registry.register(
             NativeThread(name='a', tags=frozenset({'x', 'y'}), worktree=Checkout(Path('/wt')), parent=ForkedParent('p'), task=GivenThreadText('t'), process_identity=ProcessIdentity.capture(os.getpid()))
         )
-        registry.unregister("a")
-        reloaded = Registration(path)
-        thread = reloaded.require("a")
+        thread = Registration(path).require("a")
         assert thread.parent == ForkedParent("p") and thread.task == GivenThreadText("t") and thread.process_identity == ProcessIdentity.capture(os.getpid())
         assert thread.tags == frozenset({"x", "y"})
+        registry.unregister("a")
+        reloaded = Registration(path)
+        assert reloaded.require("a").process_identity == NoProcess()
         assert reloaded.status("a") == StoppedThreadStatus()
 
     def test_peers_excludes_self(self, tmp_path: Path):
@@ -461,5 +462,5 @@ class TestCurrentThread:
             monkeypatch.setenv(name, value)
         thread = current_thread(registry)
         assert (thread.name, thread.tags, thread.worktree, thread.parent, thread.task) == (
-            "worker", frozenset({"a", "b"}), str(tmp_path / "project"), ForkedParent("colleague"), GivenThreadText("Ship it")
+            "worker", frozenset({"a", "b"}), Checkout(tmp_path / "project"), ForkedParent("colleague"), GivenThreadText("Ship it")
         )
