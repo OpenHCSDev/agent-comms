@@ -88,6 +88,11 @@ class ClaudeTranscript(ClaudeJsonLines, JsonLinesFile, ClaudeHistory, OfflineHis
                             key=lambda path: path.stat().st_mtime))
 
 
+WINDOW_ENDED = ""
+"""On a watch socket: the recent window has been sent and what follows is live. A transcript line is
+never blank (JsonLines.complete_lines), so this cannot be mistaken for one."""
+
+
 class RecentClaudeWindow(ClaudeJsonLines):
     """Where a running session's transcript is read from: its recent window's owning occurrence,
     never an arbitrary mid-turn prefix."""

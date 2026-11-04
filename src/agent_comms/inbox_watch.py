@@ -24,7 +24,7 @@ from yarl import URL
 
 from .agent_inbox import SecondsWait
 from .child_process import ProcessIdentity
-from .cli_bridges.claude_transcript import ClaudeJsonLines
+from .cli_bridges.claude_transcript import WINDOW_ENDED, ClaudeJsonLines
 from .cli_bridges.history import RemoteWatchHistory
 from .comms import Comms, client_wire
 from .connector_store import BearerSecret, digest
@@ -119,7 +119,12 @@ class PushedTranscript(ClaudeJsonLines, PublishesToBus):
     async def transcript(self) -> AsyncIterator[RuntimeUpdate]:
         state, offset = self.start_state(), 0
         async for frame in self.socket:
-            if frame.type is WSMsgType.TEXT:
+            if frame.type is WSMsgType.TEXT and frame.data == WINDOW_ENDED:
+                # The same gate a local bridge opens after replaying its window: without it the
+                # reader stays in replay, so chat publishes and activity never does.
+                for update in state.phase.window_ended(state):
+                    yield update
+            elif frame.type is WSMsgType.TEXT:
                 raw = frame.data.encode()
                 for update in self.line_updates(raw, state, offset, DAMAGED_RECORD):
                     yield update
