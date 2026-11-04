@@ -29,7 +29,8 @@ def test_a_session_starts_on_a_terminal_named_for_its_inbox(tmp_path: Path) -> N
     assert result.returncode == 0, result.stderr
     assert "https://claude.ai/code/session_x" in result.stdout
     seen = json.loads((tmp_path / "seen.json").read_text())
-    assert seen == {"argv": ["--cloud", "connect as claude-remote-g", "--name", "claude-remote-g"],
+    assert seen == {"argv": ["--cloud", "connect as claude-remote-g", "--name", "claude-remote-g",
+                             "--permission-mode", "auto"],
                     "terminal": True}
 
 
