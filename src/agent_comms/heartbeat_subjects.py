@@ -86,7 +86,7 @@ class HeartbeatSubject(DeclaredFamily, affix="Subject"):
         """Original action evidence is shared, while each line retains its own start."""
         return history.action_at(self).since(since)
 
-    def threads(self) -> tuple[str, ...]:
+    def threads(self) -> tuple[ThreadIncarnation, ...]:
         """The threads this subject is about; most subjects name none."""
         return ()
 
@@ -95,8 +95,8 @@ class HeartbeatSubject(DeclaredFamily, affix="Subject"):
 class TeammateSubject(HeartbeatSubject, declared_name="unit"):
     unit: ThreadIncarnation
 
-    def threads(self) -> tuple[str, ...]:
-        return (self.unit.name,)
+    def threads(self) -> tuple[ThreadIncarnation, ...]:
+        return (self.unit,)
 
     def action_at(self, history: TeamHistory) -> EventTime:
         return max((RecordedEventTime(message.timestamp)
@@ -138,8 +138,8 @@ class PassSubject(HeartbeatSubject):
     def action_at(self, history: TeamHistory) -> EventTime:
         return history.passes.heartbeat_completed_at(self.teammate)
 
-    def threads(self) -> tuple[str, ...]:
-        return (self.teammate.name,)
+    def threads(self) -> tuple[ThreadIncarnation, ...]:
+        return (self.teammate,)
 
 
 @dataclass(frozen=True)

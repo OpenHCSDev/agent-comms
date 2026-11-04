@@ -29,7 +29,6 @@ from agent_comms.nominal.field_codec import FieldCodec, GoalId, Id128
 from agent_comms.head_review import PullRequestHead
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.heartbeat_subjects import (
-    TeamHistory,
     HeadSubject,
     HeartbeatSubject,
     PassSubject,
@@ -371,12 +370,12 @@ class PlanStalled(PlanRule):
 class TeammateOwedAnswer(OwedAnswer, declared_name=None):
     """A message one unit is owed; it belongs on that unit's observation."""
 
-    unit: str
+    unit: ThreadIncarnation
 
     def questions_for(self, unit: ThreadIncarnation) -> tuple[Message, ...]:
-        return (self.message,) if unit.name == self.unit else ()
+        return (self.message,) if unit == self.unit else ()
 
-    def named_threads(self) -> tuple[str, ...]:
+    def named_threads(self) -> tuple[ThreadIncarnation, ...]:
         return tuple(dict.fromkeys((self.unit, *super().named_threads())))
 
 
@@ -388,7 +387,7 @@ class UnitAskUnanswered(TeammateOwedAnswer, UndatedStandingRule):
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
                   held: Mapping[ThreadIncarnation, Sequence[Todo]], debtor: str,
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
-        return tuple(cls(message, owner.name)
+        return tuple(cls(message, owner)
                      for owner, questions in UnansweredTeammateAsks.for_orders(
                          source, snapshot, debtor, held, time.time(),
                      ).items()
@@ -402,20 +401,20 @@ class UnitAskUnanswered(TeammateOwedAnswer, UndatedStandingRule):
         return self.message.timestamp <= now - AwaitingTeam.seconds
 
     def asked_by(self, reached: frozenset[str]) -> bool:
-        return self.unit in reached
+        return self.unit.name in reached
 
     def answered_in(self) -> tuple[str, ...]:
-        return (self.unit,)
+        return (self.unit.name,)
 
     def misaddressed(self, named: tuple[Message, ...], reached: frozenset[str]) -> str:
         """A unit's ask is answered only by a message that reaches that unit."""
-        if self.unit in reached or not self.answered_by(named):
+        if self.unit.name in reached or not self.answered_by(named):
             return ""
-        return (f"{self.message.message_id} was asked by {self.unit}; "
-                f"answer it in a message to {self.unit}")
+        return (f"{self.message.message_id} was asked by {self.unit.name}; "
+                f"answer it in a message to {self.unit.name}")
 
     def line(self) -> str:
-        return (f"ANSWER {self.unit} asked {self.cited} at {RecordedEventTime(self.message.timestamp).stamp()}. why is it still waiting on you?"
+        return (f"ANSWER {self.unit.name} asked {self.cited} at {RecordedEventTime(self.message.timestamp).stamp()}. why is it still waiting on you?"
                 f" -> {self.clearing_action()}")
 
 
@@ -433,7 +432,7 @@ class DeliveryAwaitingJudgement(TeammateOwedAnswer, UndatedStandingRule, OrderHe
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
         """The retained claim owns the report and the head owed a verdict, published or not:
         a claim whose answer never reached the bus is still owed its judgement."""
-        return tuple(cls(message=claim.message, unit=owner.name, problem=todo.id,
+        return tuple(cls(message=claim.message, unit=owner, problem=todo.id,
                          request=claim.request(), todo=todo)
                      for owner, todos in held.items() for todo in todos
                      for claim in todo.order.owed_claims())
@@ -448,7 +447,7 @@ class DeliveryAwaitingJudgement(TeammateOwedAnswer, UndatedStandingRule, OrderHe
         return (HeadSubject(self.request),)
 
     def command_values(self) -> Mapping[str, str]:
-        return {"unit": self.unit, **super().command_values()}
+        return {"unit": self.unit.name, **super().command_values()}
 
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         return False
@@ -457,15 +456,16 @@ class DeliveryAwaitingJudgement(TeammateOwedAnswer, UndatedStandingRule, OrderHe
                answered: tuple[OwedAnswer, ...]) -> bool:
         """Work sent to the holder waits on this judgement; an answer to the holder's own ask
         never does, or the gate would refuse the conversation the answer gate demands."""
-        return (self.unit in reached and not action.resolves_claim(self.unit, self.problem)
-                and not any(rule.asked_by(frozenset((self.unit,))) for rule in answered))
+        return (self.unit.name in reached
+                and not action.resolves_claim(self.unit.name, self.problem)
+                and not any(rule.asked_by(frozenset((self.unit.name,))) for rule in answered))
 
     def clearing_action(self) -> str:
         DeclaredFamily.discover_package(team)  # The verbs that clear it, for its action.
         return self.clearing_commands()
 
     def line(self) -> str:
-        return (f"JUDGE {self.unit} delivered {self.problem} ({self.cited}). you judged it yet?"
+        return (f"JUDGE {self.unit.name} delivered {self.problem} ({self.cited}). you judged it yet?"
                 f" -> {self.clearing_action()}")
 
 
@@ -486,8 +486,8 @@ class GoalBlocked(IndependentStandingRule, UndatedStandingRule):
                      for goal in thread.goal
                      for reason in goal.state.blocked_reasons())
 
-    def named_threads(self) -> tuple[str, ...]:
-        return (self.thread.name,)
+    def named_threads(self) -> tuple[ThreadIncarnation, ...]:
+        return (self.thread,)
 
     def line(self) -> str:
         return (f"GOAL BLOCKED {self.thread.name}: {self.reason[:200]}"

@@ -420,12 +420,16 @@ def test_a_notice_naming_a_deleted_rule_decodes_as_history():
 
 def test_rules_carrying_his_words_flag_their_board_lines():
     since = RecordedEventTime(1.0)
-    worker = TeammateSubject(RecordedThreadIncarnation("worker", 1.0))
+    born = RecordedThreadIncarnation("worker", 1.0)
+    worker = TeammateSubject(born)
+    colleague = RecordedThreadIncarnation("colleague", 2.0)
     flagged = RulePing(DirectiveUnacted, TextDigest.of("d"), text="ACT", subjects=(worker,), since=since)
     plain = RulePing(ReviewTimerUp, TextDigest.of("t"), text="Review", subjects=(worker,),
-                     since=since, threads=("worker",))
-    assert flagged.addresses("colleague") and not plain.addresses("colleague")
-    assert plain.addresses("worker")
+                     since=since, threads=(born,))
+    assert flagged.addresses(colleague) and not plain.addresses(colleague)
+    assert plain.addresses(born)
+    # A thread re-created under the same name is a different birth: the old rows aren't its.
+    assert not plain.addresses(RecordedThreadIncarnation("worker", 3.0))
 
 
 def test_a_tool_call_prints_only_new_rows_naming_its_session(
@@ -448,13 +452,13 @@ def test_a_tool_call_prints_only_new_rows_naming_its_session(
     began = time.time()
     first = RulePing(SpinningTeammate, TextDigest.of("first"), text="Read worker P1",
                      subjects=(TeammateSubject(worker),), since=RecordedEventTime(began),
-                     threads=("colleague",))
+                     threads=(colleague,))
     second = RulePing(ReviewTimerUp, TextDigest.of("second"), text="Review worker P2",
                       subjects=(TeammateSubject(worker),), since=RecordedEventTime(began),
-                      threads=("colleague",))
+                      threads=(colleague,))
     elsewhere = RulePing(ReviewTimerUp, TextDigest.of("elsewhere"), text="Review worker P3",
                          subjects=(TeammateSubject(worker),), since=RecordedEventTime(began),
-                         threads=("worker",))
+                         threads=(worker,))
     TeamUpdateStore.record(comms.root, TeamDecisions(
         colleague, (first, second, elsewhere), (first, second, elsewhere), ()))
     with (claim.held(record), claim.reader_held(), Binding.open(tmp_path / "delivery") as db,
@@ -1095,16 +1099,17 @@ def test_rows_waiting_on_a_stopped_thread_leave_the_main_view():
 
     since = RecordedEventTime(1.0)
     worker = TeammateSubject(RecordedThreadIncarnation("worker", 1.0))
+    claude = RecordedThreadIncarnation("claude", 2.0)
+    stopped = frozenset({RecordedThreadIncarnation("pi-stopped", 3.0)})
     live = RulePing(SpinningTeammate, TextDigest.of("live"), text="Read claude P1",
-                    subjects=(worker,), since=since, threads=("claude",))
+                    subjects=(worker,), since=since, threads=(claude,))
     parked = RulePing(SpinningTeammate, TextDigest.of("parked"), text="Read pi P2",
-                      subjects=(worker,), since=since, threads=("pi-stopped",))
-    claude = RecordedThreadIncarnation("claude", 1.0)
+                      subjects=(worker,), since=since, threads=tuple(stopped))
     packet = TeamDecisions(claude, (live, parked), (live, parked), ())
-    sections = AlarmGroup.sections((packet,), (live, parked), frozenset({"pi-stopped"}))
+    sections = AlarmGroup.sections((packet,), (live, parked), stopped)
     groups = {section.group: section for section in sections}
     assert groups[NewAlarms].pings == (live,)
     assert groups[ParkedAlarms].pings == (parked,)
     assert groups[ParkedAlarms].text_lines(2.0) == ()
     assert not ParkedAlarms.needs_disposal()
-    assert parked.parked(frozenset({"pi-stopped"})) and not live.parked(frozenset({"pi-stopped"}))
+    assert parked.parked(stopped) and not live.parked(stopped)

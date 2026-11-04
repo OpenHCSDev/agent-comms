@@ -268,11 +268,11 @@ class StandingRule(DefaultedName, RegisteredFamily, affix="StandingRule", discov
         about nothing a verb can act on clears only when its condition does."""
         return ()
 
-    def named_threads(self) -> tuple[str, ...]:
+    def named_threads(self) -> tuple[ThreadIncarnation, ...]:
         """The threads this line waits on or is about, which may differ from what disposes of
         it: a row naming only stopped threads waits below the board, not on it."""
         return tuple(dict.fromkeys(
-            name for subject in self.subjects() for name in subject.threads()))
+            thread for subject in self.subjects() for thread in subject.threads()))
 
     def rejected_line(self, error: RejectedEnforcementError) -> str:
         return f"Not applied ({error.explanation()}): {self.line()}"
