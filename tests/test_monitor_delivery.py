@@ -1036,7 +1036,8 @@ async def confirm_and_finish_reply(
 async def test_diagnostic_notice_is_consumed_without_replying_to_the_failed_sender(bridge, reply_end):
     diagnostic = record_terminal_failure(
         bridge.comms.root, subject=InputId.mint(), thread='peer',
-        failure=BackendFailed, sequences=(), source_error=RuntimeError('native request failed'))
+        failure=BackendFailed('native request failed'), sequences=(),
+        source_error=RuntimeError('native request failed'))
     message = bridge.comms.messaging.send(
         'peer', 'viewer', f'Request failed. No automatic retry. [Open diagnostic]({diagnostic.as_uri()})',
         AlertKind, role=NoticeRole()).message

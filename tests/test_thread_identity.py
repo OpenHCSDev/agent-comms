@@ -276,9 +276,16 @@ def test_saved_read_ledger_survives_reopen_and_new_ack(tmp_path):
     assert all(sequence in seen for sequence in (message.seq, next_message.seq))
 
 
+def complete_delete(registry: Registration, name: str) -> None:
+    """A begun deletion completes through its own owner, as thread deletion does."""
+    with registry.store.editing() as edit:
+        edit.document.remove_originals((edit.document.require(name),))
+        edit.commit()
+
+
 @pytest.mark.parametrize("withdrawals", [
     pytest.param((Registration.unregister, Registration.unregister, Registration.archive,
-                  Registration.begin_delete, Registration.remove), id="stop-archive-delete"),
+                  Registration.begin_delete, complete_delete), id="stop-archive-delete"),
     pytest.param((Registration.archive, Registration.remove), id="archive-remove"),
     pytest.param((Registration.remove,), id="remove"),
 ])

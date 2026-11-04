@@ -93,7 +93,7 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status,
             # none. Its original identity must bind this owner, while presentation
             # of the common lifecycle/readiness is identical.
             assert individual.read_identity.thread.incarnation == thread.incarnation
-            assert replace(individual, read_identity=None) == visible[0].presentation
+            assert individual.same_status(visible[0].presentation)
         else:
             from agent_comms.registry_document import RosterVisibility
             if expected.in_view(RosterVisibility(archived=True)):
