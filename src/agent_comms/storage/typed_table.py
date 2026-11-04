@@ -45,10 +45,10 @@ from typing import (
     overload,
 )
 
-from .class_fact import ClassFact
-from .nominal.declared_family import DeclaredFamily, FamilyMember, declared_words
-from .errors import RelationViolationError
-from .nominal.field_codec import (
+from ..class_fact import ClassFact
+from ..nominal.declared_family import DeclaredFamily, FamilyMember, declared_words
+from ..errors import RelationViolationError
+from ..nominal.field_codec import (
     FieldCodec,
     FieldDirective,
     FieldPlan,
@@ -65,7 +65,7 @@ from .nominal.field_codec import (
     WireValue,
     compile_decoder,
 )
-from .lifecycle import LifecycleState
+from ..lifecycle import LifecycleState
 from .locked_store import (
     DeclaredFile,
     ExternalFile,
@@ -81,8 +81,8 @@ from .locked_store import (
     WrittenFile,
 )
 from .maintenance_barrier import HolderWrittenFile, MaintenanceBarrier, MaintenanceHolder
-from .package_stamp import STAMP
-from .projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
+from ..package_stamp import STAMP
+from ..projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
 from .private_path import PrivateDirectoryRole
 from .store_files import (
     BorrowedStoreLock,
@@ -92,7 +92,7 @@ from .store_files import (
 )
 
 if TYPE_CHECKING:
-    from .execution_states import ExecutionState
+    from ..execution_states import ExecutionState
 
 RelatedRow = TypeVar("RelatedRow", bound="TypedRow")
 

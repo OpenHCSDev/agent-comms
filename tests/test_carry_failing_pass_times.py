@@ -4,7 +4,7 @@ import json
 
 from cutover.carry_failing_pass_times import FailingPassTimes
 
-from agent_comms.locked_store import LiveFilesRequest
+from agent_comms.storage.locked_store import LiveFilesRequest
 from agent_comms.service_passes import ServicePassStore
 
 

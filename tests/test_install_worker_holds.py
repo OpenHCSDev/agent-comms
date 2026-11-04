@@ -33,7 +33,7 @@ from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.repo import Checkout
 from agent_comms.threads import NativeThread
-from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceClaimHolder
+from agent_comms.storage.maintenance_barrier import HOLDER_NONCE, MaintenanceClaimHolder
 
 
 @pytest.mark.parametrize("command", [StartCliCommand, StopCliCommand])

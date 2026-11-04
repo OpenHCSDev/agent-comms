@@ -27,7 +27,7 @@ from agent_comms.envelope_claim_transitions import (
 )
 from agent_comms.errors import CommittedMessageError
 from agent_comms.nominal.field_codec import ClaimId, InputId, TurnId
-from agent_comms.locked_store import RegistryFile, StoreCommittedError
+from agent_comms.storage.locked_store import RegistryFile, StoreCommittedError
 from agent_comms.messages import (
     BusCapability,
     BusProjectionTables,
@@ -45,7 +45,7 @@ from agent_comms.messages import (
 from agent_comms.registration import Registration
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import NativeThread
-from agent_comms.typed_table import ProjectionProducer, TypedTable
+from agent_comms.storage.typed_table import ProjectionProducer, TypedTable
 from bus_record_fixture import publication_processes, record_from
 
 

@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Annotated, ClassVar, Self
 
 from .errors import RelationViolationError, StoredHistoryUnreadable
-from .locked_store import InputCaptureFile
+from .storage.locked_store import InputCaptureFile
 from .nominal.field_codec import (
     ContextStoreId, FieldCodec, MalformedRecord, NullMember, TaggedRecordMember,
 )
@@ -34,7 +34,7 @@ from .turn_context import (
     UnrecordedSegment,
 )
 
-from .typed_table import (
+from .storage.typed_table import (
     AttachedPracticeRebuild, StoreRows, Column, DurableStore, Generated, Index,
     RowidSequenced, SingletonRow, TableSchema, TypedTable,
 )

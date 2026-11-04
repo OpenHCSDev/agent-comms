@@ -21,8 +21,8 @@ from . import turn_failure as failures
 from .acp_failure import UnrecordedFailureSource
 from .turn_inbox import ClearQueue, InputRequest, SendNow, TurnInbox, TurnInboxItem, UseSettings
 from .nominal.field_codec import InputId
-from .locked_store import RegistryFile
-from .maintenance_barrier import MaintenanceBarrier
+from .storage.locked_store import RegistryFile
+from .storage.maintenance_barrier import MaintenanceBarrier
 from .native_failures import NativePiUnavailable
 from .pending_requests import PendingRequest
 from .prompt_state import PreparedSession, UnwrittenPrompt

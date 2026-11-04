@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Self
 
 from .nominal.field_codec import FieldCodec
 from .projection_source import ProducedRow, ProjectionSource
-from .typed_table import TypedRow
+from .storage.typed_table import TypedRow
 
 if TYPE_CHECKING:
     from .channels import Channel

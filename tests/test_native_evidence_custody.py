@@ -19,7 +19,7 @@ from agent_comms.native_session_reopen import PiSessionId
 from agent_comms.turn_item import FreshNativeId
 from agent_comms.native_evidence_read import PrivateEvidenceRead
 from agent_comms.native_transcript import NativeTranscript
-from agent_comms.store_files import (
+from agent_comms.storage.store_files import (
     ExclusiveLock,
     StoreLockContention,
     StoreGuard,
@@ -148,7 +148,7 @@ def test_physical_lock_budget_closes_refused_descriptor(tmp_path):
 
 def test_consumer_work_cannot_spend_physical_lock_resource(tmp_path):
     import time
-    from agent_comms.store_files import StoreLockContention, _store_lock
+    from agent_comms.storage.store_files import StoreLockContention, _store_lock
     resource = StoreLockContention(.025)
     with _store_lock(tmp_path / 'first', ExclusiveLock(), resource):
         time.sleep(.04)

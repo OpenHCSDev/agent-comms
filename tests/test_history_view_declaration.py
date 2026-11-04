@@ -67,7 +67,7 @@ def test_joined_declarations_decode_one_sql_snapshot_and_reject_foreign_columns(
 
     import pytest
 
-    from agent_comms.typed_table import TypedRow
+    from agent_comms.storage.typed_table import TypedRow
 
     @dataclass(frozen=True)
     class Label(TypedRow):

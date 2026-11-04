@@ -14,8 +14,8 @@ from agent_comms.native_input_record import TriageNativeExecution, UnrecordedNat
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.nominal.field_codec import FieldCodec, InputId, RootId, ThreadLookup
 from agent_comms.native_prompt_binding import PromptBinding, PromptBindings
-from agent_comms.maintenance_barrier import MaintenanceNotHeldError
-from agent_comms.typed_table import ReconciledFile
+from agent_comms.storage.maintenance_barrier import MaintenanceNotHeldError
+from agent_comms.storage.typed_table import ReconciledFile
 from conftest import maintenance_held
 
 

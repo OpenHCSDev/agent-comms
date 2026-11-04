@@ -9,7 +9,7 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
-from agent_comms.locked_store import LiveFilesRequest
+from agent_comms.storage.locked_store import LiveFilesRequest
 from agent_comms.nominal.field_codec import TurnId
 from agent_comms.threads import ParkedThreadWorkState, NativeThread
 
@@ -24,8 +24,8 @@ from agent_comms.registry_document import NoTeamProject, RegisteredTeamProject
 from agent_comms.installer.backup import bus_files
 from agent_comms.installer.carry import CarryChain
 from agent_comms.installer.practice import PracticeCopy
-from agent_comms.locked_store import BusFile, RegistryFile, RootFile, SQLiteFile
-from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+from agent_comms.storage.locked_store import BusFile, RegistryFile, RootFile, SQLiteFile
+from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -198,7 +198,7 @@ def test_an_install_without_flags_keeps_native_team_and_parked_state(
     import multiprocessing
 
     from agent_comms.cli_verbs.install import InstallCliCommand
-    from agent_comms.store_files import SharedLock
+    from agent_comms.storage.store_files import SharedLock
     from test_locked_store import _hold_lock, process
 
     root = (private_directory / "wire").resolve()

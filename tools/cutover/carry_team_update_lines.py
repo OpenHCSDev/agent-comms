@@ -17,7 +17,7 @@ from agent_comms.task_attachments.team_pings import TeamDecisions, TeamUpdateNot
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.installer.probes.carry import Carried, Carry
-from agent_comms.locked_store import RootFile
+from agent_comms.storage.locked_store import RootFile
 from agent_comms.messages import Message
 from agent_comms.thread_identity import ThreadIncarnation
 from cutover.carry_team_observations import TeamObservations

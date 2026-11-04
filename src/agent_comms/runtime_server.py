@@ -22,7 +22,7 @@ from .owner_protocol import ClientLine, OwnerFailure, OwnerLine, OwnerPermission
 from .owner_connection import socket_path
 from .coordination_errors import CoordinationError, IdentityConflict
 from .native_failures import NativeRequestFailure
-from .private_path import PrivateSocketRole
+from .storage.private_path import PrivateSocketRole
 from typing import TYPE_CHECKING
 
 from abc import abstractmethod
@@ -35,7 +35,7 @@ from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .nominal.field_codec import WireOmitDefault
 from .thread_identity import ThreadIncarnation
-from .maintenance_barrier import MaintenanceHolder, NoMaintenanceHolder
+from .storage.maintenance_barrier import MaintenanceHolder, NoMaintenanceHolder
 from .owner_protocol import OwnerResult
 from .tool_result import DeclaredReply
 from agent_comms.owner_connection import AnyOwner, NoControllerToken, OwnerConnection, RequestedOwner

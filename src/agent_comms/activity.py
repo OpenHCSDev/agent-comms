@@ -25,7 +25,7 @@ from .nominal.field_codec import (
     WireOmitDefault,
     WireRequired,
 )
-from agent_comms.typed_table import StoreRows, Column, DerivedStore, TypedTable
+from agent_comms.storage.typed_table import StoreRows, Column, DerivedStore, TypedTable
 from .thread_identity import OwnerIdentity
 from .thread_owned_state import ThreadOwnedState
 from .thread_presentation import IdleThreadPresentationStatus, ThreadPresentationStatus, WorkingThreadPresentationStatus

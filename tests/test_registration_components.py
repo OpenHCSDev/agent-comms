@@ -12,14 +12,14 @@ import pytest
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.nominal.field_codec import FieldCodec, TurnId
-from agent_comms.locked_store import DocumentChange
+from agent_comms.storage.locked_store import DocumentChange
 from agent_comms.registration import Registration
 from agent_comms.routing import NoTurnRouting
 from agent_comms.registry_document import ThreadRows
 from agent_comms.snapshot_slices import ThreadSlice
 from agent_comms.repo import Checkout
 from agent_comms.registry_store import RegistryStore
-from agent_comms.store_files import AtomicFile
+from agent_comms.storage.store_files import AtomicFile
 from agent_comms.threads import ExternalThread, Thread, NativeThread
 from agent_comms.thread_text import GivenThreadText
 

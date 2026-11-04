@@ -7,14 +7,14 @@ import pytest
 
 from agent_comms.context_store import ContextStore
 from agent_comms.errors import RelationViolationError
-from agent_comms.locked_store import (
+from agent_comms.storage.locked_store import (
     DeclaredFile,
     InstallationFiles,
     LiveFilesRequest,
     RootFile,
     UndeclaredFile,
 )
-from agent_comms.store_files import store_lock_path
+from agent_comms.storage.store_files import store_lock_path
 from agent_comms.threads import ThreadCatalogFile
 
 

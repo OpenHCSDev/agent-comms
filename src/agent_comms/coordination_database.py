@@ -15,8 +15,8 @@ from typing import Self
 
 from agent_comms.coordination_errors import CoordinationReadUnavailable, IntegrityViolationError
 from agent_comms.coordination_schema import CoordinatorTable
-from agent_comms.locked_store import FileStore, InputCaptureFile, SQLiteReader
-from agent_comms.typed_table import (
+from agent_comms.storage.locked_store import FileStore, InputCaptureFile, SQLiteReader
+from agent_comms.storage.typed_table import (
     CarriedWriter,
     ReconciledFile,
     StoreWriter,
@@ -25,7 +25,7 @@ from agent_comms.typed_table import (
 
 from .child_process import Platform
 from .nominal.declared_family import DeclaredFamily
-from .store_files import DEFAULT_STORE_CONTENTION, StoreContention
+from .storage.store_files import DEFAULT_STORE_CONTENTION, StoreContention
 
 class StoreFile(DeclaredFamily):
     """One decoded file state, with the consumer's result inside its read lifetime."""

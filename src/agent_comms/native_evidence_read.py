@@ -10,7 +10,7 @@ from .errors import RelationViolationError
 from .nominal.field_codec import FieldCodec, MalformedRecord
 from .native_failures import NativePiUnavailable
 from .pi_vocabulary import PendingStopReason
-from .private_path import FileIdentity, FileRevision, PrivateFileRole, TrustedAncestorRole
+from .storage.private_path import FileIdentity, FileRevision, PrivateFileRole, TrustedAncestorRole
 
 
 class NativeInputUncommitted(NativePiUnavailable):

@@ -11,7 +11,7 @@ from pathlib import Path
 
 from .harness_install import replace_link
 from .repo import Checkout, Repo
-from .store_files import StoreGuard
+from .storage.store_files import StoreGuard
 
 
 class PublishingCheckout(Checkout, StoreGuard):

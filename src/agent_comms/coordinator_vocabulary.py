@@ -8,7 +8,7 @@ from functools import cache
 from typing import ClassVar
 
 from .nominal.declared_family import DeclaredFamily
-from .typed_table import sql_literal
+from .storage.typed_table import sql_literal
 
 
 class CoordinatorVocabulary(DeclaredFamily, declared_name=None):

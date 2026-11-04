@@ -22,7 +22,7 @@ from .nominal.field_codec import (
     TextRepresentation,
 )
 from .selected_result import CoordinatedTurn
-from .typed_table import TextStorage
+from .storage.typed_table import TextStorage
 
 if TYPE_CHECKING:
     from sqlite3 import Connection

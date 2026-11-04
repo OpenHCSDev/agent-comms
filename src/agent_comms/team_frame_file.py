@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from agent_comms.service_passes import ServicePassStore
-from agent_comms.locked_store import PatternFile, RuntimeFile
+from agent_comms.storage.locked_store import PatternFile, RuntimeFile
 
 
 class TeamFrameFile(RuntimeFile, PatternFile):

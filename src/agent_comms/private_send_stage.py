@@ -37,7 +37,7 @@ from .reservation_rules import ReservationViolationError
 from .selected_triage import DecidedTriageRecord, SelectedTriage
 from .text_digest import TextDigest
 from .turn_failure import TurnFailure
-from .typed_table import SqlValue
+from .storage.typed_table import SqlValue
 from .reservation_rules import ReservationRule
 
 

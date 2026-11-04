@@ -11,7 +11,7 @@ from agent_comms.historical_views import (
     UnobservedConversation,
     DMDisplayHistory,
 )
-from agent_comms.private_path import FileRevision
+from agent_comms.storage.private_path import FileRevision
 from bus_record_fixture import prepare_native_comms
 from agent_comms.threads import NativeThread
 

@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 from .nominal.field_codec import FieldCodec, MalformedRecord, MessageId, NullMember, RecordMember, SingleFieldValue, SubclassUnion
 from .page_traversal import LiveCursor, NewestCursor, PageCursor, PageTraversal
-from .typed_table import TypedRow
+from .storage.typed_table import TypedRow
 
 if TYPE_CHECKING:
     from .read_basis import ReadCursor

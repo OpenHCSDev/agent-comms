@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from .nominal.declared_family import DeclaredFamily
 from .native_session_files import NativeSessionFiles
-from .private_path import FileRevision
+from .storage.private_path import FileRevision
 
 
 class SessionRevisionUnavailable(ValueError):

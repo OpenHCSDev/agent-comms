@@ -25,7 +25,7 @@ from .coordination_session import (
 )
 from .execution_store import ExecutionStore
 from .participant_store import ParticipantStore
-from .store_files import DEFAULT_STORE_CONTENTION, StoreContention
+from .storage.store_files import DEFAULT_STORE_CONTENTION, StoreContention
 from .working_memory_annotations import WorkingMemoryAnnotations
 
 if TYPE_CHECKING:

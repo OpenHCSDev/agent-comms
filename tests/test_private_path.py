@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.child_process import Platform
-from agent_comms.private_path import (
+from agent_comms.storage.private_path import (
     FileIdentity,
     FileRevision,
     PrivateDirectoryRole,

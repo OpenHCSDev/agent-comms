@@ -26,13 +26,13 @@ from .nominal.field_codec import (
     Sha256Text,
     WireName,
 )
-from .locked_store import DurableFile, PatternFile, SQLiteFile
+from .storage.locked_store import DurableFile, PatternFile, SQLiteFile
 from .native_failures import NativePiUnavailable
 from .native_integer import PositiveNativeIntegerBounds
 from .native_session_reopen import PiSessionId
-from .private_path import FileIdentity, PrivateFileRole
+from .storage.private_path import FileIdentity, PrivateFileRole
 from .turn_item import FreshNativeId
-from .typed_table import (
+from .storage.typed_table import (
     Column,
     DurableTables,
     GuardedInserts,

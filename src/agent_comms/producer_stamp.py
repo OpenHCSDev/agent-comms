@@ -19,7 +19,7 @@ if __name__ == "__main__":
 
 from agent_comms.bus import Bus as Bus  # noqa: E402
 from agent_comms.messages import BusRecord  # noqa: E402
-from agent_comms.typed_table import ProducedTable, ProducedRow  # noqa: E402
+from agent_comms.storage.typed_table import ProducedTable, ProducedRow  # noqa: E402
 
 
 def complete_writer_family() -> tuple[type[ProducedRow], ...]:

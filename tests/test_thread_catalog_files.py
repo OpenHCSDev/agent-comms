@@ -4,12 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.locked_store import InstallationFiles, LiveFilesRequest
-from agent_comms.locked_store import LockedFile, RootFile
+from agent_comms.storage.locked_store import InstallationFiles, LiveFilesRequest
+from agent_comms.storage.locked_store import LockedFile, RootFile
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.registry_store import RegistryStore
-from agent_comms.store_files import AtomicFile, store_lock_path
+from agent_comms.storage.store_files import AtomicFile, store_lock_path
 from agent_comms.threads import ThreadCatalogFile
 
 

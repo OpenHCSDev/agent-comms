@@ -41,7 +41,7 @@ from agent_comms.order_tools import (
     CommsVerdictTool,
     TodoChanged,
 )
-from agent_comms.locked_store import SQLiteFile
+from agent_comms.storage.locked_store import SQLiteFile
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.slop import (
     DeclarationDerivation,

@@ -41,7 +41,7 @@ from agent_comms.goal_presentation import (
 )
 from agent_comms.goal_scope import OneGoal
 from agent_comms.goal_states import ActiveGoal, ModelPause
-from agent_comms.maintenance_barrier import MaintenanceOperator
+from agent_comms.storage.maintenance_barrier import MaintenanceOperator
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.threads import NativeThread
 from agent_comms.tool_caller import ToolCaller

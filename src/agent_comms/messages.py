@@ -28,7 +28,7 @@ from typing import (
 from agent_comms.response_policy import (
     NO_ALIASES, InformationalPolicy, ResponseEligibility, ResponsePolicy,
 )
-from agent_comms.typed_table import (
+from agent_comms.storage.typed_table import (
     AppendOnlyTables, Column, DerivedTables, DurableTables, ForeignKey, Index,
     LOCAL_TABLE_SOURCE, ProducedTable, SharedFileTables, TableReference, TableSource, TypedRow, TypedTable,
 )

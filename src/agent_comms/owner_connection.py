@@ -18,9 +18,9 @@ from .coordinator import Coordination
 from .errors import RelationViolationError, UnregisteredThreadError
 from .nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
 from .jsonl_stream import JsonlStreamReader
-from .maintenance_barrier import MaintenanceHolder
+from .storage.maintenance_barrier import MaintenanceHolder
 from .owner_protocol import OwnerLine
-from .private_path import PrivateSocketRole
+from .storage.private_path import PrivateSocketRole
 from .thread_identity import OwnerIdentity, ThreadIncarnation
 from .threads import NativeThread, Thread
 

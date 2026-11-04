@@ -40,7 +40,7 @@ from .input_key import AcpInputKey, InputKey
 from .nominal.field_codec import InputId, RecordMember
 from .input_disposition import InputDispositions
 from .launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime, RestartEnvironment, SetVariable, ThreadLaunch
-from .maintenance_barrier import MaintenanceBarrier
+from .storage.maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .native_arguments import (
     ConfiguredBinary,

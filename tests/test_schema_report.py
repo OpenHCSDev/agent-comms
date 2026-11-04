@@ -8,7 +8,7 @@ from agent_comms.cli import main
 from agent_comms.cli_verbs.schema_report import SchemaReportCliCommand
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.todos import Todo
-from agent_comms.typed_table import SQLiteSchemaObject, SQLiteSchemaDifference
+from agent_comms.storage.typed_table import SQLiteSchemaObject, SQLiteSchemaDifference
 from bus_record_fixture import context_comms
 
 

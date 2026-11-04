@@ -48,10 +48,10 @@ from .message_reference import MessageReference
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import RegistryPrivacy
 from .registration import Registration
-from .store_files import StoreBusy
+from .storage.store_files import StoreBusy
 from .threads import NativeThread, Thread
 from .turn_context import ContextSegment, InstructionFile, ResourceProvenance, WireProvenance
-from .typed_table import TypedRow
+from .storage.typed_table import TypedRow
 from .wake_candidate_index import ProjectionUnavailableError, WakeCandidateIndex
 
 

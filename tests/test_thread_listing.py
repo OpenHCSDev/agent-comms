@@ -11,14 +11,14 @@ from typing import ClassVar
 import pytest
 from multiprocessing.synchronize import Event
 
-from agent_comms import store_files
+from agent_comms.storage import store_files
 from agent_comms.bus_route_counts import BusRouteCounts
 from agent_comms.cli_verbs.threads import ThreadsCliCommand
 from agent_comms.comms import Comms
 from agent_comms.presentation import CountedInbox
 from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Checkout
-from agent_comms.store_files import LendingConnection
+from agent_comms.storage.store_files import LendingConnection
 from agent_comms.threads import NativeThread
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
 

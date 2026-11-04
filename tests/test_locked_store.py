@@ -11,14 +11,14 @@ from dataclasses import dataclass, field, replace
 
 import pytest
 
-from agent_comms.locked_store import DocumentBytes, DocumentChange, LockedStore
-from agent_comms.private_path import FileRevision, MissingFile
+from agent_comms.storage.locked_store import DocumentBytes, DocumentChange, LockedStore
+from agent_comms.storage.private_path import FileRevision, MissingFile
 from agent_comms.coordination_errors import StaleRevision
 from agent_comms.pi_counts import PiCount
 from agent_comms.registry_store import RegistryStore
 from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoDocument, RuntimeInfoStore
 from agent_comms.child_process import Platform
-from agent_comms.store_files import (
+from agent_comms.storage.store_files import (
     ExclusiveLock,
     StoreLockBusyError,
     StoreLockContention,

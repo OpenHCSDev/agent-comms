@@ -26,7 +26,7 @@ from .nominal.field_codec import (
     ThreadLookup,
     ToolCallId,
 )
-from .locked_store import RegistryFile
+from .storage.locked_store import RegistryFile
 from .message_reference import MessageReference
 from .native_runtime_input import NativeRuntimeInput
 from .native_tools import MutatingPathTool
@@ -42,7 +42,7 @@ from .transcript_events import (
 )
 from .transcript_sources import TranscriptDraft, TranscriptRecord, TranscriptSource
 from .turn_item import NativeItemId, NativeTurnId
-from .typed_table import (
+from .storage.typed_table import (
     Column,
     DurableStore,
     ForeignKey,

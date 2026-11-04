@@ -21,10 +21,10 @@ from .connector_profile import (
 )
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import FieldCodec, NominalSpelling, NominalText, RootId
-from .locked_store import DocumentChange, ExternalFile, FilesRequest
-from .maintenance_barrier import CarriedDocument
-from .store_files import DependentStateTier, DrainedWriters, SingleFileStore
-from .typed_table import GuardedExternalStore
+from .storage.locked_store import DocumentChange, ExternalFile, FilesRequest
+from .storage.maintenance_barrier import CarriedDocument
+from .storage.store_files import DependentStateTier, DrainedWriters, SingleFileStore
+from .storage.typed_table import GuardedExternalStore
 
 ACCESS_SECONDS = 3600
 UI_GRANT_SECONDS = 7 * 24 * 3600

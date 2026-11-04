@@ -34,7 +34,7 @@ from agent_comms.message_notification import NotificationWindow
 from .notification_evidence import OwnerOutcomes
 from .message_notification import MessageNotification
 from .thread_presentation import ThreadPresentation
-from .private_path import FileObservation, FileRevision
+from .storage.private_path import FileObservation, FileRevision
 from .private_registry_guard import RegistryPrivacy
 from .recorded_bus import RecordedBusIdentity
 from .registration import Registration

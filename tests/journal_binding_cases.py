@@ -6,7 +6,7 @@ from multiprocessing.connection import Connection
 from pathlib import Path
 
 from agent_comms.cli_bridges.shared import Binding
-from agent_comms.locked_store import SQLiteFile
+from agent_comms.storage.locked_store import SQLiteFile
 
 
 def _bind(state: Path, requested: Binding, pipe: Connection) -> None:

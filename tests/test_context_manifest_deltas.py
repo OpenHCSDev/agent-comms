@@ -14,7 +14,7 @@ from agent_comms.context_store import (
 )
 from agent_comms.errors import RelationViolationError
 from agent_comms.installer.practice import PracticeCopy
-from agent_comms.typed_table import RowNotFoundError, SQLitePageSize
+from agent_comms.storage.typed_table import RowNotFoundError, SQLitePageSize
 import json
 import sqlite3
 

@@ -36,7 +36,7 @@ from .native_input_proof import NativeContextProof
 from .native_integer import PositiveNativeIntegerBounds
 from .native_session_reopen import PiSessionId
 from .transcript_routes import InputDisplay, NoDisplayText
-from .typed_table import LOCAL_TABLE_SOURCE, SqlStorage, TableSource, TextStorage, sql_literal
+from .storage.typed_table import LOCAL_TABLE_SOURCE, SqlStorage, TableSource, TextStorage, sql_literal
 
 if TYPE_CHECKING:
     from sqlite3 import Connection

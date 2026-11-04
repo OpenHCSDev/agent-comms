@@ -13,7 +13,7 @@ from agent_comms.coordination_cohort import pending_sealed_assignments
 from agent_comms.coordinator import Coordination
 from agent_comms.nominal.field_codec import InputId, TurnId
 from agent_comms.input_attempt import NotSentInput
-from agent_comms.private_path import FileRevision
+from agent_comms.storage.private_path import FileRevision
 from agent_comms.queued_input import DeliveredInput
 from conftest import publish_initial
 from stored_inputs import stored_inputs

@@ -14,7 +14,7 @@ from agent_comms.comms import Comms
 from agent_comms.coordinator import Coordination
 from agent_comms.nominal.field_codec import InputId
 from agent_comms.installer.practice import PracticeCopy
-from agent_comms.locked_store import RootFile
+from agent_comms.storage.locked_store import RootFile
 from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.queued_input import InitialInput
 from native_backend_fixture import native_backend_fixture, wait_for

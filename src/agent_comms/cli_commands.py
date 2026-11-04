@@ -43,7 +43,7 @@ from .threads import Thread
 from .todos import Todo
 from .head_review import PullRequestHead
 from .turn_context import CodexRolloutProvenance, ContextManifest, ContextSegment, ContributionCoordinates, Provenance, TurnContext
-from .typed_table import StoreRewrite
+from .storage.typed_table import StoreRewrite
 
 from agent_comms.session_file import SessionFile
 

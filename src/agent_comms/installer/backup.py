@@ -28,7 +28,7 @@ from agent_comms.active_route import (
 from agent_comms.child_process import Platform
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, PathText
 from agent_comms.installer.refusals import UpgradeRefused
-from agent_comms.locked_store import (
+from agent_comms.storage.locked_store import (
     DeclaredFile,
     FilesRequest,
     InstallationFiles,
@@ -38,11 +38,11 @@ from agent_comms.locked_store import (
     RuntimeFile,
     UndeclaredFile,
 )
-from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator, MaintenanceState
-from agent_comms.private_path import FileObservation, FileRevision, MissingFile, PrivateDirectoryRole
+from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator, MaintenanceState
+from agent_comms.storage.private_path import FileObservation, FileRevision, MissingFile, PrivateDirectoryRole
 from agent_comms.registry_store import RegistryStore
-from agent_comms.store_files import AtomicFile, DirectoryAtomicFile
-from agent_comms.typed_table import ExternalStore
+from agent_comms.storage.store_files import AtomicFile, DirectoryAtomicFile
+from agent_comms.storage.typed_table import ExternalStore
 
 
 @dataclass(frozen=True)

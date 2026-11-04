@@ -135,7 +135,7 @@ from agent_comms.thread_identity import (
 )
 from agent_comms.threads import Thread
 from agent_comms.tool_result import ToolResult
-from agent_comms.typed_table import (
+from agent_comms.storage.typed_table import (
     CapturedRows,
     Column,
     DurableStore,

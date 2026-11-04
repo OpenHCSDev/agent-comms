@@ -15,9 +15,9 @@ import pytest
 from agent_comms.nominal.field_codec import (
     AttemptId, BoundedText, FieldCodec, GitCommitText, GoalId, Id128Text, MalformedRecord, NoAttemptId, NullMember,
 )
-from agent_comms.store_files import DEFAULT_STORE_CONTENTION
+from agent_comms.storage.store_files import DEFAULT_STORE_CONTENTION
 from agent_comms.messages import InfoKind, MessageKind
-from agent_comms.typed_table import (
+from agent_comms.storage.typed_table import (
     Column,
     DurableTables,
     ExactStorage,
@@ -313,7 +313,7 @@ def test_writer_derives_missing_nullable_fields_but_refuses_unclaimed_data():
         GoalHistoryError,
     )
     from agent_comms.goals import NoGoal
-    from agent_comms.typed_table import WriterOwnedFile
+    from agent_comms.storage.typed_table import WriterOwnedFile
 
     entry = GoalHistoryEntry(1, BaselineRevision, 1.0, NoGoal(), NoGoal(),
                              owner_created_at=1.0, state=CommittedEntry)
@@ -337,7 +337,7 @@ def test_writer_derives_missing_nullable_fields_but_refuses_unclaimed_data():
 
 
 def test_durable_writer_relaxes_not_null_without_losing_rows():
-    from agent_comms.typed_table import DurableTables, WriterOwnedFile
+    from agent_comms.storage.typed_table import DurableTables, WriterOwnedFile
 
     @dataclass(frozen=True)
     class RelaxedValueRow(DurableTables, TypedTable, declared_name="relaxed_values"):
@@ -363,7 +363,7 @@ def test_durable_writer_relaxes_not_null_without_losing_rows():
 
 
 def test_durable_writer_fills_a_missing_field_from_its_declared_default():
-    from agent_comms.typed_table import DurableTables, WriterOwnedFile
+    from agent_comms.storage.typed_table import DurableTables, WriterOwnedFile
 
     @dataclass(frozen=True)
     class DefaultedRow(DurableTables, TypedTable, declared_name="defaulted_row"):
@@ -381,7 +381,7 @@ def test_durable_writer_fills_a_missing_field_from_its_declared_default():
 
 
 def test_durable_writer_drops_a_declared_dropped_field_and_keeps_rows():
-    from agent_comms.typed_table import DurableTables, WriterOwnedFile
+    from agent_comms.storage.typed_table import DurableTables, WriterOwnedFile
 
     @dataclass(frozen=True)
     class LeanBoardLine(DurableTables, TypedTable, declared_name="lean_board_line"):

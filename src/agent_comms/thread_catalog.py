@@ -6,7 +6,7 @@ from .cli_result import ThreadToolCatalogResult
 from .nominal.field_codec import FieldCodec
 from .launch_root import LaunchRoot
 from .registry_store import RegistryStore
-from .store_files import AtomicFile
+from .storage.store_files import AtomicFile
 from .threads import Thread, ThreadCatalogFile
 from .tool_declaration import NativeRequestTools
 

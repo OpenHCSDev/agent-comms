@@ -15,7 +15,7 @@ from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import TurnId, GoalId
 from agent_comms.goals import Goal
-from agent_comms.store_files import SharedLock, store_lock_path
+from agent_comms.storage.store_files import SharedLock, store_lock_path
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.thread_text import GivenThreadText
 from agent_comms.turn_lease import RecordedGeneration
@@ -171,7 +171,7 @@ def test_a_claim_drop_waiting_on_a_turn_retired_under_it_finds_the_retirement(tm
 def test_turn_access_waits_for_private_registry_commit(tmp_path, operation):
     from concurrent.futures import ThreadPoolExecutor
     from agent_comms.private_registry_guard import registry_digest
-    from agent_comms.store_files import AtomicFile
+    from agent_comms.storage.store_files import AtomicFile
 
     registry = registered(tmp_path)
     registry.store.prepare_native_root()
@@ -220,7 +220,7 @@ def test_turn_access_waits_for_private_registry_commit(tmp_path, operation):
 
 def test_turn_read_still_rejects_abandoned_post_replacement_guard(tmp_path):
     from agent_comms.private_registry_guard import registry_digest
-    from agent_comms.store_files import AtomicFile
+    from agent_comms.storage.store_files import AtomicFile
 
     registry = registered(tmp_path)
     registry.store.prepare_native_root()

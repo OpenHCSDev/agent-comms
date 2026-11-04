@@ -15,7 +15,7 @@ from agent_comms.cli_bridges.shared import Binding, GivenBinding, StoredBinding
 from agent_comms.cli_protocol import WATCH_LINE, FailedCoreError, UnavailableCoreError
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.nominal.field_codec import RecordProblems
-from agent_comms.locked_store import SQLiteFile
+from agent_comms.storage.locked_store import SQLiteFile
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.threads import NativeThread
 
@@ -68,7 +68,7 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 from agent_comms.cli_bridges.shared import Binding
-from agent_comms.store_files import LendingConnection
+from agent_comms.storage.store_files import LendingConnection
 
 connect = sqlite3.connect
 class PausedConnection(LendingConnection):

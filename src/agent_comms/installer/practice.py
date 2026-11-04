@@ -25,13 +25,13 @@ from agent_comms.installer.backup import pinned_bus_files, saved_bus_files
 from agent_comms.registry_store import RegistryCut, RegistryStore
 from agent_comms.installer.declared_uv import DeclaredUv
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.locked_store import (
+from agent_comms.storage.locked_store import (
     CompleteInputReader, DeclaredFile, InputCaptureFile, InstallationFiles,
     LiveFilesRequest, RegistryFile, RetainedCopyRequest, RootFile, UndeclaredFile,
 )
-from agent_comms.maintenance_barrier import MaintenanceBarrier, NoMaintenanceHolder
+from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, NoMaintenanceHolder
 from agent_comms.storage_rules import StorageRule
-from agent_comms.private_path import PrivateDirectoryRole
+from agent_comms.storage.private_path import PrivateDirectoryRole
 
 
 @dataclass(frozen=True)

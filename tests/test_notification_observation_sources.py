@@ -13,7 +13,7 @@ from agent_comms.message_reference import MessageReference
 from agent_comms.notification_progress import AnsweredResponse, UnansweredResponse
 from agent_comms.notification_evidence import RecipientLimit
 from agent_comms.notification_reads import LiveNotificationRead
-from agent_comms.private_path import FileObservation, FileRevision
+from agent_comms.storage.private_path import FileObservation, FileRevision
 from agent_comms.ui_model.observation import (
     NotificationsObserved, ObserveNotifications, ObservationService,
     ReadNotifications, RevisionObserved,

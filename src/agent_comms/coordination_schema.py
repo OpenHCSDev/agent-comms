@@ -8,7 +8,7 @@ from typing import Final
 import agent_comms.coordination_tables as coordination_tables
 from agent_comms.coordination_errors import SchemaVersionError
 from agent_comms.coordinator_vocabulary import CoordinatorVocabulary
-from agent_comms.typed_table import DurableTables, SharedFileTables, TypedTable
+from agent_comms.storage.typed_table import DurableTables, SharedFileTables, TypedTable
 
 COORDINATION_SNAPSHOT_VERSION: Final = 3
 

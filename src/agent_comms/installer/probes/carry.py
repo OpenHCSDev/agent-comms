@@ -21,11 +21,11 @@ from agent_comms.installer.interpreter_operation import (
     SubjectPhase,
     TargetProbe,
 )
-from agent_comms.locked_store import FilesRequest, InstallationFiles, RootFile
+from agent_comms.storage.locked_store import FilesRequest, InstallationFiles, RootFile
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import BoundedText, FieldPlan, PathText, SingleFieldValue
-from agent_comms.store_files import BorrowedStoreLock, is_store_lock
-from agent_comms.typed_table import ExternalStore, TriggerKind, TypedTable
+from agent_comms.storage.store_files import BorrowedStoreLock, is_store_lock
+from agent_comms.storage.typed_table import ExternalStore, TriggerKind, TypedTable
 
 
 @dataclass(frozen=True)

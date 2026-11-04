@@ -9,7 +9,7 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_schema import CoordinatorRow
 from agent_comms.coordination_tables.executions import ExecutionReference
 from agent_comms.coordination_tables.recovery import RecoveryAudit
-from agent_comms.typed_table import Column, ForeignKey
+from agent_comms.storage.typed_table import Column, ForeignKey
 
 pytestmark = pytest.mark.refactor_guard
 

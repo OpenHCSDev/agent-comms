@@ -12,7 +12,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.team_hud import TeamFrame
 from agent_comms_hooks import ToolRefusedError
 from agent_comms.nominal.field_codec import ToolCallId
-from agent_comms.locked_store import DocumentChange
+from agent_comms.storage.locked_store import DocumentChange
 from agent_comms.order_tools import (
     TeammateRead,
     CommsTeamLoadTool,

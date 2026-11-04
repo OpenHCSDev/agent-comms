@@ -4,10 +4,10 @@ from agent_comms.cli_commands import PlannedStoresResult
 from agent_comms.cli_support.store_reconcile import StoreReconcileCliCommand
 from agent_comms.nominal.field_codec import Argument
 from agent_comms.storage_rules import StorageRule
-from agent_comms.locked_store import LiveFilesRequest
-from agent_comms.typed_table import ReconciledFile
-from agent_comms.typed_table import StoreRewrite
-from agent_comms.typed_table import ExternalStore
+from agent_comms.storage.locked_store import LiveFilesRequest
+from agent_comms.storage.typed_table import ReconciledFile
+from agent_comms.storage.typed_table import StoreRewrite
+from agent_comms.storage.typed_table import ExternalStore
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path

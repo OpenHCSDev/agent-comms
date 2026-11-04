@@ -10,8 +10,8 @@ import pytest
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.locked_store import RegistryFile
-from agent_comms.maintenance_barrier import (
+from agent_comms.storage.locked_store import RegistryFile
+from agent_comms.storage.maintenance_barrier import (
     MaintenanceBarrier,
     MaintenanceOperator,
     NoMaintenanceTarget,

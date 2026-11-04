@@ -52,7 +52,7 @@ from agent_comms.storage_rules import StorageRule
 from agent_comms.todos import EditWorkplaces
 from agent_comms.turn_digests import OrderEditsRead, OrderEditCountRead, TurnsSince
 from agent_comms.installer.backup import StoreBackup
-from agent_comms.maintenance_barrier import (
+from agent_comms.storage.maintenance_barrier import (
     MaintenanceBarrier,
     MaintenanceOperator,
 )
@@ -90,7 +90,7 @@ from agent_comms.activity import ActivityState
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
-from agent_comms.typed_table import HeldBusFile
+from agent_comms.storage.typed_table import HeldBusFile
 from agent_comms_hooks import forks
 from hook_session_fixture import resident_hook, resident_session, resident_stdout
 from cli_command import team

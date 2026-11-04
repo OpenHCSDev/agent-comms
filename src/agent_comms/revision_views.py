@@ -5,7 +5,7 @@ from __future__ import annotations
 from itertools import zip_longest
 
 from .nominal.declared_family import DeclaredFamily
-from .private_path import FileObservation, MissingFile
+from .storage.private_path import FileObservation, MissingFile
 
 
 class StatusSourced:

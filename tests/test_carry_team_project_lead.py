@@ -6,7 +6,7 @@ import pytest
 from cutover.carry_team_project_lead import TeamProjectLead
 
 from agent_comms.comms import wire
-from agent_comms.locked_store import LiveFilesRequest, RegistryFile
+from agent_comms.storage.locked_store import LiveFilesRequest, RegistryFile
 from agent_comms.private_registry_guard import PrivateRegistryGuard
 from agent_comms.registry_document import NoTeamProject, RegisteredTeamProject
 from agent_comms.registry_store import RegistryStore

@@ -23,10 +23,10 @@ from metaclass_registry.mro_dispatch import (
 
 from .child_process import Platform, ProcessState
 from .nominal.field_codec import FieldCodec, InputId, ScratchName, TurnId
-from .locked_store import PatternFile, RuntimeFile
+from .storage.locked_store import PatternFile, RuntimeFile
 from .native_failures import NativeRequestFailure
 from .publication_measurements import PublicationMeasurements
-from .store_files import AtomicFile
+from .storage.store_files import AtomicFile
 from .turn_failure import TurnFailure
 from .turn_lease import TurnLeaseFence
 

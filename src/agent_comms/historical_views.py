@@ -25,8 +25,8 @@ from .errors import UnregisteredThreadError
 from .nominal.field_codec import (
     FieldCodec, NullMember, RecordMember, ScratchName, SingleFieldValue, SubclassUnion, TaggedRecordMember,
 )
-from .locked_store import DocumentChange, RegistryFile, RootFile
-from .maintenance_barrier import CarriedDocument
+from .storage.locked_store import DocumentChange, RegistryFile, RootFile
+from .storage.maintenance_barrier import CarriedDocument
 from .tool_result import ToolResult
 from .message_page import (
     NEWEST_PAGE,
@@ -42,7 +42,7 @@ from .notification_evidence import FirstRecipient, OutcomeViewer, RecipientCurso
 from .page_traversal import HistoryCursor, HistorySourceKey, OlderTraversal
 from .message_notification import MessageNotification
 from .presentation import WireRevision
-from .private_path import FileObservation, FileRevision, ObservedPath, PrivateDirectoryRole
+from .storage.private_path import FileObservation, FileRevision, ObservedPath, PrivateDirectoryRole
 from .read_basis import (
     AnonymousViewer,
     ChannelDisplayIdentity,
@@ -64,7 +64,7 @@ from .registration import Registration
 from .registry_document import RegistrySnapshot
 from .registry_provenance import RegistryProvenance
 from .revision_views import BusSourceView
-from .store_files import SingleFileStore, SourceTier, StoreOwner
+from .storage.store_files import SingleFileStore, SourceTier, StoreOwner
 from .thread_identity import UnrecordedThreadIncarnation
 from .display_references import ReferenceContext
 from .threads import Thread, ThreadProvenance

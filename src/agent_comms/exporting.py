@@ -27,7 +27,7 @@ from .messages import Message, StoredWireHistory
 from .bus_tables import MessageIdentitySource
 from .read_basis import DMDisplayScope
 from .registration import Registration
-from .store_files import AtomicFile, ExclusiveAtomicFile
+from .storage.store_files import AtomicFile, ExclusiveAtomicFile
 
 
 class WireExportFormat(DeclaredFamily, affix="Format"):

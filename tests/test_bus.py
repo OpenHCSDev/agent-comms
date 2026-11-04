@@ -57,7 +57,7 @@ from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.response_acknowledgement import (
     canonical_publication_key,
 )
-from agent_comms.typed_table import (
+from agent_comms.storage.typed_table import (
     ProducedTable,
     ProjectionProducer,
     RowNotFoundError,

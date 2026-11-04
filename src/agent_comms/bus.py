@@ -51,14 +51,14 @@ from agent_comms.envelope_claim_transitions import (
 )
 from agent_comms.errors import CommittedMessageError, RelationViolationError, UnclaimedError
 from agent_comms.nominal.field_codec import ClaimId, FieldCodec, MessageId, ThreadLookup
-from agent_comms.locked_store import (
+from agent_comms.storage.locked_store import (
     BusFile, CompleteInputReader, FileStore, SQLiteReader, StoreCommittedError,
 )
 from agent_comms.message_reference import MessageReference
-from agent_comms.private_path import FileIdentity, PresentPath
+from agent_comms.storage.private_path import FileIdentity, PresentPath
 from agent_comms.read_basis import CursorRow
 from agent_comms.read_basis import ReadCursor, RepliesDisplayScope, UnreadQuery
-from agent_comms.typed_table import (
+from agent_comms.storage.typed_table import (
     CarriedWriter, PracticeRebuild, ReconciledFile, SchemaRebuild,
     SQLiteDatabase, WalStore,
 )

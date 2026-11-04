@@ -31,7 +31,7 @@ from .nominal.field_codec import (
     WireChoices,
     WireName,
 )
-from .maintenance_barrier import FreshIngress
+from .storage.maintenance_barrier import FreshIngress
 from .native_tools import (
     ArgumentTool,
     CoordinationCall,

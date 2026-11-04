@@ -82,7 +82,7 @@ from .connector_store import (
     ConnectorGrants, ConnectorStore, IssuedTokens,
     RegisteredClient, TrustedBrowser, UiGrantAccess, UiReadAccess, digest,
 )
-from .locked_store import DocumentChange
+from .storage.locked_store import DocumentChange
 from .messages import QuestionKind
 from .team.standing import UnownedOrderWatch
 from .team_heartbeat import TeamHeartbeat

@@ -3,10 +3,10 @@ from __future__ import annotations
 from agent_comms.cli_commands import ReconciledStoresResult
 from agent_comms.cli_support.store_reconcile import StoreReconcileCliCommand
 from agent_comms.nominal.field_codec import Argument
-from agent_comms.typed_table import HeldBusFile
-from agent_comms.typed_table import NoPractice
-from agent_comms.typed_table import Practice
-from agent_comms.typed_table import ReconciledFile
+from agent_comms.storage.typed_table import HeldBusFile
+from agent_comms.storage.typed_table import NoPractice
+from agent_comms.storage.typed_table import Practice
+from agent_comms.storage.typed_table import ReconciledFile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated

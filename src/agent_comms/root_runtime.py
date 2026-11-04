@@ -17,13 +17,13 @@ from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .nominal.field_codec import PathText, WireOmitDefault
 from .launch_runtime import LaunchRuntime
-from .locked_store import DocumentChange, LockedStore, RegistryFile, RollbackRetained
-from .maintenance_barrier import MaintenanceBarrier
+from .storage.locked_store import DocumentChange, LockedStore, RegistryFile, RollbackRetained
+from .storage.maintenance_barrier import MaintenanceBarrier
 from .owner_connection import socket_path
-from .private_path import FileIdentity, PrivateSocketRole
+from .storage.private_path import FileIdentity, PrivateSocketRole
 from .recorded_bus import RecordedBus, RecordedBusIdentity
 from .registry_store import RegistryStore
-from .store_files import DependentStateTier, SingleFileStore
+from .storage.store_files import DependentStateTier, SingleFileStore
 
 
 class ForeignRuntimeError(RelationViolationError):

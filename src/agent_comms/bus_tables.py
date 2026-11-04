@@ -13,7 +13,7 @@ from agent_comms import messages
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
 from agent_comms.message_reference import MessageReference
-from agent_comms.typed_table import (
+from agent_comms.storage.typed_table import (
     Column,
     ComposedSchemas,
     Index,

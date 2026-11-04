@@ -20,7 +20,7 @@ from .native_session_reopen import NativeSessionIdentity
 from .pending_requests import PendingRequest
 from .pi_events import PiEvent
 from .pi_rpc import PiRpcChannel
-from .private_path import PrivateSocketRole
+from .storage.private_path import PrivateSocketRole
 from .publication_measurements import PublicationMeasurements
 from .session_revision import SessionRevision
 from .turn_context import Provenance

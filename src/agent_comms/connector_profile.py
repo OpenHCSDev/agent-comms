@@ -14,8 +14,8 @@ from .nominal.field_codec import (
     FieldCodec, Id128, MalformedRecord, NominalSpelling, NominalText, PathText,
     RootId, SingleFieldValue, TextRepresentation,
 )
-from .private_path import PrivateDirectoryRole, PrivateFileRole
-from .store_files import ExclusiveDirectoryAtomicFile
+from .storage.private_path import PrivateDirectoryRole, PrivateFileRole
+from .storage.store_files import ExclusiveDirectoryAtomicFile
 
 
 class UiGrantId(Id128):

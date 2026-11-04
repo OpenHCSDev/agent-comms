@@ -17,7 +17,7 @@ from .native_session_reopen import NativeSessionIdentity
 from .native_evidence_read import session_location
 from agent_comms.native_failures import NativePiUnavailable
 from .nominal.field_codec import boundary_decoder
-from .private_path import PrivateFileRole
+from .storage.private_path import PrivateFileRole
 from .launch_runtime import RestartEnvironment, ThreadLaunch
 from .pi_vocabulary import ThinkingChoice
 

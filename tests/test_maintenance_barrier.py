@@ -16,7 +16,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import FieldCodec, TurnId
-from agent_comms.maintenance_barrier import (
+from agent_comms.storage.maintenance_barrier import (
     HOLDER_NONCE,
     DrainingPhase,
     InstallingPhase,
@@ -30,7 +30,7 @@ from agent_comms.maintenance_barrier import (
     ReadyPhase,
 )
 from agent_comms.registration import Registration
-from agent_comms.store_files import (
+from agent_comms.storage.store_files import (
     ExclusiveLock,
     StoreGuard,
     _async_store_lock,
@@ -423,7 +423,7 @@ def test_a_registry_write_is_refused_to_all_but_the_maintenance_holder(tmp_path:
     registry itself refuses their writes during a hold, and the holder's own writes still land."""
     from agent_comms.coordination_errors import ParticipantNotRegistered
     from agent_comms.coordination_session import CoordinationSession
-    from agent_comms.maintenance_barrier import HOLDER_NONCE
+    from agent_comms.storage.maintenance_barrier import HOLDER_NONCE
     from agent_comms.participant_store import ParticipantStore
 
     comms = wire(tmp_path)
@@ -454,7 +454,7 @@ def test_a_carried_store_write_is_refused_to_all_but_the_maintenance_holder(tmp_
     """Every file an installation carries gates its writers through its kind, CarriedWriter:
     a bridge's transcript or a fork's todo write during a hold is refused instead of
     changing a file the install's carry check compares, and the holder still writes."""
-    from agent_comms.maintenance_barrier import HOLDER_NONCE
+    from agent_comms.storage.maintenance_barrier import HOLDER_NONCE
 
     comms = wire(tmp_path)
     todos = comms.goals.todos
@@ -478,7 +478,7 @@ def test_the_goal_ledger_refuses_other_writers_once_the_drained_hold_is_retarget
     still settle their turns in it; once retargeted, only the holder commits."""
     from agent_comms.nominal.field_codec import GoalId
     from agent_comms.launch_runtime import LaunchRuntime
-    from agent_comms.maintenance_barrier import HOLDER_NONCE
+    from agent_comms.storage.maintenance_barrier import HOLDER_NONCE
 
     comms = wire(tmp_path)
     ledger = comms.goals.open_goal_store()
@@ -501,7 +501,7 @@ def test_a_ledger_created_after_the_drain_is_refused_and_leaves_no_file(
     the same drain-settled policy its writes inherit, and the carry check meets no new file."""
     from agent_comms.goal_attempts import GoalAttemptStore
     from agent_comms.launch_runtime import LaunchRuntime
-    from agent_comms.maintenance_barrier import HOLDER_NONCE
+    from agent_comms.storage.maintenance_barrier import HOLDER_NONCE
 
     comms = wire(tmp_path)
     directory = GoalAttemptStore.directory_in(comms.root)

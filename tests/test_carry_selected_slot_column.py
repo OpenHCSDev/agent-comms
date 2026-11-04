@@ -13,7 +13,7 @@ from agent_comms.nominal.field_codec import (
     SlotId,
     ToolCallId,
 )
-from agent_comms.locked_store import LiveFilesRequest
+from agent_comms.storage.locked_store import LiveFilesRequest
 from agent_comms.native_runtime_input import SelectedToolSlot
 
 

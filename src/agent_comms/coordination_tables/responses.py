@@ -16,7 +16,7 @@ from agent_comms.coordination_tables.executions import ExecutionReference, Retry
 from agent_comms.nominal.field_codec import MessageId, SnapshotExclude, WireName, projected
 from agent_comms.obligation_states import ResponseState
 from agent_comms.reason_codes import ReasonCode
-from agent_comms.typed_table import (
+from agent_comms.storage.typed_table import (
     Column,
     ColumnGuard,
     FrozenColumn,

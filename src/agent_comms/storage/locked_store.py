@@ -24,11 +24,11 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Self, TypeVar
 
 from pydantic import JsonValue
 
-from .child_process import Platform
-from .coordination_errors import CoordinationBeginUnavailable, CoordinationReadUnavailable
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import FieldCodec, MalformedRecord, PathText
-from .errors import RelationViolationError
+from ..child_process import Platform
+from ..coordination_errors import CoordinationBeginUnavailable, CoordinationReadUnavailable
+from ..nominal.declared_family import DeclaredFamily
+from ..nominal.field_codec import FieldCodec, MalformedRecord, PathText
+from ..errors import RelationViolationError
 from .private_path import FileObservation, FileRevision, MissingFile, PrivateDirectoryRole, PrivateFileRole
 from .store_files import (
     AtomicFile,
@@ -761,7 +761,7 @@ class RegistryFile(RollbackRetained, GoalWakeFile):
     def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
         """The copy names no live process: a signal, stop or wake aimed through it would reach
         the source root's units."""
-        from .registry_store import RegistryStore
+        from ..registry_store import RegistryStore
 
         registry = RegistryStore(source)
         with registry.guarded_read():

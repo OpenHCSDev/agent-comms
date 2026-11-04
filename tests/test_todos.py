@@ -36,7 +36,7 @@ from agent_comms.goal_actions import SetGoalAction
 from agent_comms.held_orders import HeldOrders
 from agent_comms.goals import OrderCheck
 from agent_comms.installer.practice import PracticeCopy
-from agent_comms.locked_store import RootFile
+from agent_comms.storage.locked_store import RootFile
 from agent_comms.installer.runtime_resolution import CorePackage, TextualPackage, ToadPackage
 from agent_comms.owner_requests import NewestOpenRequest
 from agent_comms.plan_phases import PlanPhase

@@ -10,7 +10,7 @@ import sys
 import pytest
 
 from agent_comms.errors import RelationViolationError
-from agent_comms.store_files import (
+from agent_comms.storage.store_files import (
     BoundedStoreReadBudget,
     ExclusiveLock,
     SharedLock,

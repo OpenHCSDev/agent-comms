@@ -17,7 +17,7 @@ from .owner_connection import (
     OwnerReading,
     OwnerReplyConnection,
 )
-from .private_path import FileRevision, ObservedPath
+from .storage.private_path import FileRevision, ObservedPath
 from .runtime_server import AttachedResultRuntimeRequest, AttachedRuntimeRequestContext
 from .read_basis import NoDisplaySelection, ReadAuthority
 from .registry_document import RegistrySnapshot

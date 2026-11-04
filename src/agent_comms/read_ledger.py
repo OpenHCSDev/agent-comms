@@ -18,9 +18,9 @@ from .bus import Bus, BusReader
 from .channel_targets import CommandTarget
 from .coordination_errors import DMScopeChanged
 from .nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
-from .locked_store import DocumentChange
-from .maintenance_barrier import CarriedDocument
-from .private_path import ObservedPath
+from .storage.locked_store import DocumentChange
+from .storage.maintenance_barrier import CarriedDocument
+from .storage.private_path import ObservedPath
 from .read_basis import (
     AllConversation,
     ChannelConversation,
@@ -33,7 +33,7 @@ from .read_basis import (
 )
 from .recorded_bus import NoRecordedBus, RecordedBus, RecordedBusIdentity
 from .nominal.sealed import Sealed
-from .store_files import DependentStateTier, SingleFileStore
+from .storage.store_files import DependentStateTier, SingleFileStore
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 

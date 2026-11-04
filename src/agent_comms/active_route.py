@@ -22,13 +22,13 @@ from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .nominal.field_codec import FieldCodec, MalformedRecord, PathText, ScratchName
 from .launch_root import LaunchRoot
-from .locked_store import DocumentBytes
+from .storage.locked_store import DocumentBytes
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
-from .private_path import (
+from .storage.private_path import (
     FileRevision, MissingFile, ObservedPath, OwnedDirectoryRole, PrivateDirectoryRole, PrivateFileRole,
 )
 from .recorded_bus import RecordedBusIdentity
-from .store_files import (
+from .storage.store_files import (
     DependentStateTier, DirectoryAtomicFile, ExclusiveDirectoryAtomicFile,
     FileTransactions, SingleFileStore, StoreLockContention,
 )

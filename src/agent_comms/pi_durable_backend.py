@@ -19,7 +19,7 @@ from .agent_backend import (
     RuntimeLocation,
 )
 from .agent_events import Error
-from .locked_store import SQLiteFile
+from .storage.locked_store import SQLiteFile
 from .external_transcript import ExternalCut
 from .native_child import PiChild
 from .native_entries import StoredEntry

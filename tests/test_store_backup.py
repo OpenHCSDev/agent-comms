@@ -14,8 +14,8 @@ from agent_comms.coordination_database import (
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.coordination_tables.refusals import SendRefusal
 from agent_comms.external_transcript import ExternalTranscript
-from agent_comms.locked_store import RollbackRetained, SQLiteFile
-from agent_comms.store_files import StoreBusy
+from agent_comms.storage.locked_store import RollbackRetained, SQLiteFile
+from agent_comms.storage.store_files import StoreBusy
 
 
 def _try_external_writer(path, result):

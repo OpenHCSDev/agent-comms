@@ -23,7 +23,7 @@ from .child_process import NO_PROCESS, ProcessIdentity, ProcessState
 from .cli_result import CliResult
 from .goal_waits import GoalWaits
 from .native_entries import ImportedSessionWriter
-from .locked_store import PatternFile, RuntimeFile
+from .storage.locked_store import PatternFile, RuntimeFile
 from .registration import Registration
 from .relationships import RelationshipStore
 from .repo import Checkout, LaunchCheckout

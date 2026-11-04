@@ -33,13 +33,13 @@ from .input_attempt import (
 from .input_key import InputKey, InputKeyText, TurnInputKey
 from .input_origin import HarnessAttemptOrigin, InputOrigin, UnattributedInputOrigin
 from .lifecycle_capability import Unresolved
-from .locked_store import CompleteInputReader, DocumentChange, PublishedProperty
+from .storage.locked_store import CompleteInputReader, DocumentChange, PublishedProperty
 from .message_reference import MessageReference
 from .messages import MessageInput
 from .native_input_proof import NativeContextProof
 from .reported_turn import ReportedTurnState
 from .tool_result import ToolResult
-from .typed_table import (
+from .storage.typed_table import (
     AttachedPracticeRebuild,
     Column,
     DurableStore,

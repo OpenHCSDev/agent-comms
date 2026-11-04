@@ -26,7 +26,7 @@ from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.envelope_claim_transitions import AssignmentBinding
 from agent_comms.nominal.field_codec import AssignmentId, MessageId, SnapshotExclude, ThreadLookup, WireName, projected
 from agent_comms.message_reference import MessageReference
-from agent_comms.typed_table import (
+from agent_comms.storage.typed_table import (
     LOCAL_TABLE_SOURCE,
     Column,
     FirstValueState,

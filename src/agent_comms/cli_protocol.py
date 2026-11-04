@@ -24,7 +24,7 @@ from .coordination_errors import CoordinationReadUnavailable
 from .nominal.declared_family import UnknownFamilyMember
 from .external_transcript import RequestedEarlierPage
 from .nominal.field_codec import TimestampText
-from .maintenance_barrier import MaintenanceHeldError
+from .storage.maintenance_barrier import MaintenanceHeldError
 from .recorded_time import UnrecordedTimeError
 from .turn_item import NativeTurnId, TurnItem
 from .wire_models import DeclaredWireFamily, WireModel

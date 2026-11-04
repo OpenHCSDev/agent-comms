@@ -7,7 +7,7 @@ import pytest
 
 from agent_comms.nominal.field_codec import MalformedRecord
 from agent_comms.registration import Registration
-from agent_comms.store_files import AtomicFile
+from agent_comms.storage.store_files import AtomicFile
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.threads import Thread, NativeThread
 

@@ -14,7 +14,7 @@ from abc import abstractmethod
 from .compaction_notices import CompactionNotice, IgnoredCompactionDeal, StartedRuleReading
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import boundary_decoder
-from .store_files import StoreGuard
+from .storage.store_files import StoreGuard
 
 class GateNotices(DeclaredFamily):
     """The existing call record's leading byte owns which first event remains to report."""

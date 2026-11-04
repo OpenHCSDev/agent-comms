@@ -60,11 +60,11 @@ from .goal_generation import (
     ReservedGeneration,
 )
 from .lifecycle_capability import Failed
-from .locked_store import FileStore, GoalWakeFile, SQLiteReader
-from .maintenance_barrier import DrainSettledFile
+from .storage.locked_store import FileStore, GoalWakeFile, SQLiteReader
+from .storage.maintenance_barrier import DrainSettledFile
 from .pi_counts import PiCount, UnreportedCount
 from agent_comms.pi_wire import PiUsage
-from .store_files import AtomicFile
+from .storage.store_files import AtomicFile
 from .attempt_resolution import (
     AttemptResolution,
     DecidedResolution,
@@ -75,7 +75,7 @@ from .attempt_resolution import (
     UnverifiedLaunchRetired,
     WorkDecision,
 )
-from .typed_table import (
+from .storage.typed_table import (
     LOCAL_TABLE_SOURCE,
     Column,
     Generated,

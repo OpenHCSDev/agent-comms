@@ -9,8 +9,8 @@ from contextlib import closing
 import pytest
 
 from agent_comms.coordination_errors import CoordinationReadUnavailable
-from agent_comms.locked_store import FileStore, SQLiteReader, SQLiteStorage
-from agent_comms.store_files import StoreBusy, StoreWait
+from agent_comms.storage.locked_store import FileStore, SQLiteReader, SQLiteStorage
+from agent_comms.storage.store_files import StoreBusy, StoreWait
 
 
 class ReaderFile(FileStore, SQLiteReader):

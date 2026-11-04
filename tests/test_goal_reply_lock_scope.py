@@ -27,7 +27,7 @@ from agent_comms.goal_actions import (
 from agent_comms.goal_waits import GoalWaitReview, NoGoalWait, RecordedGoalWait
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.messages import ConversationRole, NoticeRole
-from agent_comms.store_files import store_lock_path
+from agent_comms.storage.store_files import store_lock_path
 from agent_comms.thread_text import GivenThreadText
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.tool_caller import ThreadCaller

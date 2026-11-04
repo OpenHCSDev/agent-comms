@@ -16,7 +16,7 @@ from .messages import BusProjectionTables, BusRow, MessageInput, PublicRecord, P
 from .projection_source import ProducedRow
 from .read_basis import ReadCursor
 from .routing import DeliveryScope
-from .typed_table import Column, Index, TypedRow
+from .storage.typed_table import Column, Index, TypedRow
 
 if TYPE_CHECKING:
     from .bus_publication import Delivered

@@ -16,12 +16,12 @@ from .errors import RelationViolationError
 from .nominal.field_codec import InputId, MalformedRecord, NominalSpelling, NominalText, NullMember, SingleFieldValue
 from .input_disposition import InputDispositions
 from .pi_wire import PiOmitted, ReportedInputId
-from .private_path import FileObservation, FileRevision
+from .storage.private_path import FileObservation, FileRevision
 from .routing import NoTurnRouting, Routing, TurnRouting
 from .text_digest import TextDigest
 from .turn_item import FreshNativeId
 from .transcript_events import ContextTranscript, TranscriptEvent
-from .typed_table import Column, DurableStore, StoreRows, TextStorage, WithoutRowid
+from .storage.typed_table import Column, DurableStore, StoreRows, TextStorage, WithoutRowid
 
 
 if TYPE_CHECKING:

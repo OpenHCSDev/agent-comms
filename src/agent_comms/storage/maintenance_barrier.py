@@ -20,12 +20,12 @@ from typing import Annotated, ClassVar, Literal, Self
 
 from agent_comms_hooks import ToolRefusedError
 
-from .child_process import ProcessIdentity
-from .coordination_errors import DrainUnavailable
+from ..child_process import ProcessIdentity
+from ..coordination_errors import DrainUnavailable
 from .private_path import FileObservation, FileRevision, PrivateFileRole
-from .nominal.declared_family import DeclaredFamily
-from .errors import RelationViolationError
-from .nominal.field_codec import (
+from ..nominal.declared_family import DeclaredFamily
+from ..errors import RelationViolationError
+from ..nominal.field_codec import (
     FieldCodec,
     ClaimId,
     MalformedRecord,
@@ -34,10 +34,10 @@ from .nominal.field_codec import (
     SubclassUnion,
     WireOmitDefault,
 )
-from .launch_runtime import LaunchRuntime
-from .lifecycle import LifecycleState
+from ..launch_runtime import LaunchRuntime
+from ..lifecycle import LifecycleState
 from .locked_store import DurableFile, LockedStore, RegistryFile, WrittenFile
-from .send_outcome import GrantedSend, HeldSend
+from ..send_outcome import GrantedSend, HeldSend
 from .store_files import (
     AtomicFile,
     RegistryLocking,

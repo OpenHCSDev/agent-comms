@@ -58,9 +58,9 @@ from agent_comms.coordinator import Coordination
 from agent_comms.nominal.field_codec import FieldCodec, MessageId, PathText, SubclassUnion, ThreadLookup
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.maintenance_barrier import MaintenanceHeldError
-from agent_comms.private_path import PrivateDirectoryRole, PrivateFileRole, TrustedAncestorRole
-from agent_comms.store_files import ExclusiveDirectoryAtomicFile
+from agent_comms.storage.maintenance_barrier import MaintenanceHeldError
+from agent_comms.storage.private_path import PrivateDirectoryRole, PrivateFileRole, TrustedAncestorRole
+from agent_comms.storage.store_files import ExclusiveDirectoryAtomicFile
 from agent_comms.message_reference import (
     BridgeBeginning,
     BridgePosition,
@@ -79,7 +79,7 @@ from agent_comms.task_attachments.team_pings import TeamUpdate
 from agent_comms.thread_status import ThreadStatus
 from agent_comms.thread_text import AbsentText, GivenText, TextChoice
 from agent_comms.repo import Checkout
-from agent_comms.typed_table import (
+from agent_comms.storage.typed_table import (
     Column,
     DurableTables,
     TableSchema,
@@ -102,7 +102,7 @@ from .session_watch import (
     WatchClaim,
     WatchRecord,
 )
-from ..locked_store import FilesRequest, RegistryFile, SQLiteFile
+from ..storage.locked_store import FilesRequest, RegistryFile, SQLiteFile
 from agent_comms.harness_install import HarnessSession
 from .monitor import (
     BRIDGE_FAILURES,

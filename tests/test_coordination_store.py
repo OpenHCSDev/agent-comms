@@ -76,7 +76,7 @@ from agent_comms.recovery_states import FailedRecovery
 from agent_comms.response_acknowledgement import canonical_publication_key
 from agent_comms.selected_source_batch import SelectedSource
 from agent_comms.turn_failure import ProviderRetryExhausted
-from agent_comms.typed_table import SQLiteForeignKeys
+from agent_comms.storage.typed_table import SQLiteForeignKeys
 from agent_comms.wake_policy import (
     BoundedTriageWake,
     FullWake,

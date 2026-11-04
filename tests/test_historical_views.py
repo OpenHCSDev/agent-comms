@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.locked_store import LiveFilesRequest, RegistryFile
+from agent_comms.storage.locked_store import LiveFilesRequest, RegistryFile
 from agent_comms.registration import Registration
 from agent_comms.bus import Bus, PublicRecord
 from agent_comms.channel_targets import CommandTarget, ThreadTarget
@@ -30,7 +30,7 @@ from agent_comms.read_ledger import ReadLedger
 from agent_comms.routing import MessageRoute, TurnRouting
 from agent_comms.transcript_routes import DisplayText
 from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.store_files import StoreOwner
+from agent_comms.storage.store_files import StoreOwner
 from agent_comms.threads import NativeThread
 
 

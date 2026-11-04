@@ -35,11 +35,11 @@ from agent_comms_hooks.process_claim import (
     SharedFlock,
 )
 
-from .child_process import LockHolder, Platform
-from .coordination_errors import CoordinationReadUnavailable, DeferredRead, StaleRevision
-from .nominal.declared_family import DeclaredFamily
-from .errors import RelationViolationError
-from .nominal.field_codec import PathText, ScratchName
+from ..child_process import LockHolder, Platform
+from ..coordination_errors import CoordinationReadUnavailable, DeferredRead, StaleRevision
+from ..nominal.declared_family import DeclaredFamily
+from ..errors import RelationViolationError
+from ..nominal.field_codec import PathText, ScratchName
 from .private_path import FileIdentity, FileObservation, FileRevision, OwnedDirectoryRole, PrivateFileRole
 
 if TYPE_CHECKING:

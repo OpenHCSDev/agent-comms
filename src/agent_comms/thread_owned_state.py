@@ -6,7 +6,7 @@ from abc import abstractmethod
 from collections.abc import Iterable, Sequence
 from typing import TYPE_CHECKING
 
-from .store_files import StoreOwner
+from .storage.store_files import StoreOwner
 from .errors import RelationViolationError
 
 if TYPE_CHECKING:

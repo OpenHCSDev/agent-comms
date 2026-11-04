@@ -9,7 +9,7 @@ from multiprocessing import Pipe
 import pytest
 
 from agent_comms.presentation import WireRevision
-from agent_comms.private_path import FileRevision
+from agent_comms.storage.private_path import FileRevision
 from agent_comms.revision_views import StatusView
 from agent_comms.ui_model.observation import (
     TeamHudReading,

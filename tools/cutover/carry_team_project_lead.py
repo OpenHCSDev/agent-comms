@@ -19,8 +19,8 @@ from cutover.carry_team_vocabulary import TeamVocabulary
 from pydantic import JsonValue
 
 from agent_comms.installer.probes.carry import Carried, Carry
-from agent_comms.locked_store import RegistryFile, RootFile
-from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceHolder
+from agent_comms.storage.locked_store import RegistryFile, RootFile
+from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceHolder
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.registry_store import RegistryStore

@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
 from .child_process import Platform
-from . import store_files
+from .storage import store_files
 from .coordination_database import CoordinationStore
 from .cohort_schema import AcceptanceFrontier, PrivateCoordinatorSchema
 from .coordination_errors import PublicationActivationBlocked
@@ -36,14 +36,14 @@ from .coordination_tables.participants import Participants
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .nominal.field_codec import RootId, ThreadLookup
-from .locked_store import RollbackRetained, WireWakeFile
+from .storage.locked_store import RollbackRetained, WireWakeFile
 from .native_input_owner import RegistryOwner
 from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from .private_nk_entrypoint import (
     PrivateNkLaunch,
     SharedRootLaunch,
 )
-from .private_path import FileObservation, PrivateFileRole
+from .storage.private_path import FileObservation, PrivateFileRole
 from .private_runtime_schema import PrivateCoordinatorTable
 from .thread_identity import ClaimedIdentity
 
@@ -56,7 +56,7 @@ if TYPE_CHECKING:
     from .messages import MessageReference
     from .private_nk_entrypoint import RootLaunch
     from .registry_document import RegistrySnapshot
-    from .typed_table import TableSchema
+    from .storage.typed_table import TableSchema
 
 _MAGIC = b"ACRG"
 _VERSION = 1

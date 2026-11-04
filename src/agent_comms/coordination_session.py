@@ -17,8 +17,8 @@ from agent_comms.coordination_errors import (
     IntegrityViolationError,
 )
 from agent_comms.publication_measurements import PublicationMeasurements
-from agent_comms.locked_store import RegistryFile
-from agent_comms.store_files import (
+from agent_comms.storage.locked_store import RegistryFile
+from agent_comms.storage.store_files import (
     DEFAULT_STORE_CONTENTION, StoreContention,
 )
 

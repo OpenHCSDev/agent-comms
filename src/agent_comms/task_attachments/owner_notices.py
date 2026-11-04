@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from agent_comms.comms import Comms
     from agent_comms.messaging import Messaging
     from agent_comms.registry_document import RegistrySnapshot
-    from agent_comms.typed_table import TypedTable
+    from agent_comms.storage.typed_table import TypedTable
 
 
 @dataclass(frozen=True)
