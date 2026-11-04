@@ -134,6 +134,39 @@ def test_a_stored_record_format_change_bumps_its_version_and_ships_a_carry(
         {audit.project_measures.UncarriedRecordFormat.total(): 0}, {audit.project_measures.UncarriedRecordFormat.total(): uncarried})
 
 
+SHARED = ("from dataclasses import dataclass\nfrom typing import Annotated, ClassVar\n"
+          "from agent_comms.nominal.field_codec import WireOmitDefault\n\n"
+          "@dataclass(frozen=True)\nclass Choice:\n    repository: str\n    path: str\n\n"
+          "@dataclass(frozen=True)\nclass Pair:\n    left: str\n    right: str\n    label: str\n\n"
+          "@dataclass(frozen=True, kw_only=True)\nclass Record:\n    version: ClassVar[int] = 1\n")
+PAIRS = "    first: Pair\n    second: Pair\n"
+CHOICES = "    choices: Annotated[tuple[Choice, ...], WireOmitDefault()] = ()\n"
+
+
+@pytest.mark.refactor_guard
+@pytest.mark.parametrize("head, uncarried", [
+    (SHARED + CHOICES + PAIRS, 0),
+    (SHARED.replace("label: str", "label: int") + CHOICES + PAIRS, 1),
+    (SHARED + CHOICES.replace(" = ()", "") + PAIRS, 1),
+], ids=["optional-new-type", "changed-shared-type", "required-new-field"])
+def test_a_new_shared_type_never_reads_as_a_renamed_stored_field(tmp_path, head, uncarried):
+    """#3999: FieldCodec numbers a schema's shared definitions in the order a build meets them,
+    so an optional field of a new type, rendered first, renumbered Pair's reference from d0 to
+    d1 while every stored record still decodes. The reader inlines its definitions; a newly
+    required field or a changed shared type still needs a carry."""
+    repo = Repository(tmp_path)
+    AgentCommsProject(REPO).extract("HEAD", tmp_path, "src/agent_comms", "tools/stored_formats.py")
+    record = tmp_path / "src" / "agent_comms" / "record.py"
+    record.write_text(SHARED + PAIRS)
+    base = repo.commit({})
+    record.write_text(head)
+    tested = repo.commit({})
+    assert audit.project_measures.UncarriedRecordFormat.counted(
+        AgentCommsProject(tmp_path), base, tested, {"src/agent_comms/record.py"}, "src/agent_comms",
+    ) == ({audit.project_measures.UncarriedRecordFormat.total(): 0},
+          {audit.project_measures.UncarriedRecordFormat.total(): uncarried})
+
+
 def test_a_store_compares_by_its_rows_and_not_by_its_companion_files(tmp_path):
     store = tmp_path / "todos.sqlite3"
     with closing(sqlite3.connect(store)) as db:
