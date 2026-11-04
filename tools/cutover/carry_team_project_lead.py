@@ -14,15 +14,16 @@ from __future__ import annotations
 import json
 from typing import ClassVar
 
+from cutover.carry_team_vocabulary import TeamVocabulary
 from pydantic import JsonValue
 
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import RegistryFile, RootFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceHolder
 from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.private_registry_guard import PrivateRegistryGuard
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.registry_store import RegistryStore
-from cutover.carry_team_vocabulary import TeamVocabulary
 
 
 class TeamProjectLead(Carry):
@@ -36,7 +37,8 @@ class TeamProjectLead(Carry):
         if not path.exists():
             return Carried(0)
         document = FieldCodec.decode(
-            dict[str, JsonValue], FieldCodec.parse(path.read_text(encoding="utf-8")))
+            dict[str, JsonValue], FieldCodec.parse(path.read_text(encoding="utf-8"))
+        )
         version = FieldCodec.record_key(RegistryDocument, "version")
         if document[version] == RegistryDocument.version:
             return Carried(0)
@@ -44,10 +46,18 @@ class TeamProjectLead(Carry):
             project = FieldCodec.decode(dict[str, JsonValue], document.pop(self.retired_key))
             project.pop(self.retired_field)
             document[FieldCodec.record_key(RegistryDocument, "team_project")] = project
-        document = FieldCodec.decode(dict[str, JsonValue], TeamVocabulary.renamed(document))
         document[version] = RegistryDocument.version
         if apply:
             MaintenanceBarrier(path).read().require_held_by(
-                MaintenanceHolder.current(), "Drop the stored team lead")
-            RegistryStore(path).carry_text(json.dumps(document, indent=2))
-        return Carried(1, rewritten=(path.relative_to(self.root),) if apply else ())
+                MaintenanceHolder.current(), "Drop the stored team lead"
+            )
+            RegistryStore(path).carry_text(
+                TeamVocabulary.renamed_text(json.dumps(document, indent=2))
+            )
+        guard = PrivateRegistryGuard.path_in(self.root)
+        return Carried(
+            1,
+            rewritten=(
+                tuple(written.relative_to(self.root) for written in (path, guard)) if apply else ()
+            ),
+        )

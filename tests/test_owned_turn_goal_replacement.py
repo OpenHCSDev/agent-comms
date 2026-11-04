@@ -2,7 +2,7 @@
 
 import asyncio
 import os
-from contextlib import AsyncExitStack
+from contextlib import AsyncExitStack, ExitStack
 from dataclasses import replace
 
 import pytest
@@ -12,13 +12,14 @@ from agent_comms.controller import NO_CONTROLLER
 from agent_comms.channel_coding_tools import OrdinaryGoalRule
 from agent_comms.acp import CommsAgent
 from agent_comms.turn_inbox import InputContent
-from agent_comms.channel_input_batch import InputBatch
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.nominal.field_codec import AcpSessionId, InputId, OrderId, TurnId
+from agent_comms.nominal.field_codec import AcpSessionId, InputId, OrderId
 from agent_comms.goal_actions import (
     BlockedGoalAction,
     CreateProblemGoalAction,
     OrderGoalAction,
+    OwnerInvocable,
+    PausedGoalAction,
 )
 from agent_comms.goal_states import ActiveGoal
 from agent_comms.owned_send import OwnedSend
@@ -169,21 +170,17 @@ async def test_goal_published_during_preparation_is_current_at_reservation(tmp_p
                         original_owner_input=True, original_goal_id=replaced.id,
                         acceptance=NoTurnAcceptance())
     assert current.authorize()
-    current.turn_id = TurnId.mint()
     async with AsyncExitStack() as resources:
-        current.registry_owner = agent.turns.acquire_turn(
-            resources, current.session_id, current.thread_name, current.turn_id, current.task,
-        )
-        batch = InputBatch.capture((), (), current.task, current.thread,
-                                   agent.turns.inputs.dispositions.read(()))
-        current.prepare_prompt(batch)
+        permits = ExitStack()
+        resources.callback(permits.close)
+        assert current.prepare(resources, permits)
         todo = comms.goals.todos.get('P1')
         latest = comms.goals.update_goal('worker', OrderGoalAction(
             problem='P1', expected_revision=todo.revision, assigner=actor, request=request, review_at=RecordedEventTime(3000),
             order=replace(order(source), id=OrderId.mint()),
         ))
         assert current.thread.goal == replaced != latest
-        current.reserve_input(batch)
+        current.reserve_input(current.prepared)
         try:
             assert current.original.keys != old.original.keys
             # This is the same goal check CodingToolOwner.allow runs before a tool.
@@ -225,3 +222,29 @@ async def test_order_reactivating_a_blocked_goal_keeps_the_running_turn(tmp_path
         assert retried.state == ActiveGoal()
         # The same check CodingToolOwner.allow runs before each of the turn's tool calls.
         OrdinaryGoalRule.require(turn.original.goal_permission, comms.registry.require('worker').goal)
+
+
+@pytest.mark.asyncio
+async def test_an_owner_pause_holds_off_a_correction_of_the_goals_own_order(
+    tmp_path, prepared_owner,
+):
+    """A correction asks no consent, but a pause is the goal's own state and refuses it."""
+    source = SourceRepository.create(tmp_path / 'source')
+    comms, _ = prepared_owner
+    colleague = comms.registry.require('colleague').incarnation
+    request = comms.goals.todos.add_request(colleague, 'Repair the paused teammate').id
+    comms.goals.update_goal('worker', CreateProblemGoalAction(
+        problem='P1', order=order(source), request=request,
+        review_at=RecordedEventTime(1000), assigner=colleague,
+        repo=RepositoryName.from_wire('org/repo'), text='Repair the paused teammate',
+    ))
+    paused = comms.goals.update_goal('worker', PausedGoalAction(), actor=OwnerInvocable)
+    todo = comms.goals.todos.get('P1')
+    with pytest.raises(ValueError) as refused:
+        comms.goals.update_goal('worker', OrderGoalAction(
+            problem='P1', expected_revision=todo.revision, assigner=colleague, request=request,
+            review_at=RecordedEventTime(2000), order=replace(order(source), id=OrderId.mint()),
+        ))
+    assert str(refused.value) == paused.state.pause_source.instruction()
+    assert comms.registry.require('worker').goal == paused
+    assert comms.goals.todos.get('P1') == todo

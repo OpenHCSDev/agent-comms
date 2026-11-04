@@ -15,5 +15,6 @@ class TeammatesCliCommand(CliCommand, declared_name="teammates"):
 
     def apply(self, ctx: Comms) -> TeammatesResult:
         snapshot = ctx.registry.snapshot()
-        return TeammatesResult(tuple(
-            thread.name for thread in snapshot.team_project.colleagues(snapshot)))
+        return TeammatesResult(
+            tuple(thread.name for thread in snapshot.team_project.colleagues(snapshot))
+        )

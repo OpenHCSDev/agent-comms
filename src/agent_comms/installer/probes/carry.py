@@ -13,9 +13,7 @@ from typing import Annotated, ClassVar
 
 from typing_extensions import TypeForm
 
-from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
-from agent_comms.nominal.field_codec import BoundedText, FieldPlan, PathText, SingleFieldValue
 from agent_comms.installer.interpreter_operation import (
     InstallClock,
     InterpreterOperation,
@@ -24,6 +22,8 @@ from agent_comms.installer.interpreter_operation import (
     TargetProbe,
 )
 from agent_comms.locked_store import FilesRequest, InstallationFiles, RootFile
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import BoundedText, FieldPlan, PathText, SingleFieldValue
 from agent_comms.store_files import BorrowedStoreLock, is_store_lock
 from agent_comms.typed_table import ExternalStore, TriggerKind, TypedTable
 
@@ -112,12 +112,14 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
         """Inside the caller's write transaction, carry stored values of a guarded row:
         its declared mutation guards are lifted and recreated from the same declaration. Each
         update is the new value followed by the row's primary key, one value per key column."""
-        keys = " AND ".join(f'"{field.wire_name}"=?' for field in row._fields if field.column.primary_key)
+        keys = " AND ".join(
+            f'"{field.wire_name}"=?' for field in row._fields if field.column.primary_key)
         guards = row.triggers()
         for name in guards:
             TriggerKind.drop(db, name)
-        db.executemany(row._sql(f'UPDATE "{row.declared_name}" SET {{{column.name}}}=? WHERE {keys}'),
-                       updates)
+        db.executemany(
+            row._sql(f'UPDATE "{row.declared_name}" SET {{{column.name}}}=? WHERE {keys}'),
+            updates)
         for sql in guards.values():
             db.execute(sql)
 

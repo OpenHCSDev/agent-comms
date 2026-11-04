@@ -4084,18 +4084,22 @@ class AssignTodo(ReleasesHold, TodoOperation):
         return replace(self, actor=actor, proposed=replace(self.proposed,
                        parent=actor.name, parent_created=actor.wire_birth))
 
-    def changes_work(self, current: Todo, proposed: Assignment) -> bool:
-        return (current.assignment, current.order) != (proposed, self.order)
+    def moves_hold(self, current: Todo, proposed: Assignment) -> bool:
+        """A corrected order to the holder already doing this problem under the same goal keeps
+        that hold; only a new holder or goal moves it. The requester corrects its own order:
+        the holder cannot serve that request, so asking it would leave no one able to."""
+        return not current.current_holder.owned_by(proposed.owner_identity, proposed.generation)
 
     def require_hold_release(self, current: Todo, snapshot: RegistrySnapshot) -> None:
-        """Only an assignment that changes the work asks its current holder."""
-        if self.changes_work(current, current.proposed_assignment(self.proposed)):
+        """Only an assignment that moves the hold asks its current holder."""
+        if self.moves_hold(current, current.proposed_assignment(self.proposed)):
             super().require_hold_release(current, snapshot)
 
     def require_receiving_work(
         self, current: Todo, proposed: Assignment, snapshot: RegistrySnapshot,
     ) -> None:
-        if self.changes_work(current, proposed):
+        """Only an assignment that moves the hold asks the receiver's goal."""
+        if self.moves_hold(current, proposed):
             proposed.require_receiving_work(self.actor, snapshot)
 
     def proposed_work(self, store: TodoStore, problem: str) -> tuple[Todo, ...]:

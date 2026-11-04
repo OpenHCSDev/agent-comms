@@ -118,18 +118,21 @@ def test_maintainer_cannot_change_holder_or_the_receiving_goal(fork_bus):
     assert comms.registry.require("worker").goal == goal
 
 
-def test_original_issuer_cannot_replace_the_order_while_keeping_its_assignment(fork_bus):
+def test_original_issuer_corrects_the_order_while_keeping_its_assignment(fork_bus):
     comms, _, _ = fork_bus
     current = comms.goals.todos.get("P40")
     actor = comms.registry.require("colleague").acting_identity
+    corrected = replace(current.order, id=OrderId.mint())
     operation = AssignTodo.by(
         actor, current.revision, current.held().owner_identity, current.held().generation,
-        current.review_at, replace(current.order, id=OrderId.mint()),
+        current.review_at, corrected,
         current.request.require(), current.order.owner, frozenset({current.id}))
     assert operation.proposed == current.assignment
-    with pytest.raises(HolderConsentRequired):
-        operation.record(comms.goals, current.id)
-    assert comms.goals.todos.get(current.id) == current
+    operation.record(comms.goals, current.id)
+    saved = comms.goals.todos.get(current.id)
+    assert saved.order.id == corrected.id
+    assert (saved.held().owner_identity, saved.held().generation) == (
+        current.held().owner_identity, current.held().generation)
 
 
 def test_holder_handoff_keeps_creator_history_and_records_the_actual_actor(fork_bus):

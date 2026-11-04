@@ -269,9 +269,13 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     assert ctx.call(CommsTodoListTool(thread=ctx.actor_name)).todos == (saved,)
     load = ctx.call(CommsTeamLoadTool(thread=ctx.actor_name))
     assert load.load.owed == 1 and load.load.timers_up == 0 and load.load.unjudged == 0
-    refused = command(comms, "order", "send", "worker", body, "--fork", "fork-two")
-    assert refused.returncode != 0 and consent_refused(comms, "fork-two") in refused.stderr
-    assert store.get("P40") == saved
+    # Another fork of the same teammate corrects P40's order; worker keeps it under its goal.
+    corrected = command(comms, "order", "send", "worker", body, "--fork", "fork-two")
+    assert corrected.returncode == 0, corrected.stderr
+    resent = store.get("P40")
+    assert (resent.held().owner_identity, resent.held().generation) == (
+        saved.held().owner_identity, saved.held().generation)
+    saved = resent
     interim = tmp_path / "interim.txt"
     interim.write_text("The first review is complete; another check remains.")
     posted = command(comms, "order", "say", "#comms", str(interim), "--fork", "fork-one")

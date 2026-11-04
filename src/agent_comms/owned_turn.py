@@ -275,6 +275,14 @@ class OwnedTurn:
         return True
 
     def begin(self, resources: AsyncExitStack, permits: ExitStack) -> bool:
+        """Prepare the turn under its lease, then reserve the inputs it prepared."""
+        if not self.prepare(resources, permits):
+            return False
+        self.reserve_input(self.prepared)
+        return True
+
+    def prepare(self, resources: AsyncExitStack, permits: ExitStack) -> bool:
+        """Take the lease and goal account and build the prompt; reservation follows."""
         self.turn_id = TurnId.mint()
         self.routing = TurnRouting(
             tuple(origin.reference for origin in self.origins),
@@ -334,7 +342,7 @@ class OwnedTurn:
             document,
         )
         self.prepare_prompt(batch)
-        self.reserve_input(batch)
+        self.prepared = batch
         return True
 
     def _prepare_goal_permit(self, goal: Goal, permits: ExitStack) -> bool:

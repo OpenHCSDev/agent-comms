@@ -9,21 +9,21 @@ installation.
 
 from __future__ import annotations
 
-import shutil
+import re
+import sqlite3
 from contextlib import closing
 from typing import ClassVar
-
-from pydantic import JsonValue
 
 from agent_comms.bus import Bus
 from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.installer.probes.carry import Carried, Carry
-from agent_comms.locked_store import RootFile
+from agent_comms.locked_store import PatternFile, RootFile
 from agent_comms.messages import EscalationPosition, Message
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.store_files import AtomicFile
 from agent_comms.task_attachments.team_pings import TeamUpdateStore
+from agent_comms.team_frame_file import TeamFrameFile
 from agent_comms.todos import HuntRecord, OwnerRequest, TodoStore
 from agent_comms.typed_table import TypedTable
 
@@ -32,54 +32,62 @@ class TeamVocabulary(Carry, declared_name=None):
     """One renaming shared by every store that wrote the lead's names."""
 
     tags: ClassVar[dict[str, str]] = {
-        "commander_notice": "team_notice", "commander_decisions": "team_decisions",
-        "commander_deaf": "team_deaf", "commander_heartbeat": "team_heartbeat",
-        "commander_native": "team_native", "commander_page": "team_page",
-        "commander_latency": "team_latency", "commander_overloaded": "team_overloaded",
-        "commander_fork_execution": "fork_execution", "awaiting_commander": "awaiting_team",
-        "commanders": "teammates", "#commanders": "#teammates",
+        "commander_notice": "team_notice",
+        "commander_decisions": "team_decisions",
+        "commander_deaf": "team_deaf",
+        "commander_heartbeat": "team_heartbeat",
+        "commander_native": "team_native",
+        "commander_page": "team_page",
+        "commander_latency": "team_latency",
+        "commander_overloaded": "team_overloaded",
+        "commander_fork_execution": "fork_execution",
+        "awaiting_commander": "awaiting_team",
+        "commanders": "teammates",
+        "#commanders": "#teammates",
     }
     """Stored declared names and the channel tag, matched as whole strings."""
-    keys: ClassVar[dict[str, str]] = {"commander": "teammate", "commander_completed": "teammate_completed"}
+    keys: ClassVar[dict[str, str]] = {
+        "commander": "teammate",
+        "commander_completed": "teammate_completed",
+    }
     """Stored record fields."""
+    token: ClassVar[re.Pattern[str]] = re.compile(r'"((?:[^"\\]|\\.)*)"(\s*:?)')
+    """One JSON string token and, when it is an object key, its colon. Outside a string JSON
+    has no quote, so scanning stored JSON left to right meets every string exactly once."""
 
     @classmethod
-    def renamed(cls, value: JsonValue) -> JsonValue:
-        match value:
-            case dict():
-                return {cls.tags.get(key, cls.keys.get(key, key)): cls.renamed(item)
-                        for key, item in value.items()}
-            case list():
-                return [cls.renamed(item) for item in value]
-            case str():
-                return cls.tags.get(value, value)
-        return value
+    def renamed_text(cls, text: str) -> str:
+        """Stored JSON with every whole string that names the lead renamed, keys also taking the
+        field renames; the rest of the text, its formatting included, stays as stored."""
+        return cls.token.sub(cls.renamed_token, text)
 
     @classmethod
-    def renamed_text(cls, text: str) -> str | None:
-        """The rewritten JSON text, or None when nothing in it names the lead."""
-        stored = FieldCodec.parse(text)
-        renamed = cls.renamed(stored)
-        return None if renamed == stored else FieldCodec.compact(renamed, allow_nan=False)
+    def renamed_token(cls, match: re.Match[str]) -> str:
+        name, colon = match.group(1), match.group(2)
+        names = cls.keys | cls.tags if colon.strip() else cls.tags
+        return f'"{names.get(name, name)}"{colon}'
 
     @classmethod
-    def rewrite_rows(cls, db, row: type[TypedTable]) -> int:
-        """Inside the caller's transaction, every JSON-valued column of ``row`` that names the
-        lead, keyed by the row's primary key."""
+    def rewrite_rows(cls, db: sqlite3.Connection, row: type[TypedTable]) -> int:
+        """Inside the caller's transaction, every JSON object or array column of ``row`` that
+        names the lead, keyed by the row's primary key; SQLite says which values are JSON."""
         keys = tuple(field for field in row._fields if field.column.primary_key)
         selected = ", ".join(f'"{key.wire_name}"' for key in keys)
         changed = 0
         for field in row._fields:
             if field in keys:
                 continue
+            column = f'"{field.wire_name}"'
             stored = db.execute(
-                f'SELECT "{field.wire_name}", {selected} FROM "{row.declared_name}"'
-                f""" WHERE "{field.wire_name}" LIKE '%commander%'""").fetchall()
-            updates = []
-            for text, *identity in stored:
-                if isinstance(text, str) and text[:1] in "[{\"":
-                    if (renamed := cls.renamed_text(text)) is not None:
-                        updates.append((renamed, *identity))
+                f'SELECT {column}, {selected} FROM "{row.declared_name}"'
+                f" WHERE {column} LIKE '%commander%' AND json_valid({column})"
+                f" AND json_type({column}) IN ('object', 'array')"
+            ).fetchall()
+            updates = [
+                (renamed, *identity)
+                for text, *identity in stored
+                if (renamed := cls.renamed_text(text)) != text
+            ]
             if updates:
                 cls.rewrite_stored(db, row, FieldCodec.field_plan(row, field.name), updates)
                 changed += len(updates)
@@ -100,14 +108,25 @@ class TeamVocabularyMessages(TeamVocabulary):
         rewritten = []
         for path in self.input_files():
             with closing(Bus.read_snapshot(path)) as db:
-                stored = db.execute(table._sql(
-                    f'SELECT {{seq}}, {{task}} FROM "{table.declared_name}"'
-                    " WHERE {task} LIKE '%commander%'")).fetchall()
-                projections = tuple(name for name in self.retired_projections if db.execute(
-                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)).fetchone())
+                stored = db.execute(
+                    table._sql(
+                        f'SELECT {{seq}}, {{task}} FROM "{table.declared_name}"'
+                        " WHERE {task} LIKE '%commander%'"
+                    )
+                ).fetchall()
+                projections = tuple(
+                    name
+                    for name in self.retired_projections
+                    if db.execute(
+                        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)
+                    ).fetchone()
+                )
                 escalations = self.escalation_column(db)
-            updates = [(renamed, seq) for seq, task in stored
-                       if (renamed := self.renamed_text(task)) is not None]
+            updates = [
+                (renamed, seq)
+                for seq, task in stored
+                if (renamed := self.renamed_text(task)) != task
+            ]
             if not (updates or projections or escalations):
                 continue
             changed += len(updates) + len(projections) + escalations
@@ -123,7 +142,7 @@ class TeamVocabularyMessages(TeamVocabulary):
         return Carried(changed, rewritten=tuple(rewritten))
 
     @staticmethod
-    def escalation_column(db) -> int:
+    def escalation_column(db: sqlite3.Connection) -> int:
         """The escalation projection keyed by the old column: dropped, then rebuilt."""
         present = EscalationPosition.present(db)
         return int(present and "commander_lookup" in EscalationPosition.stored_columns(db))
@@ -145,13 +164,22 @@ class TeamVocabularyTodos(TeamVocabulary):
         rewritten = []
         for path in self.input_files():
             with closing(TodoStore.read_snapshot(path)) as db:
-                renames = tuple((row, old, new) for row, old, new in self.columns
-                                if row.present(db) and old in row.stored_columns(db))
+                renames = tuple(
+                    (row, old, new)
+                    for row, old, new in self.columns
+                    if row.present(db) and old in row.stored_columns(db)
+                )
                 rows = tuple(row for row in TodoStore.schema_rows() if row.present(db))
-                tagged = sum(db.execute(
-                    f'SELECT COUNT(*) FROM "{row.declared_name}" WHERE '
-                    + " OR ".join(f""""{column}" LIKE '%commander%'""" for column in row.stored_columns(db))
-                    ).fetchone()[0] for row in rows)
+                tagged = sum(
+                    db.execute(
+                        f'SELECT COUNT(*) FROM "{row.declared_name}" WHERE '
+                        + " OR ".join(
+                            f""""{column}" LIKE '%commander%'"""
+                            for column in row.stored_columns(db)
+                        )
+                    ).fetchone()[0]
+                    for row in rows
+                )
             if not (renames or tagged):
                 continue
             changed += len(renames) + tagged
@@ -166,40 +194,48 @@ class TeamVocabularyTodos(TeamVocabulary):
 
 
 class TeamVocabularyFiles(TeamVocabulary):
-    """Each teammate's retained packet moves to ``team_updates/``, the service passes and the
-    channel catalog drop the lead's names, and the runtime frames under the old directory go;
-    the heartbeat writes them again on its next pass."""
+    """The service passes and the channel catalog drop the lead's names, and each teammate's
+    retained packet and HUD frame move from the lead's directory to the team's, renamed: a HUD
+    read needs its frame before the heartbeat's next pass writes one."""
 
     opened_files: ClassVar[tuple[type[RootFile], ...]] = (ServicePassStore, ChannelCatalog)
-    retired_updates: ClassVar[str] = "commander_updates"
-    retired_frames: ClassVar[str] = "commander_frames"
+    retired: ClassVar[tuple[tuple[str, type[PatternFile]], ...]] = (
+        ("commander_updates", TeamUpdateStore),
+        ("commander_frames", TeamFrameFile),
+    )
+    """Each old per-teammate directory and the store its files now live in."""
 
     def carry(self, *, apply: bool) -> Carried:
-        documents = {path: renamed for path in self.input_files()
-                     if (renamed := self.renamed_text(path.read_text(encoding="utf-8"))) is not None}
-        moves = {}
-        updates = self.root / self.retired_updates
-        if updates.is_dir():
-            for old in sorted(updates.glob("*.json")):
-                self.require_confined(old)
-                text = old.read_text(encoding="utf-8")
-                new = TeamUpdateStore.path_in(self.root, lookup=old.stem)
-                moves[old] = (new, self.renamed_text(text) or text)
-        frames = self.root / self.retired_frames
-        changed = len(documents) + len(moves) + int(frames.is_dir())
+        stored = {path: path.read_text(encoding="utf-8") for path in self.input_files()}
+        documents = {
+            path: renamed
+            for path, text in stored.items()
+            if (renamed := self.renamed_text(text)) != text
+        }
+        directories = tuple(
+            (self.root / name, store) for name, store in self.retired if (self.root / name).is_dir()
+        )
+        moves = {
+            old: (
+                store.path_in(self.root, lookup=old.stem),
+                self.renamed_text(old.read_text(encoding="utf-8")),
+            )
+            for directory, store in directories
+            for old in sorted(directory.glob("*.json"))
+        }
+        for old in moves:
+            self.require_confined(old)
         if apply:
             for path, text in documents.items():
                 AtomicFile(path).write_text(text)
             for old, (new, text) in moves.items():
-                new.parent.mkdir(parents=True, exist_ok=True)
+                new.parent.mkdir(mode=0o700, parents=True, exist_ok=True)  # as the stores do
                 AtomicFile(new).write_text(text)
                 old.unlink()
-            if updates.is_dir():
-                updates.rmdir()
-            if frames.is_dir():
-                self.require_confined(frames)
-                shutil.rmtree(frames)
+            for directory, _ in directories:
+                directory.rmdir()
         rewritten = (*documents, *(new for new, _ in moves.values()))
-        return Carried(changed, rewritten=tuple(path.relative_to(self.root) for path in rewritten)
-                       if apply else ())
-
+        return Carried(
+            len(documents) + len(moves) + len(directories),
+            rewritten=tuple(path.relative_to(self.root) for path in rewritten) if apply else (),
+        )

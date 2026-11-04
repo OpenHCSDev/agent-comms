@@ -7,6 +7,7 @@ from cutover.carry_team_project_lead import TeamProjectLead
 
 from agent_comms.comms import wire
 from agent_comms.locked_store import LiveFilesRequest, RegistryFile
+from agent_comms.private_registry_guard import PrivateRegistryGuard
 from agent_comms.registry_document import NoTeamProject, RegisteredTeamProject
 from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Checkout
@@ -43,6 +44,9 @@ def test_carry_stamps_version_two_and_the_project_stays_the_teams(private_direct
 
     assert step.carry(apply=False).changed == 1
     with maintenance_held(tmp_path):
-        assert step.carry(apply=True).rewritten == (path.relative_to(tmp_path),)
+        # The guard is rewritten with the registry, so the upgrade's file audit expects both.
+        assert step.carry(apply=True).rewritten == tuple(
+            written.relative_to(tmp_path)
+            for written in (path, PrivateRegistryGuard.path_in(tmp_path)))
     assert wire(tmp_path).registry.snapshot().team_project == project
     assert step.carry(apply=False).changed == 0
