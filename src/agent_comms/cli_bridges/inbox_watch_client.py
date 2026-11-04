@@ -57,7 +57,11 @@ class FollowedTranscript(RecentClaudeWindow, TranscriptRoute):
     @classmethod
     def line(cls, raw: bytes) -> str:
         """The transcript holds each watch URL this session was given, and the bus holds no tokens."""
-        return cls.watch_url.sub(cls.hidden_url, raw.decode())
+        return cls.hidden(raw.decode())
+
+    @classmethod
+    def hidden(cls, text: str) -> str:
+        return cls.watch_url.sub(cls.hidden_url, text)
 
     async def lines_sent(self, socket: ClientWebSocketResponse, stream: BinaryIO, offset: int) -> int:
         """Every complete line from `offset`; where the next read starts."""
@@ -172,7 +176,7 @@ class InboxSocket:
                     publishing.cancel()
                 return f"closed with code {socket.close_code}"
         except (ClientError, OSError) as failure:
-            return f"failed: {type(failure).__name__}: {failure}"
+            return f"failed: {type(failure).__name__}: {FollowedTranscript.hidden(str(failure))}"
 
 
 def main() -> None:

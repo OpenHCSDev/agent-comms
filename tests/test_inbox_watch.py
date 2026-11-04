@@ -305,9 +305,10 @@ def test_a_hidden_watch_url_leaves_a_task_notification_readable() -> None:
 
 async def test_the_cloud_client_says_out_loud_when_its_url_is_refused(session, tmp_path: Path) -> None:
     client, _ = session
-    used = str(client.make_url("/watch/not-a-ticket"))
+    used = str(client.make_url("/watch/not-a-ticket").with_scheme("ws"))
     ended = await InboxSocket(used, tmp_path / "messages").carried()
     assert ended.startswith("failed: WSServerHandshakeError")
+    assert "not-a-ticket" not in ended
 
 
 async def inbox_emptied(comms: Comms, thread: str) -> None:
