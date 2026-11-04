@@ -72,7 +72,7 @@ from agent_comms.notification_reads import NotificationRead
 from agent_comms.read_basis import DisplayCut, NoDisplaySelection
 from agent_comms.message_notification import MessageNotification
 from agent_comms.presentation import CoordinationSnapshot, NoRevision, ReadState, WireRevision
-from agent_comms.registry_document import RosterVisibility
+from agent_comms.registry_document import RegistrySnapshot, RosterVisibility, UnreadRegistry
 from agent_comms.registry_provenance import DeletedThread
 from agent_comms.revision_views import (
     TeamFramesView,
@@ -922,9 +922,11 @@ class ThreadReading(ReadingObservation[ObserveThreads]):
         self.observed = ThreadsObserved(WireRevision.empty(), {}, frozenset(), {})
         self.initial = request.threads
         self.located_threads = LocatedThreads({}, request.threads, {})
+        self.registry_read: RegistrySnapshot | UnreadRegistry = UnreadRegistry()
 
     def continue_from(self, previous: Self) -> Self:
         self.observed = previous.observed
+        self.registry_read = previous.registry_read
         self.initial = self.request.threads - previous.request.threads
         return self
 
@@ -960,7 +962,11 @@ class ThreadReading(ReadingObservation[ObserveThreads]):
                                     for actor in view.notification_window.activity_names())
         activity = comms.views.observed_activity(revision, watched)
         self.located_threads = replace(self.located_threads, activity=activity)
-        names = (revision.changed_threads(previous, comms, activity) | names - previous.results.keys()) & names
+        snapshot = comms.registry.snapshot()
+        registry_changed = self.registry_read.changed_names_to(snapshot)
+        changed = revision.changed_threads(previous, comms, activity, snapshot, registry_changed)
+        self.registry_read = snapshot
+        names = (changed | names - previous.results.keys()) & names
         self.located_threads = replace(self.located_threads, names=names)
         if names:
             batch = comms.views.thread_presentations(names)

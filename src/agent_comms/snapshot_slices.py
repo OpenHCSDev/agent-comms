@@ -42,6 +42,12 @@ class ThreadSlice[Value](ABC):
         return ()
 
     @classmethod
+    def changed_names(cls, earlier: Value, current: Value, every: frozenset[str]) -> frozenset[str]:
+        """The names a change to this field can affect: a field shared by every thread
+        affects all of them; an own-row field overrides this with the rows that differ."""
+        return every if earlier != current else frozenset()
+
+    @classmethod
     def required[Document: type](cls, document: Document) -> Document:
         """Refuse, at class definition, a document field without a slice kind."""
         for plan in FieldCodec.field_plans(document):
@@ -90,6 +96,15 @@ class OwnRow[Rows](SnapshotValue[Rows]):
     def own_row_plans(cls, plan: FieldPlan) -> tuple[FieldPlan, ...]:
         return (plan,)
 
+    @classmethod
+    @abstractmethod
+    def differing(cls, earlier: Rows, current: Rows) -> frozenset[str]:
+        """The names whose own row differs between two values of this field."""
+
+    @classmethod
+    def changed_names(cls, earlier: Rows, current: Rows, every: frozenset[str]) -> frozenset[str]:
+        return cls.differing(earlier, current)
+
 
 class MappingRowsSlice(OwnRow[MutableMapping]):
     @classmethod
@@ -106,6 +121,12 @@ class MappingRowsSlice(OwnRow[MutableMapping]):
         merged = {name: (earlier if name in kept else changed)[name] for name in rows}
         changed.clear()
         changed.update(merged)
+
+    @classmethod
+    def differing(cls, earlier: Mapping, current: Mapping) -> frozenset[str]:
+        absent = object()
+        return frozenset(name for name in earlier.keys() | current.keys()
+                         if earlier.get(name, absent) != current.get(name, absent))
 
 
 class WholeDocumentValue[Value](SnapshotValue[Value]):
