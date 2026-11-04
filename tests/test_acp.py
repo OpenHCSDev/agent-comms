@@ -186,11 +186,6 @@ class TestHandlers:
         finally:
             await agent.shutdown()
 
-    async def test_compaction_details_preserve_markdown(self, tmp_path):
-        summary = "## Decisions\n\n" + "- Keep this decision.\n" * 80 + "\n## Next\nContinue."
-        assert backend.compaction_summary(summary) == summary
-        assert "\x1b" not in backend.compaction_summary("\x1b[2J\nSafe")
-
     @pytest.mark.parametrize("renamed", [False, True])
     @pytest.mark.parametrize("subscribed", [False, True])
     async def test_snapshot_capability_replays_one_bounded_update(

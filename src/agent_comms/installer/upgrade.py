@@ -872,7 +872,7 @@ class Install[Rehearsed: Rehearsal](ABC):
         """The live checkout moves to the target before anything runs from it."""
         with LiveCheckoutPreparePhase().running(self.staged.commands.clock):
             self.staged.commands.git(self.checkout, "merge", "--ff-only", "-q", self.target)
-            Checkout(self.checkout).prepare()
+            Checkout(self.checkout).update_submodules()
 
     def publish(self, backup: StoreBackup, selected: RouteFileSelection) -> str:
         """The converted bus's route is ready before new runtime entrypoints open it."""
@@ -1228,7 +1228,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                             with RestoredCheckoutPreparePhase().running(self.staged.commands.clock):
                                 self.installed.commands.git(
                                     self.checkout, "reset", "-q", "--keep", self.current)
-                                Checkout(self.checkout).prepare()
+                                Checkout(self.checkout).update_submodules()
                         self.installed.publish(self.root)
                         self.installed.require_opens(self.root)
                     holder.close()

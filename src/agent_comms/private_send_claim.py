@@ -320,7 +320,7 @@ class PrivateSendClaim(PromptBoundary):
 
     @contextmanager
     def prompt_boundary(self, turn):
-        with self(turn.native.attestation.identity):
+        with self(turn.native.attestation.require_identity()):
             turn.grant_prompt()
             yield
 

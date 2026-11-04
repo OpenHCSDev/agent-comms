@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import unicodedata
 from abc import ABC, abstractmethod
 from collections.abc import (
     AsyncGenerator,
@@ -62,7 +61,7 @@ from .native_input_proof import NativeContextProof, NativeInputCommit
 from .native_package import VerifiedNativePackage
 from .native_pi import NativePiRpcLaunch, read_tracked_input_commitment
 from .native_session_files import NativeSessionFiles
-from .native_session_reopen import PiSessionId, SessionRetention
+from .native_session_reopen import PiSessionId
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartup
 from .native_tool_call import NativeToolMode
 from .native_tool_transport import ToolTransport, UnboundToolTransport
@@ -85,14 +84,6 @@ if TYPE_CHECKING:
     from .acp_failure import ProviderRetryResult
     from .pi_native_backend import PersistentPiSession
     from .pi_payloads import AssistantMessage, UserMessage
-
-
-def compaction_summary(value: str) -> str:
-    """Preserve saved Markdown, excluding terminal control codes."""
-    return "".join(
-        char if char in "\n\t" or not unicodedata.category(char).startswith("C") else " "
-        for char in value.replace("\r\n", "\n")
-    )
 
 
 # Pi 0.85.1 owns provider-idle detection and defaults it to 300 seconds. This
@@ -585,7 +576,7 @@ class NativeSession(MroDispatch, ABC):
     async def retain_or_close(self) -> None:
         self.tool_socket.assert_complete()
         await self.finish_input()
-        retention = SessionRetention.from_optional(self.native.attestation.identity)
+        retention = self.native.attestation.identity
         if self.prompt_state.permits_retention(self):
             self.native.sensitive_diagnostics = self.output.sensitive
             retention.retain(self.native, self.native_session)

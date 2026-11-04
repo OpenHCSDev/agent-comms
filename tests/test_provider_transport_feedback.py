@@ -39,7 +39,7 @@ def test_observed_native_failure_preserves_stage_and_no_content_assumptions():
     assert event.message.usage.total_tokens == PiCount.from_wire(0)
     (diagnostic,) = event.message.diagnostics
     assert type(diagnostic.error) is CodedProviderDiagnosticError
-    assert diagnostic.error.name == "WebSocketCloseError"
+    assert diagnostic.error.description == "WebSocketCloseError (code 1011)"
     assert diagnostic.error.code == 1011
     assert diagnostic.details.request_bytes == RequestBytes(159312)
     assert isinstance(diagnostic.details.phase, AfterMessageStreamStartStage)

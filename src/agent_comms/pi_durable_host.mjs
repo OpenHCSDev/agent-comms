@@ -148,7 +148,7 @@ const handlers = {
     const placed = await (await harness.submission(outcome.result.submissionId, context)).wait(context);
     if (placed.status !== 'done') return { outcome: placed.reason === 'stale' ? { kind: 'stale' } : { kind: 'failed', message: JSON.stringify(placed) } };
     const entry = await root.commit(tx => tx.entry(placed.entry), context);
-    return { outcome: { kind: 'placed', summary: text(entry), first_kept: String(entry.head), tokens_before: null } };
+    return { outcome: { kind: 'placed', summary: text(entry), tokens_before: null } };
   },
   async close() {
     if (stream) await stream.stop();

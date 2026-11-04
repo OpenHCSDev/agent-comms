@@ -3071,9 +3071,10 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
                             traced: FileLine | NoSourceReference) -> list[str]:
         """The document's selected problems and phase must agree. Whether the unit is free
         for them is IncomingWork's decision, made in the assignment's own Todo transaction."""
-        reading = context.plan_reading(
-            context.comms.goals.todos.board_history())
-        problems = list(self.phase.order_refusals(reading, document.unplanned_reason))
+        problems = list(self.phase.order_refusals(
+            lambda: context.plan_reading(context.comms.goals.todos.board_history()),
+            document.unplanned_reason,
+        ))
         if not group or any(not ProblemNumber.accepts(pid) for pid in group):
             problems.append('problems: fix: supply an array of P<n> IDs, or use order problem')
         problems.extend(target.refusals(document, group, listed))

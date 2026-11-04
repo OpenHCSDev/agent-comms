@@ -25,6 +25,7 @@ from .nominal.field_codec import (
     projected,
 )
 from .message_reference import MessageReference
+from .pi_wire import PiOmitted, ReportedInputId
 from .messages import Message
 from .recorded_time import EventTime, UnrecordedEventTime
 from .routing import MessageRoute, NoTurnRouting, Routing, TurnRouting
@@ -122,8 +123,6 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     timestamp: float
     ordinal: int = 0
     """This event's place among the events of its one source record; see RecordedEntry.project_messages."""
-    routing = None
-    source = None
 
     def append_to(self, events: list[TranscriptEvent]) -> None:
         events.append(self)
@@ -135,8 +134,9 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     def ended_calls(self) -> tuple[ToolCallId, ...]:
         return ()
 
-    def followed_by_assistant(self, text: AssistantTranscript) -> TranscriptEvent | None:
-        return None
+    def take_assistant(self, events: list[TranscriptEvent], text: AssistantTranscript) -> None:
+        """Assistant text after this event starts its own event."""
+        events.append(text)
 
     def for_assigned_source(self, source, published: bool) -> tuple[TranscriptEvent, ...]:
         return (self,)
@@ -167,7 +167,7 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     native_inputs: ClassVar[frozenset[str]] = frozenset()
     incoming_sources: ClassVar[tuple[MessageReference, ...]] = ()
 
-    def with_native_input(self, native_id: InputId | None) -> TranscriptEvent:
+    def with_native_input(self, native_id: ReportedInputId | PiOmitted) -> TranscriptEvent:
         return self
 
     @property
@@ -215,7 +215,6 @@ class TranscriptCoverage:
 @dataclass(frozen=True, kw_only=True)
 class RecordedTranscript(TranscriptEvent):
     routing: Routing = NoTurnRouting()
-    source: MessageReference | None = None
 
 
 class TextTranscript(TranscriptEvent):
@@ -344,14 +343,14 @@ class IncomingTranscript(TextTranscript):
 @dataclass(frozen=True)
 class UserTranscript(NativeTextTranscript):
     category = UserCategory
-    native_id: InputId | None = field(default=None, kw_only=True)
+    native_id: ReportedInputId | PiOmitted = field(default_factory=PiOmitted, kw_only=True)
 
-    def with_native_input(self, native_id: InputId | None) -> UserTranscript:
+    def with_native_input(self, native_id: ReportedInputId | PiOmitted) -> UserTranscript:
         return replace(self, native_id=native_id)
 
     @property
     def native_inputs(self) -> frozenset[str]:
-        return frozenset((self.native_id,)) if self.native_id is not None else frozenset()
+        return frozenset(self.native_id.present())
 
     @property
     def routed(self) -> bool:
@@ -391,13 +390,14 @@ class AssistantTranscript(ModelOutput, AgentTextTranscript):
         return bool(self.text)
 
     def append_to(self, events: list[TranscriptEvent]) -> None:
-        if events and (merged := events[-1].followed_by_assistant(self)) is not None:
-            events[-1] = merged
+        # The event before it decides whether assistant text continues it.
+        if events:
+            events[-1].take_assistant(events, self)
         else:
             super().append_to(events)
 
-    def followed_by_assistant(self, text: AssistantTranscript) -> TranscriptEvent:
-        return replace(self, text=self.text + text.text)
+    def take_assistant(self, events: list[TranscriptEvent], text: AssistantTranscript) -> None:
+        events[-1] = replace(self, text=self.text + text.text)
 
     def for_assigned_source(self, source, published: bool) -> tuple[TranscriptEvent, ...]:
         return () if published else (self,)
@@ -463,13 +463,14 @@ class SentTranscript(OutgoingRoute, WireTextTranscript):
                    routing=TurnRouting(reply=MessageRoute(message.sender, (message.target,))))
 
     def matches(self, message: Message) -> bool:
+        """A report stands for an original wire message only when it is that message's report."""
         return self == type(self).from_message(message)
 
     def core_message(self, source) -> Message:
         """Read the actual original; a stored report cannot invent its missing kind or role."""
-        original = source.sent_messages((self.source,)).get(self.source)
-        if original is not None and self.matches(original):
-            return original
+        for reference, original in source.sent_messages((self.source,)).items():
+            if reference == self.source and self.matches(original):
+                return original
         raise ValueError("Sent report no longer matches its original assigned wire message")
 
 

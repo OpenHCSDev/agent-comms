@@ -5,15 +5,21 @@ import shutil
 import subprocess
 from dataclasses import dataclass, replace
 from pathlib import Path
+import time
 from typing import Annotated
 
 import pytest
 
 from agent_comms.comms import Comms, wire
+from agent_comms.cli_verbs.select_checkout import SelectCheckoutCliCommand
+from agent_comms.cli_verbs.goal_checkout import GoalCheckoutCliCommand
+from agent_comms.cli_commands import AddCheckoutOperation
+from agent_comms.tool_caller import ThreadCaller
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, RecordProblems
 from agent_comms.thread_creation import RecordedCreationTime
-from agent_comms.repo import Checkout, DetachedStart, LocalRepositorySource, Repo, RepositoryReads
+from agent_comms.repo import Checkout, DetachedStart, GitCommandError, LocalRepositorySource, Repo, RepositoryReads
+from agent_comms.goal_actions import SetGoalAction
 from agent_comms.repository_name import RepositoryName
 from agent_comms.shell_effects import (
     CreateCheckoutStorageEffect,
@@ -24,6 +30,9 @@ from agent_comms.shell_effects import (
 from agent_comms.standing_rules import StorageHomeMissing
 from agent_comms.storage_projection import StorageProjection
 from agent_comms.storage_rules import (
+    CheckoutAllocation,
+    EditableCheckoutAllocation,
+    GoalCheckoutAllocation,
     ScopedDirectory,
     StorageRule,
     UnitStorage,
@@ -31,10 +40,18 @@ from agent_comms.storage_rules import (
 from agent_comms.thread_storage import (
     StoragePath,
     StorageRoots,
+    NoRepositoryChoice,
+    SelectedCheckout,
     UnassignedThreadStorage,
 )
 from agent_comms.threads import Thread
 from agent_comms.tool_denial import SelectedToolDenied
+from agent_comms.goals import OrderCheck
+from agent_comms.registry_document import RegisteredTeamProject
+from agent_comms.order_runs import MechanicalOrderRun
+from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.todos import EditWorkplaces, PendingProblemOrder, PullRequestLink
+from source_revision_fixture import SourceRepository
 
 
 def test_isolated_policy_is_durable_and_preserves_existing_private_limits(tmp_path: Path):
@@ -222,6 +239,8 @@ def checkout_comms(tmp_path: Path) -> Comms:
     comms = wire(tmp_path / 'wire')
     comms.registry.storage_rule = StorageRule(
         checkout_base=base, scratch_base=tmp_path / 'scratch', floor_gib=0)
+    StorageRule.path_in(comms.root).write_text(
+        FieldCodec.compact(FieldCodec.encode(comms.registry.storage_rule)))
     comms.registry.declare(Thread('worker', frozenset(), Checkout(home)))
     return comms
 
@@ -250,8 +269,9 @@ def test_removed_worktree_updates_membership_and_another_home_cannot_claim_its_p
     with pytest.raises(StorageDenied):
         StorageProjection(rule, other, comms).check((
             CreateCheckoutStorageEffect(new, source, DetachedStart('HEAD')),))
-    StorageProjection(rule, thread, comms).check((
-        CreateCheckoutStorageEffect(new, source, DetachedStart('HEAD')),))
+    with pytest.raises(StorageDenied, match='Reuse'):
+        StorageProjection(rule, thread, comms).check((
+            CreateCheckoutStorageEffect(new, source, DetachedStart('HEAD')),))
     StorageProjection(rule, thread, comms).check((RemoveCheckoutStorageEffect(old),))
     shutil.rmtree(old)
     assert rule.checkouts_of(thread, RepositoryReads()) == (home,)
@@ -358,6 +378,71 @@ def test_goal_donor_allocation_never_grants_source_writes(checkout_comms: Comms)
         rule.require_repository_donor(next_birth, name, donor)
 
 
+@pytest.mark.parametrize("allocation", CheckoutAllocation.members_with(EditableCheckoutAllocation),
+                         ids=lambda member: member.__name__)
+@pytest.mark.parametrize("select_other", (False, True))
+def test_existing_work_boundaries_do_not_select_a_new_checkout(
+        checkout_comms: Comms, allocation: type[EditableCheckoutAllocation], select_other: bool):
+    comms = checkout_comms
+    rule = comms.registry.storage_rule
+    owner = comms.registry.require('worker')
+    source = owner.project_path
+    repository = Repo.of(source).github
+    first_goal, second_goal = GoalId.mint(), GoalId.mint()
+    first = allocation.declared_for_work(
+        rule, owner, 'P1', repository, (repository,), first_goal)[repository]
+    second = allocation.declared_for_work(
+        rule, owner, 'P2', repository, (repository,), second_goal)[repository]
+    # Real older worktrees are admitted input, even though new allocation now
+    # refuses to create a second tree. No peer tree or storage policy is changed.
+    Checkout.add(source, first, DetachedStart('HEAD'))
+    Checkout.add(source, second, DetachedStart('HEAD'))
+    if select_other:
+        owner = replace(owner, worktree=Checkout(second))
+    assert rule.edit_boundaries(owner, 'P1', repository, (repository,), first_goal) == {first}
+    assert rule.edit_boundaries(owner, 'P2', repository, (repository,), second_goal) == {second}
+    fresh = rule.order_checkout(rule.roots_of(owner), 'P3')
+    if select_other:
+        assert rule.edit_boundaries(
+            owner, 'P3', repository, (repository,), GoalId.mint()) == {second}
+    else:
+        with pytest.raises(StorageDenied):
+            rule.edit_boundaries(owner, 'P3', repository, (repository,), GoalId.mint())
+    with pytest.raises(StorageDenied):
+        StorageProjection(rule, owner, comms).check((CreateCheckoutStorageEffect(
+            fresh, LocalRepositorySource(Repo.of(source)), DetachedStart('HEAD')),))
+    assert not fresh.exists()
+
+
+def test_selected_edit_checkout_does_not_read_an_unrelated_broken_history(checkout_comms: Comms):
+    comms = checkout_comms
+    rule = comms.registry.storage_rule
+    owner = comms.registry.require('worker')
+    source = owner.project_path
+    repository = Repo.of(source).github
+    goal = comms.goals.update_goal(owner.name, SetGoalAction(text='Use the selected source'))
+    owner = comms.registry.require(owner.name)
+    selected = GoalCheckoutAllocation.declared_for_goal(rule, owner, goal.id, repository)
+    Checkout.add(source, selected, DetachedStart('HEAD'))
+    owner = comms.registry.update_thread(owner.name, lambda thread: replace(thread, worktree=Checkout(selected)))
+    broken = rule.order_checkout(rule.roots_of(owner), 'P1243')
+    broken.mkdir(parents=True)
+    (broken / '.git').write_text('gitdir: /vanished/uv/git/store/worktrees/old\n')
+    (broken / 'unfinished.txt').write_text('preserve this work')
+    before = {path.name: path.read_bytes() for path in broken.iterdir()}
+    fresh = rule.repository_checkout(rule.roots_of(owner), GoalId.mint(), repository)
+    assert rule.reused_checkout(owner, repository, fresh, RepositoryReads()) == selected
+    assert rule.edit_boundaries(owner, 'P2', repository, (), goal.id) == {selected}
+    StorageProjection(rule, owner, comms).require_write(selected / 'implementation.py')
+    assert not fresh.exists()
+    assert {path.name: path.read_bytes() for path in broken.iterdir()} == before
+    # Without a selected editable target, unreadable historical work still refuses
+    # inventory-based selection: do not silently discard it or allocate around it.
+    with pytest.raises(GitCommandError):
+        rule.reused_checkout(replace(owner, worktree=Checkout(source)), repository,
+                             fresh, RepositoryReads())
+
+
 def test_allocating_effect_reuses_one_checkout_instead_of_creating_more(checkout_comms: Comms):
     comms = checkout_comms
     rule = comms.registry.storage_rule
@@ -373,6 +458,189 @@ def test_allocating_effect_reuses_one_checkout_instead_of_creating_more(checkout
             CreateCheckoutStorageEffect(second, source, DetachedStart('HEAD')),))
     assert not second.exists()
     assert UnitStorage.read(rule, thread, RepositoryReads()).extra_checkouts == (Checkout(first),)
+
+
+@dataclass(frozen=True)
+class RepositoryCheckouts:
+    repository: RepositoryName
+    first: Path
+    second: Path
+
+
+@pytest.fixture
+def multiple_repository_checkouts(checkout_comms: Comms) -> tuple[RepositoryCheckouts, ...]:
+    rule = checkout_comms.registry.storage_rule
+    owner = checkout_comms.registry.require('worker')
+    other = rule.checkout_base / 'toad-source'
+    other.mkdir()
+    Repo.git(other, 'init', '-q')
+    Repo.git(other, 'config', 'user.name', 'storage-proof')
+    Repo.git(other, 'config', 'user.email', 'storage@example.invalid')
+    Repo.git(other, 'remote', 'add', 'origin', 'https://github.com/OpenHCSDev/toad.git')
+    Repo.git(other, 'commit', '-q', '--allow-empty', '-m', 'seed')
+    result = []
+    for source in (owner.project_path, other):
+        (source / 'owner.py').write_text(SourceRepository.main_source)
+        Repo.git(source, 'add', 'owner.py')
+        Repo.git(source, 'commit', '-q', '-m', 'Declare the fixture source owner')
+        repository = Repo.of(source).github
+        first, second = (GoalCheckoutAllocation.declared_for_goal(
+            rule, owner, GoalId.mint(), repository) for _ in range(2))
+        for path in (first, second):
+            Checkout.add(source, path, DetachedStart('HEAD'))
+            (path / 'held-work.txt').write_text(str(path))
+        result.append(RepositoryCheckouts(repository, first, second))
+    return tuple(result)
+
+
+def test_independent_repository_choices_survive_navigation_and_reopening(
+        checkout_comms: Comms, multiple_repository_checkouts: tuple[RepositoryCheckouts, ...]):
+    comms = checkout_comms
+    rule = comms.registry.storage_rule
+    comms.goals.update_goal('worker', SetGoalAction(text='Preserve this goal'))
+    original = comms.registry.require('worker')
+    peer = comms.registry.declare(Thread('peer', frozenset(), Checkout(comms.root)))
+    before = {path: (path / 'held-work.txt').read_bytes()
+              for pair in multiple_repository_checkouts for path in (pair.first, pair.second)}
+    for pair in multiple_repository_checkouts:
+        SelectCheckoutCliCommand(caller=ThreadCaller('worker'), repository=pair.repository,
+                                 path=pair.first).apply(comms)
+    chosen = comms.registry.require('worker')
+    assert chosen == replace(original, storage_roots=rule.roots_of(chosen))
+    assert comms.registry.require(peer.name) == peer
+    for pair in multiple_repository_checkouts:
+        assert rule.roots_of(chosen).choice(pair.repository) == SelectedCheckout(
+            pair.repository, pair.first)
+    comms.threads.set_project(chosen.incarnation, str(multiple_repository_checkouts[0].second))
+    reopened = wire(comms.root)
+    owner = reopened.registry.require('worker')
+    assert owner.storage_roots == chosen.storage_roots
+    assert owner.goal == original.goal
+    for pair in multiple_repository_checkouts:
+        fresh = rule.repository_checkout(rule.roots_of(owner), GoalId.mint(), pair.repository)
+        assert rule.reused_checkout(owner, pair.repository, fresh, RepositoryReads()) == pair.first
+        command = GoalCheckoutCliCommand(
+            caller=ThreadCaller(owner.name), operation=AddCheckoutOperation,
+            repository=LocalRepositorySource(Repo.of(pair.first)))
+        assert command.destination(reopened, owner) == pair.first
+        assert GoalCheckoutAllocation.for_goal(
+            rule, owner, owner.goal.require().id, pair.repository) == (pair.first,)
+        with pytest.raises(StorageDenied, match='Reuse'):
+            StorageProjection(rule, owner, comms).check((CreateCheckoutStorageEffect(
+                fresh, command.repository, DetachedStart('HEAD')),))
+    primary, companion = multiple_repository_checkouts
+    assert rule.edit_boundaries(owner, 'P1234', primary.repository,
+                                (companion.repository,), GoalId.mint()) == {
+                                    primary.first, companion.first}
+    assert {path: (path / 'held-work.txt').read_bytes() for path in before} == before
+
+
+def test_normal_companion_order_admission_uses_the_persisted_repository_choices(
+        checkout_comms: Comms, multiple_repository_checkouts: tuple[RepositoryCheckouts, ...]):
+    comms = checkout_comms
+    core, toad = multiple_repository_checkouts
+    owner = comms.registry.require('worker')
+    requester = comms.registry.declare(Thread('requester', frozenset(), Checkout(comms.root)))
+    comms.registry.set_team_project(RegisteredTeamProject(requester.incarnation, (
+        Repo(checkout=core.first, github=core.repository),
+        Repo(checkout=toad.first, github=toad.repository))))
+    request = comms.goals.todos.add_request(
+        requester.incarnation, 'Use both explicitly selected repository checkouts').id
+    now = RecordedEventTime(time.time())
+    scope = SourceRepository.scope()
+    order = PendingProblemOrder(
+        owner=scope.shape.parents[0], scope=scope, run=MechanicalOrderRun(),
+        check=OrderCheck(core.first, 'true'),
+        edits=('Use both selected repositories while retaining the other held worktrees.',),
+        banned=('No arbitrary checkout selection or held-work deletion.',),
+        report='Report the actual selected edit boundaries.', at=now,
+        pull_requests=(PullRequestLink(toad.repository, 7),))
+    generation = GoalId.mint()
+
+    def admit():
+        return comms.goals.todos.create(
+            'P1', core.repository, 'Use both explicitly selected repository checkouts',
+            creator=requester, owner=comms.registry.require('worker'),
+            assigner=requester.incarnation, generation=generation, review_at=now,
+            order=order, request=request)
+
+    with pytest.raises(StorageDenied, match='Multiple owned'):
+        admit()
+    assert comms.registry.require('worker') == owner
+    for pair in multiple_repository_checkouts:
+        comms.registry.select_checkout(owner.incarnation, pair.repository, pair.first)
+    selected = comms.registry.require('worker')
+    admitted = admit()
+    places = EditWorkplaces.for_assignment(
+        comms.root, comms.registry.snapshot(), (), (admitted,))
+    assert places.roots_for(admitted.id) == frozenset((core.first, toad.first))
+    assert comms.registry.require('worker') == selected
+    assert comms.registry.require('requester') == requester
+    for pair in multiple_repository_checkouts:
+        assert (pair.second / 'held-work.txt').read_text() == str(pair.second)
+
+
+def test_missing_ambiguous_choice_and_invalid_selection_refuse(
+        checkout_comms: Comms, multiple_repository_checkouts: tuple[RepositoryCheckouts, ...]):
+    comms = checkout_comms
+    rule = comms.registry.storage_rule
+    owner = comms.registry.require('worker')
+    core, toad = multiple_repository_checkouts
+    fresh = rule.repository_checkout(rule.roots_of(owner), GoalId.mint(), toad.repository)
+    with pytest.raises(StorageDenied, match='Multiple owned'):
+        rule.reused_checkout(owner, toad.repository, fresh, RepositoryReads())
+    comms.registry.select_checkout(owner.incarnation, core.repository, core.first)
+    with pytest.raises(StorageDenied, match='Multiple owned'):
+        rule.reused_checkout(comms.registry.require(owner.name), toad.repository,
+                             fresh, RepositoryReads())
+    selected = comms.registry.require(owner.name)
+    foreign = comms.registry.declare(Thread('foreign', frozenset(), Checkout(core.second)))
+    with pytest.raises(StorageDenied):
+        comms.registry.select_checkout(foreign.incarnation, core.repository, core.first)
+    with pytest.raises(StorageDenied):
+        comms.registry.select_checkout(owner.incarnation, toad.repository, core.first)
+    link = rule.checkout_base / 'worker--P999'
+    link.symlink_to(core.first, target_is_directory=True)
+    with pytest.raises(StorageDenied):
+        comms.registry.select_checkout(owner.incarnation, core.repository, link)
+    stale_owner = replace(owner, created_at=RecordedCreationTime(owner.created_at + 1))
+    with pytest.raises(RelationViolationError, match='owner changed'):
+        comms.registry.select_checkout(stale_owner.incarnation, core.repository, core.second)
+    assert comms.registry.require(owner.name) == selected
+
+
+def test_stale_selection_refuses_instead_of_using_another_retained_tree(
+        checkout_comms: Comms, multiple_repository_checkouts: tuple[RepositoryCheckouts, ...]):
+    comms = checkout_comms
+    rule = comms.registry.storage_rule
+    owner = comms.registry.require('worker')
+    core, _ = multiple_repository_checkouts
+    comms.registry.select_checkout(owner.incarnation, core.repository, core.first)
+    selected = comms.registry.require(owner.name)
+    git_file = core.first / '.git'
+    original = git_file.read_bytes()
+    git_file.unlink()
+    with pytest.raises(StorageDenied, match='no longer an owned'):
+        rule.reused_checkout(selected, core.repository, core.second, RepositoryReads())
+    git_file.write_bytes(original)
+    assert rule.reused_checkout(selected, core.repository, core.second,
+                                RepositoryReads()) == core.first
+    assert (core.second / 'held-work.txt').read_text() == str(core.second)
+
+
+def test_repository_choices_are_nominal_and_transfer_only_the_selected_path(tmp_path: Path):
+    repository = RepositoryName('OpenHCSDev', 'agent-comms')
+    same = RepositoryName('openhcsdev', 'Agent-Comms')
+    original = StorageRoots(tmp_path, (SelectedCheckout(repository, tmp_path / 'first'),))
+    changed = original.choosing(same, tmp_path / 'second')
+    assert changed.choice(repository) == SelectedCheckout(same, tmp_path / 'second')
+    assert len(changed.selected_checkouts) == 1
+    assert FieldCodec.decode(StorageRoots, FieldCodec.encode(changed)) == changed
+    assert changed.relocated(tmp_path / 'second', tmp_path / 'third').choice(repository) == (
+        SelectedCheckout(same, tmp_path / 'third'))
+    assert changed.choice(RepositoryName('OpenHCSDev', 'toad')) == NoRepositoryChoice()
+    with pytest.raises(ValueError, match='only one'):
+        StorageRoots(tmp_path, (*original.selected_checkouts, SelectedCheckout(same, tmp_path / 'second')))
 
 
 def test_projected_checkout_membership_follows_add_and_remove(checkout_comms: Comms):

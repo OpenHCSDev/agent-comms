@@ -16,7 +16,7 @@ from agent_comms.comms import wire
 from agent_comms.coordination_errors import StaleRevision
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
-from agent_comms.notification_assignment import NotificationAssignment
+from agent_comms.notification_assignment import AssignmentSource, NotificationAssignment
 from agent_comms.notification_progress import (
     PendingProgress,
     SentProgress,
@@ -136,12 +136,12 @@ def test_retained_reads_refresh_only_for_changes_their_viewer_sees(tmp_path):  #
             root, NotificationSelection.of(OwnerOutcomes(lookups["sender"]), (initial,))),
         "operator": NotificationAssignment.read(root, NotificationSelection.of(AllOutcomes(), (initial,))),
     }
-    assert NotificationAssignment.changed(reads.values(), root) == ()
+    assert NotificationAssignment.changed(reads.values(), AssignmentSource(root)) == ()
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assignment, = sealed_cohort_assignments(store, changed.recipient_lookup)
         store.assignments.transition_preengagement(
             assignment.assignment_id, DeferredAssignment, expected_revision=assignment.revision)
-    refreshed = NotificationAssignment.changed(reads.values(), root)
+    refreshed = NotificationAssignment.changed(reads.values(), AssignmentSource(root))
     assert {name for name, read in reads.items() if read in refreshed} == {
         "changed", "sender", "operator"}
 

@@ -43,8 +43,8 @@ from .lifecycle_capability import Successful
 from .native_failures import NativePiUnavailable
 from .native_file_artifact import NativeFileArtifact
 from .native_output import AssistantOutput, NativeOutputScope, ToolOutput
-from .native_session_reopen import NativeSessionIdentity, PiSessionId
-from .pi_wire import McpCallPolicy, McpServerState, Opaque, OpenPayload, PiDiagnostic, PiField, PiOmitted, PiPayload, PiReported, PiUsage, TaggedPayload, UnknownPayload
+from .native_session_reopen import NativeSessionIdentity, NoSessionRetention, PiSessionId
+from .pi_wire import McpCallPolicy, McpServerState, Opaque, OpenPayload, PiDiagnostic, PiField, PiOmitted, PiPayload, PiReported, PiUsage, ReportedInputId, TaggedPayload, UnknownPayload
 from . import agent_events as events
 from .acp_failure import ExhaustedRetry, FailureSource, RecoveredRetry
 from .pi_counts import NonnegativePiCount, PiCount, TotalPiCount, UnreportedCount
@@ -106,7 +106,7 @@ class NativeMessageFailureSource(FailureSource):
 @dataclass(frozen=True)
 class ProviderDiagnosticError(PiPayload, DeclaredFamily, affix="ProviderDiagnosticError"):
     message: str
-    name: str | None = None
+    name: PiField[ReportedText | PiOmitted] = PiOmitted()
 
     @classmethod
     def wire_member(cls, value: dict[str, object]) -> type[ProviderDiagnosticError]:
@@ -114,7 +114,7 @@ class ProviderDiagnosticError(PiPayload, DeclaredFamily, affix="ProviderDiagnost
 
     @property
     def description(self) -> str:
-        return self.name or "Provider transport error"
+        return self.name.text_or("Provider transport error")
 
 
 @dataclass(frozen=True)
@@ -158,6 +158,13 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
+class ReportedTimestamp(PiReported[int]):
+    """The Unix-millisecond clock Pi stamped a record with."""
+
+    value: int
+
+
+@dataclass(frozen=True)
 class ReportedText(PiReported[str]):
     value: str
 
@@ -171,13 +178,6 @@ class ReportedText(PiReported[str]):
     def text_or[D](self, default: D) -> str | D:
         """Pi's empty text falls back exactly as its omitted text does."""
         return self.value or default
-
-
-@dataclass(frozen=True)
-class ReportedInputId(PiReported[InputId]):
-    """The native input identity decoded from Pi's inputId field."""
-
-    value: InputId
 
 
 @dataclass(frozen=True)
@@ -531,7 +531,7 @@ class ProviderTransportFailureDiagnostic(PiDiagnostic):
     provider_connection_failure = True
     error: ProviderDiagnosticError
     details: ProviderTransportDetails
-    timestamp: int | None = None
+    timestamp: PiField[ReportedTimestamp | PiOmitted] = PiOmitted()
 
     def turn_phase(self, phase: TurnPhase) -> TurnPhase:
         from .turn_phase import FailedPhase
@@ -755,9 +755,7 @@ class UserMessage(PiMessage):
     ) -> list[TranscriptEvent]:
         events = [event for part in parts for event in part.user_transcript(context.position, timestamp)]
         events = [replace(event, routing=routing) for event in events]
-        for input_id in self.input_id.present():
-            events = [event.with_native_input(input_id) for event in events]
-        return events
+        return [event.with_native_input(self.input_id) for event in events]
 
 
 @dataclass(frozen=True)
@@ -882,9 +880,9 @@ class UnreportedModel(ExternalNullMember, PiModel):
 
 @dataclass(frozen=True)
 class ReportedModel(PiModel):
-    provider: str | None = None
-    id: str | None = None
-    name: str | None = None
+    provider: PiField[ReportedText | PiOmitted] = PiOmitted()
+    id: PiField[ReportedText | PiOmitted] = PiOmitted()
+    name: PiField[ReportedText | PiOmitted] = PiOmitted()
     context_window: Annotated[
         PiField[PiCount], WireName("contextWindow")
     ] = UnreportedCount()
@@ -898,10 +896,14 @@ class ReportedModel(PiModel):
         return self
 
     def thread_model(self) -> ThreadModel:
-        name = self.id or self.name
-        return ThreadModel.reported(
-            f"{self.provider}/{name}" if self.provider and name else name or self.provider
-        )
+        """Provider and the model's id (else its name), as far as Pi reported them."""
+        shown = (*self.id.present(), *self.name.present())[:1]
+        return ThreadModel.reported("/".join((*self.provider.present(), *shown)) or None)
+
+    def catalog_texts(self) -> tuple[str, ...]:
+        """A catalog lists a model only when Pi named both its provider and its id."""
+        return tuple(text for _provider in self.provider.present() for _id in self.id.present()
+                     for text in self.thread_model().texts())
 
 
 @dataclass(frozen=True)
@@ -1056,10 +1058,10 @@ class NativeSessionSnapshot(PiPayload):
         }
 
     @property
-    def identity(self) -> NativeSessionIdentity | None:
+    def identity(self) -> NativeSessionIdentity | NoSessionRetention:
         known = self._known_identity()
         if len(known) != len(fields(NativeSessionIdentity)):
-            return None
+            return NoSessionRetention()
         return NativeSessionIdentity(
             FieldCodec.decode(PiSessionId, self.session_id.text_or("")),
             self.session_file.text_or(""),
@@ -1156,7 +1158,7 @@ class CompactionData(PiResponseData):
     def require_compaction(self) -> CompactionData:
         return self
 
-    summary: str | None = None
+    summary: PiField[ReportedText | PiOmitted] = PiOmitted()
     usage: Annotated[PiField[PiUsage], WireNullDefault()] = UnreportedUsage()
     first_kept_entry_id: Annotated[
         PiField[ReportedText | PiOmitted], WireName("firstKeptEntryId")
@@ -1167,12 +1169,6 @@ class CompactionData(PiResponseData):
     estimated_tokens_after: Annotated[
         PiField[PiCount], WireName("estimatedTokensAfter")
     ] = UnreportedCount()
-
-    @property
-    def display_summary(self):
-        from .backend import compaction_summary
-
-        return compaction_summary(self.summary) if self.summary is not None else None
 
     def charge(self):
         yield from events.ProviderUsage.charges(self.usage, CompactionChargeId.fresh())

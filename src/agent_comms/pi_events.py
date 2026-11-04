@@ -376,7 +376,7 @@ class CompactionEnd(ReasonedCompaction, ends=phases.CompactionPhase):
         session.usage.invalidate()
         yield session.context_info()
         will_retry = self.will_retry.value_or(False)
-        yield next((events.CompactionEnd(reason=self.reason, summary=result.display_summary,
+        yield next((events.CompactionEnd(reason=self.reason,
                                          will_retry=will_retry) for result in completed),
                    events.CompactionAbort(reason=self.reason, will_retry=will_retry))
         for message in self.error_message.present():

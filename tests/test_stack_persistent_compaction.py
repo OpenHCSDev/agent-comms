@@ -295,7 +295,6 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch, n
             ]
             assert len(terminal) == 1
             assert terminal[0].reason is ManualCompactionReason
-            assert terminal[0].summary == committed[0].summary
             assert not attachment.turns.persistent_backends
             # The child that compacted stays retained and current; nothing reopens it.
             assert retained.returncode is None
@@ -305,7 +304,6 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch, n
             compactions = [row for row in rows if row.get("type") == "compaction"]
             assert len(compactions) == 1
             assert summary in compactions[0]["summary"]
-            assert compactions[0]["firstKeptEntryId"] == committed[0].first_kept
             await asyncio.wait_for(
                 InitialInput.run(
                     owner.inputs, "worker", "worker", "AFTER_COMPACT", input_id=InputId.mint()

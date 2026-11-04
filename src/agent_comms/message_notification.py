@@ -15,7 +15,7 @@ from .frozen_recipient import FrozenRecipient
 from .channel_targets import CommandTarget
 from .nominal.field_codec import MessageId, TaggedUnion, TaggedRecordMember, ThreadLookup
 from .message_reference import MessageReference
-from .notification_assignment import NotificationAssignment
+from .notification_assignment import AssignmentSource, NotificationAssignment
 from agent_comms.notification_progress import AssignmentResponse
 from agent_comms.notification_assignment import NotificationAssignmentRead, NotificationReadMark
 from .notification_evidence import FirstRecipient, OutcomeViewer, RecipientCursor, RecipientLimit
@@ -88,7 +88,7 @@ class CapturedNotificationWindow(TaggedRecordMember, NotificationWindow):
         evidence = notifications.evidence
         return bool(
             (self.read_marks and evidence.changed_marks(self.read_marks))
-            or NotificationAssignment.changed(self.reads, evidence.root)
+            or NotificationAssignment.changed(self.reads, notifications.assignments)
         )
 
 
@@ -100,6 +100,11 @@ class NotificationPass:
     def __init__(self, comms: Comms, revision: WireRevision) -> None:
         self.comms = comms
         self.revision = revision
+
+    @cached_property
+    def assignments(self) -> AssignmentSource:
+        """Assignment evidence for every window this pass checks, through one source."""
+        return AssignmentSource(self.comms.root)
 
     @cached_property
     def evidence(self) -> CapturedNotificationEvidence:

@@ -9,6 +9,7 @@ evidence holds on the plan repository's ``origin/main``; accepting a task proves
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -71,16 +72,17 @@ class OrderPhase(DeclaredFamily, affix="Phase"):
     """What an order serves: one plan phase, or nothing in any plan."""
 
     @classmethod
-    def order_refusals(cls, reading: PlanReading, reason: str) -> tuple[str, ...]:
+    def order_refusals(cls, read_plan: Callable[[], PlanReading], reason: str) -> tuple[str, ...]:
         return ()
 
 
 class UnplannedPhase(OrderPhase):
     @classmethod
-    def order_refusals(cls, reading: PlanReading, reason: str) -> tuple[str, ...]:
-        """A stated reason answers the refusal, so main is read only when it is missing."""
+    def order_refusals(cls, read_plan: Callable[[], PlanReading], reason: str) -> tuple[str, ...]:
+        """Acquire plan evidence only when the stated reason does not answer the refusal."""
         if len(reason.split()) >= 8:
             return ()
+        reading = read_plan()
         ready = tuple(phase for phase in PlanPhase.members_with(PlanPhase) if phase.ready(reading))
         if ready:
             return (

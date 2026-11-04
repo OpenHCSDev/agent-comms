@@ -15,7 +15,7 @@ from agent_comms.native_entries import TranscriptProjection
 from agent_comms.native_transcript import NativeTranscript
 from agent_comms.transcript_events import UserTranscript
 from agent_comms.transcript_routes import DisplayText, SentInputText
-from agent_comms.turn_item import FreshNativeId
+from agent_comms.turn_item import FreshNativeId, FreshNativeIdText
 
 
 def append_input(path, native_id, text, *, role="user"):
@@ -26,7 +26,7 @@ def append_input(path, native_id, text, *, role="user"):
                         "role": role,
                         "inputId": str(native_id),
                         "content": [{"type": "text", "text": text}],
-                    }, id=native_id[:8])
+                    }, id=FreshNativeIdText.decode(native_id[:8]))
             )
             + "\n"
         )
@@ -61,7 +61,7 @@ def test_bound_input_overrides_turn_wide_annotation_without_attributing_quotes(t
             for record in NativeTranscript(path).forward(0, path.stat().st_size)
             for event in record.entry.events(TranscriptProjection(
                 position=record.entry.id,
-                routing=annotations.get(record.entry.id),
+                routing=record.entry.routing_in(annotations),
                 input_display=annotations.input_display(record.entry.input_id),
             ))
         ]

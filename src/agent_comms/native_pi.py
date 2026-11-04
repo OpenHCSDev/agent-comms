@@ -36,6 +36,7 @@ from .pi_vocabulary import NoThinkingOverride, ThinkingChoice
 
 from .native_evidence_read import NativeInputUncommitted
 
+from .native_entries import NO_EVIDENCE_READ, NoEvidenceRead
 from .selected_session import SelectedSession
 if TYPE_CHECKING:
     from . import pi_events as pi
@@ -377,16 +378,14 @@ class NativePiRpcLaunch:
 
 
 def read_tracked_input_commitment(
-    session_file: Path, input_id: InputId, *, evidence: NativeEvidenceRead | None = None
+    session_file: Path, input_id: InputId, *, evidence: NativeEvidenceRead | NoEvidenceRead = NO_EVIDENCE_READ
 ) -> InputCommitment:
     """Corroborating commitment only; this cannot authorize recovery or input replay.
 
     An unreadable or malformed journal is not an uncommitted input and raises.
     """
     session_file = Path(session_file).absolute()
-    from .native_entries import NativeEvidenceRead
-
-    with NativeEvidenceRead.borrow(session_file, evidence) as evidence:
+    with evidence.borrowed(session_file) as evidence:
         evidence.observe()
         try:
             return CommittedInput(evidence.tracked(input_id).message.input_digest.require())

@@ -394,7 +394,6 @@ class OwnerLifecycle:
         env = initial_input.launch(thread.launch()).apply(env)
         env[NativeArguments.binary_key] = agent_bin
         agent_args.apply(env)
-        thread.worktree.prepare()
         host = RootRuntimeStore.at(self.root).acquire_host(
             launch_runtime,
             (str(launch_runtime.interpreter), "-m", "agent_comms.worker",

@@ -413,7 +413,7 @@ async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> N
     with output.transcript.reading() as source:
         assert source.current_draft(
             output.transcript.root, output.transcript.incarnation
-        ).external_row().events == (
+        ).events == (
             AssistantTranscript("prefix once", timestamp=1.0, position=NativeItemId("item")),
         )
 

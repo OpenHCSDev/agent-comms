@@ -69,7 +69,7 @@ from .channel_targets import NamedTarget
 from .cohort_foreground import _accept_visible_deliveries
 from .comms import Comms, wire
 from .controller import (
-    ACP_PERMISSION_TIMEOUT_SECONDS, Controller, SessionUpdateSink,
+    ACP_PERMISSION_TIMEOUT_SECONDS, Controller, NoController, SessionUpdateSink,
 )
 from .coordinated_runtime import SelectedExecution
 from .coordination_cohort import next_sealed_assignment
@@ -272,7 +272,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
     # Private attachment ABI consumed by runtime/compaction. State exists only
     # on its component; in-process consumers use that owner directly.
 
-    def on_connect(self, client: SdkSessionConnection) -> None:
+    def on_connect(self, client: SdkSessionConnection | NoController) -> None:
         """Called by AgentSideConnection with the client-facing connection."""
         self.sessions.client = client
 

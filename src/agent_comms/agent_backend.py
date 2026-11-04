@@ -29,6 +29,7 @@ from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import AcpSessionId, InputId
 from .native_input_proof import NativeContextProof
 from .pi_counts import PiCount
+from .thread_model import ThreadModel, UndeclaredModel
 from .pi_commands import NativeQuery
 from .pi_payloads import PiResponseData
 from .pi_vocabulary import CompactionReason
@@ -117,8 +118,9 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
         return DealDelivery()
 
     @property
-    def model_choice(self):
-        return None
+    def saved_model(self) -> ThreadModel:
+        """A runtime without a saved session file selects no model."""
+        return UndeclaredModel()
 
 
 # ---------------------------------------------------------------------------
@@ -136,15 +138,14 @@ class CompactionOutcome(DeclaredFamily, DeclaredReply, TurnOutcome, affix="Compa
 
 @dataclass(frozen=True)
 class PlacedCompaction(CompactionOutcome):
-    """A summary now replaces the entries before ``first_kept``."""
+    """A summary now replaces the entries Pi's compaction entry names."""
 
     summary: str
-    first_kept: str | None
     tokens_before: PiCount
 
     def completion_event[T](self, end: Callable[..., T], abort: Callable[..., T],
                             reason: type[CompactionReason]) -> T:
-        return end(reason=reason, summary=self.summary)
+        return end(reason=reason)
 
 
 @dataclass(frozen=True)

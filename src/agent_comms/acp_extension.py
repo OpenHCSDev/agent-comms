@@ -28,6 +28,7 @@ from .child_process import ProcessIdentity
 from .context_reading import ContextReading
 from .nominal.declared_family import DeclaredFamily
 from .external_transcript import DraftRow
+from .transcript_sources import NoDraft
 from .nominal.field_codec import (
     AcpSessionId,
     AssignmentId,
@@ -675,10 +676,9 @@ class CompactionChangedUpdate(AgentCommsUpdate):
 
 @dataclass(frozen=True)
 class CompactionCommittedUpdate(AgentCommsUpdate):
-    """The /compact reply: the runtime placed this summary before ``first_kept``."""
+    """The /compact reply: the runtime placed this summary."""
 
     summary: str
-    first_kept: str | None
 
 
 @dataclass(frozen=True)
@@ -697,19 +697,19 @@ class TranscriptDraftUpdate(AgentCommsUpdate):
     """Current draft beside an unchanged, already published transcript page."""
 
     identity: TranscriptReadIdentity
-    draft: DraftRow | None
+    draft: DraftRow | NoDraft
 
 
 @dataclass(frozen=True)
 class TranscriptSnapshotUpdate(AgentCommsUpdate, ToolResult):
     page: TranscriptPage
     identity: TranscriptReadIdentity
-    draft: DraftRow | None = None
+    draft: DraftRow | NoDraft = NoDraft()
 
     @classmethod
     def from_read(cls, read: TranscriptRead) -> Self:
         page, draft = read.read_snapshot()
-        return cls(page, read.identity, draft.external_row())
+        return cls(page, read.identity, draft)
 
     @classmethod
     def capture(cls, transcripts, name, *, page_source: PageSource = LivePageSource()):

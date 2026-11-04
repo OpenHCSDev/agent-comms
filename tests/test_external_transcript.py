@@ -1,3 +1,4 @@
+from agent_comms.transcript_sources import NoDraft
 from agent_comms.repo import Checkout
 import asyncio
 
@@ -72,7 +73,7 @@ def test_absent_store_reads_stay_empty_without_creating_storage(tmp_path):
         assert not read.has_older(0) and not read.request_earlier(0)
         assert list(read.reverse(0)) == list(read.forward(0, 0)) == []
         assert read.turns(LastTurns(2)) == read.frames() == ()
-        assert read.current_draft(transcript.root, transcript.incarnation).external_row() is None
+        assert read.current_draft(transcript.root, transcript.incarnation) == NoDraft()
     transcript.end_turn()
     assert not transcript.path.exists()
 
@@ -235,7 +236,7 @@ def test_draft_is_current_state_and_finishes_atomically(tmp_path):
     with pytest.raises(StaleRevision):
         read.current_draft()
     with transcript.reading() as records:
-        assert records.current_draft(transcript.root, transcript.incarnation).external_row() is None
+        assert records.current_draft(transcript.root, transcript.incarnation) == NoDraft()
     assert [e.text for e in comms.transcripts.capture_page_read("codex").read().events] == [
         "Tool",
         "Hello!",
@@ -247,7 +248,7 @@ def test_draft_is_current_state_and_finishes_atomically(tmp_path):
     )
     transcript.end_turn()
     with transcript.reading() as records:
-        assert records.current_draft(transcript.root, transcript.incarnation).external_row() is None
+        assert records.current_draft(transcript.root, transcript.incarnation) == NoDraft()
 
 
 def test_a_thread_with_nothing_read_pages_older_and_newer_from_its_cursor(tmp_path):

@@ -34,7 +34,7 @@ from .bus import Bus
 from .bus_publication import Delivered
 from .coordination_errors import StaleRevision, TranscriptChanged
 from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import FieldCodec, MalformedRecord
+from .nominal.field_codec import FieldCodec, MalformedRecord, NullMember
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .recorded_time import EventTime, UnrecordedEventTime
 from .routing import TurnRouting
@@ -342,14 +342,10 @@ class TranscriptDraft:
     def publish(self, transcript: StoreWriter) -> None:
         """An absent draft needs no publication."""
 
-    def external_row(self):
-        """The ACP draft field is null when there is no external draft."""
-        return None
 
-
-@dataclass(frozen=True)
-class NoDraft(TranscriptDraft):
-    pass
+@dataclass(frozen=True, slots=True)
+class NoDraft(NullMember, TranscriptDraft):
+    """No external draft: the ACP draft field is absent on the wire."""
 
 
 class TranscriptRecord:

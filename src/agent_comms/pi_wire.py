@@ -179,6 +179,13 @@ class PiOmitted(NullMember):
 
 
 @dataclass(frozen=True)
+class ReportedInputId(PiReported[InputId]):
+    """The native input identity decoded from Pi's inputId field."""
+
+    value: InputId
+
+
+@dataclass(frozen=True)
 class RequestId(PiReported[PiRequestKey]):
     """The id a command carries and Pi echoes on the response that answers it."""
 

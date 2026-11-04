@@ -514,7 +514,7 @@ wheels = [
 [[package]]
 name = "nominal-refactor-advisor"
 version = "0.1.0"
-source = { git = "https://github.com/OpenHCSDev/NominalRefactorAdvisor?rev=main#d0667af3c2733b3de298be1af4bd69f963cb9e23" }
+source = { git = "https://github.com/OpenHCSDev/NominalRefactorAdvisor?rev=main#4fbcf54d8aa285d4e1144e68971d711875d4b2a6" }
 dependencies = [
     { name = "metaclass-registry" },
     { name = "tree-sitter" },
@@ -737,7 +737,7 @@ wheels = [
 [[package]]
 name = "python-introspect"
 version = "0.3.0"
-source = { git = "https://github.com/OpenHCSDev/python-introspect?rev=main#0aff2a73bd24594d377d3f0ffa1464e12447c487" }
+source = { git = "https://github.com/OpenHCSDev/python-introspect?rev=main#f2876b9ee089c65789607284949e11a9f58283fe" }
 dependencies = [
     { name = "annotated-types" },
     { name = "metaclass-registry" },

@@ -36,7 +36,7 @@ from .message_page import (
     PageBounds,
 )
 from .message_reference import MessageReference
-from .messages import CarriesEnvelope, Message
+from .messages import CarriesEnvelope, Message, MessageHistory
 from agent_comms.message_notification import NotificationWindow
 from .notification_evidence import FirstRecipient, OutcomeViewer, RecipientCursor, RecipientLimit
 from .page_traversal import HistoryCursor, HistorySourceKey, OlderTraversal
@@ -317,7 +317,7 @@ class DMDisplayHistory(ConversationHistoryView, DMHistory):
 
 
 @dataclass(frozen=True, slots=True)
-class HistorySource:
+class HistorySource(MessageHistory):
     """An immutable bus/registry snapshot attached by the destination MessageBus."""
 
     root: str
@@ -327,6 +327,9 @@ class HistorySource:
     snapshot_bus_revision: int
     snapshot_registry_revision: FileObservation
     provenance: RegistryProvenance
+
+    def references_from(self, context: ReferenceContext) -> ReferenceContext:
+        return context.for_history(self)
 
     def selection(self, displayed: DisplayBasis) -> HistoricalSelection:
         return HistoricalSelection(HistoricalDisplay(self, displayed))
@@ -417,11 +420,11 @@ class HistorySource:
 
     @classmethod
     def require(cls, sources: tuple[HistorySource, ...], key: HistorySourceKey) -> HistorySource:
-        source = next((item for item in sources if item.key == key), None)
-        if source is None:
-            raise HistoricalSourceChanged("Historical source detached; refresh history")
-        source.validate()
-        return source
+        for source in sources:
+            if source.key == key:
+                source.validate()
+                return source
+        raise HistoricalSourceChanged("Historical source detached; refresh history")
 
     def notification_references(
         self,

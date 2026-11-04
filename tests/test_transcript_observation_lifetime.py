@@ -25,7 +25,6 @@ from test_runtime import until
 async def headless_owner(comms, tmp_path, caplog, native_runtime_package):
     owner = canonical_agent(comms, agent_bin=GivenBinary('pi'),
                             runtime_enabled=True, auto_wake=False)
-    owner.on_connect(None)
     try:
         thread = await Coordination.run_worker(
             partial(owner.sessions.declare_thread, str(tmp_path))

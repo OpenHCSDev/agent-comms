@@ -41,7 +41,7 @@ from .native_input_proof import (
     NativeInputLocation,
 )
 from .native_session_reopen import PiSessionId
-from agent_comms.pi_wire import PiField, PiOmitted, PiPayload, TaggedPayload
+from agent_comms.pi_wire import PiField, PiOmitted, PiPayload, ReportedInputId, TaggedPayload
 from agent_comms.pi_wire import Opaque
 from .pi_payloads import PiMessage, ReportedText
 from .pi_vocabulary import PendingStopReason, ThinkingLevel
@@ -49,6 +49,7 @@ from .recorded_time import GeneratedTimestamp
 from .routing import NoTurnRouting, Routing
 from .transcript_events import ImportedMessage, NoticeTranscript, TranscriptEvent
 from .transcript_routes import InputPresentation, NoInputDisplay, _SessionRoutes
+from .thread_model import DeclaredModel
 from .turn_item import FreshNativeId, NativeItemId
 
 
@@ -212,12 +213,13 @@ class NativeEntry(TaggedPayload, RecordedEntry, DeclaredFamily, affix="Entry"):
             yield evidence
 
     @property
-    def model_choice(self) -> tuple[str, str] | None:
-        return None
+    def saved_models(self) -> tuple[DeclaredModel, ...]:
+        """The model this entry selected; an entry that selects none answers nothing."""
+        return ()
 
     @property
-    def input_id(self) -> InputId | None:
-        return None
+    def input_id(self) -> ReportedInputId | PiOmitted:
+        return PiOmitted()
 
     @property
     def unread_reply(self) -> bool:
@@ -333,26 +335,20 @@ class NativeEvidenceRead:
             finally:
                 evidence.close()
 
-    @classmethod
     @contextmanager
-    def borrow(cls, session_file: Path, reader: NativeEvidenceRead | None = None):
-        """Own acquisition and refusal cleanup, without borrowing proof authority.
+    def borrowed(self, session_file: Path):
+        """Lend this acquired reader without lending its proof authority.
 
-        A supplied reader stays acquired by its original scope after success.
-        Failed corroboration or cancellation retires its bytes and descriptor;
+        It stays acquired by its original scope after success. Failed
+        corroboration or cancellation retires its bytes and descriptor;
         a consumer cannot continue using an observation after that refusal.
         """
-        session_file = Path(session_file).absolute()
-        if reader is None:
-            with cls.open(session_file) as acquired:
-                yield acquired
-        else:
-            try:
-                reader.require_path(session_file)
-                yield reader
-            except BaseException:
-                reader.close()
-                raise
+        try:
+            self.require_path(Path(session_file).absolute())
+            yield self
+        except BaseException:
+            self.close()
+            raise
 
     def _forget(self) -> None:
         self.entries: tuple[NativeEntry, ...] = ()
@@ -406,7 +402,7 @@ class NativeEvidenceRead:
     ) -> NativeContextProof:
         """Corroborate a journal row against this reader's original acquired bytes."""
         session_file = files.session.absolute()
-        with self.borrow(session_file, self) as evidence:
+        with self.borrowed(session_file) as evidence:
             with NativeContextJournal.open_evidence(files.input_proof) as db:
                 row = NativeContextJournal.for_input(db, input_id, generations)
             location = NativeInputLocation(
@@ -459,7 +455,7 @@ class NativeEvidenceRead:
         if context.input_commit != input_event.input_commit:
             raise NativePiUnavailable("Native Pi input/context events disagree")
         emitted = context.at(files.session, session_entry_start=input_event.session_entry_start)
-        with self.borrow(files.session, self) as evidence:
+        with self.borrowed(files.session) as evidence:
             if not evidence.corroborates_context(
                 emitted, input_id=input_event.input_id, files=files
             ):
@@ -656,9 +652,8 @@ class MessageEntry(NativeEntry):
         return self.message.assistant
 
     @property
-    def input_id(self) -> InputId | None:
-        # NativeEntry declares absence as None for every entry; this hands Pi's answer over.
-        return self.message.input_id.value_or(None)
+    def input_id(self) -> ReportedInputId | PiOmitted:
+        return self.message.input_id
 
     def require_input_id(self) -> InputId:
         """A tracked user message names the input it carries; anything else is malformed."""
@@ -750,10 +745,26 @@ class ModelChangeEntry(NativeEntry):
     model_id: Annotated[str, WireName("modelId")]
 
     @property
-    def model_choice(self) -> tuple[str, str] | None:
-        return (self.provider, self.model_id) if self.provider and self.model_id else None
+    def saved_models(self) -> tuple[DeclaredModel, ...]:
+        """Pi's model change, when it wrote both its provider and model id."""
+        return (DeclaredModel(f"{self.provider}/{self.model_id}"),) if self.provider and self.model_id else ()
 
 
 @dataclass(frozen=True, kw_only=True)
 class ThinkingLevelChangeEntry(NativeEntry):
     thinking_level: Annotated[type[ThinkingLevel], WireName("thinkingLevel")]
+
+
+@dataclass(frozen=True)
+class NoEvidenceRead[Reader: NativeEvidenceRead]:
+    """No reader is acquired yet: borrowing opens one of `reads` for this call and retires it after."""
+
+    reads: type[Reader]
+
+    @contextmanager
+    def borrowed(self, session_file: Path) -> Iterator[Reader]:
+        with self.reads.open(Path(session_file).absolute()) as acquired:
+            yield acquired
+
+
+NO_EVIDENCE_READ = NoEvidenceRead(NativeEvidenceRead)

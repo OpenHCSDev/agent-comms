@@ -498,7 +498,9 @@ class NoProgress(NullMember, ProgressRequest):
 
 @dataclass(frozen=True)
 class ProgressToken(SingleFieldValue, ProgressRequest):
-    token: str
+    """MCP's progressToken is a string or a number; Claude Code sends a number."""
+
+    token: JsonRpcId
 
     async def answered(
         self, message: ToolsCallMessage, connector: Connector, caller: ConnectorCaller,
@@ -541,7 +543,15 @@ class StreamedProgress(CancellableWireExport):
 
 @dataclass(frozen=True)
 class ToolCallMeta:
+    """The part of a call's `_meta` Core reads. MCP's `_meta` is open: a client adds its own
+    namespaced keys (Claude Code's claudecode/toolUseId), and those are not Core's to refuse."""
+
     progress: Annotated[ProgressRequest, WireName("progressToken")] = NoProgress()
+
+    @classmethod
+    def of(cls, meta: Mapping[str, object]) -> ToolCallMeta:
+        declared = {entry.key for entry in FieldCodec.argument_fields(cls)}
+        return FieldCodec.decode(cls, {key: meta[key] for key in declared & meta.keys()})
 
 
 class StreamedEvent(ABC):
@@ -562,7 +572,7 @@ class ExportProgressMeta:
 
 @dataclass(frozen=True)
 class ProgressParams:
-    token: Annotated[str, WireName("progressToken")]
+    token: Annotated[JsonRpcId, WireName("progressToken")]
     progress: int
     meta: Annotated[ExportProgressMeta, WireName("_meta")]
 
@@ -577,7 +587,7 @@ class ProgressNotice(StreamedEvent):
         observer.advanced(self.params.meta.export)
 
     @classmethod
-    def sent(cls, token: str, progress: WireExportProgress) -> bytes:
+    def sent(cls, token: JsonRpcId, progress: WireExportProgress) -> bytes:
         notice = cls("2.0", "notifications/progress",
                      ProgressParams(token, progress.messages_written, ExportProgressMeta(progress)))
         return cls.framed(FieldCodec.encode(notice))
@@ -596,7 +606,7 @@ class ToolsCallMessage(McpMessage, declared_name="tools/call"):
         self, connector: Connector, caller: ConnectorCaller, http: web.Request,
     ) -> web.StreamResponse:
         """The call's own meta says whether the client asked for progress."""
-        meta = FieldCodec.decode(ToolCallMeta, self.params.meta)
+        meta = ToolCallMeta.of(self.params.meta)
         return await meta.progress.answered(self, connector, caller, http)
 
     async def result(
