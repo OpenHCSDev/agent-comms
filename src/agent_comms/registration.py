@@ -192,8 +192,7 @@ class Registration:
         if edit.document.canonical_name(name) != name:
             raise RelationViolationError(f"Child thread {name!r} is an alias.")
         if edit.document.taken(name):
-            # A redeclared child keeps the execution it was declared with.
-            existing = edit.document.require_member(name, execution)
+            existing = edit.document.require(name).redeclared_child(execution)
             if not existing.parent.named(parent.name):
                 raise RelationViolationError(f"Thread {name!r} is not a child of {parent.name!r}.")
             return self._declare_in(edit, existing, _DEFAULT_PRESENCE)

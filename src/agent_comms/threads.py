@@ -551,6 +551,10 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread")
             return thread
         raise RelationViolationError(cls.required_refusal)
 
+    def redeclared_child(self, execution: type[SubagentThread]) -> Thread:
+        """This thread named again as a child; it keeps the execution it was declared with."""
+        return execution.stored(self)
+
     def same_execution(self, other: Thread) -> bool:
         """Two declarations of one member; the class is the execution's identity."""
         return type(self) is type(other)
@@ -831,6 +835,11 @@ class ExternalThread(Thread):
 
     def serving_its_own_session(self) -> ExternalThread:
         """What this thread is once a process of its own serves it."""
+        return self
+
+    def redeclared_child(self, execution: type[SubagentThread]) -> Thread:
+        """A child that came to serve its own session keeps its name on its parent's grant;
+        the caller's parent check, not the execution, says whose name it is."""
         return self
 
     def registered_status(self, requested: ThreadStatus) -> ThreadStatus:
