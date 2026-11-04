@@ -6,7 +6,10 @@ from contextlib import nullcontext
 from dataclasses import replace
 from datetime import UTC, datetime
 
+import pytest
+
 from agent_comms.team import judge
+from agent_comms_hooks import ToolRefusedError
 from agent_comms.team_heartbeat import TeamHeartbeat
 from agent_comms.closed_pull_requests import ClosedPullRequestWatch
 from agent_comms.team.publication_rules import (
@@ -157,7 +160,9 @@ def test_closed_unmerged_pull_request_flags_lost_commits(head_bus, reviewed_sour
     assert judge.SupersededVerb in ClosedUnmergedPullRequest.clearing_verbs
     accepted = ReviewedHeadVerdict(VerdictReason('The owner implements the requested behavior without competing decisions.'))
     review = CommsHeadVerdictTool(request=request, operation=accepted, order=NoHeadOrder())
-    review.invoke(comms, review.arguments, caller=ThreadCaller('colleague'))
+    # Acceptance reads the open source; a closed head cannot be accepted, so it stays lost.
+    with pytest.raises(ToolRefusedError, match="no longer an open source"):
+        review.invoke(comms, review.arguments, caller=ThreadCaller('colleague'))
     assert set(scan(capture())) == {lost, old_lost}
     ping = replace(RulePing.capture(lost), since=RecordedEventTime(lost.began()))
     assert not ping.acted(TeamHistory.read(comms, frozenset(('colleague',))))

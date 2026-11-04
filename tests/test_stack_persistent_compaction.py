@@ -23,7 +23,7 @@ from agent_comms.acp_extension import (
 from agent_comms.agent_events import CompactionEnd
 from agent_comms.comms import wire
 from agent_comms.controller import SessionUpdateSink
-from agent_comms.nominal.field_codec import InputId
+from agent_comms.nominal.field_codec import AcpSessionId, InputId
 from agent_comms.launch_runtime import RestartEnvironment
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from agent_comms.pi_vocabulary import ManualCompactionReason
@@ -223,10 +223,11 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch, n
         compact_task = None
         try:
             await owner.new_session(str(project))
+            worker_session = AcpSessionId("worker")
             comms.threads.attach_session((attachment_owner := comms.registry.require("worker")), str(session), process=attachment_owner.process_identity)
             await asyncio.wait_for(
                 InitialInput.run(
-                    owner.inputs, "worker", "worker", "WARMUP", input_id=InputId.mint()
+                    owner.inputs, worker_session, "worker", "WARMUP", input_id=InputId.mint()
                 ),
                 20,
             )
@@ -236,7 +237,7 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch, n
             )
             await asyncio.wait_for(
                 InitialInput.run(
-                    owner.inputs, "worker", "worker", "REUSE", input_id=InputId.mint()
+                    owner.inputs, worker_session, "worker", "REUSE", input_id=InputId.mint()
                 ),
                 20,
             )
@@ -306,7 +307,7 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch, n
             assert summary in compactions[0]["summary"]
             await asyncio.wait_for(
                 InitialInput.run(
-                    owner.inputs, "worker", "worker", "AFTER_COMPACT", input_id=InputId.mint()
+                    owner.inputs, worker_session, "worker", "AFTER_COMPACT", input_id=InputId.mint()
                 ),
                 20,
             )

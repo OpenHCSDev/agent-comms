@@ -45,6 +45,22 @@ class MutualSources:
         path = storage.repository_checkout(storage.roots_of(holder), problem, repository.github)
         return IntegrationCheckout.create(repository, path, repository.main_commit)
 
+    def link_companion(self, problem: str, source: SourceRepository, text: str) -> None:
+        """Link a companion source by a separate real checked order.
+
+        The worker's goal slot is occupied, so the worker accepts the companion itself."""
+        comms = self.context.comms
+        primary = comms.goals.todos.get("P2")
+        creation = CreateProblemGoalAction(
+            problem=problem, request=primary.request,
+            assigner=comms.registry.require("colleague").incarnation,
+            repo=source.github, text=text,
+            order=replace(primary.order.checked(), pull_requests=(source.link,),
+                          check=replace(primary.order.check, directory=source.checkout)),
+            review_at=RecordedEventTime(time.time() + 3600),
+        )
+        PeerCaller("worker").invoke(CommsTodoCreateTool(owner="worker", order=creation), comms)
+
     def publish_carrier(self, github: GitHubFixture) -> PullRequestHead:
         """Publish the separate combined PR; source-member refs and Todo links stay intact."""
         commit = self.core.git(self.checkout.path, "rev-parse", "HEAD").strip()
@@ -165,19 +181,6 @@ def materialized_clients(test_uv: Path) -> Callable[[Path, IntegrationInput], Ma
 
 @pytest.fixture
 def mutual_sources(source_pair: MutualSources) -> MutualSources:
-    """The same source owner, with its companion linked by a separate real checked order.
-
-    The worker's goal slot is occupied, so the worker accepts the companion itself."""
-    comms = source_pair.context.comms
-    primary = comms.goals.todos.get("P2")
-    creation = CreateProblemGoalAction(
-        problem="P3", request=primary.request,
-        assigner=comms.registry.require("colleague").incarnation,
-        repo=source_pair.client.github, text="Migrate the paired source client",
-        order=replace(primary.order.checked(), pull_requests=(source_pair.client.link,),
-                      check=replace(primary.order.check, directory=source_pair.client.checkout)),
-        review_at=RecordedEventTime(time.time() + 3600),
-    )
-    PeerCaller("worker").invoke(
-        CommsTodoCreateTool(owner="worker", order=creation), comms)
+    """The same source owner, with its client migration as a linked companion."""
+    source_pair.link_companion("P3", source_pair.client, "Migrate the paired source client")
     return source_pair

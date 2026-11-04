@@ -52,6 +52,7 @@ from agent_comms.goal_states import ActiveGoal
 from agent_comms.goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from team_heartbeat_fixture import capture_frame
 from agent_comms.held_orders import HeldOrders
+from agent_comms.heartbeat_delivery import OnHeartbeatDelivery
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_key import AcpInputKey
 from agent_comms.installer.backup import StoreBackup
@@ -1020,6 +1021,8 @@ def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus):
     heartbeat = TeamHeartbeat()
     colleague = held_bus.registry.require("colleague")
     held_bus.registry.register(replace(colleague, process_identity=ProcessIdentity.capture(os.getpid())))
+    # The assertion reads the published board message; publication is off by default.
+    held_bus.threads.set_heartbeat_delivery("colleague", OnHeartbeatDelivery)
     asyncio.run(heartbeat.run(lambda: nullcontext(held_bus)))
     saved, = TeamUpdate.latest(held_bus, colleague.incarnation)
     assert saved.handled

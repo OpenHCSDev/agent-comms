@@ -1,0 +1,27 @@
+name: Install the stack
+description: >-
+  Sync the stack the installer runs under (Core with Toad, Textual and ui-theme), add the dev
+  extra, and put its interpreter first on PATH, so later steps run Core as an install would.
+inputs:
+  upgrade:
+    description: Relock to the latest Toad, Textual and ui-theme mains before syncing
+    required: false
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - name: Install uv
+      shell: bash
+      run: |
+        python -m pip install packaging
+        python -m pip install "$(python -I src/agent_comms/installer/declared_uv.py pyproject.toml)"
+    - name: Relock the stack at the latest mains
+      if: inputs.upgrade == 'true'
+      shell: bash
+      run: uv lock --project stack --upgrade --python "$(command -v python)"
+    - name: Sync the stack and the dev extra
+      shell: bash
+      run: |
+        uv sync --project stack --locked --python "$(command -v python)"
+        uv pip install --python stack/.venv/bin/python -r pyproject.toml --extra dev
+        echo "$PWD/stack/.venv/bin" >> "$GITHUB_PATH"

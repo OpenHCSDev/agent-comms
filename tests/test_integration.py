@@ -260,14 +260,7 @@ def test_resolved_companion_keeps_multiple_original_links_and_the_published_carr
     github_cli.put(peer.github, DraftListedPullRequest(
         peer.number, "second-client-source", peer_head, stamp, "main", reviewable_times=(stamp,)))
     comms = pair.context.comms
-    primary = comms.goals.todos.get("P2")
-    comms.goals.update_goal("worker", CreateProblemGoalAction(
-        problem="P4", request=primary.request,
-        assigner=comms.registry.require("colleague").incarnation,
-        repo=peer.github, text="Include the second existing companion source",
-        order=replace(primary.order.checked(), pull_requests=(peer.link,),
-                      check=replace(primary.order.check, directory=peer.checkout)),
-        review_at=RecordedEventTime(9999999999.0)))
+    pair.link_companion("P4", peer, "Include the second existing companion source")
     member_heads = (PullRequestHead(pair.client.github, pair.client.number, pair.client.branch_commit),
                     PullRequestHead(peer.github, peer.number, peer_head))
     resolved = integration.IntegrationCheckout.create(pair.client, tmp_path / "resolved-client", pair.client.main_commit)
@@ -316,14 +309,7 @@ def test_actual_main_cli_keeps_merged_local_members_exact_and_refuses_later_head
     stamp = "2026-10-24T00:00:00Z"
     github_cli.put(peer.github, DraftListedPullRequest(
         peer.number, "second-local-source", peer_head, stamp, "main", reviewable_times=(stamp,)))
-    primary = pair.context.comms.goals.todos.get("P2")
-    pair.context.comms.goals.update_goal("worker", CreateProblemGoalAction(
-        problem="P4", request=primary.request,
-        assigner=pair.context.comms.registry.require("colleague").incarnation,
-        repo=peer.github, text="Include the existing local source",
-        order=replace(primary.order.checked(), pull_requests=(peer.link,),
-                      check=replace(primary.order.check, directory=peer.checkout)),
-        review_at=RecordedEventTime(9999999999.0)))
+    pair.link_companion("P4", peer, "Include the existing local source")
     inputs = pair.capture(("P2", "P3", "P4"), "actual main tuple")
     carrier = pair.publish_carrier(github_cli)
     pair.core.git(pair.core.checkout, "switch", "main")
