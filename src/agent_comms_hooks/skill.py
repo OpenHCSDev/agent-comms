@@ -114,15 +114,10 @@ class DeckReader(DealtSources):
 
     @classmethod
     def sources(cls) -> tuple[Path, ...]:
-        """The closing rule follows every proof, rule and the recorded failures."""
-        return (*cls.leading(), *(rule.path for rule in cls.rules() if rule.closes_deal))
-
-    @classmethod
-    def leading(cls) -> tuple[Path, ...]:
         """One source order for every collaborator and every backend."""
         return (
             *cls.proofs(),
-            *(rule.path for rule in cls.rules() if not rule.closes_deal),
+            *(rule.path for rule in cls.rules()),
             TeamPackage.voice(),
             Path(inspect.getfile(PostmortemFailure)),
             TeamPackage.skill(),
