@@ -290,13 +290,14 @@ class MonitorShown(MonitorFrame, declared_name='shown'):
         self, bridge: LineMonitorBridge, record: ObservedMonitor,
     ) -> tuple[MessageReference, ...]:
         """The one whole part this event proves, confirmed as any other part; an event that is
-        not exactly the original's rendering confirms nothing and says so."""
+        not exactly the original's rendering confirms nothing and says so. Only
+        ClaudeMonitorFrame decodes a shown message, so it renders the original too."""
         identity = self.reference.message_id
         with bridge.uncertain_on_contention(identity):
             for delivery in await bridge.attempts(identity):
                 message = await bridge.message(delivery.reference)
                 observed = tuple(line.rstrip() for line in self.lines)
-                if bridge.incoming_frame(message).observed != observed:
+                if ClaudeMonitorFrame(message).observed != observed:
                     await bridge.record_mismatch(
                         delivery, 'Shown lines do not equal the original message')
                     continue
