@@ -467,7 +467,7 @@ async def test_pages_require_every_line_then_reopen(bridge):
 
 def body_of(parts):
     """A body whose Claude frame has exactly this many parts."""
-    return 'x' * 50 if parts == 1 else '\n'.join(('x' * 300,) * parts)
+    return 'x' * 50 if parts == 1 else '\n'.join(('x' * 1500,) * parts)
 
 
 def read_started(session, path, label):
@@ -506,13 +506,19 @@ async def observe(bridge, updates):
 
 
 async def only_event(reader):
-    """The one line the reader gets for a message; any second line is a partial message."""
-    line = (await reader.readline()).decode().rstrip('\n')
-    with pytest.raises(TimeoutError):
-        async with asyncio.timeout(.3):
-            await reader.readline()
-    assert ClaudeMonitorFrame.units(line) <= ClaudeMonitorFrame.EVENT_CHARS
-    return line
+    """The lines the reader gets for one message, joined as Monitor joins one batch: every line
+    under the line cap, the batch under the batch cap."""
+    lines = [(await reader.readline()).decode().rstrip('\n')]
+    try:
+        while True:
+            async with asyncio.timeout(.3):
+                lines.append((await reader.readline()).decode().rstrip('\n'))
+    except TimeoutError:
+        pass
+    assert all(ClaudeMonitorFrame.units(line) <= ClaudeMonitorFrame.EVENT_CHARS for line in lines)
+    event = '\n'.join(lines)
+    assert ClaudeMonitorFrame.units(event) <= ClaudeMonitorFrame.BATCH_CHARS
+    return event
 
 
 async def exported(bridge, body):
@@ -531,8 +537,8 @@ async def test_a_body_that_fits_one_event_goes_inline_and_exports_nothing(bridge
     async with attached_monitor(bridge) as reader:
         await bridge.accept(message)
         line = await only_event(reader)
-        part = ClaudeMonitorFrame.decode_line(line)
-        assert (part.id, part.number, part.total) == (message.message_id, 1, 1)
+        shown, = ClaudeMonitorFrame.decode_event(line)
+        assert (shown.id, shown.sender) == (message.message_id, message.sender)
         await observe(bridge, notification(line).updates(ClaudeSession()))
     confirmed, = await bridge.attempts(message.message_id)
     assert confirmed.outcome is DeliveredOutcome
@@ -782,7 +788,8 @@ def test_frame_parts_rebuild_the_body_and_cut_only_at_line_ends(body, sender):
     assert ''.join(part.body for part in frame.read_parts(shown_rows))==body
     assert all(part.sender==sender for part in frame.read_parts(shown_rows))
     assert all(len(line)<=frame.READ_LINE_CHARS for line in frame.export_lines[1:])
-    assert frame.fits_one_event==(frame.event_size(frame.inline)<=frame.EVENT_CHARS)
+    assert frame.fits_one_event==(frame.units(frame.shown_inline())<=frame.BATCH_CHARS
+                                  and frame.shows_safely_inline)
 
 
 def test_a_heartbeat_sized_message_is_one_readable_file_not_fragments():
