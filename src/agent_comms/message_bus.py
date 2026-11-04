@@ -179,7 +179,10 @@ class MessageBus[Writes: Publisher]:
                 snapshot, delivery, seen, after=cursor, scope=selection, limit=bounds.limit + 1,
                 traversal=traversal,
             )
-        total = unread[0].matched if unread else 0
+            counts = source.unseen_counts(
+                snapshot, {delivery.actor: delivery}, {delivery.actor: seen}, after=cursor,
+            )[delivery.actor]
+        total = target.pending_count(counts, snapshot, require_channel)
         listed = ListedDeliveries(selection, frozenset(row.seq for row in unread),
                                   frozenset(row.target for row in unread))
         result = MessagePageRequest(
