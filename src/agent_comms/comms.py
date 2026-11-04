@@ -74,7 +74,7 @@ class InboxActivity(AgentActivity):
                FileRevision.capture(self.catalog))
         if not self.untaken.answers(key, snapshot):
             self.untaken = UntakenCut(
-                key, snapshot, self.bus.oldest_untaken(snapshot.claimed_readers(), snapshot))
+                key, snapshot, self.bus.oldest_untaken(snapshot.claimed_readers(snapshot.threads), snapshot))
         return self.untaken.oldest
 
 
