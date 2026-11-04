@@ -1,11 +1,18 @@
-# Toad scrolling CPU: findings and continuation plan
+# Agent Comms CPU bursts: findings and structural repair plan
 
 ## Request and scope
 
-Tristan, 2026-11-03: profile the actual Toad UI and its workers because CPU use
-and responsiveness become bad while scrolling. He then asked for these findings
-and a plan on main so a cloud agent can continue. This is a source/implementation
-handoff, not a claim that scrolling is fixed.
+Tristan, 2026-11-03: profile the actual Toad UI and its workers, then commit the
+findings and a plan to main so a cloud agent can continue. His subsequent
+correction defines the actual target: Agent Comms intermittently drives CPU to
+maximum; scrolling itself is secondary. In his words: "sometimes agent comms
+just goes crazy to max useage" and "i'm tryin got get this struturally sovled not
+just good enough rn".
+
+Find and remove the cause of those bursts across the UI, observer and runtime
+workers. A quiet period, acceptable scrolling, lower process priority, a polling
+throttle or an average below 100% does not establish the repair. This is an
+implementation handoff, not a claim that the CPU problem is fixed.
 
 The cloud agent takes this CPU investigation. Codex-latency retains the separate
 socket-retry repair, Core #3991. Do not duplicate that repair or the independent
@@ -52,6 +59,26 @@ Nonblocking stack races mean these are recurring hotspot leads, **not reliable
 CPU-time percentages**. The separate OS CPU-time measurements above do not come
 from those stack proportions. Do not turn sample weights into precise shares,
 FPS, a 16 ms claim or proof of a particular invalidation cause.
+
+### The later burst and the verification workload must be separated
+
+During the later reported spike, a one-second OS sample showed the existing
+Toad observer at approximately 112% of one core and the UI at 26%. Our separate
+private retry-qualification guardian also consumed approximately 107% of one
+core. That concurrent workload materially contributed to host load; it is not
+proof that all of the spike came from Toad. The guardian was lowered to nice 19
+and idle I/O priority. It subsequently timed out waiting for its copied owner to
+start, before any input or frontend launch; cleanup retired its private root and
+confirmed user settings unchanged. Lowering priority was load management, not a
+product fix.
+
+After that setup exited, a separate five-second CPU-time sample measured the
+same UI at 2.2%, its observer at 5.4%, and runtime worker 1049324 at 0%. This
+confirms variability, not resolution. These short samples cannot identify the
+transition that caused the burst. Retain startup/owner-start work as a separate
+investigation dimension from visible UI activity; do not equate a process label
+or overlapping load with a source-level cause. The latest quiet sample is in
+`after-private-setup-cpu.json` beside the existing evidence.
 
 ## Findings recovered from actual stacks
 
@@ -157,7 +184,17 @@ evidence changes cause unnecessary prompt or whole-view invalidation.
    of notification truth. Do not treat a faster example or fewer source lines
    as evidence that the required answer remains complete.
 
-5. **Confirm once against the actual affected journey.** Focused behavioral
+5. **Confirm the burst cause and its removal, not just smoother scrolling.**
+   Compare active and settled periods, background arrivals, tab return, and
+   managed-owner startup separately. Capture the source transition admitting
+   expensive work and whether the same unchanged state makes it run again.
+   Account for every participating UI/observer/runtime process and unrelated
+   qualification work; do not hide the cost by moving it to another worker.
+   Show that work settles when its source settles and stays bounded by the
+   changed/shown data rather than lifetime history. Include a burst-capable
+   workload and retain before/after evidence of the demonstrated cause.
+
+   Focused behavioral
    checks follow the coherent source change, not repeated full suites or local
    ratchets. Compare the same saved-state scrolling journey before/after,
    measuring UI and observer CPU separately, and preserve the workload and
