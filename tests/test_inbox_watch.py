@@ -555,7 +555,7 @@ async def test_a_message_the_client_printed_reads_emitted(session, comms: Comms,
     await inbox_emptied(comms, "cloud")
     await outcome_becomes(comms, message, "emitted")
     ledgers = tmp_path / "cloud" / "printed"
-    assert [path.name for path in ledgers.iterdir()] == ["session-a"]
+    assert sorted(path.name for path in ledgers.iterdir()) == ["session-a", "session-a.id"]
     assert (ledgers / "session-a").read_text().split() == [message.reference.name]
     watch.cancel()
 

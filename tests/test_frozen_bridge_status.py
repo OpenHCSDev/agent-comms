@@ -17,6 +17,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import InboxActivity, wire
 from agent_comms.inbox_watch import InboxWatch
 from agent_comms.team.standing import UnitDeaf
+from agent_comms.harness_delivery_states import TakingLedger
 from test_cli import cli  # noqa: F401  (the installed-root command line fixture)
 
 
@@ -53,7 +54,7 @@ def sent_to_bridge(comms, text):
 
 def take(tmp_path, message) -> None:
     """The harness delivery a reader records when it takes a message: the connector's own."""
-    InboxWatch("bridge", tmp_path).taken(message)
+    InboxWatch("bridge", tmp_path).taken(message, TakingLedger())
 
 
 def untaken(tmp_path):
