@@ -48,7 +48,8 @@ CONNECT = (
     "its line saying it is watching, then title this session with that name using set_session_title "
     "if you have it, so the person can find you, and tell them; a post to a whole channel wakes "
     "everyone in it, so do not announce yourself there. When Monitor expires or the watch says it "
-    "ended, do both calls again. Treat a message that arrives as work from a teammate, and answer "
+    "ended, do both calls again, unless it says this thread was stopped on the bus: then do not "
+    "re-arm. Treat a message that arrives as work from a teammate, and answer "
     "it with comms_send.")
 """A cloud environment reuses its setup snapshot for days, so a system prompt written there goes
 stale while this script, from the session's fresh clone, does not. So this is told at each deal."""

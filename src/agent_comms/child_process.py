@@ -222,6 +222,10 @@ class ProcessState(SubclassUnion, affix=""):
     @abstractmethod
     def require_release_by(self, process: ProcessIdentity) -> None: ...
 
+    @abstractmethod
+    def held_external_stop(self, release: Callable[[], None], name: str) -> tuple[str, ...]:
+        """Stop a CLI endpoint this process holds: the names still for the ordinary stop."""
+
 
 @dataclass(frozen=True)
 class NoProcess(NullMember, ProcessState):
@@ -282,6 +286,10 @@ class NoProcess(NullMember, ProcessState):
     def require_release_by(self, process: ProcessIdentity) -> None:
         # Stopping before the first start still produces a valid release.
         pass
+
+    def held_external_stop(self, release: Callable[[], None], name: str) -> tuple[str, ...]:
+        """Nothing holds the endpoint, so the ordinary stop finishes it on the bus."""
+        return (name,)
 
 
 @dataclass(frozen=True)
@@ -401,6 +409,15 @@ class ProcessIdentity(RecordMember, ProcessState):
     def require_release_by(self, process: ProcessIdentity) -> None:
         if self != process:
             raise RelationViolationError("Only the registered owner may release itself.")
+
+    def held_external_stop(self, release: Callable[[], None], name: str) -> tuple[str, ...]:
+        """A live holder (a CLI bridge or the connector's inbox watch) serves no owner runtime to
+        retire, so its binding is released for it. A dead holder left a binding the ordinary stop
+        finishes."""
+        if not self.alive():
+            return (name,)
+        release()
+        return ()
 
     def thread_status(self, presence: ActiveThreadPresence, last_seen: float) -> ThreadStatus:
         return presence.process_seen(self)

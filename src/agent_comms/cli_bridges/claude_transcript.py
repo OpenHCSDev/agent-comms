@@ -92,6 +92,11 @@ WINDOW_ENDED = ""
 """On a watch socket: the recent window has been sent and what follows is live. A transcript line is
 never blank (JsonLines.complete_lines), so this cannot be mistaken for one."""
 
+WATCH_STOPPED = 4000
+"""On a watch socket: the close code saying this thread was stopped on the bus, so the session must
+not re-arm. It is in the application range (4000-4999): a re-armed watch replacing an older socket
+closes with 1000, and an install drops the socket (1006), and both of those mean re-arm."""
+
 
 class RecentClaudeWindow(ClaudeJsonLines):
     """Where a running session's transcript is read from: its recent window's owning occurrence,

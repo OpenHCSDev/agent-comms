@@ -254,9 +254,18 @@ class Registration:
             with self.store.editing() as edit:
                 entry = edit.document.entry_if_present(owner.incarnation.name)
                 if entry is not None and entry.owned_by(owner, process):
-                    self._commit_registration(edit, edit.document.prepare_registration(
-                        replace(entry.thread, process_identity=NoProcess()), NoBridgeThreadStatus(),
-                        new_owner=False))
+                    self._released(edit, entry.thread)
+
+    def release_external(self, name: str) -> None:
+        """Stop a CLI endpoint on the bus: its holder's binding is released here, exactly as
+        that holder's own exit releases it, so the stop is finished whether or not the holder
+        is still there to notice. A holder that is still there sees its binding gone and leaves."""
+        with self.store.editing() as edit:
+            self._released(edit, edit.document.require_member(name, ExternalThread))
+
+    def _released(self, edit: RegistryEdit, thread: Thread) -> None:
+        self._commit_registration(edit, edit.document.prepare_registration(
+            replace(thread, process_identity=NoProcess()), NoBridgeThreadStatus(), new_owner=False))
 
     def attach_native_session(self, original: RegistryOwner, session_file: str) -> RegistryOwner:
         """Publish an observed native source under its original executable lease.

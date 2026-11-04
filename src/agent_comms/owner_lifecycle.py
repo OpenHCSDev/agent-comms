@@ -351,6 +351,11 @@ class OwnerLifecycle:
             return tuple((thread, fenced.claim_generation(thread.name)) for thread, _ in owners)
 
     def stop(self, *names: str) -> None:
+        threads = tuple(self.registry.require(name) for name in dict.fromkeys(names))
+        for thread in threads:
+            thread.role.require_executable(RelationViolationError("Only agent threads can be stopped."))
+        names = tuple(remaining for thread in threads
+                      for remaining in thread.stop_names(self.registry.release_external))
         owners = self.fence_stop(*names)
         self._stop_processes(owners)
         # Completed per-session retirement, not the early fence, permits settlement.

@@ -15,7 +15,9 @@ from yarl import URL
 from agent_comms.activity import ActivityState, ObservedActivity
 from agent_comms.cli_bridges.claude_protocol import ClaudeMonitorFrame
 from agent_comms.cli_bridges.claude_protocol import MonitorTaskNotification, TaskEnvelope
-from agent_comms.cli_bridges.inbox_watch_client import FollowedTranscript, InboxSocket
+from agent_comms.cli_bridges.inbox_watch_client import (
+    FollowedTranscript, InboxSocket, WatchDropped, WatchEnd, WatchStopped,
+)
 from agent_comms.comms import Comms
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.connector import Connector
@@ -307,8 +309,8 @@ async def test_the_cloud_client_says_out_loud_when_its_url_is_refused(session, t
     client, _ = session
     used = str(client.make_url("/watch/not-a-ticket").with_scheme("ws"))
     ended = await InboxSocket(used, tmp_path / "messages").carried()
-    assert ended.startswith("failed: WSServerHandshakeError")
-    assert "not-a-ticket" not in ended
+    assert ended.line().startswith("Your inbox watch failed: WSServerHandshakeError")
+    assert "not-a-ticket" not in ended.line()
 
 
 async def inbox_emptied(comms: Comms, thread: str) -> None:
@@ -382,3 +384,52 @@ async def test_a_newer_socket_replaces_the_older_one(session, comms: Comms) -> N
     comms.messaging.send("sender", "cloud", "after")
     assert (await frame(newer))["text"] == "after"
     await newer.close()
+
+
+async def stopped(client: TestClient, token: str, name: str) -> None:
+    """comms_stop as a teammate calls it, through the same connector the watch is on."""
+    response = await client.post("/mcp", headers={"Authorization": f"Bearer {token}"}, json={
+        "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+        "params": {"name": "comms_stop", "arguments": {"name": name}}})
+    assert response.status == 200, await response.text()
+    reply = await response.json()
+    assert not reply["result"]["isError"], reply
+
+
+async def status_becomes(comms: Comms, thread: str, status: type) -> None:
+    async with asyncio.timeout(10):
+        while type(comms.registry.snapshot().entry(thread).status) is not status:
+            await asyncio.sleep(0.05)
+
+
+async def test_a_stop_on_the_bus_ends_the_cloud_watch_and_finishes(
+    session, comms: Comms, tmp_path: Path,
+) -> None:
+    """No owner runtime serves a cloud thread, so the stop releases the watch's binding, and the
+    watch tells the session not to re-arm; it used to dial an owner runtime and fail with a 500."""
+    client, token = session
+    url = str(client.make_url(await watch_path(client, token, "cloud")))
+    watch = asyncio.create_task(InboxSocket(url, tmp_path / "messages").carried())
+    await status_becomes(comms, "cloud", ConnectedThreadStatus)
+    await stopped(client, token, "cloud")
+    assert await asyncio.wait_for(watch, timeout=30) == WatchStopped()
+    assert type(comms.registry.snapshot().entry("cloud").status) is NoBridgeThreadStatus
+
+
+async def test_a_stop_finishes_with_no_session_on_the_other_end(session, comms: Comms) -> None:
+    """A reclaimed VM leaves nothing to answer: the stop still ends stopped, never Stopping."""
+    client, token = session
+    socket = await client.ws_connect(await watch_path(client, token, "cloud"))
+    await status_becomes(comms, "cloud", ConnectedThreadStatus)
+    await socket.close()
+    await status_becomes(comms, "cloud", NoBridgeThreadStatus)
+    await stopped(client, token, "cloud")
+    assert type(comms.registry.snapshot().entry("cloud").status) is NoBridgeThreadStatus
+
+
+def test_an_install_or_a_newer_watch_still_says_rearm() -> None:
+    """Only the stop code means stay off; an install's drop and a replacement mean come back."""
+    assert WatchEnd.closed(1006) == WatchDropped("closed with code 1006")
+    assert WatchEnd.closed(1000) == WatchDropped("closed with code 1000")
+    assert WatchEnd.closed(None).exit_code == 1
+    assert "start this again" in WatchEnd.closed(1006).line()
