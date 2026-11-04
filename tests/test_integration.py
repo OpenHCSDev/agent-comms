@@ -1,5 +1,6 @@
 """Integration policy at real TOML/Git/gh boundaries; no patched Core methods."""
 
+import argparse
 from collections.abc import Callable
 from contextlib import nullcontext
 from dataclasses import replace
@@ -40,8 +41,16 @@ from fixture_git import ENVIRONMENT, SETTINGS
 from agent_comms_project import AgentCommsProject, ClientTypeErrors
 from nominal_refactor_advisor import audit
 from module_layers import MaterializedClients, Package
+from local_checker import LocalCheckerVerb
 
 pytest_plugins = ("github_fixture", "test_holder_standing_rules", "integration_source_fixture")
+
+
+def ci_event(root: Path, repository: RepositoryName, tested: str, event: str,
+             document: Path) -> tuple[str, ...]:
+    """The runner and event words the workflow spells on every CI source step."""
+    return ("--runner-root", str(root), "--repository", repository.to_wire(),
+            "--tested-commit", tested, "--event-name", event, "--event-path", str(document))
 
 
 @pytest.fixture
@@ -78,14 +87,13 @@ def test_actual_ci_cli_uses_verified_carrier_not_synthetic_message_and_revalidat
     document = tmp_path / "event.json"
     document.write_text(json.dumps(documents[event]))
     output = tmp_path / "resolved"
-    environment = {**os.environ, **ENVIRONMENT, "GITHUB_EVENT_NAME": event,
-                   "GITHUB_EVENT_PATH": str(document), "GITHUB_SHA": tested,
-                   "GITHUB_REPOSITORY": pair.core.github.to_wire(), "RUNNER_TEMP": str(tmp_path),
+    environment = {**os.environ, **ENVIRONMENT,
                    "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
+    words = ci_event(tmp_path, pair.core.github, tested, event, document)
     command = (sys.executable, "-m", "agent_comms.integration")
     workflow_output = tmp_path / "workflow-output"
     result = subprocess.run((*command, "--resolve-ci-inputs", str(output),
-                             "--workflow-output", str(workflow_output)), cwd=checkout.path,
+                             "--workflow-output", str(workflow_output), *words), cwd=checkout.path,
                             env=environment, capture_output=True, text=True, timeout=120)
     assert result.returncode == 0, result.stdout + result.stderr
     assert IntegrationInput.at(output) == inputs
@@ -105,11 +113,13 @@ def test_actual_ci_cli_uses_verified_carrier_not_synthetic_message_and_revalidat
         for side in (BaseSide, HeadSide):
             side.require_materialized(output, source)
     original = pair.core.git(pair.core.checkout, "rev-parse", "HEAD").strip()
-    result = subprocess.run((*command, "--revalidate-ci-inputs", str(output)), cwd=checkout.path,
-                            env=environment, capture_output=True, text=True, timeout=120)
+    result = subprocess.run((*command, "--revalidate-ci-inputs", str(output), *words),
+                            cwd=checkout.path, env=environment, capture_output=True, text=True,
+                            timeout=120)
     assert result.returncode == 0, result.stdout + result.stderr
     pair.client.git(pair.client.checkout, "push", "origin", "HEAD:main")
-    stale = subprocess.run((*command, "--revalidate-ci-inputs", str(output)), cwd=checkout.path,
+    stale = subprocess.run((*command, "--revalidate-ci-inputs", str(output), *words),
+                           cwd=checkout.path,
                            env=environment, capture_output=True, text=True, timeout=120)
     # A pull request keeps the bases it captured; only the merge group must be current.
     assert (stale.returncode != 0 and "main moved" in stale.stderr) == moved_main_refuses, stale.stderr
@@ -132,16 +142,21 @@ def test_actual_ordinary_ci_cli_captures_main_once_and_never_steals_an_unlinked_
     checkout = integration.IntegrationCheckout.create(pair.core, tmp_path / "ordinary-ci", tested)
     assert pair.core.git(checkout.path, "rev-parse", "HEAD^{tree}").strip() == tree
     assert pair.core.git(checkout.path, "show", "-s", "--format=%P", "HEAD").split() == [baseline, head]
-    document = tmp_path / "ordinary-event.json"
-    document.write_text(json.dumps({"number": pair.core.number, "pull_request": {"head": {"sha": head}}}))
+    # The local command's request is the one CI's workflow spells, and CI's code resolves it.
+    request = LocalCheckerVerb.parse(["pr", str(pair.core.number)]).request(
+        tmp_path, pair.core.github, tested)
+    parser = argparse.ArgumentParser()
+    integration.CiEvent.add_arguments(parser)
+    assert integration.CiEvent.from_arguments(parser.parse_args(ci_event(
+        tmp_path, pair.core.github, tested, "pull_request", request.document))) == request
+    assert json.loads(request.document.read_text())["pull_request"]["head"]["sha"] == head
+    words = integration.CiEvent.to_arguments(request)
     output = tmp_path / "ordinary-inputs"
-    environment = {**os.environ, **ENVIRONMENT, "GITHUB_EVENT_NAME": "pull_request",
-                   "GITHUB_EVENT_PATH": str(document), "GITHUB_SHA": tested,
-                   "GITHUB_REPOSITORY": pair.core.github.to_wire(), "RUNNER_TEMP": str(tmp_path),
+    environment = {**os.environ, **ENVIRONMENT,
                    "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
     workflow_output = tmp_path / "ordinary-workflow-output"
     result = subprocess.run((sys.executable, "-m", "agent_comms.integration", "--resolve-ci-inputs", str(output),
-                             "--workflow-output", str(workflow_output)),
+                             "--workflow-output", str(workflow_output), *words),
                             cwd=checkout.path, env=environment, capture_output=True, text=True, timeout=120)
     assert result.returncode == 0, result.stdout + result.stderr
     inputs = IntegrationInput.at(output)
@@ -159,15 +174,17 @@ def test_actual_ordinary_ci_cli_captures_main_once_and_never_steals_an_unlinked_
     assert {name for _, name in Package(candidate, resource.at(checkout.path, baseline, tested, HeadSide)).missing_names} == {"old_api"}
     assert not any("state=success" in call or call[:2] == ("pr", "merge") for call in github_cli.calls())
     ordinary = subprocess.run((sys.executable, "-m", "agent_comms.integration", "--check-merge-inputs",
-                               str(tmp_path / "ordinary")), cwd=checkout.path,
+                               str(tmp_path / "ordinary"), *words), cwd=checkout.path,
                               env=environment, capture_output=True, text=True, timeout=120)
     assert ordinary.returncode == 0 and "combined=False" in ordinary.stdout, ordinary.stderr
-    document.write_text(json.dumps({"merge_group": {
+    request.document.write_text(json.dumps({"merge_group": {
         "head_sha": tested, "base_sha": baseline,
         "head_ref": f"refs/heads/gh-readonly-queue/main/pr-{pair.core.number}-{head}"}}))
     queued = subprocess.run((sys.executable, "-m", "agent_comms.integration", "--check-merge-inputs",
-                             str(tmp_path / "ordinary-queue")), cwd=checkout.path,
-                            env={**environment, "GITHUB_EVENT_NAME": "merge_group"},
+                             str(tmp_path / "ordinary-queue"),
+                             *integration.CiEvent.to_arguments(
+                                 replace(request, event=integration.MergeGroupSources))),
+                            cwd=checkout.path, env=environment,
                             capture_output=True, text=True, timeout=120)
     assert queued.returncode == 0 and "combined=False" in queued.stdout, queued.stderr
     assert not HeadReview.accepted(pair.core.github, tested)
@@ -220,11 +237,10 @@ def test_required_hosted_merge_gate_distinguishes_source_review_from_combined_pr
     }
     document = tmp_path / "event.json"
     document.write_text(json.dumps(documents[event]))
-    environment = {**os.environ, **ENVIRONMENT, "GITHUB_EVENT_NAME": event,
-                   "GITHUB_EVENT_PATH": str(document), "GITHUB_SHA": tested,
-                   "GITHUB_REPOSITORY": pair.core.github.to_wire(), "RUNNER_TEMP": str(tmp_path),
+    environment = {**os.environ, **ENVIRONMENT,
                    "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
-    command = (sys.executable, "-m", "agent_comms.integration", "--check-merge-inputs")
+    command = (sys.executable, "-m", "agent_comms.integration",
+               *ci_event(tmp_path, pair.core.github, tested, event, document), "--check-merge-inputs")
     result = subprocess.run((*command, str(tmp_path / "before-promotion")), cwd=checkout.path,
                             env=environment, capture_output=True, text=True, timeout=120)
     assert (result.returncode == 0) == (event == "pull_request"), result.stdout + result.stderr
@@ -323,11 +339,10 @@ def test_actual_main_cli_keeps_merged_local_members_exact_and_refuses_later_head
     document = tmp_path / "main-event.json"
     document.write_text(json.dumps({"ref": "refs/heads/main", "after": tested}))
     output = tmp_path / "main-inputs"
-    environment = {**os.environ, **ENVIRONMENT, "GITHUB_EVENT_NAME": "push",
-                   "GITHUB_EVENT_PATH": str(document), "GITHUB_SHA": tested,
-                   "GITHUB_REPOSITORY": pair.core.github.to_wire(), "RUNNER_TEMP": str(tmp_path),
+    environment = {**os.environ, **ENVIRONMENT,
                    "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
-    command = (sys.executable, "-m", "agent_comms.integration")
+    command = (sys.executable, "-m", "agent_comms.integration",
+               *ci_event(tmp_path, pair.core.github, tested, "push", document))
     result = subprocess.run((*command, "--resolve-ci-inputs", str(output)), cwd=pair.core.checkout,
                             env=environment, capture_output=True, text=True, timeout=120)
     assert result.returncode == 0, result.stdout + result.stderr
@@ -409,12 +424,12 @@ def test_ci_event_refuses_unrelated_graph_and_carrier_without_materialization(
     with pytest.raises(integration.IntegrationFailed, match="two-parent"):
         integration.PullRequestSources.resolve(pair.core, pair.core.main_commit,
             {"number": carrier.pr, "pull_request": {"head": {"sha": carrier.head}}},
-            environment=integration.RunnerEnvironment(root=tmp_path))
+            runner=integration.CiRunner(root=tmp_path))
     with pytest.raises(integration.IntegrationFailed, match="queued carrier"):
         integration.MergeGroupSources.resolve(pair.core, pair.core.main_commit,
             {"merge_group": {"head_sha": pair.core.main_commit, "base_sha": pair.core.main_commit,
                              "head_ref": "refs/heads/not-a-GitHub-queue-reference"}},
-            environment=integration.RunnerEnvironment(root=tmp_path))
+            runner=integration.CiRunner(root=tmp_path))
     assert not any(call[:2] == ("pr", "merge") for call in github_cli.calls())
 
 

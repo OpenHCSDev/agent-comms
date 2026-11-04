@@ -11,7 +11,7 @@ import tomllib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Annotated, ClassVar, Self
+from typing import Annotated, ClassVar
 
 from _pytest.config import get_config
 
@@ -21,7 +21,16 @@ from .child_process import STOP_GRACE_SECONDS, ResidentManager, SpawnedProcess
 from .team.order import TeamContext
 from .nominal.declared_family import DeclaredFamily
 from agent_comms_hooks import ToolRefusedError
-from .nominal.field_codec import FieldCodec, GitCommitText, GoalId, PathText, WireName, boundary_decoder
+from .declared_verb import DeclaredOptions
+from .nominal.field_codec import (
+    Argument,
+    FieldCodec,
+    GitCommitText,
+    GoalId,
+    PathText,
+    WireName,
+    boundary_decoder,
+)
 from .head_review import (
     BaseSide,
     CombinedInput,
@@ -333,22 +342,14 @@ class TimedOutTestAttempt(TestAttempt):
 
 
 @dataclass(frozen=True, kw_only=True)
-class RunnerEnvironment:
-    root: Annotated[Path, PathText, WireName("RUNNER_TEMP")]
+class CiRunner(DeclaredOptions):
+    """The runner a CI job owns, given on its command line; CI artifacts stay under it."""
 
-    @classmethod
-    def read(cls) -> Self:
-        return FieldCodec.decode(
-            cls, {entry.key: os.environ[entry.key] for entry in FieldCodec.argument_fields(cls)}
-        )
-
-
-@dataclass(frozen=True, kw_only=True)
-class GitHubEnvironment(RunnerEnvironment):
-    repository: Annotated[RepositoryName, WireName("GITHUB_REPOSITORY")]
-    tested: Annotated[str, GitCommitText, WireName("GITHUB_SHA")]
-    event: Annotated[str, WireName("GITHUB_EVENT_NAME")]
-    document: Annotated[Path, PathText, WireName("GITHUB_EVENT_PATH")]
+    root: Annotated[
+        Path,
+        PathText,
+        Argument(flags=("--runner-root",), options={"help": "the runner's private temporary root"}),
+    ]
 
 
 @dataclass(frozen=True)
@@ -362,7 +363,7 @@ class TestedSources(DeclaredFamily, affix="Sources"):
     repository: Repo
     tested: str
     carrier: PullRequestHead
-    environment: RunnerEnvironment = field(kw_only=True, compare=False)
+    runner: CiRunner = field(kw_only=True, compare=False)
     resolve_option: ClassVar[str] = "--resolve-ci-inputs"
     revalidate_option: ClassVar[str] = "--revalidate-ci-inputs"
     merge_option: ClassVar[str] = "--check-merge-inputs"
@@ -386,24 +387,9 @@ class TestedSources(DeclaredFamily, affix="Sources"):
         return Repo.git(self.repository.checkout, "rev-parse", f"{self.tested}^{{tree}}").strip()
 
     @classmethod
-    def read(cls, checkout: Path) -> TestedSources:
-        environment = GitHubEnvironment.read()
-        repository = Repo.of(checkout)
-        if environment.repository != repository.github:
-            raise IntegrationFailed("The runner checkout origin is not the actual event repository")
-        tested = Repo.git(checkout, "rev-parse", "HEAD^{commit}").strip()
-        if environment.tested != tested:
-            raise IntegrationFailed("The runner checkout is not the event's actual tested SHA")
-        GitCommitText.decode(tested)
-        document = FieldCodec.parse(environment.document.read_text())
-        return cls.member_named(environment.event).resolve(
-            repository, tested, document, environment=environment
-        )
-
-    @classmethod
     @abstractmethod
     def resolve(
-        cls, repository: Repo, tested: str, document: object, *, environment: RunnerEnvironment
+        cls, repository: Repo, tested: str, document: object, *, runner: CiRunner
     ) -> TestedSources:
         """Decode this foreign event once and prove its relationship to the tested Git graph."""
 
@@ -461,7 +447,7 @@ class TestedSources(DeclaredFamily, affix="Sources"):
 
     def materialize(self, directory: Path) -> IntegrationInput:
         """Capture once from Git/forge, then use these same exact checkouts for every consumer."""
-        if not directory.is_relative_to(self.environment.root.resolve()):
+        if not directory.is_relative_to(self.runner.root.resolve()):
             raise IntegrationFailed(
                 "CI source artifacts belong under the runner's private temporary root"
             )
@@ -573,7 +559,7 @@ class TestedSources(DeclaredFamily, affix="Sources"):
 class PullRequestSources(TestedSources, declared_name="pull_request"):
     @classmethod
     def resolve(
-        cls, repository: Repo, tested: str, document: object, *, environment: RunnerEnvironment
+        cls, repository: Repo, tested: str, document: object, *, runner: CiRunner
     ) -> TestedSources:
         match document:
             case {"number": int(number), "pull_request": {"head": {"sha": str(head)}}}:
@@ -581,7 +567,7 @@ class PullRequestSources(TestedSources, declared_name="pull_request"):
                     repository,
                     tested,
                     PullRequestHead(repository.github, number, head),
-                    environment=environment,
+                    runner=runner,
                 )
             case _:
                 raise IntegrationFailed("Malformed pull_request source event")
@@ -630,7 +616,7 @@ class MergeGroupSources(TestedSources, declared_name="merge_group"):
     @classmethod
     @boundary_decoder
     def resolve(
-        cls, repository: Repo, tested: str, document: object, *, environment: RunnerEnvironment
+        cls, repository: Repo, tested: str, document: object, *, runner: CiRunner
     ) -> TestedSources:
         match document:
             case {
@@ -652,7 +638,7 @@ class MergeGroupSources(TestedSources, declared_name="merge_group"):
                     repository,
                     tested,
                     PullRequestHead(carrier.repo, carrier.pr, carrier.head),
-                    environment=environment,
+                    runner=runner,
                 )
             case _:
                 raise IntegrationFailed("Malformed merge_group source event")
@@ -694,7 +680,7 @@ class MainSources(TestedSources, declared_name="push"):
 
     @classmethod
     def resolve(
-        cls, repository: Repo, tested: str, document: object, *, environment: RunnerEnvironment
+        cls, repository: Repo, tested: str, document: object, *, runner: CiRunner
     ) -> TestedSources:
         match document:
             case {"ref": str(reference), "after": str(after)} if after == tested:
@@ -704,7 +690,7 @@ class MainSources(TestedSources, declared_name="push"):
                     repository,
                     tested,
                     cls.merged_carrier(repository, tested),
-                    environment=environment,
+                    runner=runner,
                 )
             case _:
                 raise IntegrationFailed("Main cache requires the actual main push event")
@@ -739,6 +725,34 @@ class MainSources(TestedSources, declared_name="push"):
                 raise IntegrationFailed(
                     f"#{head.pr} is not the exact captured source merged into this main"
                 )
+
+
+@dataclass(frozen=True, kw_only=True)
+class CiEvent(CiRunner):
+    """The forge event a CI job tests, given on its command line beside its runner."""
+
+    repository: Annotated[RepositoryName, Argument(options={"help": "the event's OWNER/REPO"})]
+    tested: Annotated[
+        str, GitCommitText, Argument(flags=("--tested-commit",), options={"help": "the tested SHA"})
+    ]
+    event: Annotated[
+        type[TestedSources],
+        Argument(flags=("--event-name",), options={"help": "the forge event's name"}),
+    ]
+    document: Annotated[
+        Path, PathText, Argument(flags=("--event-path",), options={"help": "the event's JSON"})
+    ]
+
+    def sources(self, checkout: Path) -> TestedSources:
+        """Decode the event document once against the checkout CI actually tests."""
+        repository = Repo.of(checkout)
+        if self.repository != repository.github:
+            raise IntegrationFailed("The runner checkout origin is not the actual event repository")
+        if self.tested != Repo.git(checkout, "rev-parse", "HEAD^{commit}").strip():
+            raise IntegrationFailed("The runner checkout is not the event's actual tested SHA")
+        return self.event.resolve(
+            repository, self.tested, FieldCodec.parse(self.document.read_text()), runner=self
+        )
 
 
 @dataclass(frozen=True)
@@ -1222,6 +1236,7 @@ def run() -> int:
         help="new persistent directory for this run's two bounded logs",
     )
     risk_option = local_options.add_argument("--risk", default="")
+    CiEvent.add_arguments(parser)
     operation = parser.add_mutually_exclusive_group()
     operation.add_argument(
         TestedSources.resolve_option,
@@ -1317,7 +1332,9 @@ def run() -> int:
                 + ", ".join(sorted(forbidden))
             )
         arguments.drop_on_failure.require_qualification()
-        graph = TestedSources.read((arguments.checkout or Path.cwd()).resolve())
+        graph = CiEvent.from_arguments(arguments).sources(
+            (arguments.checkout or Path.cwd()).resolve()
+        )
         if arguments.resolve_ci_inputs:
             inputs = graph.materialize(arguments.resolve_ci_inputs.resolve())
             if arguments.workflow_output:
@@ -1327,6 +1344,10 @@ def run() -> int:
         else:
             graph.check_merge_inputs(arguments.check_merge_inputs.resolve())
         return 0
+    if given := sorted(
+        entry.key for entry in FieldCodec.argument_fields(CiEvent) if entry.key in values
+    ):
+        parser.error("The CI event belongs to CI source resolution: " + ", ".join(given))
     missing = {
         option.dest
         for option in (checkout_option, output_option, risk_option)

@@ -625,6 +625,11 @@ class Argument(FieldDirective):
     def flags_for(self, name: str) -> tuple[str, ...]:
         return self.flags or ("--" + name.replace("_", "-"),)
 
+    def words(self, name: str, text: object) -> tuple[str, ...]:
+        """The command-line words ``add_to``'s argument reads back as ``text``."""
+        flag = self.flags_for(name)[0]
+        return (f"{flag}={text}",) if flag.startswith("-") else (str(text),)
+
     def add_to(
         self,
         parser: argparse.ArgumentParser,
@@ -792,6 +797,12 @@ class FieldPlan(ViewColumn):
 
     def argument_payload(self, value: object) -> object:
         return self.argument_normalizer(value)
+
+    def argument_words(self, encoded: object) -> tuple[str, ...]:
+        """The command-line spelling ``argument_payload`` decodes back to ``encoded``."""
+        return Argument.declared(self.annotation).words(
+            self.name, self.value.argument_text(encoded)
+        )
 
     def editor_payload(self, value: object) -> object:
         return self.editor_normalizer(value)
@@ -2813,6 +2824,16 @@ class FieldCodec(MroDispatch, Sealed):
             for entry in cls.argument_fields(target)
             if entry.key in raw
         })
+
+    @classmethod
+    def encode_arguments(cls, target: type, value: object) -> tuple[str, ...]:
+        """The command line ``decode_arguments`` reads back as ``value``'s ``target`` fields."""
+        encoded = cls.encode_fields(value)
+        return tuple(
+            word
+            for entry in cls.argument_fields(target)
+            for word in entry.argument_words(encoded[entry.key])
+        )
 
     @classmethod
     def editor_arguments(cls, target: type, values: Mapping[str, object]) -> dict[str, object]:

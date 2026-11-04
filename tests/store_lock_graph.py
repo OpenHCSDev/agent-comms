@@ -43,7 +43,9 @@ class StoreLockGraph:
                 continue
             text = path.read_text()
             self.modules.append(
-                ParsedModule(path=path.relative_to(self.root), module_name=str(path),
+                ParsedModule(path=path.relative_to(self.root),
+                             module_name=".".join(path.relative_to(self.root / "src")
+                                                  .with_suffix("").parts),
                              module=ast.parse(text), source=text)
             )
         self.classes = {}
