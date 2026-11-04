@@ -2,6 +2,10 @@
 from __future__ import annotations
 
 import json
+import sqlite3
+from abc import ABC, abstractmethod
+from collections.abc import Mapping
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
@@ -56,8 +60,18 @@ class UnseenDelivery(TypedRow):
     target: str
 
 
-class RouteCounts:
+@dataclass(frozen=True)
+class RouteOldest(TypedRow):
+    actor: str
+    oldest: float
+
+
+class RouteCounts(ABC):
     """Bus readers share delivery queries and their existing observing lifetime."""
+
+    @abstractmethod
+    def observing(self) -> AbstractContextManager[sqlite3.Connection]:
+        """Borrow one read snapshot through the reader's declared lifetime."""
 
     _requests = f'''arguments AS MATERIALIZED (
         SELECT ? AS targets,? AS recipients,? AS senders,? AS unrecorded,? AS through,? AS after,
@@ -144,7 +158,8 @@ class RouteCounts:
                 WHERE addressed.lookup=route.recipient_lookup AND addressed.seq=row.seq)
     )'''
 
-    def _route_rows(self, row_type, registry, deliveries, seen, after: int, query: str, parameters=()):
+    def _route_rows[Row: TypedRow](self, row_type: type[Row], registry, deliveries, seen,
+                                  after: int, query: str, parameters=()) -> list[Row]:
         with self.observing() as db:
             namespace = registry.sender_bindings
             bindings = (
@@ -179,6 +194,16 @@ class RouteCounts:
             conversation = deliveries[row.actor].conversation(row.sender, row.target)
             counts[row.actor][conversation] = counts[row.actor].get(conversation, 0) + row.count
         return counts
+
+    def unseen_oldest(self, registry, deliveries: Mapping[str, DeliveryScope],
+                      seen: Mapping[str, ReadCursor]) -> dict[str, float]:
+        """When each actor's oldest message under its cursor was sent, in one read."""
+        rows = self._route_rows(RouteOldest, registry, deliveries, seen, 0,
+            f'''SELECT request.actor AS actor,min(message.timestamp) AS oldest
+            FROM cursors AS request
+            CROSS JOIN "{MessageInput.table.declared_name}" AS message USING(seq)
+            WHERE {ReadCursor.rule_of(seen.values())} GROUP BY request.actor''')
+        return {row.actor: row.oldest for row in rows}
 
     def unseen_deliveries(self, registry, delivery, seen, *, after: int = 0, scope=None, limit: int = 100,
                           traversal: PageTraversal):

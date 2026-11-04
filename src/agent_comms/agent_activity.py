@@ -166,7 +166,17 @@ class AgentActivity:
                     for name, thread in requested.items()}
         for name, claim in claims.items():
             observed[name] = claim.phase.project(observed[name], claim.work)
+        readers = tuple(reader for name in requested
+                        for reader in snapshot.status(name).claimed_readers(name))
+        for name, oldest in self.stalled(readers, snapshot).items():
+            observed[name] = replace(
+                observed[name], readiness=observed[name].readiness.stalled(oldest))
         return ActivityCapture(observed, events.expires_at)
+
+    def stalled(self, readers: tuple[str, ...], snapshot: RegistrySnapshot) -> Mapping[str, float]:
+        """Each claimed reader that stopped taking its inbox, by when. A store without the bus
+        reads no inbox, so it sees no stall; Comms's store reads the taken-input inbox."""
+        return {}
 
     def observe_recipients(
         self,

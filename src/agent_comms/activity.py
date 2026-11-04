@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, ClassVar, Self, Annotated
 
 
 from .nominal.declared_family import DeclaredFamily
+from .recorded_time import RecordedEventTime
 from .errors import RelationViolationError
 from .nominal.field_codec import (
     FieldCodec,
@@ -218,6 +219,11 @@ class DrainReadiness(DeclaredFamily, affix="DrainReadiness"):
         """When nothing could reach this owner's inbox; empty while it is reachable."""
         return ()
 
+    def stalled(self, oldest: float) -> DrainReadiness:
+        """This readiness once its reader has taken none of its inbox since ``oldest``. A
+        readiness that already reports its own diagnostic keeps it."""
+        return self
+
 
 @dataclass(frozen=True)
 class ReadyDrainReadiness(DrainReadiness):
@@ -226,6 +232,30 @@ class ReadyDrainReadiness(DrainReadiness):
 
     def presentation(self, ordinary):
         return ordinary
+
+    def stalled(self, oldest: float) -> DrainReadiness:
+        return StalledDeliveryReadiness(oldest)
+
+
+@dataclass(frozen=True)
+class StalledDeliveryReadiness(DrainReadiness):
+    """A reader that says it is connected but has taken nothing since ``oldest``. A frozen
+    bridge process is still alive, so its connection proves nothing; the messages it
+    stopped taking do. It is derived on every read and never stored, so it clears the
+    moment the reader takes that message."""
+
+    oldest: float
+
+    def source_diagnostic(self) -> NoDrainDiagnostic:
+        return NoDrainDiagnostic()
+
+    def presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
+        return ordinary.status.with_attention(
+            f"not reading since {RecordedEventTime(self.oldest).clock()}"
+        ).present_attention(ordinary)
+
+    def unavailable_since(self) -> tuple[float, ...]:
+        return (self.oldest,)
 
 
 @dataclass(frozen=True)
@@ -239,6 +269,9 @@ class DiagnosticDrainReadiness(DrainReadiness):
 
     def presentation(self, ordinary):
         return ordinary.status.with_attention(self.diagnostic.summary).present_attention(ordinary)
+
+    def stalled(self, oldest: float) -> DrainReadiness:
+        return self
 
 
 class NativeInputDrainReadiness(DiagnosticDrainReadiness, ReadyDrainReadiness):

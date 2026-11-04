@@ -41,6 +41,7 @@ from agent_comms.publisher import Publisher
 from agent_comms.read_selection import CapturedSelection
 from agent_comms.read_basis import AnonymousViewer, DisplayViewer, ListedDeliveries, NamedViewer
 from agent_comms.read_ledger import ReadLedger
+from agent_comms.agent_inbox import TakenInputCursor
 from agent_comms.routing import DeliveryScope
 
 from .watched import FileSource
@@ -189,6 +190,19 @@ class MessageBus[Writes: Publisher]:
             listed, PageBounds(traversal, bounds.limit),
         ).displayed(self.reads, document, delivery.actor, snapshot, snapshot, self.bus)
         return InboxPage(result.page, result.displayed, total - len(result.page.messages))
+
+    def oldest_untaken(self, names: Sequence[str], snapshot: RegistrySnapshot) -> Mapping[str, float]:
+        """When each thread's oldest message no harness took was sent: one read for them all,
+        under the taken-input rule that owns the agent inbox."""
+        if not names:
+            return {}
+        catalog = self._channels.read()
+        deliveries = {delivery.actor: delivery
+                      for delivery in (DeliveryScope.capture(name, snapshot, catalog) for name in names)}
+        with self.bus.reading() as source:
+            with source.observing() as db:
+                taken = TakenInputCursor().attached(db, self.bus.path.parent, self._registry.store.privacy())
+            return source.unseen_oldest(snapshot, deliveries, dict.fromkeys(deliveries, taken))
 
     async def when_open[Result](self, operation: Callable[[], Result | Awaitable[Result]]) -> Result:
         while True:

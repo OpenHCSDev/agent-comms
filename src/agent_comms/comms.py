@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Mapping
 from contextlib import AbstractContextManager, aclosing
-from functools import partial
+from functools import cached_property, partial
+import time
+from typing import ClassVar
 from pathlib import Path
 
 from .active_route import CommsRoute, resolve_comms_route
@@ -26,6 +28,9 @@ from .messaging import Messaging
 from .owner_lifecycle import OwnerLifecycle
 from .publisher import OwnerPublisher
 from .relationships import ThreadRelationships
+from .agent_activity import AgentActivity
+from .registration import Registration
+from .registry_document import RegistrySnapshot
 from .route_client import ActivityClient
 from .thread_configuration import ThreadConfiguration
 from .thread_identity import ThreadIncarnation
@@ -35,14 +40,27 @@ from .transcripts import Transcripts
 from .watched import FileSource
 
 
+class InboxActivity(AgentActivity):
+    """Activity read beside the bus. A connected reader whose oldest untaken message is
+    older than the stall window has stopped reading, whatever its process says: on
+    2026-11-04 a py-spy that paused a session bridge left it `connected` for almost four
+    minutes while its messages waited."""
+
+    stall_seconds: ClassVar[float] = 60.0
+
+    def __init__(self, root: Path, registry: Registration, bus: MessageBus) -> None:
+        super().__init__(root, registry)
+        self.bus = bus
+
+    def stalled(self, readers: tuple[str, ...], snapshot: RegistrySnapshot) -> Mapping[str, float]:
+        cutoff = time.time() - self.stall_seconds
+        return {name: oldest for name, oldest in self.bus.oldest_untaken(readers, snapshot).items()
+                if oldest < cutoff}
+
+
 class Comms(ActivityClient):
     def __init__(self, root: CommsRoute) -> None:
         super().__init__(root)
-        self.bus = MessageBus(
-            self.root,
-            self.registry,
-            OwnerPublisher,
-        )
         self.goals = Goals(self.root, self.registry, self.bus, self.agents)
         self.messaging = Messaging(self.root, self.registry, self.bus, self.goals)
         self.ledger = CollaborationLedger.at(self.root, self.registry)
@@ -87,6 +105,13 @@ class Comms(ActivityClient):
                         after = after.advanced(message.reference)
                     if not batch.remaining:
                         break
+
+    @cached_property
+    def bus(self) -> MessageBus:
+        return MessageBus(self.root, self.registry, OwnerPublisher)
+
+    def activity_store(self) -> InboxActivity:
+        return InboxActivity(self.root, self.registry, self.bus)
 
     def watched_reader(self, name: str) -> ThreadIncarnation:
         with Comms.client(self.route) as comms:

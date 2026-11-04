@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from agent_comms.activity_clocks import ActivityClocks, ChannelActivity
 import sqlite3
-from abc import ABC, abstractmethod
+from abc import ABC
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
-from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
+from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field, replace
 from itertools import islice
 from pathlib import Path
@@ -159,10 +159,6 @@ class DisplayUnread:
 
 class BusReader(RouteCounts, ABC):
     """One query implementation for individual reads and a held read snapshot."""
-
-    @abstractmethod
-    def observing(self) -> AbstractContextManager[sqlite3.Connection]:
-        """Borrow one read snapshot through the reader's declared lifetime."""
 
     def answering(self, references: tuple[MessageReference, ...], route: NamedTarget,
                   snapshot: RegistrySnapshot) -> tuple[MessageReference, ...]:
