@@ -156,6 +156,7 @@ from .history_views import RetiredViews
 from .thread_identity import ThreadIncarnation
 from .registry_document import ProjectThreadSelection, RegistrySnapshot
 from .transcripts import TranscriptCursor
+from .host_logs import HostLog, HostLogRead
 from .tool_result import ToolResult
 from .notification_reads import LiveNotificationRead
 from .work_branches import WorkBranch, WorkBranches
@@ -1429,6 +1430,25 @@ class CommsResourcesTool(ThreadReadTool):
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ToolResult:
         return HostResources.read(comms.root, comms.registry.require(caller.subject(self.thread)))
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsHostLogTool(ReadTool, NativeToolRequest):
+    label = "Host log"
+    description = (
+        "Read the host's connector journal, latest install diagnostics or busiest processes, with "
+        "secrets hidden: a session on another machine reads a failure itself instead of asking "
+        "someone on the host."
+    )
+    longest: ClassVar[int] = 500
+
+    source: Annotated[type[HostLog], *tool_field("What to read")]
+    lines: Annotated[int, *tool_field("How many lines, newest last; from 1 to 500")] = 100
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> HostLogRead:
+        if not 1 <= self.lines <= self.longest:
+            raise ValueError(f"lines must be from 1 to {self.longest}, not {self.lines}")
+        return HostLogRead(self.source.read(comms.root, self.lines))
 
 
 @dataclass(frozen=True, kw_only=True)
