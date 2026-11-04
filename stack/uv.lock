@@ -211,7 +211,7 @@ wheels = [
 [[package]]
 name = "batrachian-toad"
 version = "0.6.20"
-source = { git = "https://github.com/OpenHCSDev/toad.git?branch=main#5443f0d7d1352a2286884f30282e9a51d270f265" }
+source = { git = "https://github.com/OpenHCSDev/toad.git?branch=main#5a152eed1b6be2ae8e6243873f183c29a4a5659d" }
 dependencies = [
     { name = "agent-client-protocol" },
     { name = "agent-comms" },
@@ -661,7 +661,7 @@ wheels = [
 [[package]]
 name = "nominal-refactor-advisor"
 version = "0.1.0"
-source = { git = "https://github.com/OpenHCSDev/NominalRefactorAdvisor?rev=main#1dd41972ad8d36b0a9667f3301cdd03c55ee980c" }
+source = { git = "https://github.com/OpenHCSDev/NominalRefactorAdvisor?rev=main#2063b32ffcbea5cf278c3a13f7ed1b849f91559a" }
 dependencies = [
     { name = "metaclass-registry" },
     { name = "tree-sitter" },
