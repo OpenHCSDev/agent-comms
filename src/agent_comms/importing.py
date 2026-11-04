@@ -134,7 +134,7 @@ class ImportSnapshot(ImportedConversation):
 
         timestamp = datetime.now(UTC)
         iso = timestamp.isoformat()
-        records: list[dict[str, object]] = [SessionEntry.fresh(project, timestamp).to_wire()]
+        records: list[object] = [SessionEntry.fresh(project, timestamp).to_wire()]
         parent = FieldCodec.encode(NativeItemId.fresh())
         records.append({"type": "custom", "id": parent, "parentId": None, "timestamp": iso,
             "customType": "agent-comms-import",
