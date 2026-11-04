@@ -256,7 +256,7 @@ class CurrentDisplayReferences(SnapshotRestored, DisplayReferences):
 
     @classmethod
     def from_registry(cls, root: str, registry: RegistrySnapshot, channels: tuple[str, ...] = ()) -> Self:
-        return cls(root, {name: thread.incarnation for name, thread in registry.named_members()}, channels)
+        return cls(root, dict(registry.named_incarnations()), channels)
 
     def __post_init__(self) -> None:
         """Restoring a packet copies the member map; lookups derive from it when asked."""
