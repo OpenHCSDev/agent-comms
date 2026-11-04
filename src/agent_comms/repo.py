@@ -563,29 +563,64 @@ class PinnedSubmodule:
             ).strip()
         )
 
+    def answers(self, *question: str) -> bool:
+        """Ask this module's own Git directory, never discover the enclosing checkout."""
+        return Repo._run(self.checkout, '--git-dir', str(self.path / '.git'),
+                         *question).returncode == 0
+
+    def initialized(self) -> bool:
+        """A checked-out commit is work to preserve, even without a fetch remote."""
+        return (not self.path.is_symlink()
+                and self.answers('rev-parse', '--verify', '--quiet', 'HEAD^{commit}'))
+
     def usable(self) -> bool:
-        """A repository that can serve every later update: it holds a commit, and it has the
-        origin `submodule update` fetches a newly pinned commit from. A store borrowing its
-        objects through alternates with no remote and no refs answers the first and fails
-        the second the moment the pin moves ("transport 'file' not allowed")."""
-        return all(
-            Repo.store_serves(self.store, *question)
-            for question in (
-                ("rev-parse", "--verify", "--quiet", "HEAD^{commit}"),
-                ("remote", "get-url", Repo.remote),
-            )
-        )
+        """An initialized module with the origin an explicit pin update can fetch from."""
+        return self.initialized() and self.answers('remote', 'get-url', Repo.remote)
 
     def broken(self) -> bool:
-        """Anything but a usable store or the empty directory `git worktree add` leaves: a
-        store without a repository or without its origin, a `.git` pointing at one, a
-        hand-copied directory or a link standing where the clone belongs."""
-        occupied = self.path.is_symlink() or (self.path.is_dir() and any(self.path.iterdir()))
-        return (self.store.exists() or occupied) and not self.usable()
+        """An interrupted store, dangling Git pointer, copied directory or symlink;
+        a valid initialized module is never clone debris."""
+        if self.path.is_symlink():
+            return True
+        if self.initialized():
+            return False
+        occupied = self.path.is_dir() and any(self.path.iterdir())
+        # Deinitialization leaves a valid store with local refs but no working tree.
+        return ((self.store.exists() or occupied)
+                and not Repo.store_serves(self.store, 'rev-parse', '--verify',
+                                          '--quiet', 'HEAD^{commit}'))
+
+    def checkout_pin(self) -> None:
+        """Select this parent's pin only; nested modules have their own owners."""
+        Repo.git(self.checkout, 'submodule', 'update', '--init', '--checkout', '--',
+                 self.path.relative_to(self.checkout).as_posix(), timeout=300)
+
+    def initialize(self) -> None:
+        """Recover missing setup without changing a valid working module."""
+        if not self.initialized():
+            if self.broken():
+                self.clear()
+            self.checkout_pin()
+
+    def prepare(self) -> None:
+        """Keep this HEAD and its edits; initialize missing modules declared by it."""
+        self.initialize()
+        Checkout(self.path).prepare()
+
+    def update(self) -> None:
+        """Explicitly select the declared pin, retaining Git's dirty-work refusal."""
+        self.initialize()
+        if not self.usable():
+            relative = self.path.relative_to(self.checkout).as_posix()
+            Repo.git(self.checkout, 'submodule', 'init', '--', relative)
+            url = Repo.git(self.checkout, 'config', '--get', f'submodule.{self.name}.url').strip()
+            Repo.git(self.path, 'remote', 'add', Repo.remote, url)
+        self.checkout_pin()
+        Checkout(self.path).update_submodules()
 
     def clear(self) -> None:
-        """Pinned package data, never a unit's edit: dropped whole so the next update
-        clones it again from its declared source."""
+        """Drop broken initialization so the module can clone from its declared source.
+        initialize() never calls this for a valid checked-out commit."""
         if self.path.is_symlink():
             self.path.unlink()
         for directory in (self.store, self.path):
@@ -753,16 +788,14 @@ class Checkout(SingleFieldValue, PresentMember):
             rollback.pop_all()
 
     def prepare(self) -> None:
-        """Populate the pinned submodules, rebuilding any an interrupted clone left broken.
-        A tree that pins none has nothing to prepare."""
-        modules = self.submodules()
-        if not modules:
-            return
-        for module in modules:
-            if module.broken():
-                module.clear()
-        Repo.git(self.path, "submodule", "update", "--init", "--recursive", "--checkout",
-                 timeout=300)
+        """Initialize missing modules; preserve initialized HEADs and every local edit."""
+        for module in self.submodules():
+            module.prepare()
+
+    def update_submodules(self) -> None:
+        """Select this revision's pins after an explicit parent-version change."""
+        for module in self.submodules():
+            module.update()
 
     def held_work(self) -> str:
         """Every source change retirement would lose, including initialized submodules."""

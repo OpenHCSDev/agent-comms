@@ -233,7 +233,7 @@ class IntegrationCheckout(SourceCheckout):
         Repo.git(self.path, "switch", "--detach", base)
         for head in heads:
             self.include(head)
-        self.prepare()
+        self.update_submodules()
         return Repo.git(self.path, "rev-parse", "HEAD^{tree}").strip()
 
     def combine(self, base: str, heads: tuple[PullRequestHead, ...]) -> tuple[PullRequestHead, ...]:
@@ -1119,7 +1119,7 @@ class IntegrationRun(InputPublication):
         selected = self.checkout.test_files(base, heads)
         if not selected:
             raise IntegrationFailed("The touched-test union is empty; no suite fallback was run")
-        self.checkout.prepare()
+        self.checkout.update_submodules()
         log = self.output / f"attempt-{attempt}.log"
         command = (
             "timeout",

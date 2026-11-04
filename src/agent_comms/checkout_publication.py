@@ -17,6 +17,16 @@ from .store_files import StoreGuard
 class PublishingCheckout(Checkout, StoreGuard):
     """Git owns source updates; a publication only creates ignored output and a link."""
 
+    def qualified_for(self, source: Checkout) -> PublishingCheckout:
+        """The explicit physical target must publish the caller's selected repository."""
+        path = self.path.expanduser().absolute()
+        checkout = self.checked(path)
+        if path != checkout.path:
+            raise ValueError("Publication checkout must be a physical path")
+        if Repo.from_origin(checkout.path).github != Repo.from_origin(source.resolved().path).github:
+            raise ValueError("Publication checkout must match the selected project's repository")
+        return checkout
+
     def head(self) -> str:
         return Repo.git(self.path, "rev-parse", "HEAD").strip()
 
