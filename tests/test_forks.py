@@ -580,10 +580,12 @@ def test_ambiguous_pre_pr_work_never_picks_latest(edit_sources, tmp_path):
     save_edit_order(comms, another_edit_order(comms))
     session = tmp_path / "ambiguous.jsonl"
     calls = captured_edit_sources(comms, (source.checkout / "owner.py", primary / "new.py"), session)
+    # One owned tree per teammate and repository: P41 reuses P40's allocated checkout, so
+    # edits in either tree belong to two held orders and neither is picked for review.
     shown = command(comms, "judge", "show", "--as", "colleague")
     assert shown.returncode == 0, shown.stderr
-    assert calls[0][0] not in shown.stdout and calls[1][0] in shown.stdout
-    assert shown.stdout.splitlines()[-1] == "1 unjudged"
+    assert calls[0][0] not in shown.stdout and calls[1][0] not in shown.stdout
+    assert shown.stdout.splitlines()[-1] == "0 unjudged"
     assert all(not todo.judged_calls for todo in comms.goals.todos.board_history())
 
 
