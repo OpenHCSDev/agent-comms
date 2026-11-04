@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
+import secrets
 import re
 import sys
 from abc import ABC, abstractmethod
@@ -28,6 +29,7 @@ from yarl import URL
 
 from agent_comms.bus import Bus
 from agent_comms.bus_publication import Delivered
+from agent_comms.harness_delivery_states import PrintLedgerId
 from agent_comms.message_reference import MessageReference
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.watched import FileSource
@@ -64,12 +66,25 @@ class SessionLedger(PrintLedger):
             stream.flush()
             os.fsync(stream.fileno())
 
+    @property
+    def identity(self) -> PrintLedgerId:
+        """Born with the ledger and kept beside it: a fresh container's ledger is a new one."""
+        path = self.path.with_suffix(".id")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with path.open("x") as stream:
+                stream.write(secrets.token_hex(16))
+        except FileExistsError:
+            pass
+        return PrintLedgerId(path.read_text())
+
     def reports(self) -> tuple[str, ...]:
         try:
             names = self.path.read_text().split()
         except FileNotFoundError:
             names = []
-        return (PrintedLedger(printed=tuple(MessageReference.named(name) for name in names)).line(),)
+        return (PrintedLedger(ledger=self.identity,
+                              printed=tuple(MessageReference.named(name) for name in names)).line(),)
 
 
 class TranscriptRoute(ABC):

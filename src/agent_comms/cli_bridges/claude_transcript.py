@@ -12,6 +12,7 @@ from agent_comms.thread_text import NoThreadText, ThreadText
 
 from ..session_receipts import SessionReceipts
 from ..cli_protocol import TaggedWire
+from ..harness_delivery_states import PrintLedgerId
 from ..wire_models import WireModel
 from .shared import WireReference
 from .claude_protocol import CLAUDE_RECORD, ClaudeRecord, ClaudeSession, SubagentProgress
@@ -123,12 +124,15 @@ class PrintedNow(WatchReport, declared_name='printed'):
 
 
 class PrintedLedger(WatchReport, declared_name='ledger'):
-    """Everything this machine's clients may have printed, sent first on every connect. Once it
-    is in, an attempt still unconfirmed provably never reached a Monitor and may go again."""
+    """Everything this session's client may have printed, sent first on every connect, with the
+    ledger's own id. Once it is in, an attempt this ledger took and still unconfirmed provably
+    never reached a Monitor and may go again."""
+
+    ledger: PrintLedgerId
 
     async def received(self, pushed: PushedTranscript) -> None:
         await super().received(pushed)
-        pushed.ledger_read.set()
+        pushed.reported.arrived(self.ledger)
 
 
 WATCH_REPORT = WireModel.adapter(WatchReport.declared_union())
