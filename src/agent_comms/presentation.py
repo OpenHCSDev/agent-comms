@@ -672,16 +672,19 @@ class WireRevision(ReadState, ToolResult):
                 and not self.changed_since(BusSourceView(), earlier))
 
     def changed_threads(self, previous: ThreadsObserved, comms: Comms,
-                        activity: Mapping[str, ObservedActivity | DeletedThread]) -> frozenset[str]:
-        """Attribute changes using the retained observation and existing route rows."""
+                        activity: Mapping[str, ObservedActivity | DeletedThread],
+                        snapshot: RegistrySnapshot, registry_changed: frozenset[str],
+                        ) -> frozenset[str]:
+        """Attribute changes using the retained observation and existing route rows. A
+        registry revision reaches only the threads whose own rows it changed (or their forks):
+        every turn start rewrites the registry, and it re-presented every open thread."""
         earlier = previous.revision
         names = previous.results.keys()
         readable, changed = previous.revision_inputs()
-        if (self.registry != earlier.registry or self.changed_since(BusSourceView(), earlier)
-                or not readable):
+        if self.changed_since(BusSourceView(), earlier) or not readable:
             return frozenset(names)
+        changed.update(name for name in names if snapshot.affected_by(name, registry_changed))
         if self.bus_seq != earlier.bus_seq:
-            snapshot = comms.registry.snapshot()
             source = comms.bus.bus
             if source.revision() != self.bus_seq:
                 raise StaleRevision("Bus changed before route attribution")

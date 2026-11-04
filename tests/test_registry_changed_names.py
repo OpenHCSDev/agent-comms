@@ -1,0 +1,44 @@
+"""A registry revision names the threads it changed, so an observer re-reads only those."""
+
+from dataclasses import replace
+from pathlib import Path
+
+from agent_comms.registration import Registration
+from agent_comms.registry_document import UnreadRegistry
+from agent_comms.repo import Checkout
+from agent_comms.thread_text import ForkedParent, GivenThreadText
+from agent_comms.threads import NativeThread
+
+
+def registry_with_a_fork(root: Path) -> Registration:
+    registry = Registration(root / "registry.json")
+    registry.register(NativeThread("alpha", frozenset(), Checkout(root), created_at=10.0))
+    registry.register(NativeThread("beta", frozenset(), Checkout(root), created_at=20.0))
+    registry.register(NativeThread("alpha-fork", frozenset(), Checkout(root),
+                                   parent=ForkedParent("alpha"), created_at=30.0))
+    return registry
+
+
+def test_a_write_to_one_thread_names_that_thread_and_its_fork_only(tmp_path: Path) -> None:
+    """Every turn start rewrites the registry; it used to re-present every open thread."""
+    registry = registry_with_a_fork(tmp_path)
+    before = registry.snapshot()
+    registry.register(replace(registry.require("alpha"), title=GivenThreadText("renamed")))
+    after = registry.snapshot()
+
+    changed = after.changed_names(before)
+
+    assert changed == {"alpha"}
+    assert after.affected_by("alpha", changed)
+    assert after.affected_by("alpha-fork", changed)
+    assert not after.affected_by("beta", changed)
+
+
+def test_an_unchanged_registry_names_nothing(tmp_path: Path) -> None:
+    registry = registry_with_a_fork(tmp_path)
+    assert registry.snapshot().changed_names(registry.snapshot()) == frozenset()
+
+
+def test_a_reader_that_read_no_cut_rereads_every_thread(tmp_path: Path) -> None:
+    snapshot = registry_with_a_fork(tmp_path).snapshot()
+    assert UnreadRegistry().changed_names_to(snapshot) >= {"alpha", "beta", "alpha-fork"}
