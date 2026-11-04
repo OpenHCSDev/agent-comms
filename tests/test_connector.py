@@ -967,6 +967,9 @@ def test_ui_grant_expiry_scope_and_direct_mutation_admission(
     for seconds in (0, UiReadAccess.maximum_seconds + 1):
         with pytest.raises(ValueError):
             store.read().ui_issued(namespace, seconds)
+    assert UiReadAccess.maximum_seconds == 7 * 24 * 3600
+    week = store.read().ui_issued(namespace, UiReadAccess.maximum_seconds).result
+    assert week.expires_at > time.time() + 6 * 24 * 3600
 
 
 @pytest.mark.parametrize("endpoint", [
