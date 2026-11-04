@@ -1,6 +1,9 @@
 """A session on another machine is woken by a pushed frame, through the login it already has."""
 
 import asyncio
+import os
+import signal
+import sys
 import json
 import re
 from pathlib import Path
@@ -23,6 +26,7 @@ from agent_comms.comms import Comms
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.connector import Connector
 from agent_comms.connector_store import ConnectorStore
+from agent_comms.message_reference import MessageReference
 from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery
 from agent_comms.repo import Checkout
 from agent_comms.thread_status import ConnectedThreadStatus, NoBridgeThreadStatus
@@ -512,6 +516,12 @@ def ledger_line(*messages) -> str:
     return PrintedLedger(printed=tuple(message.reference for message in messages)).line()
 
 
+async def bridged(comms: Comms, thread: str) -> None:
+    async with asyncio.timeout(20):
+        while not isinstance(comms.registry.snapshot().entry(thread).status, ConnectedThreadStatus):
+            await asyncio.sleep(0.05)
+
+
 async def outcome_becomes(comms: Comms, message, outcome: str) -> None:
     async with asyncio.timeout(20):
         while attempt_outcome(comms, message) != outcome:
@@ -521,10 +531,17 @@ async def outcome_becomes(comms: Comms, message, outcome: str) -> None:
 async def test_a_message_the_client_printed_reads_emitted(session, comms: Comms, tmp_path: Path, capsys) -> None:
     client, token = session
     url = str(client.make_url(await watch_path(client, token, "cloud")))
-    watch = asyncio.create_task(InboxSocket(url, tmp_path / "cloud" / "messages").carried())
+    source = tmp_path / "session-a.jsonl"
+    source.write_text("".join(f"{line}\n" for line in transcript_lines("before")))
+    watch = asyncio.create_task(
+        InboxSocket(url, tmp_path / "cloud" / "messages", FollowedTranscript(source)).carried())
+    await bridged(comms, "cloud")
     message = comms.messaging.send("sender", "cloud", "printed here").message
+    await inbox_emptied(comms, "cloud")
     await outcome_becomes(comms, message, "emitted")
-    assert (tmp_path / "cloud" / "printed").read_text().split() == [message.reference.name]
+    ledgers = tmp_path / "cloud" / "printed"
+    assert [path.name for path in ledgers.iterdir()] == ["session-a"]
+    assert (ledgers / "session-a").read_text().split() == [message.reference.name]
     watch.cancel()
 
 
@@ -533,9 +550,10 @@ async def test_a_message_taken_but_never_printed_is_replayed_once_the_ledger_pro
 ) -> None:
     """62380: a frozen watch took it, the socket died, and it was gone for good."""
     client, token = session
+    frozen = await client.ws_connect(await watch_path(client, token, "cloud"))
+    await bridged(comms, "cloud")
     lost = comms.messaging.send("sender", "cloud", "taken, never printed").message
     shown = comms.messaging.send("sender", "cloud", "printed before the freeze").message
-    frozen = await client.ws_connect(await watch_path(client, token, "cloud"))
     assert [(await frame(frozen))["text"] for _ in range(2)] == [lost.body, shown.body]
     await inbox_emptied(comms, "cloud")
     await frozen.close()
@@ -552,12 +570,58 @@ async def test_a_message_taken_but_never_printed_is_replayed_once_the_ledger_pro
 
 async def test_no_ledger_is_no_proof_so_nothing_is_replayed(session, comms: Comms) -> None:
     client, token = session
-    comms.messaging.send("sender", "cloud", "taken by an old client")
     old = await client.ws_connect(await watch_path(client, token, "cloud"))
+    await bridged(comms, "cloud")
+    comms.messaging.send("sender", "cloud", "taken by an old client")
     await frame(old)
     await inbox_emptied(comms, "cloud")
     await old.close()
     again = await client.ws_connect(await watch_path(client, token, "cloud"))
     with pytest.raises(TimeoutError):
         await asyncio.wait_for(again.receive_str(), timeout=2)
+    await again.close()
+
+
+async def test_a_watch_frozen_past_its_heartbeat_loses_nothing_and_shows_nothing_twice(
+    session, comms: Comms, tmp_path: Path,
+) -> None:
+    """The 62380 freeze with a real client process and a real SIGSTOP: the connector drops the
+    stopped socket at its heartbeat while the message it took sits unshown. Whatever the client
+    prints after SIGCONT is in its ledger, and the next watch sends exactly what it did not."""
+    client, token = session
+    url = str(client.make_url(await watch_path(client, token, "cloud")))
+    (tmp_path / ".claude" / "projects" / "p").mkdir(parents=True)
+    (tmp_path / ".claude" / "projects" / "p" / "frozen-session.jsonl").write_text(
+        "".join(f"{line}\n" for line in transcript_lines("before the freeze")))
+    environment = {**os.environ, "HOME": str(tmp_path), "CLAUDE_CODE_SESSION_ID": "frozen-session",
+                   "PYTHONPATH": str(Path(__file__).parents[1] / "src")}
+    watch = await asyncio.create_subprocess_exec(
+        sys.executable, "-c", "from agent_comms.cli_bridges.inbox_watch_client import main; main()", url,
+        env=environment, stdout=asyncio.subprocess.PIPE)
+    assert watch.stdout is not None
+    async with asyncio.timeout(30):
+        assert b"Watching your inbox" in await watch.stdout.readline()
+    os.kill(watch.pid, signal.SIGSTOP)
+    try:
+        message = comms.messaging.send("sender", "cloud", "sent into the freeze").message
+        await inbox_emptied(comms, "cloud")
+        async with asyncio.timeout(90):
+            while isinstance(comms.registry.snapshot().entry("cloud").status, ConnectedThreadStatus):
+                await asyncio.sleep(0.5)
+    finally:
+        os.kill(watch.pid, signal.SIGCONT)
+    async with asyncio.timeout(30):
+        printed = (await watch.stdout.read()).decode()
+    await watch.wait()
+    ledger = tmp_path / ".local" / "state" / "claude-comms-inbox" / "cloud" / "printed" / "frozen-session"
+    names = ledger.read_text().split() if ledger.exists() else []
+    assert (message.body in printed) == (message.reference.name in names)
+
+    again = await client.ws_connect(await watch_path(client, token, "cloud"))
+    await again.send_str(PrintedLedger(printed=tuple(MessageReference.named(n) for n in names)).line())
+    if message.reference.name in names:
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(again.receive_str(), timeout=2)
+    else:
+        assert (await frame(again))["text"] == message.body
     await again.close()

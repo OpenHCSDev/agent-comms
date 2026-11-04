@@ -37,7 +37,7 @@ from .coordination_database import CoordinationStore
 from .coordination_tables.harness_deliveries import HarnessDelivery
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .harness_delivery_states import EmittedOutcome, ReceivingMonitor, UnconfirmedOutcome, UnrecordedMonitor
+from .harness_delivery_states import EmittedOutcome, UnconfirmedOutcome
 from .message_reference import MessageReference
 from .messages import Message
 from .nominal.field_codec import FieldCodec, ThreadLookup
@@ -130,10 +130,14 @@ class PushedTranscript(TranscriptConfirmsDelivery, ClaudeJsonLines):
         """The ticket's thread, decoded once for the socket's life."""
         return self.comms.registry.require(self.transcript_thread).incarnation.require_recorded().lookup
 
-    async def emitted(self, reference: MessageReference) -> None:
-        """The client printed this message, or was about to: its attempt is never sent again."""
-        for delivery in await self.attempts(reference.message_id):
-            if delivery.reference == reference:
+    async def emitted(self, printed: frozenset[MessageReference]) -> None:
+        """The client printed these, or was about to: their attempts are never sent again. One
+        read of this recipient's unconfirmed attempts, however long the ledger is."""
+        unconfirmed = await self.coordinator_read(lambda db: tuple(HarnessDelivery.select(
+            db, bridge=self.delivery_kind, recipient_lookup=self.recipient_lookup,
+            outcome=UnconfirmedOutcome)))
+        for delivery in unconfirmed:
+            if delivery.reference in printed:
                 await self.finish(delivery, partial(replace, outcome=EmittedOutcome))
 
     async def transcript(self) -> AsyncIterator[RuntimeUpdate]:
@@ -176,21 +180,22 @@ class InboxWatch:
             return request.page(comms).page.messages
 
     def taken(self, message: Message) -> None:
-        """A message leaves the inbox once its frame went out, but a written socket is not a
-        shown event: the attempt stays unconfirmed until the session's transcript shows it.
+        """A message leaves the inbox before its frame goes out: the client may ack a print
+        before a later write could land, and an attempt recorded but never sent is exactly what
+        replay with proof sends again. The attempt stays unconfirmed until the session's
+        transcript shows it.
         A message one Monitor event shows inline waits for that one part; one sent as a file
         has no Read this side can check, so it stays unconfirmed."""
         with self.wire() as comms:
             reference = message.reference
             incarnation = comms.registry.require(self.thread).incarnation
-            frame = ClaudeMonitorFrame(message)
             delivery = HarnessDelivery(
                 RemoteWatchHistory,
                 incarnation.require_recorded().lookup,
                 reference.message_id,
                 reference.seq,
                 UnconfirmedOutcome,
-                monitor=ReceivingMonitor(len(frame.parts)) if frame.fits_one_event else UnrecordedMonitor(),
+                monitor=ClaudeMonitorFrame(message).shown_evidence(),
             )
             path = str(CoordinationStore.path_in(comms.root))
             with Coordination(path) as store, store.session.writing() as db:
@@ -238,8 +243,8 @@ class InboxWatch:
         try:
             while not socket.closed:
                 for message in await asyncio.to_thread(self.untaken, after):
-                    await socket.send_str(FieldCodec.compact(FieldCodec.encode(message)))
                     await asyncio.to_thread(self.taken, message)
+                    await socket.send_str(FieldCodec.compact(FieldCodec.encode(message)))
                     after = after.advanced(message.reference)
                 if not await asyncio.to_thread(self.holds, here):
                     await socket.close(code=WATCH_STOPPED, message=b"stopped on the bus")
