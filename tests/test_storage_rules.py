@@ -13,7 +13,8 @@ from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, RecordProblems
 from agent_comms.thread_creation import RecordedCreationTime
-from agent_comms.repo import Checkout, DetachedStart, LocalRepositorySource, Repo, RepositoryReads
+from agent_comms.repo import Checkout, DetachedStart, GitCommandError, LocalRepositorySource, Repo, RepositoryReads
+from agent_comms.goal_actions import SetGoalAction
 from agent_comms.repository_name import RepositoryName
 from agent_comms.shell_effects import (
     CreateCheckoutStorageEffect,
@@ -26,6 +27,7 @@ from agent_comms.storage_projection import StorageProjection
 from agent_comms.storage_rules import (
     CheckoutAllocation,
     EditableCheckoutAllocation,
+    GoalCheckoutAllocation,
     ScopedDirectory,
     StorageRule,
     UnitStorage,
@@ -252,8 +254,9 @@ def test_removed_worktree_updates_membership_and_another_home_cannot_claim_its_p
     with pytest.raises(StorageDenied):
         StorageProjection(rule, other, comms).check((
             CreateCheckoutStorageEffect(new, source, DetachedStart('HEAD')),))
-    StorageProjection(rule, thread, comms).check((
-        CreateCheckoutStorageEffect(new, source, DetachedStart('HEAD')),))
+    with pytest.raises(StorageDenied, match='Reuse'):
+        StorageProjection(rule, thread, comms).check((
+            CreateCheckoutStorageEffect(new, source, DetachedStart('HEAD')),))
     StorageProjection(rule, thread, comms).check((RemoveCheckoutStorageEffect(old),))
     shutil.rmtree(old)
     assert rule.checkouts_of(thread, RepositoryReads()) == (home,)
@@ -394,6 +397,35 @@ def test_existing_work_boundaries_do_not_select_a_new_checkout(
         StorageProjection(rule, owner, comms).check((CreateCheckoutStorageEffect(
             fresh, LocalRepositorySource(Repo.of(source)), DetachedStart('HEAD')),))
     assert not fresh.exists()
+
+
+def test_selected_edit_checkout_does_not_read_an_unrelated_broken_history(checkout_comms: Comms):
+    comms = checkout_comms
+    rule = comms.registry.storage_rule
+    owner = comms.registry.require('worker')
+    source = owner.project_path
+    repository = Repo.of(source).github
+    goal = comms.goals.update_goal(owner.name, SetGoalAction(text='Use the selected source'))
+    owner = comms.registry.require(owner.name)
+    selected = GoalCheckoutAllocation.declared_for_goal(rule, owner, goal.id, repository)
+    Checkout.add(source, selected, DetachedStart('HEAD'))
+    owner = comms.registry.update_thread(owner.name, lambda thread: replace(thread, worktree=Checkout(selected)))
+    broken = rule.order_checkout(rule.roots_of(owner), 'P1243')
+    broken.mkdir(parents=True)
+    (broken / '.git').write_text('gitdir: /vanished/uv/git/store/worktrees/old\n')
+    (broken / 'unfinished.txt').write_text('preserve this work')
+    before = {path.name: path.read_bytes() for path in broken.iterdir()}
+    fresh = rule.repository_checkout(rule.roots_of(owner), GoalId.mint(), repository)
+    assert rule.reused_checkout(owner, repository, fresh, RepositoryReads()) == selected
+    assert rule.edit_boundaries(owner, 'P2', repository, (), goal.id) == {selected}
+    StorageProjection(rule, owner, comms).require_write(selected / 'implementation.py')
+    assert not fresh.exists()
+    assert {path.name: path.read_bytes() for path in broken.iterdir()} == before
+    # Without a selected editable target, unreadable historical work still refuses
+    # inventory-based selection: do not silently discard it or allocate around it.
+    with pytest.raises(GitCommandError):
+        rule.reused_checkout(replace(owner, worktree=Checkout(source)), repository,
+                             fresh, RepositoryReads())
 
 
 def test_allocating_effect_reuses_one_checkout_instead_of_creating_more(checkout_comms: Comms):
