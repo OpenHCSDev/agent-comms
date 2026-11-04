@@ -430,6 +430,10 @@ class Watched(WireWakeFile, ABC):
                 yield changes
                 await changes.wait()
 
+    def commit_sources(self) -> tuple[FileSource, ...]:
+        """This store's own commit signal, without every other store in its root."""
+        return tuple(FileSource(path) for path in self.source_paths(self.path.parent))
+
     def wake_sources(self) -> tuple[FileSource, ...]:
         """The files this store's commits wake its watchers through."""
         return tuple(FileSource(path) for path in WireWakeFile.watched_paths_in(self.path.parent))
