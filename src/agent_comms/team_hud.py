@@ -67,8 +67,9 @@ class PlanPhasesGroup(HudGroup):
     tone = AccentTone
 
 
-class FinishedPlansGroup(ExpandedHudGroup, HudGroup):
-    pass
+class PhasesDoneByPlanGroup(ExpandedHudGroup, HudGroup):
+    """Each plan's finished-phase count. A plan appears once one phase is finished; its other
+    phases stay in their own groups, so the heading names phases, never finished plans."""
 
 
 class HudUnavailableGroup(HudGroup):
@@ -218,7 +219,7 @@ class FinishedPhases(HudRecord):
 
     plan: Annotated[type[Plan], DisclosureIdentity()]
     phases: Annotated[tuple[type[PlanPhase], ...], HudExclude()]
-    hud_group: ClassVar[type[HudGroup]] = FinishedPlansGroup
+    hud_group: ClassVar[type[HudGroup]] = PhasesDoneByPlanGroup
 
     @projected(view=HudExclude)
     def done(self) -> int:

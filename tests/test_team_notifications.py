@@ -21,7 +21,7 @@ from agent_comms.team_heartbeat import TeamHeartbeat, TeamObservation
 from agent_comms.comms import Comms
 from team_heartbeat_fixture import ObservedHeartbeat, capture_frame, current_hud
 from agent_comms.team_hud import (
-    TeamFrame, TeamHud, Teammate, CodexUsage, FinishedPlansGroup, UnreadableUsage,
+    TeamFrame, TeamHud, Teammate, CodexUsage, PhasesDoneByPlanGroup, UnreadableUsage,
 )
 from agent_comms.team.vibe_check import OverloadDegradation
 from agent_comms.task_attachments.team_pings import TeamDecisions, TeamUpdateNotice, TeamUpdate, TeamUpdateStore, PublishedFacts, RulePing
@@ -582,10 +582,13 @@ def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_
     urgent = next(section for section in hud.groups if section.group is UrgentGroup)
     assert tuple(row.phase for row in urgent.records) == (RecordPlanePhase, ReviewQueuePhase)
     assert urgent.tables[0].record is type(hud.phases[0])
-    folded, = next(section.records for section in hud.groups
-                    if section.group is FinishedPlansGroup)
+    done_by_plan = next(section for section in hud.groups
+                        if section.group is PhasesDoneByPlanGroup)
+    folded, = done_by_plan.records
     assert folded.phases == (RetainedStorePhase, OneOrderOwnerPhase)
     assert folded.done == 2
+    # The plan still has urgent phases, so its heading must not call it finished.
+    assert done_by_plan.heading() == "PHASES DONE BY PLAN · 1"
     rendered = "\n".join(hud.hud_text(time.time()))
     assert all(phase.declared_name in rendered for phase in (RecordPlanePhase, ReviewQueuePhase))
 
