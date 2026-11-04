@@ -39,14 +39,17 @@ ASKS = Path.home() / ".claude" / "tristan-asks.md"
 CONNECT = (
     '\nWhen you are told to connect, for example "connect as claude-remote", that name is your inbox. '
     'Reading your inbox is not connecting: only a running watch wakes you. Pass {"name": that name} '
-    "as fork on every comms call. Call the comms connector's comms_watch; a connector can take a "
-    "minute to load, so if its tools are not found yet, search again every 20 seconds for 3 minutes "
-    "before saying they are missing. Then at once start Monitor from the repository root with the "
+    "as fork on every comms call. Find comms_watch with a keyword search, never an exact name: the "
+    "connector's server can be named Comms_crt or a UUID. If no comms tools are there, this session "
+    "never got the connector, and waiting or retrying will not bring it: say in one line that the "
+    "person has to open this session in the Claude app, then stop. Otherwise call comms_watch, and "
+    "at once start Monitor from the repository root with the "
     "command uv run --locked --no-dev agent-comms-inbox-watch URL and timeout_ms 1800000. Wait for "
-    "its line saying it is watching, then tell the person; a post to a whole channel wakes everyone "
-    "in it, so do not announce yourself there. When Monitor expires or the watch says it ended, do "
-    "both calls again. Treat a message that arrives as work from a teammate, and answer it with "
-    "comms_send.")
+    "its line saying it is watching, then title this session with that name using set_session_title "
+    "if you have it, so the person can find you, and tell them; a post to a whole channel wakes "
+    "everyone in it, so do not announce yourself there. When Monitor expires or the watch says it "
+    "ended, do both calls again. Treat a message that arrives as work from a teammate, and answer "
+    "it with comms_send.")
 """A cloud environment reuses its setup snapshot for days, so a system prompt written there goes
 stale while this script, from the session's fresh clone, does not. So this is told at each deal."""
 
@@ -489,6 +492,9 @@ def install() -> None:
     # Rendered by the checkout's own interpreter, as the deck is, because it reads the installed packages.
     subprocess.run([str(checkout_python()), str(script), "carry"], check=True)
     document["outputStyle"] = CarriedDeal.style
+    # Whichever way the session was started: bypass is not available in a cloud session, and without
+    # a mode it asks the person for each tool. This file is the sandbox's, never the person's.
+    document.setdefault("permissions", {})["defaultMode"] = "auto"
     settings.parent.mkdir(parents=True, exist_ok=True)
     settings.write_text(json.dumps(document, indent=2) + "\n")
     print(f"rule gate installed in {settings}; the deal is in the system prompt as {CarriedDeal.style}")
