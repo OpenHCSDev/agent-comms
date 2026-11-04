@@ -10,7 +10,7 @@ from yarl import URL
 from agent_comms.comms import Comms
 from agent_comms.connector import Connector
 from agent_comms.connector_store import ConnectorStore, UiReadAccess
-from agent_comms.remote_core import ConnectorClient
+from agent_comms.remote_core import ConnectorClient, ObservationRetired
 from agent_comms.ui_model.observation import ConnectionClosed
 from agent_comms.repo import Checkout
 from agent_comms.ui_model.observation import (
@@ -82,7 +82,7 @@ def test_retiring_a_peer_ends_its_relay_while_the_connector_is_still_connecting(
             peer.retire()
             assert not peer.thread.is_alive()
             assert time.monotonic() - started < 5
-            assert ConnectionClosed().reported_by(peer).error == "the UI retired the observation"
+            assert ConnectionClosed().reported_by(peer).ending == ObservationRetired()
 
 
 def test_an_ended_observation_reports_its_own_cause() -> None:
@@ -94,9 +94,9 @@ def test_an_ended_observation_reports_its_own_cause() -> None:
     try:
         peer.join()
         assert not peer.thread.is_alive()
-        assert "retired" not in peer.ending
+        assert peer.ending != ObservationRetired()
         assert "Traceback: the service failed" in str(ServiceReported("Traceback: the service failed").reported_by(peer))
         closed = str(ConnectionClosed().reported_by(peer))
-        assert peer.ending in closed and "Traceback" not in closed
+        assert peer.ending.describe() in closed and "Traceback" not in closed
     finally:
         peer.retire()

@@ -68,6 +68,7 @@ class ConnectorObserverClosed(ObserverDied):
     """The connector ended a remote UI's observation; there is no local process to describe."""
 
     def __init__(self, url: URL, ending: RelayEnding):
+        self.ending = ending
         super().__init__(f"The comms observation at {url} closed:\n{ending.describe()}")
 
 

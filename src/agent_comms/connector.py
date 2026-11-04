@@ -95,7 +95,7 @@ from .tools import CommsSendTool, SendTool
 from .order_tools import CommsHeadVerdictTool, HeadVerdictTool, MessagePublished
 from .tool_request import ToolCall, ToolRequest, tool_field
 
-type JsonRpcId = int | str
+JsonRpcId = int | str
 """A JSON-RPC request id, as the client chose it."""
 
 
