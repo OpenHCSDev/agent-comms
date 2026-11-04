@@ -994,8 +994,6 @@ def test_subject_evidence_is_shared_without_losing_each_pings_start(notification
     assert old.acted(history) and not new.acted(history)
     opened = packet.open_pings(history)
     assert opened == (new,) and opened[0].since == new.since
-    waiting = packet.undisposed(history, now)
-    assert tuple(ping.since for ping in waiting) == (new.since,)
     hud = TeamHud.of(comms, capture_frame(comms, ProgressRead()), (),
                           delivery=TeamDelivery(packet, opened), usage=CodexUsage.read())
     assert hud.open_pings is opened

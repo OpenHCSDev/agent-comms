@@ -84,7 +84,8 @@ class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
                     published=TeamUpdate.published(comms, thread.incarnation), now=now,
                 ):
                     TeamUpdateStore.record(comms.root, update)
-                    sections = AlarmGroup.sections((update,), update.open_pings(actions))
+                    sections = AlarmGroup.sections((update,), update.open_pings(actions),
+                                                   update.stopped(snapshot))
                     duty.publish(lambda update=update, sections=sections: update.send(comms, (
                         HudUnavailableGroup.heading(),
                         *TeamHud.alarm_text(sections, now),

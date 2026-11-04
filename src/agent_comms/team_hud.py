@@ -312,6 +312,7 @@ class TeamHud(TeamLoad):
     usage: CodexUsage
     packets: tuple[TeamUpdate, ...] = ()
     open_pings: tuple[Ping, ...] = field(kw_only=True)
+    stopped: tuple[str, ...] = field(default=(), kw_only=True)
 
     @classmethod
     def read(cls, comms: Comms, teammate: str) -> TeamHud:
@@ -365,6 +366,7 @@ class TeamHud(TeamLoad):
                    load=OverloadDegradation.from_orders(held, len(timers), sum(edits.values())),
                    forks=forks, usage=usage, packets=(delivery.packet,),
                    open_pings=delivery.open_pings, services=passes,
+                   stopped=tuple(sorted(delivery.packet.stopped(snapshot))),
                    heartbeat=passes.heartbeat_completed_at(owner))
 
     def for_delivery(self, delivery: TeamDelivery) -> TeamHud:
@@ -380,7 +382,7 @@ class TeamHud(TeamLoad):
 
     @cached_property
     def alarms(self) -> tuple[AlarmSection, ...]:
-        return AlarmGroup.sections(self.packets, self.open_pings)
+        return AlarmGroup.sections(self.packets, self.open_pings, frozenset(self.stopped))
 
     @cached_property
     def groups(self) -> tuple[HudSection, ...]:

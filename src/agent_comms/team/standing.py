@@ -376,6 +376,9 @@ class TeammateOwedAnswer(OwedAnswer, declared_name=None):
     def questions_for(self, unit: ThreadIncarnation) -> tuple[Message, ...]:
         return (self.message,) if unit.name == self.unit else ()
 
+    def named_threads(self) -> tuple[str, ...]:
+        return tuple(dict.fromkeys((self.unit, *super().named_threads())))
+
 
 @dataclass(frozen=True)
 class UnitAskUnanswered(TeammateOwedAnswer, UndatedStandingRule):
@@ -482,6 +485,9 @@ class GoalBlocked(IndependentStandingRule, UndatedStandingRule):
                      for thread in snapshot.visible_threads(DEFAULT_ROSTER)
                      for goal in thread.goal
                      for reason in goal.state.blocked_reasons())
+
+    def named_threads(self) -> tuple[str, ...]:
+        return (self.thread.name,)
 
     def line(self) -> str:
         return (f"GOAL BLOCKED {self.thread.name}: {self.reason[:200]}"

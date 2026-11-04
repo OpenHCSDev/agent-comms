@@ -309,7 +309,6 @@ class DeliveredBoardContent(BridgeStateTable, TypedTable, declared_name="board_d
     def deliver(cls, db: sqlite3.Connection, entries: tuple[BoardEntry, ...], now: float) -> SessionBoard:
         """Select and stamp together: concurrent hooks cannot deliver the same change."""
         due: list[BoardEntry] = []
-        unchanged: list[BoardEntry] = []
         with db:
             db.execute("BEGIN IMMEDIATE")
             current = {entry.content for entry in entries}
@@ -321,9 +320,7 @@ class DeliveredBoardContent(BridgeStateTable, TypedTable, declared_name="board_d
                 if all(delivered.alarm_due(entry, now) for delivered in prior):
                     cls(entry.content, entry.since, now).upsert(db)
                     due.append(entry)
-                else:
-                    unchanged.append(entry)
-        return SessionBoard.presented(due, unchanged, now)
+        return SessionBoard.presented(due, now)
 
 
 class BindingRequest(ABC):
