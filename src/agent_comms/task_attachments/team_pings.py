@@ -457,9 +457,8 @@ class AlarmGroup(ViewHeading, affix="Alarms"):
         return True
 
     @classmethod
-    def admits(cls, ping: Ping, stopped: frozenset[str]) -> bool:
-        """A line waiting on a stopped thread leaves every main-view group."""
-        return not ping.parked(stopped)
+    @abstractmethod
+    def admits(cls, ping: Ping, stopped: frozenset[str]) -> bool: ...
 
     @classmethod
     def row_lines(cls, section: AlarmSection, now: float) -> tuple[str, ...]:
@@ -478,7 +477,16 @@ class AlarmGroup(ViewHeading, affix="Alarms"):
                                            if group.admits(ping, stopped)),) if members)
 
 
-class NewAlarms(AlarmGroup):
+class MainAlarms(AlarmGroup, declared_name=None):
+    """The groups of the main view: together they are what a parked line would have shown."""
+
+    @classmethod
+    def admits(cls, ping: Ping, stopped: frozenset[str]) -> bool:
+        """A line waiting on a stopped thread leaves every main-view group."""
+        return not ping.parked(stopped)
+
+
+class NewAlarms(MainAlarms):
     tone = AccentTone
 
     @classmethod
@@ -487,7 +495,7 @@ class NewAlarms(AlarmGroup):
         return new
 
 
-class StillOpenAlarms(AlarmGroup):
+class StillOpenAlarms(MainAlarms):
     tone = WarningTone
 
     @classmethod
@@ -497,7 +505,7 @@ class StillOpenAlarms(AlarmGroup):
         return tuple(line for ping in opened for line in ping.alarm_pings() if line not in new_members)
 
 
-class WatchingAlarms(AlarmGroup):
+class WatchingAlarms(MainAlarms):
     """A still-failing source remains visible, but it has no teammate disposal to wake for."""
 
     @classmethod
@@ -531,11 +539,9 @@ class ParkedAlarms(AlarmGroup):
     @classmethod
     def members(cls, packets: tuple[TeamUpdate, ...],
                 opened: tuple[Ping, ...], new: tuple[Ping, ...]) -> tuple[Ping, ...]:
-        """What the main view would have shown: open lines and still-failing sources."""
-        return tuple(dict.fromkeys(line for ping in (
-            *opened,
-            *(ping for packet in packets for ping in packet.handled if not ping.team_disposes),
-        ) for line in ping.alarm_pings()))
+        """Exactly what the main-view groups would have shown, each line once."""
+        return tuple(dict.fromkeys(line for group in MainAlarms.members_with(MainAlarms)
+                                   for line in group.members(packets, opened, new)))
 
 
 @dataclass(frozen=True)
