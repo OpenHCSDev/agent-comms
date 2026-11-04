@@ -154,16 +154,7 @@ class ReloadRequired(StaleRevision, DeclaredError):  # noqa: N818 - nominal outc
     so the caller is answered and re-reads from fresh bounds. Its message is its whole state,
     so a remote UI receives the same reload signal."""
 
-    wire_type: ClassVar[object] = str
-
-    def to_wire(self) -> JsonValue:
-        return str(self)
-
-    @classmethod
-    def from_wire(cls, data: object) -> Self:
-        error = cls.__new__(cls)
-        Exception.__init__(error, FieldCodec.decode(str, data))
-        return error
+    wire_type: ClassVar[object] = tuple[str]
 
 
 class TranscriptChanged(ReloadRequired):  # noqa: N818 - nominal outcome name

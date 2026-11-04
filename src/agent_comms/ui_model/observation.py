@@ -35,7 +35,6 @@ from functools import cached_property, partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self, final
 
-from pydantic import JsonValue
 
 from agent_comms_hooks import ToolRefusedError
 from metaclass_registry.mro_dispatch import MroDispatch, handles
@@ -320,14 +319,6 @@ class UnreadableHistory(ValueError, DeclaredError):  # noqa: N818 - nominal stor
     # Its whole state is its two arguments: the reader runtime and the reason. A remote UI
     # receives them as they are; the reader runtime then names the Core that failed.
     wire_type: ClassVar[object] = tuple[str, str]
-
-    def to_wire(self) -> JsonValue:
-        wire: list[JsonValue] = list(self.args)
-        return wire
-
-    @classmethod
-    def from_wire(cls, data: object) -> UnreadableHistory:
-        return cls(*FieldCodec.decode(tuple[str, str], data))
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, UnreadableHistory):

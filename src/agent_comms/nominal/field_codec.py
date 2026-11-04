@@ -1709,6 +1709,17 @@ class DeclaredError(DeclaredWireType):
         super().__init_subclass__(**kwargs)
         DeclaredError.declared_errors[f"{cls.__module__}.{cls.__qualname__}"] = cls
 
+    def to_wire(self) -> JsonValue:
+        """Its arguments are its whole state unless a member declares more."""
+        return FieldCodec.encode(cast(BaseException, self).args, self.wire_type)
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        """Rebuilt from its declared arguments, never through a member's narrowed constructor."""
+        error = cls.__new__(cls)
+        BaseException.__init__(cast(BaseException, error), *FieldCodec.decode(cls.wire_type, data))
+        return error
+
 
 class SubclassUnion(DeclaredFamily, AcceptsNull, ExternalJsonShape, WireValue):
     """An untagged wire family; each union declares its own root with affix=""."""
