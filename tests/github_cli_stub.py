@@ -75,15 +75,22 @@ def main():
                 if entry["listed"]["kind"] in data["open_kinds"]:
                     print(entry["listed"]["number"])
         elif parts[:1] == ["pulls"] and len(parts) == 2:
-            assert arguments[arguments.index("--jq") + 1] == (
-                '.head.sha + " " + .base.ref + " " + (.draft | tostring) + " " + .state')
             request = data["requests"][parts[1]]
             listed = request["listed"]
             observations = request.get("observations", [])
             observed = observations.pop(0) if observations else listed["head"]
             (directory / "pull_requests.json").write_text(json.dumps(repositories))
             state = "open" if listed["kind"] in data["open_kinds"] else "closed"
-            print(observed, listed["base"], str(listed["kind"] == "draft").lower(), state)
+            if "--jq" in arguments:
+                assert arguments[arguments.index("--jq") + 1] == (
+                    '.head.sha + " " + .base.ref + " " + (.draft | tostring) + " " + .state')
+                print(observed, listed["base"], str(listed["kind"] == "draft").lower(), state)
+            else:
+                # The whole pull request document, as a pull_request event carries it.
+                print(json.dumps({"number": listed["number"], "state": state,
+                                  "draft": listed["kind"] == "draft",
+                                  "head": {"sha": observed, "ref": listed["branch"]},
+                                  "base": {"ref": listed["base"]}}))
         elif len(parts) == 3 and parts[0] == "commits" and parts[2] == "pulls":
             assert arguments[arguments.index("--jq") + 1] == "map(.number)"
             print(json.dumps([entry["listed"]["number"] for entry in data["requests"].values()

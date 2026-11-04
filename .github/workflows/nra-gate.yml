@@ -70,7 +70,9 @@ jobs:
         id: sources
         env:
           GH_TOKEN: ${{ github.token }}
-        run: PYTHONPATH=src python -m agent_comms.integration --resolve-ci-inputs "$RUNNER_TEMP/job-sources" --workflow-output "$GITHUB_OUTPUT"
+        run: >-
+          PYTHONPATH=src python -m agent_comms.integration --resolve-ci-inputs "$RUNNER_TEMP/job-sources" --workflow-output "$GITHUB_OUTPUT"
+          --runner-root "$RUNNER_TEMP" --repository "${{ github.repository }}" --tested-commit "${{ github.sha }}" --event-name "${{ github.event_name }}" --event-path "$GITHUB_EVENT_PATH"
 
   smoke:
     needs: [ready, base]
@@ -93,9 +95,11 @@ jobs:
       - name: Resolve the actual tested source tuple once
         env:
           GH_TOKEN: ${{ github.token }}
-        run: PYTHONPATH=src python -m agent_comms.integration --resolve-ci-inputs "$RUNNER_TEMP/paired-sources"
+        run: >-
+          PYTHONPATH=src python -m agent_comms.integration --resolve-ci-inputs "$RUNNER_TEMP/paired-sources"
+          --runner-root "$RUNNER_TEMP" --repository "${{ github.repository }}" --tested-commit "${{ github.sha }}" --event-name "${{ github.event_name }}" --event-path "$GITHUB_EVENT_PATH"
       - name: Build the one common checker environment
-        run: PYTHONPATH=src:tools python tools/checker_stack.py --ci-inputs "$RUNNER_TEMP/paired-sources"
+        run: PYTHONPATH=src:tools python tools/checker_stack.py --ci-inputs "$RUNNER_TEMP/paired-sources" --runner-root "$RUNNER_TEMP"
       - name: Compile production and tools
         run: python -m compileall -q src tools
       - name: Import every Core and hook module
@@ -123,7 +127,9 @@ jobs:
       - name: The same sources are still current before success
         env:
           GH_TOKEN: ${{ github.token }}
-        run: PYTHONPATH=src python -m agent_comms.integration --revalidate-ci-inputs "$RUNNER_TEMP/paired-sources"
+        run: >-
+          PYTHONPATH=src python -m agent_comms.integration --revalidate-ci-inputs "$RUNNER_TEMP/paired-sources"
+          --runner-root "$RUNNER_TEMP" --repository "${{ github.repository }}" --tested-commit "${{ github.sha }}" --event-name "${{ github.event_name }}" --event-path "$GITHUB_EVENT_PATH"
 
   native-scripts:
     name: native-scripts
@@ -212,7 +218,9 @@ jobs:
       # A combined carrier proves its exact reviewed members and, in the queue, its promotion.
       # An ordinary source owes only its own head's verdict, read by the next step.
       - name: A captured combined carrier proves its members
-        run: PYTHONPATH=src python -m agent_comms.integration --check-merge-inputs "$RUNNER_TEMP/merge-inputs"
+        run: >-
+          PYTHONPATH=src python -m agent_comms.integration --check-merge-inputs "$RUNNER_TEMP/merge-inputs"
+          --runner-root "$RUNNER_TEMP" --repository "${{ github.repository }}" --tested-commit "${{ github.sha }}" --event-name "${{ github.event_name }}" --event-path "$GITHUB_EVENT_PATH"
       # A verdict names the pull request head, not the merge group's own commit.
       - name: The commander's verdict on the queued head is success
         if: github.event_name == 'merge_group'
@@ -260,10 +268,12 @@ jobs:
       - name: Resolve the actual tested source tuple once
         env:
           GH_TOKEN: ${{ github.token }}
-        run: PYTHONPATH=src python -m agent_comms.integration --resolve-ci-inputs "$RUNNER_TEMP/paired-sources"
+        run: >-
+          PYTHONPATH=src python -m agent_comms.integration --resolve-ci-inputs "$RUNNER_TEMP/paired-sources"
+          --runner-root "$RUNNER_TEMP" --repository "${{ github.repository }}" --tested-commit "${{ github.sha }}" --event-name "${{ github.event_name }}" --event-path "$GITHUB_EVENT_PATH"
 
       - name: Build the one common checker environment
-        run: PYTHONPATH=src:tools python tools/checker_stack.py --ci-inputs "$RUNNER_TEMP/paired-sources"
+        run: PYTHONPATH=src:tools python tools/checker_stack.py --ci-inputs "$RUNNER_TEMP/paired-sources" --runner-root "$RUNNER_TEMP"
 
       # Saved by nra-gate-cache.yml on main; entries are keyed by content, so any
       # older main's cache only misses where the code differs.
@@ -289,7 +299,9 @@ jobs:
       - name: The same sources are still current before success
         env:
           GH_TOKEN: ${{ github.token }}
-        run: PYTHONPATH=src python -m agent_comms.integration --revalidate-ci-inputs "$RUNNER_TEMP/paired-sources"
+        run: >-
+          PYTHONPATH=src python -m agent_comms.integration --revalidate-ci-inputs "$RUNNER_TEMP/paired-sources"
+          --runner-root "$RUNNER_TEMP" --repository "${{ github.repository }}" --tested-commit "${{ github.sha }}" --event-name "${{ github.event_name }}" --event-path "$GITHUB_EVENT_PATH"
 
       # The whole verdict on the pull request, one comment per kind; the action owns its shape.
       - name: The gate's findings on the pull request

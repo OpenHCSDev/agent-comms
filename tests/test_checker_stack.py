@@ -15,6 +15,7 @@ from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.head_review import BaseSide, HeadSide
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.refusals import UpgradeRefused
+from agent_comms.integration import CiRunner
 from agent_comms.installer.runtime_resolution import CorePackage, GitSource, PrivateUvProject, ResolvedLock, StackSources
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.repository_name import RepositoryName
@@ -50,7 +51,7 @@ def test_local_package_membership_comes_from_both_source_declarations() -> None:
 def test_private_project_preserves_settings_pins_and_captured_sources(
     mutual_sources: MutualSources, github_cli: GitHubFixture, tmp_path: Path,
     dependencies: tuple[str, ...], declared_python: str,
-    monkeypatch: pytest.MonkeyPatch, test_uv: Path,
+    test_uv: Path,
 ) -> None:
     pair = mutual_sources
     # Edit the real source before capture, never rewrite the captured artifact or selectors.
@@ -81,7 +82,8 @@ def test_private_project_preserves_settings_pins_and_captured_sources(
     with InstallCommands() as commands:
         checker = CheckerStack(checkout=tmp_path / "checker", commands=commands, home=tmp_path,
                                runtime=LaunchRuntime.running(), source_directory=pair.output,
-                               inputs=inputs, uv_program=test_uv)
+                               inputs=inputs, uv_program=test_uv,
+            runner=CiRunner(root=tmp_path))
         original = checker.core / "stack"
         before = (original / "pyproject.toml").read_bytes(), (original / "uv.lock").read_bytes()
         checker.write_project()
@@ -93,7 +95,6 @@ def test_private_project_preserves_settings_pins_and_captured_sources(
 
         assert tomllib.loads((checker.checkout / "stack/pyproject.toml").read_text()) == expected
         assert checker.lock.read_bytes() == before[1]
-        monkeypatch.setenv("RUNNER_TEMP", str(tmp_path))
         with pytest.raises(ValueError, match="isolated runner bootstrap prefix"):
             checker.prepare()
         assert ((original / "pyproject.toml").read_bytes(), (original / "uv.lock").read_bytes()) == before
@@ -129,7 +130,8 @@ def test_bootstrap_extra_is_runtime_only_when_the_virtual_root_requests_it(
     inputs = pair.capture(("P2", "P3"), "runtime root extras, not bootstrap extras")
     with InstallCommands() as commands:
         checker = CheckerStack(checkout=tmp_path / "checker", commands=commands, home=tmp_path,
-            runtime=LaunchRuntime.running(), source_directory=pair.output, inputs=inputs, uv_program=test_uv)
+            runtime=LaunchRuntime.running(), source_directory=pair.output, inputs=inputs, uv_program=test_uv,
+            runner=CiRunner(root=tmp_path))
         checker.write_project()
         private = PrivateUvProject.read(checker.checkout / "stack/pyproject.toml")
         projected = tuple(Requirement(text) for text in private.project.dependencies)
@@ -188,7 +190,8 @@ def common_checker(
                 source.number, "feature", source.branch_commit, stamp, "main", reviewable_times=(stamp,)))
         inputs = pair.capture(("P2", "P3"), "one complete runtime/checker solve")
         checker = CheckerStack(checkout=tmp_path / "checker", commands=commands, home=tmp_path,
-            runtime=LaunchRuntime.running(), source_directory=pair.output, inputs=inputs, uv_program=test_uv)
+            runtime=LaunchRuntime.running(), source_directory=pair.output, inputs=inputs, uv_program=test_uv,
+            runner=CiRunner(root=tmp_path))
         checker.write_project()
         yield checker
 

@@ -28,7 +28,7 @@ from agent_comms.installer.runtime_resolution import (
     VersionedPackage,
 )
 from agent_comms.installer.upgrade import Stack
-from agent_comms.integration import RunnerEnvironment
+from agent_comms.integration import CiRunner
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.repo import Repo
 
@@ -44,6 +44,7 @@ class CheckerStack(Stack, StackSources):
     source_directory: Path
     inputs: IntegrationInput
     uv_program: Path
+    runner: CiRunner
 
     @property
     def uv(self) -> Path:
@@ -202,7 +203,7 @@ class CheckerStack(Stack, StackSources):
 
     def prepare(self) -> RuntimeResolution:
         prefix = self.runtime.prefix.resolve()
-        runner = RunnerEnvironment.read().root.resolve()
+        runner = self.runner.root.resolve()
         for path in (self.source_directory.resolve(), prefix):
             if not path.is_relative_to(runner):
                 raise ValueError(
@@ -251,6 +252,7 @@ class CheckerStack(Stack, StackSources):
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ci-inputs", type=Path, required=True)
+    CiRunner.add_arguments(parser)
     args = parser.parse_args()
     directory = args.ci_inputs.resolve()
     executable = StackSources.frontend()
@@ -264,6 +266,7 @@ def main() -> int:
             source_directory=directory,
             inputs=inputs,
             uv_program=executable,
+            runner=CiRunner.from_arguments(args),
         ).prepare()
     return 0
 
