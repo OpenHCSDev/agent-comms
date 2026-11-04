@@ -692,6 +692,12 @@ class LockSource(BaseModel):
     def project_source(self) -> UvSourceOptions:
         raise ValueError("Local/virtual sources have no external retention projection")
 
+    def shared_identity(self) -> object:
+        """What two locks sharing this package must agree on. A Git source is one exact
+        revision whatever version it reports: two locks both saying 0.1.0 while pinning
+        NominalRefactorAdvisor 4fbcf54d and 595d1972 disagree (#3999)."""
+        return self.project_source()
+
     def retain(self, name: str, marker: str, uv: UvProjectSettings) -> None:
         uv.retain(name, marker, self.project_source())
 
@@ -704,6 +710,10 @@ class RegistrySource(LockSource):
 
     def project_source(self) -> UvIndexSource:
         return UvIndexSource(index="locked-" + hashlib.sha256(self.registry.encode()).hexdigest())
+
+    def shared_identity(self) -> object:
+        """Versions from one registry reconcile in the common solve; only the registry is shared."""
+        return self.registry
 
     def retain(self, name: str, marker: str, uv: UvProjectSettings) -> None:
         index = UvIndex(name=self.project_source().index, url=self.registry, explicit=True)
@@ -835,6 +845,19 @@ class ResolvedLock(BaseModel):
                     raise ValueError(f"Lock selects ambiguous external entries for {name}")
                 result[name] = entry
         return result
+
+    def require_shared_sources(self, other: ResolvedLock, excluded: frozenset[str],
+                               names: tuple[str, str]) -> None:
+        """Every external package both locks record comes from one shared source: registry
+        versions may differ and reconcile, a Git revision may not. The common checker installs
+        one of them, so a disagreement refuses here, naming both, instead of reaching a gate
+        as a phantom finding."""
+        mine, theirs = self.external(excluded), other.external(excluded)
+        for name in sorted(mine.keys() & theirs.keys()):
+            if mine[name].source.shared_identity() != theirs[name].source.shared_identity():
+                raise ValueError(
+                    f"{names[0]} and {names[1]} lock different sources of {name}:"
+                    f" {mine[name].source} and {theirs[name].source}; relock one to match")
 
     def pins(self, selected: dict[str, str], core: str) -> dict[str, PackagePin]:
         result: dict[str, PackagePin] = {}

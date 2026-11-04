@@ -219,6 +219,8 @@ class CheckerStack(Stack, StackSources):
                 " and input directory"
             )
         self.require_uv()
+        self.bootstrap_lock.require_shared_sources(
+            self.runtime_locks[HeadSide], self.local_names, ("uv.lock", "stack/uv.lock"))
         self.write_project()
         self.resolve()
         # Both graphs belong to this solve; retaining stray files cannot substitute for roots.

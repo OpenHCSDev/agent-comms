@@ -296,3 +296,28 @@ def test_retained_runtime_checker_version_and_git_identity_refuse_actual_solve_d
     actual = ResolvedLock.read(checker.lock).external(checker.local_names)[package]
     with pytest.raises(ValueError, match="changed retained source/version"):
         expected.require_retained(actual)
+
+
+def locked(*packages: dict) -> ResolvedLock:
+    return ResolvedLock.model_validate({"package": list(packages)})
+
+
+def test_shared_git_source_is_one_revision_while_registry_versions_reconcile() -> None:
+    """#3999: uv.lock pinned NominalRefactorAdvisor 4fbcf54d and stack/uv.lock 595d1972, both
+    "0.1.0"; the checker installed the stack's and the gate counted a phantom finding."""
+    repository = "https://github.com/OpenHCSDev/NominalRefactorAdvisor?rev=main"
+    def nra(revision: str) -> dict:
+        return {"name": "nominal-refactor-advisor", "version": "0.1.0",
+                "source": {"git": f"{repository}#{revision}"}}
+    def idna(version: str) -> dict:
+        return {"name": "idna", "version": version, "source": {"registry": "https://pypi.org/simple"}}
+    names = ("uv.lock", "stack/uv.lock")
+    core = locked(nra("4fbcf54d8aa285d4e1144e68971d711875d4b2a6"), idna("3.10"))
+    locked(nra("4fbcf54d8aa285d4e1144e68971d711875d4b2a6"), idna("3.11")).require_shared_sources(
+        core, frozenset(), names)
+    with pytest.raises(ValueError, match="different sources of nominal-refactor-advisor"):
+        core.require_shared_sources(
+            locked(nra("595d19725deba0b37158c05cc05f1c7d8af6bec7"), idna("3.10")), frozenset(), names)
+    core.require_shared_sources(
+        locked(nra("595d19725deba0b37158c05cc05f1c7d8af6bec7")),
+        frozenset({"nominal-refactor-advisor"}), names)
