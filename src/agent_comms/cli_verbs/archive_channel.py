@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from agent_comms.cli_command import TargetActionCommand
 from agent_comms.repo import Checkout
 
 from agent_comms.cli_command import CliCommand
@@ -21,7 +22,8 @@ from typing import Annotated
 
 
 @dataclass(frozen=True, kw_only=True)
-class ArchiveChannelCliCommand(MultipleTargets, NamedCliCommand, declared_name="archive-channel"):
+class ArchiveChannelCliCommand(MultipleTargets, NamedCliCommand, TargetActionCommand[Channel],
+                               declared_name="archive-channel"):
     help = "Archive channel"
     archived: Annotated[
         bool, TargetBound(), Argument(flags=("--archived",))

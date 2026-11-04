@@ -308,7 +308,12 @@ class ConfigOptions:
     @classmethod
     def configured(cls) -> ConfigOptions:
         """The CLI ingress's catalog; hosted owners supply their original launch directly."""
-        return cls(RetainedOwnerLaunch.configured(), resolve_comms_route(LaunchRoot.current().path))
+        return cls.for_route(resolve_comms_route(LaunchRoot.current().path))
+
+    @classmethod
+    def for_route(cls, route: CommsRoute) -> ConfigOptions:
+        """The catalogs of the Core serving this route, with the owner launch configured here."""
+        return cls(RetainedOwnerLaunch.configured(), route)
 
     async def observe_authentication(
         self, session_id: AcpSessionId, publish: Callable[[AcpSessionId], Awaitable[object]],

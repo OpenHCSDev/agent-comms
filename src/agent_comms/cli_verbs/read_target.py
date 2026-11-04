@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+from agent_comms.cli_command import TargetActionCommand
 from agent_comms.repo import Checkout
 
 from agent_comms.channel_targets import SurroundingChannel
 
 from agent_comms.catalog_document import CatalogAccess
 from agent_comms.registry_document import ResolvedChannel
-from agent_comms.cli_command import CliCommand
 from agent_comms.cli_command import MultipleTargets
 from agent_comms.cli_commands import TargetReadResult
 from agent_comms.comms import Comms
@@ -22,7 +22,8 @@ from typing import Self
 
 
 @dataclass(frozen=True, kw_only=True)
-class ReadTargetCliCommand(MultipleTargets, CliCommand, declared_name="read-target"):
+class ReadTargetCliCommand(MultipleTargets, TargetActionCommand[TargetReadResult],
+                           declared_name="read-target"):
     help = "Mark view read"
     target: Annotated[
         str, TargetBound(), Argument(flags=("--target",))

@@ -217,10 +217,11 @@ class PromptRuntimeRequest(AttachedResultRuntimeRequest):
 
     @classmethod
     def proxy_payload(
-        cls, thread: str, controller_token: str | NoControllerToken, parameters: dict[str, object]
+        cls, owner: ThreadIncarnation, controller_token: str | NoControllerToken,
+        parameters: dict[str, object],
     ) -> dict[str, object]:
         return super().proxy_payload(
-            thread, controller_token, {"controllerToken": controller_token, **parameters}
+            owner, controller_token, {"controllerToken": controller_token, **parameters}
         )
 
     async def result(self, ctx: AttachedRuntimeRequestContext) -> PromptReply:
@@ -255,7 +256,7 @@ class QueueActionRuntimeRequest(AttachedResultRuntimeRequest, declared_name=None
     @classmethod
     def at_owner(cls, root: Path, thread: Thread) -> None:
         """Ask the thread's live owner process to apply this action to its queued inputs."""
-        OwnerConnection.exchange(root, thread.require_process(), cls(thread=thread.name))
+        OwnerConnection.exchange_at(root, thread, cls(thread=thread.name))
 
 
 @dataclass(frozen=True, kw_only=True)

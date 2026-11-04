@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
+
+from agent_comms.nominal.field_codec import TaggedRecordMember, TaggedUnion
 
 if TYPE_CHECKING:
     from agent_comms.presentation import CoordinationSnapshot
 
 
-class UnreadPresentation(ABC):
+class UnreadPresentation(TaggedUnion, affix="Unread"):
+    """A row's unread count as presented. It travels with the sidebar snapshot to a remote
+    UI, and several members share the same field, so each record carries its kind."""
+
     waiting: ClassVar[bool] = False
+
 
     @classmethod
     def for_thread(cls, snapshot: CoordinationSnapshot, name: str) -> UnreadPresentation:
@@ -39,7 +45,7 @@ class UnreadPresentation(ABC):
 
 
 @dataclass(frozen=True)
-class ExactUnread(UnreadPresentation):
+class ExactUnread(TaggedRecordMember, UnreadPresentation):
     count: int = 0
 
     @property
@@ -52,7 +58,7 @@ class ExactUnread(UnreadPresentation):
 
 
 @dataclass(frozen=True)
-class ReplyUnread(UnreadPresentation):
+class ReplyUnread(TaggedRecordMember, UnreadPresentation):
     count: int
 
     @property
@@ -82,14 +88,14 @@ class EmptyCappedReplyUnread(CappedReplyUnread):
 
 
 @dataclass(frozen=True)
-class IndexingUnread(UnreadPresentation):
+class IndexingUnread(TaggedRecordMember, UnreadPresentation):
     waiting = True
     label = "Indexing…"
     detail = "Unread replies are still being indexed; the exact count is not yet known."
 
 
 @dataclass(frozen=True)
-class UnobservedUnread(UnreadPresentation):
+class UnobservedUnread(TaggedRecordMember, UnreadPresentation):
     """No observation for this view's source has arrived yet."""
 
     label = ""

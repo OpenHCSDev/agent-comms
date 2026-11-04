@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agent_comms.nominal.field_codec import IdentityExclude
+from agent_comms.nominal.field_codec import IdentityExclude, TaggedUnion
 
 import json
 import sqlite3
@@ -15,7 +15,9 @@ from typing import Annotated, ClassVar, Self
 
 from .errors import RelationViolationError, StoredHistoryUnreadable
 from .locked_store import InputCaptureFile
-from .nominal.field_codec import ContextStoreId, FieldCodec, MalformedRecord, NullMember
+from .nominal.field_codec import (
+    ContextStoreId, FieldCodec, MalformedRecord, NullMember, TaggedRecordMember,
+)
 from .native_session_reopen import NativeSessionIdentity
 from .registration import Registration
 from .thread_identity import ThreadIncarnation
@@ -368,8 +370,12 @@ class CapturedContext(RecordedContextState):
         return UnrecordedSegment()
 
 
-class ContextManifestCursor(ABC):
+class ContextManifestCursor(TaggedUnion, affix="ContextManifest"):
+    """Where a context page starts: the latest manifests, or before or after one. A remote UI
+    sends it to Core, so a positioned cursor carries its direction as its kind."""
+
     descending: ClassVar[bool] = True
+
 
     @abstractmethod
     def has_position(self) -> bool: ...
@@ -392,7 +398,7 @@ class LatestContextManifest(NullMember, ContextManifestCursor):
 
 
 @dataclass(frozen=True)
-class PositionedContextManifest(ContextManifestCursor):
+class PositionedContextManifest(ContextManifestCursor, declared_name=None):
     source: ContextStoreIdentity
     record_id: int
     comparison: ClassVar[str]
@@ -426,12 +432,12 @@ class PositionedContextManifest(ContextManifestCursor):
         )
 
 
-class BeforeContextManifest(PositionedContextManifest):
+class BeforeContextManifest(TaggedRecordMember, PositionedContextManifest):
     comparison = "<"
     descending = True
 
 
-class AfterContextManifest(PositionedContextManifest):
+class AfterContextManifest(TaggedRecordMember, PositionedContextManifest):
     comparison = ">"
     descending = False
 

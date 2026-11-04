@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Concatenate
 
@@ -19,7 +19,7 @@ from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .goal_scope import AllGoals, GoalScope
 from .native_input_owner import RegistryOwner
 from .registration_change import RegistrationChange
-from .registry_document import RegistryDocument, RegistrySnapshot
+from .registry_document import FoundProjectThread, ProjectThreadSelection, RegistryDocument, RegistrySnapshot
 from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from .routing import NoTurnRouting, Routing
 from .storage_rules import StorageRule
@@ -43,33 +43,6 @@ if TYPE_CHECKING:
     from .selected_participant import SelectedParticipant
 
 _DEFAULT_PRESENCE = ProcessThreadStatus()
-
-
-class ProjectThreadSelection:
-    """The registry's complete answer, including absence and ambiguity."""
-
-    @classmethod
-    def from_threads(cls, threads: tuple[Thread, ...]) -> ProjectThreadSelection:
-        if not threads:
-            return NoProjectThread()
-        if len(threads) == 1:
-            return FoundProjectThread(threads[0])
-        return SeveralProjectThreads(threads)
-
-
-@dataclass(frozen=True, slots=True)
-class NoProjectThread(ProjectThreadSelection):
-    """There is no declared ACP thread at this project."""
-
-
-@dataclass(frozen=True, slots=True)
-class FoundProjectThread(ProjectThreadSelection):
-    thread: Thread
-
-
-@dataclass(frozen=True, slots=True)
-class SeveralProjectThreads(ProjectThreadSelection):
-    threads: tuple[Thread, ...]
 
 
 class Registration:
@@ -472,24 +445,20 @@ class Registration:
         )
 
     def session_thread(
-        self, project_path: Path, preferred: str | None = None,
+        self, project_path: Path, preferred: str,
     ) -> ProjectThreadSelection:
-        """Select an unbound project's preferred name or sole declared ACP thread.
-
-        Preferred names keep their previous precedence, including non-ACP
-        threads. Bound sessions use strict lookup instead of project discovery.
-        """
+        """Select an unbound project's preferred name or sole declared ACP thread. Paths
+        resolve here, on Core's host, whose filesystem they name; a snapshot elsewhere never
+        resolves them. Preferred names keep their precedence, including non-ACP threads."""
+        snapshot = self.store.read()
         project = Path(project_path).expanduser().resolve()
-        document = self.store.read()
-        located = tuple(t for t in document.threads.values() if t.project_path == project)
-        if preferred:
-            selected = document.canonical_name(preferred)
-            for thread in located:
-                if thread.name == selected:
-                    return FoundProjectThread(thread)
+        located = tuple(t for t in snapshot.threads.values() if t.project_path == project)
+        selected = snapshot.canonical_name(preferred)
+        for thread in located:
+            if thread.name == selected:
+                return FoundProjectThread(thread)
         return ProjectThreadSelection.from_threads(tuple(
-            member for thread in located for member in thread.role.acp_thread(thread)
-        ))
+            member for thread in located for member in thread.role.acp_thread(thread)))
 
     def all_threads(self) -> Mapping[str, Thread]:
         return dict(self.store.read().threads)
@@ -527,5 +496,4 @@ class Registration:
         return [name for name in document.threads if name != exclude]
 
     def __contains__(self, name: str) -> bool:
-        document = self.store.read()
-        return document.canonical_name(name) in document.threads
+        return name in self.store.read()

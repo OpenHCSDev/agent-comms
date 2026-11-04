@@ -42,7 +42,7 @@ from .owner_protocol import (
     OwnerUpdate,
     UnannouncedOwner,
 )
-from .owner_connection import NoControllerToken, OwnerConnection, OwnerIdentityChangedError
+from .owner_connection import CapturedOwner, NoControllerToken, OwnerConnection, OwnerIdentityChangedError
 from agent_comms.runtime_server import RuntimeRequest
 from .runtime_requests import SubscribeRuntimeRequest
 from .thread_identity import ThreadIncarnation
@@ -73,7 +73,7 @@ class RuntimeConnection(OwnerConnection):
 
     def request_payload(self, action: str, parameters: dict[str, object]) -> dict[str, object]:
         return RuntimeRequest.member_named(action).proxy_payload(
-            self._identity.name, self.controller_token, parameters,
+            self._identity, self.controller_token, parameters,
         )
 
 
@@ -118,7 +118,7 @@ class RuntimeProxy(RuntimeConnection):
         try:
             writer.write(
                 (
-                    json.dumps(FieldCodec.encode(subscription(thread=self._identity.name)))
+                    json.dumps(FieldCodec.encode(subscription(thread=self._identity.name, captured=CapturedOwner(self._identity))))
                     + "\n"
                 ).encode()
             )

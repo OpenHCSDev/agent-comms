@@ -22,10 +22,10 @@ from typing import Annotated, TYPE_CHECKING
 
 from .activity import ActivityState
 from .child_process import NoProcess, ProcessState
-from .cli_result import CliResult
+from .cli_result import CliResult, TargetEditResult
 from .comms import Comms
 from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import Argument, PathText, WireForm, WireOmitDefault, boundary_decoder
+from .nominal.field_codec import Argument, PathText, RecordMember, WireForm, WireOmitDefault, boundary_decoder
 from .history_result import HistoryPageResult
 from .goals import Goal
 from .lifecycle_capability import Complete
@@ -42,7 +42,6 @@ from .thread_model import ThreadModel
 from .threads import Thread
 from .todos import Todo
 from .head_review import PullRequestHead
-from .tool_result import ToolResult
 from .turn_context import CodexRolloutProvenance, ContextManifest, ContextSegment, ContributionCoordinates, Provenance, TurnContext
 from .typed_table import StoreRewrite
 
@@ -89,17 +88,17 @@ def _message_reference(value: str) -> dict[str, object]:
 
 
 @dataclass(frozen=True)
-class ThreadStoppedResult(CliResult, ToolResult):
+class ThreadStoppedResult(RecordMember, TargetEditResult):
     stopped: str
 
 
 @dataclass(frozen=True)
-class ThreadArchivedResult(CliResult, ToolResult):
+class ThreadArchivedResult(RecordMember, TargetEditResult):
     archived: str
 
 
 @dataclass(frozen=True)
-class ThreadCreatedResult(CliResult, ToolResult):
+class ThreadCreatedResult(RecordMember, TargetEditResult):
     created: str
     process_identity: ProcessState
 
@@ -108,7 +107,7 @@ class ThreadCreatedResult(CliResult, ToolResult):
 
 
 @dataclass(frozen=True)
-class ThreadTagsResult(CliResult):
+class ThreadTagsResult(RecordMember, TargetEditResult):
     thread: str
     tags: frozenset[str]
 
@@ -120,23 +119,23 @@ class TeammatesResult(CliResult):
 
 
 @dataclass(frozen=True)
-class TagRenamedResult(CliResult):
+class TagRenamedResult(RecordMember, TargetEditResult):
     renamed: str
     name: str
 
 
 @dataclass(frozen=True)
-class ViewDeletedResult(CliResult):
+class ViewDeletedResult(RecordMember, TargetEditResult):
     deleted_view: str
 
 
 @dataclass(frozen=True)
-class TargetReadResult(CliResult):
+class TargetReadResult(RecordMember, TargetEditResult):
     read: str
 
 
 @dataclass(frozen=True)
-class ThreadPinnedResult(CliResult):
+class ThreadPinnedResult(RecordMember, TargetEditResult):
     thread: str
     pinned: bool
 
@@ -283,7 +282,7 @@ class ActivitySetResult(CliResult):
 
 
 @dataclass(frozen=True)
-class OwnersRestartedResult(CliResult):
+class OwnersRestartedResult(RecordMember, TargetEditResult):
     restarted: tuple[OwnerRestartResult, ...]
 
 

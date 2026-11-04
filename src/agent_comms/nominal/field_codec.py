@@ -1543,18 +1543,6 @@ class StructuralRepresentation(FieldRepresentation):
             }
         if origin in (list, tuple, frozenset):
             return {"type": "array", "items": FieldCodec.value_schema(args[0])}
-        if origin is dict:
-            if args[0] is str:
-                return {"type": "object", "additionalProperties": FieldCodec.value_schema(args[1])}
-            return {
-                "type": "array",
-                "items": {
-                    "type": "array",
-                    "prefixItems": [FieldCodec.value_schema(arg) for arg in args],
-                    "minItems": 2,
-                    "maxItems": 2,
-                },
-            }
         if origin is type and args and issubclass(args[0], DeclaredFamily):
             return {
                 "type": "string",
@@ -1676,11 +1664,81 @@ class DeclaredWireType(ExternalJsonShape, WireValue):
         return compile_decoder(cls.wire_type)
 
     @classmethod
-    def schema(cls) -> dict[str, object]:
+    def schema(cls) -> dict[str, JsonValue]:
         return FieldCodec.value_schema(cls.wire_type)
 
 
-class SubclassUnion(DeclaredFamily, AcceptsNull, ExternalJsonShape, WireValue):
+class MemberUnion(ExternalJsonShape, WireValue):
+    """A wire value that is whichever of its members it holds; the decoder, its decoding and
+    its schema all derive from that member set."""
+
+    __slots__ = ()
+
+    @classmethod
+    @abstractmethod
+    def union_members(cls) -> tuple[type, ...]:
+        """The members this union decodes into."""
+
+    @classmethod
+    def union_decoder(cls) -> UnionDecoder[object]:
+        return ValueDecoder.for_members(cls.union_members())
+
+    @classmethod
+    def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
+        return cls.union_decoder()
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        return cast(Self, cls.union_decoder().decode_bound(data, {}))
+
+    @classmethod
+    def schema(cls) -> dict[str, JsonValue]:
+        return FieldCodec.value_schema(cls.union_decoder().target)
+
+
+class CapabilityUnion(MemberUnion):
+    """A capability shared by members of several declared families. Its wire value is the
+    member it holds; it names the families, and each family's members with this
+    capability are its members, so no member is listed by hand."""
+
+    __slots__ = ()
+
+    @classmethod
+    @abstractmethod
+    def capability_families(cls) -> tuple[type[DeclaredFamily], ...]:
+        """The declared families whose members can hold this capability."""
+
+    @classmethod
+    def union_members(cls) -> tuple[type, ...]:
+        return tuple(dict.fromkeys(
+            member for family in cls.capability_families() for member in family.members_with(cls)))
+
+
+class DeclaredError(DeclaredWireType):
+    """An error that declares its whole state as its wire form, so it crosses a boundary
+    as itself: its class is found by name among declared errors, and it is rebuilt from
+    that declared form, never from its args."""
+
+    declared_errors: ClassVar[dict[str, type[DeclaredError]]] = {}
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        super().__init_subclass__(**kwargs)
+        DeclaredError.declared_errors[f"{cls.__module__}.{cls.__qualname__}"] = cls
+
+    def to_wire(self) -> JsonValue:
+        """Its arguments are its whole state unless a member declares more."""
+        return FieldCodec.encode(cast(BaseException, self).args, self.wire_type)
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        """Rebuilt from its declared arguments, never through a member's narrowed constructor."""
+        error = cls.__new__(cls)
+        BaseException.__init__(cast(BaseException, error), *FieldCodec.decode(
+            cast(type[tuple[object, ...]], cls.wire_type), data))
+        return error
+
+
+class SubclassUnion(DeclaredFamily, AcceptsNull, MemberUnion):
     """An untagged wire family; each union declares its own root with affix=""."""
 
     @classmethod
@@ -1688,23 +1746,23 @@ class SubclassUnion(DeclaredFamily, AcceptsNull, ExternalJsonShape, WireValue):
         return False
 
     @classmethod
-    def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
-        return ValueDecoder.for_members(cls.members_with(cls))
-
-    @classmethod
-    def from_wire(cls, data: object) -> Self:
-        return ValueDecoder.for_members(cls.members_with(cls)).decode_bound(data, {})
-
-    @classmethod
-    def schema(cls) -> dict[str, object]:
-        return FieldCodec.value_schema(ValueDecoder.for_members(cls.members_with(cls)).target)
+    def union_members(cls) -> tuple[type, ...]:
+        return cls.members_with(cls)
 
     @classmethod
     def argument_options(cls, argument: Argument) -> dict[str, object]:
         """The union root offers its members' choices; a member offers only its own."""
         if cls.family_root is not cls:
             return super().argument_options(argument)
-        return ValueDecoder.for_members(cls.members_with(cls)).argument_options(argument)
+        return cls.union_decoder().argument_options(argument)
+
+class TaggedUnion(SubclassUnion):
+    """A family whose members cross the wire as tagged records, each carrying its kind."""
+
+    @classmethod
+    def decodes_tagged_records(cls) -> bool:
+        return True
+
 
 
 class PresentMember:
@@ -1749,7 +1807,7 @@ class NullMember(ExternalField, AcceptsNull, WireValue):
         return None
 
     @classmethod
-    def schema(cls) -> dict[str, object]:
+    def schema(cls) -> dict[str, JsonValue]:
         return FieldCodec.value_schema(type(None))
 
 
@@ -1801,10 +1859,10 @@ class RecordMember(WireValue):
         return FieldCodec.decode_record(cls, data)
 
     @classmethod
-    def schema(cls) -> dict[str, object]:
+    def schema(cls) -> dict[str, JsonValue]:
         return FieldCodec.record_schema(cls)
 
-    def to_wire(self) -> dict[str, object]:
+    def to_wire(self) -> dict[str, JsonValue]:
         return FieldCodec.encode_record(self)
 
 
@@ -2164,7 +2222,7 @@ class SequenceNumber(ValidatedScalar):
         return position
 
     @classmethod
-    def schema(cls) -> dict[str, object]:
+    def schema(cls) -> dict[str, JsonValue]:
         return {"type": "integer", "minimum": cls.minimum}
 
 
@@ -2657,6 +2715,11 @@ class FieldCodec(MroDispatch, Sealed):
         )
 
     @classmethod
+    def ordering(cls, encoded: object) -> str:
+        """The order of an unordered collection's encoded members: their sorted compact text."""
+        return cls.compact(encoded, sort_keys=True)
+
+    @classmethod
     def digest(cls, value: object) -> str:
         """SHA-256 of a declared value's sorted compact encoding."""
         return hashlib.sha256(cls.compact(cls.encode(value), sort_keys=True).encode()).hexdigest()
@@ -2813,10 +2876,22 @@ class FieldCodec(MroDispatch, Sealed):
         alternatives = []
         for member in target.members_with(target):
             tag = member.family_discriminator
-            alternatives.append(cls._record_schema(
-                (member,), {tag: {"type": "string", "const": member.declared_name}}, [tag]
-            ))
+            selector: dict[str, JsonValue] = {
+                tag: {"type": "string", "const": member.declared_name}}
+            alternatives.append(
+                cls._record_schema((member,), selector, [tag]) if is_dataclass(member)
+                # A model member (a Pydantic wire model) describes its own fields.
+                else cls._tagged_model_schema(member, selector, tag))
         return cls.alternatives_schema("oneOf", alternatives)
+
+    @classmethod
+    def _tagged_model_schema(
+        cls, member: type, selector: dict[str, JsonValue], tag: str,
+    ) -> dict[str, JsonValue]:
+        schema = compile_decoder(member).value_schema()
+        properties = FieldCodec.decode(dict[str, JsonValue], schema.get("properties", {}))
+        required = FieldCodec.decode(list[str], schema.get("required", []))
+        return {**schema, "properties": {**selector, **properties}, "required": [tag, *required]}
 
     @classmethod
     def record_schema(cls, *targets: type) -> dict[str, JsonValue]:
@@ -3208,7 +3283,7 @@ class _UndeclaredDecoder(_JsonValueRepresentation, ValueDecoder[JsonValue]):
         if isinstance(value, type):
             return value.__module__, value.__qualname__
         if type(value) is dict:
-            return _PairKeyDictDecoder(dict, self, self).compared(value)
+            return _PairKeyDictDecoder(dict, self, self, (object, object)).compared(value)
         return compile_decoder(type(value)).compared(value)
 
 
@@ -3470,10 +3545,10 @@ class _FrozenSetDecoder[E](_ArrayDecoder[frozenset[E]]):
     container = frozenset
 
     def encode(self, value: frozenset[E]) -> list[object]:
-        return self.encode_items(sorted(value))
+        return sorted(self.encode_items(value), key=FieldCodec.ordering)
 
     def compared(self, value: frozenset[E]) -> list[object]:
-        return sorted(super().compared(value), key=lambda item: FieldCodec.compact(item, sort_keys=True))
+        return sorted(super().compared(value), key=FieldCodec.ordering)
 
 
 class _ListDecoder[E](_ArrayDecoder[list[E]]):
@@ -3547,7 +3622,8 @@ def _object_or_pair_entries(data: object) -> Iterable[tuple[object, object]]:
 class _DictDecoder[K, V](ValueDecoder[dict[K, V]]):
     key: ValueDecoder[K]
     value: ValueDecoder[V]
-    origins = (dict,)
+    arguments: tuple[object, object]
+    origins = (dict, Mapping)
 
     def field_paths(self, key: str, seen: frozenset[type] = frozenset()) -> tuple[tuple[str, ...], ...]:
         return tuple(('*', *path) for path in self.value.field_paths(key, seen))
@@ -3563,7 +3639,7 @@ class _DictDecoder[K, V](ValueDecoder[dict[K, V]]):
     def from_annotation(cls, target, args):
         key, value = args or (str, None)
         plan = _StringKeyDictDecoder if key is str else _PairKeyDictDecoder
-        return plan(target, compile_decoder(key), compile_decoder(value))
+        return plan(target, compile_decoder(key), compile_decoder(value), (key, value))
 
     @classmethod
     def representation_plan(
@@ -3581,7 +3657,7 @@ class _DictDecoder[K, V](ValueDecoder[dict[K, V]]):
     def compared(self, value: dict[K, V]) -> list[object]:
         entries = [(self.key.comparison(key), self.value.comparison(item))
                    for key, item in value.items()]
-        return sorted(entries, key=lambda item: FieldCodec.compact(item[0], sort_keys=True))
+        return sorted(entries, key=lambda entry: FieldCodec.ordering(entry[0]))
 
     def decode(self, data: object) -> dict[K, V]:
         return self.decode_entries(
@@ -3612,6 +3688,9 @@ class _DictDecoder[K, V](ValueDecoder[dict[K, V]]):
 
 
 class _StringKeyDictDecoder[V](_DictDecoder[str, V]):
+    def value_schema(self) -> dict[str, JsonValue]:
+        return {"type": "object", "additionalProperties": FieldCodec.value_schema(self.arguments[1])}
+
     entries = staticmethod(_object_entries)
 
     def fits_wire(self, data: object) -> bool:
@@ -3633,6 +3712,13 @@ class _StringKeyDictDecoder[V](_DictDecoder[str, V]):
 
 
 class _PairKeyDictDecoder[K, V](_DictDecoder[K, V]):
+    def value_schema(self) -> dict[str, JsonValue]:
+        return {"type": "array", "items": {
+            "type": "array",
+            "prefixItems": [FieldCodec.value_schema(argument) for argument in self.arguments],
+            "minItems": 2, "maxItems": 2,
+        }}
+
     entries = staticmethod(_object_or_pair_entries)
 
     def fits_wire(self, data: object) -> bool:
@@ -3929,6 +4015,113 @@ class _PydanticDecoder(ValueDecoder[object]):
         if not isinstance(value, self.target):
             raise TypeError(f"Expected {self.target.__name__}, received {type(value).__name__}")
         return value.model_dump(mode="json", by_alias=True, exclude_none=True)
+
+
+class ReportedError(Exception):
+    """An error raised on the other side of a boundary, reported by its class and message.
+    Its arguments are not its constructor's inputs or its whole state, so the original is
+    never rebuilt; a field typed with an error class receives the reported error that also
+    inherits that class (declared beside it), or the decode is refused."""
+
+    reports: ClassVar[type[BaseException]] = Exception
+    reporting: ClassVar[dict[type[BaseException], type[ReportedError]]] = {}
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        super().__init_subclass__(**kwargs)
+        ReportedError.reporting[cls.reports] = cls
+
+    @classmethod
+    def reporting_for(cls, target: type[BaseException]) -> type[ReportedError]:
+        """The reported error a field of ``target`` receives; a target with none declared refuses."""
+        reporting = {Exception: ReportedError} | ReportedError.reporting
+        if target not in reporting:
+            raise MalformedRecord(f"No reported error is declared for {target.__name__}")
+        return reporting[target]
+
+    def __init__(self, kind: str, message: str):
+        super().__init__(kind, message)
+        self.kind, self.message = kind, message
+
+    def __str__(self) -> str:
+        return f"{self.kind}: {self.message}"
+
+
+class ErrorRecord(TaggedUnion, affix=""):
+    """How an error crosses a boundary: a declared error as its declared form, any other
+    as its class and message. Each record answers the error a field of ``target`` receives."""
+
+
+    @staticmethod
+    def of(value: BaseException) -> ErrorRecord:
+        """The boundary: an outgoing error is foreign until its class's recorder records it."""
+        record: ErrorRecord = ErrorRecorder.handler_for(type(value))(value)
+        return record
+
+    @staticmethod
+    def class_of(value: object) -> str:
+        return f"{type(value).__module__}.{type(value).__qualname__}"
+
+    @abstractmethod
+    def error(self, target: type[BaseException]) -> BaseException: ...
+
+
+@dataclass(frozen=True)
+class DeclaredErrorRecord(TaggedRecordMember, ErrorRecord):
+    error_class: str
+    declared: JsonValue
+
+    def error(self, target: type[BaseException]) -> BaseException:
+        if self.error_class not in DeclaredError.declared_errors:
+            raise MalformedRecord(f"{self.error_class} is not a declared error")
+        return DeclaredError.declared_errors[self.error_class].from_wire(self.declared)
+
+
+@dataclass(frozen=True)
+class ReportedErrorRecord(TaggedRecordMember, ErrorRecord):
+    error_class: str
+    message: str
+
+    def error(self, target: type[BaseException]) -> BaseException:
+        return ReportedError.reporting_for(target)(self.error_class, self.message)
+
+
+class ErrorRecorder(MroDispatch):
+    """Each error kind declares how it crosses: the first handler along its MRO records it.
+
+    DeclaredError is a mixin listed after its exception base, so BaseException precedes it in
+    a declared error's MRO; the reported form is therefore declared on ``object``, which every
+    MRO ends with."""
+
+    @handles(DeclaredError)
+    @classmethod
+    def declared(cls, value: DeclaredError) -> ErrorRecord:
+        return DeclaredErrorRecord(ErrorRecord.class_of(value), value.to_wire())
+
+    @handles(object)
+    @classmethod
+    def reported(cls, value: BaseException) -> ErrorRecord:
+        return ReportedErrorRecord(ErrorRecord.class_of(value), str(value))
+
+
+class _ExceptionDecoder(ValueDecoder[BaseException]):
+    """An error crosses as its ErrorRecord and arrives as the error that record answers for
+    the field's type, refused when it is not one."""
+
+    origins = (BaseException,)
+    target: type[BaseException]
+
+    def value_schema(self) -> dict[str, JsonValue]:
+        return FieldCodec.value_schema(ErrorRecord)
+
+    @boundary_decoder
+    def decode(self, data: object) -> BaseException:
+        error = FieldCodec.decode(ErrorRecord, data).error(self.target)
+        if not isinstance(error, self.target):
+            raise MalformedRecord(f"{type(error).__qualname__} is not a {self.target.__name__}")
+        return error
+
+    def encode(self, value: object) -> object:
+        return FieldCodec.encode(ErrorRecord.of(cast(BaseException, value)), ErrorRecord)
 
 
 class _MemberDecoders(dict[object, ValueDecoder[object]]):

@@ -1,6 +1,7 @@
 """Actual saved buses and transcripts, with colliding live/source sequences."""
 
 
+from agent_comms.historical_views import AllHistoricalSenders, NamedHistoricalSender
 from agent_comms.transcripts import RecordedPageSource
 from agent_comms.repo import Checkout
 import json
@@ -226,7 +227,7 @@ def test_duplicate_and_newer_incarnations_sessions(tmp_path):
     old.transcripts.routes.record(
         str(session), (FreshNativeId("two"),), TurnRouting(reply=MessageRoute("alice", ("#later",)))
     )
-    declarations = {h.thread.name: h.thread for h in live.views.historical_threads()}
+    declarations = {h.thread.name: h.thread for h in live.bus.history.threads(AllHistoricalSenders())}
     assert declarations["alice"].created_at == declarations["bob"].created_at == 10.0
     assert live.registry.require("alice").created_at == 20.0
     page = live.transcripts.capture_page_read("alice", page_source=RecordedPageSource(source.key)).read()
@@ -396,7 +397,7 @@ def test_historical_namespace_has_recorded_provenance_and_no_live_authority(migr
     before = FieldCodec.encode(source.provenance)
     live.registry.rename("alice", "new-alice")
     assert FieldCodec.encode(source.provenance) == before
-    assert live.views.historical_threads("alice")
+    assert live.bus.history.threads(NamedHistoricalSender("alice"))
 
 
 

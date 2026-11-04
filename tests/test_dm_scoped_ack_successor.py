@@ -47,7 +47,7 @@ def test_alias_rename_invalidates_old_basis_but_fresh_alias_page_can_mark(tmp_pa
     viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
     comms.messaging.send("peer", viewer, "before rename")
     old = comms.views.dm_display_page(ThreadTarget("peer"), worktree=Checkout(tmp_path))
-    comms.threads.rename_managed_thread("peer", "renamed", owner=ProcessIdentity.capture(os.getpid()))
+    comms.threads.rename_managed_thread(comms.registry.require("peer").incarnation, "renamed", owner=ProcessIdentity.capture(os.getpid()))
     marker_before = _ledger(tmp_path)
     with pytest.raises(DMScopeChanged):
         _mark(comms, tmp_path, old)
@@ -152,7 +152,7 @@ def test_lifecycle_and_marker_lock_order_does_not_deadlock(tmp_path: Path):
     with ThreadPoolExecutor(max_workers=2) as pool:
         marked = pool.submit(_mark, comms, tmp_path, page)
         lifecycle = pool.submit(
-            comms.threads.rename_managed_thread, "other", "renamed", owner=ProcessIdentity.capture(os.getpid())
+            comms.threads.rename_managed_thread, comms.registry.require("other").incarnation, "renamed", owner=ProcessIdentity.capture(os.getpid())
         )
         # Either order is valid; an unrelated registry change may reject the
         # stale basis, but the registry->marker path must not hang.
