@@ -68,20 +68,28 @@ class TeamVocabulary(Carry, declared_name=None):
         return f'"{names.get(name, name)}"{colon}'
 
     @classmethod
-    def rewrite_rows(cls, db: sqlite3.Connection, row: type[TypedTable]) -> int:
-        """Inside the caller's transaction, every JSON object or array column of ``row`` that
-        names the lead, keyed by the row's primary key; SQLite says which values are JSON."""
+    def rewrite_rows(
+        cls, db: sqlite3.Connection, row: type[TypedTable], *, apply: bool = True,
+    ) -> int:
+        """Count the actual rewrites, optionally applying them in the caller's transaction.
+
+        The storage family exposes JSON records; a text field stays text even when its
+        contents happen to look like JSON. Fields renamed by a pending rebuild are absent
+        from this source schema, not columns to reinterpret as SQLite string literals.
+        """
         keys = tuple(field for field in row._fields if field.column.primary_key)
         selected = ", ".join(f'"{key.wire_name}"' for key in keys)
         changed = 0
+        stored_columns = row.stored_columns(db)
         for field in row._fields:
-            if field in keys:
+            if field in keys or field.wire_name not in stored_columns:
                 continue
             column = f'"{field.wire_name}"'
+            encoded = field.storage.json_text(db, column)
             stored = db.execute(
                 f'SELECT {column}, {selected} FROM "{row.declared_name}"'
-                f" WHERE {column} LIKE '%commander%' AND json_valid({column})"
-                f" AND json_type({column}) IN ('object', 'array')"
+                f" WHERE {column} LIKE '%commander%' AND json_valid({encoded})"
+                f" AND json_type({encoded}) IN ('object', 'array')"
             ).fetchall()
             updates = [
                 (renamed, *identity)
@@ -89,7 +97,8 @@ class TeamVocabulary(Carry, declared_name=None):
                 if (renamed := cls.renamed_text(text)) != text
             ]
             if updates:
-                cls.rewrite_stored(db, row, FieldCodec.field_plan(row, field.name), updates)
+                if apply:
+                    cls.rewrite_stored(db, row, FieldCodec.field_plan(row, field.name), updates)
                 changed += len(updates)
         return changed
 
@@ -170,16 +179,7 @@ class TeamVocabularyTodos(TeamVocabulary):
                     if row.present(db) and old in row.stored_columns(db)
                 )
                 rows = tuple(row for row in TodoStore.schema_rows() if row.present(db))
-                tagged = sum(
-                    db.execute(
-                        f'SELECT COUNT(*) FROM "{row.declared_name}" WHERE '
-                        + " OR ".join(
-                            f""""{column}" LIKE '%commander%'"""
-                            for column in row.stored_columns(db)
-                        )
-                    ).fetchone()[0]
-                    for row in rows
-                )
+                tagged = sum(self.rewrite_rows(db, row, apply=False) for row in rows)
             if not (renames or tagged):
                 continue
             changed += len(renames) + tagged

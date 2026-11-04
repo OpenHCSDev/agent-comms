@@ -82,7 +82,8 @@ def test_team_packets_in_history_and_their_projection(team_bus):
 def test_owner_requests_answer_for_their_teammate(team_bus):
     root = team_bus.root
     teammate = team_bus.registry.require("unit-x").acting_identity
-    request = team_bus.goals.todos.add_request(teammate, "Keep the board honest")
+    request = team_bus.goals.todos.add_request(
+        teammate, '{"commander": "Keep the historical text and the board honest"}')
     with closing(sqlite3.connect(TodoStore.path_in(root))) as db, db:
         db.execute('ALTER TABLE "owner_request" RENAME COLUMN "teammate" TO "commander"')
         db.execute(
