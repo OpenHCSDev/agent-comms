@@ -159,8 +159,14 @@ class MessageBus[Writes: Publisher]:
         after: InboxStart = FirstUnreadStart(), bounds: PageBounds = PageBounds(),
     ) -> InboxPage:
         catalog = self._channels.read()
+        activity = self.bus.activity_clocks()
+
+        def require_channel(channel: str) -> Channel:
+            """One read's channels: the catalog and activity it captured, not a fresh read each."""
+            return catalog.require_channel(channel, activity)
+
         delivery = DeliveryScope.capture(name, snapshot, catalog)
-        selection = delivery.selection(target, snapshot, self.require_channel)
+        selection = delivery.selection(target, snapshot, require_channel)
         document, seen = after.read_basis(self.reads, delivery.actor, snapshot)
         self.bus.messages_for_references(after.references())
         cursor = after.cursor()
@@ -175,7 +181,7 @@ class MessageBus[Writes: Publisher]:
             counts = source.unseen_counts(
                 snapshot, {delivery.actor: delivery}, {delivery.actor: seen}, after=cursor,
             )[delivery.actor]
-        total = target.pending_count(counts, snapshot, self.require_channel)
+        total = target.pending_count(counts, snapshot, require_channel)
         listed = ListedDeliveries(selection, frozenset(row.seq for row in unread),
                                   frozenset(row.target for row in unread))
         result = MessagePageRequest(
