@@ -117,7 +117,7 @@ def test_held_board_commands_take_the_same_verdicts_as_the_order(board_review, c
         assert_review_preconditions(timer, comms, request)
     for delivery in DeliveryAwaitingJudgement.read_open(
             comms.bus.bus, comms.registry.snapshot(), {todo.held().owner_identity: (todo,)},
-            "colleague", ()):
+            comms.registry.require("colleague"), ()):
         assert_review_preconditions(delivery, comms, request)
 
 

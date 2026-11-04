@@ -268,11 +268,11 @@ class StandingRule(DefaultedName, RegisteredFamily, affix="StandingRule", discov
         about nothing a verb can act on clears only when its condition does."""
         return ()
 
-    def named_threads(self) -> tuple[str, ...]:
+    def named_threads(self) -> tuple[ThreadIncarnation, ...]:
         """The threads this line waits on or is about, which may differ from what disposes of
         it: a row naming only stopped threads waits below the board, not on it."""
         return tuple(dict.fromkeys(
-            name for subject in self.subjects() for name in subject.threads()))
+            thread for subject in self.subjects() for thread in subject.threads()))
 
     def rejected_line(self, error: RejectedEnforcementError) -> str:
         return f"Not applied ({error.explanation()}): {self.line()}"
@@ -768,7 +768,7 @@ class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
     @classmethod
     @abstractmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
-                  held: Mapping[ThreadIncarnation, Sequence[Todo]], debtor: str,
+                  held: Mapping[ThreadIncarnation, Sequence[Todo]], debtor: Thread,
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
         """This member's open debts, inside their window or past it, on one bus cut."""
 
@@ -812,7 +812,7 @@ class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
         with comms.bus.bus.reading() as source:
             opened = tuple(rule for member in cls.members_with(cls)
                            for rule in member.read_open(
-                               source, snapshot, held, thread.name, requests))
+                               source, snapshot, held, thread, requests))
         questions: dict[str, tuple[Thread, dict[MessageReference, None]]] = {}
         for rule in opened:
             answerer = rule.session_answerer(thread)
@@ -1367,18 +1367,17 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
-                  held: Mapping[ThreadIncarnation, Sequence[Todo]], debtor: str,
+                  held: Mapping[ThreadIncarnation, Sequence[Todo]], debtor: Thread,
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
         """The frozen recipient owes the private directive, not every request maintainer.
         Stored request associations cannot substitute a different mailbox or birth.
         """
-        reader = snapshot.require(debtor)
         return tuple(
             cls(message=original, request=request.id, directive=directive,
-                answerer=reader)
+                answerer=debtor)
             for request in requests
             for directive, original in request.directive_messages(
-                source, reader.incarnation.require_recorded().lookup)
+                source, debtor.incarnation.require_recorded().lookup)
         )
 
     def answered_in(self) -> tuple[str, ...]:
