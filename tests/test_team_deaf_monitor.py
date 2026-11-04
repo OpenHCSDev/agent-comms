@@ -11,6 +11,7 @@ import pytest
 from agent_comms.channel_targets import CommsTag
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.cli_bridges.session_watch import WatchClaim
+from agent_comms.heartbeat_delivery import OnHeartbeatDelivery
 from agent_comms.task_attachments.team_pings import TeamUpdate
 from agent_comms.task_attachments.owner_notices import TeamNotice
 from agent_comms.cli_bridges.claude import ClaudeBridge
@@ -35,8 +36,9 @@ async def test_unconfirmed_monitor_reports_team_deaf_once(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("HOME", "home")
     owner = ProcessIdentity.capture(os.getpid())
+    # The reconnect assertion reads the published board packet; publication is off by default.
     colleague = held_bus.registry.require("colleague").as_member(ExternalThread,
-        process_identity=owner)
+        process_identity=owner, heartbeat_delivery=OnHeartbeatDelivery)
     held_bus.registry.register(colleague)
     state = tmp_path / "bridge-state"
     binding = Binding(root=str(held_bus.root), owner=held_bus.registry.require('colleague').incarnation,
