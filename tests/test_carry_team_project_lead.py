@@ -52,5 +52,5 @@ def test_carry_stamps_version_two_and_the_project_stays_the_teams(private_direct
             written.relative_to(tmp_path)
             for written in (path, PrivateRegistryGuard.path_in(tmp_path)))
     assert wire(tmp_path).registry.snapshot().team_project == project
-    assert wire(tmp_path).registry.require("worker").declared_name == NativeThread.declared_name
+    assert type(wire(tmp_path).registry.require("worker")) is NativeThread
     assert step.carry(apply=False).changed == 0

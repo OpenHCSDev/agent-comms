@@ -552,7 +552,8 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread")
         raise RelationViolationError(cls.required_refusal)
 
     def same_execution(self, other: Thread) -> bool:
-        return self.declared_name == other.declared_name
+        """Two declarations of one member; the class is the execution's identity."""
+        return type(self) is type(other)
 
     def as_member(self, member: type[Thread], **changes: object) -> Thread:
         """The same declaration under another execution; replace() keeps the class."""
@@ -673,7 +674,7 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread")
         """
         def launch(thread: Thread):
             return (thread.incarnation, thread.process_identity, thread.role, thread.runtime,
-                    thread.worktree, thread.declared_name, thread.model, thread.thinking_level)
+                    thread.worktree, type(thread), thread.model, thread.thinking_level)
         return launch(self) == launch(other)
 
     def same_turn(self, other: Thread) -> bool:
