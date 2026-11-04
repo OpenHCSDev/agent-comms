@@ -64,6 +64,14 @@ def context(owner, path, count, turn):
     )
 
 
+def assert_restores(actual, expected):
+    """A restored manifest returns the recorded segments, the transcript's contributors and
+    its public text; its flat captured text comes back through the entries, not inline."""
+    assert actual.segments[:2] == expected.segments[:2]
+    assert actual.segments[2].contributors == expected.segments[2].contributors
+    assert actual.segments[2].recorded_public_text({}) == expected.segments[2].recorded_public_text({})
+
+
 def test_context_deltas_restore_original_text_and_incremental_membership(tmp_path):
     comms = context_comms(tmp_path)
     owner = comms.registry.require('Alice')
@@ -91,9 +99,7 @@ def test_context_deltas_restore_original_text_and_incremental_membership(tmp_pat
     assert len(decoded[1].segments[2].entries) == 2
     assert decoded[2].segments[2].previous == decoded[1].segments[2].previous
     for expected, actual in zip((first, second), (r.value for r in page.resources)):
-        assert actual.segments[:2] == expected.segments[:2]
-        assert actual.segments[2].contributors == expected.segments[2].contributors
-        assert actual.segments[2].recorded_public_text({}) == expected.segments[2].recorded_public_text({})
+        assert_restores(actual, expected)
     # Independent readers and retained-page readers resolve the same original values.
     assert comms.contexts.page(owner.name, comms.registry).resources == page.resources
     assert comms.contexts.page(owner.name, comms.registry,
@@ -211,7 +217,7 @@ def test_context_batch_decodes_shared_entries_once(tmp_path: Path) -> None:
             sys.setprofile(previous_profile)
     assert len(decoded) == len(set(decoded)) == 5
     for original, restored in zip(expected, actual, strict=True):
-        assert restored.value.segments == original.segments
+        assert_restores(restored.value, original)
 
 
 @pytest.mark.parametrize('preloaded', (False, True))
@@ -246,7 +252,9 @@ def test_context_batch_keeps_same_session_and_entry_on_different_paths(tmp_path:
         rows = ContextRequest.select(db, order_by=('id',))
         actual = tuple(comms.contexts.resolve(db, originals[0].source, rows))
     for original, restored in zip(originals, actual, strict=True):
-        assert restored == original
+        assert (restored.source, restored.record_id, restored.recorded) == (
+            original.source, original.record_id, original.recorded)
+        assert_restores(restored.value, original.value)
 
 
 def test_missing_store_identity_refuses_reads_and_further_records(tmp_path):
