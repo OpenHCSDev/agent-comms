@@ -420,11 +420,11 @@ class HistorySource(MessageHistory):
 
     @classmethod
     def require(cls, sources: tuple[HistorySource, ...], key: HistorySourceKey) -> HistorySource:
-        source = next((item for item in sources if item.key == key), None)
-        if source is None:
-            raise HistoricalSourceChanged("Historical source detached; refresh history")
-        source.validate()
-        return source
+        for source in sources:
+            if source.key == key:
+                source.validate()
+                return source
+        raise HistoricalSourceChanged("Historical source detached; refresh history")
 
     def notification_references(
         self,
