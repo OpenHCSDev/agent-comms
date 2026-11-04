@@ -1,5 +1,6 @@
 """Single-owner attachment and idle wakeup through real processes and sockets."""
 from agent_comms.repo import Checkout
+from agent_comms.runtime_requests import ClearQueueRuntimeRequest, SendNowRuntimeRequest
 from agent_comms.owner_connection import (
     CapturedOwner, OwnerIdentityChangedError, OwnerReplyConnection, OwnerReplyLostError, socket_path,
 )
@@ -428,19 +429,16 @@ async def test_new_session_metadata_has_a_display_title_before_first_switch(
         await agent.shutdown()
 
 
-@pytest.mark.parametrize("action", ["SendNowRuntimeRequest", "ClearQueueRuntimeRequest"])
-async def test_a_queue_action_binds_the_incarnation_its_caller_read(comms, action):
+@pytest.mark.parametrize("queue_request", [SendNowRuntimeRequest, ClearQueueRuntimeRequest])
+async def test_a_queue_action_binds_the_incarnation_its_caller_read(comms, queue_request):
     """Send-now and clear go straight to the owner's socket, not through a connection's
     payload; the request still carries the birth, so a same-name replacement refuses it."""
-    import agent_comms.runtime_requests as runtime_requests
-
-    request = getattr(runtime_requests, action)
     process = ProcessIdentity.capture(os.getpid())
     owner = declare_owner(comms, "held", process)
     async with silent_socket(comms, process) as received:
         with pytest.raises(OwnerReplyLostError):
             async with asyncio.timeout(30):
-                await asyncio.to_thread(request.at_owner, comms.root, owner)
+                await asyncio.to_thread(queue_request.at_owner, comms.root, owner)
     assert [FieldCodec.decode(RuntimeRequest, sent) for sent in received] == [
-        request(thread="held", captured=CapturedOwner(owner.incarnation)),
+        queue_request(thread="held", captured=CapturedOwner(owner.incarnation)),
     ]

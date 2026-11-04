@@ -71,17 +71,15 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class PublishedSession:
-    """The thread metadata a session last published, derived from its Thread. The birth it
-    was published for owns the session through every rename; a name alone does not."""
+    """The thread metadata a session last published, derived from its Thread."""
 
     name: str
     title: ThreadText
     worktree: Checkout
-    incarnation: ThreadIncarnation
 
     @classmethod
     def of(cls, thread: Thread) -> PublishedSession:
-        return cls(thread.name, thread.title, thread.worktree, thread.incarnation)
+        return cls(thread.name, thread.title, thread.worktree)
 
 
 class SessionLifecycle:
@@ -157,7 +155,15 @@ class SessionLifecycle:
 
     def require_owned_session(self, entry: RegistryEntry) -> AcpSessionId:
         """Resolve an original loaded resource; registration grants no attachment."""
-        for session_id in self.owned_sessions(entry):
+        return self._require_session(self.owned_sessions(entry), entry)
+
+    def require_fenced_session(self, entry: RegistryEntry) -> AcpSessionId:
+        """The loaded resource a stop fenced; the fence already advanced its lease."""
+        return self._require_session(self.fenced_sessions(entry.thread.incarnation), entry)
+
+    @staticmethod
+    def _require_session(sessions: Iterator[AcpSessionId], entry: RegistryEntry) -> AcpSessionId:
+        for session_id in sessions:
             return session_id
         raise Refused.invalid_params({
             "reason": f"Registered owner {entry.thread.name!r} has no loaded ACP session. "
@@ -166,10 +172,20 @@ class SessionLifecycle:
         })
 
     def owned_sessions(self, entry: RegistryEntry) -> Iterator[AcpSessionId]:
-        """Published attachments of this registry incarnation, under any of its names; a
-        same-name replacement owns none of them."""
-        return (session_id for session_id, published in self.published.items()
-                if published.incarnation == entry.thread.incarnation)
+        """Published sessions whose retained owner lease is this entry's allocation, birth
+        and generation, under any of the thread's names. A same-name replacement, or the same
+        birth under a later lease, owns none of them."""
+        return (owner.identifier for owner in self._retained() if owner.owner == entry.owner_identity)
+
+    def fenced_sessions(self, incarnation: ThreadIncarnation) -> Iterator[AcpSessionId]:
+        """A stop advances the lease when it fences a birth; the sessions that birth retained
+        are its to retire, under the lease they were bound with."""
+        return (owner.identifier for owner in self._retained() if owner.owner.incarnation == incarnation)
+
+    def _retained(self) -> Iterator[OwnerSession]:
+        """The published sessions holding local execution, with the owner lease each bound."""
+        return (owner for state in self.effects.inputs.drained.values() for owner in state.executors()
+                if owner.identifier in self.published)
 
     @staticmethod
     def reject_foreign_mcp(request: NewSessionRequest | LoadSessionRequest) -> None:
@@ -390,7 +406,8 @@ class SessionLifecycle:
                 self.comms.registry.entry, cached_name,
             ))).entry
             thread = entry.thread
-            if thread.incarnation != self.published[session_id].incarnation:
+            if any(owner.owner.incarnation != thread.incarnation
+                   for owner in self.effects.inputs.state(session_id).executors()):
                 await self.effects.turns.close_idle_backend(session_id)
                 raise RelationViolationError(
                     f"{cached_name!r} now names another thread; this session stays its original's")
@@ -486,7 +503,7 @@ class SessionLifecycle:
                 try:
                     entry = (await Coordination.run_worker(partial(
                         self.comms.registry.entry, request.thread))).entry
-                    state = self.effects.inputs.state(self.require_owned_session(entry)).owned()
+                    state = self.effects.inputs.state(self.require_fenced_session(entry)).owned()
                     await request.retire(self, state)
                 except (OSError, ValueError) as error:
                     failures.append(error)

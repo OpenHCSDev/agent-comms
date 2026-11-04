@@ -128,10 +128,15 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
         assert replacement.thread.incarnation != loaded.incarnation
         with pytest.raises(Refused):
             owner.sessions.require_owned_session(replacement)
+        # Restoring the same birth allocates a new owner lease; the retained session keeps
+        # the old allocation, so the restored row does not own it either.
         comms.registry.remove("shadowed-owner")
         comms.registry.declare(loaded)
-        assert owner.sessions.require_owned_session(
-            comms.registry.entry("shadowed-owner").entry) == "shadowed-acp-session"
+        restored = comms.registry.entry("shadowed-owner").entry
+        assert restored.thread.incarnation == loaded.incarnation
+        with pytest.raises(Refused):
+            owner.sessions.require_owned_session(restored)
+        await asyncio.to_thread(comms.owners.stop, "shadowed-owner")
         assert not (root / "native-sessions").exists()
         assert not (root / "input_dispositions.sqlite3").exists()
     finally:

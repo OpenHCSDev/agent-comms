@@ -200,7 +200,7 @@ class StopOwnerRuntimeRequest(ResultRuntimeRequest[RuntimeRequestContext]):
             agent._comms.registry.entry, self.thread,
         ))).entry
         owner = self.require_owner(entry)
-        session = next(agent.sessions.owned_sessions(entry), AcpSessionId(owner.name))
+        session = next(agent.sessions.fenced_sessions(owner.incarnation), AcpSessionId(owner.name))
         return await agent.inputs.state(session).retire_for_stop(
             ctx.server.agent.sessions, self)
 
