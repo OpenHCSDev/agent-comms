@@ -737,7 +737,7 @@ wheels = [
 [[package]]
 name = "python-introspect"
 version = "0.3.0"
-source = { git = "https://github.com/OpenHCSDev/python-introspect?rev=main#0aff2a73bd24594d377d3f0ffa1464e12447c487" }
+source = { git = "https://github.com/OpenHCSDev/python-introspect?rev=main#f2876b9ee089c65789607284949e11a9f58283fe" }
 dependencies = [
     { name = "annotated-types" },
     { name = "metaclass-registry" },
