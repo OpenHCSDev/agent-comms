@@ -1380,7 +1380,7 @@ class CommsRegistryTool(CoreRead[RegistrySnapshot]):
 
 @dataclass(frozen=True)
 class ChannelNames(ToolResult):
-    """Every channel the catalog declares, in roster order."""
+    """Every channel the catalog declares, in views() order, not the roster's list_order."""
 
     names: tuple[str, ...]
 
