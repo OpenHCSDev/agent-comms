@@ -56,6 +56,7 @@ class InboxActivity(AgentActivity):
         super().__init__(root, registry)
         self.bus = bus
         self.coordination = CoordinationStore.path_in(root)
+        self.catalog = ChannelCatalog.at(root).path
         self.untaken = UntakenCut((), UnreadRegistry(), {})
 
     def stalled(self, readers: tuple[str, ...], snapshot: RegistrySnapshot) -> Mapping[str, float]:
@@ -65,10 +66,12 @@ class InboxActivity(AgentActivity):
 
     def oldest_untaken(self, snapshot: RegistrySnapshot) -> Mapping[str, float]:
         """Every claimed reader's oldest untaken message, read again only when something that
-        decides it changed: a bus message, a take or claim in coordination, or a registry cut.
-        One observer pass captures activity through several paths; they share this read."""
+        decides it changed: a bus message, a take or claim in coordination, a channel edit that
+        moves a delivery scope (the catalog), or a registry cut. One observer pass captures
+        activity through several paths; they share this read."""
         key = (self.bus.bus.revision(), FileRevision.capture(self.coordination),
-               FileRevision.capture(self.coordination.with_name(self.coordination.name + "-wal")))
+               FileRevision.capture(self.coordination.with_name(self.coordination.name + "-wal")),
+               FileRevision.capture(self.catalog))
         if not self.untaken.answers(key, snapshot):
             readers = tuple(reader for name in snapshot.threads
                             for reader in snapshot.status(name).claimed_readers(name))

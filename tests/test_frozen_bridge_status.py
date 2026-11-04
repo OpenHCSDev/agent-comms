@@ -143,3 +143,28 @@ def test_one_reader_sees_a_take_clear_the_stall_with_no_new_message(
         take(tmp_path, message)
 
     assert type(observed()) is ReadyDrainReadiness
+
+
+def test_captures_at_one_cut_share_one_inbox_read(tmp_path, connected, monkeypatch):
+    """One observer pass captures activity through several paths; only a new write re-reads."""
+    from agent_comms.message_bus import MessageBus
+
+    reads = []
+    read = MessageBus.oldest_untaken
+
+    def counted(self, *arguments):
+        reads.append(arguments)
+        return read(self, *arguments)
+
+    monkeypatch.setattr(MessageBus, "oldest_untaken", counted)
+    observer = wire(tmp_path)
+
+    def capture():
+        return observer.agents.activity_of("bridge", snapshot=observer.registry.snapshot())
+
+    capture()
+    capture()
+    assert len(reads) == 1
+    sent_to_bridge(connected, "a new message is a new cut")
+    capture()
+    assert len(reads) == 2
