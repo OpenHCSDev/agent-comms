@@ -131,7 +131,7 @@ class CheckedPhaseTask(PhaseTask):
             raise ValueError("A phase task needs a finite positive review interval.")
 
     def start(
-        self, comms: Comms, commander: Thread, phase: type[PlanPhase], reading: PlanReading
+        self, comms: Comms, assigner: Thread, phase: type[PlanPhase], reading: PlanReading
     ) -> None:
         if not phase.ready(reading) or phase.ordered(reading):
             return
@@ -146,8 +146,8 @@ class CheckedPhaseTask(PhaseTask):
             repo=self.repo,
             text=self.text,
             order=order,
-            request=NewestOpenRequest().for_order(comms.goals.todos, commander.acting_identity),
-            assigner=commander.incarnation,
+            request=NewestOpenRequest().for_order(comms.goals.todos, assigner.acting_identity),
+            assigner=assigner.incarnation,
             review_at=RecordedEventTime(now + self.review_seconds),
         )
         WorkDispatch(action, revision=0).start(comms)

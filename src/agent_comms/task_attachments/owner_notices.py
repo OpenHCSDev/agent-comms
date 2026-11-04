@@ -101,8 +101,8 @@ class EscalationNotice(OwnerNotice, declared_name=None):
             raise RelationViolationError("An escalation changed recipient incarnation")
 
     @classmethod
-    def of(cls, snapshot: RegistrySnapshot, commander: str) -> EscalationNotice:
-        return cls(snapshot.require(commander).incarnation)
+    def of(cls, snapshot: RegistrySnapshot, teammate: str) -> EscalationNotice:
+        return cls(snapshot.require(teammate).incarnation)
 
     @classmethod
     def burst(cls, comms: Comms, teammate: ThreadIncarnation, lines: Sequence[str]) -> None:
@@ -125,32 +125,32 @@ class EscalationNotice(OwnerNotice, declared_name=None):
             cls.burst(comms, teammate, lines)
 
     @classmethod
-    def lines(cls, source: BusReader, snapshot: RegistrySnapshot, commander: str,
+    def lines(cls, source: BusReader, snapshot: RegistrySnapshot, teammate: str,
               before: float) -> tuple[Message, ...]:
         """This burst kind's lines to the teammate's birth within the horizon, newest first."""
-        notice = cls.of(snapshot, commander)
+        notice = cls.of(snapshot, teammate)
         with source.observing() as db:
             sent = EscalationPosition.sent(
                 db, notice.commander.require_recorded().lookup, time.time() - cls.horizon, before)
         return tuple(message for message in sent if message.task == notice)
 
     @classmethod
-    def newest_answer(cls, source: BusReader, snapshot: RegistrySnapshot, commander: str,
+    def newest_answer(cls, source: BusReader, snapshot: RegistrySnapshot, teammate: str,
                       lines: Sequence[Message]) -> tuple[Message, ...]:
         """The newest answer naming any of those lines from the addressed teammate itself. The
         lines are already this birth's (lines() reads by its lookup); another teammate's
         reply, quote included, never covers or releases them."""
         return source.latest_reply(
-            tuple(line.reference for line in lines), frozenset(snapshot.names_for(commander)))
+            tuple(line.reference for line in lines), frozenset(snapshot.names_for(teammate)))
 
     @classmethod
-    def unanswered(cls, source: BusReader, snapshot: RegistrySnapshot, commander: str,
+    def unanswered(cls, source: BusReader, snapshot: RegistrySnapshot, teammate: str,
                    before: float) -> tuple[Message, ...]:
         """Lines sent by ``before`` that the bus ordered after the newest answer to any line of
         this burst kind. Whether a line is answered is decided by bus sequence alone, the one total
         order every writer shares: a reply whose clock ran behind still covers what it follows."""
-        sent = cls.lines(source, snapshot, commander, time.time())
-        covered = max((answer.seq for answer in cls.newest_answer(source, snapshot, commander, sent)),
+        sent = cls.lines(source, snapshot, teammate, time.time())
+        covered = max((answer.seq for answer in cls.newest_answer(source, snapshot, teammate, sent)),
                       default=0)
         return tuple(message for message in sent if message.seq > covered and message.timestamp <= before)
 

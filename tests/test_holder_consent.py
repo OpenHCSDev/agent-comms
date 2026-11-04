@@ -30,7 +30,7 @@ def test_shared_maintenance_and_storage_selection_do_not_release_another_holder(
     current = store.get("P40")
     caller = PeerCaller(name)
     actor = caller.identity(comms)
-    assert actor.commands(current.creator_identity)
+    assert actor.acts_for(current.creator_identity)
     assert actor.acting_identity == comms.registry.require(name).incarnation
     assert actor.represented_owners == (comms.registry.require(name).incarnation,)
     assert not actor.represents(current.held().owner_identity)
@@ -70,7 +70,7 @@ def test_represented_owners_follow_only_actual_bound_parent_identities():
     foreign = RecordedThreadIncarnation("storage-owner", 200.0)
     child = RecordedThreadIncarnation("child", 300.0).acting_for(parent)
     nested = RecordedThreadIncarnation("nested", 400.0).acting_for(child)
-    assert parent.commands(foreign) and not parent.represents(foreign)
+    assert parent.acts_for(foreign) and not parent.represents(foreign)
     assert parent.represented_owners == (parent,)
     assert child.represented_owners == (child, parent)
     assert nested.represented_owners == (nested, child, parent)
@@ -152,7 +152,7 @@ def test_reissue_records_core_instead_of_reconstructing_the_original_assigner(fo
     actor = CoreWatcherIncarnation.watcher()
     action = ReissuedOrderGoalAction.for_todo(current)
     assert action.assigner == actor
-    assert actor.commands(current.creator_identity)
+    assert actor.acts_for(current.creator_identity)
     assert not actor.represents(current.held().owner_identity)
     assert actor.answerable((current.creator_identity,)) == ()
 

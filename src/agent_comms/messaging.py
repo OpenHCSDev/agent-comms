@@ -65,13 +65,13 @@ class SenderReceipts(AnswerAuthority):
 @dataclass(frozen=True)
 class TeamReceipts(AnswerAuthority):
     """A teammate verb answers what its actor received, and what each teammate it acts
-    for received; ``ThreadIncarnation.commands`` decides which, as it does for orders."""
+    for received; ``ThreadIncarnation.acts_for`` decides which, as it does for orders."""
 
     actor: ThreadIncarnation
-    commanders: tuple[ThreadIncarnation, ...]
+    teammates: tuple[ThreadIncarnation, ...]
 
     def lookups(self, owner: Thread) -> tuple[ThreadLookup, ...]:
-        return self.actor.answerable(self.commanders)
+        return self.actor.answerable(self.teammates)
 
 
 class Messaging:

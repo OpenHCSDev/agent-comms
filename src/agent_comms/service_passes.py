@@ -66,10 +66,10 @@ class ServicePasses:
         return tuple(f'{failure.failure_line(watch)} ({RecordedEventTime(failure.since).age(now)})'
                      for watch, failure in sorted(self.failing.items()))
 
-    def heartbeat_completed_at(self, commander: RecordedThreadIncarnation) -> EventTime:
+    def heartbeat_completed_at(self, recipient: RecordedThreadIncarnation) -> EventTime:
         """The original completion clock, or its declared unrecorded state."""
-        if commander in self.commander_completed:
-            return RecordedEventTime(self.commander_completed[commander])
+        if recipient in self.commander_completed:
+            return RecordedEventTime(self.commander_completed[recipient])
         return UnrecordedEventTime()
 
     def heartbeat_current(self, heartbeat: EventTime) -> bool:
@@ -144,11 +144,11 @@ class ServicePassStore(SingleFileStore, DurableFile, LockedStore[ServicePasses],
             )
 
     def heartbeat_passed(
-        self, commanders: Iterable[ThreadIncarnation], registered: Iterable[ThreadIncarnation]
+        self, recipients: Iterable[ThreadIncarnation], registered: Iterable[ThreadIncarnation]
     ) -> None:
         """Only a retired incarnation loses its completion; a missed live one keeps it."""
         current = frozenset(registered)
-        completed = {owner.require_recorded(): time.time() for owner in commanders}
+        completed = {owner.require_recorded(): time.time() for owner in recipients}
 
         def change(passes: ServicePasses) -> DocumentChange[ServicePasses, ServicePasses]:
             retained = {owner: at for owner, at in passes.commander_completed.items()

@@ -470,16 +470,16 @@ class TeamFrame(TeamFrameFile, JsonDocument[TeamHud]):
     record_type = TeamHud
 
     @classmethod
-    def at(cls, root: Path, commander: ThreadIncarnation) -> Self:
-        return cls(cls.path_in(root, lookup=str(commander.require_recorded().lookup)))
+    def at(cls, root: Path, recipient: ThreadIncarnation) -> Self:
+        return cls(cls.path_in(root, lookup=str(recipient.require_recorded().lookup)))
 
     def empty(self) -> TeamHud:
         raise BoardUnavailable(self.reading, f'Tristan frame missing: {self.path}')
 
     @classmethod
-    def current(cls, comms: Comms, commander: str) -> TeamHud:
+    def current(cls, comms: Comms, recipient: str) -> TeamHud:
         """Read the heartbeat's publication, never repeat its forge and history work."""
-        owner = comms.registry.require(commander).incarnation.require_recorded()
+        owner = comms.registry.require(recipient).incarnation.require_recorded()
         passes = ServicePassStore.at(comms.root).read()
         health = ServiceReading().with_services(passes, owner)
         hud = cls(cls.path_in(comms.root, lookup=str(owner.lookup)), reading=health).read()

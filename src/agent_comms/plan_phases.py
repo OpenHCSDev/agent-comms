@@ -221,7 +221,7 @@ class ReviewQueuePhase(TeamNativePhase):
     ))
 
 
-COMMANDER = "src/agent_comms/team/"
+TEAM_PACKAGE = "src/agent_comms/team/"
 
 
 class ControlPlanePhase(TeamNativePhase):
@@ -230,7 +230,7 @@ class ControlPlanePhase(TeamNativePhase):
     after = (RecordPlanePhase,)
     evidence = PathsAbsent(
         tuple(
-            COMMANDER + name
+            TEAM_PACKAGE + name
             for name in (
                 "rotate.py",
                 "capacity.py",
@@ -254,7 +254,7 @@ class StoryPhase(TeamNativePhase):
         (
             ClassDeclared("CommsOrderStoryTool", ("src/agent_comms/order_tools.py",)),
             ClassDeclared("CommsTeamStoryTool", ("src/agent_comms/order_tools.py",)),
-            PatternAbsent(r"^def roast\b", (COMMANDER + "judge.py",)),
+            PatternAbsent(r"^def roast\b", (TEAM_PACKAGE + "judge.py",)),
         )
     )
 

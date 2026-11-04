@@ -135,7 +135,7 @@ class ThreadCaller(ToolCaller):
     def teammate(self) -> ThreadCaller:
         return self
 
-    def commander(self, comms: Comms) -> Thread:
+    def authority(self, comms: Comms) -> Thread:
         return comms.registry.require(self.name)
 
     def identity(self, comms: Comms) -> ThreadIncarnation:
@@ -200,11 +200,11 @@ class ActsForTeam(ThreadCaller):
     verbs accept its orders and verdicts as the teammate's, and the record names who acted."""
 
     @abstractmethod
-    def commander(self, comms: Comms) -> Thread: ...
+    def authority(self, comms: Comms) -> Thread: ...
 
     def identity(self, comms: Comms) -> ThreadIncarnation:
         own = comms.registry.require(self.name).incarnation
-        return own.require_recorded().acting_for(self.commander(comms).acting_identity)
+        return own.require_recorded().acting_for(self.authority(comms).acting_identity)
 
 
 @dataclass(frozen=True)
@@ -248,7 +248,7 @@ class ForkCaller(ActsForTeam, SubagentCaller):
         binding, = bindings
         return binding.bus
 
-    def commander(self, comms: Comms) -> Thread:
+    def authority(self, comms: Comms) -> Thread:
         fork = comms.registry.require(self.name)
         parent, = fork.parent.names()
         return comms.registry.require(parent)
@@ -280,7 +280,7 @@ class ForkCaller(ActsForTeam, SubagentCaller):
     def leaving(self, comms: Comms) -> None:
         """A fork that recorded nothing tells its teammate the work is missing."""
         if not self.recorded(comms):
-            commander = self.commander(comms).name
-            comms.messaging.send(self.name, commander, (
+            teammate = self.authority(comms).name
+            comms.messaging.send(self.name, teammate, (
                 f"{self.name} stopped without recording what it found: its work is missing."
                 " Read its transcript or give the work to another fork."))

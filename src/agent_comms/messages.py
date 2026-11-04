@@ -133,13 +133,13 @@ class TeamUpdatePosition(BusProjectionTables, declared_name="commander_update_po
     indexes = (Index(("commander_lookup", "seq")),)
 
     @classmethod
-    def latest(cls, db: sqlite3.Connection, commander: ThreadLookup) -> tuple[BusRecord, ...]:
+    def latest(cls, db: sqlite3.Connection, recipient: ThreadLookup) -> tuple[BusRecord, ...]:
         """The newest packet for that teammate through the covering index, decoded from its one
         original record; a teammate with no packet has none."""
         positions = db.execute(
             cls._sql(f'SELECT {{seq}} FROM "{cls.declared_name}" WHERE {{commander_lookup}}=? '
                      'ORDER BY {seq} DESC LIMIT 1'),
-            (FieldCodec.encode(commander),))
+            (FieldCodec.encode(recipient),))
         headers = (BusRow.require(db, seq=FieldCodec.decode(int, seq)) for seq, in positions)
         return tuple(header.kind.read_from(db, header.seq) for header in headers)
 
@@ -156,13 +156,13 @@ class EscalationPosition(BusProjectionTables):
     indexes = (Index(("commander_lookup", "at")),)
 
     @classmethod
-    def sent(cls, db: sqlite3.Connection, commander: ThreadLookup, since: float,
+    def sent(cls, db: sqlite3.Connection, recipient: ThreadLookup, since: float,
              before: float) -> tuple[BusRecord, ...]:
         """Every escalation line to that teammate birth in [since, before], newest first."""
         positions = db.execute(
             cls._sql(f'SELECT {{seq}} FROM "{cls.declared_name}" WHERE {{commander_lookup}}=? '
                      'AND {at} >= ? AND {at} <= ? ORDER BY {seq} DESC'),
-            (FieldCodec.encode(commander), since, before))
+            (FieldCodec.encode(recipient), since, before))
         headers = (BusRow.require(db, seq=FieldCodec.decode(int, seq)) for seq, in positions)
         return tuple(header.kind.read_from(db, header.seq) for header in headers)
 

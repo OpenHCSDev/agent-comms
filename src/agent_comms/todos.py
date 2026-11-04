@@ -3514,7 +3514,7 @@ class Hunt(DeclaredFamily, affix="Hunt"):
             raise TodoError("Describe the inspected code and verdict in ten or more words.")
         self.at.require_recorded("A hunt")
 
-    def require_maintainer(self, store: TodoStore, commander: ThreadIncarnation) -> None:
+    def require_maintainer(self, store: TodoStore, actor: ThreadIncarnation) -> None:
         """Validate source references before recording shared inspection evidence."""
 
 
@@ -3527,8 +3527,8 @@ class CleanHunt(Hunt):
 class OrderedHunt(Hunt):
     sent: str
 
-    def require_maintainer(self, store: TodoStore, commander: ThreadIncarnation) -> None:
-        super().require_maintainer(store, commander)
+    def require_maintainer(self, store: TodoStore, actor: ThreadIncarnation) -> None:
+        super().require_maintainer(store, actor)
         if not any(todo.id == self.sent
                    for todo in store.held_orders()):
             raise TodoError("The hunt must name a current shared order.")
@@ -5656,15 +5656,15 @@ class OwnerRequest(TodoStoreRows, TypedTable, SharedFileTables, DurableTables):
             raise TodoError("An owner request needs its text.")
 
     @classmethod
-    def new(cls, commander: ThreadIncarnation, text: str) -> Self:
-        return cls(OwnerRequestId.new(), commander.require_recorded(), text)
+    def new(cls, requester: ThreadIncarnation, text: str) -> Self:
+        return cls(OwnerRequestId.new(), requester.require_recorded(), text)
 
-    def require_maintainer(self, commander: ThreadIncarnation) -> None:
-        if not commander.commands(self.commander):
+    def require_maintainer(self, actor: ThreadIncarnation) -> None:
+        if not actor.acts_for(self.commander):
             raise ForeignRequest(f"Request {self.id.value} is outside this actor's work scope.")
 
-    def require_open(self, commander: ThreadIncarnation) -> OpenRequestState:
-        self.require_maintainer(commander)
+    def require_open(self, actor: ThreadIncarnation) -> OpenRequestState:
+        self.require_maintainer(actor)
         return self.state.require_open(self.id)
 
     def at_revision(self, directives: tuple[RequestDirective, ...]) -> RequestAtRevision:
@@ -5912,12 +5912,12 @@ class Todo(TodoStoreRows, TypedTable):
         self.order.folded(target.id, why)
 
     def require_maintainer(self, actor: ThreadIncarnation) -> None:
-        if not (actor.commands(self.creator_identity)
+        if not (actor.acts_for(self.creator_identity)
                 or self.current_holder.represented_by(actor)):
             raise NotWorkMaintainer(self, actor)
 
     def require_actor(self, actor: ThreadIncarnation, generation: GoalId | None) -> None:
-        if not actor.commands(self.creator_identity):
+        if not actor.acts_for(self.creator_identity):
             self.require_assignee(actor, generation)
 
     def require_same_creation(self, proposed: Todo) -> None:
@@ -6266,7 +6266,7 @@ class TodoHistory:
     """Shared history queries; a board snapshot overrides only its aggregate lookup."""
 
     def phases_checked(
-        self, commanders: frozenset[ThreadIncarnation],
+        self, teammates: frozenset[ThreadIncarnation],
     ) -> dict[type[OrderPhase], float]:
         """The latest checked declaration per phase, including declarations retained by folds.
 
@@ -6276,9 +6276,9 @@ class TodoHistory:
         serves = f"""json_extract(value, '$.{FieldCodec.record_key(CheckedProblemOrder, 'serves')}')"""
         at = (f"""json_extract(value, '$.{FieldCodec.record_key(CheckedProblemOrder, 'at')}"""
               f""".{FieldCodec.record_key(RecordedEventTime, 'at')}')""")
-        if not commanders:
+        if not teammates:
             return {}
-        creators = ", ".join("(?, ?)" for _ in commanders)
+        creators = ", ".join("(?, ?)" for _ in teammates)
         with self.snapshot() as db:
             rows = db.execute(
                 f'WITH RECURSIVE declarations(value) AS ('
@@ -6291,8 +6291,8 @@ class TodoHistory:
                 f"SELECT COALESCE({serves}, ?), MAX({at}) FROM declarations "
                 f"WHERE json_extract(value, '$.{ProblemOrder.family_discriminator}') "
                 f"IN {CheckedProblemOrder.sql_choices()} AND {at} IS NOT NULL GROUP BY 1",
-                tuple(value for commander in commanders
-                      for value in (commander.name, commander.wire_birth))
+                tuple(value for teammate in teammates
+                      for value in (teammate.name, teammate.wire_birth))
                 + (FieldCodec.encode(UnplannedPhase),)).fetchall()
         return {FieldCodec.decode(type[OrderPhase], phase): at for phase, at in rows}
 
@@ -6345,8 +6345,8 @@ class TransactionTodoHistory(TodoHistory):
 class OwnerRequestStore(DurableStore):
     """Request lifetime and serving-work queries share the store's transaction."""
 
-    def add_request(self, commander: ThreadIncarnation, text: str) -> OwnerRequest:
-        request = OwnerRequest.new(commander, text)
+    def add_request(self, requester: ThreadIncarnation, text: str) -> OwnerRequest:
+        request = OwnerRequest.new(requester, text)
         with self.writing() as db:
             request.insert(db)
         return request
@@ -6356,14 +6356,14 @@ class OwnerRequestStore(DurableStore):
             return OwnerRequest.require(db, id=request)
 
     def open_requests(
-        self, commander: ThreadIncarnation, *, limit: int = -1, descending: bool = True,
+        self, teammate: ThreadIncarnation, *, limit: int = -1, descending: bool = True,
     ) -> tuple[OwnerRequest, ...]:
         with self.snapshot() as db:
             requests = (
                 request for request in OwnerRequest.stream(
                     db, state=OpenRequestState(),
                     order_by=("created_at", "id"), descending=descending,
-                ) if commander.commands(request.commander)
+                ) if teammate.acts_for(request.commander)
             )
             return tuple(islice(requests, None if limit < 0 else limit))
 
@@ -6381,11 +6381,11 @@ class OwnerRequestStore(DurableStore):
             replace(current, directives=(*current.directives, directive)).upsert(db)
 
     def complete_request(
-        self, commander: ThreadIncarnation, request: OwnerRequestId, reason: str,
+        self, actor: ThreadIncarnation, request: OwnerRequestId, reason: str,
     ) -> OwnerRequest:
         with self.writing() as db:
             current = OwnerRequest.require(db, id=request)
-            state = current.require_open(commander)
+            state = current.require_open(actor)
             completed = replace(current, state=state.complete(
                 request, TransactionTodoHistory(db).attach(
                     Todo.capture_rows(db, *self._serving(request))), reason,
@@ -6477,9 +6477,9 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         with self.writing() as db:
             return str(ProblemAllocation.allocate(db))
 
-    def record_hunt(self, commander: ThreadIncarnation, hunt: Hunt) -> HuntRecord:
-        hunt.require_maintainer(self, commander)
-        recorded = HuntRecord(HuntId.mint(), commander, hunt)
+    def record_hunt(self, actor: ThreadIncarnation, hunt: Hunt) -> HuntRecord:
+        hunt.require_maintainer(self, actor)
+        recorded = HuntRecord(HuntId.mint(), actor, hunt)
         with self.writing() as db:
             recorded.upsert(db)
         return recorded
@@ -6489,37 +6489,37 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         with self.snapshot() as db:
             return tuple(record.hunt for record in HuntRecord.select(db))
 
-    def resolve_order(self, commander: ThreadIncarnation, unit: str, problem: str) -> Todo:
+    def resolve_order(self, actor: ThreadIncarnation, unit: str, problem: str) -> Todo:
         found = self._select('id=?', (problem,), reader=self._open)
         if (len(found) != 1
                 or found[0].holder_state.previous_assignment().owner != unit):
             raise TodoError(f'{unit} holds no order on {problem}')
-        commander.require_may_change(found[0])
+        actor.require_may_change(found[0])
         return found[0]
 
-    def drop(self, commander: ThreadIncarnation, unit: str, problem: str, by: str) -> Todo:
-        old = self.resolve_order(commander, unit, problem)
-        newer = self.resolve_order(commander, unit, by)
+    def drop(self, actor: ThreadIncarnation, unit: str, problem: str, by: str) -> Todo:
+        old = self.resolve_order(actor, unit, problem)
+        newer = self.resolve_order(actor, unit, by)
         if not old.pending or not newer.pending or newer.order.at.at <= old.order.at.at:
             raise TodoError('Only a live newer order to the same teammate replaces an old one.')
         return self.apply_together((ProblemCommand(old.id, DropTodo(
-            old.revision, commander, ExpectedProblem(newer.id, newer.revision),
+            old.revision, actor, ExpectedProblem(newer.id, newer.revision),
             newer.latest_message.message_id)),))[0]
 
-    def fold(self, commander: ThreadIncarnation, problem: str, into: str, why: str) -> None:
+    def fold(self, actor: ThreadIncarnation, problem: str, into: str, why: str) -> None:
         source, target = self.get(problem), self.get(into)
         self.apply_together((
             ProblemCommand(source.id, FoldSourceTodo(
-                source.revision, commander, ExpectedProblem(target.id, target.revision), why)),
-            ProblemCommand(target.id, FoldTargetTodo(target.revision, commander, source.id, source.text)),
+                source.revision, actor, ExpectedProblem(target.id, target.revision), why)),
+            ProblemCommand(target.id, FoldTargetTodo(target.revision, actor, source.id, source.text)),
         ))
 
     def link(
-        self, commander: ThreadIncarnation, problem: str, unit: str, held_problem: str
+        self, actor: ThreadIncarnation, problem: str, unit: str, held_problem: str
     ) -> None:
-        sent = self.resolve_order(commander, unit, held_problem)
+        sent = self.resolve_order(actor, unit, held_problem)
         target = self.get(problem)
-        self.apply_together((ProblemCommand(target.id, LinkTodo(target.revision, commander, sent, unit)),))
+        self.apply_together((ProblemCommand(target.id, LinkTodo(target.revision, actor, sent, unit)),))
 
     @staticmethod
     def _open(db: sqlite3.Connection, where: str, parameters: tuple,

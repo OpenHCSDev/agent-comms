@@ -110,8 +110,8 @@ class Edit(EditCall):
     hunks: tuple[Hunk, ...]
 
     @classmethod
-    def unjudged(cls, comms: Comms, commander: str) -> list[Edit]:
-        reply = CommsUnjudgedTool.invoke(comms, {'thread': commander}, caller=ThreadCaller(commander))
+    def unjudged(cls, comms: Comms, teammate: str) -> list[Edit]:
+        reply = CommsUnjudgedTool.invoke(comms, {'thread': teammate}, caller=ThreadCaller(teammate))
         return list(FieldCodec.decode(tuple[cls, ...], reply['edits']))
 
     def code(self) -> str:

@@ -234,7 +234,7 @@ class TaskAttachment(
         """Search rows this attachment adds beside its original message: none."""
         return iter(())
 
-    def team_update(self, commander: ThreadLookup) -> tuple[TeamUpdate, ...]:
+    def team_update(self, recipient: ThreadLookup) -> tuple[TeamUpdate, ...]:
         """The observations this attachment carries for that teammate birth: none."""
         return ()
 

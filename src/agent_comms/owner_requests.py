@@ -49,8 +49,8 @@ class RequestSelection(RequestValue, declared_name=None):
             for request in self.select(store, registry.require(name).acting_identity)
         )
 
-    def for_order(self, store: TodoStore, commander: ThreadIncarnation) -> OwnerRequestId:
-        selected = self.select(store, commander)
+    def for_order(self, store: TodoStore, actor: ThreadIncarnation) -> OwnerRequestId:
+        selected = self.select(store, actor)
         if len(selected) != 1:
             raise RelationViolationError("An order needs exactly one open owner request.")
         return selected[0].id
@@ -59,7 +59,7 @@ class RequestSelection(RequestValue, declared_name=None):
     def select(
         self,
         store: TodoStore,
-        commander: ThreadIncarnation,
+        actor: ThreadIncarnation,
     ) -> tuple[OwnerRequest, ...]: ...
 
 
@@ -85,10 +85,10 @@ class OwnerRequestId(SingleFieldValue, RequestLink, RequestSelection):
     def select(
         self,
         store: TodoStore,
-        commander: ThreadIncarnation,
+        actor: ThreadIncarnation,
     ) -> tuple[OwnerRequest, ...]:
         request = store.owner_request(self)
-        request.require_open(commander)
+        request.require_open(actor)
         return (request,)
 
 
@@ -103,9 +103,9 @@ class NewestOpenRequest(NullMember, RequestSelection):
     def select(
         self,
         store: TodoStore,
-        commander: ThreadIncarnation,
+        actor: ThreadIncarnation,
     ) -> tuple[OwnerRequest, ...]:
-        return store.open_requests(commander, limit=1)
+        return store.open_requests(actor, limit=1)
 
 
 class RequestState(DeclaredFamily, affix="RequestState"):

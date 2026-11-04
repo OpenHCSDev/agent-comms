@@ -236,8 +236,8 @@ class TeamUpdate(OwnerNotice, declared_name=None):
         """The packet's position under the teammate birth it was published for."""
         yield TeamUpdatePosition(message.seq, self.commander.require_recorded().lookup)
 
-    def team_update(self, commander: ThreadLookup) -> tuple[TeamUpdate, ...]:
-        return (self,) if self.commander.require_recorded().lookup == commander else ()
+    def team_update(self, recipient: ThreadLookup) -> tuple[TeamUpdate, ...]:
+        return (self,) if self.commander.require_recorded().lookup == recipient else ()
 
     def category(self, spoken: type[MessageCategory]) -> type[MessageCategory]:
         """A board packet speaks in the owner's voice yet is not his words: its own category."""
@@ -255,7 +255,7 @@ class TeamUpdate(OwnerNotice, declared_name=None):
             "BOARD (Core heartbeat; Tristan's own words never arrive in this format)",
             "Each rule prints its shared words once; '…' in a header is each row's own words.",
             *hud, "",
-            "Full evidence: comms_hud board/open_pings, or Toad /commander original details",
+            "Full evidence: comms_hud board/open_pings, or Toad /recipient original details",
         ))
 
     def board(self, comms: Comms) -> tuple[BoardEntry, ...]:
@@ -282,27 +282,27 @@ class TeamUpdate(OwnerNotice, declared_name=None):
             raise RelationViolationError("Team observations changed recipient incarnation")
 
     @classmethod
-    def latest(cls, comms: Comms, commander: ThreadIncarnation) -> tuple[TeamUpdate, ...]:
+    def latest(cls, comms: Comms, recipient: ThreadIncarnation) -> tuple[TeamUpdate, ...]:
         """The last retained observation, even when nothing was sent to the bus."""
-        return TeamUpdateStore.for_team(comms.root, commander).read()
+        return TeamUpdateStore.for_team(comms.root, recipient).read()
 
     @classmethod
-    def published(cls, comms: Comms, commander: ThreadIncarnation) -> tuple[TeamUpdate, ...]:
+    def published(cls, comms: Comms, recipient: ThreadIncarnation) -> tuple[TeamUpdate, ...]:
         """The last actual publication: what was announced, not just observed."""
-        lookup = commander.require_recorded().lookup
+        lookup = recipient.require_recorded().lookup
         with comms.bus.bus.observing() as db:
             messages = TeamUpdatePosition.latest(db, lookup)
         return tuple(packet for message in messages
                      for packet in message.task.team_update(lookup))
 
     @classmethod
-    def current_board(cls, comms: Comms, commander: str) -> tuple[BoardEntry, ...]:
+    def current_board(cls, comms: Comms, recipient: str) -> tuple[BoardEntry, ...]:
         """The retained observation's board, derived at the moment of asking."""
-        return tuple(entry for latest in cls.latest(comms, comms.registry.require(commander).incarnation)
+        return tuple(entry for latest in cls.latest(comms, comms.registry.require(recipient).incarnation)
                      for entry in latest.board(comms))
 
     @classmethod
-    def derive(cls, commander: ThreadIncarnation, states: tuple[TeammateState, ...],
+    def derive(cls, recipient: ThreadIncarnation, states: tuple[TeammateState, ...],
                rules: tuple[StandingRule, ...],
                previous: tuple[TeamUpdate, ...], *,
                published: tuple[TeamUpdate, ...], now: float,
@@ -329,11 +329,11 @@ class TeamUpdate(OwnerNotice, declared_name=None):
         ))
         announced = {ping.key: ping for packet in published for ping in packet.handled}
         new = tuple(ping for ping in handled if announced.get(ping.key) != ping)
-        notice = TeamUpdateNotice(commander, handled, not_applied=not_applied)
+        notice = TeamUpdateNotice(recipient, handled, not_applied=not_applied)
         opened = notice.open_pings(history)
         open_members = frozenset(opened)
         packet = TeamDecisions(
-            commander, handled, new,
+            recipient, handled, new,
             tuple(ping for ping in handled
                   if ping in began and ping in open_members
                   and ping.waits_on_team(now - AwaitingTeam.seconds)),
@@ -342,7 +342,7 @@ class TeamUpdate(OwnerNotice, declared_name=None):
         return TeamDelivery(packet, opened)
 
     @classmethod
-    def report_failure(cls, commander: ThreadIncarnation, failure: ServicePassFailing,
+    def report_failure(cls, recipient: ThreadIncarnation, failure: ServicePassFailing,
                        previous: tuple[TeamUpdate, ...], *,
                        published: tuple[TeamUpdate, ...],
                        now: float) -> tuple[TeamUpdate, ...]:
@@ -356,7 +356,7 @@ class TeamUpdate(OwnerNotice, declared_name=None):
                     (*handled, replace(ping, since=ping.since.continued_from(now))))
         current = next(line for line in retained if line == ping)
         return (TeamDecisions(
-            commander, retained, (current,), (),
+            recipient, retained, (current,), (),
             not_applied=tuple(line for packet in previous for line in packet.not_applied),
         ),)
 
@@ -412,8 +412,8 @@ class TeamUpdateStore(PatternFile, SingleFileStore, DurableFile,
     record_type = tuple[TeamUpdate, ...]
 
     @classmethod
-    def for_team(cls, root: Path, commander: ThreadIncarnation) -> Self:
-        return cls(cls.path_in(root, lookup=str(commander.require_recorded().lookup)))
+    def for_team(cls, root: Path, recipient: ThreadIncarnation) -> Self:
+        return cls(cls.path_in(root, lookup=str(recipient.require_recorded().lookup)))
 
     def empty(self) -> tuple[TeamUpdate, ...]:
         return ()
