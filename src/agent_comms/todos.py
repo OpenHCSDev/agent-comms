@@ -3262,12 +3262,12 @@ class OrderClaim:
     @classmethod
     def for_order(
         cls, todo: Todo, actor: ThreadIncarnation, pull_request: PullRequestLink, head: str,
-        report: str, answer: MessageReference, *,
+        report: str, answers: tuple[MessageReference, ...], *,
         reviewer: ClaimReviewer = AssignedClaimReviewer(),
     ) -> OrderClaim:
         return cls(
             pull_request, head,
-            Message(actor.name, reviewer.identity(todo).name, report, InfoKind, answers=(answer,)),
+            Message(actor.name, reviewer.identity(todo).name, report, InfoKind, answers=answers),
             reviewer=reviewer,
         )
 
@@ -3692,6 +3692,10 @@ class HolderConsent(ABC):
     def require(self, incoming: IncomingWork, db: sqlite3.Connection, unit: ThreadIncarnation,
                 snapshot: RegistrySnapshot) -> None: ...
 
+    @abstractmethod
+    def answered(self, todo: Todo) -> tuple[MessageId, ...]:
+        """The order message a delivery of this work answers."""
+
 
 class HandedWork(HolderConsent):
     """Work a colleague hands over: a busy holder refuses it unless it belongs to held work."""
@@ -3699,6 +3703,9 @@ class HandedWork(HolderConsent):
     def require(self, incoming: IncomingWork, db: sqlite3.Connection, unit: ThreadIncarnation,
                 snapshot: RegistrySnapshot) -> None:
         incoming.require_free(db, unit, snapshot)
+
+    def answered(self, todo: Todo) -> tuple[MessageId, ...]:
+        return (todo.latest_message.message_id,)
 
 
 class SelfFiledWork(HolderConsent):
@@ -3708,6 +3715,10 @@ class SelfFiledWork(HolderConsent):
     def require(self, incoming: IncomingWork, db: sqlite3.Connection, unit: ThreadIncarnation,
                 snapshot: RegistrySnapshot) -> None:
         pass
+
+    def answered(self, todo: Todo) -> tuple[MessageId, ...]:
+        """Nobody sent this order, so its delivery answers no message."""
+        return ()
 
 
 @dataclass(frozen=True)
