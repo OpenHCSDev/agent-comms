@@ -50,11 +50,11 @@ def inlined(schema: object, definitions: Mapping[str, object],
 
 def record_schema(record: type) -> object:
     """The record's schema with no document-local reference names left in it."""
-    match FieldCodec.record_schema(record):
-        case {"$defs": dict() as definitions, **schema}:
-            return inlined(schema, definitions)
-        case schema:
-            return schema
+    schema = FieldCodec.record_schema(record)
+    match schema:
+        case {"$defs": dict() as definitions, **stored}:
+            return inlined(stored, definitions)
+    return schema
 
 
 def stored_format(record: type) -> Iterator[audit.project.StoredFormat]:
