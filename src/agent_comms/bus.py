@@ -184,6 +184,10 @@ class BusReader(RouteCounts, ABC):
         with self.observing() as db:
             return BusActivityIndex.clocks(db)
 
+    def channel_clocks(self, target: str) -> ActivityClocks:
+        with self.observing() as db:
+            return BusActivityIndex.clocks_of(db, target)
+
     def target_activity(self, predicate: str, parameters: tuple[object, ...]) -> ChannelActivity:
         with self.observing() as db:
             return BusActivityIndex.aggregate(db, predicate, parameters)

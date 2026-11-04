@@ -20,7 +20,8 @@ from typing import TYPE_CHECKING
 
 from agent_comms.bus import Bus, BusSnapshot
 from agent_comms.catalog_store import ChannelCatalog
-from agent_comms.channel_targets import NamedTarget
+from agent_comms.catalog_document import CatalogAccess
+from agent_comms.channel_targets import ChannelTarget, NamedTarget
 from agent_comms.child_process import AsyncWork
 from agent_comms.native_build_inputs import GitLaunch
 from agent_comms.channels import AnyChannel, Channel
@@ -132,8 +133,13 @@ class MessageBus[Writes: Publisher]:
         yield self.bus.activity_clocks()
 
     def require_channel(self, target: str) -> Channel:
-        with self.opened_activity() as activity:
-            return self._channels.read().require_channel(target, activity)
+        return self.channel_in(self._channels.read(), target)
+
+    def channel_in(self, catalog: CatalogAccess, target: str) -> Channel:
+        """A lookup needs its own channel's clocks only. Every inbox read makes several, and the
+        whole index is a thousand rows."""
+        name = ChannelTarget.normalize_name(target)
+        return catalog.require_channel(name, self.bus.channel_clocks(name))
 
     def channel_declarations(self):
         with self.opened_activity() as activity:
@@ -159,12 +165,7 @@ class MessageBus[Writes: Publisher]:
         after: InboxStart = FirstUnreadStart(), bounds: PageBounds = PageBounds(),
     ) -> InboxPage:
         catalog = self._channels.read()
-        activity = self.bus.activity_clocks()
-
-        def require_channel(channel: str) -> Channel:
-            """One read's channels: the catalog and activity it captured, not a fresh read each."""
-            return catalog.require_channel(channel, activity)
-
+        require_channel = partial(self.channel_in, catalog)
         delivery = DeliveryScope.capture(name, snapshot, catalog)
         selection = delivery.selection(target, snapshot, require_channel)
         document, seen = after.read_basis(self.reads, delivery.actor, snapshot)

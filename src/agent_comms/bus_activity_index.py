@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Annotated
 
@@ -48,10 +49,19 @@ class BusActivityIndex(activity_clocks.ChannelActivity, ActivityMaximum):
     @classmethod
     def clocks(cls, db: sqlite3.Connection) -> activity_clocks.ActivityClocks:
         return activity_clocks.ActivityClocks(
-            {row.target: activity_clocks.ChannelActivity(row.last_message, row.last_user_input)
-             for row in cls.select(db)},
+            cls.channels(cls.select(db)),
             {row.sender: row.last_sent for row in SentActivity.select(db)},
         )
+
+    @classmethod
+    def clocks_of(cls, db: sqlite3.Connection, target: str) -> activity_clocks.ActivityClocks:
+        """One channel's clocks, from its own row."""
+        return activity_clocks.ActivityClocks(cls.channels(cls.select(db, target=target)))
+
+    @staticmethod
+    def channels(rows: Iterable[BusActivityIndex]) -> dict[str, activity_clocks.ChannelActivity]:
+        return {row.target: activity_clocks.ChannelActivity(row.last_message, row.last_user_input)
+                for row in rows}
 
 
 @dataclass(frozen=True)

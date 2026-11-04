@@ -148,6 +148,11 @@ class RegistryNames(Generic[Member]):
         for alias in self.aliases:
             yield alias, self.require(alias)
 
+    def named_incarnations(self) -> Iterator[tuple[str, ThreadIncarnation]]:
+        """Every current and retained name with its identity."""
+        for name, source in self.named_members():
+            yield name, source.incarnation
+
     def names_for(self, name: str) -> frozenset[str]:
         """Current and retained names of one declared member."""
         canonical = self.canonical_name(name)
@@ -226,10 +231,10 @@ class RegistryProvenance(RegistryNames[ThreadProvenance]):
         senders = {}
         births = {}
         unrecorded: list[str] = []
-        for name, source in self.named_members():
-            births[name] = source.incarnation.wire_birth
+        for name, incarnation in self.named_incarnations():
+            births[name] = incarnation.wire_birth
             senders[name] = tuple(DeliveryScope.sender_lookups(
-                source.incarnation, partial(unrecorded.append, name)
+                incarnation, partial(unrecorded.append, name)
             ))
         return SenderBindings(
             senders=FieldCodec.compact(FieldCodec.encode(
