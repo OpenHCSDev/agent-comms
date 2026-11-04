@@ -53,27 +53,27 @@ class SelectedCheckout(RecordMember):
 @dataclass(frozen=True, slots=True)
 class StorageRoots(RecordMember, ThreadStorage):
     scratch: StoragePath
-    checkouts: Annotated[tuple[SelectedCheckout, ...], WireOmitDefault()] = ()
+    selected_checkouts: Annotated[tuple[SelectedCheckout, ...], WireOmitDefault()] = ()
 
     def __post_init__(self) -> None:
         if not self.scratch.is_absolute():
             raise ValueError("Storage scratch requires an absolute path.")
-        if len({choice.repository for choice in self.checkouts}) != len(self.checkouts):
+        if len({choice.repository for choice in self.selected_checkouts}) != len(self.selected_checkouts):
             raise ValueError("A repository can have only one selected checkout.")
 
     def chosen(self, repository: RepositoryName) -> tuple[Path, ...]:
-        return tuple(choice.path for choice in self.checkouts
+        return tuple(choice.path for choice in self.selected_checkouts
                      if choice.repository == repository)
 
     def choosing(self, repository: RepositoryName, path: Path) -> StorageRoots:
-        return replace(self, checkouts=(*(
-            choice for choice in self.checkouts if choice.repository != repository
+        return replace(self, selected_checkouts=(*(
+            choice for choice in self.selected_checkouts if choice.repository != repository
         ), SelectedCheckout(repository, path)))
 
     def relocated(self, source: Path, destination: Path) -> StorageRoots:
-        return replace(self, checkouts=tuple(
+        return replace(self, selected_checkouts=tuple(
             replace(choice, path=destination) if choice.path == source else choice
-            for choice in self.checkouts))
+            for choice in self.selected_checkouts))
 
     def assigned(self, rule: StorageRule, name: str) -> StorageRoots:
         return self

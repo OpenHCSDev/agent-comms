@@ -5,6 +5,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass, replace
 from pathlib import Path
+import time
 from typing import Annotated
 
 import pytest
@@ -44,6 +45,12 @@ from agent_comms.thread_storage import (
 )
 from agent_comms.threads import Thread
 from agent_comms.tool_denial import SelectedToolDenied
+from agent_comms.goals import OrderCheck
+from agent_comms.registry_document import RegisteredTeamProject
+from agent_comms.order_runs import MechanicalOrderRun
+from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.todos import EditWorkplaces, PendingProblemOrder, PullRequestLink
+from source_revision_fixture import SourceRepository
 
 
 def test_isolated_policy_is_durable_and_preserves_existing_private_limits(tmp_path: Path):
@@ -231,6 +238,8 @@ def checkout_comms(tmp_path: Path) -> Comms:
     comms = wire(tmp_path / 'wire')
     comms.registry.storage_rule = StorageRule(
         checkout_base=base, scratch_base=tmp_path / 'scratch', floor_gib=0)
+    StorageRule.path_in(comms.root).write_text(
+        FieldCodec.compact(FieldCodec.encode(comms.registry.storage_rule)))
     comms.registry.declare(Thread('worker', frozenset(), Checkout(home)))
     return comms
 
@@ -470,6 +479,9 @@ def multiple_repository_checkouts(checkout_comms: Comms) -> tuple[RepositoryChec
     Repo.git(other, 'commit', '-q', '--allow-empty', '-m', 'seed')
     result = []
     for source in (owner.project_path, other):
+        (source / 'owner.py').write_text(SourceRepository.main_source)
+        Repo.git(source, 'add', 'owner.py')
+        Repo.git(source, 'commit', '-q', '-m', 'Declare the fixture source owner')
         repository = Repo.of(source).github
         first, second = (GoalCheckoutAllocation.declared_for_goal(
             rule, owner, GoalId.mint(), repository) for _ in range(2))
@@ -519,6 +531,51 @@ def test_independent_repository_choices_survive_navigation_and_reopening(
                                 (companion.repository,), GoalId.mint()) == {
                                     primary.first, companion.first}
     assert {path: (path / 'held-work.txt').read_bytes() for path in before} == before
+
+
+def test_normal_companion_order_admission_uses_the_persisted_repository_choices(
+        checkout_comms: Comms, multiple_repository_checkouts: tuple[RepositoryCheckouts, ...]):
+    comms = checkout_comms
+    core, toad = multiple_repository_checkouts
+    owner = comms.registry.require('worker')
+    requester = comms.registry.declare(Thread('requester', frozenset(), Checkout(comms.root)))
+    comms.registry.set_team_project(RegisteredTeamProject(requester.incarnation, (
+        Repo(checkout=core.first, github=core.repository),
+        Repo(checkout=toad.first, github=toad.repository))))
+    request = comms.goals.todos.add_request(
+        requester.incarnation, 'Use both explicitly selected repository checkouts').id
+    now = RecordedEventTime(time.time())
+    scope = SourceRepository.scope()
+    order = PendingProblemOrder(
+        owner=scope.shape.parents[0], scope=scope, run=MechanicalOrderRun(),
+        check=OrderCheck(core.first, 'true'),
+        edits=('Use both selected repositories while retaining the other held worktrees.',),
+        banned=('No arbitrary checkout selection or held-work deletion.',),
+        report='Report the actual selected edit boundaries.', at=now,
+        pull_requests=(PullRequestLink(toad.repository, 7),))
+    generation = GoalId.mint()
+
+    def admit():
+        return comms.goals.todos.create(
+            'P1', core.repository, 'Use both explicitly selected repository checkouts',
+            creator=requester, owner=comms.registry.require('worker'),
+            assigner=requester.incarnation, generation=generation, review_at=now,
+            order=order, request=request)
+
+    with pytest.raises(StorageDenied, match='Multiple owned'):
+        admit()
+    assert comms.registry.require('worker') == owner
+    for pair in multiple_repository_checkouts:
+        comms.registry.select_checkout(owner.incarnation, pair.repository, pair.first)
+    selected = comms.registry.require('worker')
+    admitted = admit()
+    places = EditWorkplaces.for_assignment(
+        comms.root, comms.registry.snapshot(), (), (admitted,))
+    assert places.roots_for(admitted.id) == frozenset((core.first, toad.first))
+    assert comms.registry.require('worker') == selected
+    assert comms.registry.require('requester') == requester
+    for pair in multiple_repository_checkouts:
+        assert (pair.second / 'held-work.txt').read_text() == str(pair.second)
 
 
 def test_missing_ambiguous_choice_and_invalid_selection_refuse(
@@ -575,12 +632,12 @@ def test_repository_choices_are_nominal_and_transfer_only_the_selected_path(tmp_
     original = StorageRoots(tmp_path, (SelectedCheckout(repository, tmp_path / 'first'),))
     changed = original.choosing(same, tmp_path / 'second')
     assert changed.chosen(repository) == (tmp_path / 'second',)
-    assert len(changed.checkouts) == 1
+    assert len(changed.selected_checkouts) == 1
     assert FieldCodec.decode(StorageRoots, FieldCodec.encode(changed)) == changed
     assert changed.relocated(tmp_path / 'second', tmp_path / 'third').chosen(repository) == (
         tmp_path / 'third',)
     with pytest.raises(ValueError, match='only one'):
-        StorageRoots(tmp_path, (*original.checkouts, SelectedCheckout(same, tmp_path / 'second')))
+        StorageRoots(tmp_path, (*original.selected_checkouts, SelectedCheckout(same, tmp_path / 'second')))
 
 
 def test_projected_checkout_membership_follows_add_and_remove(checkout_comms: Comms):
