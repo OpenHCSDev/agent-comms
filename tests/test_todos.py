@@ -827,8 +827,7 @@ def test_reused_enforcement_rejects_a_new_idle_goal(checkout_bus):
         assert checkout_bus.registry.require(selected.name).goal == changed
         assert checkout_bus.goals.todos.get(before.id) == before
         assert isinstance(rejected[rule], GoalChangedError)
-        assert rejected[rule].thread.name == selected.name
-        assert rejected[rule].expected == selected.goal.captured
+        assert str(rejected[rule]).startswith(f"{selected.name}: observed {selected.goal.captured}")
 
 
 @pytest.mark.parametrize("number", (0, -1))
