@@ -129,9 +129,6 @@ class TakingLedger:
     def receiving(self, total: int) -> MonitorEvidence:
         return ReceivingMonitor(total)
 
-    def unrecorded(self) -> MonitorEvidence:
-        return UnrecordedMonitor()
-
 
 @dataclass(frozen=True)
 class PrintLedgerId(TakingLedger):
@@ -142,9 +139,6 @@ class PrintLedgerId(TakingLedger):
 
     def receiving(self, total: int) -> MonitorEvidence:
         return LedgerReceivingMonitor(total, self)
-
-    def unrecorded(self) -> MonitorEvidence:
-        return LedgerUnrecordedMonitor(self)
 
 
 @dataclass(frozen=True)
@@ -157,12 +151,9 @@ class TakenUnderLedger(MonitorEvidence):
 
 @dataclass(frozen=True)
 class LedgerReceivingMonitor(TakenUnderLedger, ReceivingMonitor):
-    """An inline message a cloud watch took under this ledger, awaiting its one shown part."""
+    """A message a cloud watch took under this ledger, awaiting every part: its one inline
+    event, or each slice a Read of its export shows."""
 
-
-@dataclass(frozen=True)
-class LedgerUnrecordedMonitor(TakenUnderLedger, UnrecordedMonitor):
-    """A message sent as a file under this ledger; no Read here can confirm it."""
 
 
 @dataclass(frozen=True)
