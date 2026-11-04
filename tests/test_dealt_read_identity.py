@@ -76,8 +76,8 @@ def test_his_question_quotes_the_written_audit_statement_and_asks():
     from agent_comms.rule_deal import MeantRecord, RuleAudit, SessionAudit
 
     wrote = RuleAudit("spine", does="I end turns on a teammate's state, not on a wait.\nSecond line")
-    audit = SessionAudit((wrote, RuleAudit("ally"), RuleAudit("owner-authority", does="I take his plan as the work.")), ())
-    asked = audit.batch(frozenset({"spine", "ally"})).his_question()
+    audit = SessionAudit((wrote, RuleAudit("deadlines"), RuleAudit("owner-authority", does="I take his plan as the work.")), ())
+    asked = audit.batch(frozenset({"spine", "deadlines"})).his_question()
     assert asked == f"> I end turns on a teammate's state, not on a wait.\n\n{MeantRecord.question}"
     assert audit.batch(frozenset({"owner-authority"})).his_question() == (
         f"> I take his plan as the work.\n\n{MeantRecord.question}")  # its own batch, not an older line

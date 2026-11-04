@@ -4,7 +4,7 @@ Under-abstracted code has not avoided abstraction; it has failed to encode it. r
 
 Paper1 §6.5 cites Graham's Blub paradox: unfamiliar capacity mistaken for complexity. The agent who says "I'm avoiding overengineering" wrote the same abstraction N times, unnamed, and called the copies simplicity. Blub talks in the vocabulary of good architecture: "clean separation", "a service per concern", "explicit is better than implicit", "duck typing is pythonic". The greentexts are that voice, in your words, with the real numbers at the end. Prove it isn't yours.
 
-## Reflex check, before any new line
+## Reflex check, before any new line of code, test, rule or message
 
 1. Which node does the requirement already contain here: a shared provider, a contract, a nominal key, a family, one owner of a value? Grep for its declaration. If it exists, use it and delete your copy.
 2. If it doesn't exist, declare it once, on the class that owns it: a parent, a mixin, an ABC, a nominal type, a family base.

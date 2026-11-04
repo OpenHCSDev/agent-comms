@@ -566,9 +566,9 @@ def test_failure_catalog_numbers_every_evidenced_member_once():
 
 def test_the_reading_order_names_exactly_the_packaged_rules_and_the_spine_leads():
     names = tuple(RuleFile.read(path).name for path in TeamPackage.rules_files())
-    assert sorted(RuleFile.reading_order) == sorted(names)
-    assert tuple(rule.name for rule in RuleFile.packaged()) == RuleFile.reading_order
-    assert RuleFile.reading_order[0] == "spine"
+    assert sorted(TeamPackage.reading_order) == sorted(names)
+    assert tuple(rule.name for rule in RuleFile.packaged()) == TeamPackage.reading_order
+    assert TeamPackage.reading_order[0] == "spine"
 
 
 def test_every_full_deal_reads_the_paper_before_any_rule():
@@ -589,7 +589,7 @@ def test_the_prime_variants_cover_papers_and_patterns_once_each_with_the_pattern
         assert all(rule.path in sources for rule in DeckReader.rules())
         kept.add((paper <= set(sources), patterns in sources))
         if patterns in sources:
-            assert prime.reader.leading()[-1] == patterns
+            assert prime.reader.sources()[-1] == patterns
         assert prime.reader.slices()
     assert kept == {(True, True), (True, False), (False, True), (False, False)}
 
@@ -771,7 +771,7 @@ def test_dealt_files_open_in_order_with_the_patterns_last(capsys, dealt_session,
     papers: the next batch of dealt files opens, any later one is refused and named the next."""
     transcript, _ = dealt_session
     dealt = DeckReader.sources()
-    assert [path.stem for path in dealt[-2:]] == ["patterns", "ally"]
+    assert dealt[-1].stem == "patterns"
     papers = TeamPackage.paper()
     past_batch = papers[Unengaged.batch]
     for later in (TeamPackage.patterns(), DeckReader.rules()[0].path, past_batch):

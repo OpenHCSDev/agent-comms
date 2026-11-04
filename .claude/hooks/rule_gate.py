@@ -26,13 +26,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
-RULE_ORDER = (
-    "spine", "self-protection", "after-compaction", "unnecessary", "correct-maintenance",
-    "slop-and-polymorphism", "owner-authority", "evidence-not-claims", "plain-reporting",
-    "refactor-game", "no-blocking", "finish-line", "fork-orders", "tests-and-commands",
-    "ship-and-install", "hotfix", "storage-and-cleanup", "send-backs-and-strikes",
-    "blunt-reviews", "coordination", "self-correction", "deadlines",
-)
 ASKS = Path.home() / ".claude" / "tristan-asks.md"
 
 
@@ -77,14 +70,12 @@ class Reading:
 
     @classmethod
     def dealt(cls, store: Path) -> Reading:
-        team = team_directory()
-        papers = [path for paper in ("semantic-completeness", "less-is-harder")
-                  for path in sorted((team / "paper" / paper).glob("*.md"))]
-        rules = [team / "rules" / f"{name}.md" for name in RULE_ORDER]
-        listed = {*RULE_ORDER, "ally"}
-        rules += sorted(path for path in (team / "rules").glob("*.md") if path.stem not in listed)
-        extra = [team / "patterns.md", team / "rules" / "ally.md", ASKS]
-        files = [path.resolve() for path in papers + rules + extra if path.is_file()]
+        """The papers, the rules and the pattern catalog in the order the package declares, read
+        from the checkout beside this script: its TeamPackage imports with no dependencies."""
+        sys.path.insert(0, str(team_directory().parent.parent))
+        from agent_comms.team.package import TeamPackage
+        dealt = (*TeamPackage.paper(), *TeamPackage.rules_files(), TeamPackage.patterns(), ASKS)
+        files = [path.resolve() for path in dealt if path.is_file()]
         return cls(store, {path: OwedFile(path) for path in files})
 
     @classmethod
