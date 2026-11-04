@@ -1239,11 +1239,13 @@ class GrantUiVerb(ConnectorRootOptions, declared_name="grant-ui"):
         Argument(flags=("--access",), options={"help": "Declared UI grant capability"}),
     ] = UiReadAccess
 
-    def apply(self, ctx: ConnectorStore) -> str:
+    def apply(self, ctx: ConnectorStore) -> int | str:
+        """The receipt is output, printed like round-trip's; a returned string is a refusal."""
         namespace = RegistryStore.at(self.root).privacy().namespace
         profile = ctx.publish_ui_profile(
             namespace, self.endpoint, self.profile, self.seconds, self.access)
-        return FieldCodec.compact(FieldCodec.encode(profile), allow_nan=False)
+        print(FieldCodec.compact(FieldCodec.encode(profile), allow_nan=False))
+        return 0
 
 
 @dataclass(frozen=True, kw_only=True)
