@@ -270,7 +270,6 @@ jobs:
   nra-gate:
     name: debt-${{ matrix.kind }}
     needs: base
-    if: needs.base.outputs.reused != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -279,7 +278,9 @@ jobs:
     strategy:
       fail-fast: false
       # A root's debt can only grow when the change reaches it: its own files, Core it imports,
-      # or the locked checker. A combined carrier also changes its paired sources.
+      # or the locked checker. A combined carrier also changes its paired sources. No job-level
+      # `if` here: a skipped matrix job never expands, so its required debt-src/debt-tools
+      # checks would never report. A reused queue entry skips inside each leg instead.
       matrix:
         include:
           - kind: src
@@ -296,10 +297,13 @@ jobs:
         env:
           BASE: ${{ needs.base.outputs.base }}
           COMBINED: ${{ needs.base.outputs.combined }}
+          REUSED: ${{ needs.base.outputs.reused }}
           REACHES: ${{ matrix.reaches }}
         run: |
           read -ra paths <<< "$REACHES"
-          if [[ $COMBINED == true ]] || ! git diff --quiet "$BASE" HEAD -- "${paths[@]}"; then
+          if [[ $REUSED == true ]]; then
+            echo "reaches=false" >> "$GITHUB_OUTPUT"
+          elif [[ $COMBINED == true ]] || ! git diff --quiet "$BASE" HEAD -- "${paths[@]}"; then
             echo "reaches=true" >> "$GITHUB_OUTPUT"
           else
             echo "reaches=false" >> "$GITHUB_OUTPUT"
