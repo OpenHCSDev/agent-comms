@@ -160,7 +160,7 @@ def test_worker_answers_each_request_as_that_request_s_holder(monkeypatch, tmp_p
                                   FieldCodec.decode(ProbeReply, FieldCodec.parse(line)).answer)
                 for line in answers.read_text().splitlines()] == list(holders)
     finally:
-        RuntimeProbe.__registry__.pop(HolderSeenProbe.declared_name)
+        HolderSeenProbe.withdraw()
 
 
 def test_a_raising_probe_ends_its_worker_and_refuses_with_its_traceback():

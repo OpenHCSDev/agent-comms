@@ -9,7 +9,7 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_schema import CoordinatorRow
 from agent_comms.coordination_tables.executions import ExecutionReference
 from agent_comms.coordination_tables.recovery import RecoveryAudit
-from agent_comms.typed_table import Column, ForeignKey, TypedTable
+from agent_comms.typed_table import Column, ForeignKey
 
 pytestmark = pytest.mark.refactor_guard
 
@@ -33,7 +33,7 @@ def test_recovery_audit_inherits_changes_to_execution_restriction():
     try:
         assert restriction.sql(RecoveryAuditProbe) in RecoveryAuditProbe.ddl()[0]
     finally:
-        TypedTable.__registry__.pop(RecoveryAuditProbe.declared_name)
+        RecoveryAuditProbe.withdraw()
 
 
 def test_new_declared_table_is_installed_without_schema_roster_edit(tmp_path):
@@ -51,4 +51,4 @@ def test_new_declared_table_is_installed_without_schema_roster_edit(tmp_path):
         with CoordinationStore(database) as reopened:
             assert ProofRow.one(reopened._connection, identity=row.identity) == row
     finally:
-        TypedTable.__registry__.pop(ProofRow.declared_name)
+        ProofRow.withdraw()

@@ -14,7 +14,8 @@ class Declarations:
     generation: ClassVar[int] = 0
 
     @classmethod
-    def declared(cls) -> None:
+    def changed(cls) -> None:
+        """A family gained or lost a member."""
         cls.generation += 1
 
 

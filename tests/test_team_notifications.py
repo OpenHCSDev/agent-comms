@@ -813,7 +813,7 @@ def test_failed_rule_scan_raises_to_the_heartbeat(notification_bus, request):
         def line(self):
             return "unreachable scan result"
 
-    request.addfinalizer(lambda: StandingRule.__registry__.pop(FailedScan.declared_name))
+    request.addfinalizer(FailedScan.withdraw)
     with pytest.raises(IndexError):
         StandingRule.broken(comms, observed=states, frame=frame)
 

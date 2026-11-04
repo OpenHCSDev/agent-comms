@@ -43,7 +43,7 @@ def test_new_policy_drives_eligibility_guidance_and_batching(tmp_path):
         assert ScheduledTurn.take_batch([turn, turn]) == ([turn], [turn])
 
     finally:
-        del ResponsePolicy.__registry__["review"]
+        ReviewPolicy.withdraw()
 
 
 def test_autonomous_turns_keep_message_batches_and_delivery_keys_separate(tmp_path, thread_registration):

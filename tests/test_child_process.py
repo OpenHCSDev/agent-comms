@@ -359,7 +359,7 @@ def test_new_outcome_is_derived_and_field_encoded() -> None:
         assert ChildOutcome.member_named("test_observation") is TestObservationOutcome
         assert FieldCodec.decode(ChildOutcome, FieldCodec.encode(value)) == value
     finally:
-        ChildOutcome.__registry__.pop("test_observation")
+        TestObservationOutcome.withdraw()
 
 
 @pytest.mark.asyncio

@@ -68,7 +68,6 @@ from .nominal.field_codec import (
 from .lifecycle import LifecycleState
 from .locked_store import (
     DeclaredFile,
-    DurableFile,
     ExternalFile,
     FilesRequest,
     PublishedSQLiteFile,

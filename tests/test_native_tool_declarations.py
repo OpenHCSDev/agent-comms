@@ -34,15 +34,15 @@ from delivery_owner_fixture import canonical_agent
 
 
 async def test_new_tool_declaration_drives_presentation_without_coding_permission(acp_tools):
+    @dataclass(frozen=True, kw_only=True)
+    class InspectFixtureTool(SearchAction, ToolDeclaration):
+        label = "Inspect"
+        query: str
+
+        def reads(self):
+            return self.query
+
     try:
-        @dataclass(frozen=True, kw_only=True)
-        class InspectFixtureTool(SearchAction, ToolDeclaration):
-            label = "Inspect"
-            query: str
-
-            def reads(self):
-                return self.query
-
         event = events.ToolStart.from_call("case", "inspect_fixture", {"query": "new declaration"})
         assert (event.title, event.kind) == ("Inspect new declaration", SearchAction)
         owner, received = acp_tools
@@ -75,7 +75,7 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
             {"private": "preserved"},
         )
     finally:
-        ToolDeclaration.__registry__.pop("inspect_fixture", None)
+        InspectFixtureTool.withdraw()
 
 
 @pytest.mark.parametrize("name,label", [("grep", "Search"), ("glob", "Find")])

@@ -324,7 +324,7 @@ def test_retained_alias_contact_without_projected_person_is_unavailable(tmp_path
 def test_new_group_supplies_snapshot_choices_defaults_and_persistence(tmp_path):
     from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.relationships import (
-        InboundRelationshipGroup, RelationshipGroup, SortableRelationshipGroup,
+        InboundRelationshipGroup, SortableRelationshipGroup,
     )
 
     class SortedInboundRelationshipGroup(SortableRelationshipGroup, InboundRelationshipGroup):
@@ -365,4 +365,4 @@ def test_new_group_supplies_snapshot_choices_defaults_and_persistence(tmp_path):
         reopened = wire(comms.root).relationships.snapshot("owner")
         assert FieldCodec.decode(type(reopened), FieldCodec.encode(reopened)) == reopened
     finally:
-        RelationshipGroup.__registry__.pop(SortedInboundRelationshipGroup.declared_name)
+        SortedInboundRelationshipGroup.withdraw()
