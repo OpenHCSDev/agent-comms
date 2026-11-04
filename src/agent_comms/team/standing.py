@@ -279,11 +279,13 @@ class RequestStalled(IndependentStandingRule, UndatedStandingRule):
 
     @classmethod
     def violations(cls, comms: Comms) -> tuple[RequestStalled, ...]:
-        """Every live teammate's open requests: Tristan's asks belong to the team board."""
+        """Every live teammate's open requests, once each: every peer acts for every request, so
+        asking per teammate listed each one once per teammate."""
         store = comms.goals.todos
+        teammates = TeamService.teammates(comms.registry.snapshot(), comms.goals)
         return tuple(cls(request)
-                     for teammate in TeamService.teammates(comms.registry.snapshot(), comms.goals)
-                     for request in store.open_requests(teammate.acting_identity)
+                     for request in store.open_requests_of(
+                         tuple(teammate.acting_identity for teammate in teammates))
                      if not store.serving_orders(request.id))
 
     def line(self) -> str:

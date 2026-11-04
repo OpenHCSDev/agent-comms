@@ -66,9 +66,10 @@ def test_retired_team_requests_follow_peer_authority(
     assert store.open_requests(outsider.acting_identity, limit=1) == (newest,)
     assert not store.open_requests(peer.acting_identity, limit=0)
     assert first.id.for_order(store, peer.acting_identity) == first.id
-    assert first.id in {
-        rule.request.id for rule in RequestStalled.violations(comms)
-    }
+    stalled = [rule.request.id for rule in RequestStalled.violations(comms)]
+    assert first.id in stalled
+    # 2026-11-04: 8 requests printed once per teammate made a board of 104 rows.
+    assert len(stalled) == len(set(stalled))
     peer_context = Team.on_root(peer.name, (repository,), comms.root)
     request_main(["list"], peer_context)
     assert first.id.value in capsys.readouterr().out
