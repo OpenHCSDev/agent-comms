@@ -16,7 +16,7 @@ from agent_comms.installer.practice import PracticeCopy
 from agent_comms.locked_store import RootFile
 from agent_comms.coordination_errors import Refused
 from agent_comms.errors import GoalRefused
-from agent_comms.goal_actions import ClearGoalAction, SetGoalAction
+from agent_comms.goal_actions import ClearGoalAction, CreateProblemGoalAction, SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from agent_comms.owner_protocol import OwnerFailure, OwnerLine
 from agent_comms.recorded_time import RecordedEventTime
@@ -29,6 +29,7 @@ from agent_comms.owner_requests import NewestOpenRequest
 from agent_comms.order_runs import ApplicationOrderRun
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsChannelsTool
+from agent_comms.order_tools import CommsTodoCreateTool
 
 
 pytest_plugins = ("test_todos",)
@@ -201,6 +202,20 @@ def test_second_unplanned_order_is_refused_without_recording(held_team, cited_so
     assert ctx.comms.goals.todos.board() == before
     assert ctx.comms.goals.todos.get("P1") == original
     assert ctx.comms.registry.require("worker").goal == goal
+
+
+def test_a_teammate_files_its_own_second_row_beside_the_one_it_holds(held_team, cited_source):
+    """Every PR needs its board row: comms_todo_create from a holder for itself is never busy."""
+    ctx = held_team
+    worker = ctx.comms.registry.require("worker")
+    held = ctx.comms.goals.todos.get("P1")
+    creation = CreateProblemGoalAction(
+        problem="P2", repo=ctx.repos[0].github, text="Repair the second workflow",
+        assigner=worker.acting_identity, request=held.request.require(),
+        review_at=RecordedEventTime(time.time() + 1000),
+        order=replace(order(cited_source), id=OrderId.mint()))
+    ThreadCaller("worker").invoke(CommsTodoCreateTool(owner="worker", order=creation), ctx.comms)
+    assert {todo.id for todo in ctx.comms.goals.todos.held_by(worker.incarnation)} == {"P1", "P2"}
 
 
 def test_an_order_waiting_on_install_frees_its_holder_for_the_next_order(

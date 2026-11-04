@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator, Mapping
 from contextlib import AbstractContextManager, aclosing
+from dataclasses import dataclass
 from functools import cached_property, partial
+import math
 import time
 from typing import ClassVar
 from pathlib import Path
@@ -14,6 +16,7 @@ from .catalog_store import ChannelCatalog
 from .channel_management import ChannelManagement
 from .collaboration_ledger import CollaborationLedger
 from .context_store import ContextStore
+from .coordination_database import CoordinationStore
 from .coordinator import Coordination
 from .errors import UnregisteredThreadError
 from .goal_management import Goals
@@ -30,7 +33,8 @@ from .publisher import OwnerPublisher
 from .relationships import ThreadRelationships
 from .agent_activity import AgentActivity
 from .registration import Registration
-from .registry_document import RegistrySnapshot
+from .private_path import FileRevision
+from .registry_document import RegistrySnapshot, UnreadRegistry
 from .route_client import ActivityClient
 from .thread_configuration import ThreadConfiguration
 from .thread_identity import ThreadIncarnation
@@ -51,11 +55,40 @@ class InboxActivity(AgentActivity):
     def __init__(self, root: Path, registry: Registration, bus: MessageBus) -> None:
         super().__init__(root, registry)
         self.bus = bus
+        self.coordination = CoordinationStore.path_in(root)
+        self.catalog = ChannelCatalog.at(root).path
+        self.untaken = UntakenCut((), UnreadRegistry(), {})
 
     def stalled(self, readers: tuple[str, ...], snapshot: RegistrySnapshot) -> Mapping[str, float]:
         cutoff = time.time() - self.stall_seconds
-        return {name: oldest for name, oldest in self.bus.oldest_untaken(readers, snapshot).items()
-                if oldest < cutoff}
+        oldest = self.oldest_untaken(snapshot)
+        return {name: at for name in readers if (at := oldest.get(name, math.inf)) < cutoff}
+
+    def oldest_untaken(self, snapshot: RegistrySnapshot) -> Mapping[str, float]:
+        """Every claimed reader's oldest untaken message, read again only when something that
+        decides it changed: a bus message, a take or claim in coordination, a channel edit that
+        moves a delivery scope (the catalog), or a registry cut. One observer pass captures
+        activity through several paths; they share this read."""
+        key = (self.bus.bus.revision(), FileRevision.capture(self.coordination),
+               FileRevision.capture(self.coordination.with_name(self.coordination.name + "-wal")),
+               FileRevision.capture(self.catalog))
+        if not self.untaken.answers(key, snapshot):
+            self.untaken = UntakenCut(
+                key, snapshot, self.bus.oldest_untaken(snapshot.claimed_readers(snapshot.threads), snapshot))
+        return self.untaken.oldest
+
+
+@dataclass(frozen=True)
+class UntakenCut:
+    """The oldest untaken messages read at one bus, coordination and registry cut."""
+
+    key: tuple[object, ...]
+    registry: RegistrySnapshot | UnreadRegistry
+    oldest: Mapping[str, float]
+
+    def answers(self, key: tuple[object, ...], snapshot: RegistrySnapshot) -> bool:
+        """The same cut: the snapshot by identity, since one registry revision decodes one."""
+        return self.registry is snapshot and self.key == key
 
 
 class Comms(ActivityClient):

@@ -1178,6 +1178,10 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
             for plan in FieldCodec.field_plans(type(self)) if plan.declared.init
         ))
 
+    def claimed_readers(self, names: Iterable[str]) -> tuple[str, ...]:
+        """Each of ``names`` whose status claims a reader of its inbox."""
+        return tuple(reader for name in names for reader in self.status(name).claimed_readers(name))
+
     def changed_names_to(self, later: RegistrySnapshot) -> frozenset[str]:
         """What a reader that last read this cut must re-read at ``later``."""
         return later.changed_names(self)

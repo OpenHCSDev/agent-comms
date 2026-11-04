@@ -122,3 +122,39 @@ def test_a_message_younger_than_the_window_is_not_a_stall(tmp_path, connected, b
     sent_to_bridge(connected, "just sent")
 
     assert type(readiness(tmp_path)) is ReadyDrainReadiness
+
+
+def test_one_reader_sees_a_take_clear_the_stall_with_no_new_message(
+        tmp_path, connected, bridge_process, instant_stall):
+    """One observer keeps its InboxActivity across passes; a take writes coordination and
+    no bus message, and that alone must re-read the stall."""
+    observer = wire(tmp_path)
+
+    def observed():
+        return observer.agents.activity_of("bridge", snapshot=observer.registry.snapshot()).readiness
+
+    os.kill(bridge_process.pid, signal.SIGSTOP)
+    sent_to_bridge(connected, "probe while frozen")
+    assert type(observed()) is StalledDeliveryReadiness
+    assert type(observed()) is StalledDeliveryReadiness
+
+    os.kill(bridge_process.pid, signal.SIGCONT)
+    for message in untaken(tmp_path):
+        take(tmp_path, message)
+
+    assert type(observed()) is ReadyDrainReadiness
+
+
+
+def test_captures_at_one_cut_share_one_inbox_read(tmp_path, connected):
+    """One observer pass captures activity through several paths; only a new write re-reads."""
+    observer = wire(tmp_path)
+
+    def capture():
+        observer.agents.activity_of("bridge", snapshot=observer.registry.snapshot())
+        return observer.agents.untaken
+
+    first = capture()
+    assert capture() is first
+    sent_to_bridge(connected, "a new message is a new cut")
+    assert capture() is not first

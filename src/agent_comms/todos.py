@@ -3685,6 +3685,31 @@ class NoTodoHolder(TodoHolder):
         pass
 
 
+class HolderConsent(ABC):
+    """Where an assignment came from, which decides whether its holder must be free for it."""
+
+    @abstractmethod
+    def require(self, incoming: IncomingWork, db: sqlite3.Connection, unit: ThreadIncarnation,
+                snapshot: RegistrySnapshot) -> None: ...
+
+
+class HandedWork(HolderConsent):
+    """Work a colleague hands over: a busy holder refuses it unless it belongs to held work."""
+
+    def require(self, incoming: IncomingWork, db: sqlite3.Connection, unit: ThreadIncarnation,
+                snapshot: RegistrySnapshot) -> None:
+        incoming.require_free(db, unit, snapshot)
+
+
+class SelfFiledWork(HolderConsent):
+    """Work the holder files for itself beside what it holds: filing it is the consent, so
+    every PR it has in flight can have its board row."""
+
+    def require(self, incoming: IncomingWork, db: sqlite3.Connection, unit: ThreadIncarnation,
+                snapshot: RegistrySnapshot) -> None:
+        pass
+
+
 @dataclass(frozen=True)
 class IncomingWork:
     """The problems one order hands a unit, decided together under one Todo transaction.
@@ -3704,7 +3729,8 @@ class IncomingWork:
                      snapshot: RegistrySnapshot) -> None:
         """The one busy-unit decision, under this transaction and its registry cut.
 
-        An open order that occupies the unit refuses unrelated work for every actor.
+        An open order that occupies the unit refuses unrelated work a colleague hands it;
+        work the unit files for itself never asks (SelfFiledWork).
         Assignment owns consent for changing the work already inside this group.
         Creator and previous assigner confer no rank. Work waiting only on install
         holds no unit, as ProblemOrder.occupies_holder answers."""
@@ -3785,7 +3811,7 @@ class Assignment(TodoHolder):
         if (self.owner_identity, self.generation) != (prepared.owner_identity, prepared.generation):
             raise TodoConflict(proposed)
         workplaces.require_owner(proposed, snapshot)
-        incoming.require_free(db, self.owner_identity, snapshot)
+        self.consent.require(incoming, db, self.owner_identity, snapshot)
         worktrees = workplaces.roots_for(problem)
         for held in TodoStore._open(db, "assignment IS NOT NULL", ()):
             previous = held.held()
@@ -3796,6 +3822,13 @@ class Assignment(TodoHolder):
                 raise SharedWorktreeRefusal(
                     problem, held.id, self.owner_identity, previous.owner_identity, shared
                 )
+
+    @property
+    def consent(self) -> HolderConsent:
+        """Where this work came from, decided once from who assigned it to whom."""
+        if self.parent_identity == self.owner_identity:
+            return SelfFiledWork()
+        return HandedWork()
 
     @property
     def parent_identity(self) -> ThreadIncarnation:
