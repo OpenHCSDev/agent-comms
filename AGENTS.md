@@ -40,7 +40,9 @@ never here. This file holds only facts about this host and this setup.
 ## Permissions
 
 - Privileged tooling is limited to read-only `sudo -n py-spy dump` and
-  `sudo -n py-spy record`. No sudo for Python, no `sys.remote_exec`, no debugger or code
+  `sudo -n py-spy record`. Always pass `--nonblocking` to `record`: by default it pauses the
+  process at every sample, and on 2026-11-04 that froze a session bridge for over 3 minutes
+  while the bus still said connected. A normal user cannot kill it once it is running. No sudo for Python, no `sys.remote_exec`, no debugger or code
   injection into a running process. When attribution needs instrumentation, load it at
   a normal-user launch.
 - Live-path verification with Tristan's saved sessions and the configured provider is
