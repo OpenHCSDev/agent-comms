@@ -107,25 +107,39 @@ async def test_the_cloud_client_names_the_whole_body_of_a_message_too_long_for_o
 async def test_the_cloud_client_shows_a_message_one_batch_holds_whole_across_wrapped_lines(
     session, comms: Comms, tmp_path: Path, capsys
 ) -> None:
-    """Monitor cuts a line at 500 units and a batch at 3000, and trims every line, so a
+    """Monitor cuts a line at 500 units and a batch at 3000, and drops an empty line, so a
     2500-character body arrives as written: its 1200-character line wrapped under the cap, its
-    blank line and indent kept by a zero-width space Monitor does not trim."""
+    blank line kept by a zero-width space Monitor does not trim."""
     client, token = session
     exports = tmp_path / "state" / "messages"
     exports.parent.mkdir(mode=0o700)
     long = " ".join(f"w{index:03d}" for index in range(240))
-    body = "\n".join(["first", "", "    indented", long, "x" * (2500 - len(long) - 21)])
+    body = "\n".join(["first", "", long, "x" * (2500 - len(long) - 8)])
     lines = await delivered_lines(client, token, comms, exports, capsys, body)
     start = next(index for index, line in enumerate(lines) if line.startswith("Comms in"))
     shown = lines[start:]
     assert all(ClaudeMonitorFrame.units(line) <= ClaudeMonitorFrame.EVENT_CHARS for line in shown)
     assert len("\n".join(shown)) <= ClaudeMonitorFrame.BATCH_CHARS
-    assert all(line == line.strip() for line in shown)
-    assert shown[1:4] == ["first", "\u200b", "\u200b    indented"]
-    # A wrap cuts after a space, which Monitor would trim, so the piece keeps a guard too.
-    unguarded = [line.replace("\u200b", "") for line in shown]
-    assert "".join(unguarded[4:7]) == long and "".join(unguarded[7:]) == body.rsplit("\n", 1)[1]
+    assert shown[1:3] == ["first", "\u200b"]
+    assert "".join(shown[3:6]) == long and "".join(shown[6:]) == body.rsplit("\n", 1)[1]
+    assert "\u200b" not in "".join(shown[3:])
     assert not exports.exists() or not any(exports.iterdir())
+
+
+async def test_indented_code_goes_to_the_file_with_its_indent_byte_exact(
+    session, comms: Comms, tmp_path: Path, capsys
+) -> None:
+    """Monitor trims a line's indent, and a guard character would ride into whatever a reader
+    pastes, so a body with an indented line is the file, copied byte for byte."""
+    client, token = session
+    exports = tmp_path / "state" / "messages"
+    exports.parent.mkdir(mode=0o700)
+    code = "def indented():\n    return 'four'\n\tif tab:\n        pass"
+    lines = await delivered_lines(client, token, comms, exports, capsys, code)
+    notice = next(json.loads(line) for line in lines if line.startswith(('Comms in', '{"protocol"')))
+    assert notice["type"] == "read-file"
+    written = Path(notice["path"]).read_text()
+    assert written.endswith(code + "\n") and "\u200b" not in written
 
 
 def monitor_event_record(event: str) -> str:

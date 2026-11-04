@@ -107,32 +107,27 @@ class WatchedMonitorFrame(ClaudeMonitorFrame):
     (InboxSocket.batch_gap_seconds), so the batch cap, not the line cap, bounds what fits."""
 
     GUARD = '\u200b'
-    """Monitor trims every line and drops one left empty, so a blank line or an indent would
-    vanish; a zero-width space at the trimmed end keeps it, and reads as nothing."""
+    """Monitor trims every line and drops one left empty, so a blank line would vanish; a
+    zero-width space keeps it and reads as nothing. Nobody copies a blank line, so the guard
+    goes nowhere else: an indent would carry it into whatever a reader pastes."""
 
     @cached_property
     def shown_lines(self) -> tuple[str, ...]:
         """The header and body lines, with any line Monitor would cut wrapped after its last
-        space inside the cap, or at the cap when there is none, and guarded where it trims."""
+        space inside the cap, or at the cap when there is none, and blank lines guarded."""
         return tuple(self.guarded(piece) for line in self.inline.split('\n')
                      for piece in self.wrapped(line))
 
     @classmethod
     def guarded(cls, line: str) -> str:
-        if not line.strip():
-            return line + cls.GUARD
-        lead = cls.GUARD if line != line.lstrip() else ''
-        trail = cls.GUARD if line != line.rstrip() else ''
-        return lead + line + trail
+        return line if line.strip() else cls.GUARD
 
     @classmethod
     def wrapped(cls, line: str) -> tuple[str, ...]:
-        """Pieces two units under the cap, leaving room for both guards."""
-        cap = cls.EVENT_CHARS - 2 * len(cls.GUARD)
         pieces: list[str] = []
-        while cls.units(line) > cap:
-            end = cap
-            while cls.units(line[:end]) > cap:
+        while cls.units(line) > cls.EVENT_CHARS:
+            end = cls.EVENT_CHARS
+            while cls.units(line[:end]) > cls.EVENT_CHARS:
                 end -= 1
             space = line.rfind(' ', 0, end)
             cut = space + 1 if space > 0 else end
@@ -161,8 +156,9 @@ class WatchedMonitorFrame(ClaudeMonitorFrame):
     def shows_safely_inline(self) -> bool:
         """Shown as written, each shown line is a line of the event, and the transcript decoder
         reads every line: a body quoting one of our frames goes to the file, where nothing
-        decodes it."""
-        return not any(self.claims(line) for line in self.shown_lines)
+        decodes it. Monitor trims a line's indent, so an indented body goes there too, where
+        a reader copies it byte for byte."""
+        return not any(self.claims(line) or line[:1].isspace() for line in self.shown_lines)
 
 
 class WatchEnd(ABC):
