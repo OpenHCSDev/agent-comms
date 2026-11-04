@@ -130,15 +130,28 @@ def edit_inside(
     module = ast.parse(path.read_text())
     declaration, = (node for node in module.body
                      if isinstance(node, ast.ClassDef) and node.name == owner.__name__)
+    # @overload stubs bind the name for type checkers only; the runtime declaration is the edit.
     statement, = (node for node in declaration.body
-                   if member in ProducedTable.bound_names(ast.unparse(node)))
+                  if member in ProducedTable.bound_names(ast.unparse(node))
+                  and not (isinstance(node, ast.FunctionDef)
+                           and any(ast.unparse(decorator) == "overload"
+                                   for decorator in node.decorator_list)))
+    before = ast.unparse(statement)
     change(statement)
+    assert ast.unparse(statement) != before, f"{owner.__name__}.{member}: the edit changed nothing"
     path.write_text(ast.unparse(ast.fix_missing_locations(module)) + "\n")
 
 
 def return_no_rows(statement: ast.stmt) -> None:
     assert isinstance(statement, ast.FunctionDef)
     statement.body = [ast.Return(value=ast.Tuple(elts=[], ctx=ast.Load()))]
+
+
+def route_the_message_itself(statement: ast.stmt) -> None:
+    """A routing body no declared route produces, so the edit changes every owner."""
+    assert isinstance(statement, ast.FunctionDef)
+    statement.body = [ast.Return(value=ast.Tuple(
+        elts=[ast.Name(id="message", ctx=ast.Load())], ctx=ast.Load()))]
 
 
 def widen_spelling(statement: ast.stmt) -> None:
@@ -260,7 +273,7 @@ def test_projection_digest_tracks_inherited_routing(
     pristine_projection: PristineProjection, projection_source: Path, owner: type,
 ) -> None:
     before = json.loads(pristine_projection.digest)
-    edit_inside(projection_source, owner, "route_rows", return_no_rows)
+    edit_inside(projection_source, owner, "route_rows", route_the_message_itself)
     after = json.loads(projection_source_digest(projection_source))
     assert after[BusRouteCounts.declared_name] != before[BusRouteCounts.declared_name]
     assert after[AnsweredSource.declared_name] == before[AnsweredSource.declared_name]
