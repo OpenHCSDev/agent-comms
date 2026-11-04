@@ -312,8 +312,9 @@ class MonitorShown(MonitorFrame, declared_name='shown'):
                     await bridge.record_mismatch(
                         delivery, 'Shown lines do not equal the original message')
                     continue
-                return await MonitorPart(id=self.id, sender=self.sender, number=1, total=1,
-                                         body=message.body).confirm(bridge, record)
+                return await MonitorPart.model_validate(dict(
+                    id=self.id, sender=self.sender, number=1, total=1, body=message.body,
+                )).confirm(bridge, record)
         return ()
 
 
