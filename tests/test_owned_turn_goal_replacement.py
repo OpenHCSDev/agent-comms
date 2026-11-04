@@ -66,7 +66,7 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
                 comms.registry.require('lead').incarnation, 'Repair following input').id
             comms.goals.update_goal(worker, CreateProblemGoalAction(
                 problem='P1', order=order(source), request=request,
-                review_at=RecordedEventTime(1000), commander='lead',
+                review_at=RecordedEventTime(1000),
                 assigner=comms.registry.require('lead').incarnation,
                 repo=RepositoryName.from_wire('org/repo'), text='Repair following input',
             ))
@@ -85,7 +85,7 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
                 replaced = comms.goals.update_goal(worker, OrderGoalAction(
                     problem='P1', expected_revision=todo.revision,
                     assigner=comms.registry.require('lead').incarnation,
-                    commander='lead', request=request, review_at=RecordedEventTime(2000),
+                    request=request, review_at=RecordedEventTime(2000),
                     order=replace(order(source), id=OrderId.mint()),
                 ))
                 # A replaced order keeps the running turn's authority; only following input waits.
@@ -146,7 +146,7 @@ async def test_goal_published_during_preparation_is_current_at_reservation(tmp_p
         comms.registry.require('lead').incarnation, 'Repair the turn owner').id
     initial = comms.goals.update_goal('worker', CreateProblemGoalAction(
         problem='P1', order=order(source), request=request,
-        review_at=RecordedEventTime(1000), commander='lead',
+        review_at=RecordedEventTime(1000),
         assigner=comms.registry.require('lead').incarnation,
         repo=RepositoryName.from_wire('org/repo'), text='Repair the turn owner',
     ))
@@ -160,7 +160,7 @@ async def test_goal_published_during_preparation_is_current_at_reservation(tmp_p
         todo = comms.goals.todos.get('P1')
         replaced = comms.goals.update_goal('worker', OrderGoalAction(
             problem='P1', expected_revision=todo.revision, assigner=actor,
-            commander='lead', request=request, review_at=RecordedEventTime(2000),
+            request=request, review_at=RecordedEventTime(2000),
             order=replace(order(source), id=OrderId.mint()),
         ))
         OrdinaryGoalRule.require(old.original.goal_permission, replaced)
@@ -182,7 +182,7 @@ async def test_goal_published_during_preparation_is_current_at_reservation(tmp_p
         todo = comms.goals.todos.get('P1')
         latest = comms.goals.update_goal('worker', OrderGoalAction(
             problem='P1', expected_revision=todo.revision, assigner=actor,
-            commander='lead', request=request, review_at=RecordedEventTime(3000),
+            request=request, review_at=RecordedEventTime(3000),
             order=replace(order(source), id=OrderId.mint()),
         ))
         assert current.thread.goal == replaced != latest
@@ -206,7 +206,7 @@ async def test_order_reactivating_a_blocked_goal_keeps_the_running_turn(tmp_path
         comms.registry.require('lead').incarnation, 'Repair the blocked teammate').id
     comms.goals.update_goal('worker', CreateProblemGoalAction(
         problem='P1', order=order(source), request=request,
-        review_at=RecordedEventTime(1000), commander='lead',
+        review_at=RecordedEventTime(1000),
         assigner=comms.registry.require('lead').incarnation,
         repo=RepositoryName.from_wire('org/repo'), text='Repair the blocked teammate',
     ))
@@ -223,7 +223,7 @@ async def test_order_reactivating_a_blocked_goal_keeps_the_running_turn(tmp_path
         todo = comms.goals.todos.get('P1')
         retried = comms.goals.update_goal('worker', OrderGoalAction(
             problem='P1', expected_revision=todo.revision, assigner=actor,
-            commander='lead', request=request, review_at=RecordedEventTime(2000),
+            request=request, review_at=RecordedEventTime(2000),
             order=replace(order(source), id=OrderId.mint()),
         ))
         assert retried.state == ActiveGoal()
