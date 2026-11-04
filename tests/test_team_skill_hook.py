@@ -307,22 +307,32 @@ def test_a_recorded_verdict_drops_its_board_line_on_the_next_tool_call(
     claim.path.parent.mkdir(parents=True)
     record = WatchRecord("colleague", str(comms.root), ("watch",), tmp_path / "inbox")
     worker = RecordedThreadIncarnation("worker", 1.0)
+    colleague = comms.registry.require("colleague").incarnation
     rules = (*OrderlessUnreviewedHead.scan_reviews(comms.goals, ProgressRead(())),
-             ReviewTimerUp("P1", worker, "order-P1", RecordedEventTime(1000.0)),
+             ReviewTimerUp("P1", colleague, "order-P1", RecordedEventTime(1000.0)),
              SpinningTeammate("P2", worker, 92))
     beat(comms, rules)
     beat(comms, rules)
+    head_line = f"--pr {request.pr} --head {request.head}"
+
+    def shared_board() -> tuple[str, ...]:
+        return tuple(entry.text for packet in TeamUpdate.latest(comms, colleague)
+                     for entry in packet.board(comms))
     with (claim.held(record), claim.reader_held(), Binding.open(tmp_path / "delivery") as db,
           socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server):
         server.bind(str(claim.socket_path))
         server.listen()
         server.settimeout(5)
         assert DeckStart.decode(hook_record(tmp_path / "session.jsonl", "SessionStart")).take(comms, admitted_binding(comms, "colleague"))
+        # Only the row naming this session rides its tool call; the unowned head and the
+        # worker's row stay on the shared board.
         board = tool_call(hook, server, comms, db, time.time())
-        assert len(board) == len(rules)
+        assert len(board) == 1 and "P1" in board[0]
+        assert len(shared_board()) == len(rules)
+        assert any(head_line in line for line in shared_board())
         invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
-        assert [line for line in tool_call(hook, server, comms, db, time.time())
-                if f"--pr {request.pr} --head {request.head}" in line] == []
+        assert not any(head_line in line for line in shared_board())
+        assert tool_call(hook, server, comms, db, time.time()) == ()
 
 
 def test_board_decoder_names_a_refusal_instead_of_a_constructor_error():
@@ -370,8 +380,13 @@ def test_board_start_line_disappears_when_its_phase_order_is_sent(notification_b
         server.listen()
         server.settimeout(5)
         assert DeckStart.decode(hook_record(tmp_path / "session.jsonl", "SessionStart")).take(comms, admitted_binding(comms, "colleague"))
-        before = tool_call(hook, server, comms, db, time.time())
-        assert sum(phase_name in line for line in before) == 1
+        def shared_board() -> tuple[str, ...]:
+            return tuple(entry.text for packet in TeamUpdate.latest(comms, colleague)
+                         for entry in packet.board(comms))
+
+        # A ready phase names nobody: it stays on the shared board, off every tool call.
+        assert tool_call(hook, server, comms, db, time.time()) == ()
+        assert sum(phase_name in line for line in shared_board()) == 1
         # The worker holds P1 and P2 already; the idle outsider takes the phase order.
         comms.goals.update_goal("outsider", CreateProblemGoalAction(
             problem="P3", request=request, assigner=colleague,
@@ -380,9 +395,8 @@ def test_board_start_line_disappears_when_its_phase_order_is_sent(notification_b
             order=replace(original, id=OrderId.mint(), serves=BusWriterPhase,
                           at=RecordedEventTime(time.time())),
         ))
-        after = tool_call(hook, server, comms, db, time.time())
-        assert sum(phase_name in line for line in after) == 0
-        assert not after
+        assert sum(phase_name in line for line in shared_board()) == 0
+        assert tool_call(hook, server, comms, db, time.time()) == ()
 
 
 def test_a_board_row_rides_a_tool_call_as_one_short_line():
@@ -1081,9 +1095,9 @@ def test_rows_waiting_on_a_stopped_thread_leave_the_main_view():
 
     since = RecordedEventTime(1.0)
     worker = TeammateSubject(RecordedThreadIncarnation("worker", 1.0))
-    live = RulePing(ReviewTimerUp, TextDigest.of("live"), text="Review claude P1",
+    live = RulePing(SpinningTeammate, TextDigest.of("live"), text="Read claude P1",
                     subjects=(worker,), since=since, threads=("claude",))
-    parked = RulePing(ReviewTimerUp, TextDigest.of("parked"), text="Review pi P2",
+    parked = RulePing(SpinningTeammate, TextDigest.of("parked"), text="Read pi P2",
                       subjects=(worker,), since=since, threads=("pi-stopped",))
     claude = RecordedThreadIncarnation("claude", 1.0)
     packet = TeamDecisions(claude, (live, parked), (live, parked), ())
