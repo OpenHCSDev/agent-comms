@@ -19,6 +19,7 @@ from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.presentation import CountedRead, ThreadView
 from agent_comms.registration import Registration
+from agent_comms.registry_document import DEFAULT_ROSTER
 from agent_comms.thread_status import (
     ArchivedThreadStatus,
     ConnectedThreadStatus,
@@ -83,7 +84,9 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status,
         assert reopened.status("owner") == expected
         assert FieldCodec.decode(ThreadStatus, FieldCodec.encode(status)) == status
         assert comms.views.thread_detail("owner", CountedRead()).to_wire()["status"] == expected.declared_name
-        assert comms.views.list_threads()[0].status.declared_name == expected.declared_name
+        listed = {row.thread.name: row.status.declared_name for row in comms.views.list_threads()}
+        assert listed == ({"owner": expected.declared_name}
+                          if expected.in_view(DEFAULT_ROSTER) else {})
         activity = Activity("owner", ActivityState.WORKING, "stale or current activity")
         comms.agents.activity.emit(activity)
         visible = comms.views.thread_views()

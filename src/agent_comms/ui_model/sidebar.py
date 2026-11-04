@@ -25,7 +25,6 @@ from agent_comms.ui_model.changes import KeyedModel
 from agent_comms.ui_model.unread import UnreadPresentation, UnobservedUnread
 
 from ..display_references import (
-    ForeignReferences,
     PendingReferences,
     UnavailableReferences,
 )
@@ -181,8 +180,7 @@ class ObservedSidebar(SidebarObservation):
         return UnreadPresentation.for_bus(self.snapshot, target)
 
     def references_for(self, root):
-        references = self.snapshot.references
-        return references if root == references.root else ForeignReferences(root, references.root)
+        return self.snapshot.references.at(root)
 
 
 class SidebarModel:

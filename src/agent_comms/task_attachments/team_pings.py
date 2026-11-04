@@ -66,6 +66,12 @@ class Ping(DeclaredFamily, affix="Ping"):
     since: EventTime = field(default_factory=UnrecordedEventTime, compare=False, kw_only=True)
     threads: tuple[str, ...] = field(default=(), compare=False, kw_only=True)
 
+    @staticmethod
+    def stored_threads(threads: tuple[ThreadIncarnation, ...]) -> tuple[str, ...]:
+        """The threads a line names, in the shape packets on the bus already carry: names.
+        Keying them by birth changes the wire and needs a carry of those packets."""
+        return tuple(thread.name for thread in threads)
+
     @property
     def urgent(self) -> bool:
         return False
@@ -157,7 +163,7 @@ class RulePing(Ping):
     @classmethod
     def capture(cls, rule: StandingRule) -> Self:
         return cls(type(rule), rule.observation_key(), text=rule.line(), subjects=rule.subjects(),
-                   threads=rule.named_threads())
+                   threads=cls.stored_threads(rule.named_threads()))
 
 
 @dataclass(frozen=True)
@@ -197,7 +203,7 @@ class TeammatePing(Ping, declared_name="unit"):
                   for todo in state.source.todos if todo.id in state.orders),
             tuple(message.reference for message in state.owed),
             state.observation_key(), text=state.line(), subjects=state.subjects(),
-            threads=state.named_threads(),
+            threads=cls.stored_threads(state.named_threads()),
         )
 
 

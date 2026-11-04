@@ -154,6 +154,7 @@ from .tool_caller import ThreadCaller, ThreadListing, ToolCaller
 from .acp_extension import CoordinationChangedUpdate
 from .history_views import RetiredViews
 from .thread_identity import ThreadIncarnation
+from .display_references import ReferenceNames
 from .registry_document import ProjectThreadSelection, RegistrySnapshot
 from .transcripts import TranscriptCursor
 from .host_logs import HostLog, HostLogRead
@@ -1377,6 +1378,17 @@ class CommsRegistryTool(CoreRead[RegistrySnapshot]):
 
     def apply(self, comms: Comms, caller: ToolCaller) -> RegistrySnapshot:
         return comms.registry.snapshot()
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsReferenceNamesTool(CoreRead[ReferenceNames]):
+    """A UI resolves @thread and #channel links without the registry or channel activity."""
+
+    label = "Reference names"
+    description = "Every linkable thread name with its incarnation, and every channel name, without thread records."
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> ReferenceNames:
+        return ReferenceNames.of(comms.registry.snapshot(), comms.channels.catalog.read().channel_names())
 
 
 @dataclass(frozen=True)
