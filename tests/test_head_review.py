@@ -26,6 +26,7 @@ from agent_comms.head_review import (
 )
 from agent_comms.integration import IntegrationRun
 from team_heartbeat_fixture import capture_frame
+from agent_comms.heartbeat_delivery import OnHeartbeatDelivery
 from agent_comms.heartbeat_subjects import TeamHistory, HeadSubject, UnlandedHeadSubject
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
@@ -1339,6 +1340,7 @@ def test_retained_head_verdict_precedes_the_published_lost_packet(
     ping = replace(RulePing.capture(lost), since=RecordedEventTime(published))
     packet = TeamDecisions(owner, (ping,), (ping,), ())
     TeamUpdateStore.record(comms.root, packet)
+    comms.threads.set_heartbeat_delivery('colleague', OnHeartbeatDelivery)
     original, = packet.send(comms, ())
     previous = TeamUpdate.latest(comms, owner)
     assert previous == (packet,)
