@@ -16,6 +16,7 @@ import time
 from collections.abc import AsyncIterator, Iterator
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass, field
+from functools import cached_property
 from pathlib import Path
 from typing import ClassVar
 
@@ -25,20 +26,21 @@ from yarl import URL
 from .agent_inbox import SecondsWait, TakenInputPosition, TakenInputStart
 from .child_process import ProcessIdentity
 from .cli_bridges.claude_transcript import WATCH_STOPPED, WINDOW_ENDED, ClaudeJsonLines
+from .cli_bridges.claude_protocol import ClaudeMonitorFrame
 from .cli_bridges.history import RemoteWatchHistory
+from .cli_bridges.shared import TranscriptConfirmsDelivery
 from .comms import Comms, client_wire
 from .connector_store import BearerSecret, digest
 from .coordination_database import CoordinationStore
 from .coordination_tables.harness_deliveries import HarnessDelivery
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .harness_delivery_states import DeliveredOutcome
+from .harness_delivery_states import ReceivingMonitor, UnconfirmedOutcome, UnrecordedMonitor
 from .messages import Message
-from .nominal.field_codec import FieldCodec
+from .nominal.field_codec import FieldCodec, ThreadLookup
 from .runtime_updates import RuntimeUpdate
 from .tool_result import ToolResult
 from .tools import CommsInboxTool
-from .transcript_publication import PublishesToBus
 
 
 @dataclass(frozen=True)
@@ -107,13 +109,21 @@ class WatchTickets:
 
 
 @dataclass(frozen=True)
-class PushedTranscript(ClaudeJsonLines, PublishesToBus):
+class PushedTranscript(TranscriptConfirmsDelivery, ClaudeJsonLines):
     """A session's transcript as lines on its watch socket. Holding the ticket proved which
-    thread this is, so these lines publish on that thread and no other."""
+    thread this is, so these lines publish on that thread and no other, and the Monitor events
+    in them confirm that thread's deliveries as a local bridge's transcript does."""
 
     comms: Comms
     transcript_thread: str
     socket: web.WebSocketResponse
+
+    delivery_kind: ClassVar[type[RemoteWatchHistory]] = RemoteWatchHistory
+
+    @cached_property
+    def recipient_lookup(self) -> ThreadLookup:
+        """The ticket's thread, decoded once for the socket's life."""
+        return self.comms.registry.require(self.transcript_thread).incarnation.require_recorded().lookup
 
     async def transcript(self) -> AsyncIterator[RuntimeUpdate]:
         state, offset = self.start_state(), 0
@@ -153,17 +163,21 @@ class InboxWatch:
             return request.page(comms).page.messages
 
     def taken(self, message: Message) -> None:
-        """A message leaves the inbox only after its frame went out, so a dropped socket
-        replays at most the one in hand."""
+        """A message leaves the inbox once its frame went out, but a written socket is not a
+        shown event: the attempt stays unconfirmed until the session's transcript shows it.
+        A message one Monitor event shows inline waits for that one part; one sent as a file
+        has no Read this side can check, so it stays unconfirmed."""
         with self.wire() as comms:
             reference = message.reference
             incarnation = comms.registry.require(self.thread).incarnation
+            frame = ClaudeMonitorFrame(message)
             delivery = HarnessDelivery(
                 RemoteWatchHistory,
                 incarnation.require_recorded().lookup,
                 reference.message_id,
                 reference.seq,
-                DeliveredOutcome,
+                UnconfirmedOutcome,
+                monitor=ReceivingMonitor(len(frame.parts)) if frame.fits_one_event else UnrecordedMonitor(),
             )
             path = str(CoordinationStore.path_in(comms.root))
             with Coordination(path) as store, store.session.writing() as db:
