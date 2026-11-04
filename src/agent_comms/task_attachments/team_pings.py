@@ -264,13 +264,19 @@ class TeamUpdate(OwnerNotice, declared_name=None):
             "Full evidence: comms_hud board/open_pings, or Toad /team",
         ))
 
-    def board(self, comms: Comms, reader: str) -> tuple[BoardEntry, ...]:
-        """The open lines naming ``reader`` that wait on no stopped thread: a tool call carries
-        what is that session's own, and the whole board stays in comms_hud."""
-        snapshot = comms.registry.snapshot()
-        history = TeamHistory.read(comms, TeamService.actors(snapshot))
-        stopped = self.stopped(snapshot)
-        return tuple(ping.board_entry() for ping in self.open_pings(history)
+    def board(self, comms: Comms) -> tuple[BoardEntry, ...]:
+        """Any teammate's recorded action disposes of its subject on the shared board."""
+        return tuple(ping.board_entry() for ping in self.open_now(comms))
+
+    def open_now(self, comms: Comms) -> tuple[Ping, ...]:
+        history = TeamHistory.read(comms, TeamService.actors(comms.registry.snapshot()))
+        return self.open_pings(history)
+
+    def reader_board(self, comms: Comms, reader: str) -> tuple[BoardEntry, ...]:
+        """The open lines addressing ``reader`` that wait on no stopped thread: a tool call
+        carries what is that session's own, and the whole board stays in comms_hud."""
+        stopped = self.stopped(comms.registry.snapshot())
+        return tuple(ping.board_entry() for ping in self.open_now(comms)
                      if ping.addresses(reader) and not ping.parked(stopped))
 
     def stopped(self, snapshot: RegistrySnapshot) -> frozenset[str]:
@@ -307,9 +313,9 @@ class TeamUpdate(OwnerNotice, declared_name=None):
 
     @classmethod
     def current_board(cls, comms: Comms, recipient: str) -> tuple[BoardEntry, ...]:
-        """The retained observation's board, derived at the moment of asking."""
+        """The retained observation's rows for ``recipient``'s tool calls, derived when asked."""
         return tuple(entry for latest in cls.latest(comms, comms.registry.require(recipient).incarnation)
-                     for entry in latest.board(comms, recipient))
+                     for entry in latest.reader_board(comms, recipient))
 
     @classmethod
     def derive(cls, recipient: ThreadIncarnation, states: tuple[TeammateState, ...],
