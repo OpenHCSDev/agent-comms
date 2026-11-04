@@ -800,7 +800,7 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_team, monkeypatch):
                            for rule in OwedAnswer.opened(copied, ctx.incarnation))
             report = root / "after-merge.txt"
             report.write_text("Merged; installation evidence is still pending")
-            SayVerb(units="#comms", body_file=str(report)).apply(Team.read_root(root))
+            SayVerb(units="#comms", body_file=str(report), acting_as=ctx.actor).apply(Team.read_root(root))
             assert copied.goals.todos.get(released.id).holder_state == released.holder_state
             assert any(line.startswith("gh ") for line in observed)
             assert any(line.startswith("git ") for line in observed)
@@ -826,8 +826,7 @@ def test_reused_enforcement_rejects_a_new_idle_goal(checkout_bus):
         assert checkout_bus.registry.require(selected.name).goal == changed
         assert checkout_bus.goals.todos.get(before.id) == before
         assert isinstance(rejected[rule], GoalChangedError)
-        assert rejected[rule].thread.name == selected.name
-        assert rejected[rule].expected == selected.goal.captured
+        assert str(rejected[rule]).startswith(f"{selected.name}: observed {selected.goal.captured}")
 
 
 @pytest.mark.parametrize("number", (0, -1))

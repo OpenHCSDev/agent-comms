@@ -103,7 +103,7 @@ def delivery(ctx, report: str) -> CommsOrderDeliverTool:
 
 def test_pathname_handoff_publishes_without_completing_the_held_work(held_team):
     comms = held_team.comms
-    lead = held_team.commander
+    lead = held_team.actor_name
     original = comms.goals.todos.get(working(held_team).id)
     goals = tuple(comms.registry.require(name).goal for name in ("worker", lead))
     body = (
