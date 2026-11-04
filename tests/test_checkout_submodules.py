@@ -195,6 +195,27 @@ def test_checkout_add_prepares_the_order_repository_submodule(checkout_command_b
     assert (path / "pinned" / "catalog.md").read_text() == "patterns\n"
 
 
+def test_checkout_add_reuses_dirty_initialized_modules(checkout_command_bus):
+    comms = checkout_command_bus
+    command = ('--root', str(comms.root), 'checkout', '--from', 'worker', 'add', 'P1')
+    first = core_process(*command)
+    assert first.returncode == 0, first.stderr
+    worker = comms.registry.require('worker')
+    path = comms.registry.storage_rule.order_checkout(
+        comms.registry.storage_rule.roots_of(worker), 'P1')
+    module, = Checkout(path).submodules()
+    (module.path / 'catalog.md').write_text('local revision\n')
+    git(module.path, 'commit', '-qam', 'Retain local module work')
+    head = git(module.path, 'rev-parse', 'HEAD')
+    (module.path / 'catalog.md').write_text('dirty module work\n')
+    (module.path / 'untracked.md').write_text('not a clone artifact\n')
+    reused = core_process(*command)
+    assert reused.returncode == 0, reused.stdout + reused.stderr
+    assert git(module.path, 'rev-parse', 'HEAD') == head
+    assert (module.path / 'catalog.md').read_text() == 'dirty module work\n'
+    assert (module.path / 'untracked.md').read_text() == 'not a clone artifact\n'
+
+
 def test_checkout_add_repairs_an_existing_checkout_with_a_missing_store(checkout_command_bus):
     comms = checkout_command_bus
     first = core_process("--root", str(comms.root), "checkout", "--from", "worker", "add", "P1")
@@ -378,7 +399,100 @@ def test_prepare_rebuilds_a_store_an_interrupted_clone_left_broken(
     assert git(checkout.path, "diff", "--name-only", "HEAD") == ""
 
 
-def test_prepare_rebuilds_a_store_with_no_origin_when_the_pin_moves(repository, tmp_path):
+@pytest.mark.parametrize('remove_origin', (False, True), ids=('origin', 'no-origin'))
+def test_prepare_preserves_initialized_work_and_initializes_a_missing_sibling(
+    repository, tmp_path, remove_origin,
+):
+    package = tmp_path / 'package'
+    git(repository, 'submodule', 'add', '-q', str(package), 'missing')
+    git(repository, 'commit', '-qam', 'Add another pinned module')
+    checkout = Checkout.add(repository, tmp_path / 'unit--P1', DetachedStart('HEAD'))
+    module, missing = checkout.submodules()
+    (module.path / 'catalog.md').write_text('local commit\n')
+    (module.path / 'deleted.md').write_text('tracked file\n')
+    git(module.path, 'add', '.')
+    git(module.path, 'commit', '-qm', 'Local module revision')
+    git(module.path, 'switch', '-qc', 'local-work')
+    (module.path / 'catalog.md').write_text('staged change\n')
+    git(module.path, 'add', 'catalog.md')
+    (module.path / 'catalog.md').write_text('unstaged change\n')
+    (module.path / 'deleted.md').unlink()
+    (module.path / 'untracked.md').write_text('untracked work\n')
+    if remove_origin:
+        git(module.path, 'remote', 'remove', 'origin')
+    before = (git(module.path, 'rev-parse', 'HEAD'), git(module.path, 'symbolic-ref', 'HEAD'),
+              git(module.path, 'diff', '--binary'), git(module.path, 'diff', '--cached', '--binary'),
+              git(module.path, 'status', '--porcelain'))
+    git(missing.path, 'branch', 'retained-local-ref')
+    git(checkout.path, 'submodule', 'deinit', '-f', '--', 'missing')
+    checkout.prepare()
+    checkout.prepare()
+    assert before == (git(module.path, 'rev-parse', 'HEAD'), git(module.path, 'symbolic-ref', 'HEAD'),
+                      git(module.path, 'diff', '--binary'), git(module.path, 'diff', '--cached', '--binary'),
+                      git(module.path, 'status', '--porcelain'))
+    assert (module.path / 'untracked.md').read_text() == 'untracked work\n'
+    assert (missing.path / 'catalog.md').read_text() == 'patterns\n'
+    assert git(missing.path, 'rev-parse', 'retained-local-ref') == git(package, 'rev-parse', 'HEAD')
+    if remove_origin:
+        assert not module.usable()
+
+
+def test_prepare_uses_the_preserved_parent_head_for_nested_modules(repository, tmp_path):
+    package = tmp_path / 'package'
+    child = tmp_path / 'child'
+    child.mkdir()
+    git(child, 'init', '-q')
+    (child / 'child.md').write_text('child pin\n')
+    git(child, 'add', '.')
+    git(child, 'commit', '-qm', 'Child pin')
+    for name in ('nested', 'missing'):
+        git(package, 'submodule', 'add', '-q', str(child), name)
+    git(package, 'commit', '-qam', 'Declare nested modules')
+    checkout = Checkout.add(repository, tmp_path / 'unit--P1', DetachedStart('HEAD'))
+    module, = checkout.submodules()
+    git(module.path, 'fetch', 'origin')
+    git(module.path, 'checkout', '-q', git(package, 'rev-parse', 'HEAD').strip())
+    parent_head = git(module.path, 'rev-parse', 'HEAD')
+    checkout.prepare()
+    nested, missing = Checkout(module.path).submodules()
+    (nested.path / 'child.md').write_text('local child revision\n')
+    git(nested.path, 'commit', '-qam', 'Child work')
+    nested_head = git(nested.path, 'rev-parse', 'HEAD')
+    (nested.path / 'child.md').write_text('dirty child\n')
+    (nested.path / 'untracked.md').write_text('child notes\n')
+    git(module.path, 'submodule', 'deinit', '-f', '--', 'missing')
+    shutil.rmtree(missing.store)
+    checkout.prepare()
+    assert git(module.path, 'rev-parse', 'HEAD') == parent_head
+    assert git(nested.path, 'rev-parse', 'HEAD') == nested_head
+    assert (nested.path / 'child.md').read_text() == 'dirty child\n'
+    assert (nested.path / 'untracked.md').read_text() == 'child notes\n'
+    assert (missing.path / 'child.md').read_text() == 'child pin\n'
+
+
+@pytest.mark.parametrize('remove_origin', (False, True), ids=('origin', 'no-origin'))
+def test_explicit_pin_update_refuses_to_overwrite_dirty_work(repository, tmp_path, remove_origin):
+    checkout = Checkout.add(repository, tmp_path / 'unit--P1', DetachedStart('HEAD'))
+    module, = checkout.submodules()
+    head = git(module.path, 'rev-parse', 'HEAD')
+    package = tmp_path / 'package'
+    (package / 'catalog.md').write_text('next pin\n')
+    git(package, 'commit', '-qam', 'New pin')
+    moved = git(package, 'rev-parse', 'HEAD').strip()
+    git(checkout.path, 'update-index', '--cacheinfo', f'160000,{moved},pinned')
+    git(checkout.path, 'commit', '-qm', 'Select new module pin')
+    (module.path / 'catalog.md').write_text('dirty work\n')
+    (module.path / 'untracked.md').write_text('untracked work\n')
+    if remove_origin:
+        git(module.path, 'remote', 'remove', 'origin')
+    with pytest.raises(GitCommandError):
+        checkout.update_submodules()
+    assert git(module.path, 'rev-parse', 'HEAD') == head
+    assert (module.path / 'catalog.md').read_text() == 'dirty work\n'
+    assert (module.path / 'untracked.md').read_text() == 'untracked work\n'
+
+
+def test_explicit_update_restores_a_missing_origin_when_the_pin_moves(repository, tmp_path):
     """fork-boundaries at install 34: a store with no remote cannot fetch the moved pin."""
     checkout = Checkout.add(repository, tmp_path / "unit--P1", DetachedStart("HEAD"))
     (module,) = checkout.submodules()
@@ -391,7 +505,7 @@ def test_prepare_rebuilds_a_store_with_no_origin_when_the_pin_moves(repository, 
     git(checkout.path, "commit", "-q", "-m", "move the pin")
     with pytest.raises(subprocess.CalledProcessError):
         git(checkout.path, "submodule", "update", "--init", "--recursive", "--checkout")
-    checkout.prepare()
+    checkout.update_submodules()
     assert (module.path / "catalog.md").read_text() == "patterns, indexed\n"
     assert git(checkout.path, "diff", "--name-only", "HEAD") == ""
 
