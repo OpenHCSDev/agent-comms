@@ -93,9 +93,12 @@ class ChannelRowModel:
         channel = view.channel
         return cls(
             channel.name,
-            f"{'* ' if channel.pinned else ''}{channel.name} {view.active_agents}/{view.registered_agents}",
-            f"{view.active_agents} running or idle / {view.registered_agents} registered agents"
-            f" · tags: {', '.join(sorted(channel.tags)) or 'all'}",
+            " · ".join((*view.pin_notices,
+                        f"{'* ' if channel.pinned else ''}{channel.name} {view.active_agents}/{view.registered_agents}")),
+            "\n".join((
+                f"{view.active_agents} running or idle / {view.registered_agents} registered agents"
+                f" · tags: {', '.join(sorted(channel.tags)) or 'all'}", *view.pin_notices,
+            )),
             UnreadPresentation.for_channel(snapshot, channel.name),
             any(name in working for name in view.members),
             tuple(name for name in view.members if name in snapshot.threads),

@@ -12,6 +12,7 @@ from agent_comms.nominal.field_codec import FieldCodec, MessageId, TurnId, compi
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.channel_targets import CommandTarget, NoChannel, PerTargetChannels, ChannelTarget, ProjectTarget
 from agent_comms.catalog_document import NoCatalog
+from agent_comms.thread_pins import ThreadPin
 from agent_comms.cli import main, build_parser
 from agent_comms.threads import ChosenServiceTier, NextTurnConfiguration, Thread
 from agent_comms.native_arguments import GivenArguments, GivenBinary
@@ -470,8 +471,8 @@ class TestSelectedTargetActions:
         assert result.successful and len(result.outcomes) == 3
         catalog = comms.channels.catalog.read()
         assert comms.bus.require_channel("#team").pinned
-        assert catalog.pinned_threads("#team") == {comms.registry.require("alpha").incarnation.require_recorded().lookup}
-        assert catalog.pinned_threads("#other") == {comms.registry.require("beta").incarnation.require_recorded().lookup}
+        assert catalog.pinned_threads("#team") == {ThreadPin.recorded(comms.registry.require("alpha").incarnation.require_recorded())}
+        assert catalog.pinned_threads("#other") == {ThreadPin.recorded(comms.registry.require("beta").incarnation.require_recorded())}
         assert {name: comms.registry.require(name).tags for name in before} == before
 
     def test_same_owner_memberships_pin_independently_and_archive_once(self, tmp_path):
@@ -486,8 +487,8 @@ class TestSelectedTargetActions:
         result = TargetEdit(PinThreadCliCommand, PinThreadCliCommand.selected_targets(tuple(CommandTarget.named(name) for name in action.targets)), {}, project=Checkout(tmp_path), channel=action.channels).apply(comms)
         assert result.successful and len(result.outcomes) == 2
         document = comms.channels.catalog.read()
-        assert document.pinned_threads("#team") == {comms.registry.require("alpha").incarnation.require_recorded().lookup}
-        assert document.pinned_threads("#other") == {comms.registry.require("alpha").incarnation.require_recorded().lookup}
+        assert document.pinned_threads("#team") == {ThreadPin.recorded(comms.registry.require("alpha").incarnation.require_recorded())}
+        assert document.pinned_threads("#other") == {ThreadPin.recorded(comms.registry.require("alpha").incarnation.require_recorded())}
         assert comms.registry.require("alpha").tags == frozenset({"team", "other"})
         with pytest.raises(ValueError):
             TargetEdit(ArchiveCliCommand, ArchiveCliCommand.selected_targets((CommandTarget.named('alpha'),)), {},
@@ -515,7 +516,7 @@ class TestSelectedTargetActions:
         assert result.outcomes[1].items_with(Successful, result.outcomes[1])
         document = comms.channels.catalog.read()
         assert not document.pinned_threads("#team")
-        assert document.pinned_threads("#other") == {comms.registry.require("alpha").incarnation.require_recorded().lookup}
+        assert document.pinned_threads("#other") == {ThreadPin.recorded(comms.registry.require("alpha").incarnation.require_recorded())}
 
     def test_mixed_read_marks_human_views_without_advancing_executor_delivery(self, tmp_path):
 

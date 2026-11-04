@@ -26,6 +26,8 @@ from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
 from agent_comms.turn_lease import NoTurnRecord
 from agent_comms.thread_text import GivenThreadText
 from agent_comms.threads import Thread
+from agent_comms.thread_creation import RecordedCreationTime
+from agent_comms.channels import AnyOfMatch, ParticipantsView, ViewPredicate
 
 
 def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity(tmp_path):
@@ -191,3 +193,29 @@ def test_public_restoration_declares_participant_without_native_authority(tmp_pa
     with Coordination(str(current.root / "coordination.sqlite3")) as store:
         assert store.participants.get(current.registry.require("missing").incarnation.lookup).committed
     assert not current.registry.store.guard_path.exists()
+
+
+def test_imported_pin_waits_for_its_original_birth_not_the_same_name(tmp_path):
+    old = installed_comms(tmp_path / "old")
+    current = installed_comms(tmp_path / "current")
+    original = old.registry.declare(Thread(
+        "shared", frozenset({"team"}), Checkout(tmp_path), created_at=RecordedCreationTime(10.0)))
+    replacement = current.registry.declare(Thread(
+        "shared", frozenset({"team"}), Checkout(tmp_path), created_at=RecordedCreationTime(20.0)))
+    assert original.incarnation != replacement.incarnation
+    old.channels.set_saved_view(ParticipantsView(
+        "pin-view", ViewPredicate(AnyOfMatch, frozenset({"team"}))))
+    old.channels.set_thread_pinned("pin-view", "shared", True)
+    source = old.channels.catalog.read()
+    source_bytes = old.channels.catalog.path.read_bytes()
+    with current.bus.opened_activity() as activity:
+        current.channels.catalog.restore_missing(source, activity)
+    shown = current.views.channel_view("pin-view")
+    assert shown.members == ("shared",) and not shown.pinned_members
+    assert shown.pin_notices == ("last known pin: shared (owner absent from this registry)",)
+    current.registry.unregister("shared")
+    current.registry.remove("shared")
+    assert current.registry.restore_stopped(old.registry.snapshot(), ("shared",)) == ("shared",)
+    restored = current.views.channel_view("pin-view")
+    assert restored.pinned_members == {"shared"} and not restored.pin_notices
+    assert old.channels.catalog.path.read_bytes() == source_bytes

@@ -44,7 +44,7 @@ class ChannelCatalog(SingleFileStore, ThreadOwnedState, CarriedDocument[CatalogD
         """Unpin deleted threads from every channel preference."""
         def remove(document: CatalogDocument) -> None:
             for thread in threads:
-                document.remove_thread(thread.incarnation.require_recorded().lookup)
+                document.remove_thread(thread.incarnation.require_recorded())
         self.change(remove)
 
     def restore_missing(self, source: CatalogDocument, activity: ActivityClocks) -> tuple[str, ...]:

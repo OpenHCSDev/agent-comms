@@ -31,7 +31,7 @@ class PinThreadCliCommand(MultipleTargets, NamedCliCommand, declared_name="pin-t
         with comms.bus.opened_activity() as activity:
             return tuple(
                 cls(name=thread.name, channel=name,
-                    pinned=thread.incarnation.require_recorded().lookup not in catalog.pinned_threads(name))
+                    pinned=not catalog.thread_pinned(name, thread.incarnation.require_recorded()))
                 for name in channel.names_for_binding()
                 if catalog.require_channel(name, activity).matches(thread.tags)
             )

@@ -267,7 +267,7 @@ class ChannelManagement:
                     if not view.matches(thread.tags):
                         raise ValueError(message)
                     snapshot.status(thread.name).require_visible(message)
-                document.set_thread_pinned(view.name, thread.incarnation.require_recorded().lookup, pinned)
+                document.set_thread_pinned(view.name, thread.incarnation.require_recorded(), pinned)
 
             self.catalog.change(record)
 

@@ -24,6 +24,7 @@ from agent_comms.channels import (
 )
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.comms import wire
+from agent_comms.thread_pins import ThreadPin
 from agent_comms.display_order import (
     ChannelSort,
     CreatedThreadSort,
@@ -172,7 +173,7 @@ def test_exclusive_tag_deletion_uses_original_storage_and_preserves_survivors(tm
     catalog = comms.channels.catalog.read()
     assert 'remove' not in catalog.tags
     assert '#remove' not in catalog.preferences
-    assert catalog.pinned_threads('#keep') == {original_multi.incarnation.require_recorded().lookup}
+    assert catalog.pinned_threads('#keep') == {ThreadPin.recorded(original_multi.incarnation.require_recorded())}
     assert not (tmp_path / 'single.jsonl').exists()
     assert not (tmp_path / 'archived.jsonl').exists()
     assert {
@@ -569,7 +570,7 @@ def test_pin_lifecycle_tracks_identity_and_membership(tmp_path):
         ParticipantsView('team', ViewPredicate(AnyOfMatch, frozenset({'api', 'ui'})))
     )
     comms.channels.set_channel_pinned("team", True)
-    original_lookup = comms.registry.require("a").incarnation.require_recorded().lookup
+    original_pin = ThreadPin.recorded(comms.registry.require("a").incarnation.require_recorded())
     comms.channels.set_thread_pinned("team", "a", True)
     comms.channels.set_thread_pinned("#any", "a", True)
     comms.registry.register(
@@ -577,8 +578,8 @@ def test_pin_lifecycle_tracks_identity_and_membership(tmp_path):
     )
     comms.threads.rename_managed_thread(comms.registry.require("a").incarnation, "renamed", owner=ProcessIdentity.capture(os.getpid()))
     observer = wire(tmp_path)
-    assert observer.channels.catalog.read().pinned_threads("#team") == {original_lookup}
-    assert observer.channels.catalog.read().pinned_threads("#any") == {original_lookup}
+    assert observer.channels.catalog.read().pinned_threads("#team") == {original_pin}
+    assert observer.channels.catalog.read().pinned_threads("#any") == {original_pin}
     comms.channels.update_tags("renamed", remove=frozenset({"api"}))
     team = next(view for view in observer.views.channel_views() if view.channel.name == "#team")
     assert not team.pinned_members and "renamed" not in team.members
@@ -596,6 +597,7 @@ def test_stored_pin_does_not_attach_to_a_replacement_under_the_same_name(tmp_pat
     comms = setup_wire(tmp_path)
     original = comms.registry.require("a")
     original_lookup = original.incarnation.require_recorded().lookup
+    original_pin = ThreadPin.recorded(original.incarnation.require_recorded())
     comms.channels.set_thread_pinned("api", "a", True)
     # Even an independently retained old row cannot pin another birth.
     comms.registry.unregister("a")
@@ -605,12 +607,14 @@ def test_stored_pin_does_not_attach_to_a_replacement_under_the_same_name(tmp_pat
         created_at=original.incarnation.require_recorded().created_at + 1.0))
     replacement_lookup = replacement.incarnation.require_recorded().lookup
     assert replacement_lookup != original_lookup
-    assert comms.channels.catalog.read().pinned_threads("#api") == {original_lookup}
+    assert comms.channels.catalog.read().pinned_threads("#api") == {original_pin}
     assert not comms.views.channel_view("api").pinned_members
+    assert comms.views.channel_view("api").pin_notices == (
+        "last known pin: a (owner absent from this registry)",)
     comms.channels.set_thread_pinned("api", "a", True)
     assert comms.views.channel_view("api").pinned_members == {"a"}
     assert comms.channels.catalog.read().pinned_threads("#api") == {
-        original_lookup, replacement_lookup,
+        original_pin, ThreadPin.recorded(replacement.incarnation.require_recorded()),
     }
 
 
@@ -621,7 +625,7 @@ def test_tag_view_pins_follow_rename_and_clear_on_delete(tmp_path):
     comms.channels.rename_tag("api", "backend")
     observer = wire(tmp_path)
     assert observer.bus.require_channel("#backend").pinned
-    assert observer.channels.catalog.read().pinned_threads("#backend") == {comms.registry.require("a").incarnation.require_recorded().lookup}
+    assert observer.channels.catalog.read().pinned_threads("#backend") == {ThreadPin.recorded(comms.registry.require("a").incarnation.require_recorded())}
     assert not observer.channels.catalog.read().pinned_threads("#api")
     comms.channels.delete_tag("backend")
     comms.channels.create_tag("backend")

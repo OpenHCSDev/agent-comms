@@ -21,18 +21,19 @@ from .channels import (
 )
 from .display_order import ChannelSort, CreatedThreadSort, NameChannelSort, ThreadSort
 from .errors import RelationViolationError, UnknownChannelError
-from .nominal.field_codec import ThreadLookup, WireRequired
+from .nominal.field_codec import WireRequired
+from .thread_identity import RecordedThreadIncarnation
+from .thread_pins import ThreadPin
 
 
 @dataclass(frozen=True, slots=True)
-class ChannelPreferences:
+class ChannelOptions:
     order: type[ThreadSort] = CreatedThreadSort
     created_at: float = 0.0
     pinned: bool = False
     parent: str | None = None
     archived: bool = False
     any_mode: bool = False
-    pinned_threads: frozenset[ThreadLookup] = frozenset()
 
     def channel[C: Channel](self, declaration: type[C], name: str, tags: frozenset[str], **identity) -> C:
         return declaration(
@@ -48,6 +49,45 @@ class ChannelPreferences:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class ChannelPreferences(ChannelOptions):
+    pinned_threads: frozenset[ThreadPin] = frozenset()
+
+
+@dataclass(slots=True)
+class CatalogDeclarations[Preference: ChannelOptions]:
+    """One declaration of the fields and validation shared by catalog wire versions."""
+
+    preferences: dict[str, Preference] = field(default_factory=dict)
+    list_order: type[ChannelSort] = NameChannelSort
+    tags: frozenset[str] = frozenset()
+    saved_views: dict[str, SavedView] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.validate()
+
+    def validate(self) -> None:
+        for tag in self.tags:
+            Tag.validate(tag)
+            channel = ChannelTarget.normalize_name(tag)
+            if channel not in self.preferences or self.preferences[channel].created_at <= 0:
+                raise ValueError(
+                    f"Channel {channel} has no recorded creation time; carry its catalog first.")
+        if any(name != view.name for name, view in self.saved_views.items()):
+            raise ValueError("Saved view key must match its declared name")
+        self.validate_parents()
+
+    def validate_parents(self) -> None:
+        for name in self.preferences:
+            visited = set()
+            parent = name
+            while parent is not None:
+                if parent in visited:
+                    raise ValueError("Channel parent relation cannot contain a cycle.")
+                visited.add(parent)
+                parent = self.preferences.get(parent, ChannelOptions()).parent
+
+
 class CatalogAccess(ABC):
     """Queries available to a command's acquired catalog context."""
 
@@ -57,7 +97,10 @@ class CatalogAccess(ABC):
     def require_channel(self, target: str, activity: ActivityClocks) -> Channel: ...
 
     @abstractmethod
-    def pinned_threads(self, channel: str) -> frozenset[ThreadLookup]: ...
+    def pinned_threads(self, channel: str) -> frozenset[ThreadPin]: ...
+
+    def thread_pinned(self, channel: str, thread: RecordedThreadIncarnation) -> bool:
+        return ThreadPin.recorded(thread) in self.pinned_threads(channel)
 
 
 class NoCatalog(CatalogAccess):
@@ -68,22 +111,19 @@ class NoCatalog(CatalogAccess):
     def require_channel(self, target: str, activity: ActivityClocks) -> Channel:
         raise ValueError("Channel lookup requires an acquired catalog")
 
-    def pinned_threads(self, channel: str) -> frozenset[ThreadLookup]:
+    def pinned_threads(self, channel: str) -> frozenset[ThreadPin]:
         raise ValueError("Thread pin lookup requires an acquired catalog")
 
 
 @dataclass(slots=True)
-class CatalogPreferences(CatalogAccess):
+class CatalogPreferences(CatalogDeclarations[ChannelPreferences], CatalogAccess):
     """The channel preference map owns ordering, pin edits and cleanup."""
 
-    preferences: dict[str, ChannelPreferences] = field(default_factory=dict)
-    list_order: type[ChannelSort] = NameChannelSort
-
-    def pinned_threads(self, channel: str) -> frozenset[ThreadLookup]:
+    def pinned_threads(self, channel: str) -> frozenset[ThreadPin]:
         return self.preferences.get(channel, ChannelPreferences()).pinned_threads
 
 
-    def pinned_members(self) -> dict[str, frozenset[ThreadLookup]]:
+    def pinned_members(self) -> dict[str, frozenset[ThreadPin]]:
         return {
             name: value.pinned_threads
             for name, value in self.preferences.items()
@@ -116,14 +156,15 @@ class CatalogPreferences(CatalogAccess):
         return self.set_preferences(name, activity, any_mode=enabled)
 
 
-    def set_thread_pinned(self, channel: str, thread: ThreadLookup, pinned: bool) -> None:
+    def set_thread_pinned(self, channel: str, thread: RecordedThreadIncarnation, pinned: bool) -> None:
         preference = self.preferences.get(channel, ChannelPreferences())
         selected = preference.pinned_threads
-        selected = selected | {thread} if pinned else selected - {thread}
+        pin = ThreadPin.recorded(thread)
+        selected = selected | {pin} if pinned else selected - {pin}
         self.preferences[channel] = replace(preference, pinned_threads=selected)
 
 
-    def remove_thread(self, thread: ThreadLookup) -> None:
+    def remove_thread(self, thread: RecordedThreadIncarnation) -> None:
         for name in tuple(self.preferences):
             self.set_thread_pinned(name, thread, False)
 
@@ -138,34 +179,7 @@ class CatalogPreferences(CatalogAccess):
 
 @dataclass(slots=True)
 class CatalogDocument(CatalogPreferences):
-    tags: frozenset[str] = frozenset()
-    saved_views: dict[str, SavedView] = field(default_factory=dict)
     version: Annotated[Literal[2], WireRequired()] = 2
-
-    def __post_init__(self) -> None:
-        self.validate()
-
-    def validate(self) -> None:
-        for tag in self.tags:
-            Tag.validate(tag)
-            channel = ChannelTarget.normalize_name(tag)
-            if channel not in self.preferences or self.preferences[channel].created_at <= 0:
-                raise ValueError(
-                    f"Channel {channel} has no recorded creation time; carry its catalog first.")
-        if any(name != view.name for name, view in self.saved_views.items()):
-            raise ValueError("Saved view key must match its declared name")
-        self.validate_parents()
-
-    def validate_parents(self) -> None:
-        for name in self.preferences:
-            visited = set()
-            parent = name
-            while parent is not None:
-                if parent in visited:
-                    raise ValueError("Channel parent relation cannot contain a cycle.")
-                visited.add(parent)
-                parent = self.preferences.get(parent, ChannelPreferences()).parent
-
 
     def set_metadata(self, name: str, activity: ActivityClocks, *, parent: str | None, archived: bool) -> Channel:
         current = self.require_channel(name, activity)

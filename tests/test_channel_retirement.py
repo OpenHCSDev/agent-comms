@@ -12,7 +12,8 @@ from agent_comms.bus import Bus, PublicRecord
 from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.channels import AnyOfMatch, ViewPredicate, ActivityView, ParticipantsView
 from agent_comms.comms import wire
-from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.thread_pins import ThreadPin
 from agent_comms.message_page import PageBounds
 from agent_comms.messages import InfoKind, Membership, Message
 from agent_comms.page_traversal import LiveCursor
@@ -52,7 +53,7 @@ def test_saved_projection_preserves_preferences_history_and_has_no_writable_alia
     comms = wire(tmp_path)
     for name, tags in (("a", {"api"}), ("b", {"ui"}), ("other", set())):
         comms.registry.declare(Thread(name, frozenset(tags), Checkout(tmp_path)))
-    pinned = comms.registry.require("a").incarnation.require_recorded().lookup
+    pinned = ThreadPin.recorded(comms.registry.require("a").incarnation.require_recorded())
     original = saved_catalog(tmp_path, pinned)
     rows = [
         Message("other", target, str(i), InfoKind, timestamp=i, seq=i)
@@ -126,7 +127,7 @@ def test_private_initial_rejects_view_but_routes_exact_tags_and_membership(tmp_p
 def test_restoring_same_named_view_keeps_current_predicate_and_original_target_history(tmp_path):
     source_root = tmp_path / "source"
     source_root.mkdir()
-    saved_catalog(source_root, ThreadLookup.mint())
+    saved_catalog(source_root, ThreadPin.unattributed("historical-pin"))
     source = ChannelCatalog(source_root / "catalog.json").read()
     Bus.install(Bus.path_in(tmp_path / "destination"))
     comms = wire(tmp_path / "destination")

@@ -36,7 +36,6 @@ from .nominal.field_codec import (
     JsonShapeFamily,
     JsonShapeMember,
     PresenceExclude,
-    ThreadLookup,
     WatchPaths,
     WatchViews,
     WireExclude,
@@ -44,6 +43,7 @@ from .nominal.field_codec import (
     WireOmitDefault,
     projected,
 )
+from .thread_pins import ThreadPin
 from .goal_presentation import GoalExecution
 from .goal_waits import GoalWaits
 from .locked_store import GoalWakeFile
@@ -269,12 +269,13 @@ class ChannelView(ToolResult):
     last_activity: float = 0
     last_user_input: float = 0
     pinned_members: frozenset[str] = frozenset()
+    pin_notices: Annotated[tuple[str, ...], WireOmitDefault()] = field(default=(), kw_only=True)
     active_agents: Annotated[int, WireExclude()] = 0
     registered_agents: Annotated[int, WireExclude()] = 0
 
     @classmethod
     def roster(cls, snapshot: RegistrySnapshot, channels: Iterable[Channel],
-        pins: Mapping[str, frozenset[ThreadLookup]], order: type[ChannelSort],
+        pins: Mapping[str, frozenset[ThreadPin]], order: type[ChannelSort],
         activity: Mapping[str, ObservedActivity], sent: Mapping[str, float],
         messages: Mapping[str, ChannelActivity], visibility: RosterVisibility,
     ) -> tuple[ChannelView, ...]:
@@ -288,13 +289,14 @@ class ChannelView(ToolResult):
     @classmethod
     def capture(
         cls, channel: Channel, registered: tuple[Thread, ...], snapshot: RegistrySnapshot,
-        pins: frozenset[ThreadLookup], activity: Mapping[str, ObservedActivity], sent: Mapping[str, float],
+        pins: frozenset[ThreadPin], activity: Mapping[str, ObservedActivity], sent: Mapping[str, float],
         history: ChannelActivity, visibility: RosterVisibility,
     ) -> ChannelView:
         people = {thread.name: thread for thread in registered
                   if snapshot.status(thread.name).in_view(visibility)}
+        pinned_lookups = frozenset(lookup for pin in pins for lookup in pin.lookups())
         pinned_names = frozenset(name for name, thread in people.items()
-                                 if thread.incarnation.require_recorded().lookup in pins)
+                                 if thread.incarnation.require_recorded().lookup in pinned_lookups)
         members = tuple(sorted(people, key=lambda name: (
             name not in pinned_names,
             channel.order.key(name, people[name].created_at,
@@ -307,6 +309,8 @@ class ChannelView(ToolResult):
                 max((activity[name].timestamp for name in members if name in activity), default=0)),
             history.last_user_input, pinned_names,
             sum(1 for _ in snapshot.active_threads(registered)), len(registered),
+            pin_notices=tuple(note for pin in sorted(pins, key=lambda pin: pin.sort_key)
+                              for note in pin.notices(snapshot.lookup_names)),
         )
 
 
