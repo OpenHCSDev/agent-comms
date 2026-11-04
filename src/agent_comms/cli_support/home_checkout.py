@@ -13,13 +13,17 @@ from agent_comms.tool_caller import ThreadCaller
 
 @dataclass(frozen=True, kw_only=True)
 class HomeCheckoutCliCommand(CliCommand):
-    """The calling thread's selected launch checkout supplies the canonical target."""
+    """Publication commands select a target without moving the caller's editing project."""
 
     caller: Annotated[ThreadCaller, Normalize(FieldCodec.encode),
                       Argument(flags=("--from",), options={"type": ThreadCaller})]
 
+    checkout: Annotated[PublishingCheckout, Argument(flags=("--checkout",), options={
+        "help": "Physical publication checkout of the selected project's repository",
+    })]
+
     def home(self, ctx: Comms) -> tuple[Thread, PublishingCheckout]:
         thread = ctx.registry.require(self.caller.own_thread())
-        checkout = PublishingCheckout.checked(thread.project_path)
+        checkout = self.checkout.qualified_for(thread.worktree)
         ctx.registry.storage_rule.require_destination(thread, checkout.path)
         return thread, checkout

@@ -18,7 +18,7 @@ class SyncedCheckoutResult(CliResult):
 
 @dataclass(frozen=True, kw_only=True)
 class SyncCheckoutCliCommand(HomeCheckoutCliCommand, declared_name="sync-checkout"):
-    help = "Fast-forward your selected launch checkout to origin's default branch"
+    help = "Fast-forward the explicit publication checkout to origin's default branch"
 
     def apply(self, ctx: Comms) -> SyncedCheckoutResult:
         _, checkout = self.home(ctx)
