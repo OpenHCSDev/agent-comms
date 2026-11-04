@@ -14,7 +14,9 @@ import agent_comms.backend as backend
 from agent_comms.agent_backend import NoInputStartListener
 from agent_comms.turn_inbox import InputContent, InputRequest, SteerInputPolicy, TurnInbox
 from agent_comms.child_process import BoundedRun, join_retirement
+from agent_comms.acp import SdkSessionConnection
 from agent_comms.comms import wire
+from agent_comms.controller import NO_CONTROLLER, NoController
 from agent_comms.coordinator import Coordination
 from agent_comms.cursor_publication import CursorDelivery
 from agent_comms.nominal.field_codec import AcpSessionId, InputId
@@ -114,7 +116,8 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
 
     @asynccontextmanager
     async def open_owner(self, *, runtime_enabled=False, auto_wake=False,
-                         native_options=("--no-tools",), client=None):
+                         native_options=("--no-tools",),
+                         client: SdkSessionConnection | NoController = NO_CONTROLLER):
         """Acquire the real saved ACP owner and attested idle native child."""
         agent = canonical_agent(
             wire(self.root), auto_wake=auto_wake, runtime_enabled=runtime_enabled, agent_bin=GivenBinary("pi"),
