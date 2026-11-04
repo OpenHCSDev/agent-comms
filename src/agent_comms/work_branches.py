@@ -11,7 +11,7 @@ from __future__ import annotations
 from agent_comms.nominal.field_codec import WireExclude
 
 from abc import abstractmethod
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from functools import cached_property, lru_cache
@@ -725,8 +725,9 @@ class CheckoutRead(DeclaredFamily, affix="CheckoutRead"):
         """Every checkout of this repository, as Git lists it."""
 
     @abstractmethod
-    def edits(self, repository: RepositoryName) -> bool:
-        """Whether a unit can edit this checkout as one of that repository."""
+    def keeps_boundary(self, owned: Callable[[], bool]) -> bool:
+        """Whether this declared checkout stays its work's edit boundary; ``owned`` qualifies
+        a checkout git can read."""
 
 
 @dataclass(frozen=True)
@@ -746,8 +747,8 @@ class ReadableCheckoutRead(CheckoutRead):
     def worktrees(self) -> tuple[Path, ...]:
         return tuple(self.branches.history.heads)
 
-    def edits(self, repository: RepositoryName) -> bool:
-        return self.branches.history.repository.github == repository
+    def keeps_boundary(self, owned: Callable[[], bool]) -> bool:
+        return owned()
 
 
 @dataclass(frozen=True)
@@ -771,6 +772,7 @@ class UnreadableCheckoutRead(CheckoutRead):
         """Git cannot list its siblings, so the checkout stands as its own until repaired."""
         return (self.checkout.resolve(),)
 
-    def edits(self, repository: RepositoryName) -> bool:
-        """Git refuses it, so nothing edits it until its unit repairs it."""
-        return False
+    def keeps_boundary(self, owned: Callable[[], bool]) -> bool:
+        """Its unit's work stays where it is: reading the boundary never fails the pass, and
+        nothing is allocated around it."""
+        return True
