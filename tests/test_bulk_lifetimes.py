@@ -104,7 +104,7 @@ def test_rehome_refuses_a_changed_original_before_publishing_the_staged_copy(
         with pytest.raises(RelationViolationError):
             rehomed.result(timeout=5)
     current = comms.registry.require(original.name)
-    assert current.execution is ExternalThread
+    assert current.declared_name == ExternalThread.declared_name
     assert current.project_path == changed_project
     assert not tuple((comms.root / "imported_sessions").iterdir())
 

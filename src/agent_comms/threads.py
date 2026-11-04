@@ -628,11 +628,6 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread")
     def process_alive(self) -> bool:
         return self.process_identity.alive()
 
-    @classmethod
-    def require_declaration(cls, value: Thread) -> None:
-        if type(value) is not cls:
-            raise ValueError("live owner requires an exact thread declaration")
-
     def same_local_process(self, process: ProcessIdentity) -> bool:
         return self.process_identity == process
 

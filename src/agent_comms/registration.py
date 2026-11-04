@@ -411,7 +411,6 @@ class Registration:
         self, expected: Thread, turn_id: TurnId, *, expected_generation: int
     ) -> tuple[Thread, int]:
         """Claim a turn against the input generation, allowing unrelated metadata changes."""
-        Thread.require_declaration(expected)
         generation = GenerationCounter.require_positive(expected_generation)
         with self.store.editing() as edit:
             owner = RegistryOwner.capture_local(edit.original.snapshot, expected.name)

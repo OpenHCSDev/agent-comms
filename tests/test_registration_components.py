@@ -112,7 +112,10 @@ def test_new_thread_field_has_no_second_registry_decoder_roster(tmp_path, *, thr
     class ExtendedThread(Thread):
         external_reference: str = "default"
 
-    raw = FieldCodec.encode(thread_registration.declare(owner(tmp_path))) | {"external_reference": "declared here"}
+    raw = FieldCodec.encode(thread_registration.declare(owner(tmp_path))) | {
+        "external_reference": "declared here",
+        Thread.family_discriminator: ExtendedThread.declared_name,  # a member names itself
+    }
     loaded = FieldCodec.decode(ExtendedThread, raw)
     assert loaded.external_reference == "declared here"
     assert loaded.to_wire()["external_reference"] == "declared here"

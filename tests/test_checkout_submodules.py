@@ -86,8 +86,8 @@ def checkout_command_bus(repository, tmp_path, monkeypatch, installed_runtime, r
     comms = wire(root)
     colleague = comms.registry.declare(ExternalThread(
         "colleague", frozenset(), Checkout(tmp_path / "colleague")))
-    worker = comms.registry.declare(NativeThread(
-        "worker", frozenset(), Checkout(repository), execution=request.param))
+    worker = comms.registry.declare(request.param(
+        "worker", frozenset(), Checkout(repository)))
     comms.registry.set_team_project(RegisteredTeamProject((Repo(checkout=repository, github=identity),)))
     request_id = comms.goals.todos.add_request(colleague.incarnation, "Prepare the pinned checkout").id
     now = time.time()

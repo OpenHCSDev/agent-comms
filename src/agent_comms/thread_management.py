@@ -434,8 +434,6 @@ class ThreadManagement:
         Progress and goals belong to the current document. A changed selection
         or project invalidates the native settings result acquired by the caller.
         """
-        Thread.require_declaration(original)
-
         def configure(thread: Thread) -> Thread:
             thread.require_original_model_configuration(original)
             thread.require_native()

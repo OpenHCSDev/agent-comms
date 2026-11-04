@@ -401,7 +401,7 @@ def test_rehome_moves_a_codex_thread_to_pi_on_its_own_birth(
     assert after.incarnation == before.incarnation and after.created_at == before.created_at
     assert (after.tags, after.worktree, after.storage_roots) == (
         before.tags, before.worktree, before.storage_roots)
-    assert after.execution is NativeThread and after.process_identity == NO_PROCESS
+    assert after.declared_name == NativeThread.declared_name and after.process_identity == NO_PROCESS
     assert comms.registry.status("worker") == StoppedThreadStatus()
     assert Path(rehomed.session_file).is_file() and rehomed.source_id == "codex-session"
     assert systemctl == [("systemctl", "--user", "disable", "--now",
