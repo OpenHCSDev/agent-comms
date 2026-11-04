@@ -666,9 +666,9 @@ async def test_a_wrong_body_in_the_export_never_confirms(bridge, capsys):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('separator', ('\u2028', '\x85', '\u2029\x1c'))
+@pytest.mark.parametrize('separator', ('\u2028', '\x85', '\u2029'))
 async def test_line_separators_inside_a_body_stay_inside_their_part(bridge, separator):
-    """Encoded parts keep U+2028, U+0085 and friends raw; only a physical LF ends a record,
+    """A transcript keeps U+2028, U+0085 and U+2029 raw; only a physical LF ends a line,
     inline in an event and in a Read result alike."""
     short = bridge.comms.messaging.send('peer', 'viewer', f'a{separator}b').message
     async with attached_monitor(bridge) as reader:
@@ -694,6 +694,16 @@ async def test_line_separators_inside_a_body_stay_inside_their_part(bridge, sepa
     observed = await bridge.coordinator_read(lambda db: HarnessObservedPart.of(db, confirmed))
     assert ''.join(part.body for part in sorted(observed, key=lambda part: part.number)) == body
     assert not export.exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('character', ('\x1c', '\r', '\x07'))
+async def test_a_character_the_xml_envelope_cannot_carry_sends_the_body_to_the_file(bridge, character):
+    """A transcript records a Monitor event inside XML, which cannot hold a control character
+    raw and reads a CR as a line break, so such a body is the file, byte for byte."""
+    body = f'a{character}b'
+    message, export = await exported(bridge, body)
+    assert export.read_text(newline='').split('\n', 1)[1] == body + '\n'
 
 
 @pytest.mark.asyncio

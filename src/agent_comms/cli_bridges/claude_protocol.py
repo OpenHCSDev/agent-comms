@@ -110,6 +110,9 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
     """A blank line would vanish; a zero-width space keeps it and reads as nothing. Nobody
     copies a blank line, so the guard goes nowhere else: an indent would carry it into whatever
     a reader pastes, so an indented body is the file instead."""
+    XML_UNSAFE = re.compile('[^\t\x20-퟿-�\U00010000-\U0010ffff]')
+    """What a transcript's XML envelope cannot carry as written: control characters, CR and
+    the two noncharacters."""
 
     @staticmethod
     def units(line: str) -> int:
@@ -175,8 +178,11 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
         """Each shown line is a line of the event, and the transcript decoder reads every line:
         a body line that would read as a header or one of our frames goes to the file, where
         nothing decodes it. Monitor trims a line's indent, so an indented body goes there too,
-        where a reader copies it byte for byte."""
-        return not any(self.claims(line) or line[:1].isspace() for line in self.shown_lines[1:])
+        where a reader copies it byte for byte. The transcript records every other character
+        verbatim inside an XML envelope, which cannot hold a control character raw and reads a
+        CR as a line break, so a body with one of those goes to the file as well."""
+        return not any(self.claims(line) or line[:1].isspace() or self.XML_UNSAFE.search(line)
+                       for line in self.shown_lines[1:])
 
     @cached_property
     def slices(self) -> tuple[str, ...]:
