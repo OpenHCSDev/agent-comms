@@ -2,6 +2,7 @@
 
 import json
 import os
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -10,6 +11,7 @@ import pytest
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.repository_name import RepositoryName
 from agent_comms.todos import ListedPullRequest, UnmergedListedPullRequest
+from github_cli_stub import hold, store
 
 
 @dataclass(frozen=True)
@@ -30,49 +32,51 @@ class GitHubFixture:
     def path(self) -> Path:
         return self.directory / "pull_requests.json"
 
+    @contextmanager
+    def changing(self):
+        """The forge state for one change, under the lock every gh call takes."""
+        with hold(self.directory):
+            data = json.loads(self.path.read_text()) if self.path.exists() else {}
+            yield data
+            store(self.directory, data)
+
     def configure(self, *repositories: RepositoryName):
-        data = json.loads(self.path.read_text()) if self.path.exists() else {}
-        for repository in repositories:
-            data.setdefault(repository.to_wire(), {
-                "open_kinds": [kind.declared_name for kind in
-                               UnmergedListedPullRequest.members_with(UnmergedListedPullRequest)],
-                "requests": {},
-            })
-        self.path.write_text(json.dumps(data))
+        with self.changing() as data:
+            for repository in repositories:
+                data.setdefault(repository.to_wire(), {
+                    "open_kinds": [kind.declared_name for kind in
+                                   UnmergedListedPullRequest.members_with(UnmergedListedPullRequest)],
+                    "requests": {},
+                })
         return self
 
     def put(self, repository: RepositoryName, row: ListedPullRequest, body: str = "") -> None:
-        data = json.loads(self.path.read_text())
-        data[repository.to_wire()]["requests"][str(row.number)] = {"body": body, "listed": FieldCodec.encode(row)}
-        self.path.write_text(json.dumps(data))
+        with self.changing() as data:
+            data[repository.to_wire()]["requests"][str(row.number)] = {"body": body, "listed": FieldCodec.encode(row)}
 
     def refuse_read(self, repository: RepositoryName, number: int, refusal: str) -> None:
         """An existing remote PR is inaccessible at GitHub's actual process boundary."""
-        data = json.loads(self.path.read_text())
-        data[repository.to_wire()]["requests"][str(number)]["read_refusal"] = refusal
-        self.path.write_text(json.dumps(data))
+        with self.changing() as data:
+            data[repository.to_wire()]["requests"][str(number)]["read_refusal"] = refusal
 
     def create_next(self, repository: RepositoryName, row: ListedPullRequest, *,
                     remotes: tuple[Path, ...] = (), reply_refusal: str = "",
                     lag_reads: int = 0) -> None:
         """The forge can follow a real pushed branch and lose its reply after creating it."""
-        data = json.loads(self.path.read_text())
-        data[repository.to_wire()]["next_creation"] = FieldCodec.encode(
-            PullRequestCreation(row, remotes, reply_refusal, lag_reads))
-        self.path.write_text(json.dumps(data))
+        with self.changing() as data:
+            data[repository.to_wire()]["next_creation"] = FieldCodec.encode(
+                PullRequestCreation(row, remotes, reply_refusal, lag_reads))
 
     def refuse_status(self, repository: RepositoryName, head: str, context: str,
                       refusal: str, *, state: str = "") -> None:
-        data = json.loads(self.path.read_text())
-        data[repository.to_wire()].setdefault("status_refusals", {}).setdefault(head, {})[context] = {
-            "state": state, "message": refusal}
-        self.path.write_text(json.dumps(data))
+        with self.changing() as data:
+            data[repository.to_wire()].setdefault("status_refusals", {}).setdefault(head, {})[context] = {
+                "state": state, "message": refusal}
 
     def refuse_arm(self, repository: RepositoryName, number: int, refusal: str) -> None:
         """GitHub's answer when enabling auto-merge on this pull request fails."""
-        data = json.loads(self.path.read_text())
-        data[repository.to_wire()]["requests"][str(number)]["arm_refusal"] = refusal
-        self.path.write_text(json.dumps(data))
+        with self.changing() as data:
+            data[repository.to_wire()]["requests"][str(number)]["arm_refusal"] = refusal
 
     def calls(self) -> tuple[tuple[str, ...], ...]:
         path = self.directory / "calls.jsonl"

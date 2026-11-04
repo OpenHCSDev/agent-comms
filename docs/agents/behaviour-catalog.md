@@ -79,7 +79,7 @@ Checked by:
 
 - check in `agent_comms.todos.PlainText`
 
-Learned from: [comms-commander rule](../../src/agent_comms/skills/comms-commander/SKILL.md) "Hate jargon."; Failure 8: October 9 postmortem: repeated permission exchanges and reports replaced delivery; one checkout reached 8.7 GB, ratchets ran dozens of times and over 200,000 evidence lines were committed in one night.
+Learned from: [comms-team rule](../../src/agent_comms/skills/comms-team/SKILL.md) "Hate jargon."; Failure 8: October 9 postmortem: repeated permission exchanges and reports replaced delivery; one checkout reached 8.7 GB, ratchets ran dozens of times and over 200,000 evidence lines were committed in one night.
 
 ## repeated_strike
 
@@ -121,7 +121,7 @@ Checked by:
 
 - check in `agent_comms.todos.TodoStore.apply`
 
-Learned from: P194 (b26843727); [comms-commander rule](../../src/agent_comms/skills/comms-commander/SKILL.md) "Strikes measure misses and trigger scrutiny; they never release work."
+Learned from: P194 (b26843727); [comms-team rule](../../src/agent_comms/skills/comms-team/SKILL.md) "Strikes measure misses and trigger scrutiny; they never release work."
 
 ## report_instead_of_state
 
@@ -143,7 +143,7 @@ Checked by:
 
 Learned from: seed catalog pattern 4 (claude-ai message 1c8729ba0ed7); Failure 4: October 9 postmortem: 451 measurement-related commits and 716 evidence files yielded only three comparable files; headline 11.7 ms median timings measured terminal writes, not total frames.
 
-## commander_overloaded
+## team_overloaded
 
 The teammate's unread backlog is over the limit while no second teammate is forked to share it.
 

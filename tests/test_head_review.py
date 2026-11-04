@@ -356,7 +356,7 @@ def test_companion_metadata_refuses_an_unregistered_origin_before_forge_read(
     before = comms.goals.todos.get("P2")
     context = configured_repository(comms, reviewed_source)
     calls = github.calls()
-    with chdir(companion_checkout), pytest.raises(ValueError, match="Unknown repository"):
+    with chdir(companion_checkout), pytest.raises(ValueError, match="not a repository of this team"):
         order.main(["pr", before.id, "--existing", str(primary.pr)], context)
     assert comms.goals.todos.get(before.id) == before
     assert github.calls() == calls
@@ -369,7 +369,7 @@ def test_companion_metadata_refuses_a_closed_order_without_forge_or_link_changes
     before = comms.goals.todos.get("P2")
     comms.goals.todos.apply(before.id, WithdrawTodo(
         before.revision, before.held().owner_identity,
-        before.held(), "Close this fixture order before attempting metadata"))
+        "Close this fixture order before attempting metadata"))
     closed = comms.goals.todos.get(before.id)
     calls = github.calls()
     with chdir(companion_checkout), pytest.raises((ValueError, TodoError)):
@@ -623,11 +623,11 @@ def test_companion_input_changes_the_identity_of_an_unchanged_local_patch(
     assert not any(HeadReview.accepted(head.repo, head.head) for head in heads)
 
 
-@pytest.mark.parametrize("actor", ("colleague", "worker"))
 def test_pending_sources_can_compute_but_only_reviewed_other_heads_allow_carrier_promotion(
-        mutual_sources: MutualSources, github_cli: GitHubFixture, actor: str) -> None:
+        mutual_sources: MutualSources, github_cli: GitHubFixture) -> None:
+    # The integration checkout's owner captures it; no teammate works in another's checkout.
     pair = replace(mutual_sources, context=mutual_sources.context.model_copy(
-        update={"actor": PeerCaller(actor)}))
+        update={"actor": PeerCaller("colleague")}))
     comms = pair.context.comms
     client = PullRequestHead(pair.client.github, pair.client.number, pair.client.branch_commit)
     invoke(comms, client, UnderReviewHeadVerdict())
@@ -842,7 +842,8 @@ def test_capture_derives_only_exact_saved_orderless_sources_in_the_actual_carrie
     mutual_sources: MutualSources, github_cli: GitHubFixture, state: str, reviewer: str,
 ) -> None:
     pair = mutual_sources
-    context = pair.context.model_copy(update={"actor": PeerCaller("worker")})
+    # The integration checkout's owner captures it; no teammate works in another's checkout.
+    context = pair.context.model_copy(update={"actor": PeerCaller("colleague")})
     comms = context.comms
     peer = SourceRepository(checkout=pair.core.checkout, github=pair.core.github, number=9)
     peer.git(peer.checkout, "switch", "-c", "orderless-source", "main")
@@ -1192,8 +1193,8 @@ def test_acceptance_over_the_growth_limit_needs_a_reason_naming_each_growing_fil
                       PullRequestLink(request.repo, request.pr), held.generation).record(
                           comms.goals, todo.id)
     before = comms.goals.todos.get(todo.id)
-    common = ["judge", "ok", "--repo", request.repo.to_wire(), "--pr", str(request.pr),
-              "--head", head, "--why", ACCEPTED.text]
+    common = ["judge", "ok", "--as", "colleague", "--repo", request.repo.to_wire(),
+              "--pr", str(request.pr), "--head", head, "--why", ACCEPTED.text]
 
     def cli(*arguments):
         return subprocess.run(
@@ -1208,7 +1209,8 @@ def test_acceptance_over_the_growth_limit_needs_a_reason_naming_each_growing_fil
     assert comms.goals.todos.get(todo.id) == before
     assert len(StoredHeadReview.head_reviews(comms.goals.todos, request)) == 1
 
-    back = cli("judge", "back", "--repo", request.repo.to_wire(), "--pr", str(request.pr),
+    back = cli("judge", "back", "--as", "colleague", "--repo", request.repo.to_wire(),
+               "--pr", str(request.pr),
                "--head", head, "--at", "owner.py:2",
                "--roast", "The decision could be improved because it repeats the required checks across fields",
                "--fix", "Put the repeated checks on their existing declaring parent class")

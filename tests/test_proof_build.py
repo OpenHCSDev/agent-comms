@@ -423,7 +423,7 @@ def test_install_due_compares_fetched_main_to_installed_build(
 
     github_cli.configure(graph.repository.github)
     pulls = ProgressRead()
-    InstallDue.prepare(bus, "colleague", HeldOrders.read(bus), pulls)
+    InstallDue.prepare(bus, HeldOrders.read(bus), pulls)
     due = InstallDue.due(bus, pulls)
 
     assert Repo.git(checkout, "rev-parse", "HEAD") == before
@@ -445,7 +445,7 @@ def test_install_due_compares_fetched_main_to_installed_build(
     resolution = RuntimeResolution.at(runtime)
     resolution.model_copy(update={"core_commit": graph.newer}).save(runtime)
     pulls = ProgressRead()
-    InstallDue.prepare(bus, "colleague", HeldOrders.read(bus), pulls)
+    InstallDue.prepare(bus, HeldOrders.read(bus), pulls)
     after_install = InstallDue.due(bus, pulls)
     assert after_install == ()
     assert Repo.git(checkout, "rev-parse", "HEAD") == before
@@ -488,7 +488,7 @@ def test_a_one_minute_old_merge_is_due_and_names_its_request_without_launching(
     monkeypatch.setattr(time, "time", lambda: merged + 60)
 
     pulls = ProgressRead()
-    InstallDue.prepare(bus, "colleague", HeldOrders.read(bus), pulls)
+    InstallDue.prepare(bus, HeldOrders.read(bus), pulls)
     (due,) = InstallDue.due(bus, pulls)
     assert due.main == merge
     assert "#41 Install what merged" in due.line() and "#42 fix/next" in due.line()

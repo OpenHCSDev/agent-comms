@@ -1190,12 +1190,16 @@ class IdlePullRequest(HeadLine, DatedStandingRule):
         """A verdict on the head or an order to its holder disposes of the line."""
         return (*super().subjects(), *(TeammateSubject(holder) for holder in self.holders))
 
+    def unheld_actions(self, remedies: tuple[str, ...]) -> tuple[str, ...]:
+        """With nobody holding the branch, its remedies say what to do; with none, the default."""
+        return remedies or (self.unowned,)
+
     def line(self) -> str:
         held = ", ".join(holder.name for holder in self.holders) or self.unheld
         why = "; ".join(block.what() for block in self.blocks) or "head unmoved"
-        actions = ((*(block.remedy() for block in self.blocks),
-                    *(f"order {holder.name}" for holder in self.holders))
-                   or (self.unowned,))
+        remedies = tuple(block.remedy() for block in self.blocks)
+        actions = ((*remedies, *(f"order {holder.name}" for holder in self.holders))
+                   if self.holders else self.unheld_actions(remedies))
         return (f"{self.tag} {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]} ({held}):"
                 f" {why}, unchanged since {RecordedEventTime(self.moved).stamp()}. who owns it, or are we"
                 f" pretending it doesn't exist? -> {'; '.join(actions)}")
@@ -1212,6 +1216,11 @@ class OrderlessPullRequest(IdlePullRequest):
     tag: ClassVar[str] = "UNORDERED"
     unheld: ClassVar[str] = "no order, and no registered thread has its branch checked out"
     unowned: ClassVar[str] = "order its author or close it with a reason"
+
+    def unheld_actions(self, remedies: tuple[str, ...]) -> tuple[str, ...]:
+        """A remedy "at its owner" names no one here: work outside the orders that nobody
+        holds needs its author ordered first."""
+        return (self.unowned,)
 
     @classmethod
     def scan_observed(cls, comms: Comms,

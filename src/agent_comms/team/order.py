@@ -1178,6 +1178,9 @@ class ExistingPullRequestSelection(PullRequestSelection):
             title: str, body_file: str) -> str:
         if title or body_file:
             raise ValueError("--existing does not create or edit the PR; omit title and body.")
+        # The project's repository rule refuses before any forge read, as creation does.
+        RecordPullRequest.require_repository(
+            ctx.comms.registry.snapshot().team_project, todo, source.github)
         link = PullRequestLink.existing(source.github, self.number)
         ctx.comms.goals.todos.apply(todo.id, RecordPullRequest.for_order(
             todo, ctx.incarnation, link))

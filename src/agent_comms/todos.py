@@ -5443,7 +5443,7 @@ class RecordPullRequest(TodoCommand):
     def require_repository(project: TeamProject, todo: Todo, repository: RepositoryName) -> None:
         """Creation preflight and the stored link share the project's repository rule."""
         if repository not in project.linkable(todo.repo):
-            raise TodoError(f"{repository.to_wire()} is not a repository of this teammate "
+            raise TodoError(f"{repository.to_wire()} is not a repository of this team's "
                             f"project; {todo.id} links only registered repositories.")
 
     def changed(self, current: Todo) -> Todo:

@@ -167,8 +167,7 @@ def materialized_clients(test_uv: Path) -> Callable[[Path, IntegrationInput], Ma
 def mutual_sources(source_pair: MutualSources) -> MutualSources:
     """The same source owner, with its companion linked by a separate real checked order.
 
-    The worker's goal slot is occupied, so the worker accepts the companion itself, acting
-    within the colleague's storage as any receiving owner does."""
+    The worker's goal slot is occupied, so the worker accepts the companion itself."""
     comms = source_pair.context.comms
     primary = comms.goals.todos.get("P2")
     creation = CreateProblemGoalAction(
