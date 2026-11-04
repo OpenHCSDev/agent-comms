@@ -120,7 +120,7 @@ def test_unresolved_projection_follows_rename_without_private_receipts(tmp_path:
         native_id=InputId("a" * 32),
         text="private wrapper",
     )
-    comms.threads.rename_managed_thread("kid", "new-kid", owner=ProcessIdentity.capture(os.getpid()))
+    comms.threads.rename_managed_thread(comms.registry.require("kid").incarnation, "new-kid", owner=ProcessIdentity.capture(os.getpid()))
     expected = (UnresolvedInput(7, "#review", "exact source", BusInputKey(7), "unknown"),)
     assert comms.goals.unresolved_inputs("new-kid") == expected
     assert comms.goals.unresolved_inputs("kid") == expected

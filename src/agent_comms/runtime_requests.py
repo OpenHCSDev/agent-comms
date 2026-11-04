@@ -217,10 +217,11 @@ class PromptRuntimeRequest(AttachedResultRuntimeRequest):
 
     @classmethod
     def proxy_payload(
-        cls, thread: str, controller_token: str | NoControllerToken, parameters: dict[str, object]
+        cls, owner: ThreadIncarnation, controller_token: str | NoControllerToken,
+        parameters: dict[str, object],
     ) -> dict[str, object]:
         return super().proxy_payload(
-            thread, controller_token, {"controllerToken": controller_token, **parameters}
+            owner, controller_token, {"controllerToken": controller_token, **parameters}
         )
 
     async def result(self, ctx: AttachedRuntimeRequestContext) -> PromptReply:

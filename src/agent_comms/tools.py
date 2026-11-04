@@ -93,7 +93,8 @@ from .notification_evidence import AfterRecipient, FirstRecipient, RecipientCurs
 from .message_notification import MessageNotification
 from .presentation import ChannelView, WireRevision
 from .runtime_requests import QueueActionRuntimeRequest
-from .runtime_server import CapturedOwner, RuntimeRequest
+from .owner_connection import CapturedOwner
+from .runtime_server import RuntimeRequest
 from .owner_connection import OwnerConnection
 from .context_store import (
     LATEST_CONTEXT, CapturedContext, ContextManifestCursor, ContextManifestPage, ContextManifestReference,
@@ -636,7 +637,7 @@ class CommsRenameManagedThreadTool(HumanToolRequest[RenameThreadResult]):
     owner: Annotated[ProcessIdentity, *tool_field("The process that manages the thread")]
 
     def answered(self, comms: Comms) -> RenameThreadResult:
-        return comms.threads.rename_managed_thread(self.thread.name, self.display_name, owner=self.owner)
+        return comms.threads.rename_managed_thread(self.thread, self.display_name, owner=self.owner)
 
 
 @dataclass(frozen=True, kw_only=True)

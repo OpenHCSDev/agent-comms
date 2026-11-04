@@ -33,12 +33,12 @@ from .command import Command
 from .coordinator import Coordination
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .nominal.field_codec import NullMember, SingleFieldValue, SubclassUnion, WireOmitDefault
+from .nominal.field_codec import WireOmitDefault
 from .thread_identity import ThreadIncarnation
 from .maintenance_barrier import MaintenanceHolder, NoMaintenanceHolder
 from .owner_protocol import OwnerResult
 from .tool_result import DeclaredReply
-from agent_comms.owner_connection import NoControllerToken, OwnerConnection
+from agent_comms.owner_connection import AnyOwner, NoControllerToken, OwnerConnection, RequestedOwner
 if TYPE_CHECKING:
     from .acp import CommsAgent
     from agent_comms.acp import AcpSelectedWriteAuthority
@@ -63,33 +63,6 @@ class AttachedRuntimeRequestContext(RuntimeRequestContext):
     session: AcpSessionId
 
 
-class RequestedOwner(SubclassUnion, affix="Owner"):
-    """Which owner incarnation a request may bind: whichever holds its thread name now, or
-    the one its caller captured. The bind checks it on the owner's side, so a name that
-    acquires a new birth in the same process after the caller's check is refused."""
-
-    @abstractmethod
-    def require(self, owner: Thread) -> None: ...
-
-
-class AnyOwner(NullMember, RequestedOwner):
-    """An in-process caller binds the row that holds the name."""
-
-    def require(self, owner: Thread) -> None:
-        """Nothing was captured, so the current row is the one requested."""
-
-
-@dataclass(frozen=True)
-class CapturedOwner(SingleFieldValue, RequestedOwner):
-    """A caller that checked one incarnation binds only that birth, under any of its names."""
-
-    incarnation: ThreadIncarnation
-
-    def require(self, owner: Thread) -> None:
-        if owner.incarnation != self.incarnation:
-            raise RelationViolationError("The owner incarnation changed before the request bound.")
-
-
 @dataclass(frozen=True, kw_only=True)
 class RuntimeRequest[Ctx: RuntimeRequestContext](
     DeclaredFamily, Command[Ctx, Awaitable[None]], affix="RuntimeRequest"
@@ -101,9 +74,10 @@ class RuntimeRequest[Ctx: RuntimeRequestContext](
 
     @classmethod
     def proxy_payload(
-        cls, thread: str, controller_token: str | NoControllerToken, parameters: dict[str, object]
+        cls, owner: ThreadIncarnation, controller_token: str | NoControllerToken,
+        parameters: dict[str, object],
     ) -> dict[str, object]:
-        return OwnerConnection.wire_request(cls.declared_name, thread, parameters)
+        return OwnerConnection.wire_request(cls.declared_name, owner, parameters)
 
     @abstractmethod
     async def bind(

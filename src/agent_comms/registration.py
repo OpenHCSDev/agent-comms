@@ -17,7 +17,7 @@ from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .goal_scope import AllGoals, GoalScope
 from .native_input_owner import RegistryOwner
 from .registration_change import RegistrationChange
-from .registry_document import ProjectThreadSelection, RegistryDocument, RegistrySnapshot
+from .registry_document import FoundProjectThread, ProjectThreadSelection, RegistryDocument, RegistrySnapshot
 from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from .routing import NoTurnRouting, Routing
 from .storage_rules import StorageRule
@@ -432,8 +432,18 @@ class Registration:
     def session_thread(
         self, project_path: Path, preferred: str,
     ) -> ProjectThreadSelection:
-        """Core's host resolves the project path its registry records, then selects."""
-        return self.store.read().session_thread(Path(project_path).expanduser().resolve(), preferred)
+        """Select an unbound project's preferred name or sole declared ACP thread. Paths
+        resolve here, on Core's host, whose filesystem they name; a snapshot elsewhere never
+        resolves them. Preferred names keep their precedence, including non-ACP threads."""
+        snapshot = self.store.read()
+        project = Path(project_path).expanduser().resolve()
+        located = tuple(t for t in snapshot.threads.values() if t.project_path == project)
+        selected = snapshot.canonical_name(preferred)
+        for thread in located:
+            if thread.name == selected:
+                return FoundProjectThread(thread)
+        return ProjectThreadSelection.from_threads(tuple(
+            member for thread in located for member in thread.role.acp_thread(thread)))
 
     def all_threads(self) -> Mapping[str, Thread]:
         return dict(self.store.read().threads)

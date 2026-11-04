@@ -218,7 +218,7 @@ class TestHandlers:
         path.write_text("".join(json.dumps(record) + "\n" for record in records))
         agent._comms.threads.attach_session((attachment_owner := agent._comms.registry.require("proj")), str(path), process=attachment_owner.process_identity)
         if renamed:
-            agent._comms.threads.rename_managed_thread("proj", "renamed", owner=ProcessIdentity.capture(os.getpid()))
+            agent._comms.threads.rename_managed_thread(agent._comms.registry.require("proj").incarnation, "renamed", owner=ProcessIdentity.capture(os.getpid()))
         client = RecordingClient()
         sent = client.updates
         destination = AcpSessionId("snapshot-destination")

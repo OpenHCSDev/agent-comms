@@ -68,14 +68,12 @@ def test_a_remote_ui_reads_the_registry_with_its_renames(tmp_path):
     received = FieldCodec.decode(RegistrySnapshot, FieldCodec.encode(answer))
     assert received == comms.registry.snapshot()
     assert received.canonical_name("worker") == "renamed"
-    # The received snapshot selects by the project path Core records, compared exactly.
+    # Core's host selects by the project path its registry records, following its aliases.
     project = tmp_path.resolve()
-    assert received.session_thread(project, "worker").name_or("worker") == "renamed"
-    assert received.session_thread(project / "elsewhere", "worker").name_or("kept") == "kept"
-    # An alias resolves only on Core's host: a detached copy elsewhere never follows it.
+    assert comms.registry.session_thread(project, "worker").name_or("worker") == "renamed"
+    assert comms.registry.session_thread(project / "elsewhere", "worker").name_or("kept") == "kept"
     alias = tmp_path.parent / f"{tmp_path.name}-alias"
     alias.symlink_to(project)
-    assert received.session_thread(alias, "worker").name_or("kept") == "kept"
     assert comms.registry.session_thread(alias, "worker").name_or("worker") == "renamed"
 
 

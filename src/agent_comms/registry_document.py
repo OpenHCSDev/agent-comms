@@ -281,26 +281,6 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
     def user_thread(self) -> UserThreadLookup[Thread]:
         return self._human.map(self.require)
 
-    def session_thread(
-        self, project: Path, preferred: str,
-    ) -> ProjectThreadSelection:
-        """Select an unbound project's preferred name or sole declared ACP thread.
-
-        ``project`` is compared exactly as given: resolving a path belongs to the host whose
-        filesystem it names (Registration, beside Core), never to a detached copy elsewhere.
-        Preferred names keep their previous precedence, including non-ACP threads. Bound
-        sessions use strict lookup instead of project discovery.
-        """
-        located = tuple(t for t in self.threads.values() if t.project_path == project)
-        selected = self.canonical_name(preferred)
-        for thread in located:
-            if thread.name == selected:
-                return FoundProjectThread(thread)
-        return ProjectThreadSelection.from_threads(tuple(
-            member for thread in located for member in thread.role.acp_thread(thread)
-        ))
-
-
 class UserThreadLookup[Value](ABC):
     """The registry's human selection, including a registry with no human yet."""
 
