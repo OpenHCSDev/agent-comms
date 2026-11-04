@@ -284,15 +284,24 @@ class NativeTranscript(TranscriptSource):
         """Ordinary journals may append; retained members bind the actual descriptor."""
         pass
 
+    def opening_failed(self, error: FileNotFoundError) -> Never:
+        """An ordinary journal may not exist yet; its consumer owns that absence."""
+        raise error
+
     @contextmanager
     def opened(self) -> Generator[BinaryIO]:
-        """Own every native file open and fence the descriptor consumers actually read."""
-        with self.reading(), self.path.open("rb") as stream:
-            self.require_opened(stream)
+        """Own acquisition failures and fence the descriptor consumers actually read."""
+        with self.reading():
             try:
-                yield stream
-            finally:
+                stream = self.path.open("rb")
+            except FileNotFoundError as error:
+                self.opening_failed(error)
+            with stream:
                 self.require_opened(stream)
+                try:
+                    yield stream
+                finally:
+                    self.require_opened(stream)
 
     def imported_sources(self):
         """Read original metadata before conversation, including native configuration.
@@ -317,18 +326,14 @@ class NativeTranscript(TranscriptSource):
     def session_cut(self, revision: FileRevision, offset: int) -> PresentSessionCut:
         return PresentSessionCut(revision, offset)
 
-    def missing_cut(self, error: FileNotFoundError) -> SessionCut:
-        """An ordinary journal can belong to a session that has not written it yet."""
-        return MissingSessionCut()
-
     def cut(self) -> SessionCut:
         try:
             # One bound descriptor supplies the revision and last record boundary.
             with self.opened() as stream:
                 revision = FileRevision.from_file(stream)
                 return self.session_cut(revision, record_end(stream, revision.size))
-        except FileNotFoundError as error:
-            return self.missing_cut(error)
+        except FileNotFoundError:
+            return MissingSessionCut()
 
     def committed_output_cut(self, location: NativeRecordLocation) -> SessionCut:
         """Corroborate one indexed output against its original header and row."""
@@ -554,7 +559,7 @@ class RetainedNativeTranscript(NativeTranscript):
     def require_retained(self) -> None:
         self.require_revision(FileRevision.capture(self.path))
 
-    def missing_cut(self, error: FileNotFoundError) -> SessionCut:
+    def opening_failed(self, error: FileNotFoundError) -> Never:
         raise TranscriptChanged() from error
 
     def require_opened(self, stream: BinaryIO) -> None:

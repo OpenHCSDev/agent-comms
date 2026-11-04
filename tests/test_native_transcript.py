@@ -24,6 +24,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.pi_native_backend import PiNativeBackend
 from agent_comms.private_path import FileRevision
+from agent_comms.recorded_time import UnrecordedEventTime
 from agent_comms.repo import Checkout
 from agent_comms.threads import Thread
 from agent_comms.session_file import BusSessionLocation, RetainedSessionLocation, SessionFile
@@ -206,17 +207,23 @@ def test_retained_cut_validates_descriptor_before_translating_original_coordinat
 
 
 @pytest.mark.parametrize("read", [
-    pytest.param(lambda runtime, reads, size: runtime.read_cut(), id="cut"),
+    pytest.param(lambda runtime, reads, size, root: runtime.read_cut(), id="cut"),
     pytest.param(
-        lambda runtime, reads, size: NativeTranscriptCursor(runtime.read_key, size).mark_read(
+        lambda runtime, reads, size, root: NativeTranscriptCursor(runtime.read_key, size).mark_read(
             reads, "viewer", runtime),
         id="nonzero-acknowledgement",
     ),
+    pytest.param(
+        lambda runtime, reads, size, root: runtime.history_source(
+            root, Thread("reader", frozenset(), Checkout(root)).incarnation).last_tool_call(),
+        id="last-tool-call",
+    ),
+    pytest.param(lambda runtime, reads, size, root: runtime.saved_model, id="saved-model"),
 ])
-def test_retained_failed_cut_acquisition_refuses_after_parent_returns(
+def test_retained_failed_acquisition_refuses_after_parent_returns(
     retained_native_location: tuple[Path, RetainedSessionLocation],
     monkeypatch: pytest.MonkeyPatch,
-    read: Callable[[RuntimeLocation, TranscriptReadState, int], object],
+    read: Callable[[RuntimeLocation, TranscriptReadState, int, Path], object],
 ) -> None:
     root, location = retained_native_location
     runtime = location.bound_to(root).location(PiNativeBackend)
@@ -232,7 +239,7 @@ def test_retained_failed_cut_acquisition_refuses_after_parent_returns(
         if candidate != path:
             return physical_open(candidate, mode)
         attempts.append(candidate)
-        # Construction opens A successfully. Its subsequent cut cannot acquire
+        # Construction opens A successfully. Its subsequent read cannot acquire
         # any descriptor; A returns before the reader's final pathname fence.
         if len(attempts) == 2:
             path.parent.rename(parked)
@@ -244,7 +251,7 @@ def test_retained_failed_cut_acquisition_refuses_after_parent_returns(
 
     monkeypatch.setattr(Path, "open", failed_second_open)
     with pytest.raises(TranscriptChanged) as refused:
-        read(runtime, reads, size)
+        read(runtime, reads, size, root)
     assert isinstance(refused.value.__cause__, FileNotFoundError)
     assert len(attempts) == 2
     assert FileRevision.capture(path) == location.revision
@@ -253,9 +260,11 @@ def test_retained_failed_cut_acquisition_refuses_after_parent_returns(
 
 
 def test_unstarted_native_journal_may_have_an_empty_cut(tmp_path: Path) -> None:
-    cut = NativeTranscript(tmp_path / "not-written-yet.jsonl").cut()
+    reader = NativeTranscript(tmp_path / "not-written-yet.jsonl")
+    cut = reader.cut()
     assert cut.offset == 0
     assert cut.holds(cut, 0)
+    assert reader.last_tool_call() == UnrecordedEventTime()
 
 
 @pytest.mark.parametrize("already_read", [False, True])
