@@ -3,6 +3,9 @@
 from agent_comms.repo import Checkout
 from conftest import publish_initial
 import json
+from dataclasses import replace
+
+from agent_comms.child_process import NoProcess
 
 import pytest
 
@@ -214,6 +217,10 @@ def test_recent_direct_work_stays_addressable_without_bare_peer_inventory(tmp_pa
     original = publish_initial(comms, "Bob", "Alice", "Current work")
     assert [r.peer.name for r in comms.relationships.context_relations("Alice")] == ["Bob"]
     assert _peers(comms, "Alice") == ()
+    # context_comms records the test process as each thread's process, and no owner host
+    # serves it: Bob's process has exited before the stop, which then retires a dead owner.
+    comms.registry.register(replace(comms.registry.require("Bob"), process_identity=NoProcess()),
+                            comms.registry.snapshot().status("Bob"))
     comms.owners.stop("Bob")
     assert [r.peer.name for r in comms.relationships.context_relations("Alice")] == ["Bob"]
     comms.registry.remove("Bob")
