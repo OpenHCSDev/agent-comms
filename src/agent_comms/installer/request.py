@@ -7,15 +7,27 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Literal
 
+from agent_comms.nominal.field_codec import NullMember, WireName
 from agent_comms.nominal.field_codec import AbsolutePathText, Argument, FieldCodec, Normalize, WireName
 from agent_comms.install_choices import InstallerChoice, LiveMode, RehearsalMode, RunMode, UnnamedInstaller
 from agent_comms.installer.probes.harnesses import HarnessInstallation
 from agent_comms.installer.probes.inputs import SelectedInputsProbe
 
 
+@dataclass(frozen=True)
+class RetiredCommanderChoice(NullMember):
+    """What the runtime installed before the no-lead carry still sends for its removed
+    `commander` option: always null, read by nothing. The old CLI starts the install that replaces
+    it, so the new installer must decode its record. Delete once no installed runtime predates it.
+    """
+
+
 @dataclass(frozen=True, kw_only=True)
 class InstallRequest(HarnessInstallation):
     kind: Literal["install"] = "install"
+    previous_commander: Annotated[RetiredCommanderChoice, WireName("commander")] = (
+        RetiredCommanderChoice()
+    )
     checkout: Annotated[
         Path,
         AbsolutePathText,

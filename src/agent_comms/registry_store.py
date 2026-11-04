@@ -14,6 +14,7 @@ from functools import cached_property, partial
 from pathlib import Path
 from typing import ClassVar, Self
 
+from .child_process import NoProcess
 from .coordination_database import CoordinationStore, ReadableStore
 from .coordination_errors import StaleFence
 from .errors import RelationViolationError
@@ -517,9 +518,16 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
             write()
 
     def retire_processes(self) -> None:
-        with self.editing() as edit:
-            edit.document.retire_processes()
-            edit.commit()
+        """A copied registry's processes belong to the root it was copied from, never to the copy.
+        An install copies the registry before its carries run, so the copy can hold a form the
+        current decoder refuses: this edits the stored rows, whose process key every form shares."""
+        threads = FieldCodec.record_key(RegistryDocument, "threads")
+        process = FieldCodec.record_key(Thread, "process_identity")
+        with self.guarded_write():
+            document = json.loads(self.path.read_text(encoding="utf-8"))
+            for row in document[threads].values():
+                row[process] = FieldCodec.encode(NoProcess())
+            self._write_unlocked(json.dumps(document, indent=2))
 
     def mark_historical(self) -> None:
         """Explicit archive creation/carry seals this declaration, idempotently."""

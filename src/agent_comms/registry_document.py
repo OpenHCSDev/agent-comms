@@ -858,11 +858,6 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         change = InitialRegistration(thread=thread, status=status)
         return change.restarted() if new_owner else change
 
-    def retire_processes(self) -> None:
-        """A copied registry's processes belong to the root it was copied from, never to the copy."""
-        for name, thread in tuple(self.threads.items()):
-            self.threads[name] = thread.without_process()
-
     def restore_stopped(self, source: RegistrySnapshot, names: Sequence[str]) -> tuple[str, ...]:
         """Restore selected missing identities without importing execution authority.
 
