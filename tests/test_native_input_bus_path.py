@@ -56,7 +56,8 @@ async def test_saved_owner_dm_replies_and_core_reads_exact_native_proof(tmp_path
                 rows = NativeContextJournal.select(db)
             assert len(rows) == 1
             record = next(record for record in NativeTranscript(native.session).forward(
-                0, native.session.stat().st_size) if record.entry.input_id == rows[0].input_id)
+                0, native.session.stat().st_size)
+                if record.entry.input_id.present() == (rows[0].input_id,))
             proof = read_context_proof(files, rows[0].input_id,
                                                      session_entry_start=record.start)
             assert proof.session_id == files.session_id
