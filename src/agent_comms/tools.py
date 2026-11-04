@@ -93,7 +93,6 @@ from .notification_evidence import AfterRecipient, FirstRecipient, RecipientCurs
 from .message_notification import MessageNotification
 from .presentation import ChannelView, WireRevision
 from .runtime_requests import QueueActionRuntimeRequest
-from .owner_connection import CapturedOwner
 from .runtime_server import RuntimeRequest
 from .owner_connection import OwnerConnection
 from .context_store import (
@@ -608,8 +607,8 @@ class CommsOwnerRequestTool(HumanToolRequest[OwnerAnswered]):
         thread = comms.registry.require(self.owner.name)
         if thread.incarnation != self.owner:
             raise ValueError("Selected thread incarnation changed")
-        return OwnerAnswered(FieldCodec.decode(JsonValue, OwnerConnection.exchange(
-            comms.root, thread.require_process(), replace(self.request, captured=CapturedOwner(self.owner)))))
+        return OwnerAnswered(FieldCodec.decode(JsonValue, OwnerConnection.ask(
+            comms.root, thread, self.request)))
 
 
 @dataclass(frozen=True, kw_only=True)

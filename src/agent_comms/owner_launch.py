@@ -117,8 +117,8 @@ class HostResources(ToolResult):
     @classmethod
     def read(cls, root: Path, thread: Thread) -> HostResources:
         """The host's own status read, asked through one thread it owns."""
-        return FieldCodec.decode(cls, OwnerConnection.exchange(
-            root, thread.require_process(), ReadHostResourcesRuntimeRequest(thread=thread.name),
+        return FieldCodec.decode(cls, OwnerConnection.ask(
+            root, thread, ReadHostResourcesRuntimeRequest(thread=thread.name),
         ))
 
 
