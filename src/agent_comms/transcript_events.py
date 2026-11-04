@@ -462,6 +462,17 @@ class SentTranscript(OutgoingRoute, WireTextTranscript):
         return cls(message.body, timestamp=message.timestamp, source=message.reference,
                    routing=TurnRouting(reply=MessageRoute(message.sender, (message.target,))))
 
+    def matches(self, message: Message) -> bool:
+        """A report stands for an original wire message only when it is that message's report."""
+        return self == type(self).from_message(message)
+
+    def core_message(self, source) -> Message:
+        """Read the actual original; a stored report cannot invent its missing kind or role."""
+        for reference, original in source.sent_messages((self.source,)).items():
+            if reference == self.source and self.matches(original):
+                return original
+        raise ValueError("Sent report no longer matches its original assigned wire message")
+
 
 class ThinkingTranscript(ModelOutput, SilentTranscript, LiveTextTranscript):
     category = ThinkingCategory
