@@ -88,14 +88,29 @@ def test_a_session_whose_start_hook_never_ran_is_dealt_on_its_first_call(tmp_pat
     assert (tmp_path / ".claude" / "state" / f"rule-dealt-{SESSION}").is_file()
 
 
-def test_the_cloud_deal_says_how_to_connect_and_the_launched_one_does_not():
-    assert "agent-comms-inbox-watch URL" in CloudDealPrompt.preamble
-    assert "comms_watch" in CloudDealPrompt.preamble
-    assert "agent-comms-inbox-watch" not in DealPrompt.preamble
+def test_a_session_is_told_how_to_connect_on_either_way_it_can_start(carried: Path):
+    """A cloud snapshot freezes the system prompt for days, so this is told fresh at each deal."""
+    assert "agent-comms-inbox-watch URL" in hook(carried, "deal", source="startup")
+    first_call = hook(carried, "gate", session_id="other", tool_name="Bash", tool_input={})
+    assert "agent-comms-inbox-watch URL" in json.loads(first_call)["hookSpecificOutput"]["additionalContext"]
+
+
+def test_a_hook_runs_under_the_checkouts_python_with_its_input(tmp_path: Path):
+    """A cloud sandbox's python3 is older than the code the gate imports."""
+    checkout = tmp_path / "checkout"
+    (checkout / ".claude" / "hooks").mkdir(parents=True)
+    (checkout / ".claude" / "hooks" / "rule_gate.py").write_text(GATE.read_text())
+    python = checkout / ".venv" / "bin" / "python"
+    python.parent.mkdir(parents=True)
+    python.write_text('#!/bin/sh\necho "ran under the checkout: $2"; cat\n')
+    python.chmod(0o755)
+    done = subprocess.run([sys.executable, str(checkout / ".claude" / "hooks" / "rule_gate.py"), "gate"],
+                          input="the record", capture_output=True, text=True, check=True, timeout=30)
+    assert done.stdout == "ran under the checkout: gate\nthe record"
 
 
 def test_a_carrying_session_is_dealt_on_its_first_call_and_still_owes_nothing(carried: Path):
-    assert hook(carried, "gate", tool_name="Bash", tool_input={}) == ""
+    assert "permissionDecision" not in hook(carried, "gate", tool_name="Bash", tool_input={})
     assert (carried / ".claude" / "state" / f"rule-dealt-{SESSION}").is_file()
 
 
