@@ -106,18 +106,27 @@ def record_source(version: int, fields: str) -> str:
             f"@dataclass(frozen=True)\nclass Record:\n    version: ClassVar[int] = {version}\n{fields}")
 
 
+def uncarried_keys(counted) -> set[tuple[str, str]]:
+    """The records a change left uncarried, each with the first key that stopped it reading; the
+    base counts each at zero so the gate reports growth by name."""
+    base, head = counted
+    assert base == dict.fromkeys(head, 0) and set(head.values()) <= {1}
+    return {(count.record, count.key) for count in head}
+
+
+RECORD = "agent_comms.record.Record"
 PLAIN = "    root: str\n"
 SPELLED = "    root: Annotated[str, Id128Text]\n"
 
 
 @pytest.mark.refactor_guard
 @pytest.mark.parametrize("before, version, fields, step, uncarried", [
-    (PLAIN, 1, PLAIN + "    label: str\n", {}, 1),
-    (PLAIN, 2, PLAIN + "    label: str\n", {}, 1),
-    (PLAIN, 2, PLAIN + "    label: str\n", {"carry_record": step_source()}, 0),
-    (PLAIN, 1, PLAIN + "    kind: ClassVar[str] = 'x'\n", {}, 0),
-    (SPELLED, 1, "    root: RootKind\n", {}, 0),
-    (PLAIN, 1, SPELLED, {}, 1),
+    (PLAIN, 1, PLAIN + "    label: str\n", {}, {(RECORD, "required")}),
+    (PLAIN, 2, PLAIN + "    label: str\n", {}, {(RECORD, "required")}),
+    (PLAIN, 2, PLAIN + "    label: str\n", {"carry_record": step_source()}, set()),
+    (PLAIN, 1, PLAIN + "    kind: ClassVar[str] = 'x'\n", {}, set()),
+    (SPELLED, 1, "    root: RootKind\n", {}, set()),
+    (PLAIN, 1, SPELLED, {}, {(RECORD, "root")}),
 ])
 def test_a_stored_record_format_change_bumps_its_version_and_ships_a_carry(
         tmp_path, before, version, fields, step, uncarried):
@@ -129,9 +138,8 @@ def test_a_stored_record_format_change_bumps_its_version_and_ships_a_carry(
     record.write_text(record_source(version, fields))
     head = repo.commit(step)
     changed = {"src/agent_comms/record.py"}
-    assert audit.project_measures.UncarriedRecordFormat.counted(AgentCommsProject(tmp_path), base, head, changed,
-                                         "src/agent_comms") == (
-        {audit.project_measures.UncarriedRecordFormat.total(): 0}, {audit.project_measures.UncarriedRecordFormat.total(): uncarried})
+    assert uncarried_keys(audit.project_measures.UncarriedRecordFormat.counted(
+        AgentCommsProject(tmp_path), base, head, changed, "src/agent_comms")) == uncarried
 
 
 SHARED = ("from dataclasses import dataclass\nfrom typing import Annotated, ClassVar\n"
@@ -145,9 +153,9 @@ CHOICES = "    choices: Annotated[tuple[Choice, ...], WireOmitDefault()] = ()\n"
 
 @pytest.mark.refactor_guard
 @pytest.mark.parametrize("head, uncarried", [
-    (SHARED + CHOICES + PAIRS, 0),
-    (SHARED.replace("label: str", "label: int") + CHOICES + PAIRS, 1),
-    (SHARED + CHOICES.replace(" = ()", "") + PAIRS, 1),
+    (SHARED + CHOICES + PAIRS, set()),
+    (SHARED.replace("label: str", "label: int") + CHOICES + PAIRS, {(RECORD, "first")}),
+    (SHARED + CHOICES.replace(" = ()", "") + PAIRS, {(RECORD, "required")}),
 ], ids=["optional-new-type", "changed-shared-type", "required-new-field"])
 def test_a_new_shared_type_never_reads_as_a_renamed_stored_field(tmp_path, head, uncarried):
     """#3999: FieldCodec numbers a schema's shared definitions in the order a build meets them,
@@ -161,10 +169,9 @@ def test_a_new_shared_type_never_reads_as_a_renamed_stored_field(tmp_path, head,
     base = repo.commit({})
     record.write_text(head)
     tested = repo.commit({})
-    assert audit.project_measures.UncarriedRecordFormat.counted(
+    assert uncarried_keys(audit.project_measures.UncarriedRecordFormat.counted(
         AgentCommsProject(tmp_path), base, tested, {"src/agent_comms/record.py"}, "src/agent_comms",
-    ) == ({audit.project_measures.UncarriedRecordFormat.total(): 0},
-          {audit.project_measures.UncarriedRecordFormat.total(): uncarried})
+    )) == uncarried
 
 
 def test_a_store_compares_by_its_rows_and_not_by_its_companion_files(tmp_path):
