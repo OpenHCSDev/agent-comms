@@ -49,10 +49,14 @@ class TeamProjectLead(Carry):
             document[FieldCodec.record_key(RegistryDocument, "team_project")] = project
         document[version] = RegistryDocument.version
         rows = FieldCodec.record_key(RegistryDocument, "threads")
-        threads = FieldCodec.decode(dict[str, dict[str, JsonValue]], document[rows])
-        for row in threads.values():
-            row.setdefault(Thread.family_discriminator, NativeThread.declared_name)
-        document[rows] = threads
+        native: dict[str, JsonValue] = {Thread.family_discriminator: NativeThread.declared_name}
+        stamped: dict[str, JsonValue] = {
+            name: {**native, **row}
+            for name, row in FieldCodec.decode(
+                dict[str, dict[str, JsonValue]], document[rows]
+            ).items()
+        }
+        document[rows] = stamped
         registry = RegistryStore(path)
         if apply:
             MaintenanceBarrier(path).read().require_held_by(
