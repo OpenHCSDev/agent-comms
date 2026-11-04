@@ -13,7 +13,7 @@ from .read_ledger import ReadDocument, ReadLedger
 from .registry_document import RegistrySnapshot
 from .frozen_recipient import FrozenRecipient
 from .channel_targets import CommandTarget
-from .nominal.field_codec import MessageId, ThreadLookup
+from .nominal.field_codec import MessageId, TaggedUnion, TaggedRecordMember, ThreadLookup
 from .message_reference import MessageReference
 from .notification_assignment import AssignmentSource, NotificationAssignment
 from agent_comms.notification_progress import AssignmentResponse
@@ -24,7 +24,7 @@ from .thread_identity import ThreadIncarnation
 from .transcript_sources import AssignedTranscriptSource
 from typing import TYPE_CHECKING
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections.abc import Iterator
 from itertools import batched
 from typing import ClassVar
@@ -41,8 +41,10 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class NotificationWindow(ABC):
-    """One window owns its evidence, batching and change contract."""
+class NotificationWindow(TaggedUnion, affix=""):
+    """One window owns its evidence, batching and change contract. A remote UI receives
+    windows as read answers, so each record carries its kind."""
+
 
     outcomes: Mapping[tuple[int, MessageId], tuple[MessageNotification, ...]]
     reads: tuple[NotificationAssignmentRead, ...]
@@ -71,16 +73,17 @@ class NotificationWindow(ABC):
     def changed(self, notifications: NotificationPass) -> bool: ...
 
 
-class NoNotificationWindow(NotificationWindow):
-    def __init__(self) -> None:
-        super().__init__({}, ())
+@dataclass(frozen=True)
+class NoNotificationWindow(TaggedRecordMember, NotificationWindow):
+    outcomes: Mapping[tuple[int, MessageId], tuple[MessageNotification, ...]] = field(default_factory=dict)
+    reads: tuple[NotificationAssignmentRead, ...] = ()
 
     def changed(self, notifications: NotificationPass) -> bool:
         return False
 
 
 @dataclass(frozen=True)
-class CapturedNotificationWindow(NotificationWindow):
+class CapturedNotificationWindow(TaggedRecordMember, NotificationWindow):
     def changed(self, notifications: NotificationPass) -> bool:
         evidence = notifications.evidence
         return bool(

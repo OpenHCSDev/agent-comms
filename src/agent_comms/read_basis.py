@@ -25,6 +25,8 @@ from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
 from .nominal.field_codec import (
+    TaggedUnion,
+    CapabilityUnion,
     FieldCodec,
     NullMember,
     PathText,
@@ -172,10 +174,14 @@ class OperatorOutcomes(ReadAuthority):
         return AllOutcomes()
 
 
-class DisplayCut(OperatorOutcomes, ABC):
+class DisplayCut(OperatorOutcomes, CapabilityUnion, ABC):
     """The selected display cut, including the absence of a painted display."""
 
     __slots__ = ()
+
+    @classmethod
+    def capability_families(cls) -> tuple[type[DeclaredFamily], ...]:
+        return (DisplayIdentity, SelectedDisplay)
 
     @property
     @abstractmethod
@@ -183,7 +189,7 @@ class DisplayCut(OperatorOutcomes, ABC):
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class DisplayIdentity(SubclassUnion, DisplayCut, affix="DisplayIdentity"):
+class DisplayIdentity(TaggedUnion, DisplayCut, affix="DisplayIdentity"):
     """The scope observation compared between pages, independent of paint evidence. A
     revision carries it to a remote UI and back, and the members share their common
     fields, so each record carries its kind."""
@@ -192,9 +198,6 @@ class DisplayIdentity(SubclassUnion, DisplayCut, affix="DisplayIdentity"):
     history_revision: FileObservation
     bus_identity: RecordedBusIdentity
 
-    @classmethod
-    def decodes_tagged_records(cls) -> bool:
-        return True
 
     @property
     def notification_identity(self) -> SourceDisplayIdentity:
@@ -229,13 +232,10 @@ class DMDisplayIdentity(TaggedRecordMember, DisplayIdentity):
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class SelectedDisplay(SubclassUnion, affix="Selection"):
+class SelectedDisplay(TaggedUnion, affix="Selection"):
     """The builder's declared read proof; never recovered from a page's fields. It travels
     with its page to a remote UI and back with the read mark, so each record carries its kind."""
 
-    @classmethod
-    def decodes_tagged_records(cls) -> bool:
-        return True
 
     history_revision: FileObservation = MissingFile()
     has_evidence: ClassVar[bool] = True

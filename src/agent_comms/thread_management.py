@@ -225,7 +225,7 @@ class ThreadDeleted(CliResult):
 
 
 @dataclass(frozen=True, slots=True)
-class ProjectChangeResult:
+class ProjectChangeResult(ToolResult):
     thread: str
     previous: str
     current: str
@@ -381,11 +381,13 @@ class ThreadManagement:
         return ProjectChangeResult(updated.name, previous, current, current != previous)
 
     def rename_managed_thread(
-        self, name: str, display_name: str, *, owner: ProcessIdentity
+        self, original: ThreadIncarnation, display_name: str, *, owner: ProcessIdentity
     ) -> RenameThreadResult:
-        """Rename a locally managed running thread after proving process ownership."""
+        """Rename only the captured thread while its process still owns it."""
         with self.registry.store.editing() as edit:
-            thread = edit.document.require(name)
+            thread = edit.document.require(original.name)
+            if thread.incarnation != original:
+                raise RelationViolationError("Thread incarnation changed before rename")
             if thread.process_identity != owner:
                 raise RelationViolationError(
                     f"Process {owner.pid} does not own thread {thread.name!r}."

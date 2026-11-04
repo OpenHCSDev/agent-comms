@@ -40,6 +40,10 @@ class ConnectorCaller(ToolCaller):
     def require_root(self, root: Path) -> None:
         """Existing thread and Director grants keep their current root access."""
 
+    def require_observation(self) -> None:
+        """Only a UI grant observes the owner's UI; a thread grant calls tools."""
+        raise GrantRefusedError("This grant cannot observe the UI; observation needs a UI grant.")
+
     def prepare_call(self, comms: Comms, acting: ToolCaller) -> None:
         """A thread-free, unscoped caller has no membership to publish."""
 
@@ -84,6 +88,9 @@ class ScopedUiCaller(ConnectorCaller, NoThreadCaller):
     def require_root(self, root: Path) -> None:
         RegistryStore.at(root).privacy().require_root(
             self.namespace, GrantRefusedError("UI grant belongs to a different root."))
+
+    def require_observation(self) -> None:
+        """A UI grant, read-only or writable, observes the root it is scoped to."""
 
     def prepare_call(self, comms: Comms, acting: ToolCaller) -> None:
         """Check the opened root before argument context reads."""

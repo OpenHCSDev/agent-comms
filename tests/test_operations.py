@@ -368,15 +368,14 @@ class TestThreadOps:
             Thread(name='generated-7', tags=frozenset({'acp'}), worktree=Checkout(Path('/tmp/project')), process_identity=ProcessIdentity.capture(os.getpid()))
         )
 
-        result = wired.threads.rename_managed_thread(
-            "generated-7", "testing 123", owner=ProcessIdentity.capture(os.getpid())
+        result = wired.threads.rename_managed_thread(wired.registry.require("generated-7").incarnation, "testing 123", owner=ProcessIdentity.capture(os.getpid())
         )
 
         assert result.previous == "generated-7"
         assert result.current == "testing-123"
         assert wired.registry.require("generated-7").name == "testing-123"
         with pytest.raises(RelationViolationError):
-            wired.threads.rename_managed_thread("testing-123", "wrong", owner=ProcessIdentity.capture(os.getppid()))
+            wired.threads.rename_managed_thread(wired.registry.require("testing-123").incarnation, "wrong", owner=ProcessIdentity.capture(os.getppid()))
 
     def test_managed_rename_disambiguates_duplicate_titles(self, wired: Comms) -> None:
         wired.registry.declare(
@@ -386,7 +385,7 @@ class TestThreadOps:
             Thread(name='generated-7', tags=frozenset({'acp'}), worktree=Checkout(Path('/tmp/project')), process_identity=ProcessIdentity.capture(os.getpid()))
         )
 
-        result = wired.threads.rename_managed_thread("generated-7", "testing 123", owner=ProcessIdentity.capture(os.getpid()))
+        result = wired.threads.rename_managed_thread(wired.registry.require("generated-7").incarnation, "testing 123", owner=ProcessIdentity.capture(os.getpid()))
 
         assert result.current == "testing-123-2"
 
@@ -394,10 +393,9 @@ class TestThreadOps:
         wired.registry.declare(
             Thread(name='generated-7', tags=frozenset(), worktree=Checkout(Path('/tmp/project')), process_identity=ProcessIdentity.capture(os.getpid()))
         )
-        assert wired.threads.rename_managed_thread(
-            "generated-7", "chosen", owner=ProcessIdentity.capture(os.getpid())
+        assert wired.threads.rename_managed_thread(wired.registry.require("generated-7").incarnation, "chosen", owner=ProcessIdentity.capture(os.getpid())
         ).changed
-        result = wired.threads.rename_managed_thread("chosen", "generated-7", owner=ProcessIdentity.capture(os.getpid()))
+        result = wired.threads.rename_managed_thread(wired.registry.require("chosen").incarnation, "generated-7", owner=ProcessIdentity.capture(os.getpid()))
         assert (result.previous, result.current, result.changed) == ("chosen", "generated-7", True)
         assert wired.registry.snapshot().aliases["chosen"] == "generated-7"
         assert "generated-7" not in wired.registry.snapshot().aliases

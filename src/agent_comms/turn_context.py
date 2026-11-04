@@ -35,7 +35,7 @@ from .native_session_reopen import NativeSessionIdentity
 from .peer_relevance import AlwaysListed, GoalShown, PeerRelevance
 from .repo import Checkout
 from .thread_identity import ThreadIncarnation, TurnIdentity
-from .tool_result import DeclaredReply
+from .tool_result import DeclaredReply, ToolResult
 from .turn_item import NativeItemId, PiRequestKey
 from .wake_policy import WakePolicy
 
@@ -236,7 +236,7 @@ class UnattributedProvenance(Provenance):
 
 
 @dataclass(frozen=True)
-class ContextSourceText(DeclaredReply):
+class ContextSourceText(ToolResult):
     """A public source-read result, not another context or input record."""
 
     description: str
@@ -289,7 +289,7 @@ class ContextSources:
 
 
 @dataclass(frozen=True)
-class SegmentManifest:
+class SegmentManifest(ToolResult):
     kind: type[ContextSegment]
     provenance: tuple[Provenance, ...]
     sha256: str

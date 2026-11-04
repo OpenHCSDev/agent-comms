@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .tool_result import ToolResult
+
 import time
 from abc import ABC, abstractmethod
 from collections import ChainMap
@@ -25,11 +27,13 @@ from .child_process import NoProcess, ProcessIdentity
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
 from .nominal.field_codec import (
+    TaggedUnion,
     ExternalJsonShape,
     FieldCodec,
     FieldPlan,
     MalformedRecord,
     SlicePolicy,
+    TaggedRecordMember,
     ThreadLookup,
     WireOmitDefault,
     WireRequired,
@@ -141,10 +145,50 @@ class ResolvedChannel(ResolvedTarget):
         )
 
 
+class ProjectThreadSelection(TaggedUnion, ToolResult, affix="ProjectThread"):
+    """The registry's complete answer, including absence and ambiguity. A remote UI receives
+    it from Core, so each record carries its kind."""
+
+
+    @classmethod
+    def from_threads(cls, threads: tuple[Thread, ...]) -> ProjectThreadSelection:
+        if not threads:
+            return NoProjectThread()
+        if len(threads) == 1:
+            return FoundProjectThread(threads[0])
+        return SeveralProjectThreads(threads)
+
+    def name_or(self, fallback: str) -> str:
+        """Keep the caller's existing identity unless one thread was selected."""
+        return fallback
+
+
+@dataclass(frozen=True)
+class NoProjectThread(TaggedRecordMember, ProjectThreadSelection):
+    """There is no declared ACP thread at this project."""
+
+
+@dataclass(frozen=True)
+class FoundProjectThread(TaggedRecordMember, ProjectThreadSelection):
+    thread: Thread
+
+    def name_or(self, fallback: str) -> str:
+        return self.thread.name
+
+
+@dataclass(frozen=True)
+class SeveralProjectThreads(TaggedRecordMember, ProjectThreadSelection):
+    threads: tuple[Thread, ...]
+
+
 class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thread]):
     """Presence reads shared by the acquired document and its detached cut."""
 
     __slots__ = ()
+
+    def __contains__(self, name: str) -> bool:
+        """A thread is present under its name or any alias the namespace keeps for it."""
+        return self.canonical_name(name) in self.threads
 
     threads: ThreadRows
     statuses: StatusMap
@@ -237,7 +281,6 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
 
     def user_thread(self) -> UserThreadLookup[Thread]:
         return self._human.map(self.require)
-
 
 class UserThreadLookup[Value](ABC):
     """The registry's human selection, including a registry with no human yet."""
@@ -1093,7 +1136,7 @@ class RegistryEntry:
 
 @SnapshotValue.required
 @dataclass(frozen=True, slots=True)
-class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadStatus]], RegistryProvenance):
+class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadStatus]], RegistryProvenance, ToolResult):
     purpose: Annotated[RootPurpose, SlicePolicy(WholeDocumentValue)]
     threads: Annotated[ThreadRows, SlicePolicy(ThreadRowsSlice)]
     statuses: Annotated[Mapping[str, ThreadStatus], SlicePolicy(MappingRowsSlice)]

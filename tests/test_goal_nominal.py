@@ -124,16 +124,20 @@ def test_unrelated_attempt_commit_requests_a_real_comparison_not_a_second_revisi
 def test_original_proxy_decodes_typed_goal_control_at_json_boundary():
     original_goal_id = GoalId.mint()
     from agent_comms.runtime_server import RuntimeRequest
+    from agent_comms.owner_connection import CapturedOwner
     from agent_comms.runtime_requests import UpdateGoalRuntimeRequest
+    from agent_comms.thread_identity import RecordedThreadIncarnation
 
-    payload = UpdateGoalRuntimeRequest.proxy_payload("worker", None, {
+    worker = RecordedThreadIncarnation("worker", 12.5)
+    payload = UpdateGoalRuntimeRequest.proxy_payload(worker, None, {
         "status": PausedGoalAction, "goal_id": original_goal_id, "expected_revision": 7,
     })
-    assert payload == {"action": "update_goal", "thread": "worker", "status": "paused",
+    assert payload == {"action": "update_goal", "thread": "worker",
+                       "captured": {"name": "worker", "created_at": 12.5}, "status": "paused",
                        "goal_id": original_goal_id, "expected_revision": 7}
     request = FieldCodec.decode(RuntimeRequest, json.loads(json.dumps(payload)))
-    assert request == UpdateGoalRuntimeRequest(thread="worker", status=PausedGoalAction,
-        goal_id=original_goal_id, expected_revision=7)
+    assert request == UpdateGoalRuntimeRequest(thread="worker", captured=CapturedOwner(worker),
+        status=PausedGoalAction, goal_id=original_goal_id, expected_revision=7)
     with pytest.raises(ValueError):
         FieldCodec.decode(RuntimeRequest, {**payload, "status": "unrecorded"})
 

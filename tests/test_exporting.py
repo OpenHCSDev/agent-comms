@@ -446,3 +446,24 @@ def test_stored_text_and_jsonl_export_render_claim_notices(tmp_path):
         assert receipt.exported_messages == 1
     assert "type=claim-notice" in (tmp_path / "claims.txt").read_text()
     assert records(tmp_path / "claims.jsonl")[1]["message"]["type"] == "claim-notice"
+
+
+async def test_a_cancel_from_another_thread_stops_the_waiting_call_and_a_plain_observer_never_does():
+    """A remote export's cancel watcher awaits the observer's stop instead of polling it."""
+    import asyncio
+    import threading
+
+    from agent_comms.exporting import CancellableWireExport, WireExportObserver
+
+    export = CancellableWireExport()
+    waiting = asyncio.create_task(export.stopped())
+    await asyncio.sleep(0)
+    assert not waiting.done()
+    threading.Thread(target=export.cancel).start()
+    await asyncio.wait_for(waiting, 5)
+    assert not export.stop_waiters
+
+    await asyncio.wait_for(export.stopped(), 1)  # already cancelled: resolves at once
+
+    with pytest.raises(TimeoutError):
+        await asyncio.wait_for(WireExportObserver().stopped(), 0.2)

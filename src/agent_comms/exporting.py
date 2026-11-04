@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import math
 import os
@@ -18,6 +19,7 @@ from typing import BinaryIO, ClassVar
 
 from .channels import Channel
 from .cli_result import CliResult
+from .tool_result import ToolResult
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
 from .message_reference import MessageReference
@@ -383,7 +385,7 @@ class WireExportBoundary:
 
 
 @dataclass(frozen=True, slots=True)
-class WireExportProvenance(CliResult):
+class WireExportProvenance(CliResult, ToolResult):
     """Artifact provenance, never a delivery or source-session acknowledgement."""
 
     destination: str
@@ -468,6 +470,10 @@ class WireExportObserver:
     def check(self) -> None:
         pass
 
+    async def stopped(self) -> None:
+        """An observer that cannot be cancelled never stops a running call."""
+        await asyncio.Event().wait()
+
     @contextmanager
     def reading(self, source: StoredWireHistory) -> Iterator[None]:
         yield
@@ -476,10 +482,27 @@ class WireExportObserver:
 class CancellableWireExport(WireExportObserver):
     def __init__(self) -> None:
         self.stop_requested = Event()
+        self.stop_waiters: list[Callable[[], None]] = []
         super().__init__()
 
     def cancel(self) -> None:
         self.stop_requested.set()
+        for wake in tuple(self.stop_waiters):
+            wake()
+
+    async def stopped(self) -> None:
+        """Resolves when cancel is called, from any thread; no polling."""
+        loop, here = asyncio.get_running_loop(), asyncio.Event()
+
+        def wake() -> None:
+            loop.call_soon_threadsafe(here.set)
+
+        self.stop_waiters.append(wake)
+        try:
+            if not self.cancelled():
+                await here.wait()
+        finally:
+            self.stop_waiters.remove(wake)
 
     def cancelled(self) -> bool:
         return self.stop_requested.is_set()

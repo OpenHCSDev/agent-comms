@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from agent_comms.cli_command import TargetActionCommand
 from agent_comms.repo import Checkout
 
 from typing import Self
@@ -14,7 +15,8 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True, kw_only=True)
-class DeleteViewCliCommand(NamedCliCommand, declared_name="delete-view"):
+class DeleteViewCliCommand(NamedCliCommand, TargetActionCommand[ViewDeletedResult],
+                           declared_name="delete-view"):
     help = "Delete saved view"
 
     @classmethod

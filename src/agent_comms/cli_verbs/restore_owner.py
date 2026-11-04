@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from agent_comms.cli_command import TargetActionCommand
 from agent_comms.cli_command import AppliedTogether
 from agent_comms.cli_support.thread_lifecycle import ThreadLifecycleCliCommand
 from agent_comms.comms import Comms
@@ -12,7 +13,8 @@ from typing import Self
 
 @dataclass(frozen=True, kw_only=True)
 class RestoreOwnerCliCommand(AppliedTogether[OwnerStartResult], NativeOwnerCommand, OwnerLifecycleControl,
-                             ThreadLifecycleCliCommand, declared_name="restore-owner"):
+                             ThreadLifecycleCliCommand, TargetActionCommand[OwnerStartResult],
+                             declared_name="restore-owner"):
     help = "Restore owner process without changing its goal"
 
     @classmethod

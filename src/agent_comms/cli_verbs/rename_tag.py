@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from agent_comms.cli_command import TargetActionCommand
 from agent_comms.cli_commands import TagRenamedResult
 from agent_comms.cli_support.exact_tag import ExactTagCliCommand
 from agent_comms.comms import Comms
@@ -10,7 +11,8 @@ from typing import Self
 
 
 @dataclass(frozen=True, kw_only=True)
-class RenameTagCliCommand(ExactTagCliCommand, declared_name="rename-tag"):
+class RenameTagCliCommand(ExactTagCliCommand, TargetActionCommand[TagRenamedResult],
+                          declared_name="rename-tag"):
     help = "Rename channel tag"
     new_name: Annotated[
         str, Argument(flags=("--to",), options={"help": "New tag name"})
