@@ -4,8 +4,11 @@ from pathlib import Path
 import pytest
 
 from agent_comms.connector_caller import ThreadConnectorCaller
-from agent_comms.host_logs import HostLog, InstallHostLog, ProcessesHostLog
+from agent_comms.host_logs import ConnectorHostLog, HostLog, InstallHostLog, ProcessesHostLog
 from agent_comms.tools import CommsHostLogTool
+
+GITHUB = "ghp_" + "a1b2c3d4" * 4
+ANTHROPIC = "sk-ant-" + "a1b2c3d4" * 4
 
 
 @pytest.mark.parametrize("line, shown", (
@@ -19,6 +22,44 @@ from agent_comms.tools import CommsHostLogTool
 ))
 def test_a_secret_never_leaves_the_host(line, shown):
     assert HostLog.hidden(line) == shown
+
+
+@pytest.mark.parametrize("line, secret", (
+    (f"GITHUB_TOKEN={GITHUB}", GITHUB),
+    (f"ANTHROPIC_API_KEY={ANTHROPIC}", ANTHROPIC),
+    (f"cloning https://user:{GITHUB}@github.com/x.git", GITHUB),
+    ("postgresql://admin:hunter2pass@db/x", "hunter2pass"),
+    ("Authorization: Basic dXNlcjpodW50ZXIy", "dXNlcjpodW50ZXIy"),
+    ("mysql -phunter2pass -h db", "hunter2pass"),
+    (f"found {GITHUB} in the output", GITHUB),
+    ("POST /token?access_token=abc%2Bdefghi%2Fjkl 200", "abc%2Bdefghi%2Fjkl"),
+    ("--password=hunter2pass", "hunter2pass"),
+))
+def test_the_secrets_a_host_really_holds_are_hidden(line, secret):
+    assert secret not in HostLog.hidden(line)
+
+
+def test_a_value_the_host_holds_is_hidden_wherever_it_appears():
+    held = HostLog.held_values({"SERVICE_API_KEY": "plainwordsonly", "HOME": "/home/someone",
+                                "SHORT_TOKEN": "abc"})
+    assert held == ("plainwordsonly",)
+    assert HostLog.hidden("then plainwordsonly came back", held) == "then [hidden] came back"
+
+
+def test_the_longer_held_value_is_hidden_whole():
+    held = HostLog.held_values({"A_KEY": "abcdefgh", "B_KEY": "abcdefghijkl"})
+    assert HostLog.hidden("abcdefghijkl", held) == "[hidden]"
+
+
+def test_a_read_hides_every_line_a_member_returns(monkeypatch):
+    monkeypatch.setattr(ConnectorHostLog, "lines", classmethod(lambda cls, root, count: (f"t={GITHUB}",)))
+    assert GITHUB not in ConnectorHostLog.read(Path("."), 1)[0]
+
+
+@pytest.mark.parametrize("lines", (-1, 0, 501))
+def test_a_count_outside_the_bound_is_refused(lines):
+    with pytest.raises(ValueError):
+        CommsHostLogTool(source=ProcessesHostLog, lines=lines).apply(None, None)
 
 
 def test_the_newest_install_log_is_named_and_cut_to_its_tail(tmp_path):
@@ -38,7 +79,12 @@ def test_no_install_yet_is_an_empty_answer(tmp_path):
 def test_processes_answer_their_header_and_stop_at_the_count(tmp_path):
     lines = ProcessesHostLog.lines(Path(tmp_path), 3)
     assert len(lines) == 3 and lines[0].split()[0] == "PID"
-    assert all(len(line) <= ProcessesHostLog.shown_columns for line in lines)
+
+
+def test_processes_are_named_by_program_and_never_by_their_arguments(tmp_path):
+    header, *rows = ProcessesHostLog.lines(Path(tmp_path), 500)
+    assert header.split()[-1] == "COMMAND"
+    assert not any("--no-cov" in row or "faulthandler_timeout" in row for row in rows)
 
 
 def test_a_session_on_a_grant_can_read_it():

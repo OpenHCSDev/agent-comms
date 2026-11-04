@@ -1,12 +1,17 @@
 """What a teammate on another machine asks the host for: its logs and busiest processes, read-only
-and with secrets hidden, so a cloud session can read a failure itself."""
+and with secrets hidden, so a cloud session can read a failure itself.
+
+Only what names no user content is offered: no denylist can certify free text clean, so the values
+this process holds are hidden by value first and the patterns are the backstop for the rest."""
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 from abc import abstractmethod
 from collections import deque
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
@@ -19,11 +24,17 @@ class HostLog(DeclaredFamily, affix="HostLog"):
     """One thing the host can show: its members say where it reads, and every read is bounded."""
 
     timeout_seconds: ClassVar[int] = 10
+    secret_name: ClassVar[re.Pattern[str]] = re.compile(r"(?i)(?:KEY|TOKEN|SECRET|PASSWORD)$")
+    shortest_secret: ClassVar[int] = 8
     secrets: ClassVar[tuple[tuple[re.Pattern[str], str], ...]] = (
         (re.compile(r'(?:wss?://[^\s"\'\\]+)?/watch/[\w-]+'), "[inbox watch URL]"),
-        (re.compile(r"(?i)\b(bearer)\s+[\w.~+/=-]+"), r"\1 [hidden]"),
-        (re.compile(r"(?i)\b(token|secret|password|authorization|code)(['\"]?\s*[=:]\s*['\"]?)[\w.~+/=-]{8,}"),
-         r"\1\2[hidden]"),
+        (re.compile(r"://[^\s/@]+@"), "://[hidden]@"),
+        (re.compile(r"(?i)\b(bearer)\s+[\w.~+/=%-]+"), r"\1 [hidden]"),
+        (re.compile(r"(?i)\b(basic)\s+[\w.~+/=%-]{8,}"), r"\1 [hidden]"),
+        (re.compile(r"\b(?:gh[pousr]_|github_pat_|sk-|xox[abprs]-|glpat-|AKIA)[\w-]{8,}"), "[hidden]"),
+        (re.compile(r"(\s-p)\S{3,}"), r"\1[hidden]"),
+        (re.compile(r"(?i)([\w-]*(?:token|secret|password|passwd|key|authorization|credential|code)"
+                    r"['\"]?\s*[=:]\s*['\"]?)[\w.~+/=%-]{8,}"), r"\1[hidden]"),
         (re.compile(r'"token":"[^"]+"'), '"token":"[hidden]"'),
     )
 
@@ -38,7 +49,22 @@ class HostLog(DeclaredFamily, affix="HostLog"):
         return tuple((done.stdout + done.stderr).splitlines())
 
     @classmethod
-    def hidden(cls, line: str) -> str:
+    def read(cls, root: Path, count: int) -> tuple[str, ...]:
+        held = cls.held_values(os.environ)
+        return tuple(cls.hidden(line, held) for line in cls.lines(root, count))
+
+    @classmethod
+    def held_values(cls, environment: Mapping[str, str]) -> tuple[str, ...]:
+        """Longest first, so a value that contains another is hidden whole."""
+        return tuple(sorted(
+            {value for name, value in environment.items()
+             if cls.secret_name.search(name) and len(value) >= cls.shortest_secret},
+            key=len, reverse=True))
+
+    @classmethod
+    def hidden(cls, line: str, held: tuple[str, ...] = ()) -> str:
+        for value in held:
+            line = line.replace(value, "[hidden]")
         for pattern, replacement in cls.secrets:
             line = pattern.sub(replacement, line)
         return line
@@ -72,25 +98,14 @@ class InstallHostLog(HostLog):
         return cls.newest(root.parent, f".{root.name}.installer-*/stderr.log", count)
 
 
-class ToadHostLog(HostLog):
-    """The newest failure Toad wrote: one file per failure."""
-
-    @classmethod
-    def lines(cls, root: Path, count: int) -> tuple[str, ...]:
-        return cls.newest(Path.home() / ".local/state/toad/logs", "*.txt", count)
-
-
 class ProcessesHostLog(HostLog):
     """The busiest processes now, by lifetime CPU share, with resident memory in KiB. Every
-    process on the desktop is listed, so an argument list is cut to what names the program:
-    the rest of a browser's or anyone else's command line is not a teammate's to read."""
-
-    shown_columns: ClassVar[int] = 150
+    process on the desktop is listed, so each is named by its program alone: anyone's command
+    line is not a teammate's to read."""
 
     @classmethod
     def lines(cls, root: Path, count: int) -> tuple[str, ...]:
-        listed = cls.run("ps", "-eo", "pid,ppid,etime,pcpu,rss,args", "--sort=-pcpu")[:count]
-        return tuple(line[:cls.shown_columns] for line in listed)
+        return cls.run("ps", "-eo", "pid,ppid,etime,pcpu,rss,comm", "--sort=-pcpu")[:count]
 
 
 @dataclass(frozen=True)

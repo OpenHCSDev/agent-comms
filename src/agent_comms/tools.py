@@ -1436,18 +1436,19 @@ class CommsResourcesTool(ThreadReadTool):
 class CommsHostLogTool(ReadTool, NativeToolRequest):
     label = "Host log"
     description = (
-        "Read the host's connector journal, latest install diagnostics, newest Toad failure, or "
-        "busiest processes, with secrets hidden: a session on another machine reads a failure "
-        "itself instead of asking someone on the host."
+        "Read the host's connector journal, latest install diagnostics or busiest processes, with "
+        "secrets hidden: a session on another machine reads a failure itself instead of asking "
+        "someone on the host."
     )
     longest: ClassVar[int] = 500
 
     source: Annotated[type[HostLog], *tool_field("What to read")]
-    lines: Annotated[int, *tool_field("How many lines, newest last; at most 500")] = 100
+    lines: Annotated[int, *tool_field("How many lines, newest last; from 1 to 500")] = 100
 
     def apply(self, comms: Comms, caller: ToolCaller) -> HostLogRead:
-        count = min(self.lines, self.longest)
-        return HostLogRead(tuple(map(self.source.hidden, self.source.lines(comms.root, count))))
+        if not 1 <= self.lines <= self.longest:
+            raise ValueError(f"lines must be from 1 to {self.longest}, not {self.lines}")
+        return HostLogRead(self.source.read(comms.root, self.lines))
 
 
 @dataclass(frozen=True, kw_only=True)
