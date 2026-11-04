@@ -279,8 +279,7 @@ class DiscoveredModels(ModelCatalog):
             owner.launch.binary, owner.agent_args.argv, owner.route.root, package=owner.package,
             configuration=owner.launch.configuration, worktree=worktree,
         )
-        return tuple(text for model in data.models if model.provider and model.id
-                     for text in model.thread_model().texts())
+        return tuple(text for model in data.models for text in model.catalog_texts())
 
 
 @dataclass(eq=False)

@@ -106,7 +106,7 @@ class NativeMessageFailureSource(FailureSource):
 @dataclass(frozen=True)
 class ProviderDiagnosticError(PiPayload, DeclaredFamily, affix="ProviderDiagnosticError"):
     message: str
-    name: str | None = None
+    name: PiField[ReportedText | PiOmitted] = PiOmitted()
 
     @classmethod
     def wire_member(cls, value: dict[str, object]) -> type[ProviderDiagnosticError]:
@@ -114,7 +114,7 @@ class ProviderDiagnosticError(PiPayload, DeclaredFamily, affix="ProviderDiagnost
 
     @property
     def description(self) -> str:
-        return self.name or "Provider transport error"
+        return self.name.text_or("Provider transport error")
 
 
 @dataclass(frozen=True)
@@ -155,6 +155,13 @@ if TYPE_CHECKING:
 
 
 # A Pi payload field is omitted from the wire while it holds its default.
+
+
+@dataclass(frozen=True)
+class ReportedTimestamp(PiReported[int]):
+    """The Unix-millisecond clock Pi stamped a record with."""
+
+    value: int
 
 
 @dataclass(frozen=True)
@@ -524,7 +531,7 @@ class ProviderTransportFailureDiagnostic(PiDiagnostic):
     provider_connection_failure = True
     error: ProviderDiagnosticError
     details: ProviderTransportDetails
-    timestamp: int | None = None
+    timestamp: PiField[ReportedTimestamp | PiOmitted] = PiOmitted()
 
     def turn_phase(self, phase: TurnPhase) -> TurnPhase:
         from .turn_phase import FailedPhase
@@ -873,9 +880,9 @@ class UnreportedModel(ExternalNullMember, PiModel):
 
 @dataclass(frozen=True)
 class ReportedModel(PiModel):
-    provider: str | None = None
-    id: str | None = None
-    name: str | None = None
+    provider: PiField[ReportedText | PiOmitted] = PiOmitted()
+    id: PiField[ReportedText | PiOmitted] = PiOmitted()
+    name: PiField[ReportedText | PiOmitted] = PiOmitted()
     context_window: Annotated[
         PiField[PiCount], WireName("contextWindow")
     ] = UnreportedCount()
@@ -889,10 +896,14 @@ class ReportedModel(PiModel):
         return self
 
     def thread_model(self) -> ThreadModel:
-        name = self.id or self.name
-        return ThreadModel.reported(
-            f"{self.provider}/{name}" if self.provider and name else name or self.provider
-        )
+        """Provider and the model's id (else its name), as far as Pi reported them."""
+        shown = (*self.id.present(), *self.name.present())[:1]
+        return ThreadModel.reported("/".join((*self.provider.present(), *shown)) or None)
+
+    def catalog_texts(self) -> tuple[str, ...]:
+        """A catalog lists a model only when Pi named both its provider and its id."""
+        return tuple(text for _provider in self.provider.present() for _id in self.id.present()
+                     for text in self.thread_model().texts())
 
 
 @dataclass(frozen=True)
