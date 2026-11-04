@@ -52,8 +52,11 @@ class RouteUnread(TypedRow):
 
 @dataclass(frozen=True)
 class UnseenDelivery(TypedRow):
+    """One page row, with how many rows the page's own predicate matched before its limit."""
+
     seq: int
     target: str
+    matched: int
 
 
 class RouteCounts:
@@ -192,6 +195,7 @@ class RouteCounts:
                 SELECT request.seq,request.target,request.sender,{MessageInput.render('message.{mentions}')}
                 FROM cursors AS request CROSS JOIN "{MessageInput.table.declared_name}" AS message USING(seq)
                 WHERE actor=? AND {seen.unread_rule()}
-            ) SELECT seq,target FROM unread WHERE ({predicate}) AND (? IS NULL OR seq < ?)
+            ) SELECT seq,target,count(*) OVER () AS matched
+            FROM unread WHERE ({predicate}) AND (? IS NULL OR seq < ?)
             ORDER BY seq {traversal.seq_order} LIMIT ?''',
             (delivery.actor, *values, traversal.upper, traversal.upper, limit)))
