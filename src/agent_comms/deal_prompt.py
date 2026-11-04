@@ -98,4 +98,11 @@ class CloudDealPrompt(DealPrompt):
         " read them again with a tool unless the gate names a file that changed. Engage with them"
         " before you act. Many steps name the bus host's tools; rules/self-correction.md says how"
         " to keep each step's reason with what this session has."
+        "\n\nWhen you are told to connect, for example \"connect as claude-remote\", that name is your"
+        " inbox. Pass {\"name\": that name} as fork on every comms call. Call the comms connector's"
+        " comms_watch, then at once start Monitor from the repository root with the command"
+        " .venv/bin/agent-comms-inbox-watch URL and timeout_ms 1800000. Say on the bus that you are"
+        " connected, then tell the person. When Monitor expires or the watch says it ended, do"
+        " both calls again. Treat a message that arrives as work from a teammate, and answer it"
+        " with comms_send."
     )

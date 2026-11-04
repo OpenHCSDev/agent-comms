@@ -88,6 +88,12 @@ def test_a_session_whose_start_hook_never_ran_is_dealt_on_its_first_call(tmp_pat
     assert (tmp_path / ".claude" / "state" / f"rule-dealt-{SESSION}").is_file()
 
 
+def test_the_cloud_deal_says_how_to_connect_and_the_launched_one_does_not():
+    assert "agent-comms-inbox-watch URL" in CloudDealPrompt.preamble
+    assert "comms_watch" in CloudDealPrompt.preamble
+    assert "agent-comms-inbox-watch" not in DealPrompt.preamble
+
+
 def test_a_carrying_session_is_dealt_on_its_first_call_and_still_owes_nothing(carried: Path):
     assert hook(carried, "gate", tool_name="Bash", tool_input={}) == ""
     assert (carried / ".claude" / "state" / f"rule-dealt-{SESSION}").is_file()

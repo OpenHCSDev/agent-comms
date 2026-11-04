@@ -5,7 +5,7 @@ import asyncio
 from contextlib import aclosing
 from functools import partial
 from pathlib import Path
-from typing import AsyncIterator, BinaryIO
+from typing import AsyncIterator
 
 from agent_comms.bus import Bus
 from agent_comms.private_path import FileRevision
@@ -15,13 +15,13 @@ from agent_comms_hooks.shell_commands import ConnectCommand
 
 from .history import ClaudeHistory
 from .claude_protocol import ClaudeMonitorFrame
-from .claude_transcript import ClaudeJsonLines, RunningClaude
+from .claude_transcript import RecentClaudeWindow, RunningClaude
 from .hook_session import SessionHook
 from .session_watch import WatchClaim
 from .shared import Enrol, LineMonitorBridge, Options, Watch, run_bridge
 from . import hook_requests  # Register the resident event declarations before serving the socket.
 
-class ClaudeBridge(ClaudeJsonLines, ClaudeHistory, LineMonitorBridge):
+class ClaudeBridge(RecentClaudeWindow, ClaudeHistory, LineMonitorBridge):
     """Follow the Claude session and deliver the original waking HUD through its native frame.
 
     Packet-owned wake behavior is shared with every bridge; tool-call board reads still derive
@@ -32,7 +32,6 @@ class ClaudeBridge(ClaudeJsonLines, ClaudeHistory, LineMonitorBridge):
 
     incoming_frame = ClaudeMonitorFrame
     window_bytes = ClaudeMonitorFrame.BATCH_CHARS * 2
-    RECENT_BYTES = 4 * 1024 * 1024
     state_directory = Path('.local/state/claude-comms-inbox')
 
     @classmethod
@@ -43,15 +42,6 @@ class ClaudeBridge(ClaudeJsonLines, ClaudeHistory, LineMonitorBridge):
         state = WatchClaim(self.address.thread).state()
         await asyncio.to_thread(state.rearm, partial(Connect().begin, self))
         await super().watch_operation(operation)
-
-    def history_start(self, stream: BinaryIO, boundary: int) -> int:
-        """Retain the recent window's owning occurrence, never an arbitrary mid-turn prefix."""
-        start = max(0, boundary - self.RECENT_BYTES)
-        if start:
-            stream.seek(start - 1)
-            stream.readline()
-            start = stream.tell()
-        return self.opening_before(stream, start)
 
     async def transcript(self) -> AsyncIterator[RuntimeUpdate]:
         session = self.start_state()

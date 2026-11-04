@@ -558,12 +558,31 @@ class Program:
         return command.program in (self.name, *self.aliases)
 
 
-class ConnectCommand:
+class BusListener:
+    """A long-running job that is how a session hears the bus, not work that ends: a stop hook
+    that waited for one could never let the session stop."""
+
+    listening: ClassVar[str]
+
+    @classmethod
+    def running_in(cls, command_line: str) -> bool:
+        return any(member.listening in command_line for member in cls.__subclasses__())
+
+
+class ConnectCommand(BusListener):
     program: ClassVar[Program] = Program('agent-comms-claude-bridge')
+    listening = f'{program.name} watch'
 
     @classmethod
     def command_name(cls) -> str:
         return ConnectCommand.__name__.removesuffix('Command').lower()
+
+
+class InboxWatchCommand(BusListener):
+    """A cloud session's listener, which holds the socket its bridge-less session cannot."""
+
+    program: ClassVar[Program] = Program('agent-comms-inbox-watch')
+    listening = program.name
 
 
 @dataclass(frozen=True)
