@@ -103,6 +103,18 @@ class ToolCall:
 
 
 @dataclass(frozen=True, kw_only=True)
+class ConnectorService(ABC):
+    """What a tool can ask of the connector serving it; only a connector call has one."""
+
+    @abstractmethod
+    def watch_url(self, thread: str) -> ToolResult: ...
+
+
+class NoConnectorService(ConnectorService):
+    def watch_url(self, thread: str) -> ToolResult:
+        raise ToolRefusedError("Only a connector call can open an inbox watch.")
+
+
 class ToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResult](
     AsyncWork, FreshIngress, ArgumentTool, ThreadCommandAvailability, ToolDeclaration
 ):
@@ -173,6 +185,10 @@ class ToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResu
 
     def bound(self, observer: WireExportObserver) -> Self:
         """A request that reports no progress runs the same whatever observes it."""
+        return self
+
+    def served_by(self, service: ConnectorService) -> Self:
+        """A request that asks nothing of its connector runs the same under any of them."""
         return self
 
     def posted(self, remote: RequestPoster) -> dict[str, JsonValue]:

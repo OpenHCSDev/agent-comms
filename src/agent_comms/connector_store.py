@@ -293,6 +293,9 @@ class ConnectorGrants:
     def thread_held(self, thread: str) -> bool:
         return any(grant.holds_thread(thread) for grant in self.access.values())
 
+    def access_without(self, thread: str) -> dict[str, ConnectorAccess]:
+        return {key: grant for key, grant in self.access.items() if not grant.holds_thread(thread)}
+
     def ui_issued(
         self, namespace: RootId, seconds: int,
         grant_type: type[UiGrantAccess] = UiReadAccess,
@@ -358,11 +361,12 @@ class ConnectorStore(SingleFileStore, CarriedDocument[ConnectorGrants], Connecto
     def thread_granted(self, thread: str) -> str:
         token = secrets.token_urlsafe(32)
         return self.update(lambda grants: DocumentChange(
-            replace(grants, access={
-                key: grant for key, grant in grants.access.items() if not grant.holds_thread(thread)
-            } | {digest(token): ThreadGrant(thread)}),
+            replace(grants, access=grants.access_without(thread) | {digest(token): ThreadGrant(thread)}),
             token,
         ))
+
+    def thread_revoked(self, thread: str) -> None:
+        self.update(lambda grants: DocumentChange.to(replace(grants, access=grants.access_without(thread))))
 
     def publish_ui_profile(
         self, namespace: RootId, endpoint: HttpsMcpEndpoint, path: Path,

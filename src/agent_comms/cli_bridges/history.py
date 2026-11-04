@@ -61,6 +61,11 @@ class ClaudeHistory(HarnessHistory):
     harness = ClaudeCodeHarness
 
 
+class RemoteWatchHistory(ClaudeHistory):
+    """A Claude session on another machine woken over its inbox socket: nothing of it is readable
+    here, so this member only names the delivery attempts the socket records."""
+
+
 class CodexHistory(HarnessHistory):
     harness = CodexHarness
 
