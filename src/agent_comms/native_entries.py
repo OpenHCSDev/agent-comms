@@ -41,7 +41,7 @@ from .native_input_proof import (
     NativeInputLocation,
 )
 from .native_session_reopen import PiSessionId
-from agent_comms.pi_wire import PiField, PiOmitted, PiPayload, ReportedInputId, TaggedPayload
+from agent_comms.pi_wire import PiField, PiOmitted, PiPayload, PiReported, ReportedInputId, TaggedPayload
 from agent_comms.pi_wire import Opaque
 from .pi_payloads import PiMessage, ReportedText
 from .pi_vocabulary import PendingStopReason, ThinkingLevel
@@ -51,6 +51,18 @@ from .transcript_events import ImportedMessage, NoticeTranscript, TranscriptEven
 from .transcript_routes import InputPresentation, NoInputDisplay, _SessionRoutes
 from .thread_model import DeclaredModel
 from .turn_item import FreshNativeId, NativeItemId
+
+
+
+@dataclass(frozen=True)
+class ReportedSessionVersion(PiReported[int]):
+    """The session-file format version Pi wrote in a session header."""
+
+    value: int
+
+
+# Saved native execution reopens only v3 headers.
+STRICT_SESSION_VERSION = ReportedSessionVersion(3)
 
 
 @dataclass(frozen=True)
@@ -598,7 +610,7 @@ class SessionEntry(NativeEntry):
     def child_parent(self) -> object:
         return FieldCodec.encode(self.parent_id)
 
-    version: int | None = None
+    version: PiField[ReportedSessionVersion | PiOmitted] = PiOmitted()
     cwd: PiField[ReportedText | PiOmitted] = PiOmitted()
     parent_session: Annotated[
         PiSessionId | PiOmitted, WireName("parentSession"), WireOmitDefault()
@@ -608,9 +620,17 @@ class SessionEntry(NativeEntry):
     def input_evidence(cls, raw: dict) -> tuple[NativeEntry, ...]:
         return (cls.from_evidence(raw),)
 
+    @classmethod
+    def fresh(cls, cwd: Path, at: datetime) -> SessionEntry:
+        """A new strict v3 header for a session Core writes itself."""
+        return cls(
+            id=PiSessionId.fresh(), version=STRICT_SESSION_VERSION, cwd=ReportedText(str(cwd)),
+            timestamp=RecordedTimestamp.written(at),
+        )
+
     def require_reopen(self) -> PiSessionId:
         """Saved native execution supports v3; display may decode older headers."""
-        if self.version != 3:
+        if self.version != STRICT_SESSION_VERSION:
             raise MalformedRecord("Strict native v3 session header required")
         return self.id
 

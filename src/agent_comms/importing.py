@@ -22,7 +22,6 @@ from .thread_text import NoThreadText, ThreadText
 from .transcript_events import ImportedInput, ImportedMessage, NoRetainedRequest
 from .turn_context import CodexRolloutProvenance, ContextSourceText
 from .turn_item import NativeItemId
-from .native_session_reopen import PiSessionId
 
 if TYPE_CHECKING:
     from .cli_bridges.history import History
@@ -131,13 +130,11 @@ class ImportSnapshot(ImportedConversation):
 
     def pi_session(self, project: Path) -> str:
         """A valid Pi v3 tree, using text-only portable historical context."""
-        from .native_entries import ImportedSessionWriter, NativeEntry
+        from .native_entries import ImportedSessionWriter, NativeEntry, SessionEntry
 
         timestamp = datetime.now(UTC)
         iso = timestamp.isoformat()
-        records: list[dict[str, object]] = [
-            {"type": "session", "version": 3, "id": FieldCodec.encode(PiSessionId.fresh()), "timestamp": iso, "cwd": str(project)}
-        ]
+        records: list[dict[str, object]] = [SessionEntry.fresh(project, timestamp).to_wire()]
         parent = FieldCodec.encode(NativeItemId.fresh())
         records.append({"type": "custom", "id": parent, "parentId": None, "timestamp": iso,
             "customType": "agent-comms-import",
