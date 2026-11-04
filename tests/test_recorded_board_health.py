@@ -61,7 +61,7 @@ def test_recorded_failure_precedes_stale_board_and_load_without_changing_retaine
     board = ThreadCaller('colleague').invoke(CommsBoardTool(), comms)
     for lines in (hud.frame, load.header, board.lines):
         assert 'original branch read failed' in lines[0]
-        assert 'elapsed' in lines[0]
+        assert lines[0].endswith(' ago)')  # the failure's age, painted when the line is read
         assert 'last completed' in lines[1]
         assert any('STALE retained' in line for line in lines)
     edits = ThreadCaller('colleague').invoke(CommsUnjudgedTool(), comms)
