@@ -84,7 +84,7 @@ class SessionLedger(PrintLedger):
         except FileNotFoundError:
             names = []
         return (PrintedLedger(ledger=self.identity,
-                              printed=tuple(MessageReference.named(name) for name in names)).line(),)
+                              printed=tuple(map(MessageReference.named, names))).line(),)
 
 
 class TranscriptRoute(ABC):

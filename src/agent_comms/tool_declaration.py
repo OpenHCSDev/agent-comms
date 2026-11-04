@@ -94,7 +94,8 @@ class ContextRows:
             if not (tab and number.isdecimal()):
                 break
             rows.append((int(number), line))
-        consecutive = all(later[0] == earlier[0] + 1 for earlier, later in zip(rows, rows[1:], strict=False))
+        consecutive = all(later[0] == earlier[0] + 1
+                          for earlier, later in zip(rows, rows[1:], strict=False))
         return tuple(rows) if consecutive else ()
 
 

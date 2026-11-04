@@ -1266,10 +1266,11 @@ class CliBridge(HarnessDeliveryRecords, ExternalRuntime, DeliversInput, HarnessS
     address: SessionBinding
     db: sqlite3.Connection
     binding: Binding = field(init=False)
+    comms: Comms = field(init=False)
 
-    @cached_property
-    def comms(self) -> Comms:
-        return wire(Path(self.address.root))
+    def __post_init__(self) -> None:
+        """The bus this bridge's address names; resolving it creates no store."""
+        self.comms = wire(Path(self.address.root))
 
     def watch_record(self, binding: SessionBinding) -> WatchRecord:
         return WatchRecord(binding.bus, binding.root,
@@ -1786,7 +1787,8 @@ class TranscriptConfirmsDelivery(PublishesToBus, HarnessDeliveryRecords):
         """Only a route that holds a window frees part of it."""
 
     async def confirm_probe(self, probe: MonitorProbe) -> None:
-        """Only a bridge that sent a probe waits on one; an old probe in a replayed window is history."""
+        """Only a bridge that sent a probe waits on one; an old probe in a replayed window is
+        history."""
 
     incoming_frame: ClassVar[type[MonitorIncomingFrame]]
 

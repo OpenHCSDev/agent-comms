@@ -147,7 +147,8 @@ class PushedTranscript(TranscriptConfirmsDelivery, ClaudeJsonLines):
     @cached_property
     def recipient_lookup(self) -> ThreadLookup:
         """The ticket's thread, decoded once for the socket's life."""
-        return self.comms.registry.require(self.transcript_thread).incarnation.require_recorded().lookup
+        incarnation = self.comms.registry.require(self.transcript_thread).incarnation
+        return incarnation.require_recorded().lookup
 
     async def emitted(self, printed: frozenset[MessageReference]) -> None:
         """The client printed these, or was about to: their attempts are never sent again. One
@@ -236,9 +237,12 @@ class InboxWatch:
             lookup = comms.registry.require(self.thread).incarnation.require_recorded().lookup
             with comms.registry.store.coordinator_reader.reader_snapshot() as db:
                 return tuple(HarnessDelivery.select(
-                    db, bridge=RemoteWatchHistory, recipient_lookup=lookup, outcome=UnconfirmedOutcome))
+                    db, bridge=RemoteWatchHistory, recipient_lookup=lookup,
+                    outcome=UnconfirmedOutcome))
 
-    def unshown(self, before: frozenset[MessageReference], ledger: TakingLedger) -> tuple[Message, ...]:
+    def unshown(
+        self, before: frozenset[MessageReference], ledger: TakingLedger,
+    ) -> tuple[Message, ...]:
         """Of the attempts taken before this socket opened, those this ledger took and, its
         report in, still unconfirmed: provably never printed."""
         references = tuple(sorted((
@@ -263,7 +267,8 @@ class InboxWatch:
         this one sends anything, so a message this socket sends is never replayed by it. Nothing
         waits on the client's ledger: a message taken before it lands is taken under none."""
         reported = ReportedLedger()
-        before = frozenset(attempt.reference for attempt in await asyncio.to_thread(self.unconfirmed))
+        taken = await asyncio.to_thread(self.unconfirmed)
+        before = frozenset(attempt.reference for attempt in taken)
         reader = asyncio.create_task(self.read_until_closed(socket, reported))
         replay = asyncio.create_task(self.replayed(socket, before, reported))
         after: TakenInputPosition = TakenInputStart()
@@ -281,7 +286,9 @@ class InboxWatch:
             reader.cancel()
             replay.cancel()
 
-    async def read_until_closed(self, socket: web.WebSocketResponse, reported: ReportedLedger) -> None:
+    async def read_until_closed(
+        self, socket: web.WebSocketResponse, reported: ReportedLedger,
+    ) -> None:
         """Publish what the session sends. A failure there must not cost it its push, so it is
         said on the bus and the socket keeps being read."""
         with self.wire() as comms:
