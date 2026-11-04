@@ -6,9 +6,11 @@ from pathlib import Path
 import pytest
 
 from agent_comms.checkout_publication import PublishingCheckout
+from agent_comms.cli import build_parser
 from agent_comms.cli_verbs.publish_checkout import PublishCheckoutCliCommand
 from agent_comms.cli_verbs.sync_checkout import SyncCheckoutCliCommand
-from agent_comms.repo import Checkout, GitCommandError
+from agent_comms.repo import Checkout, GitCommandError, NewBranchStart
+from agent_comms.repository_name import RepositoryName
 from agent_comms.tool_denial import StorageDenied
 from agent_comms.storage_projection import StorageProjection
 from agent_comms.storage_rules import StorageRule
@@ -32,7 +34,9 @@ def test_canonical_sync_and_publication_preserve_source_and_prior_release(privat
     old.mkdir(parents=True)
     (old / "report").write_text("previous")
     (checkout.path / "current").symlink_to("release/old")
-    worker = comms.registry.declare(Thread("publisher", frozenset(), Checkout(checkout.path)))
+    editing = Checkout.add(checkout.path, tmp_path / "editing", NewBranchStart("editing", "main"))
+    editing_head = repository.git(editing.path, "rev-parse", "HEAD").strip()
+    worker = comms.registry.declare(Thread("publisher", frozenset(), editing))
     caller = ThreadCaller(worker.name)
     rule = comms.registry.storage_rule
     with pytest.raises(StorageDenied):
@@ -44,13 +48,27 @@ def test_canonical_sync_and_publication_preserve_source_and_prior_release(privat
     repository.git(checkout.path, "commit", "-m", "Track a literal symlink before ignoring its namespace")
     repository.git(checkout.path, "switch", "main")
     repository.git(checkout.path, "push", "origin", "feature:main")
-    synchronized = SyncCheckoutCliCommand(caller=caller).apply(comms)
+    options = build_parser().parse_args([
+        "sync-checkout", "--from", worker.name, "--checkout", str(checkout.path),
+    ])
+    sync = options.command_declaration.from_arguments(options)
+    assert sync == SyncCheckoutCliCommand(caller=caller, checkout=checkout)
+    with pytest.raises(ValueError, match="default branch"):
+        replace(sync, checkout=PublishingCheckout(editing.path)).apply(comms)
+    other = SourceRepository.create(tmp_path / "other", RepositoryName.from_wire("example/other"))
+    with pytest.raises(ValueError, match="selected project's repository"):
+        replace(sync, checkout=PublishingCheckout(other.checkout)).apply(comms)
+    alias = tmp_path / "alias"
+    alias.symlink_to(checkout.path, target_is_directory=True)
+    with pytest.raises(ValueError, match="physical path"):
+        replace(sync, checkout=PublishingCheckout(alias)).apply(comms)
+    synchronized = sync.apply(comms)
     assert synchronized.head == repository.git(checkout.path, "rev-parse", "origin/main").strip()
     source = rule.roots_of(worker).scratch / "staged"
     source.mkdir(parents=True)
     (source / "report").write_text("accepted report")
     (source / "report").chmod(0o640)
-    command = PublishCheckoutCliCommand(caller=caller, source=source,
+    command = PublishCheckoutCliCommand(caller=caller, checkout=checkout, source=source,
         destination=Path("release/new"), link=Path("current"), previous=Path("release/old"),
         head=synchronized.head)
     published = command.apply(comms)
@@ -59,6 +77,8 @@ def test_canonical_sync_and_publication_preserve_source_and_prior_release(privat
     assert (checkout.path / "current/report").stat().st_mode == (source / "report").stat().st_mode
     assert (old / "report").read_text() == "previous"
     assert user_file.read_text() == "keep me" and user_file.stat().st_mode & 0o777 == 0o640
+    assert comms.registry.require(worker.name).worktree == editing
+    assert repository.git(editing.path, "rev-parse", "HEAD").strip() == editing_head
     with pytest.raises(FileExistsError):
         command.apply(comms)
     with pytest.raises(ValueError, match="link changed"):
@@ -80,9 +100,9 @@ def test_canonical_sync_and_publication_preserve_source_and_prior_release(privat
     # Dirty and locally-ahead source are both refused, not reset or declared synchronized.
     (checkout.path / "owner.py").write_text("local work\n")
     with pytest.raises(ValueError, match="tracked changes"):
-        SyncCheckoutCliCommand(caller=caller).apply(comms)
+        sync.apply(comms)
     repository.commit_change("Unpublished local work", "owner.py")
     with pytest.raises(GitCommandError):
-        SyncCheckoutCliCommand(caller=caller).apply(comms)
+        sync.apply(comms)
     with pytest.raises(StorageDenied):
         StorageProjection(rule, worker, comms).require_write(checkout.path / "owner.py")
