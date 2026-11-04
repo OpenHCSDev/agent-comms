@@ -24,8 +24,8 @@ from .channel_targets import CommandTarget, ThreadTarget
 from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
-from .nominal.field_codec import TaggedUnion
 from .nominal.field_codec import (
+    TaggedUnion,
     CapabilityUnion,
     FieldCodec,
     NullMember,

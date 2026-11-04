@@ -11,8 +11,8 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
 from .tool_result import ToolResult
-from .nominal.field_codec import TaggedUnion
 from .nominal.field_codec import (
+    TaggedUnion,
     NominalSpelling, NominalText, NullMember, RecordMember, SingleFieldValue, SubclassUnion,
     TaggedRecordMember,
 )

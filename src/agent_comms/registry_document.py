@@ -26,8 +26,8 @@ from .channels import Channel, ChannelMemberIndex
 from .child_process import NoProcess, ProcessIdentity
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
-from .nominal.field_codec import TaggedUnion
 from .nominal.field_codec import (
+    TaggedUnion,
     ExternalJsonShape,
     FieldCodec,
     FieldPlan,

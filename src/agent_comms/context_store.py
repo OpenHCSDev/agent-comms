@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from agent_comms.nominal.field_codec import TaggedUnion
-from agent_comms.nominal.field_codec import IdentityExclude
+from agent_comms.nominal.field_codec import IdentityExclude, TaggedUnion
 
 import json
 import sqlite3

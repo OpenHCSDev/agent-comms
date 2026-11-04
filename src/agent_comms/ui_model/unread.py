@@ -6,8 +6,7 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
-from agent_comms.nominal.field_codec import TaggedUnion
-from agent_comms.nominal.field_codec import TaggedRecordMember
+from agent_comms.nominal.field_codec import TaggedRecordMember, TaggedUnion
 
 if TYPE_CHECKING:
     from agent_comms.presentation import CoordinationSnapshot

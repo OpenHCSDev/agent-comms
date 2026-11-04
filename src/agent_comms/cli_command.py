@@ -38,8 +38,8 @@ from agent_comms.config_options import CatalogChoice, ConfigOptions
 from agent_comms.tool_result import ToolResult
 from agent_comms.nominal.declared_family import ModuleMembers
 from agent_comms.declared_verb import DeclaredCommand
-from agent_comms.nominal.field_codec import TaggedUnion
 from agent_comms.nominal.field_codec import (
+    TaggedUnion,
     FieldCodec, FieldPlan, RecordMember, TaggedRecordMember, TargetBound, WireValue,
 )
 from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, StartedOwner

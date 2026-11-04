@@ -65,8 +65,7 @@ from agent_comms.history_views import RetiredViews
 from agent_comms.message_notification import NotificationPass, NotificationWindow
 from agent_comms.notification_read import NotificationsRead, UnreadableNotificationsRead
 from agent_comms.message_reference import MessageReference
-from agent_comms.nominal.field_codec import TaggedUnion
-from agent_comms.nominal.field_codec import DeclaredError, FieldCodec, MessageId, TaggedRecordMember
+from agent_comms.nominal.field_codec import DeclaredError, FieldCodec, MessageId, TaggedRecordMember, TaggedUnion
 from agent_comms.nominal.fold import Absorbs, Accumulates, Fold
 from agent_comms.notification_reads import NotificationRead
 from agent_comms.read_basis import DisplayCut, NoDisplaySelection
