@@ -75,7 +75,9 @@ class Comms(ActivityClient):
         keeps serving, and streaming records nothing."""
         reader = await Coordination.run_worker(partial(self.watched_reader, name))
         maintenance = MaintenanceBarrier(self.registry.store.path)
-        async with aclosing(self.bus.bus.watch(FileSource(maintenance.state_path))) as changes:
+        bus = self.bus.bus
+        sources = (*bus.commit_sources(), FileSource(maintenance.state_path))
+        async with aclosing(bus.watch_sources(*sources)) as changes:
             async for _ in changes:
                 while True:
                     batch = await Coordination.run_worker(
