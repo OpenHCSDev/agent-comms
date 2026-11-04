@@ -83,3 +83,19 @@ class DealPrompt:
         except BaseException:
             Path(staged).unlink(missing_ok=True)
             raise
+
+
+class CloudDealPrompt(DealPrompt):
+    """The same deal for a session with no launcher and no Core: a cloud session, whose setup
+    (rule_gate.py install) puts it in the system prompt as an output style. Only what it is told
+    differs, because Core's audit gate is not there to enforce what the launched prompt promises."""
+
+    preamble = (
+        "# Your deal\n\n"
+        "Below is everything the rule gate deals you, in its order: the two papers every rule is"
+        " a consequence of, then the rules, the voice, the recorded failures and the pattern catalog."
+        " You have read them by reading this prompt, and it survives every compaction, so do not"
+        " read them again with a tool unless the gate names a file that changed. Engage with them"
+        " before you act. Many steps name the bus host's tools; rules/self-correction.md says how"
+        " to keep each step's reason with what this session has."
+    )
