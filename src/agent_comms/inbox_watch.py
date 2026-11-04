@@ -22,7 +22,7 @@ from typing import ClassVar
 from aiohttp import WSCloseCode, WSMsgType, web
 from yarl import URL
 
-from .agent_inbox import SecondsWait
+from .agent_inbox import SecondsWait, TakenInputPosition, TakenInputStart
 from .child_process import ProcessIdentity
 from .cli_bridges.claude_transcript import WATCH_STOPPED, WINDOW_ENDED, ClaudeJsonLines
 from .cli_bridges.history import RemoteWatchHistory
@@ -144,9 +144,12 @@ class InboxWatch:
         with client_wire(self.root) as comms:
             yield comms
 
-    def untaken(self) -> tuple[Message, ...]:
+    def untaken(self, after: TakenInputPosition = TakenInputStart()) -> tuple[Message, ...]:
+        """What no harness took after ``after``: a socket that took a message never has an
+        older untaken one, so its next read starts past it instead of at the thread's birth."""
         with self.wire() as comms:
-            request = CommsInboxTool(thread=self.thread, wait=SecondsWait(self.wait_seconds))
+            request = CommsInboxTool(
+                thread=self.thread, after=after, wait=SecondsWait(self.wait_seconds))
             return request.page(comms).page.messages
 
     def taken(self, message: Message) -> None:
@@ -179,11 +182,13 @@ class InboxWatch:
         """Frames until it closes, or until the thread is stopped on the bus; a reader must run
         for the socket to notice closing."""
         reader = asyncio.create_task(self.read_until_closed(socket))
+        after: TakenInputPosition = TakenInputStart()
         try:
             while not socket.closed:
-                for message in await asyncio.to_thread(self.untaken):
+                for message in await asyncio.to_thread(self.untaken, after):
                     await socket.send_str(FieldCodec.compact(FieldCodec.encode(message)))
                     await asyncio.to_thread(self.taken, message)
+                    after = after.advanced(message.reference)
                 if not await asyncio.to_thread(self.holds, here):
                     await socket.close(code=WATCH_STOPPED, message=b"stopped on the bus")
         except ConnectionResetError:
