@@ -78,7 +78,7 @@ from .goal_waits import NoStandbyReview, StandbyReview
 from .goals import GoalDeclaration
 from .history_result import HistoryPageResult
 from .input_attempt import UnresolvedInput
-from .message_page import NEWEST_PAGE, MessagePage, PageBounds
+from .message_page import NEWEST_PAGE, InboxPage, MessagePage, PageBounds
 from .page_traversal import LatestSequence, LiveCursor
 from .historical_views import ConversationObservation, ConversationRevision, UnobservedConversation
 from .message_reference import MessageReference
@@ -1792,17 +1792,21 @@ class CommsInboxTool(NativeToolRequest[ToolCaller, InboxPageRead]):
 
     def apply(self, comms: Comms, caller: ToolCaller) -> InboxPageRead:
         thread = self.thread
-        if not (target := self.target.strip()):
-            raise ToolRefusedError("An inbox target cannot be empty.")
         review = self.standby.review(comms, thread)
-        page = self.wait.read(comms.bus.bus, lambda: comms.bus.inbox_at(
-            thread, comms.registry.snapshot(), CommandTarget.named(target),
-            after=self.after, bounds=PageBounds(limit=self.limit),
-        ))
+        page = self.page(comms)
         return InboxPageRead(
             page.page.messages, page.remaining, tuple(comms.goals.unresolved_inputs(thread)),
             standby_review=review,
         )
+
+    def page(self, comms: Comms) -> InboxPage:
+        """The messages alone: a reader that shows no unresolved inputs need not project them."""
+        if not (target := self.target.strip()):
+            raise ToolRefusedError("An inbox target cannot be empty.")
+        return self.wait.read(comms.bus.bus, lambda: comms.bus.inbox_at(
+            self.thread, comms.registry.snapshot(), CommandTarget.named(target),
+            after=self.after, bounds=PageBounds(limit=self.limit),
+        ))
 
 
 @dataclass(frozen=True, kw_only=True)
