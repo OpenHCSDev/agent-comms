@@ -119,6 +119,11 @@ class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
     def paused_since(self, last_seen: float) -> tuple[float, ...]:
         return ()
 
+    def claimed_readers(self, name: str) -> tuple[str, ...]:
+        """The inbox this status claims a reader is taking right now. Every other status
+        already says it is not reading, so its inbox is never read to check."""
+        return ()
+
     @property
     def answers_later(self) -> bool:
         """Whether a wait on this thread is answered once it reads; a running thread does."""
@@ -389,7 +394,11 @@ class DeclaredReaderPresence(CliInboxPresence):
 
 
 class ConnectedThreadStatus(DeclaredReaderPresence, RunningThreadStatus):
-    """A CLI inbox whose bridge process is watching it."""
+    """A CLI inbox whose bridge process is watching it. A stopped or frozen process is still
+    alive, so the connection is a claim; the inbox it stopped taking is the evidence."""
+
+    def claimed_readers(self, name: str) -> tuple[str, ...]:
+        return (name,)
 
 
 class PausedBridgeThreadStatus(SelfRenaming, DeclaredReaderPresence, StoppedThreadStatus):

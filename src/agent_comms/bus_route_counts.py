@@ -56,6 +56,12 @@ class UnseenDelivery(TypedRow):
     target: str
 
 
+@dataclass(frozen=True)
+class RouteOldest(TypedRow):
+    actor: str
+    oldest: float
+
+
 class RouteCounts:
     """Bus readers share delivery queries and their existing observing lifetime."""
 
@@ -179,6 +185,14 @@ class RouteCounts:
             conversation = deliveries[row.actor].conversation(row.sender, row.target)
             counts[row.actor][conversation] = counts[row.actor].get(conversation, 0) + row.count
         return counts
+
+    def unseen_oldest(self, registry, deliveries, seen):
+        """When each actor's oldest message under its cursor was sent, in one read."""
+        rows = self._route_rows(RouteOldest, registry, deliveries, seen, 0,
+            f'''SELECT request.actor AS actor,min(message.timestamp) AS oldest
+            FROM cursors AS request CROSS JOIN "{MessageInput.table.declared_name}" AS message USING(seq)
+            WHERE {ReadCursor.rule_of(seen.values())} GROUP BY request.actor''')
+        return {row.actor: row.oldest for row in rows}
 
     def unseen_deliveries(self, registry, delivery, seen, *, after: int = 0, scope=None, limit: int = 100,
                           traversal: PageTraversal):

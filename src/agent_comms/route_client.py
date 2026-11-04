@@ -42,4 +42,8 @@ class ActivityClient(RouteClient):
 
     def __init__(self, route: CommsRoute) -> None:
         super().__init__(route)
-        self.agents = AgentActivity(self.root, self.registry)
+        self.agents = self.activity_store()
+
+    def activity_store(self) -> AgentActivity:
+        """A turn-phase report reads no inbox, so its store sees no delivery stall."""
+        return AgentActivity(self.root, self.registry)
