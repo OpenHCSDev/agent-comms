@@ -82,6 +82,9 @@ def test_a_frozen_bridge_reads_stalled_everywhere_it_read_connected(
     # the sidebar row
     view, = (view for view in wire(tmp_path).views.thread_views() if view.thread.name == "bridge")
     assert "not reading since" in " ".join(view.presentation.status.details)
+    # the sidebar roster reads it inside the bus snapshot it already holds
+    row = wire(tmp_path).views.presentation.roster("sender").threads["bridge"]
+    assert "not reading since" in " ".join(row.presentation.status.details)
     # the board
     bridge = wire(tmp_path).registry.require("bridge").incarnation.require_recorded()
     assert [rule.unit for rule in UnitDeaf.violations(wire(tmp_path))] == [bridge]
