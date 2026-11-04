@@ -22,6 +22,11 @@ class DeclaredOptions:
     def from_arguments(cls, args: argparse.Namespace) -> Self:
         return FieldCodec.decode_arguments(cls, args)
 
+    @classmethod
+    def to_arguments(cls, value: Self) -> tuple[str, ...]:
+        """The command line ``from_arguments`` reads back as this declaration's fields."""
+        return FieldCodec.encode_arguments(cls, value)
+
 
 class DeclaredCommand(DeclaredOptions, DeclaredFamily):
     """A family member that is one subcommand, named by its declared name."""
