@@ -8,7 +8,7 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .nominal.field_codec import MessageId, NullMember, RecordMember, SingleFieldValue, SubclassUnion
+from .nominal.field_codec import FieldCodec, MalformedRecord, MessageId, NullMember, RecordMember, SingleFieldValue, SubclassUnion
 from .page_traversal import LiveCursor, NewestCursor, PageCursor, PageTraversal
 from .typed_table import TypedRow
 
@@ -33,6 +33,14 @@ class MessageReference(TypedRow, ProjectionSource):
     def name(self) -> str:
         """How a reader names this message: its bus position, then its identity."""
         return f"{self.seq}-{self.message_id}"
+
+    @classmethod
+    def named(cls, name: str) -> MessageReference:
+        """The reference a name reads back as; anything else is a malformed name."""
+        seq, _, identity = name.partition("-")
+        if not seq.isdecimal():
+            raise MalformedRecord(f"A message name starts with its bus position: {name!r}")
+        return cls(int(seq), FieldCodec.decode(MessageId, identity))
 
 
 class InboxStart(SubclassUnion, affix="Start"):

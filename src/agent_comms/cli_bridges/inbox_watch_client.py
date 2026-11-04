@@ -99,21 +99,6 @@ def session_transcript() -> TranscriptRoute:
         return UnfoundTranscript(f"{type(failure).__name__}: {failure}")
 
 
-class WatchedMonitorFrame(ClaudeMonitorFrame):
-    """No transcript decode confirms a watched delivery: the server records it when it sends the
-    frame, so its header says who sent it in words a reader replies to."""
-
-    @property
-    def sender(self) -> str:
-        """No decoder reads this header, so it also says what kind of sender this is."""
-        return self.message.sender_label
-
-    @property
-    def identity(self) -> str:
-        """No decoder reads this header, so it names the whole reference a reply must cite."""
-        return self.message.reference.name
-
-
 class WatchEnd(ABC):
     """How a watch ended, and what the session does about it."""
 
@@ -169,7 +154,7 @@ class InboxSocket:
 
     async def deliver(self, frame: str) -> None:
         """Inline when one Monitor batch holds it, otherwise one notice naming its whole body."""
-        _, line = WatchedMonitorFrame(FieldCodec.decode(Delivered, FieldCodec.parse(frame))).event(
+        _, line = ClaudeMonitorFrame(FieldCodec.decode(Delivered, FieldCodec.parse(frame))).event(
             self.exports)
         print(line, flush=True)
         await asyncio.sleep(self.batch_gap_seconds)

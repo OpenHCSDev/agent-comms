@@ -1567,14 +1567,11 @@ class MonitorReadFile(MonitorProtocolFrame, declared_name='read-file'):
     @classmethod
     def exported_at(cls, directory: Path, path: str) -> tuple[Self, ...]:
         """The notice whose export is exactly this path; any other path names none."""
-        seq, _, name = Path(path).name.partition('-')
-        if not seq.isdecimal():
-            return ()
         try:
-            identity = FieldCodec.decode(MessageId, name.removesuffix('.txt'))
+            reference = MessageReference.named(Path(path).name.removesuffix('.txt'))
         except field_codec.MalformedRecord:
             return ()
-        notice = cls.naming(directory, MessageReference(int(seq), identity))
+        notice = cls.naming(directory, reference)
         return (notice,) if notice.path == path else ()
 
     @contextmanager
