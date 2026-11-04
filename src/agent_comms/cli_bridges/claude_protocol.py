@@ -35,7 +35,6 @@ from agent_comms.cli_protocol import (
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     MalformedRecord,
-    MessageId,
     ToolCallId,
     TranscriptRecordId,
 )
@@ -119,19 +118,10 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
         return len(line.encode('utf-16-le')) // 2
 
     @property
-    def sender(self) -> str:
-        """The header's sender column; decode_event reads it back, and confirmation compares it
-        with the message's sender."""
-        return self.message.sender
-
-    @property
-    def identity(self) -> str:
-        """The header's identity column; decode_event reads it back as the message id."""
-        return str(self.message.message_id)
-
-    @property
     def header(self) -> str:
-        return f'{self.HEADER_PREFIX}{self.sender} · {self.identity}\n'
+        """Who sent it, as the reader sees them, then the reference a reply cites and
+        decode_header reads back."""
+        return f'{self.HEADER_PREFIX}{self.message.sender_label} · {self.message.reference.name}\n'
 
     @cached_property
     def inline(self) -> str:
@@ -162,9 +152,9 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
         return (*pieces, line)
 
     @cached_property
-    def observed_body(self) -> tuple[str, ...]:
-        """The body lines as a transcript records them: Monitor trims each line's end."""
-        return tuple(line.rstrip() for line in self.shown_lines[1:])
+    def observed(self) -> tuple[str, ...]:
+        """The event as a transcript records it: Monitor trims each line's end."""
+        return tuple(line.rstrip() for line in self.shown_lines)
 
     def shown_inline(self) -> str:
         return '\n'.join(self.shown_lines)
@@ -201,8 +191,7 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
     @cached_property
     def export_lines(self) -> tuple[str, ...]:
         """The readable message: who sent it, then its lines as written."""
-        return (f'{self.HEADER} · {self.sender} · {self.message.message_id}',
-                *(part.removesuffix('\n') for part in self.slices))
+        return (self.header.removesuffix('\n'), *(part.removesuffix('\n') for part in self.slices))
 
     def read_parts(self, rows: tuple[tuple[int, str], ...]) -> tuple[MonitorPart, ...]:
         """The parts a Read showed, judged against the bus message and never decoded from the
@@ -257,12 +246,11 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
 
     @classmethod
     def decode_header(cls, line: str) -> MonitorFrame:
-        sender, _, message_id = line.removeprefix(cls.HEADER_PREFIX).rpartition(' · ')
         try:
-            identity = FieldCodec.decode(MessageId, message_id)
+            reference = MessageReference.named(line.rpartition(' · ')[2])
         except MalformedRecord:
             return ForeignMonitorFrame(text=line)
-        return MonitorShown.model_validate(dict(id=identity, sender=sender, lines=()))
+        return MonitorShown.model_validate(dict(reference=reference, lines=(line,)))
 
     @classmethod
     def decode_event(cls, event: str) -> tuple[MonitorFrame, ...]:
@@ -277,18 +265,17 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
 
 
 class MonitorShown(MonitorFrame, declared_name='shown'):
-    """A message shown inline: its header, then its body lines as the transcript recorded them.
-    Wrapping and Monitor's trimming leave no body to decode, so the original is rendered again
-    and compared; only an exact match proves the whole message reached the model."""
+    """A message shown inline: its lines as the transcript recorded them, header first. Wrapping
+    and Monitor's trimming leave no body to decode, so the original is rendered again and
+    compared, header and all; only an exact match proves the whole message reached the model."""
 
-    id: InstanceOf[
+    reference: InstanceOf[
         Annotated[
-            MessageId,
-            PlainValidator(partial(FieldCodec.decode, MessageId)),
+            MessageReference,
+            PlainValidator(partial(FieldCodec.decode, MessageReference)),
             PlainSerializer(FieldCodec.encode),
         ]
     ]
-    sender: str
     lines: tuple[str, ...]
 
     def continued(
@@ -304,16 +291,17 @@ class MonitorShown(MonitorFrame, declared_name='shown'):
     ) -> tuple[MessageReference, ...]:
         """The one whole part this event proves, confirmed as any other part; an event that is
         not exactly the original's rendering confirms nothing and says so."""
-        with bridge.uncertain_on_contention(self.id):
-            for delivery in await bridge.attempts(self.id):
+        identity = self.reference.message_id
+        with bridge.uncertain_on_contention(identity):
+            for delivery in await bridge.attempts(identity):
                 message = await bridge.message(delivery.reference)
                 observed = tuple(line.rstrip() for line in self.lines)
-                if ClaudeMonitorFrame(message).observed_body != observed:
+                if bridge.incoming_frame(message).observed != observed:
                     await bridge.record_mismatch(
                         delivery, 'Shown lines do not equal the original message')
                     continue
                 return await MonitorPart.model_validate(dict(
-                    id=self.id, sender=self.sender, number=1, total=1, body=message.body,
+                    id=identity, sender=message.sender, number=1, total=1, body=message.body,
                 )).confirm(bridge, record)
         return ()
 

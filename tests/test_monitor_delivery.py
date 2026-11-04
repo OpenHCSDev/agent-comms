@@ -542,7 +542,7 @@ async def test_a_body_that_fits_one_event_goes_inline_and_exports_nothing(bridge
         await bridge.accept(message)
         line = await only_event(reader)
         shown, = ClaudeMonitorFrame.decode_event(line)
-        assert (shown.id, shown.sender) == (message.message_id, message.sender)
+        assert shown.reference == message.reference
         await observe(bridge, notification(line).updates(ClaudeSession()))
     confirmed, = await bridge.attempts(message.message_id)
     assert confirmed.outcome is DeliveredOutcome
@@ -567,7 +567,7 @@ async def test_a_larger_message_is_one_notice_and_one_whole_read_confirms_it(bri
         assert stat.S_IMODE(export.stat().st_mode) == 0o600
         text = export.read_text(newline='')
         lines = text.split('\n')[:-1]
-        assert lines[0] == f'Comms in · peer · {message.message_id}'
+        assert lines[0] == f'Comms in · {message.sender_label} · {message.reference.name}'
         assert '\n'.join(lines[1:]) == body
         # The notice frees its own reservation and proves nothing about the body.
         await observe(bridge, notification(line, record_id=transcript_record('notice')).updates(
