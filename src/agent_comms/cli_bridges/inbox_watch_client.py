@@ -18,7 +18,7 @@ from abc import ABC, abstractmethod
 from contextlib import aclosing
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
+from typing import BinaryIO, ClassVar
 from urllib.request import getproxies
 
 from aiohttp import ClientError, ClientSession, ClientWebSocketResponse, WSMsgType
@@ -28,7 +28,7 @@ from agent_comms.bus_publication import Delivered
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.watched import FileSource
 
-from .claude_transcript import RecentClaudeWindow, RunningClaude
+from .claude_transcript import WINDOW_ENDED, RecentClaudeWindow, RunningClaude
 from .session_watch import WatchClaim
 from .shared import IncomingFrame, MonitorReadFile
 
@@ -55,16 +55,23 @@ class FollowedTranscript(RecentClaudeWindow, TranscriptRoute):
         """The transcript holds each watch URL this session was given, and the bus holds no tokens."""
         return cls.watch_url.sub(cls.hidden_url, raw.decode())
 
+    async def lines_sent(self, socket: ClientWebSocketResponse, stream: BinaryIO, offset: int) -> int:
+        """Every complete line from `offset`; where the next read starts."""
+        for _, raw in self.complete_lines(stream, offset, stream.seek(0, 2)):
+            await socket.send_str(self.line(raw))
+            offset = stream.tell()
+        return offset
+
     async def sent(self, socket: ClientWebSocketResponse) -> None:
         async with aclosing(Bus.watch_sources(FileSource(self.source))) as changes:
             await anext(changes)
             with self.source.open('rb') as stream:
                 offset = self.history_start(stream, stream.seek(0, 2))
+                offset = await self.lines_sent(socket, stream, offset)
+                await socket.send_str(WINDOW_ENDED)
                 while True:
-                    for _, raw in self.complete_lines(stream, offset, stream.seek(0, 2)):
-                        await socket.send_str(self.line(raw))
-                        offset = stream.tell()
                     await anext(changes)
+                    offset = await self.lines_sent(socket, stream, offset)
 
 
 @dataclass(frozen=True)

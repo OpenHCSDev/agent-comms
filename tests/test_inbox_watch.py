@@ -10,6 +10,7 @@ from aiohttp import WSServerHandshakeError
 from aiohttp.test_utils import TestClient, TestServer
 from yarl import URL
 
+from agent_comms.activity import ActivityState, ObservedActivity
 from agent_comms.cli_bridges.inbox_watch_client import FollowedTranscript, InboxSocket
 from agent_comms.comms import Comms
 from agent_comms.connector import Connector
@@ -98,6 +99,39 @@ async def test_a_transcript_sent_up_the_socket_shows_as_that_threads_work(sessio
         while "work the session did remotely" not in await turns_of(client, token, "cloud"):
             await asyncio.sleep(0.1)
     await socket.close()
+
+
+def running_tool_line() -> str:
+    return json.dumps({"type": "assistant", "uuid": str(uuid4()), "timestamp": "2026-11-04T00:00:01.000Z",
+                       "message": {"content": [{"type": "tool_use", "id": "t1", "name": "Bash",
+                                                "input": {"command": "sleep 60"}}]}})
+
+
+async def test_activity_comes_from_the_same_lines_as_the_chat_once_the_window_has_been_sent(
+    session, comms: Comms, tmp_path: Path
+) -> None:
+    """Toad's chat updated while its activity stayed idle: nothing ended the reader's replay."""
+    client, token = session
+    url = str(client.make_url(await watch_path(client, token, "cloud")))
+    source = tmp_path / "session.jsonl"
+    source.write_text("".join(f"{line}\n" for line in transcript_lines("before")))
+    watch = asyncio.create_task(
+        InboxSocket(url, tmp_path / "messages", FollowedTranscript(source)).carried())
+
+    def activity() -> ObservedActivity:
+        return comms.agents.activity_of("cloud", snapshot=comms.registry.snapshot())
+
+    async with asyncio.timeout(30):
+        while "before" not in await turns_of(client, token, "cloud"):
+            assert not watch.done(), watch.result()
+            await asyncio.sleep(0.05)
+        with source.open("a") as stream:
+            stream.write(f"{running_tool_line()}\n")
+        while activity().state is not ActivityState.WORKING:
+            assert not watch.done(), watch.result()
+            await asyncio.sleep(0.05)
+    assert activity().detail == "Run sleep 60"
+    watch.cancel()
 
 
 async def test_a_transcript_record_core_cannot_read_is_said_and_keeps_the_push(
