@@ -37,10 +37,8 @@ if TYPE_CHECKING:
 class ConnectorObserverClosed(ObserverDied):
     """The connector ended a remote UI's observation; there is no local process to describe."""
 
-    def __init__(self, url: URL, error: str | None):
-        self.pid, self.exit_status, self.error = 0, None, error
-        super(ObserverDied, self).__init__(
-            f"The comms observation at {url} closed" + (f":\n{error}" if error else ""))
+    def __init__(self, url: URL, ending: str):
+        super().__init__(f"The comms observation at {url} closed:\n{ending}")
 
 
 class ConnectorObservationPeer(ObservationPeer):
@@ -77,8 +75,6 @@ class ConnectorObservationPeer(ObservationPeer):
                 self.loop.close()
 
     async def carry(self, local: Connection, access: ConnectorClient) -> None:
-        import aiohttp
-
         try:
             async with aiohttp.ClientSession() as session, session.ws_connect(
                 self.url, headers={"Authorization": f"Bearer {access.credential.token}"},

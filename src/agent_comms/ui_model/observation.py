@@ -1373,8 +1373,19 @@ class ObserverReadFailed(ObserverStatus):
 class ObserverDied(CoordinationError, ObserverStatus):
     """The observation service ended; reads share its reported cause.
 
-    Presentation and recovery belong to the consuming application.
+    Presentation and recovery belong to the consuming application; each member says how it
+    ended.
     """
+
+    def raise_if_failed(self) -> None:
+        raise self
+
+    def failure(self, create: Callable[[], ObserverDied]) -> ObserverDied:
+        return self
+
+
+class ObserverProcessDied(ObserverDied):
+    """The local observation process ended."""
 
     def __init__(self, pid: int, exit_status: int | None, error: str | None):
         self.pid, self.exit_status, self.error = pid, exit_status, error
@@ -1385,12 +1396,6 @@ class ObserverDied(CoordinationError, ObserverStatus):
         else:
             how = f"exited with status {exit_status}"
         super().__init__(f"The comms observer (pid {pid}) {how}" + (f":\n{error}" if error else ""))
-
-    def raise_if_failed(self) -> None:
-        raise self
-
-    def failure(self, create: Callable[[], ObserverDied]) -> ObserverDied:
-        return self
 
 
 class ObservationService:
@@ -1731,13 +1736,13 @@ class LocalObservationPeer(ObservationPeer):
         self.process.join(timeout)
 
     def service_failed(self, traceback: str) -> ObserverDied:
-        return ObserverDied(self.process.pid, self.process.exitcode, traceback)
+        return ObserverProcessDied(self.process.pid, self.process.exitcode, traceback)
 
     def connection_closed(self) -> ObserverDied:
-        return ObserverDied(self.process.pid, self.process.exitcode, None)
+        return ObserverProcessDied(self.process.pid, self.process.exitcode, None)
 
     def connection_broken(self, error: str) -> ObserverDied:
-        return ObserverDied(self.process.pid, self.process.exitcode, error)
+        return ObserverProcessDied(self.process.pid, self.process.exitcode, error)
 
 
 class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
