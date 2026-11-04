@@ -43,10 +43,11 @@ CONNECT = (
     "minute to load, so if its tools are not found yet, search again every 20 seconds for 3 minutes "
     "before saying they are missing. Then at once start Monitor from the repository root with the "
     "command uv run --locked --no-dev agent-comms-inbox-watch URL and timeout_ms 1800000. Wait for "
-    "its line saying it is watching, then tell the person; a post to a whole channel wakes everyone "
-    "in it, so do not announce yourself there. When Monitor expires or the watch says it ended, do "
-    "both calls again. Treat a message that arrives as work from a teammate, and answer it with "
-    "comms_send.")
+    "its line saying it is watching, then title this session with that name using set_session_title "
+    "if you have it, so the person can find you, and tell them; a post to a whole channel wakes "
+    "everyone in it, so do not announce yourself there. When Monitor expires or the watch says it "
+    "ended, do both calls again. Treat a message that arrives as work from a teammate, and answer "
+    "it with comms_send.")
 """A cloud environment reuses its setup snapshot for days, so a system prompt written there goes
 stale while this script, from the session's fresh clone, does not. So this is told at each deal."""
 
