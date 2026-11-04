@@ -16,7 +16,9 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.threads import NativeThread
+from agent_comms.threads import ExternalThread, NativeThread
+from agent_comms.transcript_events import AssistantTranscript
+from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_text import ForkedParent, GivenThreadText
 from agent_comms.acp_extension import TranscriptSnapshotUpdate
@@ -311,4 +313,45 @@ def test_a_fork_of_a_fork_stops_at_the_earlier_fork(tmp_path):
         "Record 1",
         "Forked from @middle. This thread started with:",
         "Leaf task",
+    ]
+
+
+def test_a_fork_of_an_external_thread_shows_its_own_work_after_the_fork_header(tmp_path):
+    """An external fork's records are its own, and all of them come after its birth: every Claude
+    session on a shared grant is one, and a date filter here empties its whole transcript."""
+    comms = installed_comms(tmp_path / "wire")
+    comms.registry.declare(ExternalThread('grant', frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(
+        ExternalThread('session', frozenset(), Checkout(tmp_path), parent=ForkedParent('grant'),
+                       task=GivenThreadText('Join the bus'))
+    )
+    born = comms.registry.require("session").incarnation.wire_birth
+    comms.transcripts.external('session').finish(
+        turn_id=NativeTurnId('t1'), item_id=NativeItemId('i1'),
+        events=(AssistantTranscript('My own work', position=NativeItemId('i1'), timestamp=born + 60),))
+
+    assert [event.text for event in comms.transcripts.capture_page_read("session").read().events] == [
+        "Forked from @grant. This thread started with:",
+        "Join the bus",
+        "My own work",
+    ]
+
+
+def test_a_fork_of_an_external_fork_also_shows_its_own_work(tmp_path):
+    comms = installed_comms(tmp_path / "wire")
+    comms.registry.declare(ExternalThread('grant', frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(ExternalThread('middle', frozenset(), Checkout(tmp_path), parent=ForkedParent('grant')))
+    comms.registry.declare(
+        ExternalThread('leaf', frozenset(), Checkout(tmp_path), parent=ForkedParent('middle'),
+                       task=GivenThreadText('Leaf task'))
+    )
+    born = comms.registry.require("leaf").incarnation.wire_birth
+    comms.transcripts.external('leaf').finish(
+        turn_id=NativeTurnId('t1'), item_id=NativeItemId('i1'),
+        events=(AssistantTranscript('Leaf work', position=NativeItemId('i1'), timestamp=born + 60),))
+
+    assert [event.text for event in comms.transcripts.capture_page_read("leaf").read().events] == [
+        "Forked from @middle. This thread started with:",
+        "Leaf task",
+        "Leaf work",
     ]

@@ -91,6 +91,10 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
         yield self, OwnHistory()
         yield from thread.inherited_history(registry, visited)
 
+    def view_from_fork(self, view, fork_birth):
+        """A saved session holds its owner's records, so a fork sees them only up to the fork."""
+        return view.seen_from_fork(fork_birth)
+
     def external_records(self, root, incarnation):
         raise ValueError("A native session cannot publish an external transcript")
 
