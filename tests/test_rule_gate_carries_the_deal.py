@@ -81,6 +81,26 @@ def test_a_session_without_setup_still_reads_everything(tmp_path: Path):
     assert "Rule reading owed" in hook(tmp_path, "gate", tool_name="Bash", tool_input={})
 
 
+def test_a_session_whose_start_hook_never_ran_is_dealt_on_its_first_call(tmp_path: Path):
+    """A real cloud session showed no SessionStart output and no deck while PreToolUse ran."""
+    (tmp_path / ".claude" / "state").mkdir(parents=True)
+    assert "Rule reading owed" in hook(tmp_path, "gate", tool_name="Bash", tool_input={})
+    assert (tmp_path / ".claude" / "state" / f"rule-dealt-{SESSION}").is_file()
+
+
+def test_a_carrying_session_is_dealt_on_its_first_call_and_still_owes_nothing(carried: Path):
+    assert hook(carried, "gate", tool_name="Bash", tool_input={}) == ""
+    assert (carried / ".claude" / "state" / f"rule-dealt-{SESSION}").is_file()
+
+
+def test_a_finished_reading_is_not_dealt_again_by_the_gate(carried: Path):
+    hook(carried, "deal", source="startup")
+    digests = json.loads(manifest(carried).read_text())
+    digests[str(TeamPackage.rules_files()[0].resolve())] = "changed after the deal"
+    manifest(carried).write_text(json.dumps(digests))
+    assert hook(carried, "gate", tool_name="Bash", tool_input={}) == ""
+
+
 def test_install_selects_the_style_and_keeps_the_settings_it_found(tmp_path: Path, monkeypatch):
     spec = importlib.util.spec_from_file_location("rule_gate", GATE)
     gate = importlib.util.module_from_spec(spec)

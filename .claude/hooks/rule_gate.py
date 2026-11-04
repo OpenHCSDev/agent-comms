@@ -230,6 +230,10 @@ class HookEvent:
     def store(self) -> Path:
         return self.state() / f"rule-gate-{self.session}.json"
 
+    @property
+    def dealt(self) -> Path:
+        return self.state() / f"rule-dealt-{self.session}"
+
 
 def checkout() -> Path:
     """The agent-comms checkout this script belongs to."""
@@ -345,16 +349,28 @@ def deny(reason: str) -> None:
                                              "permissionDecisionReason": reason}}))
 
 
+def start_deal(event: HookEvent) -> str:
+    """This session's reading and its deck, and what to tell it. On 2026-11-04 a real cloud session
+    showed no SessionStart text, no reading record and no deck over 12 tool calls, while its
+    PreToolUse hooks ran, so nothing here may depend on SessionStart having fired."""
+    event.dealt.touch()
+    reading = Reading.dealt(event.store)
+    reading.save()
+    return reading.told(event.source) + Deck(event.session).deal()
+
+
 def deal(event: HookEvent) -> None:
     if event.subagent or core_gates(event):
         return
-    reading = Reading.dealt(event.store)
-    reading.save()
-    print(reading.told(event.source) + Deck(event.session).deal())
+    print(start_deal(event))
 
 
 def gate(event: HookEvent) -> None:
-    if event.subagent or (reading := Reading.owed(event.store)) is None or core_gates(event):
+    if event.subagent:
+        return
+    if not event.dealt.is_file() and not core_gates(event):
+        start_deal(event)
+    if (reading := Reading.owed(event.store)) is None or core_gates(event):
         return
     if event.call.allowed_while_owed(reading):
         return
