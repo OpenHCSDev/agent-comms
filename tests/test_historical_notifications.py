@@ -100,7 +100,7 @@ def test_harness_consumption_survives_human_display(archived_notification):
     native = live.registry.require("agent")
     live.registry.register(native.as_member(ExternalThread))
     agent = live.registry.require("agent")
-    assert agent.execution is ExternalThread and agent.role is AgentThreadRole
+    assert agent.declared_name == ExternalThread.declared_name and agent.role is AgentThreadRole
     assert agent.incarnation == native.incarnation
     # The human's own message to the agent is what the UI's human/agent dialogue page shows.
     shown = live.messaging.send_user_message(

@@ -117,7 +117,7 @@ def test_typed_results_publish_as_installer_and_survive_history_read(private_com
     assert diagnostics.getvalue().splitlines()[1:] == [timed.line() for timed in installed.phases]
     assert installed.phases[-1].line() not in messages[1].body
     sender = comms.registry.require("installer")
-    assert sender.execution is ServiceThread
+    assert sender.declared_name == ServiceThread.declared_name
     assert sender.role is ServiceThreadRole
 
 
@@ -166,7 +166,7 @@ def test_archived_installer_is_redeclared_as_a_publisher_not_a_colleague(private
     sender = comms.registry.require(original.name)
     assert sender.incarnation == original.incarnation
     assert sender.role is ServiceThreadRole
-    assert sender.execution is ServiceThread
+    assert sender.declared_name == ServiceThread.declared_name
     assert sender.role.executor(sender) == ()
     assert sender.channel_recipients() == ()
     assert original.name not in {thread.name for thread in comms.registry.snapshot().channel_audience()}
