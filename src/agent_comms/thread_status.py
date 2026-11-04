@@ -330,7 +330,15 @@ class IdleThreadStatus(ActiveThreadPresence):
     pass
 
 
-class StoppedThreadStatus(Visible, ThreadStatus):
+class OrphansHolds:
+    """A holder that can never answer: the work it held is orphaned, and any teammate may
+    release or withdraw it, as the REHOME line tells them to."""
+
+    def require_hold_consent(self, require_consent: Callable[[], None]) -> None:
+        pass
+
+
+class StoppedPresence(Visible, ThreadStatus, declared_name=None):
     stopped = True
     vacant = True
 
@@ -345,23 +353,17 @@ class StoppedThreadStatus(Visible, ThreadStatus):
     def require_stopped(self) -> None:
         pass
 
-    def require_hold_consent(self, require_consent: Callable[[], None]) -> None:
-        """A stopped thread cannot answer, and work must not wait on one: any teammate may
-        release or withdraw what it held."""
-
     def in_view(self, visibility: RosterVisibility) -> bool:
         return visibility.stopped
 
 
-class StillActingPresence(StoppedThreadStatus, declared_name=None):
-    """Not stopped for good: a session finishing its last turn can still write to what it holds,
-    and one whose bridge dropped comes back on its own. Each keeps its holds."""
-
-    def require_hold_consent(self, require_consent: Callable[[], None]) -> None:
-        require_consent()
+class StoppedThreadStatus(OrphansHolds, StoppedPresence):
+    """Stopped for good: nothing is running to answer, and work must not wait on it. A session
+    finishing its last turn can still write to what it holds, and one whose bridge dropped comes
+    back on its own, so those members of StoppedPresence keep their holds."""
 
 
-class StoppingThreadStatus(HostBoundPresence, StillActingPresence):
+class StoppingThreadStatus(HostBoundPresence, StoppedPresence):
     """Fenced against new work while its host completes the session. The binding stays
     until that completion, so a restart cannot race it; a stop sent again completes a
     session the host no longer holds. It is stored as stopped: the kept binding is what
@@ -404,7 +406,7 @@ class ConnectedThreadStatus(DeclaredReaderPresence, RunningThreadStatus):
     """A CLI inbox whose bridge process is watching it."""
 
 
-class PausedBridgeThreadStatus(SelfRenaming, DeclaredReaderPresence, StillActingPresence):
+class PausedBridgeThreadStatus(SelfRenaming, DeclaredReaderPresence, StoppedPresence):
     """A live session bridge waiting for a Monitor to confirm its probe."""
 
     def registered(self, thread: Thread, last_seen: float) -> ThreadStatus:
@@ -420,7 +422,7 @@ class PausedBridgeThreadStatus(SelfRenaming, DeclaredReaderPresence, StillActing
         return True
 
 
-class NoBridgeThreadStatus(SelfRenaming, CliInboxPresence, StillActingPresence):
+class NoBridgeThreadStatus(SelfRenaming, CliInboxPresence, StoppedPresence):
     """A CLI inbox with no bridge attached; its messages wait unread.
 
     It has no launched process to stop or restart, so it stays in every view.
@@ -452,13 +454,9 @@ class ServiceThreadStatus(PublishingPresence, ThreadStatus):
         return self
 
 
-class ArchivedThreadStatus(ThreadStatus):
+class ArchivedThreadStatus(OrphansHolds, ThreadStatus):
     archived = True
     vacant = True
-
-    def require_hold_consent(self, require_consent: Callable[[], None]) -> None:
-        """An archived thread has retired: the work it held is orphaned, and any teammate may
-        release or withdraw it, as the REHOME line tells them to."""
 
     def in_view(self, visibility: RosterVisibility) -> bool:
         return visibility.archived
