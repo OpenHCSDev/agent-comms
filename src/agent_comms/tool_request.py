@@ -145,12 +145,12 @@ class ToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResu
         a remote reply decodes into it."""
         bindings: dict[object, object] = {}
         for declaration in cls.__mro__:
-            for base in get_original_bases(declaration):
-                for parameter, argument in zip(
-                    getattr(get_origin(base), "__type_params__", ()), get_args(base)
-                ):
+            generic = (base for base in get_original_bases(declaration)
+                       if get_args(base) and issubclass(get_origin(base), ToolRequest))
+            for base in generic:
+                for parameter, argument in zip(get_origin(base).__parameters__, get_args(base)):
                     bindings.setdefault(parameter, bindings.get(argument, argument))
-        result = bindings.get(ToolRequest.__type_params__[1])
+        result = bindings.get(ToolRequest.__parameters__[1])
         if result is None or isinstance(result, TypeVar):
             raise TypeError(f"{cls.__qualname__} declares no result in its class header")
         return cast(type[Result], result)
