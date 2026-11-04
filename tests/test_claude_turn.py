@@ -78,3 +78,29 @@ def test_scheduled_wake_after_turn_end_opens_the_turn_its_thinking_belongs_to():
     for position, data in enumerate(records):
         ClaudeJsonLines().decode_line(json.dumps(data).encode(), position).updates(session)
     assert session.turn == KnownTurn(NativeTurnId(transcript_record('wake')))
+
+
+def compaction_after(session, *records):
+    """The records Claude wrote around a compaction, read as the live bridge reads them."""
+    boundary = dict(type='system', subtype='compact_boundary', uuid=transcript_record('boundary'),
+                    timestamp='2026-11-04T10:44:04.000Z', content='Conversation compacted')
+    for position, data in enumerate(records):
+        ClaudeJsonLines().decode_line(json.dumps(data).encode(), position).updates(session)
+    return ClaudeJsonLines().decode_line(json.dumps(boundary).encode(), len(records)).updates(session)
+
+
+def test_a_compaction_between_turns_opens_the_turn_of_its_notice():
+    """2026-11-04: Claude compacted 55 minutes after a turn_duration; the live reader's raise
+    stopped the bridge, and every tool call of that session was refused until it restarted."""
+    session = ClaudeSession(phase=Live())
+    (finished,) = compaction_after(session, dict(type='system', subtype='turn_duration'))
+    opened = NativeTurnId(transcript_record('boundary'))
+    assert session.turn == KnownTurn(opened)
+    assert isinstance(finished, FinishedItem) and finished.turn_id == opened
+
+
+def test_a_compaction_inside_a_turn_stays_in_that_turn():
+    running = NativeTurnId(transcript_record('prompt'))
+    session = ClaudeSession(phase=Live(), turn=KnownTurn(running))
+    (finished,) = compaction_after(session)
+    assert session.turn == KnownTurn(running) and finished.turn_id == running

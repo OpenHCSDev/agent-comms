@@ -393,6 +393,9 @@ class ClaudeSession:
                     path for other in self.tools.values()
                     for path in other.call.context_read_paths()), self.turn.source))
 
+    def open_turn(self, record: TimedRecord) -> None:
+        self.turn = self.turn.opened(record)
+
     def finished(self, item: str, events: tuple[TranscriptEvent, ...]) -> tuple[RuntimeUpdate, ...]:
         return self.turn.finished(item, events, self.phase)
 
@@ -954,7 +957,7 @@ class PromptRecord(ClaudeRecord, TimedRecord, ABC, declared_name=None):
         return self.position
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        session.turn = session.turn.opened(self)
+        session.open_turn(self)
         return self.opened_updates(session)
 
     @abstractmethod
@@ -1040,8 +1043,11 @@ class TurnDuration(SystemEvent, declared_name='turn_duration'):
 
 
 class CompactBoundary(SystemEvent, TimedRecord, declared_name='compact_boundary'):
+    """Claude compacts inside a turn or between two, so the boundary opens the turn its notice
+    belongs to, exactly as a prompt does; the summary record after it joins that turn."""
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
+        session.open_turn(self)
         return session.finished(self.uuid, (NoticeTranscript('Context compacted', timestamp=self.timestamp, position=self.position),))
 
     def begins_history(self) -> bool:
