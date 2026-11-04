@@ -170,10 +170,14 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
 
     @classmethod
     def decode_line(cls, line: str) -> MonitorFrame:
+        # Old or unrelated monitor text, including truncated text, is a named foreign frame.
         if line.startswith(MonitorProtocolFrame.wire_prefix):
+            try:
+                json.loads(line)
+            except json.JSONDecodeError:
+                return ForeignMonitorFrame(text=line)
             return MONITOR_FRAME.validate_json(line)
-        # Classify the external header before decoding its JSON string. Old or
-        # unrelated monitor text, including truncated text, is a named foreign frame.
+        # Classify the external header before decoding its JSON string.
         if not line.startswith('"' + cls.HEADER + ' · '):
             return ForeignMonitorFrame(text=line)
         raw_header, separator, _ = line.partition(r'\n')

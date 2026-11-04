@@ -13,12 +13,14 @@ from yarl import URL
 from agent_comms.activity import ActivityState, ObservedActivity
 from agent_comms.cli_bridges.inbox_watch_client import FollowedTranscript, InboxSocket
 from agent_comms.comms import Comms
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.connector import Connector
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.repo import Checkout
 from agent_comms.thread_status import ConnectedThreadStatus, NoBridgeThreadStatus
 from agent_comms.threads import ExternalThread, NativeThread
 from agent_comms.tool_caller import ThreadCaller
+from agent_comms.cli_bridges.shared import MonitorReadFile
 from agent_comms.tools import CommsInboxTool
 
 
@@ -144,6 +146,30 @@ async def test_a_transcript_record_core_cannot_read_is_said_and_keeps_the_push(
     await asyncio.sleep(0.5)
     comms.messaging.send("sender", "cloud", "still pushed")
     assert (await frame(socket))["text"] == "still pushed"
+    await socket.close()
+    said = comms.views.history_page(CommandTarget.named("#comms")).messages[-1].body
+    assert "ValidationError" in said and "TaskGroup" not in said
+
+
+async def test_a_monitor_notice_cut_short_in_the_transcript_does_not_stop_the_transcript(
+    session, comms: Comms
+) -> None:
+    """Every re-arm replays its window, so one cut notice stopped that session's work each time."""
+    client, token = session
+    socket = await client.ws_connect(await watch_path(client, token, "cloud"))
+    message = comms.messaging.send("sender", "cloud", "pushed before the cut notice").message
+    cut = MonitorReadFile.naming(Path("/root/messages"), message.reference)
+    await socket.send_str(json.dumps({
+        "type": "user", "uuid": str(uuid4()), "timestamp": "2026-11-04T00:00:00.000Z", "sessionId": "s",
+        "promptId": "p", "origin": {"kind": "task-notification"},
+        "message": {"content": [{"type": "text", "text": (
+            "<task-notification><task-id>m</task-id><summary>Monitor event: \"watch\"</summary>"
+            f"<event>{cut.model_dump_json()[:150]}</event></task-notification>")}]},
+    }))
+    await socket.send_str(transcript_lines("after the cut notice")[1])
+    async with asyncio.timeout(20):
+        while "after the cut notice" not in await turns_of(client, token, "cloud"):
+            await asyncio.sleep(0.05)
     await socket.close()
 
 
