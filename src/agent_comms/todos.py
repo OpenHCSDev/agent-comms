@@ -5694,7 +5694,7 @@ class OwnerRequest(TodoStoreRows, TypedTable, SharedFileTables, DurableTables):
 @dataclass(frozen=True, slots=True)
 class Todo(TodoStoreRows, TypedTable):
     unit_index: ClassVar[ExpressionIndex] = ExpressionIndex((
-        Assignment.sql_field('owner'), Assignment.sql_field('owner_created'), '{state}',
+        Assignment.sql_field('owner_created'), '{state}',
     ))
     problem_index: ClassVar[ExpressionIndex] = ExpressionIndex((ProblemNumber.sql_number('{id}'),))
     serving_request: ClassVar[str] = (
@@ -6539,7 +6539,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         terms = Todo.unit_index.terms[:-1]
         match = f"({', '.join(terms)})=({','.join('?' for term in terms)})"
         return cls._open(db, f'{match} AND ({where})',
-                         (unit.name, unit.wire_birth, *parameters))
+                         (unit.wire_birth, *parameters))
 
     @classmethod
     def _one(cls, rows: tuple[Todo, ...], todo_id: str) -> Todo:

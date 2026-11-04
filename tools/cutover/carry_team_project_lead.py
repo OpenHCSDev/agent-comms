@@ -21,7 +21,6 @@ from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import RegistryFile, RootFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceHolder
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.private_registry_guard import PrivateRegistryGuard
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.registry_store import RegistryStore
 
@@ -47,17 +46,15 @@ class TeamProjectLead(Carry):
             project.pop(self.retired_field)
             document[FieldCodec.record_key(RegistryDocument, "team_project")] = project
         document[version] = RegistryDocument.version
+        registry = RegistryStore(path)
         if apply:
             MaintenanceBarrier(path).read().require_held_by(
                 MaintenanceHolder.current(), "Drop the stored team lead"
             )
-            RegistryStore(path).carry_text(
-                TeamVocabulary.renamed_text(json.dumps(document, indent=2))
-            )
-        guard = PrivateRegistryGuard.path_in(self.root)
+            registry.carry_text(TeamVocabulary.renamed_text(json.dumps(document, indent=2)))
         return Carried(
             1,
             rewritten=(
-                tuple(written.relative_to(self.root) for written in (path, guard)) if apply else ()
+                tuple(written.relative_to(self.root) for written in registry.written) if apply else ()
             ),
         )
