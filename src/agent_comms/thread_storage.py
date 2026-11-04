@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, cast
 
@@ -16,7 +16,9 @@ from .nominal.field_codec import (
     PathText,
     RecordMember,
     SubclassUnion,
+    WireOmitDefault,
 )
+from .repository_name import RepositoryName
 
 if TYPE_CHECKING:
     from .storage_rules import StorageRule
@@ -37,12 +39,41 @@ class ThreadStorage(SubclassUnion, affix="ThreadStorage"):
 
 
 @dataclass(frozen=True, slots=True)
+class SelectedCheckout(RecordMember):
+    """One repository's editable checkout, chosen independently of navigation."""
+
+    repository: RepositoryName
+    path: StoragePath
+
+    def __post_init__(self) -> None:
+        if not self.path.is_absolute():
+            raise ValueError("A selected checkout requires an absolute path.")
+
+
+@dataclass(frozen=True, slots=True)
 class StorageRoots(RecordMember, ThreadStorage):
     scratch: StoragePath
+    checkouts: Annotated[tuple[SelectedCheckout, ...], WireOmitDefault()] = ()
 
     def __post_init__(self) -> None:
         if not self.scratch.is_absolute():
             raise ValueError("Storage scratch requires an absolute path.")
+        if len({choice.repository for choice in self.checkouts}) != len(self.checkouts):
+            raise ValueError("A repository can have only one selected checkout.")
+
+    def chosen(self, repository: RepositoryName) -> tuple[Path, ...]:
+        return tuple(choice.path for choice in self.checkouts
+                     if choice.repository == repository)
+
+    def choosing(self, repository: RepositoryName, path: Path) -> StorageRoots:
+        return replace(self, checkouts=(*(
+            choice for choice in self.checkouts if choice.repository != repository
+        ), SelectedCheckout(repository, path)))
+
+    def relocated(self, source: Path, destination: Path) -> StorageRoots:
+        return replace(self, checkouts=tuple(
+            replace(choice, path=destination) if choice.path == source else choice
+            for choice in self.checkouts))
 
     def assigned(self, rule: StorageRule, name: str) -> StorageRoots:
         return self

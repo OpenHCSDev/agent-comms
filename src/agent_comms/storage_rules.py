@@ -418,18 +418,26 @@ class StorageRule(RoomAllocation, DurableFile):
                         fresh: Path, reads: RepositoryReads) -> Path:
         """Keep one existing owned tree for a repository across work identities.
 
-        The current project wins. Without one, a sole retained tree is reused;
-        several retained trees require their owner to select/retire them, never
-        silently create another or pick an arbitrary source.
+        A stored repository choice wins independently of the current project.
+        Without one, the existing current-project/sole-tree policy applies;
+        unselected ambiguity still refuses rather than allocating another tree.
         """
+        for selected in self.roots_of(owner).chosen(repository):
+            self.require_physical_allocation(selected)
+            self.require_destination(owner, selected)
+            if not self.owns_editable_checkout(owner, selected, repository, reads):
+                self.deny(f'Selected checkout {selected} is no longer an owned editable '
+                          f'checkout of {repository}; select its replacement explicitly')
+            return selected
         if self.owns_editable_checkout(owner, owner.project_path, repository, reads):
             return owner.project_path
         candidates = self.owned_checkouts(owner, repository, reads)
         if len(candidates) > 1:
             self.deny('Multiple owned checkouts already exist for '
                       f'{repository}: ' + ', '.join(map(str, candidates))
-                      + '. Select the one to reuse with agent-comms set-project, '
-                      'and retire the completed others with goal-checkout --source.')
+                      + '. Choose independently with agent-comms select-checkout '
+                      f'--from {owner.name} {repository.to_wire()} EXACT_OWNED_PATH. '
+                      'Retire only completed disposable trees with goal-checkout --source.')
         return next(iter(candidates), fresh)
 
     def repository_donor(self, owner: Thread, repository: RepositoryName) -> Path:
