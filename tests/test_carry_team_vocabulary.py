@@ -19,6 +19,7 @@ from agent_comms.locked_store import LiveFilesRequest
 from agent_comms.messages import Message
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.service_passes import ServicePassStore
+from agent_comms.store_files import store_lock_path
 from agent_comms.task_attachments.team_pings import TeamUpdate, TeamUpdateNotice, TeamUpdateStore
 from agent_comms.team.vibe_check import OverloadDegradation
 from agent_comms.team_hud import CodexUsage, TeamFrame, TeamHud, UnreadableUsage
@@ -129,9 +130,18 @@ def test_retained_packets_passes_and_channel_move_to_team_names(team_bus):
     retired_frame.parent.mkdir()
     retired_frame.write_text(json.dumps(previous(json.loads(frame.read_text()))))
     frame.unlink()
+    step = TeamVocabularyFiles(LiveFilesRequest(root), root / "spill")
+    # The backup and the practice copy select from these: on 2026-11-04 they held neither.
+    assert {retired, store, retired_frame, frame} <= set(step.input_files())
+    # A live directory holds a lock for each document it ever had, including retired teammates'.
+    store_lock_path(retired).touch()
+    store_lock_path(retired.with_name("retired-teammate.json")).touch()
 
     carried(TeamVocabularyFiles, root)
 
+    # A failed install still has somewhere to restore the documents to.
+    assert (root / "commander_updates").is_dir() and not retired.exists()
+    assert step.after_acceptance().changed == 2
     assert TeamUpdateStore.for_team(root, teammate).read() == (packet,)
     # A HUD read finds the teammate's own frame before the heartbeat writes another.
     assert TeamFrame.current(team_bus, "unit-x").teammate == teammate

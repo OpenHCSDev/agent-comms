@@ -12,6 +12,7 @@ from __future__ import annotations
 import re
 import sqlite3
 from contextlib import closing
+from pathlib import Path
 from typing import ClassVar
 
 from agent_comms.bus import Bus
@@ -21,7 +22,7 @@ from agent_comms.locked_store import PatternFile, RootFile
 from agent_comms.messages import EscalationPosition, Message
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.service_passes import ServicePassStore
-from agent_comms.store_files import AtomicFile
+from agent_comms.store_files import AtomicFile, is_store_lock
 from agent_comms.task_attachments.team_pings import TeamUpdateStore
 from agent_comms.team_frame_file import TeamFrameFile
 from agent_comms.todos import HuntRecord, OwnerRequest, TodoStore
@@ -209,26 +210,34 @@ class TeamVocabularyFiles(TeamVocabulary):
     )
     """Each old per-teammate directory and the store its files now live in."""
 
+    def moved(self) -> dict[Path, Path]:
+        """Each retired document and the home it moves to."""
+        return {
+            old: store.path_in(self.root, lookup=old.stem)
+            for name, store in self.retired
+            for old in sorted((self.root / name).glob("*.json"))
+        }
+
+    def input_files(self) -> tuple[Path, ...]:
+        """A moved document and its new home are inputs like any store: the practice copy holds
+        them so the rehearsal runs these moves, and a failed install restores the document and
+        removes what the move wrote."""
+        moved = self.moved()
+        for path in (*moved, *moved.values()):
+            self.require_confined(path)
+        return tuple(sorted({*super().input_files(), *moved, *moved.values()}))
+
     def carry(self, *, apply: bool) -> Carried:
-        stored = {path: path.read_text(encoding="utf-8") for path in self.input_files()}
+        stored = {path: path.read_text(encoding="utf-8") for path in super().input_files()}
         documents = {
             path: renamed
             for path, text in stored.items()
             if (renamed := self.renamed_text(text)) != text
         }
-        directories = tuple(
-            (self.root / name, store) for name, store in self.retired if (self.root / name).is_dir()
-        )
         moves = {
-            old: (
-                store.path_in(self.root, lookup=old.stem),
-                self.renamed_text(old.read_text(encoding="utf-8")),
-            )
-            for directory, store in directories
-            for old in sorted(directory.glob("*.json"))
+            old: (new, self.renamed_text(old.read_text(encoding="utf-8")))
+            for old, new in self.moved().items()
         }
-        for old in moves:
-            self.require_confined(old)
         if apply:
             for path, text in documents.items():
                 AtomicFile(path).write_text(text)
@@ -236,10 +245,20 @@ class TeamVocabularyFiles(TeamVocabulary):
                 new.parent.mkdir(mode=0o700, parents=True, exist_ok=True)  # as the stores do
                 AtomicFile(new).write_text(text)
                 old.unlink()
-            for directory, _ in directories:
-                directory.rmdir()
         rewritten = (*documents, *moves, *(new for new, _ in moves.values()))
         return Carried(
-            len(documents) + len(moves) + len(directories),
+            len(documents) + len(moves),
             rewritten=tuple(path.relative_to(self.root) for path in rewritten) if apply else (),
         )
+
+    def after_acceptance(self) -> Carried:
+        """A restore needs the directories to put documents back into, so they outlive the
+        rollback window. Their lock files are not content and no carry moves them; anything else
+        left there stops the removal."""
+        directories = tuple(
+            self.root / name for name, _ in self.retired if (self.root / name).is_dir())
+        for directory in directories:
+            for lock in filter(is_store_lock, directory.iterdir()):
+                lock.unlink()
+            directory.rmdir()
+        return Carried(len(directories))
