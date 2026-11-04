@@ -483,9 +483,11 @@ class HistoryViews:
         return sorted(self.thread_views(), key=lambda view: view.thread.name)
 
     def list_threads(self, active_only: bool = False) -> tuple[ThreadRecord, ...]:
-        """Summarize threads with status and pending counts."""
+        """Summarize the default roster's threads with status and pending counts. Archived
+        threads have their own readers; listing them here counted thousands of retired inboxes
+        on every call."""
         snapshot = self.registry.snapshot()
-        threads = tuple(thread for _, thread in sorted(snapshot.threads.items()))
+        threads = tuple(sorted(snapshot.visible_threads(DEFAULT_ROSTER), key=lambda thread: thread.name))
         if active_only:
             threads = tuple(snapshot.active_threads(threads))
         pending = CountedRead().counts(self.bus, tuple(thread.name for thread in threads))
