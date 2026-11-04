@@ -113,13 +113,14 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
         its declared mutation guards are lifted and recreated from the same declaration. Each
         update is the new value followed by the row's primary key, one value per key column."""
         keys = " AND ".join(
-            f'"{field.wire_name}"=?' for field in row._fields if field.column.primary_key)
+            f'{row._column_list((field.name,))}=?'
+            for field in row._fields if field.column.primary_key)
+        stored_column = row._column_list((column.name,))
         guards = row.triggers()
         for name in guards:
             TriggerKind.drop(db, name)
         db.executemany(
-            row._sql(f'UPDATE "{row.declared_name}" SET {{{column.name}}}=? WHERE {keys}'),
-            updates)
+            f'UPDATE "{row.declared_name}" SET {stored_column}=? WHERE {keys}', updates)
         for sql in guards.values():
             db.execute(sql)
 
