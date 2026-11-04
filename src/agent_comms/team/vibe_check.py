@@ -31,6 +31,7 @@ from agent_comms.errors import BirthChangedError
 from agent_comms.messages import Message
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegistrySnapshot
+from agent_comms.threads import Thread
 from agent_comms.task_attachments.owner_notices import ChokeholdNotice, EscalationNotice, VibeCheckNotice
 from agent_comms.standing_rules import (
     BlocksRelease,
@@ -39,7 +40,6 @@ from agent_comms.standing_rules import (
     IndependentStandingRule,
     OwedAnswer,
     ReviewTimerUp,
-    StandingRule,
     FamilyScan,
     UndatedStandingRule,
 )
@@ -169,10 +169,10 @@ class VibeCheckUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
-                  held: Mapping[ThreadIncarnation, Sequence[Todo]], debtor: str,
+                  held: Mapping[ThreadIncarnation, Sequence[Todo]], debtor: Thread,
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
         return tuple(cls(message) for message in
-                     VibeCheckNotice.unanswered(source, snapshot, debtor, time.time()))
+                     VibeCheckNotice.unanswered(source, snapshot, debtor.name, time.time()))
 
     def due(self, now: float) -> bool:
         return self.message.timestamp <= now - self.seconds
@@ -275,10 +275,10 @@ class ChokeholdUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
-                  held: Mapping[ThreadIncarnation, Sequence[Todo]], debtor: str,
+                  held: Mapping[ThreadIncarnation, Sequence[Todo]], debtor: Thread,
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
         return tuple(cls(message) for message in
-                     ChokeholdNotice.unanswered(source, snapshot, debtor, time.time()))
+                     ChokeholdNotice.unanswered(source, snapshot, debtor.name, time.time()))
 
     def line(self) -> str:
         return (f"chokehold {self.cited} to {self.message.target} is still unanswered. why?"

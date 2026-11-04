@@ -368,15 +368,17 @@ class PlanStalled(PlanRule):
 
 @dataclass(frozen=True)
 class TeammateOwedAnswer(OwedAnswer, declared_name=None):
-    """A message one unit is owed; it belongs on that unit's observation."""
+    """A message one unit is owed; it belongs on that unit's observation. The teammate who
+    owes it is named too, so the row reaches the one who has to answer."""
 
     unit: ThreadIncarnation
+    debtor: ThreadIncarnation = field(compare=False, kw_only=True)
 
     def questions_for(self, unit: ThreadIncarnation) -> tuple[Message, ...]:
         return (self.message,) if unit == self.unit else ()
 
     def named_threads(self) -> tuple[ThreadIncarnation, ...]:
-        return tuple(dict.fromkeys((self.unit, *super().named_threads())))
+        return tuple(dict.fromkeys((self.unit, self.debtor, *super().named_threads())))
 
 
 @dataclass(frozen=True)
@@ -385,11 +387,11 @@ class UnitAskUnanswered(TeammateOwedAnswer, UndatedStandingRule):
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
-                  held: Mapping[ThreadIncarnation, Sequence[Todo]], debtor: str,
+                  held: Mapping[ThreadIncarnation, Sequence[Todo]], debtor: Thread,
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
-        return tuple(cls(message, owner)
+        return tuple(cls(message, owner, debtor=debtor.incarnation)
                      for owner, questions in UnansweredTeammateAsks.for_orders(
-                         source, snapshot, debtor, held, time.time(),
+                         source, snapshot, debtor.name, held, time.time(),
                      ).items()
                      for message in questions)
 
@@ -428,12 +430,12 @@ class DeliveryAwaitingJudgement(TeammateOwedAnswer, UndatedStandingRule, OrderHe
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
-                  held: Mapping[ThreadIncarnation, Sequence[Todo]], debtor: str,
+                  held: Mapping[ThreadIncarnation, Sequence[Todo]], debtor: Thread,
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
         """The retained claim owns the report and the head owed a verdict, published or not:
         a claim whose answer never reached the bus is still owed its judgement."""
-        return tuple(cls(message=claim.message, unit=owner, problem=todo.id,
-                         request=claim.request(), todo=todo)
+        return tuple(cls(message=claim.message, unit=owner, debtor=debtor.incarnation,
+                         problem=todo.id, request=claim.request(), todo=todo)
                      for owner, todos in held.items() for todo in todos
                      for claim in todo.order.owed_claims())
 
@@ -465,8 +467,8 @@ class DeliveryAwaitingJudgement(TeammateOwedAnswer, UndatedStandingRule, OrderHe
         return self.clearing_commands()
 
     def line(self) -> str:
-        return (f"JUDGE {self.unit.name} delivered {self.problem} ({self.cited}). you judged it yet?"
-                f" -> {self.clearing_action()}")
+        return (f"JUDGE {self.unit.name} delivered {self.problem} ({self.cited})."
+                f" you judged it yet? -> {self.clearing_action()}")
 
 
 @dataclass(frozen=True)

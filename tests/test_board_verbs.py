@@ -117,7 +117,7 @@ def test_held_board_commands_take_the_same_verdicts_as_the_order(board_review, c
         assert_review_preconditions(timer, comms, request)
     for delivery in DeliveryAwaitingJudgement.read_open(
             comms.bus.bus, comms.registry.snapshot(), {todo.held().owner_identity: (todo,)},
-            "colleague", ()):
+            comms.registry.require("colleague"), ()):
         assert_review_preconditions(delivery, comms, request)
 
 
@@ -263,6 +263,8 @@ def test_a_verdict_on_exactly_the_delivered_head_answers_the_delivery(board_revi
     colleague = comms.registry.require("colleague").incarnation
     opened, = DeliveryAwaitingJudgement.opened(comms, colleague)
     assert opened.request == request
+    # The row reaches the teammate who owes the verdict, not only the one who delivered.
+    assert colleague in opened.named_threads()
     NoHeadOrder().record_review(comms.goals, replace(request, head="f" * 40),
                                 ReviewedHeadVerdict(REASON), colleague)
     assert DeliveryAwaitingJudgement.opened(comms, colleague) == (opened,)
