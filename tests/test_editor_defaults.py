@@ -7,12 +7,12 @@ from agent_comms.cli_verbs.fork import ForkCliCommand
 from agent_comms.nominal.field_codec import FieldCodec, compile_decoder
 from agent_comms.pi_vocabulary import HighThinkingLevel, NoThinkingOverride, ThinkingLevelField
 from agent_comms.repo import LaunchCheckout
-from agent_comms.threads import ExternalThreadExecution, ThreadExecution
+from agent_comms.threads import ExternalThread, Thread
 from agent_comms.thread_model import UndeclaredModel
 
 
 @pytest.mark.parametrize('annotation,value,encoded', (
-    (type[ThreadExecution], ExternalThreadExecution, ExternalThreadExecution.declared_name),
+    (type[Thread], ExternalThread, ExternalThread.declared_name),
     (ThinkingLevelField, NoThinkingOverride, None),
     (ThinkingLevelField, HighThinkingLevel, 'high'),
     (type(None), None, None),

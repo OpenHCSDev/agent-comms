@@ -219,7 +219,7 @@ class OwnerReading[Result](ABC):
     def require_native_owner(self, owner: Thread) -> None:
         """Only a native owner serves a runtime socket; an external bridge with a live PID
         has none, so it is refused here instead of waited on before dispatch."""
-        owner.execution.require_native()
+        owner.require_native()
 
     @abstractmethod
     async def read(self, owner: OwnerConnection) -> Result: ...

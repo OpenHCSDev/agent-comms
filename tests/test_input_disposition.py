@@ -27,7 +27,7 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_origin import DeliveredInput, UndeliveredInput, WireInputOrigin
 from agent_comms.message_reference import MessageReference
 from agent_comms.text_digest import TextDigest
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from stored_inputs import stored_inputs
 
 
@@ -106,7 +106,7 @@ def test_unresolved_projection_follows_rename_without_private_receipts(tmp_path:
 
     comms = wire(tmp_path)
     comms.registry.declare(
-        Thread(name='kid', tags=frozenset(), worktree=Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+        NativeThread(name='kid', tags=frozenset(), worktree=Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     store = InputDispositions(comms.root)
     store.record(

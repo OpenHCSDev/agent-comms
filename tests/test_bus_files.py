@@ -19,7 +19,7 @@ from agent_comms.native_input_proof import NativeContextJournal
 from agent_comms.native_input_proof import NativeInputProof
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.todos import TodoStore
 from agent_comms.native_session_reopen import PiSessionId
 from agent_comms.typed_table import ReconciledFile
@@ -50,7 +50,7 @@ def test_published_change_signal_is_not_a_bus_resource(tmp_path: Path) -> None:
 def test_every_bus_file_is_a_declared_root_file(tmp_path: Path, source_repository, comms: Comms) -> None:
     declared_files_goal_id = GoalId.mint()
     for name in ("owner", "peer"):
-        comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path)))
+        comms.registry.declare(NativeThread(name, frozenset(), Checkout(tmp_path)))
     sent = comms.messaging.send("peer", "owner", "Declare the bus files").message
     resource = tmp_path / "owned.py"
     resource.write_text("owned\n")

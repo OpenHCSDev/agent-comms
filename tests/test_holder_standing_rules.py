@@ -72,7 +72,7 @@ from agent_comms.standing_rules import OwedAnswer, StandingRule
 from agent_comms.store_files import ExclusiveLock, StoreLockContention, _store_lock
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.todos import (
     ClaimOrder,
     DraftListedPullRequest,
@@ -120,7 +120,7 @@ def held_bus(comms, tmp_path, source_repository, configured_repository, installe
     outsider = tmp_path / 'outsider-checkout'
     source.git(source.checkout, 'worktree', 'add', '-q', '-b', 'outsider-work', str(outsider))
     declare_test_bus(comms, channels=('comms',), threads=tuple(
-        Thread(name=name, tags=frozenset({'comms'}), worktree=Checkout(worktree))
+        NativeThread(name=name, tags=frozenset({'comms'}), worktree=Checkout(worktree))
         for name, worktree in (('colleague', source.checkout), ('worker', source.checkout),
                                ('outsider', outsider))
     ))
@@ -230,7 +230,7 @@ def test_order_claim_publishes_only_to_its_retained_team_birth(
         comms.registry.unregister("colleague")
         comms.registry.remove("colleague")
         if change == "recreate":
-            comms.registry.declare(Thread("colleague", frozenset({"comms"}), worktree))
+            comms.registry.declare(NativeThread("colleague", frozenset({"comms"}), worktree))
     before = comms.bus.bus.revision()
     operation = ClaimOrder(todo.revision, worker, todo.held().generation, claim)
     if change in ("rename", "rename_holder"):
@@ -340,7 +340,7 @@ def test_holds_whose_holder_was_deleted_or_registered_again_are_reported_by_ever
     for name in ("worker", "outsider"):
         comms.registry.unregister(name)
         comms.registry.remove(name)
-    comms.registry.declare(Thread("worker", frozenset({"comms"}), worker.worktree))
+    comms.registry.declare(NativeThread("worker", frozenset({"comms"}), worker.worktree))
 
     frame = capture_frame(comms, ProgressRead())
     broken = StandingRule.broken(
@@ -771,7 +771,7 @@ def test_only_the_addressed_teammates_own_answer_clears_its_vibe_check(held_bus)
     owed (it could otherwise release that teammate's chokehold); the addressed teammate's own
     reply clears it."""
     check = escalate(held_bus, VibeCheckNotice, time.time() - 3600)
-    held_bus.registry.declare(Thread("peer", frozenset({TeammatesTag.declared_name}),
+    held_bus.registry.declare(NativeThread("peer", frozenset({TeammatesTag.declared_name}),
                                      Checkout(Path.cwd())), StoppedThreadStatus())
     peer, colleague = (held_bus.registry.require(name) for name in ("peer", "colleague"))
     held_bus.messaging.send("peer", "colleague", "Answered.", answers=(check.reference,),

@@ -63,7 +63,7 @@ from agent_comms.runtime_updates import (
 )
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.external_transcript import ExternalTurnInput
-from agent_comms.threads import ExternalThreadExecution, Thread
+from agent_comms.threads import ExternalThread, NativeThread
 from agent_comms.messages import AlertKind, InfoKind, Message, NoticeRole, QuestionKind
 from agent_comms.channel_targets import ThreadTarget
 from agent_comms.diagnostics import record_terminal_failure
@@ -80,7 +80,7 @@ async def stored_attempts(bridge) -> tuple[HarnessDelivery, ...]:
 @pytest.mark.asyncio
 async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp_path):
     declare_test_bus(comms, threads=tuple(
-        Thread(name, frozenset(), Checkout(tmp_path)) for name in ('viewer', 'peer')
+        NativeThread(name, frozenset(), Checkout(tmp_path)) for name in ('viewer', 'peer')
     ))
     before = comms.messaging.send('peer', 'viewer', 'before this session was bound').message
     state = tmp_path / 'bridge-state'
@@ -127,10 +127,10 @@ async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp
 @pytest.fixture
 def bridge(comms, tmp_path):
     declare_test_bus(comms, threads=(
-        Thread('claude-code', frozenset(), Checkout(tmp_path)),
+        NativeThread('claude-code', frozenset(), Checkout(tmp_path)),
         # A production bridge's session is external: its answers live in the external store.
-        Thread('viewer', frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution),
-        Thread('peer', frozenset(), Checkout(tmp_path)),
+        ExternalThread('viewer', frozenset(), Checkout(tmp_path)),
+        NativeThread('peer', frozenset(), Checkout(tmp_path)),
     ))
     practice = PracticeCopy(comms.root, tmp_path / 'copied-bus')
     practice.include(tuple(RootFile.existing_in(practice.root)))
@@ -330,9 +330,9 @@ def coordination(comms):
 def native_viewer(tmp_path):
     """A native-root bus whose external viewer is a committed coordination participant."""
     comms = prepare_native_comms(wire(tmp_path / 'wire'))
-    comms.registry.declare(Thread('peer', frozenset(), Checkout(tmp_path)))
-    viewer = comms.registry.declare(Thread(
-        'viewer', frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution))
+    comms.registry.declare(NativeThread('peer', frozenset(), Checkout(tmp_path)))
+    viewer = comms.registry.declare(ExternalThread(
+        'viewer', frozenset(), Checkout(tmp_path)))
     lookup = viewer.incarnation.require_recorded().lookup
     root_id = comms.registry.store.prepare_native_root().namespace
     with coordination(comms) as store:
@@ -1071,8 +1071,8 @@ def test_independent_sessions_share_the_delivered_message_reply_policy(comms, tm
     from agent_comms.registry_document import RegisteredTeamProject
     from agent_comms.runtime_updates import ReplyingThreadOutput
 
-    colleague, teammate = (comms.registry.declare(Thread(
-        name, frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution)) for name in ("colleague", "teammate"))
+    colleague, teammate = (comms.registry.declare(ExternalThread(
+        name, frozenset(), Checkout(tmp_path))) for name in ("colleague", "teammate"))
     comms.registry.set_team_project(RegisteredTeamProject(()))
     for speaker, sender in ((colleague, teammate), (teammate, colleague)):
         output = ReplyingThreadOutput.for_comms(comms.transcripts.external(speaker.name), comms)

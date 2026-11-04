@@ -18,7 +18,7 @@ from agent_comms.native_input_owner import RegistryOwner
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.thread_model import DeclaredModel
-from agent_comms.threads import ChosenModel, NextTurnConfiguration, Thread
+from agent_comms.threads import ChosenModel, NextTurnConfiguration, NativeThread
 from agent_comms.turn_input_source import NoTurnAcceptance
 from agent_comms.turn_lease import NoTurnLease
 from agent_comms.turn_phase import PreparingPhase
@@ -29,7 +29,7 @@ from conftest import installed_comms
 @pytest.mark.parametrize("goal_changed", [False, True])
 async def test_begin_callback_and_native_attachment_share_original_owner(tmp_path, goal_changed):
     comms = installed_comms(tmp_path)
-    comms.registry.declare(Thread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.registry.declare(NativeThread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     agent = CommsAgent(comms, auto_wake=False)
     await agent.sessions.bind_owned(comms.registry.require("owner"), AcpSessionId("owner-session"))
     turn = OwnedTurn(
@@ -70,7 +70,7 @@ async def test_begin_callback_and_native_attachment_share_original_owner(tmp_pat
 @pytest.mark.parametrize("replacement", ["same-turn-id", "new-claim_scope"])
 def test_source_attachment_refuses_replaced_original_owner(tmp_path, replacement):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.registry.declare(NativeThread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     original = comms.agents.begin_turn("owner", TurnId('058be655fae2a4c37a21d2c091ba7661'))
     assert comms.agents.finish_turn(original.turn_lease)
     if replacement == "new-claim_scope":
@@ -85,10 +85,9 @@ def test_source_attachment_refuses_replaced_original_owner(tmp_path, replacement
 
 def test_native_source_publication_retains_original_claim_across_rename(tmp_path):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread(
+    comms.registry.declare(NativeThread(
         'owner', frozenset(), Checkout(tmp_path),
-        process_identity=ProcessIdentity.capture(os.getpid()),
-    ))
+        process_identity=ProcessIdentity.capture(os.getpid())))
     original = comms.agents.begin_turn('owner', TurnId('9848d76b0bc0fadfe6c6463059c2c99b'))
     comms.registry.rename('owner', 'renamed')
     snapshot = comms.registry.snapshot()
@@ -104,7 +103,7 @@ def test_native_source_publication_retains_original_claim_across_rename(tmp_path
 
 def test_native_source_publication_retains_captured_configuration(tmp_path):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('test/old')))
+    comms.registry.declare(NativeThread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('test/old')))
     original = comms.agents.begin_turn("owner", TurnId('353fe4ec44fe236b973ecec2489ac459'))
     comms.threads.set_thread_configuration(
             comms.registry.require('owner'), NextTurnConfiguration(model=ChosenModel('test/next')))

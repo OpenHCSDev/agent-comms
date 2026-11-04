@@ -11,12 +11,12 @@ from agent_comms.goal_actions import ChokeholdPausedGoalAction, OwnerInvocable, 
 from agent_comms.task_attachments.owner_notices import ChokeholdNotice
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import invoke_tool
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 def _teammate(comms, monkeypatch, name):
     monkeypatch.setenv("AGENT_COMMS_THREAD", name)
-    comms.registry.declare(Thread(name=name, tags=frozenset(), worktree=Checkout(Path("/wt"))))
+    comms.registry.declare(NativeThread(name=name, tags=frozenset(), worktree=Checkout(Path("/wt"))))
     partial(invoke_tool, caller=ThreadCaller(name))(comms, "comms_set_goal", {"text": "work"})
 
 
@@ -59,7 +59,7 @@ def test_a_chokehold_never_pauses_a_thread_that_replaced_its_teammate(comms, mon
     rule = Chokehold(first.incarnation, SimpleNamespace(seq=1, message_id="check"))
     comms.registry.unregister("a")
     comms.registry.remove("a")
-    comms.registry.declare(Thread("a", first.tags, first.worktree, created_at=first.created_at + 1))
+    comms.registry.declare(NativeThread("a", first.tags, first.worktree, created_at=first.created_at + 1))
     partial(invoke_tool, caller=ThreadCaller("a"))(comms, "comms_set_goal", {"text": "work"})
 
     with pytest.raises(BirthChangedError):

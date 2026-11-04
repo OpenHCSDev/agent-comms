@@ -13,7 +13,7 @@ from agent_comms.task_attachments.team_pings import TeamDecisions, TeamUpdate, R
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.text_digest import TextDigest
 from agent_comms.todos import DirectiveText
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 def test_plain_messages_need_no_order_labels():
@@ -27,7 +27,7 @@ def test_plain_messages_need_no_order_labels():
 ))
 def test_blocked_goal_leads_the_board_and_clears_when_active(comms, tmp_path, state, reason):
     """No order is needed; the current state owns appearance and disappearance."""
-    comms.registry.declare(Thread("paper", frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(NativeThread("paper", frozenset(), Checkout(tmp_path)))
     comms.goals.update_goal("paper", SetGoalAction(text="Finish the paper"))
     thread = comms.registry.require("paper")
     comms.registry.register(replace(thread, goal=replace(thread.goal.require(), state=state)),

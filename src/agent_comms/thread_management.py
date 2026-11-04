@@ -27,7 +27,7 @@ from .locked_store import PatternFile, RuntimeFile
 from .registration import Registration
 from .relationships import RelationshipStore
 from .repo import Checkout, LaunchCheckout
-from .threads import NativeThreadExecution, KeptModel, ModelChoice, NextTurnConfiguration, Thread
+from .threads import NativeThread, KeptModel, ModelChoice, NextTurnConfiguration, Thread
 from .thread_status import StoppedThreadStatus
 from .view_unread import transcript_read_state
 
@@ -166,7 +166,7 @@ class NewThreadSpec:
         return cls(task=TaskLaunchInput(task) if task else LaunchInput(), **values)
 
     def declaration(self) -> Thread:
-        return Thread(name=self.name, task=self.task.thread_text(), tags=self.tags.for_new(),
+        return NativeThread(name=self.name, task=self.task.thread_text(), tags=self.tags.for_new(),
                       worktree=self.project, model=self.model, thinking_level=self.thinking_level)
 
     def declare(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Thread:
@@ -186,7 +186,7 @@ class ForkSpec(NewThreadSpec):
 
     def _parent(self, threads: ThreadManagement) -> Thread:
         parent = threads.registry.require(self.parent)
-        parent.execution.require_native()
+        parent.require_native()
         parent.runtime.require_forkable()
         return parent
 
@@ -260,13 +260,12 @@ class ThreadManagement:
         if not project.is_dir():
             raise ValueError("The imported project does not exist locally; supply --worktree.")
         session_path = ImportedSessionWriter.path_in(self.root, session_id=PiSessionId.fresh())
-        thread = model.configured(Thread(
+        thread = model.configured(NativeThread(
             name,
             tags,
             Checkout(project),
             session_file=RegistrySessionLocation.from_path(session_path, self.root),
-            title=snapshot.title,
-        ))
+            title=snapshot.title))
         self.registry.snapshot().require_fresh_name(name)
         self.registry.require_declaration_available(thread, StoppedThreadStatus())
         with ImportedSessionWriter.preparing(session_path, snapshot, project) as publish:
@@ -296,14 +295,14 @@ class ThreadManagement:
         session_path = ImportedSessionWriter.path_in(self.root, session_id=PiSessionId.fresh())
         selected = self.registry.snapshot()
         original = selected.require(name)
-        original.execution.require_external()
+        original.require_external()
         with ImportedSessionWriter.preparing(session_path, snapshot, original.worktree.path) as publish:
             with self.registry.store.editing() as edit:
                 current = edit.document.require(name)
                 if not edit.original.snapshot.same_thread(current, selected, original):
                     raise RelationViolationError("External owner changed while preparing its native session.")
-                rehomed = replace(
-                    current, execution=NativeThreadExecution, process_identity=NO_PROCESS,
+                rehomed = current.as_member(
+                    NativeThread, process_identity=NO_PROCESS,
                     session_file=RegistrySessionLocation.from_path(session_path, self.root),
                 )
                 self.registry.require_declaration_available(rehomed, StoppedThreadStatus())
@@ -330,7 +329,7 @@ class ThreadManagement:
         role: type[ThreadRole] = AgentThreadRole,
     ) -> Thread:
         """Atomically register a unique thread; its inbox starts at its creation."""
-        thread = Thread(
+        thread = NativeThread(
             name=RegistryNames.thread_slug(wanted),
             tags=tags,
             worktree=worktree,
@@ -338,8 +337,7 @@ class ThreadManagement:
             model=model,
             thinking_level=thinking_level,
             auto_title_pending=auto_title_pending,
-            role=role,
-        )
+            role=role)
         return self.registry._claim_unlocked(thread)
 
     def rename_self(self, new_name: str, *, caller: ThreadCaller) -> RenameThreadResult:
@@ -440,7 +438,7 @@ class ThreadManagement:
 
         def configure(thread: Thread) -> Thread:
             thread.require_original_model_configuration(original)
-            thread.execution.require_native()
+            thread.require_native()
             return configuration.configured(thread)
 
         updated = self.registry.update_thread(original.name, configure)

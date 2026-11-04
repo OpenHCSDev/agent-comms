@@ -21,7 +21,7 @@ from agent_comms.team_heartbeat import TeamHeartbeat
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.messages import Addressed
 from agent_comms.repo import Checkout
-from agent_comms.threads import ExternalThreadExecution
+from agent_comms.threads import ExternalThread
 from agent_comms.thread_status import ConnectedThreadStatus
 
 pytest_plugins = ("test_holder_standing_rules",)
@@ -35,11 +35,8 @@ async def test_unconfirmed_monitor_reports_team_deaf_once(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("HOME", "home")
     owner = ProcessIdentity.capture(os.getpid())
-    colleague = replace(
-        held_bus.registry.require("colleague"),
-        execution=ExternalThreadExecution,
-        process_identity=owner,
-    )
+    colleague = held_bus.registry.require("colleague").as_member(ExternalThread,
+        process_identity=owner)
     held_bus.registry.register(colleague)
     state = tmp_path / "bridge-state"
     binding = Binding(root=str(held_bus.root), owner=held_bus.registry.require('colleague').incarnation,

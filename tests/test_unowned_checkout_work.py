@@ -39,7 +39,7 @@ from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import (
     RepeatedTodoChange, ServicePassFailing, StaleTodoDecision, StandingRule,
 )
-from agent_comms.threads import ExternalThreadExecution, Thread
+from agent_comms.threads import ExternalThread, NativeThread
 from agent_comms.errors import TodoConflict, TodoError
 from agent_comms.todos import (
     Assignment, ExpectedProblem, PendingProblemOrder, ProgressRead, ReleaseTodo, StrikeReason,
@@ -116,10 +116,10 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
     spare = tmp_path / 'idle-project'
     git(home, 'worktree', 'add', '-q', '-b', 'idle-home', str(spare))
     for name in ('colleague', 'worker'):
-        c.registry.declare(Thread(
-            name, frozenset(), Checkout(home), execution=ExternalThreadExecution))
-    c.registry.declare(Thread(
-        'idle', frozenset(), Checkout(spare), execution=ExternalThreadExecution,
+        c.registry.declare(ExternalThread(
+            name, frozenset(), Checkout(home)))
+    c.registry.declare(ExternalThread(
+        'idle', frozenset(), Checkout(spare),
         process_identity=ProcessIdentity.capture(os.getpid())))
     request = c.goals.todos.add_request(
         c.registry.require('colleague').incarnation, 'Keep changes with their author').id
@@ -317,7 +317,7 @@ def test_order_closed_after_the_frame_read_does_not_fail_the_merge_read(
 def test_a_renamed_holder_keeps_its_order_checkouts(tmp_path):
     rule = StorageRule(checkout_base=tmp_path / 'checkouts',
                        scratch_base=tmp_path / 'scratch', volume=tmp_path, floor_gib=0)
-    born = Thread('unit-mi', frozenset(), Checkout(tmp_path / 'home'),
+    born = NativeThread('unit-mi', frozenset(), Checkout(tmp_path / 'home'),
                   storage_roots=rule.initial_roots('unit-mi'))
     renamed = replace(born, name='codex-mi')
     checkout = rule.order_checkout(rule.roots_of(renamed), 'P1')

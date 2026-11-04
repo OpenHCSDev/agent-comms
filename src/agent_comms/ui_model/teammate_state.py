@@ -305,7 +305,7 @@ class TeammateState(UndatedStandingRule, FamilyScan, declared_name=None):
         candidates = tuple(
             reading
             for reading in readings
-            for _ in reading.thread.execution.independent_threads(reading.thread)
+            for _ in reading.thread.independent_threads()
         )
         eligible = set(held)
         eligible.update(

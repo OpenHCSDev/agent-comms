@@ -21,7 +21,7 @@ from agent_comms.pi_payloads import (
     ReportedText,
 )
 from agent_comms.runtime_updates import ThreadOutput
-from agent_comms.threads import ExternalThreadExecution, Thread
+from agent_comms.threads import ExternalThread, NativeThread
 from agent_comms.turn_phase import FailedPhase, IdlePhase, ModelWaitPhase, ToolRunningPhase
 from agent_comms.ui_model.observation import ObserveSidebar, SidebarObserved
 from agent_comms.ui_model.sidebar import SidebarModel
@@ -65,7 +65,7 @@ def test_projection_preserves_source_identity_and_strict_record_validation(activ
 
 
 def test_native_status_reads_long_preparation_first_and_parallel_tools(comms):
-    thread = comms.registry.declare(Thread('worker', frozenset(), Checkout(comms.root), process_identity=ProcessIdentity.capture(os.getpid())))
+    thread = comms.registry.declare(NativeThread('worker', frozenset(), Checkout(comms.root), process_identity=ProcessIdentity.capture(os.getpid())))
     detail = "preparing_" + "p" * Activity.detail_limit
     lease = comms.agents.begin_turn(
         thread.name, TurnId('a9f5f927d05a07e19a018da42f972ef5'), detail
@@ -88,7 +88,7 @@ def test_native_status_reads_long_preparation_first_and_parallel_tools(comms):
 
 
 def test_a_provider_failure_shows_its_phase_and_leaves_the_turn_to_its_owner(comms):
-    thread = comms.registry.declare(Thread('provider-failure', frozenset(), Checkout(comms.root), process_identity=ProcessIdentity.capture(os.getpid())))
+    thread = comms.registry.declare(NativeThread('provider-failure', frozenset(), Checkout(comms.root), process_identity=ProcessIdentity.capture(os.getpid())))
     lease = comms.agents.begin_turn(
         thread.name, TurnId('dcd2bcad2e6989f2c586e96751d5379d')
     ).turn_lease
@@ -105,8 +105,8 @@ def test_a_provider_failure_shows_its_phase_and_leaves_the_turn_to_its_owner(com
 
 
 def test_native_and_cli_activity_publish_member_order_and_ignore_unchanged_phases(comms):
-    native = comms.registry.declare(Thread('native-clock', frozenset({'clock'}), Checkout(comms.root), process_identity=ProcessIdentity.capture(os.getpid())))
-    cli = comms.registry.declare(Thread('cli-clock', frozenset({'clock'}), Checkout(comms.root), execution=ExternalThreadExecution))
+    native = comms.registry.declare(NativeThread('native-clock', frozenset({'clock'}), Checkout(comms.root), process_identity=ProcessIdentity.capture(os.getpid())))
+    cli = comms.registry.declare(ExternalThread('cli-clock', frozenset({'clock'}), Checkout(comms.root)))
     comms.channels.set_channel_sort("#clock", LastActivityThreadSort)
     output = ThreadOutput(ExternalTranscript(comms.root, cli.incarnation), comms.agents)
     request = ObserveSidebar(Checkout(comms.root), True, False)
@@ -147,7 +147,7 @@ def test_native_and_cli_activity_publish_member_order_and_ignore_unchanged_phase
 
 
 def test_cli_keeps_whitespace_formatting_but_uses_activity_bound(comms):
-    thread = comms.registry.declare(Thread('cli-worker', frozenset(), Checkout(comms.root), execution=ExternalThreadExecution, process_identity=ProcessIdentity.capture(os.getpid())))
+    thread = comms.registry.declare(ExternalThread('cli-worker', frozenset(), Checkout(comms.root), process_identity=ProcessIdentity.capture(os.getpid())))
     output = ThreadOutput(ExternalTranscript(comms.root, thread.incarnation), comms.agents)
     output.enter(ToolRunningPhase("  tool:\n\t" + "x" * Activity.detail_limit))
     activity = comms.agents.activity_of(thread.name, snapshot=comms.registry.snapshot())
@@ -160,6 +160,6 @@ def test_cli_keeps_whitespace_formatting_but_uses_activity_bound(comms):
     shown = comms.views.thread_presentations((thread.name,)).require(thread.name)
     assert shown.status.working
     attention = replace(shown, status=shown.status.with_attention())
-    assert ExternalThreadExecution.presentation(thread, comms.registry.snapshot().status(thread.name), attention, attention.binding) == attention
+    assert ExternalThread.presentation(thread, comms.registry.snapshot().status(thread.name), attention, attention.binding) == attention
     output.enter(IdlePhase())
     assert not comms.views.thread_presentations((thread.name,)).require(thread.name).status.working

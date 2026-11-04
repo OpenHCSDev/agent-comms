@@ -55,7 +55,7 @@ from github_fixture import GitHubFixture
 from fixture_git import IDENTITY
 from order_scope_fixture import FIX_SCOPE
 from source_revision_fixture import SourceRepository
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.work_branches import WorkBranches
 
 pytest_plugins = ("github_fixture",)
@@ -278,7 +278,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
     source = wire(tmp_path / "bus")
     for number, name in enumerate(("colleague", "worker"), 1):
         source.registry.declare(
-            Thread(
+            NativeThread(
                 name, frozenset({"comms"}), Checkout(tmp_path), created_at=float(number)
             )
         )
@@ -407,7 +407,7 @@ def test_install_due_compares_fetched_main_to_installed_build(
     Repo.git(checkout, "update-ref", "refs/remotes/origin/main", graph.oldest)
     before = Repo.git(checkout, "rev-parse", "HEAD")
     bus = wire(tmp_path / "bus")
-    bus.registry.declare(Thread("colleague", frozenset(), Checkout(checkout)))
+    bus.registry.declare(NativeThread("colleague", frozenset(), Checkout(checkout)))
     extras = tuple(SourceRepository.create(
         tmp_path / "qualification", RepositoryName("example", f"qualification-{number}"))
         for number in range(2 if extra_repositories else 0))
@@ -482,7 +482,7 @@ def test_a_one_minute_old_merge_is_due_and_names_its_request_without_launching(
     github_cli.put(graph.repository.github, UnmergedListedPullRequest(
         42, "fix/next", "b" * 40, stamp, "main", reviewable_times=(stamp,), armed_times=(stamp,)))
     bus = wire(tmp_path / "bus")
-    bus.registry.declare(Thread("colleague", frozenset(), Checkout(checkout)))
+    bus.registry.declare(NativeThread("colleague", frozenset(), Checkout(checkout)))
     Team.on_root("colleague", (graph.repository,), bus.root)
     merged = int(Repo.git(checkout, "log", "-1", "--format=%ct", merge))
     monkeypatch.setattr(time, "time", lambda: merged + 60)

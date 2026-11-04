@@ -24,13 +24,13 @@ from agent_comms.thread_identity import (
     UnrecordedThreadIncarnation,
 )
 from goal_owner_fixture import canonical_goal_wire
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 def test_archived_duplicate_birth_keeps_names_without_selecting_an_arbitrary_owner(tmp_path):
     comms = wire(tmp_path / "bus")
     for name, birth in (("old", 1700.0), ("second", 1701.0)):
-        comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path), created_at=birth))
+        comms.registry.declare(NativeThread(name, frozenset(), Checkout(tmp_path), created_at=birth))
     source = comms.registry.snapshot()
     with pytest.raises(RelationViolationError):
         RegistrySnapshot.capture(replace(comms.registry.store.read(), threads=ThreadRows.from_threads({
@@ -72,7 +72,7 @@ def test_archived_duplicate_birth_keeps_names_without_selecting_an_arbitrary_own
 def test_viewer_selects_the_outcomes_of_a_delivery_window(tmp_path, viewer_of, seen):
     comms = canonical_goal_wire(tmp_path / "bus")
     for name in ("sender", "peer-a", "peer-b"):
-        comms.registry.declare(Thread(name, frozenset({"ci"}), Checkout(tmp_path)))
+        comms.registry.declare(NativeThread(name, frozenset({"ci"}), Checkout(tmp_path)))
     sent = comms.messaging.send("sender", "#ci", "channel outcome").message
     original = comms.bus.bus.delivery(sent.seq)
     lookups = {name: thread.incarnation.lookup
@@ -88,7 +88,7 @@ def test_viewer_selects_the_outcomes_of_a_delivery_window(tmp_path, viewer_of, s
 def test_a_viewer_follows_frozen_lookups_through_rename_and_never_into_a_rebirth(tmp_path):
     comms = canonical_goal_wire(tmp_path / "bus")
     for name in ("sender", "peer-a", "peer-b"):
-        comms.registry.declare(Thread(name, frozenset({"ci"}), Checkout(tmp_path)))
+        comms.registry.declare(NativeThread(name, frozenset({"ci"}), Checkout(tmp_path)))
     sent = comms.messaging.send("sender", "#ci", "channel outcome").message
     original = comms.bus.bus.delivery(sent.seq)
     key = (sent.seq, sent.message_id)
@@ -104,7 +104,7 @@ def test_a_viewer_follows_frozen_lookups_through_rename_and_never_into_a_rebirth
     comms.registry.rename("peer-a", "renamed-a")
     assert seen_by("renamed-a") == {"peer-a"}
     comms.registry.remove("peer-b")
-    comms.registry.declare(Thread("peer-b", frozenset({"ci"}), Checkout(tmp_path)))
+    comms.registry.declare(NativeThread("peer-b", frozenset({"ci"}), Checkout(tmp_path)))
     assert seen_by("peer-b") == set()
     assert seen_by("sender") == {"peer-a", "peer-b"}
 
@@ -114,7 +114,7 @@ def test_a_public_root_without_a_coordinator_keeps_its_viewer_and_projects_visib
 
     comms = wire(tmp_path / "bus")
     for name in ("sender", "peer-a", "peer-b"):
-        comms.registry.declare(Thread(name, frozenset({"ci"}), Checkout(tmp_path)))
+        comms.registry.declare(NativeThread(name, frozenset({"ci"}), Checkout(tmp_path)))
     sent = comms.messaging.send("sender", "#ci", "channel outcome").message
     original = comms.bus.bus.delivery(sent.seq)
     CoordinationStore.path_in(comms.root).unlink(missing_ok=True)
@@ -130,7 +130,7 @@ def test_a_private_root_without_a_coordinator_still_refuses_notification_reads(p
     from agent_comms.coordination_errors import PublicationActivationBlocked
 
     for name in ("sender", "peer-a"):
-        private_comms.registry.declare(Thread(name, frozenset({"ci"}), Checkout(private_comms.root)))
+        private_comms.registry.declare(NativeThread(name, frozenset({"ci"}), Checkout(private_comms.root)))
     sent = private_comms.messaging.send("sender", "#ci", "channel outcome").message
     original = private_comms.bus.bus.delivery(sent.seq)
     CoordinationStore.path_in(private_comms.root).unlink()

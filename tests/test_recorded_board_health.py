@@ -155,15 +155,14 @@ def test_missing_frame_reports_recorded_failure_without_fabricating_a_board(fork
 def test_one_unreadable_source_preserves_the_other_original_edit(published_board, fork_bus, tmp_path):
     from agent_comms.repo import Checkout
     from agent_comms.storage_rules import StorageRule
-    from agent_comms.threads import ExternalThreadExecution
+    from agent_comms.threads import ExternalThread
     from agent_comms.thread_model import DeclaredModel
-    from agent_comms.threads import Thread
     from test_edit_allocations import issue
 
     comms, source, template = fork_bus
-    worker = comms.registry.declare(Thread(
+    worker = comms.registry.declare(ExternalThread(
         'unreadable-worker', frozenset({'comms'}), Checkout(source.checkout),
-        model=DeclaredModel('anthropic/claude-opus-4-6'), execution=ExternalThreadExecution))
+        model=DeclaredModel('anthropic/claude-opus-4-6')))
     rule = StorageRule.load(comms.root)
     checkout = rule.order_checkout(rule.roots_of(worker), 'P41')
     checkout.parent.mkdir(parents=True, exist_ok=True)

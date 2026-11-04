@@ -8,7 +8,7 @@ from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from conftest import installed_comms
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 def test_prefixes_and_alias_union_stay_in_their_conversation():
@@ -51,9 +51,8 @@ def test_add_closes_gaps_without_losing_sparse_reads_or_mutating_the_source():
 def setup_conversations(root):
     comms = installed_comms(root)
     for name in ("sender", "reader"):
-        comms.registry.declare(Thread(
-            name, frozenset({"a", "b"}), Checkout(root),
-        ))
+        comms.registry.declare(NativeThread(
+            name, frozenset({"a", "b"}), Checkout(root)))
     messages = [comms.messaging.send("sender", target, target).message
                 for target in ("#a", "#b", "#a", "#b")]
     return comms, messages

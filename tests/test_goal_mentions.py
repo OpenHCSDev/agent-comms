@@ -28,16 +28,16 @@ from agent_comms.goals import (
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.tools import invoke_tool
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.goal_scope import OneGoal
 
 
 def _wire(tmp_path: Path) -> Comms:
     comms = installed_comms(tmp_path / "wire")
     for name, created in (("owner", 17001.0), ("peer", 17002.0), ("other", 17003.0)):
-        comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path), created_at=created))
+        comms.registry.declare(NativeThread(name, frozenset(), Checkout(tmp_path), created_at=created))
     comms.registry.declare(
-        Thread('human', frozenset(), Checkout(tmp_path), role=UserThreadRole, created_at=17004.0)
+        NativeThread('human', frozenset(), Checkout(tmp_path), role=UserThreadRole, created_at=17004.0)
     )
     return comms
 
@@ -151,7 +151,7 @@ def test_bound_renames_follow_only_the_same_incarnation_and_name_reuse_is_stale(
     assert _rows(comms, "reviewer")[0]["owner"].target == "owner"
     comms.owners.stop("reviewer")
     comms.registry.remove("reviewer")
-    comms.registry.declare(Thread('peer', frozenset(), Checkout(tmp_path), created_at=18002.0))
+    comms.registry.declare(NativeThread('peer', frozenset(), Checkout(tmp_path), created_at=18002.0))
     # The old token must not grant a link to a new peer with the same spelling.
     assert _rows(comms, "owner")[0] == {}
     assert _rows(comms, "peer")[0] == {}
@@ -236,7 +236,7 @@ def test_reused_owner_incarnation_cannot_inherit_old_derived_contact(tmp_path: P
     comms.owners.stop("owner")
     comms.registry.remove("owner")
     comms.registry.declare(
-        Thread('owner', frozenset(), Checkout(tmp_path), goal=goal, created_at=18001.0)
+        NativeThread('owner', frozenset(), Checkout(tmp_path), goal=goal, created_at=18001.0)
     )
     assert _rows(comms, "peer")[0] == {}
     assert _rows(comms, "owner")[0] == {}

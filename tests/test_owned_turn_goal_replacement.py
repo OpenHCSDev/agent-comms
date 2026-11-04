@@ -29,7 +29,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Checkout
 from agent_comms.repository_name import RepositoryName
 from agent_comms.reservation_rules import ReservationViolationError
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.turn_input_source import NoTurnAcceptance
 from compaction_loopback import LoopbackProvider
 from conftest import answer_rules, declare_team, installed_comms
@@ -58,10 +58,9 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
         async with saved.open_owner(native_options=()) as (agent, session_id):
             comms = agent._comms
             worker = agent.sessions.require(session_id)
-            declare_team(comms, Thread(
+            declare_team(comms, NativeThread(
                 'colleague', frozenset(), Checkout(saved.project),
-                process_identity=ProcessIdentity.capture(os.getpid()),
-            ))
+                process_identity=ProcessIdentity.capture(os.getpid())))
             answer_rules(comms, worker)
             request = comms.goals.todos.add_request(
                 comms.registry.require('colleague').incarnation, 'Repair following input').id
@@ -126,10 +125,9 @@ WORKER_SESSION = AcpSessionId('worker-session')
 async def prepared_owner(tmp_path):
     comms = installed_comms(tmp_path)
     for name in ('colleague', 'worker'):
-        comms.registry.declare(Thread(
+        comms.registry.declare(NativeThread(
             name, frozenset(), Checkout(tmp_path),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-        ))
+            process_identity=ProcessIdentity.capture(os.getpid())))
     agent = CommsAgent(comms, auto_wake=False)
     try:
         await agent.sessions.bind_owned(comms.registry.require('worker'), WORKER_SESSION)

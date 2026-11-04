@@ -36,7 +36,7 @@ from agent_comms.standing_rules import (
 from agent_comms.repo import Checkout
 from agent_comms.task_attachments.team_pings import TeamDecisions, TeamUpdate, TeamUpdateStore, RulePing
 from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.errors import TodoError
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, MalformedRecord, RecordProblems
 from agent_comms.tool_caller import PeerCaller, ThreadCaller
@@ -1375,7 +1375,7 @@ def working_on(comms, source, tmp_path, name, branch):
     """A registered thread whose own worktree has ``branch`` checked out."""
     worktree = tmp_path / f"{name}-checkout"
     source.git(source.checkout, "worktree", "add", "-q", "-b", branch, str(worktree))
-    comms.registry.declare(Thread(name, frozenset(), Checkout(worktree)), StoppedThreadStatus())
+    comms.registry.declare(NativeThread(name, frozenset(), Checkout(worktree)), StoppedThreadStatus())
 
 
 def test_a_request_no_order_links_reaches_the_thread_working_on_its_branch(

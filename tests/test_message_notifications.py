@@ -6,7 +6,7 @@ from dataclasses import replace
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 from conftest import installed_comms
 from agent_comms.nominal.field_codec import TurnId
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 def test_channel_assignments_are_visible_from_agent_view(tmp_path):  # noqa: F811
@@ -26,7 +26,7 @@ def test_new_reader_has_no_fabricated_receipts(tmp_path):  # noqa: F811
 
     root = tmp_path / 'new'
     comms = installed_comms(root)
-    comms.registry.declare(Thread('reader', frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(NativeThread('reader', frozenset(), Checkout(tmp_path)))
     assert comms.views.thread_presentations(('reader',)).require('reader').notifications == ()
 
 

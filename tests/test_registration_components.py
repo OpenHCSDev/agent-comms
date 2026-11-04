@@ -20,12 +20,12 @@ from agent_comms.snapshot_slices import ThreadSlice
 from agent_comms.repo import Checkout
 from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import AtomicFile
-from agent_comms.threads import ExternalThreadExecution, Thread
+from agent_comms.threads import ExternalThread, Thread, NativeThread
 from agent_comms.thread_text import GivenThreadText
 
 
 def owner(path):
-    return Thread("owner", frozenset(), Checkout(path), process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0)
+    return NativeThread("owner", frozenset(), Checkout(path), process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0)
 
 
 def test_edit_owns_turn_and_document_owns_later_changes(tmp_path, *, thread_registration):
@@ -161,8 +161,8 @@ def test_thread_rows_compare_unread_rows_as_stored_and_decode_only_what_changed(
     stored = {'unread': {'name': 'unread', 'not': 'a thread'}}
     assert ThreadRows.from_wire(stored) == ThreadRows.from_wire(stored)
     written = ThreadRows.from_wire(stored)
-    written['unread'] = Thread(
-        'unread', frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution)
+    written['unread'] = ExternalThread(
+        'unread', frozenset(), Checkout(tmp_path))
     other = ThreadRows.from_wire({})
     other['unread'] = written['unread']
     assert written == other

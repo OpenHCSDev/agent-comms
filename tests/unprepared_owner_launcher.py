@@ -12,12 +12,12 @@ import sys
 from pathlib import Path
 
 from agent_comms.comms import wire
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 def main(root: Path, name: str) -> None:
     comms = wire(root)
-    comms.registry.declare(Thread(name, frozenset(), Checkout(root)))
+    comms.registry.declare(NativeThread(name, frozenset(), Checkout(root)))
     print(comms.owners.start_many((name,))[0].pid)
 
 

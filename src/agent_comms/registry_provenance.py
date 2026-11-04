@@ -78,7 +78,7 @@ class RegisteredRecipient(KnownRecipient):
         return (self.thread,)
 
     def activity(self, observations, snapshot):
-        return self.thread.execution.observe_recipient(observations, snapshot, self.thread)
+        return self.thread.observe_recipient(observations, snapshot)
 
     def input_owners(self) -> tuple[Thread, ...]:
         return (self.thread,)

@@ -21,7 +21,7 @@ from agent_comms.connector import ConnectorSendTool
 from agent_comms.connector_caller import DirectorCaller
 from agent_comms.standing_rules import DirectiveUnacted
 from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.harness_delivery_states import DeliveredOutcome
 from agent_comms.messages import AckKind, AlertKind, HandoffKind, InfoKind, Message, MessageKind, NoticeRole, QuestionKind
 from agent_comms.channel_targets import TeammatesTag, ThreadTarget
@@ -317,7 +317,7 @@ async def test_twelve_directives_require_the_final_of_the_turn_they_opened(
     comms = bridge.comms
     colleague = comms.registry.require('viewer')
     comms.registry.declare(
-        Thread('peer', frozenset({TeammatesTag.declared_name}), Checkout(Path.cwd())),
+        NativeThread('peer', frozenset({TeammatesTag.declared_name}), Checkout(Path.cwd())),
         StoppedThreadStatus(),
     )
     comms.registry.set_team_project(RegisteredTeamProject(()))

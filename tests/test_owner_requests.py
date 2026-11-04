@@ -35,7 +35,7 @@ from agent_comms.todos import (
 )
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsSendTool
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 def test_retired_team_requests_follow_peer_authority(
@@ -48,7 +48,7 @@ def test_retired_team_requests_follow_peer_authority(
         ("request-outsider", frozenset()),
     ):
         comms.registry.declare(
-            Thread(name, tags, Checkout(repository.checkout)), StoppedThreadStatus(),
+            NativeThread(name, tags, Checkout(repository.checkout)), StoppedThreadStatus(),
         )
     # Standing rules read the team; a bus without a team project has no board to stall on.
     comms.registry.set_team_project(RegisteredTeamProject((repository,)))
@@ -90,7 +90,7 @@ def test_shared_request_maintenance_does_not_transfer_directive_debt(comms: Comm
     checkout = Checkout(Path.cwd())
     teammates = frozenset({TeammatesTag.declared_name})
     for name, tags in (("author", teammates), ("peer", teammates), ("claude-code", frozenset())):
-        comms.registry.declare(Thread(name, tags, checkout), StoppedThreadStatus())
+        comms.registry.declare(NativeThread(name, tags, checkout), StoppedThreadStatus())
     author = comms.registry.require("author")
     store = comms.goals.todos
     request = store.add_request(author.acting_identity, "One request.")
@@ -114,7 +114,7 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
     request_family_goal_id = GoalId.mint()
     repository = Repo(checkout=Path.cwd(), github=RepositoryName("OpenHCSDev", "agent-comms"))
     for name in ("claude-ai", "colleague", "worker"):
-        thread = Thread(name, frozenset(), Checkout(repository.checkout))
+        thread = NativeThread(name, frozenset(), Checkout(repository.checkout))
         comms.registry.declare(thread, StoppedThreadStatus())
     colleague = comms.registry.require("colleague")
     worker = comms.registry.require("worker")

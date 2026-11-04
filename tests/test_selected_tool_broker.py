@@ -39,7 +39,7 @@ from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import AssistantMessage, ReportedParts, ToolCallContent
 from agent_comms.repo import Checkout
 from agent_comms.storage_room import NoRoomNeeded
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.tool_denial import SelectedToolDenied
 
 
@@ -200,7 +200,7 @@ def test_openai_responses_call_id_is_consumed_as_the_provider_spells_it(slot_sto
 def test_owner_mode_denies_unreserved_input_before_consuming_ledger(
         private_comms, tmp_path: Path) -> None:
     comms = private_comms
-    comms.registry.declare(Thread("owner", frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(NativeThread("owner", frozenset(), Checkout(tmp_path)))
     claim_scope = WakeClaim(
         wire_root_id="a" * 32,
         source_seq=1,

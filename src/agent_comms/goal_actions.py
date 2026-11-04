@@ -602,7 +602,7 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
         itself, or the teammate whose turn a fork works inside. A created problem records it
         as creator and the request must be its own."""
         sender = ctx.goals.registry.require(self.assigner.name)
-        return ctx.goals.registry.require(sender.execution.teammate(sender))
+        return ctx.goals.registry.require(sender.teammate())
 
     def authority(self, ctx: GoalActionContext) -> ThreadIncarnation:
         """Whose open request the order may serve: its sender teammate's."""

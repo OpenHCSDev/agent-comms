@@ -12,14 +12,14 @@ from agent_comms.comms import wire
 from agent_comms.routing import ScheduledTurn
 from agent_comms.controller import UNBOUND_CONTROLLER
 from agent_comms.input_drain import WakeScheduleCheck
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from stored_inputs import stored_inputs
 
 
 async def test_wake_lock_wait_shutdown_keeps_input_unsent_and_controller_private(tmp_path):
     comms = wire(tmp_path)
     comms.registry.declare(
-        Thread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+        NativeThread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     agent = CommsAgent(comms, auto_wake=True, runtime_enabled=True)
     agent.sessions.publish(AcpSessionId("owner"), comms.registry.require("owner"))

@@ -83,7 +83,7 @@ class UpdatedRegistration(RegistrationChange):
     def declared(self, requested: Thread) -> RegistrationChange:
         """Decide whether to keep or claim execution against the locked prior owner."""
         if self.previous.executing:
-            if requested.execution is not self.previous.execution:
+            if not requested.same_execution(self.previous):
                 raise RelationViolationError("Cannot replace receiving capability during its active turn.")
             if requested.process_identity.conflicts_with(self.previous.process_identity):
                 raise RelationViolationError("Cannot replace an executor during its active turn.")
@@ -108,7 +108,7 @@ class UpdatedRegistration(RegistrationChange):
     def changes_owner(self) -> bool:
         return (
             self.previous.process_identity != self.thread.process_identity
-            or self.previous.execution is not self.thread.execution
+            or not self.previous.same_execution(self.thread)
             or self.previous.role != self.thread.role
             or self.previous_status.changes_owner(self.status)
         )

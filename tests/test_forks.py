@@ -61,12 +61,7 @@ from agent_comms.order_tools import CommsTeamLoadTool, CommsHudTool, CommsTodoLi
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.slop import DeclarationDerivation, ExistingLine, Slop
-from agent_comms.threads import (
-    ExternalThreadExecution,
-    NativeThreadExecution,
-    Thread,
-    ForkExecution,
-)
+from agent_comms.threads import ExternalThread, NativeThread, ForkThread
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
@@ -122,13 +117,11 @@ def fork_bus(tmp_path, configured_repository, monkeypatch):
         source.git(source.checkout, "worktree", "add", "-q", "-b", f"{name}-work", str(worktree))
     for name, worktree in (("colleague", source.checkout), *teammates):
         comms.registry.declare(
-            Thread(
+            ExternalThread(
                 name,
                 frozenset({"comms"}),
                 Checkout(worktree),
-                model=DeclaredModel("anthropic/claude-opus-4-6"),
-                execution=ExternalThreadExecution,
-            )
+                model=DeclaredModel("anthropic/claude-opus-4-6"))
         )
     comms.goals.update_goal(
         "colleague", SetGoalAction(text="Repair the teammate workflow", goal_id=request_goal_id)
@@ -430,7 +423,7 @@ def captured_edit_sources(comms, paths, session):
     return calls
 
 
-@pytest.mark.parametrize("execution", (NativeThreadExecution, ExternalThreadExecution))
+@pytest.mark.parametrize("execution", (NativeThread, ExternalThread))
 def test_edit_membership_preserves_native_and_external_foreign_records(edit_sources, tmp_path, execution):
     comms, source, foreign, primary = edit_sources
     scratch = StorageRule.load(comms.root).roots_of(comms.registry.require("retained")).scratch
@@ -446,7 +439,7 @@ def test_edit_membership_preserves_native_and_external_foreign_records(edit_sour
     before = comms.goals.todos.get("P40")
     holds, workplaces = edit_workplaces(comms)
     hold, = holds
-    holder = replace(hold.holder, execution=execution,
+    holder = hold.holder.as_member(execution,
                      session_file=RegistrySessionLocation.from_path(session, comms.root))
     read = OrderEditsRead(
         comms.root, holder, TurnsSince(before.order.checked().at.recorded_at("An order")),
@@ -944,7 +937,7 @@ def test_fork_superseded_verdict_reads_its_teammates_orders(fork_bus):
         order=replace(order, id=OrderId.mint()),
         request=store.get("P40").request.require(),
     )
-    comms.registry.register_child("fork-one", "colleague", ForkExecution, comms.goals)
+    comms.registry.register_child("fork-one", "colleague", ForkThread, comms.goals)
     actor = ForkCaller("fork-one").identity(comms)
     current = store.get("P40")
     verdict = SupersededVerdict(
@@ -1002,10 +995,9 @@ def test_a_hook_registered_fork_stays_its_sessions_child_under_another_recorded_
     """The bus records colleague as the team colleague; a fork the hook registered under a peer colleague's
     session acts through a team verb and stays that peer's child."""
     comms, _ = subagent_hook
-    comms.registry.declare(Thread("peer", frozenset({"comms", TeammatesTag.declared_name}),
+    comms.registry.declare(ExternalThread("peer", frozenset({"comms", TeammatesTag.declared_name}),
                                   comms.registry.require("colleague").worktree,
-                                  model=DeclaredModel("anthropic/claude-opus-4-6"),
-                                  execution=ExternalThreadExecution))
+                                  model=DeclaredModel("anthropic/claude-opus-4-6")))
     # A bound session answers its hooks only through its own resident bridge.
     with resident_session(comms, tmp_path / "peer-state", "peer", "peer-session") as peer:
         resident_stdout(peer, SubagentStartRequest, tmp_path / "peer.jsonl",
@@ -1084,7 +1076,7 @@ def test_an_untagged_peers_sdk_children_keep_real_ids_and_parent_delegation(
             told = json.loads(run(SubagentStartRequest, agent_id=agent))["hookSpecificOutput"]
             assert f"--fork claude-{agent}" in told["additionalContext"]
             child = comms.registry.require(f"claude-{agent}")
-            child.execution.require_fork()
+            child.require_fork()
             assert child.parent.named("worker")
             assert comms.registry.status(child.name).receiving
         assert run(ReadGateRequest, agent_id="a2", tool_name="Read",
@@ -1136,7 +1128,7 @@ def test_only_a_subagent_slot_is_retired_and_a_stopped_stranger_is_no_slot(fork_
     comms = fork_bus[0]
     with pytest.raises(RelationViolationError, match="not a declared subagent"):
         SubagentCaller("worker").retire(comms)
-    comms.registry.declare(Thread("other-explore", frozenset(), Checkout(Path("/tmp")),
+    comms.registry.declare(NativeThread("other-explore", frozenset(), Checkout(Path("/tmp")),
                                   parent=ForkedParent("other")), status=StoppedThreadStatus())
     with pytest.raises(RelationViolationError, match="not a declared subagent"):
         comms.registry.claim_slot("other", SubagentRole("Explore"), comms.goals)

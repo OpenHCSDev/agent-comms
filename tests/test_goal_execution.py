@@ -43,7 +43,7 @@ from agent_comms.goal_scope import OneGoal
 from agent_comms.goal_states import ActiveGoal, ModelPause
 from agent_comms.maintenance_barrier import MaintenanceOperator
 from agent_comms.owned_turn import OwnedTurn
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.tool_caller import ToolCaller
 from agent_comms.tools import CommsGoalHistoryTool
 from agent_comms.turn_failure import NativeChildSignaled
@@ -53,10 +53,9 @@ from agent_comms.turn_input_source import NoTurnAcceptance
 @pytest.fixture
 def execution_bus(copied_goal_bus):
     comms = copied_goal_bus
-    comms.registry.declare(Thread(
+    comms.registry.declare(NativeThread(
         "worker", frozenset(), Checkout(comms.root.parent),
-        process_identity=ProcessIdentity.capture(os.getpid()),
-    ))
+        process_identity=ProcessIdentity.capture(os.getpid())))
     comms.goals.update_goal("worker", SetGoalAction(text="Repair original work"))
     return comms
 

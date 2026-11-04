@@ -24,7 +24,7 @@ from agent_comms.message_reference import MessageReference
 from agent_comms.messages import InfoKind, Message
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.repo import Checkout
-from agent_comms.threads import ExternalThreadExecution, Thread
+from agent_comms.threads import ExternalThread, NativeThread
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.wake import OrdinaryControl, resolve_wake_cohort
 
@@ -51,11 +51,10 @@ def test_team_verb_answers_under_five_seconds(
     comms.channels.create_tag("comms")
     names = tuple(f"worker-{index}" for index in range(500))
     for index, name in enumerate((*names, "colleague")):
-        comms.registry.declare(Thread(
+        comms.registry.declare(ExternalThread(
             name, frozenset({"comms"}), Checkout(tmp_path / name),
-            created_at=10000.0 + index, execution=ExternalThreadExecution,
-            model=DeclaredModel("anthropic/claude-opus-4-6"),
-        ))
+            created_at=10000.0 + index,
+            model=DeclaredModel("anthropic/claude-opus-4-6")))
     configured_repository(comms)
     snapshot = comms.registry.snapshot()
     rows = (
@@ -91,7 +90,7 @@ def test_team_verb_answers_under_five_seconds(
 def reply_history(comms: Comms, tmp_path: Path) -> tuple[Comms, tuple[MessageReference, ...]]:
     comms.channels.create_tag("comms")
     for index, name in enumerate(("colleague", "sender", "other")):
-        comms.registry.declare(Thread(name, frozenset({"comms"}), Checkout(tmp_path / name),
+        comms.registry.declare(NativeThread(name, frozenset({"comms"}), Checkout(tmp_path / name),
                                       created_at=10000.0 + index))
     originals = (
         Message("sender", "#comms", "channel", InfoKind, seq=1, timestamp=30000.0),

@@ -24,7 +24,7 @@ from agent_comms.order_tools import CommsTodoCreateTool
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import GitCommandError
 from agent_comms.repository_name import RepositoryName
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.todos import (
     EditingProgress,
     NoCommitProgress,
@@ -110,7 +110,7 @@ def held(tmp_path):
     (root / 'storage.json').write_text(json.dumps({'checkout_base': str(tmp_path / 'wt')}))
     comms = wire(root)
     for name in ('colleague', 'worker'):
-        comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path)))
+        comms.registry.declare(NativeThread(name, frozenset(), Checkout(tmp_path)))
     request = comms.goals.todos.add_request(
         comms.registry.require('colleague').incarnation, 'Repair the worker').id
     ThreadCaller('colleague').invoke(CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(

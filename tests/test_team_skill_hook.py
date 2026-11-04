@@ -42,7 +42,7 @@ from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.task_attachments.team_pings import TeamDecisions, TeamUpdate, RulePing
 from agent_comms.thread_model import DeclaredModel
-from agent_comms.threads import Thread, ForkExecution
+from agent_comms.threads import ForkThread, NativeThread
 from agent_comms.ui_model.teammate_state import AwaitingTeam
 from agent_comms.todos import ProgressRead, ReviewedHeadVerdict
 from agent_comms_hooks.board import (
@@ -630,7 +630,7 @@ def test_changing_the_team_project_preserves_the_peer_deal_and_real_child_delega
                          "agent_type": "Explore"}).register(team_bus, team_binding)
     assert "in-turn fork claude-a9" in capsys.readouterr().out
     child = team_session.registry.require("claude-a9")
-    child.execution.require_fork()
+    child.require_fork()
     assert tuple(child.parent.names()) == ("claude-code",)
     assert transcript.with_suffix(".deck.json").exists()
 
@@ -639,7 +639,7 @@ def test_a_fork_registers_under_the_session_that_spawned_it(
         tmp_path, capsys, team_session, team_bus, team_binding):
     """No CLI subprocess: the hook declares the fork in its own process as a child of the
     session's own bus thread, carrying every tag that thread carries (#teammates included)."""
-    team_session.registry.declare(Thread(
+    team_session.registry.declare(NativeThread(
         "claude-nra", frozenset({TeammatesTag.declared_name}), Checkout(tmp_path),
         model=DeclaredModel("anthropic/claude-opus-4-6")))
     WatchClaim("s2").enrol(WatchRecord(
@@ -655,7 +655,7 @@ def test_a_fork_registers_under_the_session_that_spawned_it(
     snapshot = team_session.registry.snapshot()
     for agent, parent in (("a7", "claude-code"), ("a8", "claude-nra")):
         fork = snapshot.require(f"claude-{agent}")
-        fork.execution.require_fork()
+        fork.require_fork()
         assert tuple(fork.parent.names()) == (parent,)
         assert fork.tags == snapshot.require(parent).tags
     assert TeammatesTag.declared_name in snapshot.require("claude-a8").tags
@@ -965,7 +965,7 @@ def test_a_subagent_and_an_unbound_session_are_never_gated(
     # Claude's SubagentStart registers the child before PreToolUse reports its activity.
 
     team_session.registry.register_child(
-        "claude-a9", "claude-code", ForkExecution, team_session.goals)
+        "claude-a9", "claude-code", ForkThread, team_session.goals)
     assert not refused(capsys, gated(transcript, "Bash", {"command": "ls"}, agent_id="a9", comms=team_bus, binding=team_binding))
     elsewhere = tmp_path / "other.jsonl"
     elsewhere.write_text("")
@@ -981,7 +981,7 @@ def test_two_agents_on_one_session_keep_separate_deals(
     transcript.write_text("")
     assert DeckStart.decode(hook_record(transcript, "SessionStart")).take(team_bus, team_binding)
     team_session.registry.register_child(
-        "claude-a9", "claude-code", ForkExecution, team_session.goals)
+        "claude-a9", "claude-code", ForkThread, team_session.goals)
     for part in dealt_sources(transcript):
         gated(transcript, "Read", {"file_path": str(part)}, agent_id="a9", comms=team_bus, binding=team_binding).completed()
     assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}, comms=team_bus, binding=team_binding))  # main still unread

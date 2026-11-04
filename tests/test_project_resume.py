@@ -17,7 +17,7 @@ from agent_comms.nominal.field_codec import FieldCodec, TurnId
 from agent_comms.messages import Message, InfoKind
 from agent_comms.turn_phase import CancellingPhase
 from native_backend_fixture import native_backend_fixture
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 def declared_owner(tmp_path):
@@ -25,7 +25,7 @@ def declared_owner(tmp_path):
     old.mkdir()
     new.mkdir()
     comms = wire(tmp_path / "wire")
-    comms.registry.declare(Thread('owner', frozenset(), Checkout(old), process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.registry.declare(NativeThread('owner', frozenset(), Checkout(old), process_identity=ProcessIdentity.capture(os.getpid())))
     return comms, old, new
 
 
@@ -43,7 +43,7 @@ def test_project_change_during_turn_is_recorded_until_the_next_turn_starts(tmp_p
     assert comms.agents.finish_turn(turn.turn_lease)
     # The turn ended and nothing ran afterwards: the registry still says so,
     # also for an owner that registers this thread again later.
-    comms.registry.declare(Thread('owner', frozenset(), Checkout(new), process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.registry.declare(NativeThread('owner', frozenset(), Checkout(new), process_identity=ProcessIdentity.capture(os.getpid())))
     current = comms.registry.require("owner")
     assert current.project_resume_due and current.worktree == Checkout(new)
     following = comms.agents.begin_turn("owner", TurnId('bf5eb504b7221133c4f3cf2aa87008a3'))

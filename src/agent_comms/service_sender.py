@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .bus_publication import ServiceOrigin
 from .repo import Checkout
-from .threads import ServiceThreadExecution, Thread
+from .threads import ServiceThread
 from .thread_identity import ServiceThreadRole
 
 if TYPE_CHECKING:
@@ -25,11 +25,9 @@ class ServiceSender:
         does not prove a retained sender is still admitted or executable.
         """
         registry.declare(
-            Thread(
+            ServiceThread(
                 cls.sender,
                 frozenset(),
                 Checkout(registry.store.path.parent),
-                role=ServiceThreadRole,
-                execution=ServiceThreadExecution,
-            )
+                role=ServiceThreadRole)
         )

@@ -4,13 +4,13 @@ from pathlib import Path
 from agent_comms.repo import Checkout
 from agent_comms.peer_relevance import GoalContactRelevance
 from agent_comms.relationships import MutualThreadRelation, RelationRecord
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 def test_new_relation_reuses_owned_incident_and_counterpart_behavior(*, thread_registration):
-    first = Thread('first', frozenset(), Checkout(Path('/wt')), created_at=1)
-    second = Thread('second', frozenset(), Checkout(Path('/wt')), created_at=2)
-    replacement = Thread('second', frozenset(), Checkout(Path('/wt')), created_at=3)
+    first = NativeThread('first', frozenset(), Checkout(Path('/wt')), created_at=1)
+    second = NativeThread('second', frozenset(), Checkout(Path('/wt')), created_at=2)
+    replacement = NativeThread('second', frozenset(), Checkout(Path('/wt')), created_at=3)
 
     class ReviewRelation(MutualThreadRelation):
         relevance = GoalContactRelevance

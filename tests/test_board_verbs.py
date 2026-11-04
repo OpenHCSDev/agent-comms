@@ -10,7 +10,7 @@ import pytest
 
 from agent_comms.team import judge, order
 from agent_comms.errors import TodoError
-from agent_comms.threads import ForkExecution, ExternalThreadExecution, Thread
+from agent_comms.threads import ForkThread, ExternalThread
 from agent_comms.team.standing import DeliveryAwaitingJudgement
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.goal_actions import SetGoalAction
@@ -274,16 +274,15 @@ def test_a_verdict_on_exactly_the_delivered_head_answers_the_delivery(board_revi
 def test_independent_colleagues_may_review_without_rank_tags(board_review, reviewer):
     """Native and external colleagues share scope; no colleague has extra permission."""
     comms, request, _, _ = board_review
-    comms.registry.declare(Thread("peer", frozenset({"comms"}),
-                                  comms.registry.require("colleague").worktree,
-                                  execution=ExternalThreadExecution))
+    comms.registry.declare(ExternalThread("peer", frozenset({"comms"}),
+                                  comms.registry.require("colleague").worktree))
     NoHeadOrder().require_reviewer(comms.goals, request,
                                    comms.registry.require(reviewer).incarnation)
 
 
 def test_in_turn_review_uses_the_actual_bound_parent_not_a_second_independent_actor(board_review):
     comms, request, _, _ = board_review
-    child = comms.registry.register_child("review-child", "worker", ForkExecution,
+    child = comms.registry.register_child("review-child", "worker", ForkThread,
                                           comms.goals)
     with pytest.raises(ToolRefusedError):
         ThreadCaller(child.name).head_review_actor(comms, request, NoHeadOrder())

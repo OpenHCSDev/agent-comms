@@ -13,7 +13,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import TurnId
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.runtime_requests import ProjectRuntimeRequest
-from agent_comms.threads import ExternalThreadExecution, Thread
+from agent_comms.threads import ExternalThread, NativeThread
 from agent_comms.maintenance_barrier import (
     InstallingPhase, MaintenanceHeldError, MaintenanceOperator, PausedPhase,
 )
@@ -30,10 +30,9 @@ def test_cli_worktree_edit_preserves_live_external_owner(tmp_path):
     comms = wire(tmp_path / 'wire')
     Bus.install(Bus.path_in(comms.root))
     identity = ProcessIdentity.capture(os.getpid())
-    original = comms.registry.declare(Thread(
+    original = comms.registry.declare(ExternalThread(
         'bridge', frozenset(), Checkout(tmp_path / 'old'),
-        process_identity=identity, execution=ExternalThreadExecution,
-    ))
+        process_identity=identity))
     before = comms.registry.snapshot()
     result = subprocess.run(
         (sys.executable, '-m', 'agent_comms.cli', '--root', str(comms.root),
@@ -60,9 +59,8 @@ def test_cli_worktree_edit_preserves_live_external_owner(tmp_path):
 def test_bridge_cannot_write_the_registry_during_maintenance(tmp_path, phases):
     comms = wire(tmp_path)
     registry = comms.registry
-    registry.declare(Thread(
-        'bridge', frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution,
-    ))
+    registry.declare(ExternalThread(
+        'bridge', frozenset(), Checkout(tmp_path)))
     gate = comms.owners.maintenance
     process = ProcessIdentity.capture(os.getpid())
     with pytest.raises(MaintenanceHeldError):
@@ -87,7 +85,7 @@ def test_concurrent_starters_reserve_one_current_owner(tmp_path):
     from contextlib import ExitStack
 
     registry = wire(tmp_path).registry
-    original = registry.declare(Thread("owner", frozenset(), Checkout(tmp_path)))
+    original = registry.declare(NativeThread("owner", frozenset(), Checkout(tmp_path)))
     title = GivenThreadText("metadata changed during launch preparation")
     registry.register(replace(original, title=title))
     before = registry.snapshot()
@@ -150,7 +148,7 @@ def test_claim_attach_and_reload_preserve_the_captured_process(tmp_path):
 def test_same_pid_different_birth_advances_both_authority_domains(tmp_path):
     comms = wire(tmp_path)
     identity = ProcessIdentity.capture(os.getpid())
-    owner = Thread('owner', frozenset(), Checkout(tmp_path), process_identity=identity)
+    owner = NativeThread('owner', frozenset(), Checkout(tmp_path), process_identity=identity)
     comms.registry.declare(owner)
     before = comms.registry.snapshot()
     stale = replace(identity, start_time=identity.start_time + 1)
@@ -170,7 +168,7 @@ def test_same_pid_different_birth_advances_both_authority_domains(tmp_path):
 
 def test_project_request_entry_retains_original_birth_across_rename(tmp_path):
     comms = wire(tmp_path)
-    owner = Thread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+    owner = NativeThread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(owner)
     request = ProjectRuntimeRequest.for_native(
         comms.registry.snapshot(), comms.registry.require("owner")
@@ -198,7 +196,7 @@ def test_active_executor_cannot_be_replaced_by_same_pid_different_birth(tmp_path
     with pytest.raises(RelationViolationError):
         comms.registry.declare(replace(owner, process_identity=stale))
     assert comms.registry.require(owner.name) == leased
-    comms.registry.declare(Thread('owner', frozenset(), Checkout(tmp_path), title=GivenThreadText('metadata')))
+    comms.registry.declare(NativeThread('owner', frozenset(), Checkout(tmp_path), title=GivenThreadText('metadata')))
     current = comms.registry.require(owner.name)
     assert current.process_identity == identity and current.turn_record == leased.turn_record
     assert current.turn_record.read().id == 'e99af36cdfcffbc191cce98c5d771afb'

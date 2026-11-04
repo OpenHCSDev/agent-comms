@@ -16,7 +16,7 @@ from .read_basis import DisplayViewer, OperatorOutcomes, ReadAuthority
 from .registration import Registration
 from .notification_evidence import OutcomeViewer, OwnerOutcomes
 from .presentation import SentMessageSummary, ThreadRecord
-from .threads import ForkExecution, Thread
+from .threads import ForkThread, Thread
 from .thread_identity import ThreadIncarnation
 from .tool_result import ToolResult
 from .turn_phase import IdlePhase
@@ -184,7 +184,7 @@ class SubagentCaller(ThreadCaller):
         already archived has already ended."""
         if comms.registry.status(self.name).archived:
             return
-        comms.registry.require(self.name).execution.require_subagent()
+        comms.registry.require(self.name).require_subagent()
         self.leaving(comms)
         comms.agents.enter_phase(self.name, IdlePhase())
         comms.registry.unregister(self.name)
@@ -230,7 +230,7 @@ class ForkCaller(ActsForTeam, SubagentCaller):
         """The SubagentStart hook declares the fork under the session that spawned it, in its
         own process, before the fork's first call; the child inherits that parent's tags.
         A connector grant names its holder, so a fork of another parent is refused."""
-        comms.registry.register_child(self.name, parent, ForkExecution, comms.goals)
+        comms.registry.register_child(self.name, parent, ForkThread, comms.goals)
 
     def spawner(self, comms: Comms) -> str:
         """The parent the hook registered; before it has, the bus thread the calling Claude

@@ -5,8 +5,9 @@ one thread recorded as the team's lead. The project is now ``team_project`` with
 repositories, the teammates' channel tag is ``teammates`` and a fork runs a plain
 ``fork_execution``. The version-2 decoder refuses version 1, so this step stamps every
 registry version 2, moving a stored project to its new key without its lead and renaming those
-tags as TeamVocabulary renames them everywhere else. Delete this step after the live
-installation.
+tags as TeamVocabulary renames them everywhere else. A thread is now its execution, so every
+row names it: a native row, which omitted the default, is stamped native. Delete this step
+after the live installation.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceHolde
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.registry_store import RegistryStore
+from agent_comms.threads import NativeThread, Thread
 
 
 class TeamProjectLead(Carry):
@@ -46,6 +48,11 @@ class TeamProjectLead(Carry):
             project.pop(self.retired_field)
             document[FieldCodec.record_key(RegistryDocument, "team_project")] = project
         document[version] = RegistryDocument.version
+        rows = FieldCodec.record_key(RegistryDocument, "threads")
+        threads = FieldCodec.decode(dict[str, dict[str, JsonValue]], document[rows])
+        for row in threads.values():
+            row.setdefault(Thread.family_discriminator, NativeThread.declared_name)
+        document[rows] = threads
         registry = RegistryStore(path)
         if apply:
             MaintenanceBarrier(path).read().require_held_by(

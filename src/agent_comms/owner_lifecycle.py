@@ -189,7 +189,7 @@ class OwnerLifecycle:
         """Bind only this calling process; stored birth time is signal authority."""
         identity = ProcessIdentity.capture(os.getpid())
         thread = self.registry.require(name)
-        thread.execution.require_native()
+        thread.require_native()
         thread.role.require_executable(
             RelationViolationError("A human participant cannot become an executor.")
         )
@@ -232,7 +232,7 @@ class OwnerLifecycle:
         agent_args: LaunchArguments = InheritedArguments(),
     ) -> Thread:
         thread = self.registry.require(name)
-        thread.execution.require_native()
+        thread.require_native()
         refusal = RelationViolationError("Explicit start is required for a stopped agent.")
         thread.role.require_executable(refusal)
         self.registry.status(thread.name).require_active(str(refusal))
@@ -252,7 +252,7 @@ class OwnerLifecycle:
         with ExitStack() as launches:
             for name in names:
                 thread = self.registry.require(name)
-                thread.execution.require_native()
+                thread.require_native()
                 status = self.registry.status(thread.name)
                 refusal = RelationViolationError("Only visible agent threads can be started.")
                 thread.role.require_executable(refusal)

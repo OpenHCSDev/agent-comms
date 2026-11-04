@@ -17,7 +17,7 @@ from agent_comms.messages import AlertKind, InfoKind, Message, NoticeRole
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.private_path import FileRevision
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.turn_input_source import NoTurnAcceptance
 from bus_history import read_history
 from conftest import publish_initial
@@ -162,7 +162,7 @@ async def test_original_turn_keeps_cleanup_lease_after_owner_fence(
 
 def _covered_session(tmp_path):
     comms, agent, root_id, _ = _session(tmp_path)
-    other = Thread('alpha', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+    other = NativeThread('alpha', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(other)
     with Coordination(comms.root / "coordination.sqlite3") as store:
         store.participants.register(

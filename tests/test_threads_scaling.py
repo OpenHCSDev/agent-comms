@@ -2,13 +2,12 @@
 
 from agent_comms.repo import Checkout
 from agent_comms.channel_targets import CommandTarget
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 def test_rename_alias_and_real_thread_named_broadcast_match_existing_scope(wired):
-    wired.registry.declare(Thread(
-        name="broadcast", tags=frozenset(), worktree=Checkout(wired.root / "broadcast"),
-    ))
+    wired.registry.declare(NativeThread(
+        name="broadcast", tags=frozenset(), worktree=Checkout(wired.root / "broadcast")))
     wired.messaging.send("PR111", "broadcast", "direct message to the named thread")
     wired.messaging.send("fixer", "broadcast", "second sender")
     wired.messaging.send("PR111", "fixer", "old direct")

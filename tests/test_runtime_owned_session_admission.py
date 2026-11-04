@@ -22,7 +22,7 @@ from agent_comms.owner_protocol import OwnerFailure, OwnerLine
 from agent_comms.private_path import PrivateSocketRole
 from agent_comms.owner_connection import socket_path
 from agent_comms.runtime_requests import GoalHistoryRuntimeRequest
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 @pytest.mark.skipif(os.name == "nt", reason="original Unix owner socket")
@@ -91,7 +91,7 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
         assert not (root / "native-sessions").exists()
         assert not (root / "input_dispositions.sqlite3").exists()
 
-        retired = Thread('retired-owner', frozenset(), Checkout(project), process_identity=ProcessIdentity.capture(os.getpid()))
+        retired = NativeThread('retired-owner', frozenset(), Checkout(project), process_identity=ProcessIdentity.capture(os.getpid()))
         comms.registry.declare(retired)
         await owner.sessions.bind_owned(retired, AcpSessionId("retired-acp-session"))
         await asyncio.to_thread(comms.owners.stop, retired.name)

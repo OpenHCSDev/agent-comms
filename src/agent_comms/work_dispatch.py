@@ -30,7 +30,7 @@ from .storage_projection import StorageProjection
 from .thread_status import StoppedThreadStatus
 from .session_file import RegistrySessionLocation
 
-from .threads import Thread
+from .threads import NativeThread, Thread
 from .todos import PendingProblemOrder
 
 if TYPE_CHECKING:
@@ -61,13 +61,12 @@ class WorkDispatch:
         name = self.name
         storage = comms.registry.storage_rule
         checkout = storage.order_checkout(storage.initial_roots(name), self.action.problem)
-        candidate = Thread(
+        candidate = NativeThread(
             name,
             frozenset(),
             Checkout(checkout),
             model=defaults.model,
-            thinking_level=defaults.thinking_level,
-        )
+            thinking_level=defaults.thinking_level)
         self.action.require_ready(GoalActionContext(comms.goals, candidate))
         comms.registry.require_declaration_available(candidate, StoppedThreadStatus())
         repository = Repo.of(self.action.order.check.directory)

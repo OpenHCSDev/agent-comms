@@ -17,7 +17,7 @@ from agent_comms.nominal.field_codec import AbsolutePathText, Argument, PathText
 from agent_comms.harness_install import Harness
 from agent_comms.installer.interpreter_operation import RuntimeProbe, TargetProbe
 from agent_comms.registry_document import TeamProject
-from agent_comms.threads import ExternalThreadExecution, Thread
+from agent_comms.threads import ExternalThread
 from agent_comms.repo import Checkout
 
 
@@ -75,12 +75,10 @@ class HarnessInstallation:
         registered = tuple(name for name in harness.bus_threads if not names.taken(name))
         for name in registered:
             ctx.registry.declare(
-                Thread(
+                ExternalThread(
                     name=name,
                     tags=frozenset(),
-                    worktree=Checkout(self.project),
-                    execution=ExternalThreadExecution,
-                )
+                    worktree=Checkout(self.project))
             )
         return registered
 

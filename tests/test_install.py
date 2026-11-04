@@ -11,7 +11,7 @@ from pathlib import Path
 
 from agent_comms.locked_store import LiveFilesRequest
 from agent_comms.nominal.field_codec import TurnId
-from agent_comms.threads import ParkedThreadWorkState
+from agent_comms.threads import ParkedThreadWorkState, NativeThread
 
 from agent_comms.active_route import ActiveRoute, read_active_route, route_new_bus
 from agent_comms.child_process import NoProcess, ProcessIdentity
@@ -26,7 +26,6 @@ from agent_comms.installer.carry import CarryChain
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.locked_store import BusFile, RegistryFile, RootFile, SQLiteFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
-from agent_comms.threads import Thread
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -36,7 +35,7 @@ def bus(directory: Path) -> tuple[Path, RecordedBusIdentity]:
     root = directory / "wire"
     comms = prepare_native_comms(wire(root))
     comms.channels.create_tag("team")
-    comms.registry.declare(Thread("worker", frozenset({"team"}), Checkout(directory)))
+    comms.registry.declare(NativeThread("worker", frozenset({"team"}), Checkout(directory)))
     comms.messaging.send("worker", "#team", "hello")
     return root, RecordedBusIdentity.capture(comms.bus.bus.path)
 
@@ -205,8 +204,8 @@ def test_an_install_without_flags_keeps_native_team_and_parked_state(
     root = (private_directory / "wire").resolve()
     root.mkdir(mode=0o700)
     comms = wire(root)
-    comms.registry.declare(Thread("colleague", frozenset(), Checkout(private_directory)))
-    comms.registry.declare(Thread(
+    comms.registry.declare(NativeThread("colleague", frozenset(), Checkout(private_directory)))
+    comms.registry.declare(NativeThread(
         "parked-teammate", frozenset(), Checkout(private_directory)))
     comms.registry.set_work_state("parked-teammate", ParkedThreadWorkState())
     recorded = RegisteredTeamProject(())
@@ -251,7 +250,7 @@ def test_practice_copy_takes_turn_files_but_no_live_process(private_directory):
     Bus.install(Bus.path_in(root))
     comms = wire(root)
     (root / "storage.json").write_text(json.dumps({"floor_gib": 0}))
-    comms.registry.declare(Thread(
+    comms.registry.declare(NativeThread(
         "owner", frozenset(), Checkout(root), process_identity=ProcessIdentity.capture(os.getpid())))
     lease = comms.agents.begin_turn("owner", TurnId('9b473845f684444f80a26586ae298d2b')).turn_lease
     turn = comms.registry.require("owner").turn_record.path

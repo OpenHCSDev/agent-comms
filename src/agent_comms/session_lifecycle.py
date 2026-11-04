@@ -201,7 +201,7 @@ class SessionLifecycle:
 
     def validated_thread(self, cwd: Checkout, session_id: AcpSessionId) -> Thread:
         thread = self.comms.registry.require(session_id)
-        thread.execution.require_native()
+        thread.require_native()
         if not thread.contains_worktree(cwd, self.comms.registry.storage_rule):
             raise Refused.invalid_params(
                 {"reason": "The saved thread belongs to a different working directory."}

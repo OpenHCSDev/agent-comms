@@ -15,14 +15,14 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.goal_states import ActiveGoal
 from goal_owner_fixture import canonical_goal_wire
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.goal_scope import OneGoal
 
 
 def test_owner_pause_refuses_review_and_active_precondition(tmp_path):
     comms = canonical_goal_wire(tmp_path / "wire")
     for name in ("worker", "peer"):
-        comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
+        comms.registry.declare(NativeThread(name, frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     original = comms.goals.update_goal("worker", SetGoalAction(text="Original objective"))
     paused = comms.goals.update_goal(
         "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(original.id))),

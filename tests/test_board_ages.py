@@ -8,13 +8,13 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Checkout
 from agent_comms.task_attachments.team_pings import RulePing, TeamUpdate, TeamUpdateNotice
 from agent_comms.team.standing import TeamDeaf
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 def test_a_teammate_with_no_packet_inherits_the_boards_earliest_start(tmp_path):
     comms = wire(tmp_path)
     for name, born in (("colleague", 1.0), ("peer", 2.0), ("newcomer", 3.0)):
-        comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path), created_at=born))
+        comms.registry.declare(NativeThread(name, frozenset(), Checkout(tmp_path), created_at=born))
     colleague, peer, newcomer = (comms.registry.require(name).incarnation
                             for name in ("colleague", "peer", "newcomer"))
     rule = TeamDeaf(900.0, colleague.require_recorded())

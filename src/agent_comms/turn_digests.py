@@ -214,7 +214,7 @@ class ThreadRead[Result](ConversationPreparation):
     thread: Thread
 
     def read(self) -> Result:
-        return self.thread.execution.prepare_conversation(self)
+        return self.thread.prepare_conversation(self)
 
 
 @dataclass(frozen=True)

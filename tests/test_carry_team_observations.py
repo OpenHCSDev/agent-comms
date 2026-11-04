@@ -20,7 +20,7 @@ from agent_comms.task_attachments.team_pings import (
     TeamUpdateNotice, TeamUpdate, TeamUpdateStore,
 )
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from cutover.carry_team_observations import TeamObservations
 from cutover.carry_team_update_lines import TeamUpdateLines
 from cutover.carry_rule_ping_types import RulePingTypes
@@ -28,10 +28,9 @@ from cutover.carry_rule_ping_types import RulePingTypes
 
 @pytest.fixture
 def carry_bus(comms: Comms, tmp_path: Path) -> Comms:
-    comms.registry.register(Thread(
+    comms.registry.register(NativeThread(
         name="carry-colleague", tags=frozenset(), worktree=Checkout(tmp_path),
-        heartbeat_delivery=OnHeartbeatDelivery,
-    ))
+        heartbeat_delivery=OnHeartbeatDelivery))
     colleague = comms.registry.require("carry-colleague").incarnation
     now = time.time()
     original = TeamUpdateNotice(colleague, ())

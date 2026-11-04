@@ -30,7 +30,7 @@ def prime_threads(prime: type[Prime], names: Sequence[str]) -> None:
     with client_wire() as comms:
         for name in names:
             thread = comms.registry.require(name)
-            thread.execution.require_native()
+            thread.require_native()
             PiRedeal.of(comms, thread).deal_from(prime.reader, prime.trigger())
             print(f"{name}: dealt {prime.__name__}")
 

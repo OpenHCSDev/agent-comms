@@ -113,7 +113,7 @@ class Edit(EditCall):
     def unjudged(cls, comms: Comms, teammate: str) -> list[Edit]:
         """The edits awaiting judgement on the board ``teammate`` reads; a fork's is its parent's."""
         thread = comms.registry.require(teammate)
-        board = thread.execution.teammate(thread)
+        board = thread.teammate()
         reply = CommsUnjudgedTool.invoke(comms, {'thread': board}, caller=ThreadCaller(board))
         return list(FieldCodec.decode(tuple[cls, ...], reply['edits']))
 

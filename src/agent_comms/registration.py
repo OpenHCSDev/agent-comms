@@ -21,7 +21,7 @@ from .registry_document import RegistryDocument, RegistrySnapshot
 from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from .routing import NoTurnRouting, Routing
 from .storage_rules import StorageRule
-from .threads import ExternalThreadExecution, SubagentExecution, Thread
+from .threads import ExternalThread, SubagentThread, Thread, NativeThread
 from .thread_identity import GenerationCounter, UserThreadRole
 from .thread_status import (
     ConnectedThreadStatus,
@@ -153,7 +153,7 @@ class Registration:
         """Allocate one human identity, rechecking the acquired namespace."""
         with self.store.editing() as edit:
             def create() -> Thread:
-                thread = Thread(edit.document.claim_name("user"), frozenset(), worktree,
+                thread = NativeThread(edit.document.claim_name("user"), frozenset(), worktree,
                                 role=UserThreadRole)
                 return self._commit_registration(edit, edit.document.prepare_registration(
                     thread, _DEFAULT_PRESENCE, new_owner=False,
@@ -165,7 +165,7 @@ class Registration:
         """Publish a prepared fork only while its original parent's source is current."""
         with self.store.editing() as edit:
             current = edit.document.require(original.name)
-            current.execution.require_native()
+            current.require_native()
             current.runtime.require_forkable()
             child = prepare(current)
             if (current.incarnation, current.runtime) != (original.incarnation, original.runtime):
@@ -176,7 +176,7 @@ class Registration:
             return self._declare_in(edit, child, _DEFAULT_PRESENCE)
 
     def register_child(
-        self, name: str, parent_name: str, execution: type[SubagentExecution], goals: Goals,
+        self, name: str, parent_name: str, execution: type[SubagentThread], goals: Goals,
     ) -> Thread:
         """Declare or resume one named child of `parent_name` under the registry's lock."""
         with self.store.editing() as edit:
@@ -189,11 +189,11 @@ class Registration:
             parent = edit.document.require(parent_name)
             name = next(slot for slot in role.slot_names(parent.name)
                         if not edit.document.taken(slot) or edit.document.status(slot).vacant)
-            return self._child_in(edit, name, parent, SubagentExecution, goals)
+            return self._child_in(edit, name, parent, SubagentThread, goals)
 
     def _child_in(
         self, edit: RegistryEdit, name: str, parent: Thread,
-        execution: type[SubagentExecution], goals: Goals,
+        execution: type[SubagentThread], goals: Goals,
     ) -> Thread:
         if edit.document.canonical_name(name) != name:
             raise RelationViolationError(f"Child thread {name!r} is an alias.")
@@ -203,10 +203,9 @@ class Registration:
             if not existing.parent.named(parent.name):
                 raise RelationViolationError(f"Thread {name!r} is not a child of {parent.name!r}.")
             return self._declare_in(edit, existing, _DEFAULT_PRESENCE)
-        child = execution.child_of(parent, Thread(name, frozenset(), parent.worktree,
+        child = execution.child_of(parent, execution(name, frozenset(), parent.worktree,
             parent=ForkedParent(parent.name), model=parent.model,
-            thinking_level=parent.thinking_level, service_tier=parent.service_tier,
-            execution=execution))
+            thinking_level=parent.thinking_level, service_tier=parent.service_tier))
         return self._declare_in(edit, child, _DEFAULT_PRESENCE,
             prepare_goal=execution.child_goal(goals, parent))
 
@@ -218,10 +217,9 @@ class Registration:
             if edit.document.taken(name):
                 return self._declare_in(edit, edit.document.require(name), _DEFAULT_PRESENCE)
             source = edit.document.require(channel_source)
-            thread = Thread(
+            thread = ExternalThread(
                 name, DeclaredTag.for_child(source.tags), worktree,
-                process_identity=process, execution=ExternalThreadExecution,
-            )
+                process_identity=process)
             return self._declare_in(edit, thread, _DEFAULT_PRESENCE)
 
     def reserve_owner(self, edit: RegistryEdit, original: Thread, process: ProcessIdentity) -> RegistryOwner:
@@ -251,7 +249,7 @@ class Registration:
         """The CLI bridge owns its registered endpoint until that same process leaves."""
         with self.store.editing() as edit:
             thread = edit.document.require(name)
-            thread.execution.require_external()
+            thread.require_external()
             if thread.process_alive and thread.process_identity != process:
                 raise RelationViolationError("Another live process owns this CLI endpoint.")
             bound = replace(thread, process_identity=process)

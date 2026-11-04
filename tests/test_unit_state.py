@@ -25,7 +25,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import ReviewTimerUp
 from agent_comms.repo import Checkout, GitCommandError, Repo
 from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.threads import ExternalThreadExecution, ForkExecution
+from agent_comms.threads import ExternalThread, ForkThread
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.thread_text import ForkedParent
 from agent_comms.task_attachments.team_pings import TeamUpdate, TeammatePing
@@ -217,7 +217,7 @@ def test_teammate_state_family_uses_real_records(held_bus, tmp_path, request, me
 
 def test_started_turn_on_delivered_order_is_moving_not_stalled(held_bus):
     turn_turn_id = NativeTurnId('turn')
-    worker = replace(held_bus.registry.require("worker"), execution=ExternalThreadExecution)
+    worker = held_bus.registry.require("worker").as_member(ExternalThread)
     held_bus.registry.register(worker)
     ExternalTranscript(held_bus.root, worker.incarnation).finish(
         turn_id=turn_turn_id,
@@ -267,7 +267,7 @@ def test_a_stopped_child_holding_no_order_gets_no_card(held_bus):
 
 
 def test_fork_gets_no_teammate_card(held_bus):
-    fork = held_bus.registry.register_child("judge-fork", "colleague", ForkExecution, held_bus.goals)
+    fork = held_bus.registry.register_child("judge-fork", "colleague", ForkThread, held_bus.goals)
     with LaunchRoot.from_path(held_bus.root).selected():
         states = TeammateState.current(
             held_bus, capture_frame(held_bus, ProgressRead()))

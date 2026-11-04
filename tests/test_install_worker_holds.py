@@ -32,7 +32,7 @@ from agent_comms.installer.upgrade import Stack
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.repo import Checkout
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceClaimHolder
 
 
@@ -51,7 +51,7 @@ def test_owner_actions_decode_in_the_selected_worker(comms, command, source_repo
 def test_cli_probes_share_worker_and_keep_roots_and_refusals_separate(
     comms: Comms, tmp_path: Path,
 ) -> None:
-    comms.registry.declare(Thread("only-first-root", frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(NativeThread("only-first-root", frozenset(), Checkout(tmp_path)))
     runtime = LaunchRuntime.running()
     with InstallCommands() as commands:
         stack = Stack(Path(__file__).resolve().parents[1], commands, runtime=runtime)

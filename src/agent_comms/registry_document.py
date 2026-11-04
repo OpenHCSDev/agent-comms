@@ -778,7 +778,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
     def prepare_registration(
         self, thread: Thread, status: ThreadStatus, *, new_owner: bool
     ) -> RegistrationChange:
-        status = thread.execution.registered_status(thread, status)
+        status = thread.registered_status(status)
         if thread.name in self.aliases:
             raise RelationViolationError(
                 f"Thread name {thread.name!r} is a permanent alias and cannot be reused."
@@ -887,8 +887,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
             raise OwnerChangedBeforeFenceRefusal()
         if self.claims.generations[current.name] != expected_claimed_generation:
             raise OwnerGenerationChangedRefusal()
-        self.set_status(expected.name, expected.execution.registered_status(
-            expected, StoppingThreadStatus()))
+        self.set_status(expected.name, expected.registered_status(StoppingThreadStatus()))
         self.advance_claim(expected.name)
         self.owners.advance(expected.name)
         self.threads[expected.name] = current.without_turn()
@@ -897,7 +896,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
     def unregister(self, name: str) -> None:
         """Stopped; the execution decides whether the row keeps its process binding."""
         thread = self._withdraw(name, StoppedThreadStatus())
-        self.threads[thread.name] = thread.execution.withdrawn(thread)
+        self.threads[thread.name] = thread.withdrawn()
 
     def fence_owner(self, name: str) -> None:
         """Refuse new work while the host completes the session; the binding stays."""
@@ -908,7 +907,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         self.status(name).require_mutable(name)
         self.status(name).withdraw_owner(self.owners, name)
         thread = self.threads[name]
-        self.set_status(name, thread.execution.registered_status(thread, status))
+        self.set_status(name, thread.registered_status(status))
         self.advance_claim(name)
         self.threads[name] = thread.without_turn()
         return self.threads[name]
@@ -1239,7 +1238,7 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
     def owner_binding(self, name: str) -> ThreadOwnerBinding:
         canonical = self.canonical_name(name)
         thread = self.threads[canonical]
-        return thread.execution.owner_binding(self, thread)
+        return thread.owner_binding(self)
 
     def require_owner_process(self, owner: OwnerIdentity, process: ProcessIdentity) -> None:
         """A read attachment retains its owner lease across startup, not across restart."""

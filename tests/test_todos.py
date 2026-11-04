@@ -46,7 +46,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registration import Registration
 from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import StorageRule
-from agent_comms.threads import ExternalThreadExecution, Thread
+from agent_comms.threads import ExternalThread, Thread, NativeThread
 from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
@@ -98,13 +98,13 @@ pytest_plugins = ("test_holder_standing_rules", "test_unowned_checkout_work", "t
 def thread(name: str, root: Path, created: float) -> Thread:
     """A registered thread: work is assigned only to a holder the registry knows."""
     registration = Registration(Path(root) / "registry.json")
-    registration.register(Thread(name, frozenset(), Checkout(root), created_at=created))
+    registration.register(NativeThread(name, frozenset(), Checkout(root), created_at=created))
     return registration.require(name)
 
 
 def other_birth(name: str, root: Path, created: float) -> Thread:
     """The same name born at another time: a distinct identity the registry never holds."""
-    return Thread(name, frozenset(), Checkout(root), created_at=created)
+    return NativeThread(name, frozenset(), Checkout(root), created_at=created)
 
 
 def order(source: SourceRepository):
@@ -427,7 +427,7 @@ def pr_team(tmp_path, monkeypatch, proof_build_checkouts, durable_home, github_c
     for row, body in requests:
         github_cli.put(source.github, row, body)
     Bus.install(Bus.path_in(tmp_path))
-    colleague = Thread(
+    colleague = NativeThread(
         'colleague', frozenset(), Checkout(source.checkout), created_at=1.0)
     # The volume is the tmp_path HOME; the machine's floor belongs to the live bus's rule.
     rule = StorageRule(checkout_base=source.checkout.parent, floor_gib=0)
@@ -535,8 +535,8 @@ def released_published_orders(pr_team, github_cli):
         source.git(source.checkout, 'worktree', 'add', '-q', '-b', name, str(checkout))
         source.git(checkout, 'commit', '-q', '--allow-empty', '-m', 'Published work')
         source.git(checkout, 'push', '-q', '-u', 'origin', name)
-        declared[name] = c.registry.declare(Thread(
-            name, frozenset(), Checkout(checkout), execution=ExternalThreadExecution,
+        declared[name] = c.registry.declare(ExternalThread(
+            name, frozenset(), Checkout(checkout),
             process_identity=ProcessIdentity.capture(os.getpid())))
         c.transcripts.external(name).finish(
             turn_id=NativeTurnId(name), item_id=NativeItemId('idle'), events=(AssistantTranscript(
@@ -725,7 +725,7 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_team, monkeypatch):
         c.registry.register(replace(colleague, process_identity=ProcessIdentity.capture(os.getpid())))
         worker_checkout = ctx.root.parent / "worker-checkout"
         source.git(source.checkout, "worktree", "add", "-q", "--detach", str(worker_checkout))
-        worker = Thread("worker", frozenset(), Checkout(worker_checkout), created_at=2.0)
+        worker = NativeThread("worker", frozenset(), Checkout(worker_checkout), created_at=2.0)
         c.registry.register(worker)
         original = adopt_pr(ctx, pr_order(ctx, "P1", ApplicationOrderRun(
             'Read the copied board and confirm the application order remains assigned',

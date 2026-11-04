@@ -15,7 +15,7 @@ from agent_comms.controller import SessionUpdateSink
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.owner_connection import NoControllerToken
 from agent_comms.repo import Checkout
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from conftest import installed_comms
 
 
@@ -106,7 +106,7 @@ async def test_close_retires_one_real_subscription_and_permission(tmp_path, monk
 @pytest.mark.asyncio
 async def test_close_joins_unsent_request_and_capability_requires_claim(tmp_path):
     comms = wire(tmp_path / "w")
-    comms.registry.declare(Thread('cold', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.registry.declare(NativeThread('cold', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     client = CommsClient(comms, auto_wake=False, use_unstable_protocol=True)
     identifier = AcpSessionId("cold")
     proxy = client._create_runtime_proxy(comms.registry.require("cold"), identifier)

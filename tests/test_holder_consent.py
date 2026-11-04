@@ -410,7 +410,7 @@ def test_automatic_dispatch_uses_goal_owned_availability(fork_bus, state, availa
     thread = comms.registry.require("worker")
     goal = Goal(text="Independent work", id=GoalId.mint(), published_seq=0, state=state)
     thread = replace(thread, goal=goal)
-    assert thread.execution.order_candidates(thread) == ((thread,) if available else ())
+    assert thread.order_candidates() == ((thread,) if available else ())
     actor = comms.registry.require("colleague").acting_identity
     if available:
         thread.goal.require_work(actor, thread)
@@ -418,4 +418,4 @@ def test_automatic_dispatch_uses_goal_owned_availability(fork_bus, state, availa
         with pytest.raises(ValueError):
             thread.goal.require_work(actor, thread)
     free = replace(thread, goal=NoGoal())
-    assert free.execution.order_candidates(free) == (free,)
+    assert free.order_candidates() == (free,)

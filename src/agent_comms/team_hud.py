@@ -482,7 +482,7 @@ class TeamFrame(TeamFrameFile, JsonDocument[TeamHud]):
         reads the board of the teammate whose turn it works inside."""
         thread = comms.registry.require(recipient)
         owner = comms.registry.require(
-            thread.execution.teammate(thread)).incarnation.require_recorded()
+            thread.teammate()).incarnation.require_recorded()
         passes = ServicePassStore.at(comms.root).read()
         health = ServiceReading().with_services(passes, owner)
         hud = cls(cls.path_in(comms.root, lookup=str(owner.lookup)), reading=health).read()

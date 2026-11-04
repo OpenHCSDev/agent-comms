@@ -11,7 +11,7 @@ from agent_comms.private_registry_guard import PrivateRegistryGuard
 from agent_comms.registry_document import NoTeamProject, RegisteredTeamProject
 from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Checkout
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from conftest import maintenance_held
 
 
@@ -21,6 +21,9 @@ def version_one(root, *, lead: bool) -> None:
     path = RegistryFile.path_in(root)
     document = json.loads(path.read_text())
     document["version"] = 1
+    for row in document["threads"].values():  # version 1 omitted the native default
+        if row.pop("execution") != "native":
+            raise AssertionError("the fixture declares only native threads")
     project = document.pop("team_project", None)
     if lead:
         document["commander_project"] = {**project, "commander": {"name": "lead", "created_at": 1.0}}
@@ -36,7 +39,7 @@ def test_carry_stamps_version_two_and_the_project_stays_the_teams(private_direct
     tmp_path = private_directory
     comms = wire(tmp_path)
     comms.registry.store.prepare_native_root()
-    comms.registry.declare(Thread("worker", frozenset(), Checkout(tmp_path)))  # a stored registry
+    comms.registry.declare(NativeThread("worker", frozenset(), Checkout(tmp_path)))  # a stored registry
     comms.registry.set_team_project(project)
     version_one(tmp_path, lead=lead)
     path = RegistryFile.path_in(tmp_path)
@@ -49,4 +52,5 @@ def test_carry_stamps_version_two_and_the_project_stays_the_teams(private_direct
             written.relative_to(tmp_path)
             for written in (path, PrivateRegistryGuard.path_in(tmp_path)))
     assert wire(tmp_path).registry.snapshot().team_project == project
+    assert wire(tmp_path).registry.require("worker").declared_name == NativeThread.declared_name
     assert step.carry(apply=False).changed == 0

@@ -16,7 +16,7 @@ from typing import NoReturn
 
 from agent_comms.display_order import ChannelSort, NameChannelSort, ThreadSort
 from agent_comms.presentation import CoordinationSnapshot, ThreadView
-from agent_comms.threads import ConversationPreparation, ThreadExecution
+from agent_comms.threads import ConversationPreparation
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.thread_model import ThreadModel
 from agent_comms.thread_presentation import SessionDisconnected, ThreadPresentationStatus
@@ -55,7 +55,6 @@ class ThreadRowModel:
     model: ThreadModel
     unread: UnreadPresentation
     active: bool
-    execution: type[ThreadExecution]
 
     @property
     def name(self) -> str:
@@ -73,7 +72,7 @@ class ThreadRowModel:
             person.thread.incarnation, presentation.title, presentation.label, presentation.summary,
             presentation.status, person.thread.model,
             unread,
-            bool(person.status.items_with(ActiveThreadPresence, person)), person.thread.execution,
+            bool(person.status.items_with(ActiveThreadPresence, person)),
         )
 
 
@@ -202,7 +201,7 @@ class SidebarModel:
     @staticmethod
     def derive(snapshot: CoordinationSnapshot) -> tuple[dict[str, ChannelRowModel], dict[str, ThreadRowModel]]:
         threads = {name: ThreadRowModel.of(
-            person, person.thread.execution.prepare_conversation(PersonUnread(person, snapshot)))
+            person, person.thread.prepare_conversation(PersonUnread(person, snapshot)))
             for name, person in snapshot.threads.items()}
         working = frozenset(name for name, row in threads.items() if row.status.working)
         channels = {name: ChannelRowModel.of(view, snapshot, working)

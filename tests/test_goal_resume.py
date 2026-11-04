@@ -29,7 +29,7 @@ from agent_comms.goals import Goal, NoGoal
 from agent_comms.goal_states import ActiveGoal, BlockedGoal, CompletedGoal
 from agent_comms.lifecycle_capability import Active
 from agent_comms.reported_turn import ReportedTurn
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.goal_scope import OneGoal
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import invoke_tool
@@ -41,7 +41,7 @@ invoke_tool = partial(invoke_tool, caller=ThreadCaller("owner"))
 
 def _goal(comms, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
-    comms.registry.declare(Thread(name='owner', tags=frozenset(), worktree=Checkout(Path('/wt'))))
+    comms.registry.declare(NativeThread(name='owner', tags=frozenset(), worktree=Checkout(Path('/wt'))))
     return invoke_tool(comms, "comms_set_goal", {"text": "keep working"})["goal"]
 
 
@@ -72,10 +72,9 @@ def test_same_id_resume_from_paused(comms, monkeypatch):
 ])
 def test_later_progress_or_decision_keeps_the_original_turn(comms, tmp_path, status, extra, expected):
     for name in ("owner", "dependency"):
-        comms.registry.declare(Thread(
+        comms.registry.declare(NativeThread(
             name, frozenset(), Checkout(tmp_path),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-        ))
+            process_identity=ProcessIdentity.capture(os.getpid())))
     goal = invoke_tool(comms, "comms_set_goal", {"text": "finish this"})["goal"]
     goal_id = FieldCodec.decode(GoalId, goal["id"])
     turn = TurnId('d7f9429f60abc2787fc3e9717054ea41')
@@ -107,7 +106,7 @@ def test_later_progress_or_decision_keeps_the_original_turn(comms, tmp_path, sta
 def test_each_new_goal_can_report_in_same_turn(comms, monkeypatch, tmp_path, first_status):
     monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
     comms.registry.declare(
-        Thread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+        NativeThread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     first = invoke_tool(comms, "comms_set_goal", {"text": "first"})["goal"]
     turn = TurnId('d7f9429f60abc2787fc3e9717054ea41')
@@ -182,10 +181,9 @@ def test_clearing_goal_releases_its_reserved_attempt(comms, monkeypatch):
 def test_authorized_retry_does_not_consume_standby_report(comms, monkeypatch, tmp_path):
     monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
     for name in ("owner", "dependency"):
-        comms.registry.declare(Thread(
+        comms.registry.declare(NativeThread(
             name, frozenset(), Checkout(tmp_path),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-        ))
+            process_identity=ProcessIdentity.capture(os.getpid())))
     started = invoke_tool(comms, "comms_set_goal", {"text": "finish after recovery"})["goal"]
     goal_id = FieldCodec.decode(GoalId, started["id"])
     store = comms.goals.open_goal_store()
@@ -312,7 +310,7 @@ def test_same_value_goal_transition_bumps_durable_revision(comms, monkeypatch):
 def test_exhausted_goal_revision_refuses_transition_without_write(comms):
     goal_id = GoalId.mint()
     comms.registry.declare(
-        Thread(name='owner', tags=frozenset(), worktree=Checkout(Path('/wt')), goal=Goal('work', goal_id,
+        NativeThread(name='owner', tags=frozenset(), worktree=Checkout(Path('/wt')), goal=Goal('work', goal_id,
             published_seq=0, revision=(1 << 63) - 1))
     )
     before = (comms.root / "registry.json").read_bytes()

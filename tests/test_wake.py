@@ -23,7 +23,7 @@ from agent_comms.messages import (
 )
 from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, MentionedPolicy
 from agent_comms.thread_identity import AgentThreadRole, ThreadRole, UserThreadRole
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.wake import (
     MessageControl,
     OrdinaryControl,
@@ -299,7 +299,7 @@ def test_exact_stored_channel_routes_no_wildcard_or_silence_inference(
 ) -> None:
     comms = installed_comms(tmp_path / "wire")
     for name in ("sender", "alpha", "beta"):
-        comms.registry.declare(Thread(name, frozenset({'team'}), Checkout(tmp_path)))
+        comms.registry.declare(NativeThread(name, frozenset({'team'}), Checkout(tmp_path)))
     channel = comms.messaging.send("sender", "#team", "channel note").message
     broadcast = comms.messaging.send("sender", "#all", "everyone please respond").message
     dm = comms.messaging.send("sender", "alpha", "direct note").message

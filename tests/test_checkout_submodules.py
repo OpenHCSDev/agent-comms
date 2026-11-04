@@ -25,7 +25,7 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import StorageRule
 from agent_comms.tool_denial import StorageDenied
 from agent_comms.thread_creation import RecordedCreationTime
-from agent_comms.threads import ExternalThreadExecution, NativeThreadExecution, Thread
+from agent_comms.threads import ExternalThread, NativeThread
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.todos import PendingProblemOrder, WithdrawTodo
 from cli_command import core, core_process
@@ -65,7 +65,7 @@ def repository(tmp_path, monkeypatch):
     return main
 
 
-@pytest.fixture(params=(NativeThreadExecution, ExternalThreadExecution), ids=("native", "external"))
+@pytest.fixture(params=(NativeThread, ExternalThread), ids=("native", "external"))
 def checkout_command_bus(repository, tmp_path, monkeypatch, installed_runtime, request):
     """Both registered execution kinds use the explicit caller, without native launch state."""
     prepare_checkout_goal_id = GoalId.mint()
@@ -84,9 +84,9 @@ def checkout_command_bus(repository, tmp_path, monkeypatch, installed_runtime, r
     StorageRule.path_in(root).write_text(FieldCodec.compact(FieldCodec.encode(rule)))
     Bus.install(Bus.path_in(root))
     comms = wire(root)
-    colleague = comms.registry.declare(Thread(
-        "colleague", frozenset(), Checkout(tmp_path / "colleague"), execution=ExternalThreadExecution))
-    worker = comms.registry.declare(Thread(
+    colleague = comms.registry.declare(ExternalThread(
+        "colleague", frozenset(), Checkout(tmp_path / "colleague")))
+    worker = comms.registry.declare(NativeThread(
         "worker", frozenset(), Checkout(repository), execution=request.param))
     comms.registry.set_team_project(RegisteredTeamProject((Repo(checkout=repository, github=identity),)))
     request_id = comms.goals.todos.add_request(colleague.incarnation, "Prepare the pinned checkout").id
@@ -114,7 +114,7 @@ def test_retired_checkout_remains_readable_without_qualifying_a_new_launch(tmp_p
     qualified = FieldCodec.decode(LaunchCheckout, str(project))
     assert qualified.path == project
     comms = wire(tmp_path / 'wire')
-    comms.registry.declare(Thread('retired', frozenset(), Checkout(qualified.path)))
+    comms.registry.declare(NativeThread('retired', frozenset(), Checkout(qualified.path)))
     before = comms.registry.store.path.read_bytes()
     shutil.rmtree(project)
     reopened = wire(comms.root).registry.require('retired')
@@ -160,9 +160,8 @@ def test_remote_goal_checkout_uses_the_existing_submodule_prepare_and_retire_own
     rule = StorageRule(checkout_base=tmp_path / 'checkouts',
                        scratch_base=tmp_path / 'scratch', floor_gib=0)
     StorageRule.path_in(comms.root).write_text(FieldCodec.compact(FieldCodec.encode(rule)))
-    worker = comms.registry.declare(Thread(
-        'remote-worker', frozenset(), Checkout(repository), execution=ExternalThreadExecution,
-    ))
+    worker = comms.registry.declare(ExternalThread(
+        'remote-worker', frozenset(), Checkout(repository)))
     goal = comms.goals.update_goal(worker.name, SetGoalAction(text='Prepare remote pinned source'))
     worker = comms.registry.require(worker.name)
     command = ('--root', str(comms.root), 'goal-checkout', '--from', worker.name)
@@ -593,8 +592,7 @@ def test_transfer_refuses_before_moving_retained_work(retained_transfer, refusal
     if refusal == 'occupied':
         destination.mkdir()
     elif refusal == 'foreign':
-        comms.registry.declare(Thread('another-owner', frozenset(), source,
-                                      execution=ExternalThreadExecution))
+        comms.registry.declare(ExternalThread('another-owner', frozenset(), source))
     else:
         current = comms.goals.todos.get('P1')
         stale = OrderCheckoutGrant(worker, current)
@@ -617,8 +615,8 @@ def test_transfer_refuses_current_reviewer_then_keeps_departed_reviewers_history
     retained_transfer, repository,
 ):
     comms, source, destination = retained_transfer
-    reviewer = comms.registry.declare(Thread(
-        'reviewer', frozenset(), source, execution=ExternalThreadExecution))
+    reviewer = comms.registry.declare(ExternalThread(
+        'reviewer', frozenset(), source))
     rule = comms.registry.storage_rule
     reviewer_path = rule.order_checkout(rule.roots_of(reviewer), 'P2')
     Checkout.add(repository, reviewer_path, NewBranchStart('reviewer', 'HEAD'))
@@ -655,8 +653,8 @@ def test_transfer_refuses_foreign_allocation_even_after_its_owner_changes_projec
     assert rule.owns_present_checkout(worker, source.path, RepositoryReads())
     worker_path = rule.order_checkout(rule.roots_of(worker), 'P2')
     Checkout.add(repository, worker_path, NewBranchStart('worker-next', 'HEAD'))
-    reviewer = comms.registry.declare(Thread(
-        'reviewer', frozenset(), source, execution=ExternalThreadExecution))
+    reviewer = comms.registry.declare(ExternalThread(
+        'reviewer', frozenset(), source))
     reviewer_path = rule.order_checkout(rule.roots_of(reviewer), 'P3')
     Checkout.add(repository, reviewer_path, NewBranchStart('reviewer-next', 'HEAD'))
     assert comms.threads.set_project(worker.incarnation, str(worker_path)).changed

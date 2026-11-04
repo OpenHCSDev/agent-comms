@@ -8,15 +8,15 @@ from agent_comms.repo import Checkout
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import BranchBehindMain
 from agent_comms.task_attachments.owner_notices import OrderNotice
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from conftest import declare_test_bus
 
 
 @pytest.fixture
 def branch_notice(comms: Comms, tmp_path: Path) -> tuple[Comms, BranchBehindMain]:
     declare_test_bus(comms, channels=("comms",), threads=(
-        Thread("colleague", frozenset({"comms"}), Checkout(tmp_path / "colleague")),
-        Thread("worker", frozenset({"comms"}), Checkout(tmp_path / "worker")),
+        NativeThread("colleague", frozenset({"comms"}), Checkout(tmp_path / "colleague")),
+        NativeThread("worker", frozenset({"comms"}), Checkout(tmp_path / "worker")),
     ))
     return comms, BranchBehindMain(
         problem="P1", holder=comms.registry.require("worker").incarnation,
@@ -59,9 +59,8 @@ def test_branch_notice_never_addresses_a_departed_holders_replacement(
     comms.registry.unregister("worker")
     comms.registry.remove("worker")
     if replacement:
-        comms.registry.declare(Thread(
-            "worker", old.tags, old.worktree, created_at=old.created_at + 1,
-        ))
+        comms.registry.declare(NativeThread(
+            "worker", old.tags, old.worktree, created_at=old.created_at + 1))
     before = comms.bus.bus.revision()
 
     notice.enforce(comms)

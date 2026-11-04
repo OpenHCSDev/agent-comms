@@ -62,7 +62,7 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.installer.probes.interpreter import InterpreterBuildProbe, RecordedInterpreterBuild
 from source_programs import SourcePrograms
 from source_revision_fixture import SourceRepository
-from agent_comms.threads import Thread
+from agent_comms.threads import Thread, NativeThread
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.registry_document import RegisteredTeamProject
 
@@ -571,8 +571,8 @@ def thread_registration(tmp_path_factory: pytest.TempPathFactory) -> Registratio
 def wired(comms: Comms) -> Comms:
     """A wire with PR111 (parent) and fixer (child) registered."""
     return declare_test_bus(comms, channels=("base", "auth"), threads=(
-        Thread(name='PR111', tags=frozenset({'base'}), worktree=Checkout(Path('/tmp/wt1'))),
-        Thread(name='fixer', tags=frozenset({'auth'}), worktree=Checkout(Path('/tmp/wt1')), parent=ForkedParent('PR111'), task=GivenThreadText('fix auth')),
+        NativeThread(name='PR111', tags=frozenset({'base'}), worktree=Checkout(Path('/tmp/wt1'))),
+        NativeThread(name='fixer', tags=frozenset({'auth'}), worktree=Checkout(Path('/tmp/wt1')), parent=ForkedParent('PR111'), task=GivenThreadText('fix auth')),
     ))
 
 
@@ -631,10 +631,10 @@ def team_bus(tmp_path):
     """A team bus with the teammates `claude-code` and `unit-x`. Its
     storage rule keeps scratch under the bus root, so no deal reaches the developer's home
     whatever HOME holds when the bus is built."""
-    bus = declare_team(installed_comms(tmp_path / "bus"), Thread(
+    bus = declare_team(installed_comms(tmp_path / "bus"), NativeThread(
         "claude-code", frozenset(), Checkout(tmp_path),
         model=DeclaredModel("anthropic/claude-opus-4-6")))
-    bus.registry.declare(Thread(
+    bus.registry.declare(NativeThread(
         "unit-x", frozenset(), Checkout(tmp_path),
         model=DeclaredModel("anthropic/claude-opus-4-6")))
     return bus

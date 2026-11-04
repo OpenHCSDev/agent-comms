@@ -19,7 +19,7 @@ from agent_comms.cli_bridges.hook_requests import HookReply, StopRequest
 from agent_comms.cli_bridges.session_watch import WatchClaim, WatchRecord
 from agent_comms.comms import Comms
 from agent_comms.repo import Checkout
-from agent_comms.threads import ExternalThreadExecution, Thread
+from agent_comms.threads import ExternalThread
 from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms_hooks import deferral
@@ -57,8 +57,8 @@ def stop(bridge: ClaudeBridge, tmp_path: Path, records: list[dict[str, JsonValue
          idle: tuple[str, ...] = (), active: bool = False) -> HookReply:
     """The real idle owner reads registered running teammates and their retained turns."""
     for name in idle:
-        bridge.comms.registry.declare(Thread(
-            name, frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution,
+        bridge.comms.registry.declare(ExternalThread(
+            name, frozenset(), Checkout(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid())))
         bridge.comms.transcripts.external(name).finish(
             turn_id=NativeTurnId(name), item_id=NativeItemId("idle"), events=(AssistantTranscript(

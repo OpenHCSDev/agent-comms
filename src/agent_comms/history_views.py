@@ -437,7 +437,7 @@ class HistoryViews:
     def mark_thread_view_read(self, name: str, *, worktree: Checkout, through: TranscriptCursor) -> None:
         """Acknowledge the displayed position through the thread's receiving contract."""
         thread = self.registry.require(name)
-        thread.execution.prepare_conversation(ThreadViewRead(
+        thread.prepare_conversation(ThreadViewRead(
             self, thread, self.messaging.user_identity(worktree), through,
         ))
 
@@ -454,7 +454,7 @@ class HistoryViews:
         viewer = self.messaging.user_identity(worktree).name
         thread = self.registry.require(target)
         checkpoint = self.transcripts.transcript_checkpoint(thread.name)
-        thread.execution.prepare_conversation(ThreadViewRead(
+        thread.prepare_conversation(ThreadViewRead(
             self, thread, self.registry.require(viewer), checkpoint,
         ))
         self.bus.mark_read_through(

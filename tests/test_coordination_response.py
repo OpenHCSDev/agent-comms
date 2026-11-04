@@ -42,7 +42,7 @@ from agent_comms.owner_fence import OwnerFence, prepare_fence_token
 from agent_comms.publisher import ParticipantPublisher
 from agent_comms.registration import Registration
 from agent_comms.selected_source_batch import SelectedSource
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.typed_table import TypedTable
 from bus_record_fixture import prepare_native_comms
 
@@ -72,7 +72,7 @@ def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ..
     comms = prepare_native_comms(wire(tmp_path / "wire"))
     for name in ("sender", "owner"):
         comms.registry.declare(
-            Thread(name, frozenset({'team'}), worktree=Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+            NativeThread(name, frozenset({'team'}), worktree=Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
     root_id = comms.registry.store.prepare_native_root().namespace
     target = "owner" if direct else "#team"

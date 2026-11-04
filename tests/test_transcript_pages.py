@@ -14,7 +14,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.threads import Thread, NativeThreadExecution
+from agent_comms.threads import NativeThread
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_text import ForkedParent, GivenThreadText
 from agent_comms.acp_extension import TranscriptSnapshotUpdate
@@ -43,7 +43,7 @@ def test_pages_reach_beginning_and_return_to_tail_without_duplicates(tmp_path):
     path = tmp_path / "session.jsonl"
     transcript(path, 105)
     comms = installed_comms(tmp_path / "wire")
-    comms.registry.declare(Thread('worker', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), comms.root)))
+    comms.registry.declare(NativeThread('worker', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), comms.root)))
     page = comms.transcripts.capture_page_read("worker").read()
     through = page.after
     seen = [event.text for event in page.events]
@@ -85,7 +85,7 @@ def test_one_page_operation_pages_alike_for_the_ui_and_mcp(tmp_path):
     path = tmp_path / "session.jsonl"
     transcript(path, 45)
     comms = installed_comms(tmp_path / "wire")
-    comms.registry.declare(Thread('worker', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), comms.root)))
+    comms.registry.declare(NativeThread('worker', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), comms.root)))
     snapshot = shared_page(comms, TranscriptPageRead(thread="worker"))
     through = snapshot.page.after
     seen = [event.text for event in snapshot.page.events]
@@ -101,7 +101,7 @@ def test_one_page_operation_pages_alike_for_the_ui_and_mcp(tmp_path):
             thread="worker", position=LaterThan(snapshot.page.after), limit=Through(through)))
         seen.extend(event.text for event in snapshot.page.events)
     assert seen == [f"Record {i}" for i in range(45)]
-    comms.registry.declare(Thread('quiet', frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(NativeThread('quiet', frozenset(), Checkout(tmp_path)))
     empty = shared_page(comms, TranscriptPageRead(thread="quiet"))
     assert not empty.page.events and not empty.page.has_older and not empty.page.has_newer
 
@@ -113,7 +113,7 @@ def test_oversized_message_and_file_identity(tmp_path):
         json.dumps(transcript_records.message({"role": "assistant", "content": [{"type": "text", "text": text}]})) + "\n"
     )
     comms = installed_comms(tmp_path / "wire")
-    thread = Thread('worker', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), comms.root))
+    thread = NativeThread('worker', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), comms.root))
     comms.registry.declare(thread)
     page = comms.transcripts.capture_page_read("worker").read()
     assert page.events[0].text == text
@@ -127,7 +127,7 @@ def test_oversized_message_and_file_identity(tmp_path):
 
 def test_empty_transcript_and_non_message_records(tmp_path):
     comms = installed_comms(tmp_path / "wire")
-    comms.registry.declare(Thread('worker', frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(NativeThread('worker', frozenset(), Checkout(tmp_path)))
     page = comms.transcripts.capture_page_read("worker").read()
     assert not page.events and not page.has_older and not page.has_newer
 
@@ -137,10 +137,10 @@ def test_new_fork_projects_parent_history_and_instruction_until_own_session_exis
     transcript(parent_path, 3)
     comms = installed_comms(tmp_path / "wire")
     comms.registry.declare(
-        Thread('parent', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(parent_path), comms.root))
+        NativeThread('parent', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(parent_path), comms.root))
     )
     comms.registry.declare(
-        Thread('child', frozenset(), Checkout(tmp_path), parent=ForkedParent('parent'), task=GivenThreadText('Inspect the renderer'))
+        NativeThread('child', frozenset(), Checkout(tmp_path), parent=ForkedParent('parent'), task=GivenThreadText('Inspect the renderer'))
     )
 
     page = comms.transcripts.capture_page_read("child").read()
@@ -171,10 +171,10 @@ def test_inherited_scroll_window_survives_child_session_persistence(tmp_path):
     transcript(parent_path, 35)
     comms = installed_comms(tmp_path / "wire")
     comms.registry.declare(
-        Thread('parent', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(parent_path), comms.root))
+        NativeThread('parent', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(parent_path), comms.root))
     )
     comms.registry.declare(
-        Thread('child', frozenset(), Checkout(tmp_path), parent=ForkedParent('parent'), task=GivenThreadText('Child task'))
+        NativeThread('child', frozenset(), Checkout(tmp_path), parent=ForkedParent('parent'), task=GivenThreadText('Child task'))
     )
     page = comms.transcripts.capture_page_read("child").read()
     through = page.after
@@ -215,12 +215,10 @@ def test_never_started_native_child_keeps_no_native_cursor_and_no_read_mark(tmp_
     path = tmp_path / "parent.jsonl"
     transcript(path, 3)
     comms = installed_comms(tmp_path / "wire")
-    comms.registry.declare(Thread(
-        "parent", frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), comms.root),
-        execution=NativeThreadExecution,
-    ))
+    comms.registry.declare(NativeThread(
+        "parent", frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), comms.root)))
     RegisterCliCommand(name="child", worktree=Checkout(tmp_path), parent=ForkedParent("parent"),
-                       execution=NativeThreadExecution).apply(comms)
+                       execution=NativeThread).apply(comms)
     checkpoint = comms.transcripts.transcript_checkpoint("child")
     inherited = comms.transcripts.capture_page_read("child").read().after
     painted = checkpoint.over_native((inherited,))

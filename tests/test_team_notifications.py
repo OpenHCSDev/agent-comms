@@ -52,7 +52,7 @@ from agent_comms.messages import ConversationRole, InfoKind, Message
 from agent_comms.transcript_events import IncomingTranscript
 from agent_comms.ui_model.message_category import HeartbeatCategory, InboundCategory, all_categories
 from agent_comms.repo import Checkout, UnpushedHead
-from agent_comms.threads import Thread, ForkExecution
+from agent_comms.threads import Thread, ForkThread, NativeThread
 from test_holder_standing_rules import state_cards
 from test_unit_state import recorded_turn
 
@@ -161,7 +161,7 @@ def test_muted_changed_quiet_display_publishes_once_when_enabled(notification_bu
     first = beat(comms)
     original, = notifications(comms)
     comms.threads.set_heartbeat_delivery("colleague", OffHeartbeatDelivery)
-    comms.registry.register_child("muted-fork", "colleague", ForkExecution, comms.goals)
+    comms.registry.register_child("muted-fork", "colleague", ForkThread, comms.goals)
     muted = beat(comms)
     assert muted.display_facts != first.display_facts
     assert notifications(comms) == (original,)
@@ -512,7 +512,7 @@ def test_a_recreated_team_inherits_no_board(notification_bus):
     worktree = comms.registry.require("colleague").worktree
     comms.registry.unregister("colleague")
     comms.registry.remove("colleague")
-    comms.registry.declare(Thread("colleague", frozenset({"comms"}), worktree))
+    comms.registry.declare(NativeThread("colleague", frozenset({"comms"}), worktree))
     reborn = comms.registry.require("colleague").incarnation
     assert reborn != board.task.teammate
     assert TeamUpdate.latest(comms, reborn) == ()
@@ -624,7 +624,7 @@ def test_frame_keeps_original_ping_order_and_folded_idle_records(tmp_path):
 
 def test_a_registered_fork_is_on_the_hud(notification_bus):
     comms = notification_bus
-    fork = comms.registry.register_child("judge-fork", "colleague", ForkExecution, comms.goals)
+    fork = comms.registry.register_child("judge-fork", "colleague", ForkThread, comms.goals)
     assert fork.incarnation in lead_hud(comms).forks
 
 
@@ -918,7 +918,7 @@ def test_failed_quiet_publication_retries_identical_display_until_committed(noti
     first, = notifications(comms)
     assert isinstance(first.task, TeamUpdateNotice)
     assert first.task.publication == PublishedFacts.of(first_hud.display_facts)
-    comms.registry.register_child("quiet-fork", "colleague", ForkExecution, comms.goals)
+    comms.registry.register_child("quiet-fork", "colleague", ForkThread, comms.goals)
     with refused_publication(comms), pytest.raises(HumanSendRefusedError):
         beat(comms)
     owner = comms.registry.require("colleague").incarnation
@@ -1063,7 +1063,7 @@ def test_one_pass_gives_every_team_its_own_packet(notification_bus):
     for name, tags in (("worker", {"comms", TeammatesTag.declared_name}), ("outsider", {"comms"})):
         comms.registry.register(replace(comms.registry.require(name), tags=frozenset(tags),
                                         process_identity=live))
-    fork = comms.registry.register_child("worker-fork", "worker", ForkExecution, comms.goals)
+    fork = comms.registry.register_child("worker-fork", "worker", ForkThread, comms.goals)
     comms.registry.register(replace(fork, process_identity=live))
     assert TeammatesTag.declared_name in comms.registry.require("worker-fork").tags
     failing = ServicePassFailing(watch="following-rule", since=time.time(), error="independent source",
@@ -1115,9 +1115,9 @@ def test_enrollment_and_independent_execution_not_tags_determine_shared_particip
     for name in ("colleague", "worker"):
         thread = comms.registry.require(name)
         comms.registry.register(replace(thread, tags=thread.tags | {tag}))
-    declared = comms.registry.register_child("declared-fork", "worker", ForkExecution, comms.goals)
+    declared = comms.registry.register_child("declared-fork", "worker", ForkThread, comms.goals)
     comms.registry.register(replace(declared, tags=declared.tags | {tag}))
-    comms.registry.register_child("copied-fork", "worker", ForkExecution, comms.goals)
+    comms.registry.register_child("copied-fork", "worker", ForkThread, comms.goals)
     worker = comms.registry.require("worker")
     bound = comms.registry.register_bound_thread(
         "bound-unit", "worker", worker.worktree, ProcessIdentity.capture(os.getpid()))

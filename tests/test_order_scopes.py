@@ -25,7 +25,7 @@ from agent_comms.todos import (
     CommitDelivery, DoneTodoState, FixShape, OrderScope,
     PendingProblemOrder, ReportDelivery, ReportedProblemOrder, TodoStore, TriageScope,
 )
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 @pytest.mark.parametrize('scope', (TriageScope(), FIX_SCOPE))
@@ -58,7 +58,7 @@ def test_shape_references_are_class_lines_not_names_or_decorators(tmp_path):
 
 def assigned(comms, scope, source, problem='P1', edits=('Fix the problem',)):
     for name in ('colleague', 'worker'):
-        comms.registry.declare(Thread(name, frozenset(), Checkout(comms.root)))
+        comms.registry.declare(NativeThread(name, frozenset(), Checkout(comms.root)))
     return requested(comms, scope, source, problem, edits)
 
 
@@ -84,7 +84,7 @@ def test_held_orders_recall_holder_problem_scope_and_last_edit_from_the_store(
     # A teammate holding an order takes no unrelated one, so the triage goes to another.
     (private_comms.root / 'triager').mkdir()
     private_comms.registry.declare(
-        Thread('triager', frozenset(), Checkout(private_comms.root / 'triager')))
+        NativeThread('triager', frozenset(), Checkout(private_comms.root / 'triager')))
     requested(private_comms, TriageScope(), source_repository, 'P2',
               ('Classify the failing source',), owner='triager')
     held = HeldOrders.of(TodoStore(private_comms.root), private_comms.registry.snapshot())

@@ -11,7 +11,7 @@ from agent_comms.nominal.field_codec import FieldCodec, TurnId
 from agent_comms.registration import Registration
 from agent_comms.repo import Checkout
 from agent_comms.thread_text import ForkedParent, GivenThreadText
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 def main(root: Path, turn: TurnId) -> None:
@@ -26,10 +26,10 @@ def main(root: Path, turn: TurnId) -> None:
         assert Registration(registry.store.path).snapshot() == registry.snapshot()
         steps.append(row)
 
-    registry.register(Thread("owner", frozenset({"team"}), Checkout(root),
+    registry.register(NativeThread("owner", frozenset({"team"}), Checkout(root),
                              process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0))
     capture()
-    registry.register(Thread("child", frozenset(), Checkout(root),
+    registry.register(NativeThread("child", frozenset(), Checkout(root),
                              parent=ForkedParent("owner"), created_at=20.0))
     capture()
     registry.register(replace(registry.require("owner"), title=GivenThreadText("metadata")))

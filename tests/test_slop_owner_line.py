@@ -12,7 +12,7 @@ from agent_comms.team.order import OrderFile
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.progress_claims import MergedClaim
 from agent_comms.slop import CreatedLine, DeclarationDerivation, ExistingLine, OwnerLine, Slop
-from agent_comms.threads import ForkExecution, Thread
+from agent_comms.threads import ForkThread, NativeThread
 from agent_comms.errors import TodoError
 from agent_comms.todos import (
     CommitDelivery, MergedListedPullRequest, PullRequestCommit, PullRequestLink,
@@ -79,8 +79,7 @@ def test_done_is_refused_until_the_delivered_tree_declares_the_created_line(
 
 
 def test_a_fork_is_never_a_teammate_that_could_take_an_order(tmp_path):
-    teammate = Thread('worker', frozenset(), Checkout(tmp_path))
-    fork = replace(Thread('shape-next', frozenset(), Checkout(tmp_path)),
-                   execution=ForkExecution)
-    assert teammate.execution.order_candidates(teammate) == (teammate,)
-    assert fork.execution.order_candidates(fork) == ()
+    teammate = NativeThread('worker', frozenset(), Checkout(tmp_path))
+    fork = NativeThread('shape-next', frozenset(), Checkout(tmp_path)).as_member(ForkThread)
+    assert teammate.order_candidates() == (teammate,)
+    assert fork.order_candidates() == ()

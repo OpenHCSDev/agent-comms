@@ -26,7 +26,7 @@ from agent_comms.view_unread import (
     TranscriptReply,
 )
 from native_unread_fixture import completed_counts, completed_snapshot
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 def append(path, role='assistant', content='Reply', **fields):
@@ -46,7 +46,7 @@ def setup_thread(tmp_path):
     source = tmp_path / 'session.jsonl'
     session(source)
     comms = installed_comms(tmp_path / 'wire')
-    comms.registry.declare(Thread('worker', frozenset({'ci'}),
+    comms.registry.declare(NativeThread('worker', frozenset({'ci'}),
         Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
     return comms, source
 

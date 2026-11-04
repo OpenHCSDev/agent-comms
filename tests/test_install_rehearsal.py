@@ -49,7 +49,7 @@ from agent_comms.root_runtime import RootRuntime
 from agent_comms.storage_rules import StorageRule
 from agent_comms.typed_table import ReconciledFile
 from conftest import declare_test_bus, publish_initial
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 
@@ -185,7 +185,7 @@ def test_install_rehearses_without_changing_the_bus(installed_comms, installed_h
     """
     comms = installed_comms
     declare_test_bus(comms, channels=("comms",), threads=(
-        Thread(name="worker", tags=frozenset(), worktree=Checkout(tmp_path)),))
+        NativeThread(name="worker", tags=frozenset(), worktree=Checkout(tmp_path)),))
     publish_initial(comms, "worker", "#all", "One message before the install")
     rewritten = (drop_one_index(comms.root),) if drifted else ()
     checkout = install_checkout
@@ -237,7 +237,7 @@ def test_failed_live_migration_restores_data_checkout_and_runtime(
         installed_comms, installed_home, install_checkout, tmp_path):
     comms, checkout = installed_comms, install_checkout
     declare_test_bus(comms, channels=("comms",), threads=(
-        Thread(name="worker", tags=frozenset(), worktree=Checkout(tmp_path)),))
+        NativeThread(name="worker", tags=frozenset(), worktree=Checkout(tmp_path)),))
     publish_initial(comms, "worker", "#all", "Retained before migration")
     saved = comms.root / "saved"
     saved.write_text("original")

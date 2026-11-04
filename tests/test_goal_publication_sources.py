@@ -24,7 +24,7 @@ from agent_comms.goal_waits import GoalWaits
 from agent_comms.locked_store import GoalWakeFile, RegistryFile
 from agent_comms.repo import Checkout
 from agent_comms.registry_document import RegistryDocument
-from agent_comms.threads import ExternalThreadExecution, Thread
+from agent_comms.threads import ExternalThread, NativeThread
 from agent_comms.thread_text import GivenThreadText
 from agent_comms.turn_phase import IdlePhase, ToolRunningPhase
 from delivery_owner_fixture import canonical_agent
@@ -82,10 +82,9 @@ def projection_files(comms):
 
 async def test_requested_refresh_observes_activity_with_unchanged_durable_goal_files(publication):
     comms, agent, session, client = publication
-    child = comms.registry.declare(Thread(
-        "child", frozenset(), Checkout(comms.root), execution=ExternalThreadExecution,
-        process_identity=ProcessIdentity.current(),
-    ))
+    child = comms.registry.declare(ExternalThread(
+        "child", frozenset(), Checkout(comms.root),
+        process_identity=ProcessIdentity.current()))
     output = ThreadOutput(ExternalTranscript(comms.root, child.incarnation), comms.agents)
     output.enter(ToolRunningPhase("delegated work"))
     comms.goals.update_goal(session, StandbyGoalAction(wait_for=(child.name,)))
@@ -102,7 +101,7 @@ async def test_requested_refresh_observes_activity_with_unchanged_durable_goal_f
     assert second.goal == first.goal
     assert isinstance(second.execution, StandbyExecution)
     assert tuple(target.incarnation.name for target in second.execution.inactive_wait_for) == (child.name,)
-    assert second.execution.presentation(session).summary == "Standby · waiting for @child; no active turn: @child"
+    assert second.presentation(session).summary == "Standby · waiting for @child; no active turn: @child"
     await scheduler.sync_goal_execution(session)
     assert len(client.published) == 2
 
@@ -130,7 +129,7 @@ async def test_external_mid_turn_goal_reaches_actual_consumer_without_inbox_wake
     # The durable native turn is real; there is deliberately no provider and no
     # accepted bus input. Its busy fence prevents an autonomous model launch.
     lease = comms.agents.begin_turn(session, TurnId.mint()).turn_lease
-    unrelated = comms.registry.declare(Thread("unrelated", frozenset(), Checkout(comms.root)))
+    unrelated = comms.registry.declare(NativeThread("unrelated", frozenset(), Checkout(comms.root)))
     state = agent.inputs.state(session)
     wake = CountedWake()
     state.observation_ready = wake

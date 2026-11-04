@@ -47,7 +47,7 @@ from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.root_runtime import RootRuntime
-from agent_comms.threads import ExternalThreadExecution, Thread
+from agent_comms.threads import ExternalThread
 from agent_comms.cli_bridges import hook_session
 from source_programs import SourcePrograms
 
@@ -60,8 +60,8 @@ def session_bridge(tmp_path, home, program=SERVE_FROM_SOURCE, *, state_directory
     """``runtime`` serves ``program`` and so owns the bus it attaches to."""
     comms = installed_comms(tmp_path / 'bus')
     RootRuntime.publish(comms.root, runtime)
-    comms.registry.declare(Thread(
-        'bridge-copy', frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution))
+    comms.registry.declare(ExternalThread(
+        'bridge-copy', frozenset(), Checkout(tmp_path)))
     transcript = tmp_path / 'copied-session.jsonl'
     transcript.write_text('')
     state = (home / '.local/state/agent-comms/claude-bridge-copy'
@@ -217,9 +217,9 @@ def send_as_peer(built, tmp_path, env, body, *, declare=False):
     """The bus belongs to the built runtime, so the sender attaches as that runtime."""
     code = (
         'import sys; from pathlib import Path; from agent_comms.comms import wire; '
-        'from agent_comms.repo import Checkout; from agent_comms.threads import Thread; '
+        'from agent_comms.repo import Checkout; from agent_comms.threads import NativeThread; '
         'comms = wire(Path(sys.argv[1])); '
-        + ('comms.registry.declare(Thread("peer", frozenset(), Checkout(Path(sys.argv[3])))); ' if declare else '')
+        + ('comms.registry.declare(NativeThread("peer", frozenset(), Checkout(Path(sys.argv[3])))); ' if declare else '')
         + 'comms.messaging.send("peer", "bridge-copy", sys.argv[2])'
     )
     sources = os.pathsep.join(dict.fromkeys(str(package.parent) for package in built.packages))

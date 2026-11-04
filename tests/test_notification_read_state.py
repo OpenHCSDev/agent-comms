@@ -31,7 +31,7 @@ from agent_comms.revision_views import (
     SidebarView, StatusView, StoresView,
 )
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.tool_declaration import NativeRequestTools
 from agent_comms.tool_request import ToolRequest
 from agent_comms.tools import CommsMessageOutcomesTool
@@ -73,7 +73,7 @@ def declare_team(comms: Comms, tmp_path: Path) -> MessageReference:
     native recipients, so the sender and the human are never watched."""
     comms.channels.create_tag("team")
     for name, role in TEAM:
-        comms.registry.declare(Thread(name, frozenset({"team"}), Checkout(tmp_path), role=role))
+        comms.registry.declare(NativeThread(name, frozenset({"team"}), Checkout(tmp_path), role=role))
     return comms.messaging.send("sender", "#team", "Who is still here?").message.reference
 
 
@@ -104,7 +104,7 @@ def test_an_archived_participant_becoming_visible_changes_the_read(comms, tmp_pa
     revision, settled = settled_read(comms, reference)
     assert "archived" not in settled.activity
 
-    comms.registry.declare(Thread("archived", frozenset({"team"}), Checkout(tmp_path)))
+    comms.registry.declare(NativeThread("archived", frozenset({"team"}), Checkout(tmp_path)))
     later = comms.views.revision()
     assert later.changed_since(ActivityView(), revision)
     assert settled.live_changed(comms, NotificationPass(comms, later))

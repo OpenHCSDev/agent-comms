@@ -26,7 +26,7 @@ from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.selected_actions import NoSelectedTools
 from agent_comms.storage_rules import StorageRule
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from compaction_loopback import LoopbackProvider
 from delivery_owner_fixture import canonical_agent
 
@@ -45,9 +45,8 @@ class NativeBackendFixture(AnnouncedInputStart):
     @staticmethod
     def participant_at(root: Path, project: Path) -> RecordedThreadIncarnation:
         """The real thread incarnation used by a direct native turn on this bus."""
-        return Thread(
-            'direct-native', frozenset(), Checkout(project),
-        ).incarnation.require_recorded()
+        return NativeThread(
+            'direct-native', frozenset(), Checkout(project)).incarnation.require_recorded()
 
     def __init__(self, root, project, session, provider, config, package: VerifiedNativePackage):
         self.root, self.project, self.session, self.provider = root, project, session, provider

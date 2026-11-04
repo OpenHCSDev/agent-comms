@@ -19,7 +19,7 @@ from agent_comms.pi_events import NativeOutputCommitted, PiEvent
 from agent_comms.repo import Checkout
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.transcripts import Through
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from conftest import installed_comms
 
 
@@ -39,7 +39,7 @@ def committed(tmp_path):
     start, end = append(path, dict(type='message', id='assistant-one',
         timestamp='2026-10-26T00:00:01Z', message=dict(role='assistant',
         content=[dict(type='text', text='Original saved answer π')])) )
-    comms.registry.declare(Thread('worker', frozenset(), Checkout(tmp_path),
+    comms.registry.declare(NativeThread('worker', frozenset(), Checkout(tmp_path),
         session_file=RegistrySessionLocation.from_path(str(path), comms.root)))
     marker = PiEvent.from_wire(dict(type='native_output_committed',
         sessionId='session-one', sessionFile=str(path), sessionEntryId='assistant-one',

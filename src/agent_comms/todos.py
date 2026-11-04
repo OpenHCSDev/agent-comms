@@ -78,6 +78,7 @@ from agent_comms.nominal.field_codec import (
     RecordProblems,
     SingleFieldValue,
     SubclassUnion,
+    ThreadLookup,
     ToolCallId,
     WireOmitDefault,
     WireTransient,
@@ -93,7 +94,6 @@ from agent_comms.head_review import (
     IntegrationInput,
     MergeArm,
     MergeHeadReview,
-    OpenPullRequestHead,
     PreparedHeadReview,
     PullRequestHead,
     ReadPullRequestHead,
@@ -3721,7 +3721,7 @@ class IncomingWork:
             candidate.name
             for thread in snapshot.active_threads(snapshot.active_candidates())
             if thread.name not in occupied
-            for candidate in thread.execution.order_candidates(thread)))
+            for candidate in thread.order_candidates()))
 
 
 @dataclass(frozen=True, slots=True)

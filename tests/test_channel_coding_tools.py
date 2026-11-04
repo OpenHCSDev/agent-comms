@@ -29,7 +29,7 @@ from agent_comms.native_tools import CodingTool
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import AssistantMessage, ReportedFlag, ReportedParts, ReportedText, ToolCallContent
 from agent_comms.storage_room import NoRoomNeeded
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 def acquire(comms, name, turn_id, resource, work):
@@ -55,7 +55,7 @@ def test_create_claim_competes_before_file_exists_and_releases_without_creation(
         turns = {}
         for name, created in [("a", 21.0), ("b", 22.0)]:
             turns[name] = TurnId.mint()
-            thread = Thread(name, frozenset({'team'}), Checkout(work), created_at=created)
+            thread = NativeThread(name, frozenset({'team'}), Checkout(work), created_at=created)
             c.registry.declare(replace(thread, process_identity=ProcessIdentity.capture(os.getpid())))
         resource = WritableFileClaim(Path("new/nested/file.py"))
         committed = acquire(c, "a", turns["a"], resource, work)
@@ -82,7 +82,7 @@ def test_stopped_holder_reclaimed_in_copied_root(tmp_path, monkeypatch, existing
     turns = {}
     for name in ("holder-a", "holder-b"):
         turns[name] = TurnId.mint()
-        thread = Thread(name, frozenset(), Checkout(work))
+        thread = NativeThread(name, frozenset(), Checkout(work))
         original.registry.declare(replace(
             thread, process_identity=ProcessIdentity.capture(os.getpid())
         ))

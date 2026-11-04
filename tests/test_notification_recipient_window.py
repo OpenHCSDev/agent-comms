@@ -19,7 +19,7 @@ from agent_comms.notification_evidence import AfterRecipient, AllOutcomes, Owner
 from agent_comms.message_notification import MessageNotification
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.repo import Checkout
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.notification_reads import LiveNotificationRead
 from agent_comms.ui_model.observation import ReadNotifications
 from conftest import accept_initial, publish_initial
@@ -30,10 +30,9 @@ from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 def frozen_window(tmp_path: Path) -> tuple[Comms, Delivered]:
     root, root_id, comms, _initial, people = _root(tmp_path)
     for index in range(14):
-        comms.registry.declare(Thread(
+        comms.registry.declare(NativeThread(
             f"window-{index}", frozenset({"team"}), Checkout(tmp_path),
-            process_identity=people[1].process_identity,
-        ))
+            process_identity=people[1].process_identity))
     message = publish_initial(comms, "sender", "#team", "A frozen recipient window")
     source = comms.bus.bus.delivery(message.seq)
     with Coordination(root / "coordination.sqlite3") as store:

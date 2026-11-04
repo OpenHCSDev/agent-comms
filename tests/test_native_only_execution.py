@@ -14,7 +14,7 @@ import agent_comms.agent_events as events
 from agent_comms.acp_extension import CoordinationChangedUpdate, decode_updates
 from agent_comms.child_process import BoundedRun
 from agent_comms.launch_root import LaunchRoot
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from bus_history import read_history
 from bus_record_fixture import prepare_native_comms
 from pi_session_turn import one_turn_events
@@ -58,7 +58,7 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
         caller_project.mkdir()
         # Headless execution requires a private bus root (worker.py); its owner prepares one.
         comms = prepare_native_comms(wire(base / "wire"))
-        comms.registry.declare(Thread('headless', frozenset(), Checkout(project)))
+        comms.registry.declare(NativeThread('headless', frozenset(), Checkout(project)))
         env = dict(
             os.environ,
             AGENT_COMMS_ROOT=str(comms.root),

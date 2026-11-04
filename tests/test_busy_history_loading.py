@@ -18,7 +18,7 @@ from agent_comms.ui_model.observation import (
 )
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.thread_identity import UnrecordedThreadIncarnation
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 def saved_history(tmp_path):
@@ -30,7 +30,7 @@ def saved_history(tmp_path):
         {"type": "message", "id": "saved-answer", "parentId": None, "timestamp": timestamp,
          "message": {"role": "assistant", "content": [{"type": "text", "text": "Saved answer"}]}},
     )))
-    comms.registry.declare(Thread('saved', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(session), comms.root)))
+    comms.registry.declare(NativeThread('saved', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(session), comms.root)))
     comms.registry.store.prepare_native_root()
     return comms, session
 

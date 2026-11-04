@@ -23,7 +23,7 @@ from agent_comms.repo import Checkout
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.todos import (
     AcceptedVerdict,
     Assignment,
@@ -54,7 +54,7 @@ from test_todos import order
 @pytest.fixture
 def recorded_problem(comms, source_repository, tmp_path):
     for name in ("colleague", "worker"):
-        comms.registry.declare(Thread(name, frozenset({"comms"}), Checkout(tmp_path / name)))
+        comms.registry.declare(NativeThread(name, frozenset({"comms"}), Checkout(tmp_path / name)))
     actor = comms.registry.require("colleague").incarnation
     worker = comms.registry.require("worker").incarnation
     store = comms.goals.todos

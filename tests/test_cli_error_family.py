@@ -17,7 +17,7 @@ from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.nominal.field_codec import RecordProblems
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 @pytest.mark.parametrize('error,expected', [
@@ -162,7 +162,7 @@ def test_given_binding_fields_override_the_stored_binding(tmp_path, comms):
     """A partial binding takes each missing field from the stored one; a field absent from
     both is refused by name, and a changed field still claims another conversation."""
     for name in ('viewer', 'other-viewer'):
-        comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path)))
+        comms.registry.declare(NativeThread(name, frozenset(), Checkout(tmp_path)))
     with Binding.open(tmp_path) as db:
         with pytest.raises(RecordProblems, match='bus_thread'):
             GivenBinding({'root': str(comms.root)}).bind(db)

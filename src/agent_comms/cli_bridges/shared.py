@@ -72,7 +72,7 @@ from agent_comms.registration import Registration
 from agent_comms.runtime_updates import HiddenItem, ReplyingThreadOutput, RuntimeUpdate, ThreadOutput
 from agent_comms.turn_item import NoSourceTurn, SourceTurn
 from agent_comms.send_result import SendResult
-from agent_comms.threads import ExternalThreadExecution, Thread
+from agent_comms.threads import ExternalThread
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.task_attachments.team_pings import TeamUpdate
 from agent_comms.thread_status import ThreadStatus
@@ -710,10 +710,9 @@ class NoChannelSource(AbsentText, BindingChannels):
     """An independent endpoint starts without copied channel membership."""
 
     async def register(self, bridge: CliBridge) -> None:
-        thread = Thread(
+        thread = ExternalThread(
             bridge.address.bus, frozenset(), await bridge.session_worktree(),
-            process_identity=bridge.session_process(), execution=ExternalThreadExecution,
-        )
+            process_identity=bridge.session_process())
         await bridge.comms.bus.when_open(partial(bridge.comms.registry.declare, thread))
 
 

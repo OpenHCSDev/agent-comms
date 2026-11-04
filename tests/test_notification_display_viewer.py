@@ -21,7 +21,7 @@ from agent_comms.read_basis import NamedViewer
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.repo import Checkout
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from bus_record_fixture import prepare_native_comms
 from conftest import publish_initial
 
@@ -63,9 +63,8 @@ def archived_readers(tmp_path: Path, *, thread_registration: Registration) -> Ar
     for comms in (old, live):
         for index, name in enumerate(('sender', 'self', 'other')):
             role = AgentThreadRole if comms is old or name == 'sender' else UserThreadRole
-            comms.registry.declare(Thread(
-                name, frozenset({'team'}), Checkout(tmp_path), created_at=10.0 + index, role=role,
-            ))
+            comms.registry.declare(NativeThread(
+                name, frozenset({'team'}), Checkout(tmp_path), created_at=10.0 + index, role=role))
     message = publish_initial(old, 'sender', '#team', 'retained audience and human paint')
     source = live.views.attach_history(old.root)
     return ArchivedReaders(live, source, message)
@@ -132,9 +131,8 @@ def test_archive_viewer_rename_and_recreation_use_incarnation_not_current_name(a
     previous = fixture.live.registry.require('renamed')
     fixture.live.registry.unregister('renamed')
     fixture.live.registry.remove('renamed')
-    fixture.live.registry.declare(Thread(
-        'self', previous.tags, previous.worktree, created_at=111.0, role=UserThreadRole,
-    ))
+    fixture.live.registry.declare(NativeThread(
+        'self', previous.tags, previous.worktree, created_at=111.0, role=UserThreadRole))
     recreated = fixture.selection('self').notification_identity
     assert recreated.viewer != captured.viewer
     other = fixture.notifications(recreated.outcome_viewer(fixture.live.registry))
@@ -146,7 +144,7 @@ def test_archive_viewer_rename_and_recreation_use_incarnation_not_current_name(a
 def test_direct_human_self_row_disappears_without_read_or_unread_mutation(comms: Comms, tmp_path: Path) -> None:
     worktree = Checkout(tmp_path)
     human = comms.messaging.user_identity(worktree)
-    comms.registry.declare(Thread('sender', frozenset(), worktree))
+    comms.registry.declare(NativeThread('sender', frozenset(), worktree))
     message = comms.messaging.send('sender', human.name, 'painted direct human message').message
     page = comms.views.dm_display_page(ThreadTarget('sender'), worktree=worktree)
     assert message in page.messages

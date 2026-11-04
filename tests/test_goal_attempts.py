@@ -39,7 +39,7 @@ from agent_comms.goal_generation import (
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.pi_counts import PiCount, UnreportedCount
 from agent_comms.pi_wire import PiUsage
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.thread_creation import RecordedCreationTime
 from agent_comms.attempt_resolution import OperatorStopped, RetryDecision
 from agent_comms.turn_failure import FailedTurnResolution
@@ -442,10 +442,9 @@ def claimed_owner(comms):
         [sys.executable, "-c", "import time; time.sleep(300)"], start_new_session=True,
     )
     try:
-        owner = Thread(
+        owner = NativeThread(
             "stopped-goal", frozenset(), Checkout(comms.root),
-            process_identity=ProcessIdentity.capture(child.pid),
-        )
+            process_identity=ProcessIdentity.capture(child.pid))
         comms.registry.declare(owner)
         comms.goals.update_goal(owner.name, SetGoalAction(text="Continue the stopped order."))
         owner = comms.registry.require(owner.name)

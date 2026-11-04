@@ -19,7 +19,7 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.goals import Goal, NoGoal
 from agent_comms.task_sources import GoalTaskScope, TurnTaskScope
-from agent_comms.threads import ChosenModel, NextTurnConfiguration, Thread
+from agent_comms.threads import ChosenModel, NextTurnConfiguration, Thread, NativeThread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tool_request import ToolRequest
 from agent_comms.thread_model import DeclaredModel
@@ -31,7 +31,7 @@ from agent_comms.goal_scope import OneGoal
 def comms(tmp_path):
     """An installed root with one declared worker, the goal owner every test acts on."""
     comms = installed_comms(tmp_path)
-    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=Checkout(tmp_path)))
+    comms.registry.declare(NativeThread(name='worker', tags=frozenset(), worktree=Checkout(tmp_path)))
     return comms
 
 
@@ -62,7 +62,7 @@ def test_goal_survives_rename_and_reregistration(comms, tmp_path):
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Verify the release"))
     comms.threads.set_thread_configuration(
             comms.registry.require('worker'), NextTurnConfiguration(model=ChosenModel('test/model')))
-    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=Checkout(tmp_path)))
+    comms.registry.declare(NativeThread(name='worker', tags=frozenset(), worktree=Checkout(tmp_path)))
     comms.threads.rename_self("renamed", caller=ThreadCaller("worker"))
     restored = wire(tmp_path).registry.require("worker")
     assert restored.goal == goal

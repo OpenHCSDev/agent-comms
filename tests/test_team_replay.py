@@ -44,7 +44,7 @@ from agent_comms.standing_rules import (
 )
 from agent_comms.thread_identity import ReportedTools, ToolName
 from agent_comms.thread_text import ForkedParent
-from agent_comms.threads import Thread
+from agent_comms.threads import Thread, NativeThread
 from agent_comms.todos import (
     ClaimOrder,
     DraftListedPullRequest,
@@ -137,7 +137,7 @@ class Team:
         """Register a home, publish its order and populate the allocated order checkout."""
         declare_test_bus(
             self.comms,
-            threads=(Thread(name=name, tags=frozenset({"comms"}), worktree=Checkout(worktree)),),
+            threads=(NativeThread(name=name, tags=frozenset({"comms"}), worktree=Checkout(worktree)),),
         )
         todo = self.order(name, worktree, at=time.time() if at is None else at)
         rule = self.comms.registry.storage_rule
@@ -412,12 +412,11 @@ class LostToolsSeed(IncidentSeed):
         declare_test_bus(
             fleet.comms,
             threads=(
-                Thread(
+                NativeThread(
                     name="restarted",
                     tags=frozenset({"comms"}),
                     worktree=Checkout(fleet.source.checkout),
-                    parent=ForkedParent(fleet.teammate),
-                ),
+                    parent=ForkedParent(fleet.teammate)),
             ),
         )
         registry.observe_offered_tools(
@@ -444,7 +443,7 @@ def fleet(comms, tmp_path, configured_repository, installed_runtime, github_cli)
         comms,
         channels=("comms",),
         threads=(
-            Thread(name=Team.teammate, tags=frozenset({"comms"}), worktree=Checkout(source.checkout)),
+            NativeThread(name=Team.teammate, tags=frozenset({"comms"}), worktree=Checkout(source.checkout)),
         ),
     )
     request = comms.goals.todos.add_request(
@@ -662,7 +661,7 @@ def test_holders_in_one_plain_directory_share_no_worktree(fleet, tmp_path):
     declare_test_bus(
         built.comms,
         threads=tuple(
-            Thread(name=name, tags=frozenset({"comms"}), worktree=Checkout(home))
+            NativeThread(name=name, tags=frozenset({"comms"}), worktree=Checkout(home))
             for name in ("first-home", "second-home")
         ),
     )

@@ -13,7 +13,7 @@ from agent_comms.shell_effects import WriteStorageEffect
 from agent_comms.tool_denial import StorageDenied
 from agent_comms.storage_rules import StorageRule
 from agent_comms.storage_projection import StorageProjection
-from agent_comms.threads import ExternalThreadExecution, Thread
+from agent_comms.threads import ExternalThread
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.todos import Assignment, IncomingWork, SharedWorktreeRefusal
 from agent_comms.tool_caller import ThreadCaller
@@ -25,9 +25,9 @@ pytest_plugins = ('test_forks',)
 def allocation_bus(fork_bus):
     comms, source, template = fork_bus
     for name in ('first', 'second'):
-        comms.registry.declare(Thread(
+        comms.registry.declare(ExternalThread(
             name, frozenset({'comms'}), Checkout(source.checkout),
-            model=DeclaredModel('anthropic/claude-opus-4-6'), execution=ExternalThreadExecution))
+            model=DeclaredModel('anthropic/claude-opus-4-6')))
     return comms, source, template
 
 
@@ -139,9 +139,9 @@ def test_recreated_holder_cannot_use_the_prepared_birth(allocation_bus):
     proposed = replace(current, assignment=Assignment.of(old.incarnation, actor, GoalId.mint()))
     prepared = comms.goals.todos.preparing_edits((proposed,))
     comms.registry.remove(old.name)
-    comms.registry.declare(Thread(
+    comms.registry.declare(ExternalThread(
         old.name, old.tags, Checkout(source.checkout),
-        model=old.model, execution=ExternalThreadExecution))
+        model=old.model))
     assert comms.registry.require(old.name).incarnation != old.incarnation
     with prepared.writing() as db:
         with pytest.raises(TodoConflict):

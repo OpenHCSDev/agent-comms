@@ -27,12 +27,7 @@ from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import NoGoal
 from agent_comms.order_tools import InputDeliveryRead, OwnerGoalRead
 from agent_comms.reported_turn import ReportedTurn
-from agent_comms.threads import (
-    ExternalThreadExecution,
-    NativeThreadExecution,
-    ThreadExecution,
-    Thread,
-)
+from agent_comms.threads import ExternalThread, NativeThread, Thread
 from agent_comms.thread_status import ConnectedThreadStatus, RunningThreadStatus, StoppedThreadStatus, ThreadStatus
 from agent_comms.owner_connection import OwnerIdentityChangedError
 from agent_comms.coordination_errors import StaleFence, StaleRevision
@@ -72,8 +67,8 @@ def seed(comms, name):
 
 def test_history_clear_is_notice_only_and_survives_rename_and_reopen(tmp_path):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread('owner', frozenset(), Checkout(tmp_path)))
-    comms.registry.declare(Thread('peer', frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(NativeThread('owner', frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(NativeThread('peer', frozenset(), Checkout(tmp_path)))
     ledger = seed(comms, "owner")
     scope = OwnerQueueInputDeliveryScope(frozenset({BusInputKey(2), BusInputKey(8), UI_KEY}))
     ledger.record(BusInputKey(3), seq=3, owner="peer", claim_scope=1, target="peer", text="Peer")
@@ -215,17 +210,16 @@ async def test_mcp_and_the_ui_read_the_owner_goal_from_the_live_owner(tmp_path):
 
 
 @pytest.mark.parametrize("execution,status", (
-    (NativeThreadExecution, StoppedThreadStatus()),
-    (ExternalThreadExecution, ConnectedThreadStatus()),
+    (NativeThread, StoppedThreadStatus()),
+    (ExternalThread, ConnectedThreadStatus()),
 ))
 async def test_unavailable_native_queue_reads_retained_evidence_without_a_socket(
-    tmp_path: Path, execution: type[ThreadExecution], status: ThreadStatus,
+    tmp_path: Path, execution: type[Thread], status: ThreadStatus,
 ) -> None:
     comms: Comms = wire(tmp_path)
-    thread = comms.registry.declare(Thread(
-        'owner', frozenset(), Checkout(tmp_path), execution=execution,
-        process_identity=ProcessIdentity.current(),
-    ))
+    thread = comms.registry.declare(execution(
+        'owner', frozenset(), Checkout(tmp_path),
+        process_identity=ProcessIdentity.current()))
     comms.registry.register(thread, status)
     ledger = seed(comms, "owner")
     comms.goals.dismiss_historical_inputs(
@@ -260,7 +254,7 @@ async def test_unavailable_native_queue_reads_retained_evidence_without_a_socket
 @pytest.mark.parametrize("recreate", (False, True))
 async def test_retained_read_refuses_a_changed_recipient(tmp_path: Path, recreate: bool) -> None:
     comms: Comms = wire(tmp_path)
-    owner = comms.registry.declare(Thread('owner', frozenset(), Checkout(tmp_path)))
+    owner = comms.registry.declare(NativeThread('owner', frozenset(), Checkout(tmp_path)))
     operation = InputDeliveryRead()
     cut = comms.registry.store.snapshot_with_authority()
     if recreate:
@@ -269,7 +263,7 @@ async def test_retained_read_refuses_a_changed_recipient(tmp_path: Path, recreat
         with comms.registry.store.editing() as edit:
             edit.document.remove_originals((owner,))
             edit.commit()
-        comms.registry.declare(Thread('owner', frozenset(), Checkout(tmp_path)))
+        comms.registry.declare(NativeThread('owner', frozenset(), Checkout(tmp_path)))
     else:
         comms.registry.rename("owner", "renamed")
     with pytest.raises((OwnerIdentityChangedError, StaleFence)):
@@ -287,7 +281,7 @@ async def test_captured_owner_read_refuses_an_absent_root_before_its_first_witne
 ) -> None:
     root = tmp_path / "wire"
     comms: Comms = prepare_native_comms(wire(root))
-    owner = comms.registry.declare(Thread('owner', frozenset(), Checkout(tmp_path)))
+    owner = comms.registry.declare(NativeThread('owner', frozenset(), Checkout(tmp_path)))
     cut = comms.registry.store.snapshot_with_authority()
     root.rename(tmp_path / "retained-original")
     with pytest.raises(OwnerIdentityChangedError):
@@ -299,7 +293,7 @@ async def test_captured_owner_read_refuses_an_absent_root_before_its_first_witne
 async def test_retained_read_refuses_replaced_root_and_foreign_ui_root(tmp_path: Path) -> None:
     root = tmp_path / "wire"
     comms: Comms = prepare_native_comms(wire(root))
-    owner = comms.registry.declare(Thread('owner', frozenset(), Checkout(tmp_path)))
+    owner = comms.registry.declare(NativeThread('owner', frozenset(), Checkout(tmp_path)))
     operation = InputDeliveryRead()
     foreign = await ReadOwnerOperation(str(tmp_path / "foreign"), owner.incarnation, operation).answer(comms)
     assert isinstance(foreign, ReadRefused)
@@ -314,7 +308,7 @@ async def test_retained_read_refuses_replaced_root_and_foreign_ui_root(tmp_path:
 
 def test_no_owner_queue_observation_never_dismisses_inputs(tmp_path):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread('owner', frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(NativeThread('owner', frozenset(), Checkout(tmp_path)))
     ledger = InputDispositions(tmp_path)
     ledger.record(BusInputKey(1), seq=1, owner="owner", claim_scope=1, target="owner", text="Hello")
     before = ledger.path.read_bytes()

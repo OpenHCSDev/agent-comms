@@ -6,14 +6,13 @@ import pytest
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import invoke_tool
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 def conversation(comms):
     for name in ("claude-ai", "colleague", "user", "other"):
-        comms.registry.declare(Thread(
-            name=name, tags=frozenset(), worktree=Checkout(Path("/work")),
-        ))
+        comms.registry.declare(NativeThread(
+            name=name, tags=frozenset(), worktree=Checkout(Path("/work"))))
     expected = []
     for number in range(5):
         sender, target = (("claude-ai", "colleague") if number % 2 == 0

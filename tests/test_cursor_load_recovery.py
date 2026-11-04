@@ -16,7 +16,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.coordinator import Coordination
 from agent_comms.owner_protocol import OwnerLine, OwnerUpdate
 from agent_comms.runtime_server import SocketClient
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 @pytest.fixture
@@ -29,7 +29,7 @@ async def test_trusted_load_recovers_after_real_sql_contention(tmp_path, private
     # Draining an owned inbox publishes native cursors, which only a private root may do.
     comms = private_comms
     owner = comms.registry.declare(
-        Thread('reader', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+        NativeThread('reader', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.participants.register(

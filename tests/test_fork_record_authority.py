@@ -14,7 +14,7 @@ from agent_comms.errors import UnreceivedAnswerError
 from agent_comms.head_review import PullRequestHead
 from agent_comms.messaging import TeamReceipts
 from agent_comms.repo import Checkout
-from agent_comms.threads import ExternalThreadExecution, SubagentExecution, Thread
+from agent_comms.threads import ExternalThread, SubagentThread
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.standing_rules import DirectiveUnacted
 from agent_comms.todos import NoHeadOrder, RequestDirective, ReviewedHeadVerdict, VerdictAudience, VerdictReason
@@ -27,9 +27,9 @@ REASON = VerdictReason("The existing class owns this behavior without another co
 
 def test_shared_record_maintenance_does_not_make_a_successor_the_private_recipient(fork_bus):
     comms, source, _ = fork_bus
-    comms.registry.declare(Thread(
+    comms.registry.declare(ExternalThread(
         "successor", frozenset({"comms", TeammatesTag.declared_name}), Checkout(source.checkout),
-        model=DeclaredModel("anthropic/claude-opus-4-6"), execution=ExternalThreadExecution))
+        model=DeclaredModel("anthropic/claude-opus-4-6")))
     retired = comms.registry.require("retained").incarnation
     comms.goals.todos.add_request(retired, "The retired teammate's request")
     ask = comms.messaging.send_user_message(
@@ -50,9 +50,9 @@ def test_shared_record_maintenance_does_not_make_a_successor_the_private_recipie
 def test_retained_owners_private_directive_does_not_become_every_peers_debt(fork_bus):
     comms, source, _ = fork_bus
     for name in ("peer-one", "peer-two"):
-        comms.registry.declare(Thread(
+        comms.registry.declare(ExternalThread(
             name, frozenset({"comms", TeammatesTag.declared_name}), Checkout(source.checkout),
-            model=DeclaredModel("anthropic/claude-opus-4-6"), execution=ExternalThreadExecution))
+            model=DeclaredModel("anthropic/claude-opus-4-6")))
     retired = comms.registry.require("retained").incarnation
     request = comms.goals.todos.add_request(retired, "The retired teammate's request")
     ask = comms.messaging.send_user_message(
@@ -80,7 +80,7 @@ def test_channel_delivery_excludes_forks_but_keeps_rosters_and_team_answers(fork
     parent = comms.registry.require("colleague")
     comms.registry.register(replace(
         parent, tags=parent.tags | {TeammatesTag.declared_name}))
-    comms.registry.register_child("slot", "colleague", SubagentExecution, comms.goals)
+    comms.registry.register_child("slot", "colleague", SubagentThread, comms.goals)
     forks = tuple(ForkCaller(f"review-{index}") for index in range(fork_count))
     for fork in forks:
         fork.join(comms, "colleague")

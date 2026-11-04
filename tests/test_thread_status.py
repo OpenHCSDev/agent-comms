@@ -33,14 +33,14 @@ from agent_comms.thread_status import (
 )
 from agent_comms.thread_text import GivenThreadText
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.threads import Thread, OwnerLifecycleControl
+from agent_comms.threads import OwnerLifecycleControl, NativeThread
 
 
 def test_captured_owner_presentation_survives_exit_until_fresh_acquisition(tmp_path):
     comms = wire(tmp_path)
     child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
     try:
-        thread = Thread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(child.pid))
+        thread = NativeThread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(child.pid))
         comms.registry.register(thread, RunningThreadStatus())
         view, = comms.views.thread_views()
         displayed = view.presentation
@@ -67,7 +67,7 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status,
     comms = installed_comms(tmp_path)
     child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
     try:
-        thread = Thread('owner', frozenset({'team'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(child.pid), title=GivenThreadText('Retained title'), session_file=RegistrySessionLocation.from_path('/retained/session.jsonl', comms.root), created_at=12.5)
+        thread = NativeThread('owner', frozenset({'team'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(child.pid), title=GivenThreadText('Retained title'), session_file=RegistrySessionLocation.from_path('/retained/session.jsonl', comms.root), created_at=12.5)
         comms.registry.register(thread, status)
         with comms.registry.store.editing() as edit:
             edit.document.last_seen[thread.name] = time.time() - age
@@ -118,7 +118,7 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status,
 def test_live_owner_cannot_be_deleted_and_heartbeat_keeps_both_counters(tmp_path, status):
     registry = Registration(tmp_path / "registry.json")
     registry.register(
-        Thread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
+        NativeThread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
         status,
     )
     before = registry.snapshot()
@@ -136,7 +136,7 @@ def test_live_owner_cannot_be_deleted_and_heartbeat_keeps_both_counters(tmp_path
 def test_reactivation_rotates_owner_and_claim_without_rebinding_history(tmp_path, status):
     registry = Registration(tmp_path / "registry.json")
     registry.register(
-        Thread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
+        NativeThread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
         status,
     )
     before = registry.snapshot()
@@ -150,7 +150,7 @@ def test_reactivation_rotates_owner_and_claim_without_rebinding_history(tmp_path
 
 def test_delete_fence_rejects_metadata_and_presence_without_erasing_data(tmp_path):
     registry = Registration(tmp_path / "registry.json")
-    registry.register(Thread('owner', frozenset(), Checkout(tmp_path)), StoppedThreadStatus())
+    registry.register(NativeThread('owner', frozenset(), Checkout(tmp_path)), StoppedThreadStatus())
     registry.begin_delete("owner")
     before = registry.store.path.read_bytes()
     with pytest.raises(RelationViolationError):
@@ -167,7 +167,7 @@ def test_inactive_owner_survives_a_refused_viewer(tmp_path, status):
     from agent_comms.ui_model.status import ThreadStatusModel
 
     comms = wire(tmp_path)
-    comms.registry.register(Thread('owner', frozenset(), Checkout(tmp_path)), status)
+    comms.registry.register(NativeThread('owner', frozenset(), Checkout(tmp_path)), status)
     view = comms.views.thread_presentations(('owner',)).views['owner']
     transferred = FieldCodec.decode(ThreadView, FieldCodec.encode(view)).presentation
     row = ThreadStatusModel.known('owner', transferred)
@@ -206,12 +206,11 @@ def test_tier_only_tool_changes_next_catalog_without_changing_active_request(tmp
     from agent_comms.tools import invoke_tool
 
     comms = wire(tmp_path)
-    comms.registry.declare(Thread("colleague", frozenset(), Checkout(tmp_path)))
-    comms.registry.register(Thread(
+    comms.registry.declare(NativeThread("colleague", frozenset(), Checkout(tmp_path)))
+    comms.registry.register(NativeThread(
         "subject", frozenset(), Checkout(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid()),
-        model=DeclaredModel("openai/test"), service_tier=ServiceTier.PRIORITY,
-    ), RunningThreadStatus())
+        model=DeclaredModel("openai/test"), service_tier=ServiceTier.PRIORITY), RunningThreadStatus())
     # Only a running thread renames; the tier change is then asked of the given status.
     comms.registry.rename("subject", "renamed")
     comms.registry.register(comms.registry.require("renamed"), status)
@@ -255,7 +254,7 @@ def test_batch_source_rename_keeps_the_original_registry_fence(comms):
     from agent_comms.coordination_errors import StaleRevision
 
     comms.registry.register(
-        Thread('alpha', frozenset(), Checkout(comms.root), process_identity=ProcessIdentity.capture(os.getpid())),
+        NativeThread('alpha', frozenset(), Checkout(comms.root), process_identity=ProcessIdentity.capture(os.getpid())),
         RunningThreadStatus(),
     )
     batch = comms.views.thread_presentations(("alpha",))

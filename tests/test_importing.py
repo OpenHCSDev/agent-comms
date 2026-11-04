@@ -56,12 +56,7 @@ from agent_comms.cli_bridges.opencode_parts import SavedMessage
 from agent_comms.cli_bridges.opencode_protocol import Session
 from agent_comms.nominal.field_codec import FieldCodec, MessageId
 from agent_comms.native_entries import NativeEntry, ImportedMetadataEntry
-from agent_comms.threads import (
-    Thread,
-    ThreadProvenance,
-    ExternalThreadExecution,
-    NativeThreadExecution,
-)
+from agent_comms.threads import ThreadProvenance, ExternalThread, NativeThread
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.runtime_updates import FinishedItem, TurnEnded
 from agent_comms.ui_model.message_category import AgentCategory, ThinkingCategory, UserCategory
@@ -93,7 +88,7 @@ def bodies(snapshot: ImportSnapshot) -> list[str]:
     (GivenThreadText("Authored title"), "Authored title", "Authored title"),
 ])
 def test_thread_display_title_is_inherited_without_copying_the_name(tmp_path: Path, title: ThreadText, display: str, renamed_display: str, *, thread_registration: Registration) -> None:
-    thread = thread_registration.declare(Thread('original', frozenset(), Checkout(tmp_path), title=title))
+    thread = thread_registration.declare(NativeThread('original', frozenset(), Checkout(tmp_path), title=title))
     captured = ThreadProvenance.capture(thread)
     assert thread.title == captured.title == title
     assert thread.display_title == captured.display_title == display
@@ -394,8 +389,8 @@ def test_rehome_moves_a_codex_thread_to_pi_on_its_own_birth(
     monkeypatch.setattr(subprocess, "run", lambda argv, **_: systemctl.append(argv))
     worktree = tmp_path / "worker-worktree"
     worktree.mkdir()
-    before = comms.registry.declare(Thread(
-        "worker", frozenset({"team"}), Checkout(worktree), execution=ExternalThreadExecution))
+    before = comms.registry.declare(ExternalThread(
+        "worker", frozenset({"team"}), Checkout(worktree)))
     source = codex_lines(tmp_path / "rollout.jsonl", [
         codex_meta("codex-session", tmp_path), codex_message("user", "Keep going")])
 
@@ -406,7 +401,7 @@ def test_rehome_moves_a_codex_thread_to_pi_on_its_own_birth(
     assert after.incarnation == before.incarnation and after.created_at == before.created_at
     assert (after.tags, after.worktree, after.storage_roots) == (
         before.tags, before.worktree, before.storage_roots)
-    assert after.execution is NativeThreadExecution and after.process_identity == NO_PROCESS
+    assert after.execution is NativeThread and after.process_identity == NO_PROCESS
     assert comms.registry.status("worker") == StoppedThreadStatus()
     assert Path(rehomed.session_file).is_file() and rehomed.source_id == "codex-session"
     assert systemctl == [("systemctl", "--user", "disable", "--now",

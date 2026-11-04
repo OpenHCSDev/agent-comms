@@ -20,7 +20,7 @@ from agent_comms.maintenance_barrier import MaintenanceOperator
 from agent_comms.store_files import ExclusiveLock, StoreLockContention, _store_lock
 from agent_comms_hooks import ToolRefusedError
 from test_locked_store import event, process
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 def record_refusal(root, started):
@@ -55,7 +55,7 @@ def test_refusal_writer_keeps_registry_permission_until_its_sql_write_finishes(p
 def held_bus(tmp_path):
     comms = wire(tmp_path)
     for name in ('sender', 'recipient'):
-        comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path)))
+        comms.registry.declare(NativeThread(name, frozenset(), Checkout(tmp_path)))
     assert comms.bus.inbox('recipient').page.messages == ()
     barrier = comms.owners.maintenance
     hold = barrier.begin(MaintenanceOperator.current())

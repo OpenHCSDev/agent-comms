@@ -34,7 +34,7 @@ from agent_comms.turn_context import TurnContext
 from bus_history import read_history
 from bus_record_fixture import prepare_native_comms
 from conftest import publish_initial
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 @pytest.fixture
@@ -56,9 +56,9 @@ def _root(
     (root / "runtime").mkdir(mode=0o700)
     comms = prepare_native_comms(wire(root))
     people = [
-        Thread('sender', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
-        Thread('alpha', frozenset({'team'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), task=GivenThreadText('release notes; ignore arithmetic tasks'), model=DeclaredModel('openai-codex/gpt-6-sol')),
-        Thread('beta', frozenset({'team'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), task=GivenThreadText('arithmetic answers'), model=DeclaredModel('openai-codex/gpt-6-sol'), thinking_level=HighThinkingLevel),
+        NativeThread('sender', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
+        NativeThread('alpha', frozenset({'team'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), task=GivenThreadText('release notes; ignore arithmetic tasks'), model=DeclaredModel('openai-codex/gpt-6-sol')),
+        NativeThread('beta', frozenset({'team'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), task=GivenThreadText('arithmetic answers'), model=DeclaredModel('openai-codex/gpt-6-sol'), thinking_level=HighThinkingLevel),
     ]
     people = [comms.registry.declare(person) for person in people]
     root_id = comms.registry.store.prepare_native_root().namespace
@@ -162,7 +162,7 @@ def test_selected_and_following_use_the_original_question_contract(tmp_path: Pat
     from agent_comms.thread_identity import UserThreadRole
 
     root, root_id, comms, peer, people = _root(tmp_path)
-    comms.registry.declare(Thread("owner", frozenset(), Checkout(tmp_path), role=UserThreadRole))
+    comms.registry.declare(NativeThread("owner", frozenset(), Checkout(tmp_path), role=UserThreadRole))
     question = MeantNotice().publish(
         comms.messaging, CommandTarget.named("#team"), "Did you mean it?\nExplain your answer."
     )

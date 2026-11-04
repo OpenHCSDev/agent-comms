@@ -645,7 +645,7 @@ class ThreadRole(DeclaredFamily, ProjectionSource, affix="ThreadRole"):
     def independent_threads(cls, thread: Thread) -> tuple[Thread, ...]:
         """Derive work actors from this role's executors and their declared independence."""
         return tuple(peer for executor in cls.executor(thread)
-                     for peer in executor.execution.independent_threads(executor))
+                     for peer in executor.independent_threads())
 
     @classmethod
     def allows_automatic_reply(cls) -> bool:

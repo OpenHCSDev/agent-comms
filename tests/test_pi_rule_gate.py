@@ -25,7 +25,7 @@ from agent_comms.pi_rule_gate import PiRedeal, RulesUnread
 from agent_comms.repo import Checkout
 from agent_comms.selected_tool_broker import SelectedToolRequest, SelectedWriteArguments
 from agent_comms.task_attachments.owner_notices import MeantNotice, RestartNotice
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.thread_model import DeclaredModel
@@ -252,7 +252,7 @@ def test_gate_can_be_disabled_and_reenabled_without_forging_a_read(peer_deal):
 
 def test_a_bus_without_a_storage_lead_still_deals_the_shared_sources(comms, tmp_path):
     """Project storage configuration does not change an independent session's rules."""
-    peer = comms.registry.declare(Thread("peer-y", frozenset(), Checkout(tmp_path)))
+    peer = comms.registry.declare(NativeThread("peer-y", frozenset(), Checkout(tmp_path)))
     deal = PiRedeal.of(comms, peer)
     deal.start()
     assert deal.current().dealt == tuple(path.resolve() for path in DeckReader.sources())
@@ -322,7 +322,7 @@ def owner_lines(bus, name: str) -> list[str]:
 def compacted_pi_session(tmp_path, team_bus, name):
     """A Pi thread with its own fresh native session, its rules just re-dealt by a compaction."""
     session = create_fresh_private_session(tmp_path / "sessions", worktree=Checkout(tmp_path)).path
-    team_bus.registry.declare(Thread(
+    team_bus.registry.declare(NativeThread(
         name, frozenset(), Checkout(tmp_path),
         session_file=RegistrySessionLocation.from_path(str(session), team_bus.root),
         model=DeclaredModel("anthropic/claude-opus-4-6")))

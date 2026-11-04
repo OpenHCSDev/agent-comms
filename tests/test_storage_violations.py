@@ -26,7 +26,7 @@ from agent_comms.storage_rules import StorageRule, UnitStorage
 from agent_comms.todos import PendingProblemOrder, PresentCheckout, ProgressRead
 from agent_comms.ui_model.teammate_state import TeammateState
 from order_scope_fixture import FIX_SCOPE
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 @pytest.mark.parametrize(
@@ -88,10 +88,10 @@ def test_storage_family_renders_each_broken_fact(
         json.dumps(FieldCodec.encode(StorageRule(checkout_base=base)))
     )
     comms = wire(root)
-    colleague = comms.registry.declare(Thread("colleague", frozenset(), Checkout(repository)))
+    colleague = comms.registry.declare(NativeThread("colleague", frozenset(), Checkout(repository)))
     configured_repository(comms)
     worker = comms.registry.declare(
-        Thread("worker", frozenset(), Checkout(home))
+        NativeThread("worker", frozenset(), Checkout(home))
     )
     comms.goals.todos.create(
         "P1",

@@ -31,7 +31,7 @@ from agent_comms.order_tools import (
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.registry_document import RegisteredTeamProject
 from agent_comms.repository_name import RepositoryName
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.todos import (
     AcceptedVerdict,
     DoneTodoState,
@@ -59,7 +59,7 @@ def board_read(tool, comms, caller):
 def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     source = SourceRepository.create(tmp_path / 'source')
     for name in ("colleague", "worker"):
-        comms.registry.declare(Thread(name, frozenset({"comms"}), Checkout(tmp_path)))
+        comms.registry.declare(NativeThread(name, frozenset({"comms"}), Checkout(tmp_path)))
     request = comms.goals.todos.add_request(
         comms.registry.require('colleague').incarnation, 'Repair the worker').id
     caller = ThreadCaller("colleague")
@@ -161,7 +161,7 @@ def edit_order(comms, tmp_path):
     source = SourceRepository.create(tmp_path / 'source')
     other = SourceRepository.create(tmp_path / 'other', RepositoryName.from_wire("org/other"))
     for name in ("colleague", "worker"):
-        comms.registry.declare(Thread(name, frozenset({"comms"}), Checkout(tmp_path)))
+        comms.registry.declare(NativeThread(name, frozenset({"comms"}), Checkout(tmp_path)))
     colleague = comms.registry.require('colleague').incarnation
     request = comms.goals.todos.add_request(colleague, 'Repair the worker').id
     caller = ThreadCaller("colleague")

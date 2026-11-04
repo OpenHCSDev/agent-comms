@@ -11,14 +11,14 @@ from agent_comms.message_page import MessagePageRequest, PageBounds
 from agent_comms.page_traversal import LiveCursor, NewerTraversal
 from agent_comms.read_basis import MessageDisplayScope, NamedViewer
 from bus_record_fixture import prepare_native_comms
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 @pytest.fixture
 def review_comms(tmp_path):
     comms = prepare_native_comms(wire(tmp_path))
     for name in ("sender", "recipient"):
-        comms.registry.declare(Thread(name, frozenset({'review'}), Checkout(tmp_path)))
+        comms.registry.declare(NativeThread(name, frozenset({'review'}), Checkout(tmp_path)))
     return comms
 
 

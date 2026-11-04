@@ -29,7 +29,7 @@ from agent_comms.queued_input import QueuedInput
 from agent_comms.retained_task_facts import CurrentHumanInputTaskFact, HumanInputTaskFact, InputTaskFact
 from test_acp_queue_contract import _owner
 from stored_inputs import stored_inputs
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 class Client(Controller, SessionUpdateSink):
@@ -305,7 +305,7 @@ async def test_direct_human_input_pin_shares_original_source_lineage_without_rep
     repeated = comms.messaging.pin_input_constraint('beta', subject, worktree=worktree)
     assert captured('beta').current_authored_sources(snapshot.require('beta'), snapshot) == (Message.from_message(repeated),)
     before = comms.bus.bus.revision()
-    comms.registry.declare(Thread('unaddressed', frozenset(), worktree))
+    comms.registry.declare(NativeThread('unaddressed', frozenset(), worktree))
     with pytest.raises(RelationViolationError):
         comms.messaging.pin_input_constraint('unaddressed', subject, worktree=worktree)
     with pytest.raises(RelationViolationError):

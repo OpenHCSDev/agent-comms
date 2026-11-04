@@ -89,7 +89,7 @@ class TeamService:
         return tuple(dict.fromkeys(
             fork for teammate in teammates
             for thread in snapshot.children(teammate.name)
-            for fork in thread.execution.forks(thread)
+            for fork in thread.forks()
         ))
 
     @classmethod
