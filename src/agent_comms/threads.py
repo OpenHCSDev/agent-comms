@@ -418,8 +418,8 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread")
         visited.add(self.name)
         for name in self.parent.names():
             parent = registry.require(name)
-            for location, _ in parent.runtime.history_locations(parent, registry, visited):
-                yield location, True
+            for location, view in parent.runtime.history_locations(parent, registry, visited):
+                yield location, view.seen_from_fork(self.incarnation.wire_birth)
 
     def contains_worktree(self, worktree: Checkout, rule: StorageRule) -> bool:
         """A project this conversation ran in, or this unit's physical home and extra checkouts."""

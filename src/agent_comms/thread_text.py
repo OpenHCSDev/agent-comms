@@ -7,13 +7,11 @@ import re
 from abc import ABC, abstractmethod
 from collections.abc import Collection, Iterator
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
 
+from agent_comms.history_view import ForkOwnHistory, HistoryView, OwnHistory
 from agent_comms.nominal.field_codec import NullMember, SingleFieldValue, SubclassUnion, boundary_decoder
-
-if TYPE_CHECKING:
-    pass
 
 
 class TextChoice(ABC):
@@ -97,6 +95,8 @@ class ThreadParent(SubclassUnion, TextChoice, affix="Parent"):
     """The thread this one was forked from, or none."""
 
     forked: ClassVar[bool]
+    own_history: ClassVar[HistoryView]
+    """How this thread shows its own history."""
 
     @abstractmethod
     def names(self) -> tuple[str, ...]: ...
@@ -113,6 +113,7 @@ class ThreadParent(SubclassUnion, TextChoice, affix="Parent"):
 class ForkedParent(GivenText, ThreadParent):
     text: str
     forked = True
+    own_history = ForkOwnHistory()
 
     def names(self) -> tuple[str, ...]:
         return (self.text,)
@@ -126,6 +127,7 @@ class NoParent(AbsentText, ThreadParent):
     """A thread that was registered or created, not forked."""
 
     forked = False
+    own_history = OwnHistory()
 
     def names(self) -> tuple[str, ...]:
         return ()

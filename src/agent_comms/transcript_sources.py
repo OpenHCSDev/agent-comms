@@ -14,6 +14,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
+from .history_view import HistoryView
 from .native_entries import TranscriptProjection
 
 if TYPE_CHECKING:
@@ -195,11 +196,14 @@ class TranscriptTraversal(ABC):
         sources: TranscriptSource,
         initial: TranscriptCursor,
         frontier: TranscriptCursor,
+        view: HistoryView,
         *,
         max_messages: int,
         max_bytes: int,
     ) -> tuple[TranscriptCursor, list[tuple[TranscriptEvent, ...]]]:
-        """Advance each file position only after reading the record at that position."""
+        """Advance each file position only after reading the record at that position. A record or
+        message the view does not keep is passed over like an eventless record, so it neither
+        fills the page nor stops it."""
         consumed, records, used = initial, [], 0
         # A tool round opened by an already appended record keeps the window open
         # until its paired record is appended too; the bounded grace keeps an
@@ -208,7 +212,8 @@ class TranscriptTraversal(ABC):
         round_grace = 0
         native = (self.native(reader, initial, frontier) if reader.has_records(frontier.offset)
                   else (record for record in ()))
-        projected = project(native, max_records=max_messages + 1, max_bytes=max_bytes)
+        projected = ((record, view.kept(events)) for record, events
+                     in project(native, max_records=max_messages + 1, max_bytes=max_bytes))
         try:
             record, events = next(projected, (None, ()))
             source_rows = iter(
@@ -228,7 +233,11 @@ class TranscriptTraversal(ABC):
                     message is None
                     or self.chooses_native(native_time, message.message.timestamp)
                 )
-                batch = events if choose_native else sources.events(message)
+                batch = events if choose_native else view.kept(sources.events(message))
+                if not batch:
+                    consumed = consumed.at_sequence(self.receipt_position(message.message))
+                    message = next(source_rows, None)
+                    continue
                 cost = record.size if choose_native else 0
                 if records and (len(records) >= max_messages or (choose_native and used + cost > max_bytes)):
                     if not open_rounds or round_grace >= self.round_grace_limit:
