@@ -234,7 +234,7 @@ class TeamVocabularyFiles(TeamVocabulary):
                 old.unlink()
             for directory, _ in directories:
                 directory.rmdir()
-        rewritten = (*documents, *(new for new, _ in moves.values()))
+        rewritten = (*documents, *moves, *(new for new, _ in moves.values()))
         return Carried(
             len(documents) + len(moves) + len(directories),
             rewritten=tuple(path.relative_to(self.root) for path in rewritten) if apply else (),
