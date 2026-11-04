@@ -11,7 +11,7 @@ from agent_comms.channel_targets import ThreadTarget
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
-from agent_comms.nominal.field_codec import FieldCodec, RootId, TurnId
+from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, RootId, TurnId
 from agent_comms.read_basis import Conversation
 from agent_comms.read_ledger import ReadDocument
 from agent_comms.registration import Registration
@@ -202,6 +202,8 @@ def test_claim_scope_cannot_decode_a_registry_process_owner(tmp_path):
     context = QueuedInputContext.capture(owner, claim_scope)
     assert context.owns(claim_scope)
     assert not context.owns(registry_owner)
+    # Unregistering drops the row's process binding; the scopes keep the one it had.
+    process = owner.require_process()
     # Repeated revocation advances claim_scope without a second owner replacement.
     registry.unregister("owner")
     registry.unregister("owner")
@@ -215,11 +217,12 @@ def test_claim_scope_cannot_decode_a_registry_process_owner(tmp_path):
     assert not original_binding.superseded_by(snapshot.owner_binding("owner"))
     for scope in (
         LiveQueueScope(
-            session_id="official-session", claimed_identity=claim_scope, owner=owner.require_process(),
+            session_id=AcpSessionId("official-session"), claimed_identity=claim_scope,
+            owner=process,
         ),
         LiveCursorScope(
-            session_id="official-session", wire_root_id=RootId("a" * 32),
-            claimed_identity=claim_scope, owner=owner.require_process(),
+            session_id=AcpSessionId("official-session"), wire_root_id=RootId("a" * 32),
+            claimed_identity=claim_scope, owner=process,
         ),
     ):
         encoded = FieldCodec.encode(scope)

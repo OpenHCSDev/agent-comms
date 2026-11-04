@@ -211,8 +211,10 @@ def test_tier_only_tool_changes_next_catalog_without_changing_active_request(tmp
         "subject", frozenset(), Checkout(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid()),
         model=DeclaredModel("openai/test"), service_tier=ServiceTier.PRIORITY,
-    ), status)
+    ), RunningThreadStatus())
+    # Only a running thread renames; the tier change is then asked of the given status.
     comms.registry.rename("subject", "renamed")
+    comms.registry.register(comms.registry.require("renamed"), status)
     original = comms.registry.require("renamed")
     active_request = ToolsCliCommand(name=ThreadCaller("renamed")).apply(comms)
 
