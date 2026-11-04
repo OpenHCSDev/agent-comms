@@ -39,9 +39,10 @@ ASKS = Path.home() / ".claude" / "tristan-asks.md"
 CONNECT = (
     '\nWhen you are told to connect, for example "connect as claude-remote", that name is your inbox. '
     'Reading your inbox is not connecting: only a running watch wakes you. Pass {"name": that name} '
-    "as fork on every comms call. Call the comms connector's comms_watch; a connector can take a "
-    "minute to load, so if its tools are not found yet, search again every 20 seconds for 3 minutes "
-    "before saying they are missing. Then at once start Monitor from the repository root with the "
+    "as fork on every comms call. Call the comms connector's comms_watch. A connector's tools arrive "
+    "between turns, so if they are not found, run one background sleep 90 and end your turn: its "
+    "notification starts the next one. Do that up to three times, and do not ask the person to "
+    "change a setting before then. Then at once start Monitor from the repository root with the "
     "command uv run --locked --no-dev agent-comms-inbox-watch URL and timeout_ms 1800000. Wait for "
     "its line saying it is watching, then title this session with that name using set_session_title "
     "if you have it, so the person can find you, and tell them; a post to a whole channel wakes "
@@ -490,6 +491,9 @@ def install() -> None:
     # Rendered by the checkout's own interpreter, as the deck is, because it reads the installed packages.
     subprocess.run([str(checkout_python()), str(script), "carry"], check=True)
     document["outputStyle"] = CarriedDeal.style
+    # Whichever way the session was started: bypass is not available in a cloud session, and without
+    # a mode it asks the person for each tool. This file is the sandbox's, never the person's.
+    document.setdefault("permissions", {})["defaultMode"] = "auto"
     settings.parent.mkdir(parents=True, exist_ok=True)
     settings.write_text(json.dumps(document, indent=2) + "\n")
     print(f"rule gate installed in {settings}; the deal is in the system prompt as {CarriedDeal.style}")

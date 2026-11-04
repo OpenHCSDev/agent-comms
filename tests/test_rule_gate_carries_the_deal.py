@@ -138,6 +138,7 @@ def test_install_selects_the_style_and_keeps_the_settings_it_found(tmp_path: Pat
 
     document = json.loads(settings.read_text())
     assert document["outputStyle"] == "team-deal" and document["model"] == "kept"
+    assert document["permissions"]["defaultMode"] == "auto"
     assert ran[-1] == [str(gate.checkout_python()), str(GATE.resolve()), "carry"]
 
 
