@@ -191,11 +191,14 @@ class InboxWatch:
         with self.wire() as comms:
             try:
                 await PushedTranscript(comms, self.thread, socket).publish_transcript()
-            except Exception as failure:
+            except* Exception as failures:
                 logging.exception("Transcript from %s stopped", self.thread)
+                # A decoder's first line lists its whole union, so what went wrong is at the end.
+                causes = "; ".join(f"{type(failure).__name__}: {str(failure)[-400:]}"
+                                   for failure in failures.exceptions)
                 comms.messaging.send(self.thread, "#comms", (
                     f"{self.thread}'s work stopped reaching the bus, though its push still works: "
-                    f"{type(failure).__name__}: {failure}"))
+                    f"{causes}"))
         async for _ in socket:
             pass
 
