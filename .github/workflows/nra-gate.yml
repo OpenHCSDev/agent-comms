@@ -53,9 +53,12 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      statuses: write
     outputs:
       base: ${{ steps.sources.outputs.base }}
       combined: ${{ steps.sources.outputs.combined }}
+      tested: ${{ steps.sources.outputs.tested }}
+      reused: ${{ steps.reuse.outputs.reused }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -71,10 +74,44 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: PYTHONPATH=src python -m agent_comms.integration --resolve-ci-inputs "$RUNNER_TEMP/job-sources" --workflow-output "$GITHUB_OUTPUT"
+      # The head's tested sources stay pending until the `tested` job sees every job green.
+      - name: This head's tested sources are pending
+        if: github.event_name == 'pull_request' && !github.event.pull_request.draft
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          TESTED: ${{ steps.sources.outputs.tested }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$HEAD" -f state=pending \
+            -f context=agent-comms/tested -f "description=$TESTED" > /dev/null
+      # When main has not moved, the queue commit tests exactly the sources (each repository's
+      # baseline and tree) its pull request's green run already tested: the measuring jobs then
+      # report success without measuring again. Anything else, or any failed lookup, measures.
+      - name: Whether a green pull-request run already tested these sources
+        id: reuse
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          QUEUE_REF: ${{ github.event.merge_group.head_ref }}
+          TESTED: ${{ steps.sources.outputs.tested }}
+        run: |
+          reused=false
+          recorded=none
+          if [[ $GITHUB_EVENT_NAME == merge_group && $QUEUE_REF =~ /pr-([0-9]+)- ]]; then
+            head=$(gh api "repos/$GITHUB_REPOSITORY/pulls/${BASH_REMATCH[1]}" --jq .head.sha) || head=""
+            if [[ -n $head ]]; then
+              recorded=$(gh api "repos/$GITHUB_REPOSITORY/commits/$head/status" --jq \
+                '[.statuses[] | select(.context == "agent-comms/tested")][0] // {} | "\(.state) \(.description)"') || recorded=none
+            fi
+            [[ $recorded == "success $TESTED" ]] && reused=true
+          fi
+          echo "this run tests $TESTED; the pull request's run recorded: $recorded; reused=$reused"
+          echo "reused=$reused" >> "$GITHUB_OUTPUT"
 
   smoke:
     needs: [ready, base]
-    if: needs.base.outputs.combined == 'true'
+    if: needs.base.outputs.combined == 'true' && needs.base.outputs.reused != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -127,7 +164,8 @@ jobs:
 
   native-scripts:
     name: native-scripts
-    needs: ready
+    needs: [ready, base]
+    if: needs.base.outputs.reused != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -150,7 +188,7 @@ jobs:
   install-rehearsal:
     name: install-rehearsal
     needs: [ready, base]
-    if: needs.base.outputs.combined == 'true'
+    if: needs.base.outputs.combined == 'true' && needs.base.outputs.reused != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -232,6 +270,7 @@ jobs:
   nra-gate:
     name: debt-${{ matrix.kind }}
     needs: base
+    if: needs.base.outputs.reused != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -239,18 +278,40 @@ jobs:
       pull-requests: write
     strategy:
       fail-fast: false
+      # A root's debt can only grow when the change reaches it: its own files, Core it imports,
+      # or the locked checker. A combined carrier also changes its paired sources.
       matrix:
-        kind: [src, tools]
+        include:
+          - kind: src
+            reaches: src pyproject.toml uv.lock
+          - kind: tools
+            reaches: tools src pyproject.toml uv.lock
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - name: Whether the change reaches this root
+        id: reach
+        env:
+          BASE: ${{ needs.base.outputs.base }}
+          COMBINED: ${{ needs.base.outputs.combined }}
+          REACHES: ${{ matrix.reaches }}
+        run: |
+          read -ra paths <<< "$REACHES"
+          if [[ $COMBINED == true ]] || ! git diff --quiet "$BASE" HEAD -- "${paths[@]}"; then
+            echo "reaches=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "reaches=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.reach.outputs.reaches == 'true'
+        uses: actions/setup-python@v5
         with:
           python-version-file: pyproject.toml
 
       - name: Bootstrap only Core and locked checker dependencies
+        if: steps.reach.outputs.reaches == 'true'
         run: |
           python -m pip install packaging
           python -m pip install "$(python -I src/agent_comms/installer/declared_uv.py pyproject.toml)"
@@ -258,16 +319,19 @@ jobs:
           echo "$RUNNER_TEMP/checker-venv/bin" >> "$GITHUB_PATH"
 
       - name: Resolve the actual tested source tuple once
+        if: steps.reach.outputs.reaches == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: PYTHONPATH=src python -m agent_comms.integration --resolve-ci-inputs "$RUNNER_TEMP/paired-sources"
 
       - name: Build the one common checker environment
+        if: steps.reach.outputs.reaches == 'true'
         run: PYTHONPATH=src:tools python tools/checker_stack.py --ci-inputs "$RUNNER_TEMP/paired-sources"
 
       # Saved by nra-gate-cache.yml on main; entries are keyed by content, so any
       # older main's cache only misses where the code differs.
-      - uses: actions/cache/restore@v4
+      - if: steps.reach.outputs.reaches == 'true'
+        uses: actions/cache/restore@v4
         with:
           path: ~/.cache/agent-comms
           key: nra-gate-${{ matrix.kind }}-${{ needs.base.outputs.base }}
@@ -275,6 +339,7 @@ jobs:
 
       - name: No new structural debt against the base
         id: gate
+        if: steps.reach.outputs.reaches == 'true'
         env:
           BASE: ${{ needs.base.outputs.base }}
         run: |
@@ -287,6 +352,7 @@ jobs:
           exit "$gate_status"
 
       - name: The same sources are still current before success
+        if: steps.reach.outputs.reaches == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: PYTHONPATH=src python -m agent_comms.integration --revalidate-ci-inputs "$RUNNER_TEMP/paired-sources"
@@ -299,3 +365,30 @@ jobs:
           findings: gate-findings.txt
           kind: debt-${{ matrix.kind }}
           outcome: ${{ steps.gate.outcome }}
+
+  # Every job green on this head records its tested sources, which a queue entry with the same
+  # sources reuses instead of measuring again. A required job that did not run records failure.
+  tested:
+    name: tested
+    needs: [base, smoke, native-scripts, install-rehearsal, review-verdict, nra-gate]
+    if: always() && github.event_name == 'pull_request' && !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      statuses: write
+    steps:
+      - name: Record whether every job passed on these tested sources
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          TESTED: ${{ needs.base.outputs.tested }}
+          MEASURED: ${{ needs.base.result }} ${{ needs.native-scripts.result }} ${{ needs.review-verdict.result }} ${{ needs.nra-gate.result }}
+          OPTIONAL: ${{ needs.smoke.result }} ${{ needs.install-rehearsal.result }}
+        run: |
+          state=success
+          for result in $MEASURED; do [[ $result == success ]] || state=failure; done
+          for result in $OPTIONAL; do [[ $result == success || $result == skipped ]] || state=failure; done
+          echo "measured: $MEASURED; optional: $OPTIONAL; agent-comms/tested=$state"
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$HEAD" -f state=$state \
+            -f context=agent-comms/tested -f "description=$TESTED" > /dev/null
