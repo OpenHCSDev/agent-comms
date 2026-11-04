@@ -3826,7 +3826,7 @@ class Assignment(TodoHolder):
     @property
     def consent(self) -> HolderConsent:
         """Where this work came from, decided once from who assigned it to whom."""
-        if (self.parent, self.parent_created) == (self.owner, self.owner_created):
+        if self.parent_identity == self.owner_identity:
             return SelfFiledWork()
         return HandedWork()
 
