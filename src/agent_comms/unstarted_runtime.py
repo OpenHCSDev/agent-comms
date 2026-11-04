@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from .agent_backend import AgentBackend, FailedCompaction, RuntimeLocation
 from .external_transcript import ExternalTranscript
+from .history_view import ForkOwnHistory
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,11 @@ class UnstartedRuntime(RuntimeLocation):
     def history_locations(self, thread, registry, visited):
         yield from thread.inherited_history(registry, visited)
         yield self, thread.parent.own_history
+
+    def view_from_fork(self, view, fork_birth):
+        """history_source reads the asking thread's own records, whichever thread this location
+        came from. A fork's own work is all after its birth, so no date can filter it."""
+        return ForkOwnHistory()
 
     def external_records(self, root, incarnation):
         return self.history_source(root, incarnation)
