@@ -29,6 +29,11 @@ class MessageReference(TypedRow, ProjectionSource):
     seq: int
     message_id: MessageId
 
+    @property
+    def name(self) -> str:
+        """How a reader names this message: its bus position, then its identity."""
+        return f"{self.seq}-{self.message_id}"
+
 
 class InboxStart(SubclassUnion, affix="Start"):
     """Where an unread read begins: after a message already taken, or at the first unread."""

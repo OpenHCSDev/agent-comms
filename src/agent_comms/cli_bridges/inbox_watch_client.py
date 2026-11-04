@@ -100,6 +100,18 @@ class WatchedMonitorFrame(ClaudeMonitorFrame):
     def shown_inline(self) -> str:
         return self.inline
 
+    @property
+    def identity(self) -> str:
+        """No decoder reads this header, so it names the whole reference a reply must cite."""
+        return self.message.reference.name
+
+    @property
+    def shows_safely_inline(self) -> bool:
+        """Shown as written, each body line is a line of the event, and the transcript decoder
+        reads every line: a body quoting one of our frames goes to the file, where nothing
+        decodes it."""
+        return not any(self.claims(line) for line in self.message.body.split('\n'))
+
 
 @dataclass(frozen=True)
 class InboxSocket:

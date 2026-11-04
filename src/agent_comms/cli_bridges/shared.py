@@ -1559,7 +1559,7 @@ class MonitorReadFile(MonitorProtocolFrame, declared_name='read-file'):
     @classmethod
     def naming(cls, directory: Path, reference: MessageReference) -> Self:
         return cls.model_validate(dict(
-            reference=reference, path=str(directory / f'{reference.seq}-{reference.message_id}.txt')))
+            reference=reference, path=str(directory / f'{reference.name}.txt')))
 
     @classmethod
     def exported_at(cls, directory: Path, path: str) -> tuple[Self, ...]:

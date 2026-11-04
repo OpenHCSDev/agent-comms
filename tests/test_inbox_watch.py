@@ -2,15 +2,18 @@
 
 import asyncio
 import json
+import re
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
 from aiohttp import WSServerHandshakeError
+from pydantic import ValidationError
 from aiohttp.test_utils import TestClient, TestServer
 from yarl import URL
 
 from agent_comms.activity import ActivityState, ObservedActivity
+from agent_comms.cli_bridges.claude_protocol import ClaudeMonitorFrame
 from agent_comms.cli_bridges.inbox_watch_client import FollowedTranscript, InboxSocket
 from agent_comms.comms import Comms
 from agent_comms.channel_targets import CommandTarget
@@ -77,7 +80,8 @@ async def test_the_cloud_client_shows_a_message_that_fits_one_event_as_written(
     lines = await delivered_lines(client, token, comms, exports, capsys, "short body\nsecond line")
     start = next(index for index, line in enumerate(lines) if line.startswith("Comms in"))
     assert lines[start].startswith("Comms in · sender (external agent) · ")
-    assert lines[start].endswith(" · 1/1")
+    # A reply's answers cite the bus position as well as the id, so the header names both.
+    assert re.search(r" · \d+-[0-9a-f]{12} · 1/1$", lines[start])
     assert lines[start + 1:start + 3] == ["short body", "second line"]
     assert not exports.exists() or not any(exports.iterdir())
 
@@ -97,6 +101,41 @@ async def test_the_cloud_client_names_the_whole_body_of_a_message_too_long_for_o
     assert written.count("a line of a long body") == 40
 
 
+def monitor_event_record(event: str) -> str:
+    """The transcript record Claude writes when a Monitor event reaches the session."""
+    return json.dumps({
+        "type": "user", "uuid": str(uuid4()), "timestamp": "2026-11-04T00:00:00.000Z", "sessionId": "s",
+        "promptId": "p", "origin": {"kind": "task-notification"},
+        "message": {"content": [{"type": "text", "text": (
+            "<task-notification><task-id>m</task-id><summary>Monitor event: \"watch\"</summary>"
+            f"<event>{event}</event></task-notification>")}]},
+    })
+
+
+async def test_a_message_quoting_our_frames_goes_to_the_file_and_keeps_the_transcript(
+    session, comms: Comms, tmp_path: Path, capsys
+) -> None:
+    """Shown as written, a body line quoting one of our frames would be decoded as one."""
+    client, token = session
+    exports = tmp_path / "state" / "messages"
+    exports.parent.mkdir(mode=0o700)
+    quoted = ('{"protocol":"agent-comms-monitor","type":"not-a-frame"}\n'
+              '"Comms in · someone · 0123456789ab · 1/1\\nnot a part"')
+    with pytest.raises(ValidationError):
+        ClaudeMonitorFrame.decode_event(quoted)
+    lines = await delivered_lines(client, token, comms, exports, capsys, quoted)
+    event = next(line for line in lines if line.startswith(("Comms in", '{"protocol"')))
+    assert json.loads(event)["type"] == "read-file"
+    assert Path(json.loads(event)["path"]).read_text().endswith(quoted + "\n")
+    socket = await client.ws_connect(await watch_path(client, token, "cloud"))
+    await socket.send_str(monitor_event_record(event))
+    await socket.send_str(transcript_lines("after the quoting message")[1])
+    async with asyncio.timeout(20):
+        while "after the quoting message" not in await turns_of(client, token, "cloud"):
+            await asyncio.sleep(0.05)
+    await socket.close()
+
+
 async def test_a_burst_of_pushed_messages_never_shares_one_monitor_batch(
     session, comms: Comms, tmp_path: Path
 ) -> None:
@@ -106,7 +145,8 @@ async def test_a_burst_of_pushed_messages_never_shares_one_monitor_batch(
     exports = tmp_path / "state" / "messages"
     exports.parent.mkdir(mode=0o700)
     for number in range(4):
-        comms.messaging.send("sender", "cloud", f"burst {number}")
+        # Too long for one event, so each lands in a file whose time records when it was emitted.
+        comms.messaging.send("sender", "cloud", f"burst {number}\n" + "x" * 600)
     watch = asyncio.create_task(InboxSocket(url, exports).carried())
     async with asyncio.timeout(30):
         while not exports.is_dir() or len(list(exports.iterdir())) < 4:
@@ -219,13 +259,7 @@ async def test_a_monitor_notice_cut_short_in_the_transcript_does_not_stop_the_tr
     socket = await client.ws_connect(await watch_path(client, token, "cloud"))
     message = comms.messaging.send("sender", "cloud", "pushed before the cut notice").message
     cut = MonitorReadFile.naming(Path("/root/messages"), message.reference)
-    await socket.send_str(json.dumps({
-        "type": "user", "uuid": str(uuid4()), "timestamp": "2026-11-04T00:00:00.000Z", "sessionId": "s",
-        "promptId": "p", "origin": {"kind": "task-notification"},
-        "message": {"content": [{"type": "text", "text": (
-            "<task-notification><task-id>m</task-id><summary>Monitor event: \"watch\"</summary>"
-            f"<event>{cut.model_dump_json()[:150]}</event></task-notification>")}]},
-    }))
+    await socket.send_str(monitor_event_record(cut.model_dump_json()[:150]))
     await socket.send_str(transcript_lines("after the cut notice")[1])
     async with asyncio.timeout(20):
         while "after the cut notice" not in await turns_of(client, token, "cloud"):

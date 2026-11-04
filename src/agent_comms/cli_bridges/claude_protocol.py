@@ -97,6 +97,8 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
     BATCH_CHARS = 3000
     READ_LINE_CHARS = 2000
     HEADER = 'Comms in'
+    PART_PREFIX = '"' + HEADER + ' · '
+    """How an encoded part's line starts, before its JSON string is decoded."""
     JSON_TEXT = WireModel.adapter(str)
 
     @staticmethod
@@ -107,9 +109,14 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
     def event_size(cls, text: str) -> int:
         return cls.units(json.dumps(text, ensure_ascii=False))
 
+    @property
+    def identity(self) -> str:
+        """The header's identity column; decode_line reads it back as the message id."""
+        return str(self.message.message_id)
+
     def header(self, number: int, total: int) -> str:
         return (f'{self.HEADER} · {self.message.sender_label} · '
-                f'{self.message.message_id} · {number}/{total}\n')
+                f'{self.identity} · {number}/{total}\n')
 
     @cached_property
     def inline(self) -> str:
@@ -117,7 +124,12 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
 
     @cached_property
     def fits_one_event(self) -> bool:
-        return self.event_size(self.inline) <= self.EVENT_CHARS
+        return self.event_size(self.inline) <= self.EVENT_CHARS and self.shows_safely_inline
+
+    @property
+    def shows_safely_inline(self) -> bool:
+        """One JSON string carries the whole message, so no body line reaches the decoder alone."""
+        return True
 
     @cached_property
     def slices(self) -> tuple[str, ...]:
@@ -177,6 +189,11 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
         await attachment.emit(self.message.message_id, number, line, window_bytes)
 
     @classmethod
+    def claims(cls, line: str) -> bool:
+        """Whether the transcript decoder reads this line as one of our frames rather than foreign."""
+        return line.startswith((MonitorProtocolFrame.wire_prefix, cls.PART_PREFIX))
+
+    @classmethod
     def decode_line(cls, line: str) -> MonitorFrame:
         # Old or unrelated monitor text, including truncated text, is a named foreign frame.
         if line.startswith(MonitorProtocolFrame.wire_prefix):
@@ -186,7 +203,7 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
                 return ForeignMonitorFrame(text=line)
             return MONITOR_FRAME.validate_json(line)
         # Classify the external header before decoding its JSON string.
-        if not line.startswith('"' + cls.HEADER + ' · '):
+        if not line.startswith(cls.PART_PREFIX):
             return ForeignMonitorFrame(text=line)
         raw_header, separator, _ = line.partition(r'\n')
         if not separator or not line.endswith('"'):
