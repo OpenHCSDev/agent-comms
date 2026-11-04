@@ -988,8 +988,9 @@ def test_review_ok_follows_an_unchanged_change(head_bus, reviewed_source):
     assert StoredHeadReview.head_reviews(comms.goals.todos, moved)[0].verdict == CarriedHeadVerdict(ACCEPTED, request)
     assert not OrderlessUnreviewedHead.scan_reviews(comms.goals, pulls)
     carried_posts = review_posts(github, merged)
-    assert len(carried_posts) == 2 and "state=pending" in carried_posts[0]
-    assert f"description=carried from {request.head[:9]}: same change" in carried_posts[1]
+    # A carry has no reviewing mark: a new head holds no permission to withdraw first.
+    assert len(carried_posts) == 1 and "state=success" in carried_posts[0]
+    assert f"description=carried from {request.head[:9]}: same change" in carried_posts[0]
 
     owner = source.checkout / "owner.py"
     owner.write_text(owner.read_text() + 'spacing = "a b"\n')
