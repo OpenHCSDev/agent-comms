@@ -870,7 +870,12 @@ class TaskEnvelope(WireModel, ABC):
             return ForeignTaskNotification(text=text)
         # Claude Code appends sibling blocks (system-reminder) after the envelope in the same record.
         envelope, closing, _ = text.partition('</task-notification>')
-        root = ElementTree.fromstring(envelope + closing)  # Malformed envelope fails at ingress.
+        try:
+            root = ElementTree.fromstring(envelope + closing)
+        except ElementTree.ParseError:
+            # A transcript replays its window on every re-arm, so raising here would stop the
+            # session's chat and activity for good over one record.
+            return ForeignTaskNotification(text=text)
         event = root.find('event')
         if event is None:
             return ForeignTaskNotification(text=text)

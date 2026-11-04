@@ -50,7 +50,9 @@ class FollowedTranscript(RecentClaudeWindow, TranscriptRoute):
     source: Path
 
     watch_url: ClassVar[re.Pattern[str]] = re.compile(r'wss?://[^\s"\'\\]+/watch/[\w-]+')
-    hidden_url: ClassVar[str] = '<inbox watch URL>'
+    hidden_url: ClassVar[str] = '[inbox watch URL]'
+    """It lands inside whatever held the URL, including a task notification's XML, so it escapes
+    nothing and needs no escaping."""
 
     @classmethod
     def line(cls, raw: bytes) -> str:
