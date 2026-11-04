@@ -92,6 +92,10 @@ class MonitorEvidence(ConsumptionEvidence, DeclaredFamily):
     def finished_with(self, export: MonitorReadFile) -> None:
         """A body without a complete original transcript proof keeps its export."""
 
+    def taken_under(self, ledger: TakingLedger) -> bool:
+        """Only a cloud watch's attempt names the ledger that took it; nothing else is replayed."""
+        return False
+
 
 @dataclass(frozen=True)
 class UnrecordedMonitor(MonitorEvidence):
@@ -116,6 +120,49 @@ class ReceivingMonitor(MonitorEvidence):
             return ()
         await bridge.finish(delivery, partial(replace, outcome=DeliveredOutcome, monitor=record))
         return message.opening_references(bridge.transcript_thread)
+
+
+class TakingLedger:
+    """No ledger took this attempt: an old client's, or one taken before its ledger arrived.
+    Its evidence names nothing, so nothing can prove it unshown and it is never sent again."""
+
+    def receiving(self, total: int) -> MonitorEvidence:
+        return ReceivingMonitor(total)
+
+    def unrecorded(self) -> MonitorEvidence:
+        return UnrecordedMonitor()
+
+
+@dataclass(frozen=True)
+class PrintLedgerId(TakingLedger):
+    """One client's printed ledger, born with its file: a ledger in a fresh container is
+    another ledger, so its silence proves nothing about what the old one took."""
+
+    token: str
+
+    def receiving(self, total: int) -> MonitorEvidence:
+        return LedgerReceivingMonitor(total, self)
+
+    def unrecorded(self) -> MonitorEvidence:
+        return LedgerUnrecordedMonitor(self)
+
+
+@dataclass(frozen=True)
+class TakenUnderLedger(MonitorEvidence):
+    ledger: PrintLedgerId
+
+    def taken_under(self, ledger: TakingLedger) -> bool:
+        return self.ledger == ledger
+
+
+@dataclass(frozen=True)
+class LedgerReceivingMonitor(TakenUnderLedger, ReceivingMonitor):
+    """An inline message a cloud watch took under this ledger, awaiting its one shown part."""
+
+
+@dataclass(frozen=True)
+class LedgerUnrecordedMonitor(TakenUnderLedger, UnrecordedMonitor):
+    """A message sent as a file under this ledger; no Read here can confirm it."""
 
 
 @dataclass(frozen=True)

@@ -19,6 +19,7 @@ from agent_comms.activity import ActivityState, ObservedActivity
 from agent_comms.cli_bridges.claude_protocol import ClaudeMonitorFrame
 from agent_comms.cli_bridges.claude_protocol import MonitorTaskNotification, TaskEnvelope
 from agent_comms.cli_bridges.claude_transcript import PrintedLedger
+from agent_comms.harness_delivery_states import PrintLedgerId
 from agent_comms.cli_bridges.inbox_watch_client import (
     FollowedTranscript, InboxSocket, WatchDropped, WatchEnd, WatchStopped,
 )
@@ -512,8 +513,11 @@ async def test_a_pushed_message_is_delivered_only_once_the_transcript_shows_it(
     await socket.close()
 
 
-def ledger_line(*messages) -> str:
-    return PrintedLedger(printed=tuple(message.reference for message in messages)).line()
+TOOK_IT = PrintLedgerId("the ledger that took it")
+
+
+def ledger_line(*messages, ledger: PrintLedgerId = TOOK_IT) -> str:
+    return PrintedLedger(ledger=ledger, printed=tuple(message.reference for message in messages)).line()
 
 
 async def bridged(comms: Comms, thread: str) -> None:
@@ -551,7 +555,9 @@ async def test_a_message_taken_but_never_printed_is_replayed_once_the_ledger_pro
     """62380: a frozen watch took it, the socket died, and it was gone for good."""
     client, token = session
     frozen = await client.ws_connect(await watch_path(client, token, "cloud"))
+    await frozen.send_str(ledger_line())
     await bridged(comms, "cloud")
+    await asyncio.sleep(0.5)
     lost = comms.messaging.send("sender", "cloud", "taken, never printed").message
     shown = comms.messaging.send("sender", "cloud", "printed before the freeze").message
     assert [(await frame(frozen))["text"] for _ in range(2)] == [lost.body, shown.body]
@@ -566,6 +572,25 @@ async def test_a_message_taken_but_never_printed_is_replayed_once_the_ledger_pro
     with pytest.raises(TimeoutError):
         await asyncio.wait_for(again.receive_str(), timeout=1)
     await again.close()
+
+
+async def test_a_fresh_containers_empty_ledger_proves_nothing(session, comms: Comms) -> None:
+    """The container that printed it was reclaimed; the session came back with an empty ledger
+    under the same session id. That ledger never took the attempt, so its silence is no proof."""
+    client, token = session
+    reclaimed = await client.ws_connect(await watch_path(client, token, "cloud"))
+    await reclaimed.send_str(ledger_line())
+    await bridged(comms, "cloud")
+    await asyncio.sleep(0.5)
+    comms.messaging.send("sender", "cloud", "printed in the reclaimed container")
+    await frame(reclaimed)
+    await inbox_emptied(comms, "cloud")
+    await reclaimed.close()
+    fresh = await client.ws_connect(await watch_path(client, token, "cloud"))
+    await fresh.send_str(ledger_line(ledger=PrintLedgerId("born in the fresh container")))
+    with pytest.raises(TimeoutError):
+        await asyncio.wait_for(fresh.receive_str(), timeout=2)
+    await fresh.close()
 
 
 async def test_no_ledger_is_no_proof_so_nothing_is_replayed(session, comms: Comms) -> None:
@@ -618,7 +643,9 @@ async def test_a_watch_frozen_past_its_heartbeat_loses_nothing_and_shows_nothing
     assert (message.body in printed) == (message.reference.name in names)
 
     again = await client.ws_connect(await watch_path(client, token, "cloud"))
-    await again.send_str(PrintedLedger(printed=tuple(MessageReference.named(n) for n in names)).line())
+    identity = PrintLedgerId(ledger.with_suffix(".id").read_text())
+    await again.send_str(PrintedLedger(
+        ledger=identity, printed=tuple(MessageReference.named(n) for n in names)).line())
     if message.reference.name in names:
         with pytest.raises(TimeoutError):
             await asyncio.wait_for(again.receive_str(), timeout=2)

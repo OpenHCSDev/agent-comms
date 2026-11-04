@@ -73,7 +73,7 @@ from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
 
 from ..session_receipts import SessionReceipts
 from ..wire_models import WireModel
-from agent_comms.harness_delivery_states import MonitorEvidence, ReceivingMonitor, UnrecordedMonitor
+from agent_comms.harness_delivery_states import MonitorEvidence, TakingLedger
 
 from .shared import (
     MONITOR_FRAME,
@@ -157,10 +157,11 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
             id=self.message.message_id, sender=self.message.sender, number=1, total=1,
             body=self.message.body))
 
-    def shown_evidence(self) -> MonitorEvidence:
-        """What a route that sees only shown events waits for: the whole part one event shows,
-        or, for a message sent as a file no Read here can check, nothing."""
-        return ReceivingMonitor(self.whole_part.total) if self.fits_one_event else UnrecordedMonitor()
+    def shown_evidence(self, ledger: TakingLedger) -> MonitorEvidence:
+        """What a route that sees only shown events waits for, under the ledger that took it:
+        the whole part one event shows, or, for a message sent as a file no Read here can
+        check, nothing."""
+        return ledger.receiving(self.whole_part.total) if self.fits_one_event else ledger.unrecorded()
 
     @cached_property
     def observed(self) -> tuple[str, ...]:
