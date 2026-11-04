@@ -179,16 +179,17 @@ export class NativeTurnRun {
             this.include([event.message], claims);
             if (event.message.role === 'assistant') this.state = this.state.started();
         }
-        // Observe the original assistant event BEFORE extension callbacks or UI projection.
+        // Executed tools and visible text close recovery. A streamed tool-call
+        // draft does not: the agent loop never executes an errored assistant's
+        // calls, and recovery removes only that failed assistant from context.
         if (event.type === 'tool_execution_start') this.state = this.state.produced();
         if (event.type === 'message_update') {
             const delta = event.assistantMessageEvent;
-            if (delta?.type === 'toolcall_start' ||
-                (delta?.type === 'text_delta' && delta.delta?.length)) this.state = this.state.produced();
+            if (delta?.type === 'text_delta' && delta.delta?.length) this.state = this.state.produced();
         }
         if (event.type === 'message_end' && event.message.role === 'assistant') {
             const content = event.message.content;
-            if (content.some(block => block.type === 'toolCall' || block.text?.length)) {
+            if (content.some(block => block.text?.length)) {
                 this.state = this.state.produced();
             }
             this.state = this.state.finished(event.message);
