@@ -107,13 +107,7 @@ class Registration:
         """Change only this incarnation's repository choice, under the registry writer."""
         path = path.expanduser().absolute()
         with self.store.editing() as edit:
-            current = edit.document.require(owner.name)
-            if current.incarnation != owner:
-                raise RelationViolationError('Checkout owner changed before selection')
-            rule = self.storage_rule
-            rule.require_selectable_checkout(current, path, repository, RepositoryReads())
-            roots = rule.roots_of(current).choosing(repository, path)
-            edit.document.threads[current.name] = replace(current, storage_roots=roots)
+            edit.document.select_checkout(owner, self.storage_rule, repository, path)
             edit.commit()
         return path
 

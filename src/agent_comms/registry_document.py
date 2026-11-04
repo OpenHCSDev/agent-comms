@@ -47,7 +47,7 @@ from .registry_provenance import (
     RegistryProvenance,
     RetiredRecipient,
 )
-from .repo import Checkout, Repo, RepositorySelection
+from .repo import Checkout, Repo, RepositoryReads, RepositorySelection
 from .repository_name import RepositoryName
 from .snapshot_slices import (
     MappingRowsSlice,
@@ -95,9 +95,12 @@ from .turn_lease import (
 )
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from .bus_publication import Delivered
     from .cli_command import CliCommand
     from .comms import Comms
+    from .storage_rules import StorageRule
 
 
 @dataclass(frozen=True, slots=True)
@@ -774,6 +777,18 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         if current.incarnation != identity:
             raise RelationViolationError("Tool observation belongs to a replaced thread.")
         updated = current.observing_tools(offered)
+        self.threads[current.name] = updated
+        return updated
+
+    def select_checkout(
+        self, identity: ThreadIncarnation, rule: StorageRule, repository: RepositoryName, path: Path,
+    ) -> Thread:
+        """Change only this incarnation's repository choice for one selectable checkout."""
+        current = self.require(identity.name)
+        if current.incarnation != identity:
+            raise RelationViolationError("Checkout owner changed before selection")
+        rule.require_selectable_checkout(current, path, repository, RepositoryReads())
+        updated = replace(current, storage_roots=rule.roots_of(current).choosing(repository, path))
         self.threads[current.name] = updated
         return updated
 
