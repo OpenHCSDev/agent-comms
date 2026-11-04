@@ -84,6 +84,13 @@ class DisplayReferenceMatch:
     end: int
 
 
+class RegistryReferenceSource(ABC):
+    """A UI observation that can read a root's names from Core's registry and channel catalog."""
+
+    @abstractmethod
+    async def registry_references(self, root: str) -> ReferenceContext: ...
+
+
 class ReferenceContext(ABC):
     """Availability is not an empty successful catalog."""
     requires_observation = False
@@ -91,7 +98,7 @@ class ReferenceContext(ABC):
     async def acquire_from(self, read):
         return self
 
-    async def settled(self, observation) -> ReferenceContext:
+    async def settled(self, observation: RegistryReferenceSource) -> ReferenceContext:
         """The references to draw with now: an answered context is already settled."""
         return self
 
@@ -142,7 +149,7 @@ class ProjectReferences(ReferenceContext):
 class PendingReferences(RootedReferences):
     description = "Waiting for the original reference catalog."
 
-    async def settled(self, observation) -> ReferenceContext:
+    async def settled(self, observation: RegistryReferenceSource) -> ReferenceContext:
         """Names come from the registry and the channel catalog, not from a sidebar capture."""
         return await observation.registry_references(self.root)
 
