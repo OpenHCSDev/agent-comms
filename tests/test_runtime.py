@@ -1,6 +1,6 @@
 """Single-owner attachment and idle wakeup through real processes and sockets."""
 from agent_comms.repo import Checkout
-from agent_comms.runtime_requests import ClearQueueRuntimeRequest, SendNowRuntimeRequest
+from agent_comms.runtime_requests import QueueActionRuntimeRequest
 from agent_comms.owner_connection import (
     CapturedOwner, OwnerIdentityChangedError, OwnerReplyConnection, OwnerReplyLostError, socket_path,
 )
@@ -429,7 +429,7 @@ async def test_new_session_metadata_has_a_display_title_before_first_switch(
         await agent.shutdown()
 
 
-@pytest.mark.parametrize("queue_request", [SendNowRuntimeRequest, ClearQueueRuntimeRequest])
+@pytest.mark.parametrize("queue_request", RuntimeRequest.members_with(QueueActionRuntimeRequest))
 async def test_a_queue_action_binds_the_incarnation_its_caller_read(comms, queue_request):
     """Send-now and clear go straight to the owner's socket, not through a connection's
     payload; the request still carries the birth, so a same-name replacement refuses it."""
