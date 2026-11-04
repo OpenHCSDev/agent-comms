@@ -884,6 +884,39 @@ class ClassChecks(ast.NodeVisitor):
         self.generic_visit(node)
 
 
+class BusStorageProbe(BusStorageAbsent):
+    """One node's bus-storage check, for a walk another visitor drives: it never walks the
+    children itself, and a docstring's text stays inert as the full scan leaves it."""
+
+    def __init__(self) -> None:
+        self.inert: set[ast.AST] = set()
+
+    def visit(self, node: ast.AST) -> None:
+        if node not in self.inert:
+            super().visit(node)
+
+    def generic_visit(self, node: ast.AST) -> None:
+        """The driving walk reaches the children."""
+
+    def visit_Expr(self, node: ast.Expr) -> None:
+        if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+            self.inert.add(node.value)
+
+
+class SourceScan(ClassChecks):
+    """The isinstance and class scan with each node it reaches also probed for bus storage:
+    one walk of a module for every fact SourceFacts keeps."""
+
+    def __init__(self, path: str) -> None:
+        super().__init__()
+        self.path = path
+        self.bus = BusStorageProbe()
+
+    def visit(self, node: ast.AST) -> None:
+        self.bus.visit(node)
+        super().visit(node)
+
+
 @dataclass(frozen=True)
 class SourceFacts:
     """One blob's whole-module facts that ``src``-wide evidence reads, from one parse: no tree
@@ -898,12 +931,9 @@ class SourceFacts:
 
     @classmethod
     def of(cls, path: str, blob: str, tree: ast.Module) -> SourceFacts:
-        bus = BusStorageAbsent()
-        bus.visit(tree)
-        checks = ClassChecks()
-        checks.path = path
+        checks = SourceScan(path)
         checks.visit(tree)
-        return cls(path, blob, bus.found, frozenset(checks.declared),
+        return cls(path, blob, checks.bus.found, frozenset(checks.declared),
                    tuple((line, named) for _, line, named in checks.checked),
                    tuple(checks.classes))
 
