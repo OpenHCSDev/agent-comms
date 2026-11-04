@@ -91,6 +91,10 @@ class ReferenceContext(ABC):
     async def acquire_from(self, read):
         return self
 
+    async def settled(self, observation) -> ReferenceContext:
+        """The references to draw with now: an answered context is already settled."""
+        return self
+
     @property
     @abstractmethod
     def description(self): ...
@@ -138,6 +142,10 @@ class ProjectReferences(ReferenceContext):
 class PendingReferences(RootedReferences):
     description = "Waiting for the original reference catalog."
 
+    async def settled(self, observation) -> ReferenceContext:
+        """Names come from the registry and the channel catalog, not from a sidebar capture."""
+        return await observation.registry_references(self.root)
+
 
 @dataclass(frozen=True)
 class UnavailableReferences(RootedReferences):
@@ -163,6 +171,10 @@ class DisplayReferences(RootedReferences):
 
     description = ""
     targets: Mapping[str, DisplayReference] = field(default_factory=dict)
+
+    def at(self, root: str) -> RootedReferences:
+        """These names for a view at ``root``; another root's view cannot resolve them."""
+        return self if root == self.root else ForeignReferences(root, self.root)
 
     @staticmethod
     def recorded(root, source) -> DisplayReferences:
