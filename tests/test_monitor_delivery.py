@@ -557,7 +557,7 @@ async def test_a_larger_message_is_one_notice_and_one_whole_read_confirms_it(bri
         assert stat.S_IMODE(export.stat().st_mode) == 0o600
         text = export.read_text(newline='')
         lines = text.split('\n')[:-1]
-        assert lines[0] == f'Comms in · {message.sender_label} · {message.message_id}'
+        assert lines[0] == f'Comms in · peer · {message.message_id}'
         assert '\n'.join(lines[1:]) == body
         # The notice frees its own reservation and proves nothing about the body.
         await observe(bridge, notification(line, record_id=transcript_record('notice')).updates(
@@ -780,7 +780,7 @@ def test_frame_parts_rebuild_the_body_and_cut_only_at_line_ends(body, sender):
     frame=ClaudeMonitorFrame(message)
     shown_rows=tuple(enumerate(frame.export_lines,1))
     assert ''.join(part.body for part in frame.read_parts(shown_rows))==body
-    assert all(part.sender==message.sender_label for part in frame.read_parts(shown_rows))
+    assert all(part.sender==sender for part in frame.read_parts(shown_rows))
     assert all(len(line)<=frame.READ_LINE_CHARS for line in frame.export_lines[1:])
     assert frame.fits_one_event==(frame.event_size(frame.inline)<=frame.EVENT_CHARS)
 

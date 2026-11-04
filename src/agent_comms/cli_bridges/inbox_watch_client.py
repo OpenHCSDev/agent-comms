@@ -101,6 +101,11 @@ class WatchedMonitorFrame(ClaudeMonitorFrame):
         return self.inline
 
     @property
+    def sender(self) -> str:
+        """No decoder reads this header, so it also says what kind of sender this is."""
+        return self.message.sender_label
+
+    @property
     def identity(self) -> str:
         """No decoder reads this header, so it names the whole reference a reply must cite."""
         return self.message.reference.name
