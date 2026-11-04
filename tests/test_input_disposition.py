@@ -51,7 +51,7 @@ def test_record_rejects_nonstring_before_durable_unknown(tmp_path: Path, invalid
 def _kid_entries(root: Path):
     """The registered owner whose stored inputs the dispositions answer for."""
     comms = wire(root)
-    comms.registry.declare(Thread("kid", frozenset(), Checkout(root)))
+    comms.registry.declare(NativeThread("kid", frozenset(), Checkout(root)))
     return (comms.registry.snapshot().entry("kid"),)
 
 

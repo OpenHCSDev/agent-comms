@@ -22,7 +22,7 @@ from .maintenance_barrier import MaintenanceHolder
 from .owner_protocol import OwnerLine
 from .private_path import PrivateSocketRole
 from .thread_identity import OwnerIdentity, ThreadIncarnation
-from .threads import NativeThread
+from .threads import NativeThread, Thread
 
 if TYPE_CHECKING:
     from agent_comms.runtime_server import RuntimeRequest

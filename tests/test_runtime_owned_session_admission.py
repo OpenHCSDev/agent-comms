@@ -116,13 +116,13 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
             "original-acp-session": "registered",
         }
         # A same-name replacement in this process owns none of the original's loaded sessions.
-        shadowed = Thread("shadowed-owner", frozenset(), Checkout(project),
+        shadowed = NativeThread("shadowed-owner", frozenset(), Checkout(project),
                           process_identity=ProcessIdentity.capture(os.getpid()))
         comms.registry.declare(shadowed)
         loaded = comms.registry.require("shadowed-owner")
         await owner.sessions.bind_owned(loaded, AcpSessionId("shadowed-acp-session"))
         comms.registry.remove("shadowed-owner")
-        comms.registry.declare(Thread("shadowed-owner", frozenset(), Checkout(project),
+        comms.registry.declare(NativeThread("shadowed-owner", frozenset(), Checkout(project),
                                       process_identity=ProcessIdentity.capture(os.getpid())))
         replacement = comms.registry.entry("shadowed-owner").entry
         assert replacement.thread.incarnation != loaded.incarnation
@@ -156,7 +156,7 @@ def test_a_captured_owner_binds_only_its_birth_after_its_name_is_reused_in_proce
     project = tmp_path / "project"
     project.mkdir()
     here = ProcessIdentity.capture(os.getpid())
-    original = Thread("bound-owner", frozenset(), Checkout(project), process_identity=here)
+    original = NativeThread("bound-owner", frozenset(), Checkout(project), process_identity=here)
     comms.registry.declare(original)
     captured = comms.registry.require("bound-owner").incarnation
 
@@ -165,7 +165,7 @@ def test_a_captured_owner_binds_only_its_birth_after_its_name_is_reused_in_proce
     GoalHistoryRuntimeRequest(thread="renamed-owner", captured=CapturedOwner(captured)).require_owner(renamed)
 
     comms.registry.remove("renamed-owner")
-    comms.registry.declare(Thread("renamed-owner", frozenset(), Checkout(project), process_identity=here))
+    comms.registry.declare(NativeThread("renamed-owner", frozenset(), Checkout(project), process_identity=here))
     replacement = comms.registry.entry("renamed-owner").entry
     assert replacement.thread.incarnation != captured
     with pytest.raises(RelationViolationError, match="incarnation changed"):
