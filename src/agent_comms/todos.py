@@ -166,7 +166,7 @@ from agent_comms_hooks import ToolRefusedError
 
 from .goal_scope import OneGoal
 
-from agent_comms.change_report import FetchedRevision, OrderRoots
+from agent_comms.change_report import CitationProject, FetchedRevision, OrderRoots
 from agent_comms.registry_document import TeamProject
 
 if TYPE_CHECKING:
@@ -2797,6 +2797,10 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
 
     def holds_head(self, request: PullRequestHead) -> bool:
         return PullRequestLink(request.repo, request.pr) in self.pull_requests
+
+    def bound_in(self, project: CitationProject) -> Self:
+        """This order with its check bound where it enters, from the CLI or a connector tool."""
+        return replace(self, check=self.check.bound_in(project))
 
     @property
     def phase(self) -> type[OrderPhase]:

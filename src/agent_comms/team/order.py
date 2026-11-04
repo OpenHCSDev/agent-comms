@@ -31,7 +31,7 @@ from typing import Annotated, ClassVar, Self
 
 from pydantic import BaseModel, ConfigDict, Field, InstanceOf, PrivateAttr
 
-from agent_comms.change_report import RegisteredRoots
+from agent_comms.change_report import CitationProject, RegisteredRoots
 from agent_comms.change_report import FileLine, MainRevision, NoSourceReference
 from agent_comms.team.standing import (
     DeliveryAwaitingJudgement,
@@ -280,8 +280,8 @@ class CheckRequest(CheckCommand):
         request.require_writable()
         return request
 
-    def resolve(self, repos: tuple[Repo, ...]) -> OrderCheck:
-        return OrderCheck(Path(self.repository), self.command, self.result).registered(repos)
+    def resolve(self, project: CitationProject) -> OrderCheck:
+        return OrderCheck(Path(self.repository), self.command, self.result).bound_in(project)
 
 
 @dataclass(frozen=True)
@@ -329,8 +329,8 @@ class OrderFile:
     def resolved(self, finding: ProblemFinding) -> OrderFile:
         return replace(self, order=replace(self.order, finding=finding))
 
-    def registered(self, repos: tuple[Repo, ...]) -> OrderFile:
-        return replace(self, order=replace(self.order, check=self.order.check.registered(repos)))
+    def bound_in(self, project: CitationProject) -> OrderFile:
+        return replace(self, order=self.order.bound_in(project))
 STAGES = (
     "tool call",
     "review",
@@ -377,7 +377,7 @@ class TeamContext(BaseModel):
         """The order file with its check bound to a registered checkout, once, where it enters."""
         document = OrderFile.read(Path(path).read_text())
         try:
-            return document.registered(self.repos)
+            return document.bound_in(self.project)
         except ValueError as error:
             sys.exit(f'Refused order, nothing recorded:\n{error}')
 
@@ -455,7 +455,7 @@ class TeamContext(BaseModel):
     def read_check(self, line: str) -> OrderCheck:
         if not (request := CheckRequest.parse(line)):
             sys.exit('Refused: Check reads "<repo> :: <shell command> -> <integer>"')
-        return request.resolve(self.repos)
+        return request.resolve(self.project)
 
     def held_orders(self) -> tuple[Todo, ...]:
         """The live holds Core lists unjudged edits under, so a verdict finds every edit shown."""

@@ -185,6 +185,11 @@ class CitationProject(ABC):
     def registered_repos(self) -> tuple[Repo, ...]:
         """Every registered repository; an unregistered project refuses."""
 
+    def checkout_named(self, name: str) -> Path:
+        """The registered checkout ``name`` names, by repository name or checkout path: every
+        reader of an order check runs in it, whatever directory the order was sent from."""
+        return Repo.selected(self.registered_repos(), name).checkout
+
 
 class SourceRoots(ABC):
     """Where citations are read: the checkout an unqualified citation names, and the teammate

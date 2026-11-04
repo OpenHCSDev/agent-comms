@@ -63,8 +63,7 @@ from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from .errors import (
     RelationViolationError,
 )
-from .coordination_errors import CoordinationError, Refused
-from .work_branches import WorkBranchError
+from .coordination_errors import CommandFailure, Refused
 from .nominal.field_codec import (
     Argument, FieldCodec, GitCommitText, MalformedRecord, NullMember, PathText, SingleFieldValue,
     SubclassUnion, WireName, WireOmitDefault, WireTransient, RecordMember, boundary_decoder,
@@ -647,8 +646,10 @@ class ToolsCallMessage(McpMessage, declared_name="tools/call"):
             reply = await connector.call(tool, self.params.arguments, caller, observer)
             return ToolsCallResult((TextContent(json.dumps(reply)),), False, reply)
         except (
-            ToolRefusedError, RelationViolationError, CoordinationError, WorkBranchError,
-            MalformedRecord, Refused, ConnectionError, TimeoutError, WireExportCancelled,
+            # Invalid input (ToolRefusedError, MalformedRecord, an unrecorded time) and any
+            # declared CommandFailure (git, Refused, coordination) are the caller's refusal;
+            # escaping here answers HTTP 500, which the client sees as a lost connection.
+            ValueError, CommandFailure, ConnectionError, TimeoutError, WireExportCancelled,
         ) as error:
             logging.exception("Connector tool %s failed", self.params.name)
             return ToolsCallResult.failed(error)
