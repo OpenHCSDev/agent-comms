@@ -629,8 +629,7 @@ def test_changing_the_team_project_preserves_the_peer_deal_and_real_child_delega
                          "transcript_path": str(transcript), "agent_id": "a9",
                          "agent_type": "Explore"}).register(team_bus, team_binding)
     assert "in-turn fork claude-a9" in capsys.readouterr().out
-    child = team_session.registry.require("claude-a9")
-    child.require_fork()
+    child = team_session.registry.require_member("claude-a9", ForkThread)
     assert tuple(child.parent.names()) == ("claude-code",)
     assert transcript.with_suffix(".deck.json").exists()
 
@@ -654,8 +653,7 @@ def test_a_fork_registers_under_the_session_that_spawned_it(
         assert f"in-turn fork claude-{agent}" in capsys.readouterr().out
     snapshot = team_session.registry.snapshot()
     for agent, parent in (("a7", "claude-code"), ("a8", "claude-nra")):
-        fork = snapshot.require(f"claude-{agent}")
-        fork.require_fork()
+        fork = snapshot.require_member(f"claude-{agent}", ForkThread)
         assert tuple(fork.parent.names()) == (parent,)
         assert fork.tags == snapshot.require(parent).tags
     assert TeammatesTag.declared_name in snapshot.require("claude-a8").tags

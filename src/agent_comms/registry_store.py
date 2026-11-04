@@ -251,12 +251,12 @@ class RegistryEdit:
         self.commit()
         return fenced
 
-    def lease_turn(
+    def lease_turn[Owner: Thread](
         self,
-        current: Thread,
+        current: Owner,
         turn_id: TurnId,
         routing: Routing,
-    ) -> tuple[Thread, int]:
+    ) -> tuple[Owner, int]:
         """Allocate the original record under this bound registry transaction."""
         if current.turn_generation >= (1 << 63) - 1:
             raise RelationViolationError("Turn generation exhausted")

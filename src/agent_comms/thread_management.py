@@ -27,7 +27,7 @@ from .locked_store import PatternFile, RuntimeFile
 from .registration import Registration
 from .relationships import RelationshipStore
 from .repo import Checkout, LaunchCheckout
-from .threads import NativeThread, KeptModel, ModelChoice, NextTurnConfiguration, Thread
+from .threads import ExternalThread, NativeThread, KeptModel, ModelChoice, NextTurnConfiguration, Thread
 from .thread_status import StoppedThreadStatus
 from .view_unread import transcript_read_state
 
@@ -185,8 +185,7 @@ class ForkSpec(NewThreadSpec):
     parent: str
 
     def _parent(self, threads: ThreadManagement) -> Thread:
-        parent = threads.registry.require(self.parent)
-        parent.require_native()
+        parent = threads.registry.require_member(self.parent, NativeThread)
         parent.runtime.require_forkable()
         return parent
 
@@ -294,8 +293,7 @@ class ThreadManagement:
         snapshot = history.imported(limits)
         session_path = ImportedSessionWriter.path_in(self.root, session_id=PiSessionId.fresh())
         selected = self.registry.snapshot()
-        original = selected.require(name)
-        original.require_external()
+        original = selected.require_member(name, ExternalThread)
         with ImportedSessionWriter.preparing(session_path, snapshot, original.worktree.path) as publish:
             with self.registry.store.editing() as edit:
                 current = edit.document.require(name)
@@ -434,12 +432,11 @@ class ThreadManagement:
         Progress and goals belong to the current document. A changed selection
         or project invalidates the native settings result acquired by the caller.
         """
-        def configure(thread: Thread) -> Thread:
+        def configure(thread: NativeThread) -> Thread:
             thread.require_original_model_configuration(original)
-            thread.require_native()
             return configuration.configured(thread)
 
-        updated = self.registry.update_thread(original.name, configure)
+        updated = self.registry.update_member(original.name, NativeThread, configure)
         ThreadCatalog.publish(updated, self.root)
         return updated
 

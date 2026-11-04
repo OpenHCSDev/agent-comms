@@ -180,6 +180,10 @@ class RegistryNames(Generic[Member]):
         except KeyError as error:
             raise UnregisteredThreadError(f"Thread {canonical!r} is not registered.") from error
 
+    def require_member[Kind: Thread](self, name: str, kind: type[Kind]) -> Kind:
+        """The registered declaration, narrowed to the member an operation needs."""
+        return kind.stored(self.require(name))
+
 
 @dataclass(frozen=True, slots=True)
 class SenderBindings:

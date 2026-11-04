@@ -49,7 +49,7 @@ from .native_input_owner import RegistryOwner
 from .private_registry_guard import RegistryPrivacy
 from .registration import Registration
 from .store_files import StoreBusy
-from .threads import Thread
+from .threads import NativeThread, Thread
 from .turn_context import ContextSegment, InstructionFile, ResourceProvenance, WireProvenance
 from .typed_table import TypedRow
 from .wake_candidate_index import ProjectionUnavailableError, WakeCandidateIndex
@@ -106,7 +106,7 @@ class OptionalAwarenessProjection:
         self,
         initial: Delivered,
         assignment: WakeAssignment,
-        owner: Thread,
+        owner: NativeThread,
     ) -> tuple[ContextSegment, ...]:
         deadline = time.monotonic() + self.build_seconds
         if not self._build_slot.acquire(blocking=False):
@@ -142,7 +142,7 @@ class OptionalAwarenessProjection:
             raise ValueError("optional awareness text budget is outside the bounded read")
 
     def __call__(
-        self, initial: Delivered, assignment: WakeAssignment, owner: Thread
+        self, initial: Delivered, assignment: WakeAssignment, owner: NativeThread
     ) -> OptionalAwarenessResult:
         """Return complete SQL-backed rows, or omit the entire supplement.
 
@@ -163,7 +163,7 @@ class OptionalAwarenessProjection:
             return OmittedAwareness.capture(reason=type(error).__name__)
 
     def _build(
-        self, initial: Delivered, assignment: WakeAssignment, owner: Thread
+        self, initial: Delivered, assignment: WakeAssignment, owner: NativeThread
     ) -> OptionalAwarenessResult:
         if owner.process_identity != ProcessIdentity.capture(os.getpid()):
             raise ProjectionUnavailableError("selected owner is not this process")
@@ -258,7 +258,7 @@ class OptionalAwarenessProjection:
         result.require_resource_budget(self.max_text_bytes)
         return result
 
-    def _verify_live_inclusion(self, lookup: ThreadLookup, owner: Thread) -> None:
+    def _verify_live_inclusion(self, lookup: ThreadLookup, owner: NativeThread) -> None:
         registry = self.registry
         snapshot = registry.store.snapshot_now()
         RegistryOwner(

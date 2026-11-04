@@ -64,7 +64,7 @@ from .thread_identity import (
     OwnerIdentity,
 )
 from .thread_text import GivenThreadText, NoThreadText, ThreadText
-from .threads import Thread
+from .threads import NativeThread, Thread
 from .tool_result import ToolResult
 
 if TYPE_CHECKING:
@@ -188,8 +188,7 @@ class OwnerLifecycle:
     def acquire_thread(self, name: str) -> Thread:
         """Bind only this calling process; stored birth time is signal authority."""
         identity = ProcessIdentity.capture(os.getpid())
-        thread = self.registry.require(name)
-        thread.require_native()
+        thread = self.registry.require_member(name, NativeThread)
         thread.role.require_executable(
             RelationViolationError("A human participant cannot become an executor.")
         )
@@ -231,8 +230,7 @@ class OwnerLifecycle:
         self, name: str, *, agent_bin: str = NativeArguments.default_binary,
         agent_args: LaunchArguments = InheritedArguments(),
     ) -> Thread:
-        thread = self.registry.require(name)
-        thread.require_native()
+        thread = self.registry.require_member(name, NativeThread)
         refusal = RelationViolationError("Explicit start is required for a stopped agent.")
         thread.role.require_executable(refusal)
         self.registry.status(thread.name).require_active(str(refusal))
@@ -251,8 +249,7 @@ class OwnerLifecycle:
         results = []
         with ExitStack() as launches:
             for name in names:
-                thread = self.registry.require(name)
-                thread.require_native()
+                thread = self.registry.require_member(name, NativeThread)
                 status = self.registry.status(thread.name)
                 refusal = RelationViolationError("Only visible agent threads can be started.")
                 thread.role.require_executable(refusal)

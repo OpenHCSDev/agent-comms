@@ -22,13 +22,13 @@ from .maintenance_barrier import MaintenanceHolder
 from .owner_protocol import OwnerLine
 from .private_path import PrivateSocketRole
 from .thread_identity import OwnerIdentity, ThreadIncarnation
+from .threads import NativeThread
 
 if TYPE_CHECKING:
     from agent_comms.runtime_server import RuntimeRequest
     from .child_process import ProcessIdentity
     from .comms import Comms
     from .registry_document import RegistryEntry
-    from .threads import Thread
 
 
 def socket_path(root: Path, pid: int) -> Path:
@@ -216,11 +216,6 @@ class OwnerConnection:
 class OwnerReading[Result](ABC):
     """One exchange with exactly one live native owner incarnation over its socket."""
 
-    def require_native_owner(self, owner: Thread) -> None:
-        """Only a native owner serves a runtime socket; an external bridge with a live PID
-        has none, so it is refused here instead of waited on before dispatch."""
-        owner.require_native()
-
     @abstractmethod
     async def read(self, owner: OwnerConnection) -> Result: ...
 
@@ -238,12 +233,13 @@ class OwnerReplyConnection(OwnerConnection):
         asked for; the connection's own capture is then checked again, since the
         registry may change between the two reads.
         """
-        thread = comms.registry.require(owner.name)
+        # Only a native owner serves a runtime socket; an external bridge with a live PID
+        # has none, so it is refused here instead of waited on before dispatch.
+        thread = comms.registry.require_member(owner.name, NativeThread)
         if thread.incarnation != owner:
             raise OwnerIdentityChangedError(
                 "The owner incarnation changed while preparing the request."
             )
-        reading.require_native_owner(thread)
         connection = cls(comms, owner, socket_path(comms.root, thread.require_process().pid))
         connection.require_identity(owner)
         return connection

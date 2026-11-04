@@ -89,8 +89,15 @@ class Registration:
 
     def update_thread(self, name: str, change: Callable[[Thread], Thread]) -> Thread:
         """Transform the current declaration through its normal registration rules."""
+        return self.update_member(name, Thread, change)
+
+    def update_member[Kind: Thread](
+        self, name: str, kind: type[Kind], change: Callable[[Kind], Thread],
+    ) -> Thread:
+        """Transform the current declaration, narrowed to the member the change needs inside
+        the same transaction, through its normal registration rules."""
         with self.store.editing() as edit:
-            current = edit.document.require(name)
+            current = edit.document.require_member(name, kind)
             changed = change(current)
             if changed != current:
                 return self._commit_registration(edit, edit.document.prepare_registration(
@@ -164,8 +171,7 @@ class Registration:
     def declare_child(self, original: Thread, prepare: Callable[[Thread], Thread]) -> Thread:
         """Publish a prepared fork only while its original parent's source is current."""
         with self.store.editing() as edit:
-            current = edit.document.require(original.name)
-            current.require_native()
+            current = edit.document.require_member(original.name, NativeThread)
             current.runtime.require_forkable()
             child = prepare(current)
             if (current.incarnation, current.runtime) != (original.incarnation, original.runtime):
@@ -198,8 +204,8 @@ class Registration:
         if edit.document.canonical_name(name) != name:
             raise RelationViolationError(f"Child thread {name!r} is an alias.")
         if edit.document.taken(name):
-            existing = edit.document.require(name)
-            execution.require_resumes(existing)
+            # A redeclared child keeps the execution it was declared with.
+            existing = edit.document.require_member(name, execution)
             if not existing.parent.named(parent.name):
                 raise RelationViolationError(f"Thread {name!r} is not a child of {parent.name!r}.")
             return self._declare_in(edit, existing, _DEFAULT_PRESENCE)
@@ -229,7 +235,7 @@ class Registration:
         input in one transaction. Concurrent starters cannot replace each other's
         reservation; unrelated metadata comes from this current document.
         """
-        current = edit.document.require(original.name)
+        current = edit.document.require_member(original.name, NativeThread)
         if not current.same_launch(original):
             raise RelationViolationError("Owner launch changed before process reservation.")
         if current.process_alive:
@@ -240,7 +246,7 @@ class Registration:
         change = self._commit_registration(edit, edit.document.prepare_registration(
             owned, _DEFAULT_PRESENCE, new_owner=True))
         return RegistryOwner(
-            thread=change.thread,
+            thread=edit.document.require_member(change.thread.name, NativeThread),
             claimed_generation=edit.document.entry(change.thread.name).claimed_generation,
         )
 
@@ -248,8 +254,7 @@ class Registration:
     def external_process(self, name: str, process: ProcessIdentity):
         """The CLI bridge owns its registered endpoint until that same process leaves."""
         with self.store.editing() as edit:
-            thread = edit.document.require(name)
-            thread.require_external()
+            thread = edit.document.require_member(name, ExternalThread)
             if thread.process_alive and thread.process_identity != process:
                 raise RelationViolationError("Another live process owns this CLI endpoint.")
             bound = replace(thread, process_identity=process)
@@ -302,7 +307,7 @@ class Registration:
         change = self._commit_registration(edit, change)
         # The document owns the next turn's selection. Publishing an
         # observed source must not rewrite this authorized turn's settings.
-        observed = replace(change.thread,
+        observed = replace(edit.document.require_member(change.thread.name, NativeThread),
             worktree=original.thread.worktree, model=original.thread.model,
             thinking_level=original.thread.thinking_level)
         return replace(original, thread=observed)
@@ -402,14 +407,14 @@ class Registration:
     heartbeat = changing(RegistryDocument.heartbeat)
     release_turn = changing(RegistryDocument.release_turn)
 
-    def live_owner_with_claim(self, name: str) -> tuple[Thread, int]:
+    def live_owner_with_claim(self, name: str) -> tuple[NativeThread, int]:
         """Read the stored process input generation, independent of metadata revisions."""
         owner = RegistryOwner.capture_local(self.snapshot(), name)
         return owner.thread, owner.claimed_generation
 
     def lease_live_turn_with_claim(
         self, expected: Thread, turn_id: TurnId, *, expected_generation: int
-    ) -> tuple[Thread, int]:
+    ) -> tuple[NativeThread, int]:
         """Claim a turn against the input generation, allowing unrelated metadata changes."""
         generation = GenerationCounter.require_positive(expected_generation)
         with self.store.editing() as edit:
@@ -421,7 +426,7 @@ class Registration:
 
     def lease_local_turn(
         self, name: str, turn_id: TurnId, *, routing: Routing = NoTurnRouting()
-    ) -> tuple[Thread, int]:
+    ) -> tuple[NativeThread, int]:
         """Atomic local begin-turn, never reviving a stopped or replaced owner."""
         with self.store.editing() as edit:
             owner = RegistryOwner.capture_local(edit.original.snapshot, name)
@@ -440,6 +445,7 @@ class Registration:
     canonical_name = reading(RegistryDocument.canonical_name)
     last_seen = reading(RegistryDocument.seen_at)
     require = reading(RegistryDocument.require)
+    require_member = reading(RegistryDocument.require_member)
     status = reading(RegistryDocument.status)
     user_thread = reading(RegistryDocument.user_thread)
 

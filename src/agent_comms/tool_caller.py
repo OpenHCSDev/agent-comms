@@ -16,7 +16,7 @@ from .read_basis import DisplayViewer, OperatorOutcomes, ReadAuthority
 from .registration import Registration
 from .notification_evidence import OutcomeViewer, OwnerOutcomes
 from .presentation import SentMessageSummary, ThreadRecord
-from .threads import ForkThread, Thread
+from .threads import ForkThread, SubagentThread, Thread
 from .thread_identity import ThreadIncarnation
 from .tool_result import ToolResult
 from .turn_phase import IdlePhase
@@ -184,7 +184,7 @@ class SubagentCaller(ThreadCaller):
         already archived has already ended."""
         if comms.registry.status(self.name).archived:
             return
-        comms.registry.require(self.name).require_subagent()
+        comms.registry.require_member(self.name, SubagentThread)
         self.leaving(comms)
         comms.agents.enter_phase(self.name, IdlePhase())
         comms.registry.unregister(self.name)

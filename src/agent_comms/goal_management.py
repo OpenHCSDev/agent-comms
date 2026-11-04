@@ -57,7 +57,7 @@ from .input_attempt import (
     UnresolvedInput,
 )
 from .input_disposition import DeliveryOverview
-from .threads import Thread
+from .threads import NativeThread, Thread
 from .errors import TodoError
 from .todos import SendBackVerdict, StrikeReason, Todo, JudgedCall, TodoBatch, TodoCommand, TodoStore
 
@@ -200,7 +200,7 @@ class Goals(GoalRecords):
         return store.fire(owner, actor, reason)
 
     def ready_goal_grant_locked(
-        self, owner: Thread, claim_scope: int, generation: Generation
+        self, owner: NativeThread, claim_scope: int, generation: Generation
     ) -> str:
         """Caller holds registry; recover only this owner's original unused READY grant."""
         try:

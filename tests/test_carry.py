@@ -364,9 +364,9 @@ def test_restart_selection_uses_receiving_declaration_with_connected_cli_inbox(c
         'cli-inbox-copy', frozenset(), Checkout(comms.root)))
     with comms.registry.external_process(external.name, process):
         assert stack.running_owners(comms.root) == [native.name]
-        native.require_native()
+        comms.registry.require_member(native.name, NativeThread)
         with pytest.raises(ValueError):
-            external.require_native()
+            comms.registry.require_member(external.name, NativeThread)
 
 
 def test_owner_stop_batch_reports_refusal_after_stopping_available_owners(comms, stack):

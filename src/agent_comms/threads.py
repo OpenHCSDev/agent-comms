@@ -329,6 +329,8 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread")
     """
 
     family_discriminator: ClassVar[str] = "execution"
+    # What a refusal says when an operation needs this member and the thread is another.
+    required_refusal: ClassVar[str] = "This thread does not have the execution this needs."
 
     @property
     def acting_identity(self) -> ThreadIncarnation:
@@ -493,19 +495,6 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread")
         requests. An independent session is its own."""
         return self.name
 
-    def require_native(self) -> None:
-        raise RelationViolationError(
-            "This participant checks its CLI inbox; it has no native prompt transport.")
-
-    def require_external(self) -> None:
-        raise RelationViolationError("Only an external CLI can publish a bridge process.")
-
-    def require_fork(self) -> None:
-        raise RelationViolationError('This thread is not a declared teammate fork.')
-
-    def require_subagent(self) -> None:
-        raise RelationViolationError('This thread is not a declared subagent.')
-
     def prepare_conversation[T](self, preparation: ConversationPreparation[T]) -> T:
         return preparation.external()
 
@@ -559,6 +548,14 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread")
     def project_activity(self, activity: ObservedActivity) -> ObservedActivity:
         """External participants report their own activity events."""
         return activity
+
+    @classmethod
+    def stored[Kind: Thread](cls: type[Kind], thread: ThreadProvenance) -> Kind:
+        """The one narrowing of a stored declaration to the member an operation needs: a
+        registry holds threads as stored data, so their member is tested here, once."""
+        if isinstance(thread, cls):
+            return thread
+        raise RelationViolationError(cls.required_refusal)
 
     def same_execution(self, other: Thread) -> bool:
         return self.declared_name == other.declared_name
@@ -801,6 +798,7 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread")
 
 class NativeThread(Thread):
     __slots__ = ()
+    required_refusal = "This participant checks its CLI inbox; it has no native prompt transport."
 
     def native_command_available(self, command: type[ThreadCommandAvailability],
                                  status: ThreadStatus) -> bool:
@@ -813,9 +811,6 @@ class NativeThread(Thread):
 
     def prepare_conversation[T](self, preparation: ConversationPreparation[T]) -> T:
         return preparation.native()
-
-    def require_native(self) -> None:
-        pass
 
     def owner_binding(self, snapshot: RegistrySnapshot) -> ThreadOwnerBinding:
         return snapshot.status(self.name).native_owner_binding(snapshot, self)
@@ -831,9 +826,7 @@ class NativeThread(Thread):
 
 class ExternalThread(Thread):
     __slots__ = ()
-
-    def require_external(self) -> None:
-        pass
+    required_refusal = "Only an external CLI can publish a bridge process."
 
     def withdrawn(self) -> Thread:
         """The CLI bridge owns its binding and releases it as that process leaves
@@ -863,6 +856,7 @@ class SubagentThread(ExternalThread, declared_name="subagent_execution"):
     order and has no independent card, and starts with inherited channel membership."""
 
     __slots__ = ()
+    required_refusal = "This thread is not a declared subagent."
 
     def holds_activity(self, status: ThreadStatus) -> bool:
         """The occupied registration lasts until SubagentStop or SessionEnd retires it."""
@@ -870,9 +864,6 @@ class SubagentThread(ExternalThread, declared_name="subagent_execution"):
 
     def registered_status(self, requested: ThreadStatus) -> ThreadStatus:
         return requested
-
-    def require_subagent(self) -> None:
-        pass
 
     def order_candidates(self) -> tuple[Thread, ...]:
         """A child works inside its parent's turn and never holds an order."""
@@ -895,10 +886,6 @@ class SubagentThread(ExternalThread, declared_name="subagent_execution"):
     def child_goal(cls, goals: Goals, parent: Thread) -> Callable[[Thread], GoalDeclaration]:
         return lambda prepared: prepared.goal
 
-    @classmethod
-    def require_resumes(cls, existing: Thread) -> None:
-        """A redeclared child keeps the execution it was declared with."""
-        existing.require_subagent()
 
 
 class ForkThread(NoChannelInbox, SubagentThread, declared_name="fork_execution"):
@@ -908,9 +895,7 @@ class ForkThread(NoChannelInbox, SubagentThread, declared_name="fork_execution")
     """
 
     __slots__ = ()
-
-    def require_fork(self) -> None:
-        pass
+    required_refusal = "This thread is not a declared teammate fork."
 
     def forks(self) -> tuple[Thread, ...]:
         return (self,)
@@ -925,9 +910,6 @@ class ForkThread(NoChannelInbox, SubagentThread, declared_name="fork_execution")
     def child_goal(cls, goals: Goals, parent: Thread) -> Callable[[Thread], GoalDeclaration]:
         return lambda prepared: goals.fork_goal(parent, prepared)
 
-    @classmethod
-    def require_resumes(cls, existing: Thread) -> None:
-        existing.require_fork()
 
 
 def current_thread(registry) -> Thread:
