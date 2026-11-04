@@ -245,7 +245,7 @@ class Registration:
             thread = edit.document.require_member(name, ExternalThread)
             if thread.process_alive and thread.process_identity != process:
                 raise RelationViolationError("Another live process owns this CLI endpoint.")
-            bound = replace(thread, process_identity=process)
+            bound = replace(thread.serving_its_own_session(), process_identity=process)
             self._commit_registration(edit, edit.document.prepare_registration(
                 bound, ConnectedThreadStatus(), new_owner=True))
             owner = edit.document.entry(bound.name).owner_identity

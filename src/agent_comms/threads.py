@@ -829,6 +829,10 @@ class ExternalThread(Thread):
         second bridge while the first still reads."""
         return self
 
+    def serving_its_own_session(self) -> ExternalThread:
+        """What this thread is once a process of its own serves it."""
+        return self
+
     def registered_status(self, requested: ThreadStatus) -> ThreadStatus:
         return requested.external_registered(self, time.time())
 
@@ -856,6 +860,15 @@ class SubagentThread(ExternalThread, declared_name="subagent_execution"):
     def holds_activity(self, status: ThreadStatus) -> bool:
         """The occupied registration lasts until SubagentStop or SessionEnd retires it."""
         return status.receiving
+
+    def serving_its_own_session(self) -> ExternalThread:
+        """A child works inside its parent's turn and never binds a process of its own, so one
+        that does is an independent session: execution owns independence, and the parent stays
+        as provenance. Connector names and hook forks both start here."""
+        return ExternalThread(**{
+            declared.name: getattr(self, declared.name)
+            for declared in fields(self) if declared.init
+        })
 
     def registered_status(self, requested: ThreadStatus) -> ThreadStatus:
         return requested

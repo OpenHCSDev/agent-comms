@@ -13,7 +13,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import TurnId
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.runtime_requests import ProjectRuntimeRequest
-from agent_comms.threads import ExternalThread, NativeThread
+from agent_comms.threads import ExternalThread, ForkThread, NativeThread
 from agent_comms.maintenance_barrier import (
     InstallingPhase, MaintenanceHeldError, MaintenanceOperator, PausedPhase,
 )
@@ -201,3 +201,20 @@ def test_active_executor_cannot_be_replaced_by_same_pid_different_birth(tmp_path
     assert current.process_identity == identity and current.turn_record == leased.turn_record
     assert current.turn_record.read().id == 'e99af36cdfcffbc191cce98c5d771afb'
     comms.registry.release_turn(current.turn_lease)
+
+
+def test_a_fork_row_bound_by_its_own_process_is_an_independent_session(tmp_path):
+    """2026-11-04: a session named through the connector, then bound by its own bridge, stayed a
+    fork, so `require_actor` refused it as nobody's colleague and nobody's in-turn child."""
+    comms = wire(tmp_path)
+    registry = comms.registry
+    registry.declare(ExternalThread('parent', frozenset(), Checkout(tmp_path)))
+    registry.register_child('session', 'parent', ForkThread, comms.goals)
+    forked = registry.require('session')
+    assert forked.independent_threads() == ()
+    with registry.external_process('session', ProcessIdentity.capture(os.getpid())):
+        bound = registry.require('session')
+        assert bound.independent_threads() == (bound,)
+        assert bound.parent == forked.parent
+        assert bound.incarnation == forked.incarnation
+    assert registry.require('session').independent_threads() == (registry.require('session'),)
