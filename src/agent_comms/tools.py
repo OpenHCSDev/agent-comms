@@ -154,6 +154,7 @@ from .tool_caller import ThreadCaller, ThreadListing, ToolCaller
 from .acp_extension import CoordinationChangedUpdate
 from .history_views import RetiredViews
 from .thread_identity import ThreadIncarnation
+from .display_references import CurrentDisplayReferences
 from .registry_document import ProjectThreadSelection, RegistrySnapshot
 from .transcripts import TranscriptCursor
 from .tool_result import ToolResult
@@ -1379,21 +1380,30 @@ class CommsRegistryTool(CoreRead[RegistrySnapshot]):
 
 
 @dataclass(frozen=True)
-class ChannelNames(ToolResult):
-    """Every channel the catalog declares, in roster order."""
+class ReferenceNames(ToolResult):
+    """The names a UI links through: each registry name's incarnation and every declared channel.
 
-    names: tuple[str, ...]
+    A remote UI reads this instead of the whole registry (megabytes of thread
+    records over a tunnel) when all it needs is which names are linkable.
+    """
+
+    members: Mapping[str, ThreadIncarnation]
+    channels: tuple[str, ...]
+
+    def references(self, root: str) -> CurrentDisplayReferences:
+        return CurrentDisplayReferences(root, self.members, self.channels)
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsChannelNamesTool(CoreRead[ChannelNames]):
-    """A remote UI resolves #channel links without the activity a full channel read needs."""
+class CommsReferenceNamesTool(CoreRead[ReferenceNames]):
+    """A UI resolves @thread and #channel links without the registry or channel activity."""
 
-    label = "Channel names"
-    description = "Every channel name the catalog declares, read without channel activity."
+    label = "Reference names"
+    description = "Every linkable thread name with its incarnation, and every channel name, without thread records."
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> ChannelNames:
-        return ChannelNames(comms.channels.catalog.read().channel_names())
+    def apply(self, comms: Comms, caller: ToolCaller) -> ReferenceNames:
+        return ReferenceNames(dict(comms.registry.snapshot().named_incarnations()),
+                              comms.channels.catalog.read().channel_names())
 
 
 @dataclass(frozen=True)
