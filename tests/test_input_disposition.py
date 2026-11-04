@@ -29,6 +29,7 @@ from agent_comms.message_reference import MessageReference
 from agent_comms.text_digest import TextDigest
 from agent_comms.threads import Thread
 from stored_inputs import stored_inputs
+from agent_comms.comms import wire
 
 
 ORIGINAL_KEY = AcpInputKey(InputId("1" * 32))
@@ -47,6 +48,13 @@ def test_record_rejects_nonstring_before_durable_unknown(tmp_path: Path, invalid
     assert not store.path.exists()
 
 
+def _kid_entries(root: Path):
+    """The registered owner whose stored inputs the dispositions answer for."""
+    comms = wire(root)
+    comms.registry.declare(Thread("kid", frozenset(), Checkout(root)))
+    return (comms.registry.snapshot().entry("kid"),)
+
+
 def test_unknown_is_durable_and_native_start_is_a_cas(tmp_path: Path) -> None:
     store = InputDispositions(tmp_path)
     assert store.record(BusInputKey(7), seq=7, owner="kid", claim_scope=3, target="kid", text="ask")
@@ -54,7 +62,7 @@ def test_unknown_is_durable_and_native_start_is_a_cas(tmp_path: Path) -> None:
         BusInputKey(7), seq=7, owner="kid", claim_scope=3, target="kid", text="ask")
     assert (
         InputDispositions(tmp_path)
-        .unresolved(frozenset({"kid"}))
+        .unresolved(_kid_entries(tmp_path))
         .unknown(frozenset({"kid"}))[0]
         .sequence
         == 7
@@ -180,7 +188,7 @@ def test_admitted_snapshot_retains_cut_without_blocking_writer(tmp_path):
             )
             assert appended.result(timeout=2)
             assert set(store._document(connection, "1", ()).rows) == {ORIGINAL_KEY}
-    assert set(store.unresolved(frozenset({"kid"})).rows) == {ORIGINAL_KEY, LATER_KEY}
+    assert set(store.unresolved(_kid_entries(tmp_path)).rows) == {ORIGINAL_KEY, LATER_KEY}
 
 
 ROOT, NATIVE, SENT = "c" * 32, "a" * 32, "sent text"

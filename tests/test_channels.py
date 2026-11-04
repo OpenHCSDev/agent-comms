@@ -235,9 +235,12 @@ async def test_new_tag_disposition_is_declared_in_original_editor_and_tool_catal
     editor_value = compile_decoder(TagDisposition).encode_editor(disposition)
     from agent_comms.launch_root import LaunchRoot
 
+    from agent_comms.config_options import ConfigOptions
+    from agent_comms.owner_launch import RetainedOwnerLaunch
+
     with LaunchRoot.from_path(comms.root).selected():
-        choices = next(field.choices for field in await action.prepare_fields()
-                       if field.name == 'disposition')
+        prepared = await action.prepared(ConfigOptions(RetainedOwnerLaunch.configured(), comms.route))
+        choices = next(field.choices for field in prepared.fields if field.name == 'disposition')
     assert (disposition.label, editor_value) in choices
     edited = action.edited({'disposition': editor_value})
     assert edited.bound[0].disposition == disposition
