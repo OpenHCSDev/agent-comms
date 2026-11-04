@@ -4,18 +4,24 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import BinaryIO, ClassVar, Self
+from abc import ABC
+from typing import TYPE_CHECKING, BinaryIO, ClassVar, Literal, Self
 
 from agent_comms.runtime_updates import RuntimeUpdate, SessionFacts
 from agent_comms.thread_text import NoThreadText, ThreadText
 
 from ..session_receipts import SessionReceipts
+from ..cli_protocol import TaggedWire
 from ..wire_models import WireModel
+from .shared import WireReference
 from .claude_protocol import CLAUDE_RECORD, ClaudeRecord, ClaudeSession, SubagentProgress
 from .history import (
     ClaudeHistory, HarnessAddress, JsonLines, JsonLinesFile, NamedSession,
     OfflineHistory, OnlineHistory,
 )
+
+if TYPE_CHECKING:
+    from ..inbox_watch import PushedTranscript
 
 
 class SubagentMeta(WireModel):
@@ -93,6 +99,40 @@ WINDOW_ENDED = ""
 never blank (JsonLines.complete_lines), so this cannot be mistaken for one."""
 
 WATCH_STOPPED = 4000
+
+
+class WatchReport(TaggedWire, ABC, affix="", declared_name=None):
+    """What a watch client says up its socket besides its transcript: the messages it may have
+    shown. A reference is written to the client's ledger before its event is printed, so the
+    ledger can only overstate what was shown; a message missing from it was never printed."""
+
+    protocol: Literal['agent-comms-watch'] = 'agent-comms-watch'
+    wire_prefix: ClassVar[str] = '{"protocol":' + json.dumps(protocol) + ','
+    printed: tuple[WireReference, ...]
+
+    def line(self) -> str:
+        return self.model_dump_json()
+
+    async def received(self, pushed: PushedTranscript) -> None:
+        """Each printed message's attempt is emitted: shown or about to be, never sent again."""
+        for reference in self.printed:
+            await pushed.emitted(reference)
+
+
+class PrintedNow(WatchReport, declared_name='printed'):
+    """The message just printed under the session's Monitor."""
+
+
+class PrintedLedger(WatchReport, declared_name='ledger'):
+    """Everything this machine's clients may have printed, sent first on every connect. Once it
+    is in, an attempt still unconfirmed provably never reached a Monitor and may go again."""
+
+    async def received(self, pushed: PushedTranscript) -> None:
+        await super().received(pushed)
+        pushed.ledger_read.set()
+
+
+WATCH_REPORT = WireModel.adapter(WatchReport.declared_union())
 """On a watch socket: the close code saying this thread was stopped on the bus, so the session must
 not re-arm. It is in the application range (4000-4999): a re-armed watch replacing an older socket
 closes with 1000, and an install drops the socket (1006), and both of those mean re-arm."""

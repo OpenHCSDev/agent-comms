@@ -1527,6 +1527,16 @@ class TranscriptBridge(PublishesToBus, CliBridge[BridgeOptions]):
         return self.binding.bus
 
 
+WireReference = InstanceOf[
+    Annotated[
+        MessageReference,
+        PlainValidator(partial(FieldCodec.decode, MessageReference)),
+        PlainSerializer(FieldCodec.encode),
+    ]
+]
+"""A message reference on our wire lines, in the one spelling FieldCodec gives it."""
+
+
 class MonitorFrame(TaggedWire, ABC, affix=""):
     """Our line protocol inside the harness's task-notification envelope."""
     async def confirm(
@@ -1568,13 +1578,7 @@ class MonitorReadFile(MonitorProtocolFrame, declared_name='read-file'):
     The message is instead the private file this notice names, read whole. Seeing the notice
     proves only that the notice arrived; a visible Read of the file confirms the body."""
 
-    reference: InstanceOf[
-        Annotated[
-            MessageReference,
-            PlainValidator(partial(FieldCodec.decode, MessageReference)),
-            PlainSerializer(FieldCodec.encode),
-        ]
-    ]
+    reference: WireReference
     path: str
     instruction: Literal['This is one message. Read this complete file before acting on it.'] = (
         'This is one message. Read this complete file before acting on it.')
