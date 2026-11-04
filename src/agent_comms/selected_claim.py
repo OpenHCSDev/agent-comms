@@ -33,7 +33,7 @@ from .errors import RelationViolationError
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import RegistryPrivacy
 from .registry_document import RegistrySnapshot
-from .threads import Thread
+from .threads import NativeThread, Thread
 
 
 def verify_selected_wake(
@@ -50,7 +50,7 @@ def verify_selected_wake(
 
 def _verify_selected_wake_state(
     initial: Delivered,
-    owner: Thread,
+    owner: NativeThread,
     generation: int,
     store: Coordination,
     claim_scope: WakeClaim,

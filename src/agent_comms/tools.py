@@ -65,7 +65,6 @@ from .cli_command import PreparedTargetAction, TargetAction, TargetActionCommand
 from .cli_result import CliResult, TargetEditResult
 from .coordination_tables.refusals import SendRefusal
 from .display_order import ChannelSort, ThreadSort
-from .errors import RelationViolationError
 from .nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion, WireForm, WireName, WireOmitDefault, projected, GoalId
 from .goal_actions import (
     ActiveGoalAction, ClearGoalAction, EditGoalAction, GoalAction, GoalActor, GoalPrecondition,
@@ -136,7 +135,14 @@ from .task_sources import (
     TaskChange,
     TaskScopeSelection,
 )
-from .thread_execution import ArchiveOwnerControl, NativeOwnerCommand, OwnerLifecycleControl, StartOwnerControl
+from .threads import (
+    ArchiveOwnerControl,
+    NativeOwnerCommand,
+    OwnerLifecycleControl,
+    StartOwnerControl,
+    NextTurnConfiguration,
+    Thread,
+)
 from .thread_management import InheritedTags, ProjectChangeResult, RenameThreadResult, TagChoice
 from .input_origin import HumanInputOrigin
 from .thread_identity import ClaimedIdentity
@@ -144,7 +150,6 @@ from .thread_presentation import ThreadPresentation
 from .child_process import ProcessIdentity
 from .thread_identity import ToolName
 from .thread_model import ThreadModel
-from .threads import NextTurnConfiguration, Thread
 from .tool_caller import ThreadCaller, ThreadListing, ToolCaller
 from .acp_extension import CoordinationChangedUpdate
 from .history_views import RetiredViews
@@ -1860,7 +1865,7 @@ class CommsInstallTool(NativeToolRequest):
     )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> InstallLaunches:
-        return InstallLaunches(InstallDue.launch_due(comms, caller.name))
+        return InstallLaunches(InstallDue.launch_due(comms))
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -14,7 +14,7 @@ from agent_comms.agent_backend import NoInputStartListener
 from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.selected_actions import NoSelectedTools
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 async def one_turn_events(agent_bin, agent_args, task, cwd, env_extra=None,
@@ -22,9 +22,8 @@ async def one_turn_events(agent_bin, agent_args, task, cwd, env_extra=None,
     """Run ``backend.stream_agent_events`` on a fresh session and close its child after."""
     session = PersistentPiSession()
     comms = wire(Path(cwd))
-    owner = comms.registry.declare(Thread(
-        "independent-turn", frozenset(), Checkout(Path(cwd)),
-    )).incarnation.require_recorded()
+    owner = comms.registry.declare(NativeThread(
+        "independent-turn", frozenset(), Checkout(Path(cwd)))).incarnation.require_recorded()
     async with AsyncExitStack() as resources:
         cursor_delivery = CursorDelivery()
         resources.callback(cursor_delivery.close)

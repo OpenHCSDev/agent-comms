@@ -30,7 +30,7 @@ from agent_comms.input_key import BusInputKey
 from agent_comms.bus_read import OwnerReadRuntimeRequest
 from agent_comms.order_tools import InputDeliveryRead
 from agent_comms.runtime_server import RuntimeRequest
-from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.threads import ExternalThread, NativeThread
 from agent_comms.tool_caller import ToolCaller
 from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import AcpSessionId, RootId
@@ -43,7 +43,6 @@ from agent_comms.native_arguments import GivenBinary
 from delivery_owner_fixture import canonical_agent
 from owner_socket_fixture import declare_owner, silent_socket
 from stored_inputs import stored_inputs
-from agent_comms.threads import Thread
 
 
 async def test_dispatched_request_without_a_reply_remains_unknown_and_is_not_replayed(comms):
@@ -163,7 +162,7 @@ async def test_a_held_owner_read_refuses_after_its_process_dies(comms, runtime_p
 async def test_a_live_external_bridge_reads_retained_delivery_without_a_native_socket(
     comms, runtime_processes,
 ):
-    declare_owner(comms, "held", runtime_processes[0].identity, ExternalThreadExecution)
+    declare_owner(comms, "held", runtime_processes[0].identity, ExternalThread)
     before = recorded_input(comms)
     assert await mcp_input_delivery(comms) == FieldCodec.encode(
         comms.goals.input_delivery("held", include_history=True),
@@ -278,7 +277,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
     comms = wire(tmp_path / "wire")
     old, new = (child.identity for child in runtime_processes)
     old_pid, new_pid = old.pid, new.pid
-    comms.registry.declare(Thread('worker', frozenset(), Checkout(tmp_path), process_identity=old))
+    comms.registry.declare(NativeThread('worker', frozenset(), Checkout(tmp_path), process_identity=old))
     client = canonical_agent(comms)
     updates = []
 
@@ -385,7 +384,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
         comms.registry.unregister("renamed")
         comms.threads.delete("renamed")
         comms.registry.declare(
-            Thread('worker', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity(901003, 1))
+            NativeThread('worker', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity(901003, 1))
         )
         with pytest.raises(RuntimeError):
             await proxy.request("cancel")

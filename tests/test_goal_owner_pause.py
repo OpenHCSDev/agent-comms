@@ -15,13 +15,13 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.tools import CommsGoalTool, CommsResumeGoalTool
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.goal_scope import OneGoal
 
 
 def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=Checkout(tmp_path)))
+    comms.registry.declare(NativeThread(name='worker', tags=frozenset(), worktree=Checkout(tmp_path)))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Read fifty files"))
     comms.goals.update_goal(
         "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id))), actor=OwnerInvocable
@@ -45,7 +45,7 @@ def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path):
 
 def test_model_cannot_pause(tmp_path):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=Checkout(tmp_path)))
+    comms.registry.declare(NativeThread(name='worker', tags=frozenset(), worktree=Checkout(tmp_path)))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Read fifty files"))
     with pytest.raises(ValueError):
         comms.goals.update_goal(

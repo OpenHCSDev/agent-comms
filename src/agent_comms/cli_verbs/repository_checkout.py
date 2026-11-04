@@ -24,7 +24,7 @@ class RepositoryCheckoutCliCommand(CheckoutCliCommand,
         return rule.repository_checkout(rule.roots_of(thread), self.problem, self.repository)
 
     def source(self, ctx: Comms, thread: Thread) -> RepositorySource:
-        repositories = ctx.registry.snapshot().commander_project.require().repos
+        repositories = ctx.registry.snapshot().team_project.require().repos
         selected = [repository for repository in repositories
                     if repository.github == self.repository]
         if not selected:

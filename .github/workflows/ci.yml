@@ -75,7 +75,7 @@ jobs:
 
       - name: Check native RPC compaction against localhost provider
         run: |
-          uv pip install --python stack/.venv/bin/python pytest pytest-asyncio pytest-cov 'pytest-xdist>=3.6' 'pytest-timeout>=2.3'
+          uv pip install --python stack/.venv/bin/python -r pyproject.toml --extra dev
           PYTHONPATH="$PWD/src" \
             stack/.venv/bin/python -m pytest tests/test_stack_native_compaction.py tests/test_stack_persistent_compaction.py --no-cov -q
 

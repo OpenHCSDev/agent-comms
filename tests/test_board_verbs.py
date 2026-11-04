@@ -10,14 +10,13 @@ import pytest
 
 from agent_comms.team import judge, order
 from agent_comms.errors import TodoError
-from agent_comms.thread_execution import ForkExecution, ExternalThreadExecution
-from agent_comms.threads import Thread
+from agent_comms.threads import ForkThread, ExternalThread
 from agent_comms.team.standing import DeliveryAwaitingJudgement
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.goal_actions import SetGoalAction
 from team_heartbeat_fixture import capture_frame
 from agent_comms.head_review import HeadReviewOrder, PullRequestHead
-from agent_comms.tool_caller import ForkCaller, ThreadCaller
+from agent_comms.tool_caller import ForkCaller, PeerCaller, ThreadCaller
 from agent_comms_hooks import ToolRefusedError
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import HeadReviewTimerUp, LinkedUnreviewedHead, OrderlessUnreviewedHead, ReviewTimerUp, StandingRule
@@ -42,14 +41,14 @@ QUOTE = "Repair the existing owner"
 @pytest.fixture
 def board_review(head_bus):
     comms, github, request = head_bus
-    lead = comms.registry.require("lead").incarnation
+    colleague = comms.registry.require("colleague").incarnation
     worker = comms.registry.require("worker").incarnation
 
     def claim(problem="P2"):
         todo = comms.goals.todos.get(problem)
-        original = comms.messaging.send("lead", "worker", todo.order.instructions(todo)).message
+        original = comms.messaging.send("colleague", "worker", todo.order.instructions(todo)).message
         todo = comms.goals.todos.apply(todo.id, OrderMessage(
-            todo.revision, lead, original.message_id, at=RecordedEventTime(time.time())))
+            todo.revision, colleague, original.message_id, at=RecordedEventTime(time.time())))
         delivery = OrderClaim.for_order(todo, worker, PullRequestLink(todo.repo, request.pr), request.head,
                                         "Review the broken duplicated decision repair",
                                         original.reference)
@@ -66,7 +65,7 @@ def board_review(head_bus):
 
 
 def assert_review_preconditions(rule, comms, request):
-    ctx = order.Team.read_root(comms.root)
+    ctx = order.Team(root=comms.root, actor=PeerCaller("colleague"))  # the reviewer, by name
     observed = rule.command_values()
     todo = comms.goals.todos.get(observed.get("problem", "P2"))
     # Supply review prose once by declared argument, not a second roster of verb requirements.
@@ -102,23 +101,23 @@ def assert_review_preconditions(rule, comms, request):
 def test_held_board_commands_take_the_same_verdicts_as_the_order(board_review, claim_it):
     comms, request, claim, link = board_review
     todo = claim() if claim_it else link()
-    rules = LinkedUnreviewedHead.scan_reviews(comms.goals, "lead", ProgressRead(()))
+    rules = LinkedUnreviewedHead.scan_reviews(comms.goals, ProgressRead(()))
     rule, = rules
     assert rule.todo == todo
     assert judge.PromoteVerb not in rule.clearing_actions()
     assert UnderReviewHeadVerdict in assert_review_preconditions(rule, comms, request)
-    frame = capture_frame(comms, "lead", ProgressRead(()))
+    frame = capture_frame(comms, ProgressRead(()))
     # The timer's own condition remains real: age the observed review timer in this read.
     timed = replace(todo, review_at=RecordedEventTime(time.time() - 120))
     frame = replace(frame, review_timers=TodoStore.timers_up_in(
         (timed,), time.time(), frame.pulls.progress((timed,), comms.registry)))
-    timers = ReviewTimerUp.scan_observed(comms, "lead", (), frame)
+    timers = ReviewTimerUp.scan_observed(comms, (), frame)
     assert bool(timers) == (not claim_it)
     for timer in timers:
         assert_review_preconditions(timer, comms, request)
     for delivery in DeliveryAwaitingJudgement.read_open(
             comms.bus.bus, comms.registry.snapshot(), {todo.held().owner_identity: (todo,)},
-            "lead", ()):
+            "colleague", ()):
         assert_review_preconditions(delivery, comms, request)
 
 
@@ -163,16 +162,16 @@ def test_shared_head_keeps_each_order_on_its_own_board_and_timer_line(board_revi
     comms, request, claim, link = board_review
     first = link()
     second = claim("P1")
-    rules = LinkedUnreviewedHead.scan_reviews(comms.goals, "lead", ProgressRead(()))
+    rules = LinkedUnreviewedHead.scan_reviews(comms.goals, ProgressRead(()))
     assert {rule.todo.id for rule in rules} == {first.id, second.id}
     for rule in rules:
         verdicts = assert_review_preconditions(rule, comms, request)
         assert UnderReviewHeadVerdict in verdicts
-    frame = capture_frame(comms, "lead", ProgressRead(()))
+    frame = capture_frame(comms, ProgressRead(()))
     timed = replace(first, review_at=RecordedEventTime(time.time() - 120))
     frame = replace(frame, review_timers=TodoStore.timers_up_in(
         (timed,), time.time(), frame.pulls.progress((timed,), comms.registry)))
-    timers = ReviewTimerUp.scan_observed(comms, "lead", (), frame)
+    timers = ReviewTimerUp.scan_observed(comms, (), frame)
     timer, = timers
     assert timer.todo == timed
     assert timer.problem == first.id
@@ -181,7 +180,7 @@ def test_shared_head_keeps_each_order_on_its_own_board_and_timer_line(board_revi
 
 def test_orderless_board_commands_do_not_invent_a_problem(board_review):
     comms, request, _, _ = board_review
-    rule, = OrderlessUnreviewedHead.scan_reviews(comms.goals, "lead", ProgressRead(()))
+    rule, = OrderlessUnreviewedHead.scan_reviews(comms.goals, ProgressRead(()))
     assert judge.PromoteVerb not in rule.clearing_actions()
     assert "problem" not in rule.command_values()
     assert "--problem" not in rule.clearing_commands()
@@ -205,7 +204,7 @@ def test_claim_link_survives_sendbacks_and_explicit_release_without_editing_goal
     assert released.current_holder.current_assignments() == ()
     assert released.order.holds_head(request)
     assert comms.goals.todos.resolve_order(released.creator_identity, previous.owner, released.id) == released
-    rule, = LinkedUnreviewedHead.scan_reviews(comms.goals, "lead", ProgressRead(()))
+    rule, = LinkedUnreviewedHead.scan_reviews(comms.goals, ProgressRead(()))
     assert UnderReviewHeadVerdict in assert_review_preconditions(rule, comms, request)
     # A former holder can already be doing different work. A head review must not edit that goal.
     other = comms.goals.todos.get("P1")
@@ -216,7 +215,7 @@ def test_claim_link_survives_sendbacks_and_explicit_release_without_editing_goal
     assert judge.OkVerb in rule.clearing_actions()
     command, = judge.OkVerb.commands({**rule.command_values(),
         "why": shlex.quote(REASON.text), "serves": shlex.quote(QUOTE)})
-    judge.main(shlex.split(command)[1:], order.Team.read_root(comms.root))
+    judge.main(shlex.split(command)[1:], order.Team(root=comms.root, actor=PeerCaller("colleague")))
     accepted = comms.goals.todos.get(original.id)
     assert accepted.order.holds_head(request)
     assert StoredHeadReview.head_reviews(comms.goals.todos, request)[0].order.problem == original.id
@@ -261,30 +260,29 @@ def test_a_verdict_on_exactly_the_delivered_head_answers_the_delivery(board_revi
     """The delivery line names one head; only a decided verdict on that head retires it."""
     comms, request, claim, _ = board_review
     claim()
-    lead = comms.registry.require("lead").incarnation
-    opened, = DeliveryAwaitingJudgement.opened(comms, "lead")
+    colleague = comms.registry.require("colleague").incarnation
+    opened, = DeliveryAwaitingJudgement.opened(comms, colleague)
     assert opened.request == request
     NoHeadOrder().record_review(comms.goals, replace(request, head="f" * 40),
-                                ReviewedHeadVerdict(REASON), lead)
-    assert DeliveryAwaitingJudgement.opened(comms, "lead") == (opened,)
-    NoHeadOrder().record_review(comms.goals, request, ReviewedHeadVerdict(REASON), lead)
-    assert DeliveryAwaitingJudgement.opened(comms, "lead") == ()
+                                ReviewedHeadVerdict(REASON), colleague)
+    assert DeliveryAwaitingJudgement.opened(comms, colleague) == (opened,)
+    NoHeadOrder().record_review(comms.goals, request, ReviewedHeadVerdict(REASON), colleague)
+    assert DeliveryAwaitingJudgement.opened(comms, colleague) == ()
 
 
-@pytest.mark.parametrize("reviewer", ("lead", "peer", "worker"))
+@pytest.mark.parametrize("reviewer", ("colleague", "peer", "worker"))
 def test_independent_colleagues_may_review_without_rank_tags(board_review, reviewer):
-    """Native and external colleagues share scope; a storage lead has no extra permission."""
+    """Native and external colleagues share scope; no colleague has extra permission."""
     comms, request, _, _ = board_review
-    comms.registry.declare(Thread("peer", frozenset({"comms"}),
-                                  comms.registry.require("lead").worktree,
-                                  execution=ExternalThreadExecution))
+    comms.registry.declare(ExternalThread("peer", frozenset({"comms"}),
+                                  comms.registry.require("colleague").worktree))
     NoHeadOrder().require_reviewer(comms.goals, request,
                                    comms.registry.require(reviewer).incarnation)
 
 
 def test_in_turn_review_uses_the_actual_bound_parent_not_a_second_independent_actor(board_review):
     comms, request, _, _ = board_review
-    child = comms.registry.register_child("review-child", "worker", ForkExecution,
+    child = comms.registry.register_child("review-child", "worker", ForkThread,
                                           comms.goals)
     with pytest.raises(ToolRefusedError):
         ThreadCaller(child.name).head_review_actor(comms, request, NoHeadOrder())
@@ -298,7 +296,7 @@ def test_review_scope_requires_the_actual_registered_birth(board_review):
     snapshot = comms.registry.snapshot()
     original = comms.registry.require("worker").incarnation.require_recorded()
     with pytest.raises(ToolRefusedError):
-        snapshot.commander_project.require_scope(
+        snapshot.team_project.require_scope(
             snapshot, replace(original, created_at=time.time() + 1000), request.repo)
     assert not StoredHeadReview.head_reviews(comms.goals.todos, request)
 

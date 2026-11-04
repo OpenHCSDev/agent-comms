@@ -30,7 +30,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.optional_awareness_projection import OptionalAwarenessProjection
 from agent_comms.registration import Registration
 from agent_comms.selected_source_batch import SelectedSource
-from agent_comms.threads import Thread
+from agent_comms.threads import Thread, NativeThread
 from agent_comms.wake_candidate_index import (
     WakeCandidateIndex,
     ProjectionUnavailableError,
@@ -47,11 +47,11 @@ def _root(
     root.mkdir(mode=0o700)
     comms = prepare_native_comms(wire(root))
     comms.registry.declare(
-        Thread('sender', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+        NativeThread('sender', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     for number in range(recipients):
         comms.registry.declare(
-            Thread(f'member{number:03}', frozenset({'team'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('openai-codex/gpt-6-sol'))
+            NativeThread(f'member{number:03}', frozenset({'team'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('openai-codex/gpt-6-sol'))
         )
     root_id = comms.registry.store.prepare_native_root().namespace
     store = Coordination(str(root / "coordination.sqlite3"))

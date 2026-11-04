@@ -78,6 +78,7 @@ class Ping(DeclaredFamily, affix="Ping"):
     @abstractmethod
     def key(self) -> object: ...
 
+
     @property
     @abstractmethod
     def alarm_kind(self) -> type[DeclaredFamily]: ...
@@ -223,7 +224,7 @@ class PublishedFacts(PublicationFacts):
 
 @dataclass(frozen=True)
 class TeamUpdate(OwnerNotice, declared_name=None):
-    commander: ThreadIncarnation
+    teammate: ThreadIncarnation
     handled: tuple[Ping, ...]
     not_applied: tuple[str, ...] = field(default=(), kw_only=True)
     publication: PublicationFacts = field(default_factory=UnpublishedFacts, compare=False, kw_only=True)
@@ -233,10 +234,10 @@ class TeamUpdate(OwnerNotice, declared_name=None):
 
     def projections(self, message: Message) -> Iterator[TypedTable]:
         """The packet's position under the teammate birth it was published for."""
-        yield TeamUpdatePosition(message.seq, self.commander.require_recorded().lookup)
+        yield TeamUpdatePosition(message.seq, self.teammate.require_recorded().lookup)
 
-    def team_update(self, commander: ThreadLookup) -> tuple[TeamUpdate, ...]:
-        return (self,) if self.commander.require_recorded().lookup == commander else ()
+    def team_update(self, recipient: ThreadLookup) -> tuple[TeamUpdate, ...]:
+        return (self,) if self.teammate.require_recorded().lookup == recipient else ()
 
     def category(self, spoken: type[MessageCategory]) -> type[MessageCategory]:
         """A board packet speaks in the owner's voice yet is not his words: its own category."""
@@ -254,7 +255,7 @@ class TeamUpdate(OwnerNotice, declared_name=None):
             "BOARD (Core heartbeat; Tristan's own words never arrive in this format)",
             "Each rule prints its shared words once; '…' in a header is each row's own words.",
             *hud, "",
-            "Full evidence: comms_hud board/open_pings, or Toad /commander original details",
+            "Full evidence: comms_hud board/open_pings, or Toad /team",
         ))
 
     def board(self, comms: Comms) -> tuple[BoardEntry, ...]:
@@ -277,63 +278,71 @@ class TeamUpdate(OwnerNotice, declared_name=None):
         return tuple(ping for ping in self.handled if ping.undisposed(history, cut))
 
     def require_target(self, target: str, registry: RegistrySnapshot) -> None:
-        if registry.require(target).incarnation != self.commander:
+        if registry.require(target).incarnation != self.teammate:
             raise RelationViolationError("Team observations changed recipient incarnation")
 
     @classmethod
-    def latest(cls, comms: Comms, commander: ThreadIncarnation) -> tuple[TeamUpdate, ...]:
+    def latest(cls, comms: Comms, recipient: ThreadIncarnation) -> tuple[TeamUpdate, ...]:
         """The last retained observation, even when nothing was sent to the bus."""
-        return TeamUpdateStore.for_team(comms.root, commander).read()
+        return TeamUpdateStore.for_team(comms.root, recipient).read()
 
     @classmethod
-    def published(cls, comms: Comms, commander: ThreadIncarnation) -> tuple[TeamUpdate, ...]:
+    def published(cls, comms: Comms, recipient: ThreadIncarnation) -> tuple[TeamUpdate, ...]:
         """The last actual publication: what was announced, not just observed."""
-        lookup = commander.require_recorded().lookup
+        lookup = recipient.require_recorded().lookup
         with comms.bus.bus.observing() as db:
             messages = TeamUpdatePosition.latest(db, lookup)
         return tuple(packet for message in messages
                      for packet in message.task.team_update(lookup))
 
     @classmethod
-    def current_board(cls, comms: Comms, commander: str) -> tuple[BoardEntry, ...]:
+    def current_board(cls, comms: Comms, recipient: str) -> tuple[BoardEntry, ...]:
         """The retained observation's board, derived at the moment of asking."""
-        return tuple(entry for latest in cls.latest(comms, comms.registry.require(commander).incarnation)
+        return tuple(entry for latest in cls.latest(comms, comms.registry.require(recipient).incarnation)
                      for entry in latest.board(comms))
 
     @classmethod
-    def derive(cls, commander: ThreadIncarnation, states: tuple[TeammateState, ...],
+    def derive(cls, recipient: ThreadIncarnation, states: tuple[TeammateState, ...],
                rules: tuple[StandingRule, ...],
                previous: tuple[TeamUpdate, ...], *,
                published: tuple[TeamUpdate, ...], now: float,
                history: TeamHistory,
                not_applied: tuple[str, ...] = ()) -> TeamDelivery:
-        """Observation owns ages; actual publication owns which lines were announced.
-        Publication never disposes of a ping; open requests still wake on every beat."""
-        known = {ping.key: ping for packet in previous for ping in packet.handled}
-        # Equality ignores the start, so an unchanged observation keeps the start it had.
-        began = {ping: ping.since for ping in known.values()}
+        """The board owns ages; actual publication owns which lines were announced.
+        Publication never disposes of a ping; open requests still wake on every beat.
+
+        ``previous`` is every teammate's retained packet: one board, so a line keeps the
+        earliest start any teammate retained, and a teammate who joins later inherits it."""
+        # Equality ignores the start, so an unchanged observation keeps the start it had;
+        # written latest-first, the earliest recorded start is the one kept.
+        began = {ping: ping.since for ping in sorted(
+            (ping for packet in previous for ping in packet.handled),
+            key=lambda ping: ping.since.chronology(), reverse=True)}
+        captures: tuple[Ping, ...] = (
+            *(TeammatePing.capture(state) for state in states if state.attention()),
+            *(RulePing.capture(rule) for rule in rules),
+        )
         handled = tuple(sorted(
             (replace(ping, since=began.get(ping, ping.since).continued_from(now))
-             for ping in (
-                 *(TeammatePing.capture(state) for state in states if state.attention()),
-                 *(RulePing.capture(rule) for rule in rules),
-             )), key=lambda ping: not ping.urgent,
+             for ping in captures),
+            key=lambda ping: not ping.urgent,
         ))
         announced = {ping.key: ping for packet in published for ping in packet.handled}
         new = tuple(ping for ping in handled if announced.get(ping.key) != ping)
-        notice = TeamUpdateNotice(commander, handled, not_applied=not_applied)
+        notice = TeamUpdateNotice(recipient, handled, not_applied=not_applied)
         opened = notice.open_pings(history)
         open_members = frozenset(opened)
         packet = TeamDecisions(
-            commander, handled, new,
-            tuple(ping for old in previous for ping in old.handled
-                  if ping in open_members and ping.waits_on_team(now - AwaitingTeam.seconds)),
+            recipient, handled, new,
+            tuple(ping for ping in handled
+                  if ping in began and ping in open_members
+                  and ping.waits_on_team(now - AwaitingTeam.seconds)),
             not_applied=not_applied,
         ) if new or opened or not_applied else notice
         return TeamDelivery(packet, opened)
 
     @classmethod
-    def report_failure(cls, commander: ThreadIncarnation, failure: ServicePassFailing,
+    def report_failure(cls, recipient: ThreadIncarnation, failure: ServicePassFailing,
                        previous: tuple[TeamUpdate, ...], *,
                        published: tuple[TeamUpdate, ...],
                        now: float) -> tuple[TeamUpdate, ...]:
@@ -347,22 +356,22 @@ class TeamUpdate(OwnerNotice, declared_name=None):
                     (*handled, replace(ping, since=ping.since.continued_from(now))))
         current = next(line for line in retained if line == ping)
         return (TeamDecisions(
-            commander, retained, (current,), (),
+            recipient, retained, (current,), (),
             not_applied=tuple(line for packet in previous for line in packet.not_applied),
         ),)
 
     def send(self, comms: Comms, hud: tuple[str, ...], *,
              publication: PublicationFacts = UnpublishedFacts()) -> tuple[Message, ...]:
-        recipient = comms.registry.require(self.commander.name)
+        recipient = comms.registry.require(self.teammate.name)
         packet = replace(self, publication=publication)
         return comms.registry.status(recipient.name).publish_heartbeat(
             lambda: recipient.heartbeat_delivery.publish(lambda: packet.publish(
-                comms.messaging, ThreadTarget(packet.commander.name), packet.body(hud))), ())
+                comms.messaging, ThreadTarget(packet.teammate.name), packet.body(hud))), ())
 
 
 
 @dataclass(frozen=True)
-class TeamUpdateNotice(TeamUpdate, declared_name="commander_notice"):
+class TeamUpdateNotice(TeamUpdate, declared_name="team_notice"):
     """Publish a changed quiet frame once, without waking for an identical copy."""
 
     role = NoticeRole()
@@ -376,7 +385,7 @@ class TeamUpdateNotice(TeamUpdate, declared_name="commander_notice"):
 
 
 @dataclass(frozen=True)
-class TeamDecisions(TeamUpdate, declared_name="commander_decisions"):
+class TeamDecisions(TeamUpdate, declared_name="team_decisions"):
     """The new lines first, then the lines still undisposed, oldest first."""
 
     decisions: tuple[Ping, ...]
@@ -392,26 +401,26 @@ class TeamDecisions(TeamUpdate, declared_name="commander_decisions"):
 
 @dataclass(frozen=True, slots=True)
 class TeamUpdateStore(PatternFile, SingleFileStore, DurableFile,
-                           LockedStore[tuple[TeamUpdate, ...]], DependentStateTier, declared_name="commander_update_store"):
+                           LockedStore[tuple[TeamUpdate, ...]], DependentStateTier, declared_name="team_update_store"):
     """The last observation for one teammate birth, not a message or a disposable view.
 
     The packet declarations supply the complete stored shape through FieldCodec. Only the
     heartbeat writes it; failed publication and muted delivery do not erase observations.
     """
 
-    filename: ClassVar[str] = "commander_updates/{lookup}.json"
+    filename: ClassVar[str] = "team_updates/{lookup}.json"
     record_type = tuple[TeamUpdate, ...]
 
     @classmethod
-    def for_team(cls, root: Path, commander: ThreadIncarnation) -> Self:
-        return cls(cls.path_in(root, lookup=str(commander.require_recorded().lookup)))
+    def for_team(cls, root: Path, recipient: ThreadIncarnation) -> Self:
+        return cls(cls.path_in(root, lookup=str(recipient.require_recorded().lookup)))
 
     def empty(self) -> tuple[TeamUpdate, ...]:
         return ()
 
     @classmethod
     def record(cls, root: Path, packet: TeamUpdate) -> None:
-        store = cls.for_team(root, packet.commander)
+        store = cls.for_team(root, packet.teammate)
         store.update(lambda previous: DocumentChange.to((packet,)))
 
 

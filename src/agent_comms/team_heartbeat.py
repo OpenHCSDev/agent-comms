@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 from agent_comms.team_hud import CodexUsage, TeamFrame, TeamHud, HudUnavailableGroup
 from agent_comms.child_process import ReadWork
@@ -21,7 +21,6 @@ from agent_comms.nominal_census import NominalPlanReadings
 from agent_comms.plan_reading import PlanReadings, RetainedPlanReadings
 from agent_comms.service_passes import TeamPass, ServicePassStore
 from agent_comms.standing_rules import ServicePassFailing, StandingRule
-from agent_comms.threads import Thread
 from agent_comms.todos import ProgressRead, Todo
 from agent_comms.ui_model.teammate_state import TeammateState
 
@@ -31,20 +30,19 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class TeamObservation:
-    thread: Thread
+    """One beat's single team board: every teammate reads the same frame, rules and cards."""
+
     frame: HeartbeatFrame
     rules: tuple[StandingRule, ...]
     states: tuple[TeammateState, ...]
 
     @classmethod
-    def read(cls, comms: Comms, thread: Thread,
-             inputs: TeamInputs, *,
-             plans: PlanReadings) -> TeamObservation:
+    def read(cls, comms: Comms, inputs: TeamInputs, *, plans: PlanReadings) -> TeamObservation:
         """Consume the prepared cut; Core observes the local Git, forge and plan answers."""
-        frame = HeartbeatFrame.capture(comms, thread.name, inputs, plans)
-        states = TeammateState.current(comms, thread.name, frame)
-        rules = StandingRule.broken(comms, thread.name, observed=states, frame=frame)
-        return cls(thread, frame, rules, states)
+        frame = HeartbeatFrame.capture(comms, inputs, plans)
+        states = TeammateState.current(comms, frame)
+        rules = StandingRule.broken(comms, observed=states, frame=frame)
+        return cls(frame, rules, states)
 
     def merges(self, comms: Comms) -> tuple[Todo, ...]:
         """Merge checks may fetch, prepare checkouts and run commands; never a read phase."""
@@ -63,7 +61,8 @@ class TeamObservation:
 
 class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamService,
                          TeamPass,
-                         PreparedWatchPass[Mapping[Thread, TeamInputs], tuple[TeamObservation, ...]], declared_name="commander_heartbeat"):
+                         PreparedWatchPass[tuple[TeamInputs, ...], tuple[TeamObservation, ...]],
+                         declared_name="team_heartbeat"):
 
     def failed(self, opened_wire: Callable[[], AbstractContextManager[Comms]],
                error: Exception) -> None:
@@ -91,60 +90,66 @@ class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
                         *TeamHud.alarm_text(sections, now),
                     )))
 
-    def prepare(self, comms: Comms) -> Mapping[Thread, TeamInputs]:
+    def prepare(self, comms: Comms) -> tuple[TeamInputs, ...]:
+        """The bus's one team board, or none on a bus with no registered team project."""
         self.begin_pass()
-        pulls = ProgressRead()
-        return {thread: TeamInputs.prepare(comms, thread.name, pulls, self)
-                for thread in self.boards(comms.registry, comms.goals)}
+        return tuple(TeamInputs.prepare(comms, project, ProgressRead(), self)
+                     for project in comms.registry.snapshot().team_project.boards())
 
-    def observe(self, comms: Comms, prepared: Mapping[Thread, TeamInputs]) -> tuple[TeamObservation, ...]:
-        observed = tuple(
-            TeamObservation.read(comms, thread, inputs, plans=self)
-            for thread, inputs in prepared.items()
-        )
+    def observe(self, comms: Comms,
+                prepared: tuple[TeamInputs, ...]) -> tuple[TeamObservation, ...]:
+        observed = tuple(TeamObservation.read(comms, inputs, plans=self) for inputs in prepared)
         self.finish_pass()
         return observed
 
-    def pass_body(self, comms: Comms, observed: tuple[TeamObservation, ...]) -> None:
-        """Retain one shared observation per recipient before optional publication."""
+    def pass_body(self, comms: Comms, boards: tuple[TeamObservation, ...]) -> None:
+        """Enforce the team board once, then retain and publish it per teammate."""
         huds = {}
         completed = []
         now = time.time()
         duty = self.duty(comms.registry, comms.goals)
         try:
-            for item in observed:
-                comms.goals.todos.record_merges(item.merges(comms))
-                recipients = self.recipients(comms.registry.snapshot(), item.thread)
+            for observed in boards:
+                comms.goals.todos.record_merges(observed.merges(comms))
+                recipients = self.served(comms.registry, comms.goals)
                 held = {recipient.incarnation: TeamUpdate.latest(comms, recipient.incarnation)
                         for recipient in recipients}
                 announced = {
                     recipient.incarnation: TeamUpdate.published(comms, recipient.incarnation)
                     for recipient in recipients
                 }
-                previous = held[item.thread.incarnation]
-                known = frozenset(ping for packet in previous for ping in packet.handled)
+                # A line is skipped only once every teammate's own packet handled it: a teammate
+                # who joins later still gets its effect, which the effects themselves keep
+                # once-only (a burst is sent once per recipient birth, per the bus).
+                known = frozenset.intersection(*(
+                    frozenset(ping for packet in packets for ping in packet.handled)
+                    for packets in held.values())) if held else frozenset()
                 rejected = StandingRule.enforce_all(
-                    comms, item.thread.name, duty.actionable(
-                        (*(rule for rule in item.rules if RulePing.capture(rule) not in known),
-                         *(state for state in item.states
+                    comms, duty.actionable(
+                        (*(rule for rule in observed.rules if RulePing.capture(rule) not in known),
+                         *(state for state in observed.states
                            if state.attention() and TeammatePing.capture(state) not in known))),
                 )
                 usage = CodexUsage.read()
                 # Include acknowledgements committed during forge/provider reads and enforcement.
                 history = TeamHistory.read(comms, self.actors(comms.registry.snapshot()))
-                states = tuple(state for state in item.states if state not in rejected)
-                rules = tuple(rule for rule in item.rules if rule not in rejected)
+                states = tuple(state for state in observed.states if state not in rejected)
+                rules = tuple(rule for rule in observed.rules if rule not in rejected)
                 not_applied = tuple(rule.rejected_line(error) for rule, error in rejected.items())
+                # One board: every teammate's retained packet dates its lines.
+                retained = tuple(packet for packets in held.values() for packet in packets)
                 deliveries = tuple(TeamUpdate.derive(
-                    recipient, states, rules, latest, published=announced[recipient],
+                    recipient, states, rules, retained, published=announced[recipient],
                     now=now, history=history,
                     not_applied=not_applied,
-                ) for recipient, latest in held.items())
-                board = TeamHud.of(comms, item.thread.name, item.frame, item.states,
-                                        delivery=deliveries[0], usage=usage)
+                ) for recipient in held)
+                if not deliveries:
+                    continue  # No live teammate: enforced, and nobody to write a board for.
+                board = TeamHud.of(comms, observed.frame, observed.states,
+                                   delivery=deliveries[0], usage=usage)
                 for delivery in deliveries:
                     hud = board.for_delivery(delivery)
-                    recipient = delivery.packet.commander
+                    recipient = delivery.packet.teammate
                     TeamUpdateStore.record(comms.root, delivery.packet)
                     huds[recipient] = hud
                     facts = PublishedFacts.of(hud.display_facts)

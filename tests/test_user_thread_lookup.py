@@ -12,7 +12,7 @@ from agent_comms.registry_document import NoUserThread, RegistryDocument
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.thread_text import GivenThreadText
 from conftest import installed_comms
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 def test_user_answer_follows_revisions_and_stays_out_of_wire_fields(tmp_path):
@@ -34,7 +34,7 @@ def test_user_answer_follows_revisions_and_stays_out_of_wire_fields(tmp_path):
 
 def test_channel_and_dm_history_keep_the_human_as_sender(tmp_path):
     comms = installed_comms(tmp_path)
-    comms.registry.declare(Thread('peer', frozenset({'comms'}), Checkout(tmp_path)))
+    comms.registry.declare(NativeThread('peer', frozenset({'comms'}), Checkout(tmp_path)))
     channel = comms.messaging.send_user_message(CommandTarget.named('#comms'), 'own channel message', worktree=Checkout(tmp_path))
     direct = comms.messaging.send_user_message(CommandTarget.named('peer'), 'own DM message', worktree=Checkout(tmp_path))
     human = comms.registry.user_thread().existing()[0]

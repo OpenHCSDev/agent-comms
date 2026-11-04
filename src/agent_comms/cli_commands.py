@@ -114,8 +114,7 @@ class ThreadTagsResult(RecordMember, TargetEditResult):
 
 @dataclass(frozen=True)
 class TeammatesResult(CliResult):
-    leads: tuple[str, ...]
-    commanders: tuple[str, ...]
+    teammates: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -514,7 +513,7 @@ class TransferCheckoutOperation(CheckoutOperation):
         source = source.expanduser().absolute()
         grant = command.grant(ctx, thread)
         requested = command.source(ctx, thread)
-        registered = ctx.registry.snapshot().commander_project.require().repos
+        registered = ctx.registry.snapshot().team_project.require().repos
         matching = tuple(entry for entry in registered if entry.github == requested.github)
         if len(matching) != 1:
             raise ValueError(f'{requested.github} is not one unambiguous registered repository')

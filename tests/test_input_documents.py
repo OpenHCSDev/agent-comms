@@ -26,7 +26,7 @@ from agent_comms.input_disposition import InputDispositions, InputDocument
 from agent_comms.lifecycle_capability import Unresolved
 from agent_comms.reported_turn import ReportedTurn
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from stored_inputs import insert_inputs, stored_inputs
 
 
@@ -129,7 +129,7 @@ def _insert_raw(store: InputDispositions, key: InputKey, attempt: dict) -> None:
 def test_saved_discriminator_and_optional_notices_roundtrip_without_replay(tmp_path):
     goal_id = GoalId.mint()
     comms = wire(tmp_path)
-    comms.registry.declare(Thread('worker', frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(NativeThread('worker', frozenset(), Checkout(tmp_path)))
     entry = comms.registry.snapshot().entry('worker')
     store = InputDispositions(tmp_path)
     from agent_comms.text_digest import TextDigest
@@ -197,7 +197,7 @@ def test_original_native_user_receipts_include_group_and_corrected_final_only(tm
     from agent_comms.registration import Registration
 
     registry = Registration(tmp_path / "registry.json")
-    registry.register(Thread('worker', frozenset(), Checkout(tmp_path), created_at=123.0, process_identity=ProcessIdentity.capture(os.getpid())))
+    registry.register(NativeThread('worker', frozenset(), Checkout(tmp_path), created_at=123.0, process_identity=ProcessIdentity.capture(os.getpid())))
     registry.lease_local_turn("worker", TURN)
     lease = registry.require("worker").turn_lease
     claim_scope = lease.claimed_generation
@@ -279,7 +279,7 @@ def test_original_native_user_receipts_include_group_and_corrected_final_only(tm
     registry.release_turn(lease)
     registry.unregister("renamed")
     registry.remove("renamed")
-    registry.register(Thread('renamed', frozenset(), Checkout(tmp_path), created_at=321.0, process_identity=ProcessIdentity.capture(os.getpid())))
+    registry.register(NativeThread('renamed', frozenset(), Checkout(tmp_path), created_at=321.0, process_identity=ProcessIdentity.capture(os.getpid())))
     assert not document.started_for_native(
         lease, "b" * 32, "Actual corrected native user", snapshot=registry.snapshot()
     )
@@ -451,7 +451,7 @@ def test_started_delivery_and_original_ingress_use_distinct_owned_relations(
 
 def test_reads_select_only_the_rows_their_index_names(tmp_path):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread('owner', frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(NativeThread('owner', frozenset(), Checkout(tmp_path)))
     entry = comms.registry.snapshot().entry('owner')
     store = InputDispositions(tmp_path)
     for key, owner in ((A_KEY, "owner"), (B_KEY, "owner"), (C_KEY, "other")):

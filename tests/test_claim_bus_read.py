@@ -37,7 +37,7 @@ from agent_comms.selected_claim import (
 )
 from agent_comms.selected_source_batch import SelectedSource
 from agent_comms.thread_identity import TurnIdentity
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.turn_context import (
     ContextManifest,
     OwnerProvenance,
@@ -85,7 +85,7 @@ def selected_turn(private_comms, private_directory):
     resource = worktree / "module.py"
     resource.write_text("value = 1\n")
     for name, created in (("sender", 17021.0), ("Alice", 17022.0)):
-        comms.registry.declare(Thread(name, frozenset({'team'}), Checkout(worktree), process_identity=ProcessIdentity.capture(os.getpid()), created_at=created))
+        comms.registry.declare(NativeThread(name, frozenset({'team'}), Checkout(worktree), process_identity=ProcessIdentity.capture(os.getpid()), created_at=created))
     root_id = comms.registry.store.prepare_native_root().namespace
     record_context(comms, "Alice", 1)
     message = publish_initial(comms, "sender", "#team", "@Alice investigate")

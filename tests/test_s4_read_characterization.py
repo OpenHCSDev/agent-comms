@@ -8,13 +8,13 @@ from agent_comms.coordination_errors import DMScopeChanged
 from agent_comms.read_basis import NamedViewer
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.repo import Checkout
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from conftest import installed_comms
 
 
 def test_replaced_human_incarnation_rejects_painted_proof_and_prior_reads(tmp_path):
     comms = installed_comms(tmp_path)
-    comms.registry.declare(Thread('worker', frozenset({'team'}), Checkout(tmp_path)))
+    comms.registry.declare(NativeThread('worker', frozenset({'team'}), Checkout(tmp_path)))
     viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
     message = comms.messaging.send("worker", "#team", "painted").message
 

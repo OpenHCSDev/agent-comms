@@ -27,7 +27,7 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_origin import DeliveredInput, UndeliveredInput, WireInputOrigin
 from agent_comms.message_reference import MessageReference
 from agent_comms.text_digest import TextDigest
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from stored_inputs import stored_inputs
 from agent_comms.comms import wire
 
@@ -51,7 +51,7 @@ def test_record_rejects_nonstring_before_durable_unknown(tmp_path: Path, invalid
 def _kid_entries(root: Path):
     """The registered owner whose stored inputs the dispositions answer for."""
     comms = wire(root)
-    comms.registry.declare(Thread("kid", frozenset(), Checkout(root)))
+    comms.registry.declare(NativeThread("kid", frozenset(), Checkout(root)))
     return (comms.registry.snapshot().entry("kid"),)
 
 
@@ -114,7 +114,7 @@ def test_unresolved_projection_follows_rename_without_private_receipts(tmp_path:
 
     comms = wire(tmp_path)
     comms.registry.declare(
-        Thread(name='kid', tags=frozenset(), worktree=Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+        NativeThread(name='kid', tags=frozenset(), worktree=Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     store = InputDispositions(comms.root)
     store.record(

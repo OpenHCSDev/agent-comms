@@ -30,7 +30,7 @@ from agent_comms.nominal.field_codec import ClaimId, InputId, TurnId
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import Message
 from agent_comms.thread_status import RunningThreadStatus
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from bus_history import read_history
 
 
@@ -41,7 +41,7 @@ def _participants(tmp_path: Path) -> tuple[Comms, Path]:
     (worktree / "b.py").write_text("two")
     comms = wire(tmp_path / "wire")
     for name in ("alice", "bob", "observer"):
-        owner = Thread(name, frozenset({'team'}), Checkout(worktree))
+        owner = NativeThread(name, frozenset({'team'}), Checkout(worktree))
         comms.registry.declare(
             replace(owner, process_identity=ProcessIdentity.capture(os.getpid())),
             RunningThreadStatus(),
@@ -141,7 +141,7 @@ def test_same_tick_new_owner_cannot_share_live_claim_identity(tmp_path):
     )
     alice = comms.registry.require("alice")
     with pytest.raises(RelationViolationError):
-        comms.registry.declare(Thread(
+        comms.registry.declare(NativeThread(
             'same-tick-peer', frozenset({'team'}), Checkout(worktree), created_at=alice.created_at))
     assert "same-tick-peer" not in comms.registry
     assert read_history(comms) == [claimed]

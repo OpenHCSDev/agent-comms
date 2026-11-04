@@ -17,8 +17,7 @@ from agent_comms.comms import wire
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.external_transcript import ExternalItemRow
 from agent_comms.runtime_updates import ThreadOutput
-from agent_comms.thread_execution import ExternalThreadExecution
-from agent_comms.threads import Thread
+from agent_comms.threads import ExternalThread, NativeThread
 from conftest import installed_comms
 
 
@@ -66,8 +65,7 @@ async def test_pager_requests_two_older_pages_through_the_bridges_real_socket(tm
     socket_path = tmp_path.parent / 'codex.sock'
     await web.UnixSite(runner, str(socket_path)).start()
     comms = installed_comms(tmp_path / 'root')
-    comms.registry.declare(Thread('cli', frozenset(), Checkout(tmp_path),
-                                                   execution=ExternalThreadExecution))
+    comms.registry.declare(ExternalThread('cli', frozenset(), Checkout(tmp_path)))
     transcript = comms.transcripts.external('cli')
     frames = asyncio.Queue()
     watching = asyncio.create_task(transcript.watch_requests(
@@ -130,7 +128,7 @@ async def test_pager_requests_two_older_pages_through_the_bridges_real_socket(tm
 async def test_rearmed_same_cursor_is_a_new_watch_request(tmp_path):
     from agent_comms.cli_bridges.codex_protocol import ItemsPage
     comms = wire(tmp_path / 'root')
-    comms.registry.declare(Thread('cli', frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(NativeThread('cli', frozenset(), Checkout(tmp_path)))
     transcript = comms.transcripts.external('cli')
     output = ThreadOutput(transcript, comms.agents)
     page = ItemsPage.model_validate({'data': [entry('new', 2000)], 'nextCursor': 'p1'}).publication()
@@ -205,7 +203,7 @@ async def test_draining_server_gets_the_same_turn_after_reconnecting(tmp_path):
     socket_path = tmp_path.parent / 'draining-codex.sock'
     await web.UnixSite(runner, str(socket_path)).start()
     comms = installed_comms(tmp_path / 'root')
-    comms.registry.declare(Thread('cli', frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution))
+    comms.registry.declare(ExternalThread('cli', frozenset(), Checkout(tmp_path)))
     try:
         binding = Binding(root=str(comms.root), owner=comms.registry.require('cli').incarnation,
                           thread='thread', start=Binding.bus_head(str(comms.root)))

@@ -25,7 +25,7 @@ from agent_comms.pi_rule_gate import PiRedeal, RulesUnread
 from agent_comms.repo import Checkout
 from agent_comms.selected_tool_broker import SelectedToolRequest, SelectedWriteArguments
 from agent_comms.task_attachments.owner_notices import MeantNotice, RestartNotice
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.thread_model import DeclaredModel
@@ -47,7 +47,7 @@ def peer_deal(team_bus):
 
 
 def test_every_independent_thread_is_dealt_the_same_sources_once(team_bus):
-    """A lead and an untagged peer share the deal; a restart keeps its original audit."""
+    """A colleague and an untagged peer share the deal; a restart keeps its original audit."""
     for name in ("claude-code", "unit-x"):
         deal = PiRedeal.of(team_bus, team_bus.registry.require(name))
         deal.start()
@@ -89,7 +89,7 @@ def test_a_compacted_pi_thread_reads_every_dealt_rule_then_writes_its_audit(
         )
         # Core's notice publishes under the owner's thread, but nobody typed it.
         RestartNotice().publish(team_bus.messaging, CommandTarget.named("unit-x"),
-                                "COMMANDER · unit-x · continue your orders")
+                                "TEAM · unit-x · continue your orders")
     bash = call("bash", {"command": "ls"})
     bash.judge_under(peer_deal)  # never dealt: nothing to read
     events.CompactionAbort().deal_rules(peer_deal)
@@ -252,7 +252,7 @@ def test_gate_can_be_disabled_and_reenabled_without_forging_a_read(peer_deal):
 
 def test_a_bus_without_a_storage_lead_still_deals_the_shared_sources(comms, tmp_path):
     """Project storage configuration does not change an independent session's rules."""
-    peer = comms.registry.declare(Thread("peer-y", frozenset(), Checkout(tmp_path)))
+    peer = comms.registry.declare(NativeThread("peer-y", frozenset(), Checkout(tmp_path)))
     deal = PiRedeal.of(comms, peer)
     deal.start()
     assert deal.current().dealt == tuple(path.resolve() for path in DeckReader.sources())
@@ -322,7 +322,7 @@ def owner_lines(bus, name: str) -> list[str]:
 def compacted_pi_session(tmp_path, team_bus, name):
     """A Pi thread with its own fresh native session, its rules just re-dealt by a compaction."""
     session = create_fresh_private_session(tmp_path / "sessions", worktree=Checkout(tmp_path)).path
-    team_bus.registry.declare(Thread(
+    team_bus.registry.declare(NativeThread(
         name, frozenset(), Checkout(tmp_path),
         session_file=RegistrySessionLocation.from_path(str(session), team_bus.root),
         model=DeclaredModel("anthropic/claude-opus-4-6")))

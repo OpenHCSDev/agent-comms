@@ -19,7 +19,7 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.message_page import PageBounds
 from agent_comms.reported_turn import ReportedTurn
 from agent_comms.text_digest import TextDigest
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.tools import invoke_tool
 from stored_inputs import insert_inputs, stored_inputs
@@ -56,7 +56,7 @@ def inbox_comms(root):
 
     comms = canonical_goal_wire(root)
     for name in ("a", "b"):
-        comms.registry.declare(Thread(name=name, tags=frozenset(), worktree=Checkout(Path('/wt'))))
+        comms.registry.declare(NativeThread(name=name, tags=frozenset(), worktree=Checkout(Path('/wt'))))
     return comms
 
 

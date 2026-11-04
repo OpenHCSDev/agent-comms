@@ -18,6 +18,7 @@ from collections.abc import Sequence
 from agent_comms.cli_bridges.monitor import InspectSession
 from agent_comms.comms import client_wire
 from agent_comms.pi_rule_gate import PiRedeal
+from agent_comms.threads import NativeThread
 from agent_comms.cli_bridges.hook_requests import PrimeRequest
 from agent_comms_hooks.skill import FullPrime, Prime
 from agent_comms_hooks import LaunchedPrompt
@@ -29,8 +30,7 @@ def prime_threads(prime: type[Prime], names: Sequence[str]) -> None:
     route the client resolves."""
     with client_wire() as comms:
         for name in names:
-            thread = comms.registry.require(name)
-            thread.execution.require_native()
+            thread = comms.registry.require_member(name, NativeThread)
             PiRedeal.of(comms, thread).deal_from(prime.reader, prime.trigger())
             print(f"{name}: dealt {prime.__name__}")
 

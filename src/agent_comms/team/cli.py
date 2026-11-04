@@ -28,7 +28,7 @@ def main() -> None:
     loaded = (import_module(module) for module in chosen)
     tools = {tool_name(module.__name__): module for module in loaded if hasattr(module, 'main')}
     if not argv or argv[0] not in tools:
-        lines = [f'usage: agent-comms-commander {{{",".join(sorted(tools))}}} ARGS...', '']
+        lines = [f'usage: agent-comms-team {{{",".join(sorted(tools))}}} ARGS...', '']
         lines += [f'  {name:<11} {tools[name].__doc__.splitlines()[0]}'
                   for name in sorted(tools)]
         asked = argv[:1] in (['-h'], ['--help'])

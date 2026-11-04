@@ -23,6 +23,7 @@ from agent_comms.phase_evidence import (
     NoExactCopies,
     NoGodFunction,
     OwnClassChecksAbsent,
+    SourceFacts,
     ParentsShared,
     PathsAbsent,
     DocumentPatternPresent,
@@ -232,7 +233,7 @@ def test_source_checks_release_their_method_and_comparison_nodes() -> None:
                if isinstance(node, (ast.FunctionDef, ast.Call))]
     checks = ClassChecks()
     checks.visit(module)
-    assert not checks.owned()
+    assert checks.checked == []  # the comparison refusal is a guard, never a recorded check
     del module
     gc.collect()
     assert all(method() is None for method in methods)
@@ -353,9 +354,8 @@ def test_source_shape_evidence_reads_declarations_on_main(tmp_path):
      "            return NotImplemented\n", False),
 ))
 def test_only_foreign_comparison_refusal_exempts_an_owned_type_check(source, allowed):
-    checks = ClassChecks()
-    checks.visit(ast.parse(source))
-    assert (not checks.owned()) is allowed
+    facts = SourceFacts.of("value.py", "blob", ast.parse(source))
+    assert (not facts.owned(facts.declared)) is allowed
 
 
 @pytest.mark.parametrize(("required", "queue", "actors", "expected"), (

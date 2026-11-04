@@ -15,7 +15,7 @@ from agent_comms.owner_connection import OwnerConnection
 from agent_comms.owner_launch import ReadOwnerLaunchRuntimeRequest, RetainedOwnerLaunch
 from agent_comms.pi_rule_gate import PiRedeal
 from agent_comms.repo import Checkout
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from bus_record_fixture import prepare_native_comms
 
 
@@ -36,7 +36,7 @@ def test_start_batch_attaches_every_owner_to_one_host(
     comms = prepare_native_comms(wire(tmp_path / "wire"))
     names = ("first", "second")
     for name in names:
-        comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path)))
+        comms.registry.declare(NativeThread(name, frozenset(), Checkout(tmp_path)))
     try:
         results = command.apply_together(comms, tuple(command(name=name) for name in names))
         assert tuple(result.thread for result in results) == names
@@ -54,7 +54,7 @@ def test_later_selection_failure_joins_the_already_dispatched_start(
     tmp_path: Path, native_runtime_package: VerifiedNativePackage,
 ) -> None:
     comms = prepare_native_comms(wire(tmp_path / "wire"))
-    comms.registry.declare(Thread("first", frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(NativeThread("first", frozenset(), Checkout(tmp_path)))
     try:
         with pytest.raises(UnregisteredThreadError):
             comms.owners.start_many(("first", "missing"))
@@ -72,7 +72,7 @@ def test_failed_binding_retires_without_stopping_its_shared_host(
 ) -> None:
     comms = prepare_native_comms(wire(tmp_path / "wire"))
     for name in ("healthy", "failed"):
-        comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path)))
+        comms.registry.declare(NativeThread(name, frozenset(), Checkout(tmp_path)))
     gate = PiRedeal.of(comms, comms.registry.require("failed"))
     gate.record.parent.mkdir(parents=True, exist_ok=True)
     gate.record.write_text("{")  # Fail before an ACP session is published, not a model input.

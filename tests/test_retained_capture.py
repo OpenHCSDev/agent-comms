@@ -27,7 +27,7 @@ from agent_comms.maintenance_barrier import (
 )
 from agent_comms.nominal.field_codec import FieldCodec, TurnId
 from agent_comms.repo import Checkout
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.typed_table import WalStore
 from bus_record_fixture import prepare_native_comms
 
@@ -38,7 +38,7 @@ type StoreOpening = Callable[[Path], AbstractContextManager[WalStore | Coordinat
 @pytest.fixture
 def capture_source(tmp_path: Path) -> Comms:
     comms = prepare_native_comms(wire(tmp_path / 'source'))
-    comms.registry.declare(Thread('capture-owner', frozenset(), Checkout(tmp_path), created_at=17001.0))
+    comms.registry.declare(NativeThread('capture-owner', frozenset(), Checkout(tmp_path), created_at=17001.0))
     with comms.bus.bus.reading(), InputDispositions(comms.root).writing(), ContextStore(comms.root).writing():
         pass
     with CoordinationStore(CoordinationStore.path_in(comms.root)):

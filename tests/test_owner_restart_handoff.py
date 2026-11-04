@@ -27,7 +27,7 @@ from agent_comms.registry_document import RegistryDocument, RegistrySnapshot
 from agent_comms.thread_identity import GenerationCounter, OwnerIdentity
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.native_arguments import ConfiguredBinary, InheritedArguments
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 @pytest.mark.parametrize("source", [{}, {"PYTHONPATH": ""}, {"PYTHONPATH": "/source"}])
@@ -62,7 +62,7 @@ def test_runtime_path_is_idempotent_and_keeps_other_search_entries(inherited, ex
 
 def stopped():
     # A declared absent synthetic process, never a borrowed original identity.
-    thread = Thread("authored", frozenset(), Checkout(Path("/authored")),
+    thread = NativeThread("authored", frozenset(), Checkout(Path("/authored")),
                     process_identity=ProcessIdentity(2147483647, 1), created_at=1.0)
     snapshot = RegistrySnapshot.capture(RegistryDocument(
         threads=ThreadRows.from_threads({thread.name: thread}), statuses={thread.name: StoppedThreadStatus()},

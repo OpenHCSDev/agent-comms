@@ -40,7 +40,7 @@ from agent_comms.thread_management import ForkSpec, GivenTags
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_status import ArchivedThreadStatus, RunningThreadStatus, StoppedThreadStatus
 from agent_comms.thread_text import GivenThreadText
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.tools import invoke_tool
 from conftest import installed_comms
@@ -59,7 +59,7 @@ def setup_wire(path):
     for tag in ("api", "ui"):
         comms.channels.create_tag(tag)
     for name, tags in (("a", {"api"}), ("b", {"ui"}), ("both", {"api", "ui"}), ("other", set())):
-        comms.registry.declare(Thread(name=name, tags=frozenset(tags), worktree=Checkout(path)))
+        comms.registry.declare(NativeThread(name=name, tags=frozenset(tags), worktree=Checkout(path)))
     return comms
 
 
@@ -121,8 +121,8 @@ def test_channel_metadata_round_trips_without_changing_routing(tmp_path):
 
 def test_tag_cohort_refuses_active_owners_before_any_registry_publication(tmp_path):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread('inactive', frozenset({'cohort'}), Checkout(tmp_path)), StoppedThreadStatus())
-    comms.registry.declare(Thread('active', frozenset({'cohort'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())), RunningThreadStatus())
+    comms.registry.declare(NativeThread('inactive', frozenset({'cohort'}), Checkout(tmp_path)), StoppedThreadStatus())
+    comms.registry.declare(NativeThread('active', frozenset({'cohort'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())), RunningThreadStatus())
     original = comms.registry.snapshot()
     catalog = comms.channels.catalog.read()
     for disposition in (ArchiveThreadsTagDisposition(), DeleteThreadsTagDisposition()):
@@ -150,7 +150,7 @@ def test_exclusive_tag_deletion_uses_original_storage_and_preserves_survivors(tm
         path.write_text('{"original_saved_history":"' + name + '"}\n')
         saved[name] = path.read_bytes()
         process = ProcessIdentity.capture(os.getpid()) if name == 'active' else NoProcess()
-        comms.registry.declare(Thread(name, frozenset(tags), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), comms.root), process_identity=process), status)
+        comms.registry.declare(NativeThread(name, frozenset(tags), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), comms.root), process_identity=process), status)
     comms.channels.set_channel_pinned('remove', True)
     comms.channels.set_thread_pinned('keep', 'multi', True)
     original_active = comms.registry.require('active')
@@ -183,7 +183,7 @@ def test_exclusive_tag_deletion_uses_original_storage_and_preserves_survivors(tm
 
 def test_exclusive_tag_deletion_never_deletes_a_stopped_owner_that_is_still_alive(tmp_path):
     comms = wire(tmp_path / 'wire')
-    original = Thread('still-alive', frozenset({'remove'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+    original = NativeThread('still-alive', frozenset({'remove'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(original, StoppedThreadStatus())
     result = comms.channels.delete_tag('remove',
         disposition=DeleteExclusiveInactiveThreadsTagDisposition(), confirmed=True)
@@ -196,7 +196,7 @@ def test_exclusive_tag_deletion_never_deletes_a_stopped_owner_that_is_still_aliv
 def test_tag_removal_preserves_current_records(tmp_path):
     comms = wire(tmp_path / 'wire')
     for index in range(40):
-        comms.registry.declare(Thread(f'member-{index}', frozenset({'remove', 'keep'}), Checkout(tmp_path)), StoppedThreadStatus())
+        comms.registry.declare(NativeThread(f'member-{index}', frozenset({'remove', 'keep'}), Checkout(tmp_path)), StoppedThreadStatus())
     originals = tuple(comms.registry.all_threads().values())
     current = replace(originals[0], title=GivenThreadText('new title'), task=GivenThreadText('new task'), model=DeclaredModel('selected/model'))
     comms.registry.register(current, ArchivedThreadStatus())
@@ -372,7 +372,7 @@ def test_all_implicit_tag_introduction_paths_honor_name_reservations(tmp_path, s
     before = comms.registry.snapshot()
 
     with pytest.raises(ValueError):
-        comms.registry.declare(Thread('registered', frozenset({'reserved'}), Checkout(tmp_path)))
+        comms.registry.declare(NativeThread('registered', frozenset({'reserved'}), Checkout(tmp_path)))
     with pytest.raises(ValueError):
         comms.threads.claim_thread("claimed", tags=frozenset({"reserved"}), worktree=Checkout(tmp_path))
 
@@ -393,7 +393,7 @@ def test_all_implicit_tag_introduction_paths_honor_name_reservations(tmp_path, s
     parent_session = tmp_path / "parent.jsonl"
     parent_session.write_text("{}\n")
     comms.registry.declare(
-        Thread('parent', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(parent_session), comms.root))
+        NativeThread('parent', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(parent_session), comms.root))
     )
     with pytest.raises(ValueError):
         comms.threads.create(
@@ -496,9 +496,9 @@ def test_none_membership_and_independent_channel_order(tmp_path):
 
 def test_membership_notices_follow_exact_membership_and_do_not_wake(tmp_path):
     comms = installed_comms(tmp_path)
-    comms.registry.declare(Thread('moving', frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(NativeThread('moving', frozenset(), Checkout(tmp_path)))
     comms.registry.declare(
-        Thread('peer', frozenset({'api'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+        NativeThread('peer', frozenset({'api'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     comms.channels.update_tags("moving", add=frozenset({"api"}))
     joined = list(comms.views.history_page(CommandTarget.named("#api")).messages)

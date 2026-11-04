@@ -18,14 +18,14 @@ from agent_comms.nominal import field_codec
 from agent_comms.comms import wire
 from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.registration_inheritance import PredicateInheritance
-from agent_comms.threads import Thread
+from agent_comms.threads import Thread, NativeThread
 from agent_comms.thread_text import GivenThreadText
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.turn_lease import NoTurnLease
 
 
 def test_unchanged_registration_retains_creation_allocation():
-    incoming = Thread('fresh', frozenset(), Checkout(Path('/wt')))
+    incoming = NativeThread('fresh', frozenset(), Checkout(Path('/wt')))
     assert incoming.for_registration("fresh", None) is incoming
     renamed = incoming.for_claim("allocated")
     assert renamed.created_at is incoming.created_at
@@ -52,7 +52,7 @@ def test_declared_new_inheritance_case_needs_no_registration_consumer_edit(threa
 
 def test_registry_redeclaration_inherits_metadata_but_respects_explicit_values(tmp_path):
     comms = wire(tmp_path)
-    initial = Thread(
+    initial = NativeThread(
         "owner",
         frozenset({"team"}),
         Checkout(Path('/old')),
@@ -60,11 +60,10 @@ def test_registry_redeclaration_inherits_metadata_but_respects_explicit_values(t
         model=DeclaredModel('provider/model'),
         thinking_level=HighThinkingLevel,
         auto_title_pending=True,
-        title=GivenThreadText("retained"),
-    )
+        title=GivenThreadText("retained"))
     initial = replace(initial, worktree=Checkout(tmp_path))
     initial = comms.registry.declare(initial)
-    comms.registry.declare(Thread('owner', frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(NativeThread('owner', frozenset(), Checkout(tmp_path)))
     restored = comms.registry.require("owner")
     assert restored == initial
     assert restored.incarnation == initial.incarnation
@@ -79,9 +78,9 @@ def test_registry_redeclaration_inherits_metadata_but_respects_explicit_values(t
 
 def test_operational_alias_redeclaration_returns_preserved_current_owner(tmp_path):
     comms = wire(tmp_path)
-    first = comms.registry.declare(Thread('before', frozenset({'team'}), Checkout(tmp_path)))
+    first = comms.registry.declare(NativeThread('before', frozenset({'team'}), Checkout(tmp_path)))
     comms.registry.rename("before", "after")
-    returned = comms.registry.declare(Thread('before', frozenset(), Checkout(tmp_path), title=GivenThreadText('new')))
+    returned = comms.registry.declare(NativeThread('before', frozenset(), Checkout(tmp_path), title=GivenThreadText('new')))
     assert returned == comms.registry.require("after")
     assert returned.incarnation.created_at == first.created_at
     assert returned.name == "after" and returned.tags == first.tags
@@ -93,7 +92,7 @@ def test_project_round_trip_excludes_current_project_from_history(tmp_path):
     first.mkdir()
     second.mkdir()
     comms = wire(tmp_path / 'wire')
-    original = comms.registry.declare(Thread('owner', frozenset(), Checkout(first)))
+    original = comms.registry.declare(NativeThread('owner', frozenset(), Checkout(first)))
     comms.threads.set_project(original.incarnation, str(second))
     comms.threads.set_project(original.incarnation, str(first))
     current = comms.registry.require('owner')
@@ -106,7 +105,7 @@ def test_project_change_retains_executing_source_but_refuses_another_input(tmp_p
     old.mkdir()
     new.mkdir()
     comms = wire(tmp_path / 'wire')
-    comms.registry.declare(Thread('owner', frozenset(), Checkout(old), process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.registry.declare(NativeThread('owner', frozenset(), Checkout(old), process_identity=ProcessIdentity.capture(os.getpid())))
     original = comms.agents.begin_turn('owner', TurnId('ab87f599dc0a50a56b7c65de71c39426'))
     try:
         comms.threads.set_project(original.thread.incarnation, str(new))
@@ -134,7 +133,7 @@ def test_project_change_retains_executing_source_but_refuses_another_input(tmp_p
 
 def test_source_publication_refuses_unrecorded_project_replacement(tmp_path):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread('owner', frozenset(), Checkout(tmp_path / 'old'), process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.registry.declare(NativeThread('owner', frozenset(), Checkout(tmp_path / 'old'), process_identity=ProcessIdentity.capture(os.getpid())))
     original = comms.agents.begin_turn('owner', TurnId('ab87f599dc0a50a56b7c65de71c39426'))
     current = comms.registry.require('owner')
     comms.registry.register(replace(current, worktree=Checkout(tmp_path / 'other')))

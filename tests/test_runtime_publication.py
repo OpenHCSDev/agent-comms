@@ -36,3 +36,27 @@ def test_pointer_publication_does_not_kill_unselected_runtime_processes(tmp_path
         for child in (retired, kept):
             child.kill()
             child.wait()
+
+
+def test_publication_retires_runtime_links_it_no_longer_declares(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("PATH", str(tmp_path / "no-harnesses"))
+    runtime = tmp_path / "runtime"
+    (runtime / "bin").mkdir(parents=True)
+    (runtime / "bin/python").symlink_to(sys.executable)
+    (runtime / "bin/agent-comms-team").write_text("")
+    RuntimeResolution(core_commit="renamed-script-fixture", packages={}).save(runtime)
+    current = LaunchRuntime.current_pointer()
+    current.parent.mkdir(parents=True)
+    current.symlink_to(runtime)
+    published = tmp_path / ".local/bin"
+    published.mkdir(parents=True)
+    # A console script a previous publication wrote under its old name, and the owner's own link.
+    (published / "agent-comms-commander").symlink_to(current / "bin/agent-comms-commander")
+    (published / "own-tool").symlink_to("/usr/bin/env")
+    declared = published / "agent-comms-team"
+
+    RuntimePublication(runtime.resolve(), {declared: runtime.resolve() / "bin/agent-comms-team"}).publish_links()
+
+    assert sorted(entry.name for entry in published.iterdir()) == ["agent-comms-team", "own-tool"]
+    assert declared.readlink() == current / "bin/agent-comms-team"

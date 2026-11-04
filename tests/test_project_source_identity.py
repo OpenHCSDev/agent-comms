@@ -7,7 +7,7 @@ from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.repo import Checkout
 from agent_comms.thread_text import GivenThreadText
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 @pytest.fixture
@@ -16,7 +16,7 @@ def project_source(tmp_path):
     current.mkdir()
     destination.mkdir()
     comms = wire(tmp_path / "wire")
-    original = comms.registry.declare(Thread("source", frozenset(), Checkout(current)))
+    original = comms.registry.declare(NativeThread("source", frozenset(), Checkout(current)))
     return comms, original, destination
 
 
@@ -36,7 +36,7 @@ def test_recreated_name_cannot_receive_the_original_project_change(project_sourc
     with comms.registry.store.editing() as edit:
         edit.document.remove(original.name)
         edit.commit()
-    replacement = comms.registry.declare(Thread(
+    replacement = comms.registry.declare(NativeThread(
         original.name, frozenset(), original.worktree))
     assert replacement.incarnation != original.incarnation
     with pytest.raises(RelationViolationError):

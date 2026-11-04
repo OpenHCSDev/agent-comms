@@ -38,8 +38,9 @@ from .reservation_rules import ReservationViolationError
 from .routing import ScheduledTurn
 from agent_comms.input_drain import WakeScheduleCheck
 
+from .threads import NativeThread
+
 if TYPE_CHECKING:
-    from .threads import Thread
     from .comms import Comms
     from .input_drain import InputDrain, OwnerSession
     from .session_lifecycle import SessionLifecycle
@@ -123,8 +124,8 @@ class GoalScheduler:
         """Read/recover the original READY grant in its joined storage worker."""
         with self.comms.registry.store.current_snapshot() as cut:
             snapshot = cut.snapshot
-            thread = snapshot.require(self.sessions.require(session_id))
             try:
+                thread = snapshot.require_member(self.sessions.require(session_id), NativeThread)
                 thread.require_local_process(ProcessIdentity.capture(os.getpid()))
                 snapshot.status(thread.name).require_running()
                 thread.turn_record.read().require_idle()
@@ -137,7 +138,7 @@ class GoalScheduler:
             except GoalAttemptError:
                 return
 
-    def _prepare_declared_goal(self, goal: Goal, thread: Thread,
+    def _prepare_declared_goal(self, goal: Goal, thread: NativeThread,
                                snapshot: RegistrySnapshot) -> tuple[ScheduledTurn, ...]:
         if not self.comms.goals.goal_wait(thread.name).allows_routed_input():
             return ()

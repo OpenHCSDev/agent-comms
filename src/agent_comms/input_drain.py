@@ -65,7 +65,7 @@ from .runtime_server import RuntimeServer
 from .owner_launch import OwnerRetiredReply, StopOwnerRuntimeRequest
 from .session_lifecycle import SessionLifecycle
 from .thread_identity import ClaimedIdentity, OwnerIdentity
-from .threads import Thread
+from .threads import NativeThread, Thread
 from .turn_context import TurnContext, UserFollowupSegment
 from .turn_input_source import AcceptedFollowingInput, OriginalTurnInput
 from .turn_terminal import OwnerStop
@@ -493,7 +493,8 @@ class InputObservation(ABC):
         physical replacement still can. Silent context records consume bytes,
         not the message cut used to select delivery.
         """
-        owner = RegistryOwner(thread=entry.thread, claimed_generation=entry.claimed_generation)
+        owner = RegistryOwner(
+            thread=NativeThread.stored(entry.thread), claimed_generation=entry.claimed_generation)
         with store.session.read():
             participant = store.participants.get(owner.thread.incarnation.require_recorded().lookup)
             cursor = CursorOwner(

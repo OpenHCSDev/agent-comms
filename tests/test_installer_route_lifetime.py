@@ -34,8 +34,7 @@ from agent_comms.installer.interpreter_operation import InstalledProgram
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.maintenance_barrier import MaintenanceHeldError, MaintenanceOperator
 from agent_comms.recorded_bus import RecordedBusIdentity
-from agent_comms.thread_execution import ExternalThreadExecution
-from agent_comms.threads import Thread
+from agent_comms.threads import ExternalThread
 from bus_record_fixture import prepare_native_comms
 
 
@@ -225,8 +224,8 @@ def test_a_client_call_never_holds_publication_and_the_bus_refuses_writes_held_b
     route_new_bus(route_bus, path)
     with Comms.client(route_bus) as comms:
         for name in ("sender", "recipient"):
-            comms.registry.declare(Thread(
-                name, frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution))
+            comms.registry.declare(ExternalThread(
+                name, frozenset(), Checkout(tmp_path)))
         ActiveRouteFile(path).update(lambda: None, lambda original, directory: None)
         # A publisher never waits on an open client call.
         bus = comms.bus.bus

@@ -13,7 +13,7 @@ from agent_comms.task_attachments.team_pings import TeamDecisions, TeamUpdate, R
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.text_digest import TextDigest
 from agent_comms.todos import DirectiveText
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 def test_plain_messages_need_no_order_labels():
@@ -27,12 +27,12 @@ def test_plain_messages_need_no_order_labels():
 ))
 def test_blocked_goal_leads_the_board_and_clears_when_active(comms, tmp_path, state, reason):
     """No order is needed; the current state owns appearance and disappearance."""
-    comms.registry.declare(Thread("paper", frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(NativeThread("paper", frozenset(), Checkout(tmp_path)))
     comms.goals.update_goal("paper", SetGoalAction(text="Finish the paper"))
     thread = comms.registry.require("paper")
     comms.registry.register(replace(thread, goal=replace(thread.goal.require(), state=state)),
                             comms.registry.status("paper"))
-    rule, = GoalBlocked.violations(comms, "paper")
+    rule, = GoalBlocked.violations(comms)
     assert rule.thread == thread.incarnation
     assert rule.reason == reason
     assert reason[:200] in rule.line()
@@ -52,7 +52,7 @@ def test_blocked_goal_leads_the_board_and_clears_when_active(comms, tmp_path, st
         replace(current, goal=replace(current.goal.require(), state=ActiveGoal())),
         comms.registry.status("paper"),
     )
-    assert GoalBlocked.violations(comms, "paper") == ()
+    assert GoalBlocked.violations(comms) == ()
     cleared = TeamUpdate.derive(thread.incarnation, (), (), (update,),
                                      published=(update,), now=now + 60, history=history)
     assert cleared.packet.handled == ()

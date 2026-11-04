@@ -19,7 +19,7 @@ from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript, UserTranscript
 from agent_comms.native_entries import NativeEntry
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 
 
@@ -28,7 +28,7 @@ def source(scratch_root, durable_home):
     root = scratch_root / "source"
     c = wire(root)
     for name in ("A", "B", "other"):
-        c.registry.declare(Thread(name, frozenset({"comms"}), Checkout(scratch_root)),
+        c.registry.declare(NativeThread(name, frozenset({"comms"}), Checkout(scratch_root)),
                            StoppedThreadStatus())
     c.messaging.send("A", "B", "old history is not a new input")
     c.registry.register(c.registry.require("other"), RunningThreadStatus())
@@ -87,7 +87,7 @@ def test_check_roots_contain_new_child_allocations_and_actual_rule_publication(
             # Another process/client must load the persisted policy, not a patched Registration.
             reopened = wire(copied.root)
             parent = reopened.registry.require("A")
-            child = reopened.registry.declare_child(parent, lambda current: Thread(
+            child = reopened.registry.declare_child(parent, lambda current: NativeThread(
                 "fork", frozenset({"comms"}), current.worktree,
                 parent=ForkedParent(current.name)))
             allocation = reopened.registry.storage_rule.roots_of(child)

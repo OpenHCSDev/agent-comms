@@ -145,7 +145,7 @@ class AgentActivity:
     def _observed(self, participant: Thread, owner: OwnerIdentity,
                   event: Activity) -> ObservedActivity:
         activity = ObservedActivity.acquire(event, owner)
-        return participant.execution.project_activity(participant, activity)
+        return participant.project_activity(activity)
 
     def all_activity(self, threads: Iterable[Thread], *, snapshot: RegistrySnapshot) -> Mapping[str, ObservedActivity]:
         return self.captured(threads, snapshot=snapshot).activity
@@ -158,7 +158,7 @@ class AgentActivity:
         events = self.activity.captured_for(
             requested,
             active=frozenset(name for name, thread in requested.items()
-                             if thread.execution.holds_activity(thread, snapshot.status(name))),
+                             if thread.holds_activity(snapshot.status(name))),
         )
         claims = self.registry.storage_rule.room_ledger.claims(
             self.registry.store.path.parent, requested.values())

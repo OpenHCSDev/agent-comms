@@ -2,7 +2,7 @@
 
 import asyncio
 import os
-from contextlib import AsyncExitStack
+from contextlib import AsyncExitStack, ExitStack
 from dataclasses import replace
 
 import pytest
@@ -12,13 +12,14 @@ from agent_comms.controller import NO_CONTROLLER
 from agent_comms.channel_coding_tools import OrdinaryGoalRule
 from agent_comms.acp import CommsAgent
 from agent_comms.turn_inbox import InputContent
-from agent_comms.channel_input_batch import InputBatch
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.nominal.field_codec import AcpSessionId, InputId, OrderId, TurnId
+from agent_comms.nominal.field_codec import AcpSessionId, InputId, OrderId
 from agent_comms.goal_actions import (
     BlockedGoalAction,
     CreateProblemGoalAction,
     OrderGoalAction,
+    OwnerInvocable,
+    PausedGoalAction,
 )
 from agent_comms.goal_states import ActiveGoal
 from agent_comms.owned_send import OwnedSend
@@ -28,7 +29,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Checkout
 from agent_comms.repository_name import RepositoryName
 from agent_comms.reservation_rules import ReservationViolationError
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.turn_input_source import NoTurnAcceptance
 from compaction_loopback import LoopbackProvider
 from conftest import answer_rules, declare_team, installed_comms
@@ -57,17 +58,16 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
         async with saved.open_owner(native_options=()) as (agent, session_id):
             comms = agent._comms
             worker = agent.sessions.require(session_id)
-            declare_team(comms, Thread(
-                'lead', frozenset(), Checkout(saved.project),
-                process_identity=ProcessIdentity.capture(os.getpid()),
-            ))
+            declare_team(comms, NativeThread(
+                'colleague', frozenset(), Checkout(saved.project),
+                process_identity=ProcessIdentity.capture(os.getpid())))
             answer_rules(comms, worker)
             request = comms.goals.todos.add_request(
-                comms.registry.require('lead').incarnation, 'Repair following input').id
+                comms.registry.require('colleague').incarnation, 'Repair following input').id
             comms.goals.update_goal(worker, CreateProblemGoalAction(
                 problem='P1', order=order(source), request=request,
-                review_at=RecordedEventTime(1000), commander='lead',
-                assigner=comms.registry.require('lead').incarnation,
+                review_at=RecordedEventTime(1000),
+                assigner=comms.registry.require('colleague').incarnation,
                 repo=RepositoryName.from_wire('org/repo'), text='Repair following input',
             ))
             saved.provider.response_gate = asyncio.Event()
@@ -84,8 +84,7 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
                 todo = comms.goals.todos.get('P1')
                 replaced = comms.goals.update_goal(worker, OrderGoalAction(
                     problem='P1', expected_revision=todo.revision,
-                    assigner=comms.registry.require('lead').incarnation,
-                    commander='lead', request=request, review_at=RecordedEventTime(2000),
+                    assigner=comms.registry.require('colleague').incarnation, request=request, review_at=RecordedEventTime(2000),
                     order=replace(order(source), id=OrderId.mint()),
                 ))
                 # A replaced order keeps the running turn's authority; only following input waits.
@@ -125,11 +124,10 @@ WORKER_SESSION = AcpSessionId('worker-session')
 @pytest.fixture
 async def prepared_owner(tmp_path):
     comms = installed_comms(tmp_path)
-    for name in ('lead', 'worker'):
-        comms.registry.declare(Thread(
+    for name in ('colleague', 'worker'):
+        comms.registry.declare(NativeThread(
             name, frozenset(), Checkout(tmp_path),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-        ))
+            process_identity=ProcessIdentity.capture(os.getpid())))
     agent = CommsAgent(comms, auto_wake=False)
     try:
         await agent.sessions.bind_owned(comms.registry.require('worker'), WORKER_SESSION)
@@ -143,14 +141,14 @@ async def test_goal_published_during_preparation_is_current_at_reservation(tmp_p
     source = SourceRepository.create(tmp_path / 'source')
     comms, agent = prepared_owner
     request = comms.goals.todos.add_request(
-        comms.registry.require('lead').incarnation, 'Repair the turn owner').id
+        comms.registry.require('colleague').incarnation, 'Repair the turn owner').id
     initial = comms.goals.update_goal('worker', CreateProblemGoalAction(
         problem='P1', order=order(source), request=request,
-        review_at=RecordedEventTime(1000), commander='lead',
-        assigner=comms.registry.require('lead').incarnation,
+        review_at=RecordedEventTime(1000),
+        assigner=comms.registry.require('colleague').incarnation,
         repo=RepositoryName.from_wire('org/repo'), text='Repair the turn owner',
     ))
-    actor = comms.registry.require('lead').incarnation
+    actor = comms.registry.require('colleague').incarnation
     old = OwnedTurn(agent.turns, WORKER_SESSION, 'worker', 'first input',
                     original_owner_input=True, original_goal_id=initial.id,
                     acceptance=NoTurnAcceptance())
@@ -159,34 +157,28 @@ async def test_goal_published_during_preparation_is_current_at_reservation(tmp_p
         OrdinaryGoalRule.require(old.original.goal_permission, initial)
         todo = comms.goals.todos.get('P1')
         replaced = comms.goals.update_goal('worker', OrderGoalAction(
-            problem='P1', expected_revision=todo.revision, assigner=actor,
-            commander='lead', request=request, review_at=RecordedEventTime(2000),
+            problem='P1', expected_revision=todo.revision, assigner=actor, request=request, review_at=RecordedEventTime(2000),
             order=replace(order(source), id=OrderId.mint()),
         ))
         OrdinaryGoalRule.require(old.original.goal_permission, replaced)
 
     # Exercise the real lease-to-reservation boundary without replacing any methods.
-    # A second commander publication during preparation makes the leased snapshot stale.
+    # A second teammate publication during preparation makes the leased snapshot stale.
     current = OwnedTurn(agent.turns, WORKER_SESSION, 'worker', 'next input',
                         original_owner_input=True, original_goal_id=replaced.id,
                         acceptance=NoTurnAcceptance())
     assert current.authorize()
-    current.turn_id = TurnId.mint()
     async with AsyncExitStack() as resources:
-        current.registry_owner = agent.turns.acquire_turn(
-            resources, current.session_id, current.thread_name, current.turn_id, current.task,
-        )
-        batch = InputBatch.capture((), (), current.task, current.thread,
-                                   agent.turns.inputs.dispositions.read(()))
-        current.prepare_prompt(batch)
+        permits = ExitStack()
+        resources.callback(permits.close)
+        assert current.prepare(resources, permits)
         todo = comms.goals.todos.get('P1')
         latest = comms.goals.update_goal('worker', OrderGoalAction(
-            problem='P1', expected_revision=todo.revision, assigner=actor,
-            commander='lead', request=request, review_at=RecordedEventTime(3000),
+            problem='P1', expected_revision=todo.revision, assigner=actor, request=request, review_at=RecordedEventTime(3000),
             order=replace(order(source), id=OrderId.mint()),
         ))
         assert current.thread.goal == replaced != latest
-        current.reserve_input(batch)
+        current.reserve_input(current.prepared)
         try:
             assert current.original.keys != old.original.keys
             # This is the same goal check CodingToolOwner.allow runs before a tool.
@@ -203,17 +195,17 @@ async def test_order_reactivating_a_blocked_goal_keeps_the_running_turn(tmp_path
     source = SourceRepository.create(tmp_path / 'source')
     comms, agent = prepared_owner
     request = comms.goals.todos.add_request(
-        comms.registry.require('lead').incarnation, 'Repair the blocked teammate').id
+        comms.registry.require('colleague').incarnation, 'Repair the blocked teammate').id
     comms.goals.update_goal('worker', CreateProblemGoalAction(
         problem='P1', order=order(source), request=request,
-        review_at=RecordedEventTime(1000), commander='lead',
-        assigner=comms.registry.require('lead').incarnation,
+        review_at=RecordedEventTime(1000),
+        assigner=comms.registry.require('colleague').incarnation,
         repo=RepositoryName.from_wire('org/repo'), text='Repair the blocked teammate',
     ))
     blocked = comms.goals.update_goal(
         'worker', BlockedGoalAction(block_reason='Backend turn ended without a result.')
     )
-    actor = comms.registry.require('lead').incarnation
+    actor = comms.registry.require('colleague').incarnation
     # QueuedInputContext.active_goal_id of a blocked goal, as queued_input.py passes it.
     turn = OwnedTurn(agent.turns, WORKER_SESSION, 'worker', 'retry order message',
                      original_owner_input=True,
@@ -222,10 +214,35 @@ async def test_order_reactivating_a_blocked_goal_keeps_the_running_turn(tmp_path
         assert await turn.acquire(resources, permits)
         todo = comms.goals.todos.get('P1')
         retried = comms.goals.update_goal('worker', OrderGoalAction(
-            problem='P1', expected_revision=todo.revision, assigner=actor,
-            commander='lead', request=request, review_at=RecordedEventTime(2000),
+            problem='P1', expected_revision=todo.revision, assigner=actor, request=request, review_at=RecordedEventTime(2000),
             order=replace(order(source), id=OrderId.mint()),
         ))
         assert retried.state == ActiveGoal()
         # The same check CodingToolOwner.allow runs before each of the turn's tool calls.
         OrdinaryGoalRule.require(turn.original.goal_permission, comms.registry.require('worker').goal)
+
+
+@pytest.mark.asyncio
+async def test_an_owner_pause_holds_off_a_correction_of_the_goals_own_order(
+    tmp_path, prepared_owner,
+):
+    """A correction asks no consent, but a pause is the goal's own state and refuses it."""
+    source = SourceRepository.create(tmp_path / 'source')
+    comms, _ = prepared_owner
+    colleague = comms.registry.require('colleague').incarnation
+    request = comms.goals.todos.add_request(colleague, 'Repair the paused teammate').id
+    comms.goals.update_goal('worker', CreateProblemGoalAction(
+        problem='P1', order=order(source), request=request,
+        review_at=RecordedEventTime(1000), assigner=colleague,
+        repo=RepositoryName.from_wire('org/repo'), text='Repair the paused teammate',
+    ))
+    paused = comms.goals.update_goal('worker', PausedGoalAction(), actor=OwnerInvocable)
+    todo = comms.goals.todos.get('P1')
+    with pytest.raises(ValueError) as refused:
+        comms.goals.update_goal('worker', OrderGoalAction(
+            problem='P1', expected_revision=todo.revision, assigner=colleague, request=request,
+            review_at=RecordedEventTime(2000), order=replace(order(source), id=OrderId.mint()),
+        ))
+    assert str(refused.value) == paused.state.pause_source.instruction()
+    assert comms.registry.require('worker').goal == paused
+    assert comms.goals.todos.get('P1') == todo

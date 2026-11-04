@@ -9,12 +9,12 @@ from dataclasses import replace
 
 from agent_comms.comms import wire
 from agent_comms.thread_text import GivenThreadText
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 def test_release_survives_metadata_changes_and_reads_only_its_row(tmp_path):
     comms = wire(tmp_path)
-    originals = [comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path)))
+    originals = [comms.registry.declare(NativeThread(name, frozenset(), Checkout(tmp_path)))
                  for name in ('worker', 'other')]
     generation = comms.registry.snapshot().claim_generation('worker')
     for thread in originals:
@@ -37,7 +37,7 @@ def test_release_survives_metadata_changes_and_reads_only_its_row(tmp_path):
 
 def test_empty_release_store_is_not_proof(tmp_path):
     comms = wire(tmp_path)
-    thread = comms.registry.declare(Thread('worker', frozenset(), Checkout(tmp_path)))
+    thread = comms.registry.declare(NativeThread('worker', frozenset(), Checkout(tmp_path)))
     record = comms.owners.releases.read_many((thread.name,))[thread.name]
     assert isinstance(record, NoRelease)
     assert not record.current(comms.registry.snapshot(), thread, 1)

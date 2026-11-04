@@ -14,7 +14,7 @@ from agent_comms.acp_extension import CoordinationChangedUpdate, TextRouteUpdate
 from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import AcpSessionId, TurnId
 from agent_comms.routing import MessageRoute
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.native_arguments import GivenBinary
 
 
@@ -26,7 +26,7 @@ from agent_comms.native_arguments import GivenBinary
 async def test_toad_public_types_and_acp_agent_comms_metadata(tmp_path, consumer) -> None:
     turn_id = TurnId.mint()
     comms = wire(tmp_path / "wire")
-    comms.registry.declare(Thread('worker', frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(NativeThread('worker', frozenset(), Checkout(tmp_path)))
     agent = CommsAgent(comms, agent_bin=GivenBinary("nonexistent-pi"), runtime_enabled=False, auto_wake=False)
 
     session_id = AcpSessionId("worker")

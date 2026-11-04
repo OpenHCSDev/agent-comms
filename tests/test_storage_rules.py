@@ -44,7 +44,7 @@ from agent_comms.thread_storage import (
     SelectedCheckout,
     UnassignedThreadStorage,
 )
-from agent_comms.threads import Thread
+from agent_comms.threads import Thread, NativeThread
 from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.goals import OrderCheck
 from agent_comms.registry_document import RegisteredTeamProject
@@ -212,7 +212,7 @@ def test_registry_assigns_a_new_thread_its_roots_at_declaration(tmp_path):
     }))
     comms = wire(tmp_path)
     rule = comms.registry.storage_rule
-    thread = Thread('worker', frozenset(), Checkout(tmp_path / 'home'))
+    thread = NativeThread('worker', frozenset(), Checkout(tmp_path / 'home'))
     assert thread.storage_roots == UnassignedThreadStorage()
     assert rule.floor_gib == 47
     declared = comms.registry.declare(thread)
@@ -241,7 +241,7 @@ def checkout_comms(tmp_path: Path) -> Comms:
         checkout_base=base, scratch_base=tmp_path / 'scratch', floor_gib=0)
     StorageRule.path_in(comms.root).write_text(
         FieldCodec.compact(FieldCodec.encode(comms.registry.storage_rule)))
-    comms.registry.declare(Thread('worker', frozenset(), Checkout(home)))
+    comms.registry.declare(NativeThread('worker', frozenset(), Checkout(home)))
     return comms
 
 
@@ -252,7 +252,7 @@ def test_removed_worktree_updates_membership_and_another_home_cannot_claim_its_p
     home, old, new = (rule.checkout_base / name for name in ('worker', 'worker--P1', 'worker--P2'))
     Checkout.add(home, old, DetachedStart('HEAD'))
     thread = comms.registry.require('worker')
-    other = comms.registry.declare(Thread('other', frozenset(), Checkout(tmp_path)))
+    other = comms.registry.declare(NativeThread('other', frozenset(), Checkout(tmp_path)))
     assert rule.checkouts_of(thread, RepositoryReads()) == (home, old)
     storage = UnitStorage.read(rule, thread, RepositoryReads())
     scratch = rule.roots_of(thread).scratch
@@ -325,7 +325,7 @@ def test_a_thread_registered_above_its_scratch_may_write_its_scratch_and_only_th
     above = rule.scratch_base.parent
     if enclosing_source:
         Repo.git(above, 'init', '-q')
-    thread = comms.registry.declare(Thread('homed', frozenset(), Checkout(above)))
+    thread = comms.registry.declare(NativeThread('homed', frozenset(), Checkout(above)))
     projection = StorageProjection(rule, thread, comms)
     scratch = rule.roots_of(thread).scratch
     projection.require_write(scratch / 'compaction-deal.audit.json')
@@ -347,7 +347,7 @@ def test_git_source_inside_scratch_still_requires_an_edit_allocation(
     comms = checkout_comms
     rule = comms.registry.storage_rule
     above = rule.scratch_base.parent
-    thread = comms.registry.declare(Thread('homed', frozenset(), Checkout(above)))
+    thread = comms.registry.declare(NativeThread('homed', frozenset(), Checkout(above)))
     scratch = rule.roots_of(thread).scratch
     source = scratch / source_path
     source.mkdir(parents=True)
@@ -499,7 +499,7 @@ def test_independent_repository_choices_survive_navigation_and_reopening(
     rule = comms.registry.storage_rule
     comms.goals.update_goal('worker', SetGoalAction(text='Preserve this goal'))
     original = comms.registry.require('worker')
-    peer = comms.registry.declare(Thread('peer', frozenset(), Checkout(comms.root)))
+    peer = comms.registry.declare(NativeThread('peer', frozenset(), Checkout(comms.root)))
     before = {path: (path / 'held-work.txt').read_bytes()
               for pair in multiple_repository_checkouts for path in (pair.first, pair.second)}
     for pair in multiple_repository_checkouts:
@@ -540,8 +540,8 @@ def test_normal_companion_order_admission_uses_the_persisted_repository_choices(
     comms = checkout_comms
     core, toad = multiple_repository_checkouts
     owner = comms.registry.require('worker')
-    requester = comms.registry.declare(Thread('requester', frozenset(), Checkout(comms.root)))
-    comms.registry.set_team_project(RegisteredTeamProject(requester.incarnation, (
+    requester = comms.registry.declare(NativeThread('requester', frozenset(), Checkout(comms.root)))
+    comms.registry.set_team_project(RegisteredTeamProject((
         Repo(checkout=core.first, github=core.repository),
         Repo(checkout=toad.first, github=toad.repository))))
     request = comms.goals.todos.add_request(
@@ -594,7 +594,7 @@ def test_missing_ambiguous_choice_and_invalid_selection_refuse(
         rule.reused_checkout(comms.registry.require(owner.name), toad.repository,
                              fresh, RepositoryReads())
     selected = comms.registry.require(owner.name)
-    foreign = comms.registry.declare(Thread('foreign', frozenset(), Checkout(core.second)))
+    foreign = comms.registry.declare(NativeThread('foreign', frozenset(), Checkout(core.second)))
     with pytest.raises(StorageDenied):
         comms.registry.select_checkout(foreign.incarnation, core.repository, core.first)
     with pytest.raises(StorageDenied):
@@ -671,7 +671,7 @@ def test_cannot_remove_current_project_but_can_remove_another_checkout(tmp_path)
     project_link.symlink_to(current, target_is_directory=True)
     comms = wire(tmp_path / 'wire')
     comms.registry.storage_rule = StorageRule(checkout_base=base, scratch_base=tmp_path / 'scratch')
-    thread = comms.registry.declare(Thread('worker', frozenset(), Checkout(project_link)))
+    thread = comms.registry.declare(NativeThread('worker', frozenset(), Checkout(project_link)))
     assert thread.project_path == current
     assert UnitStorage.read(comms.registry.storage_rule, thread, RepositoryReads()).home == Checkout(current)
     with pytest.raises(StorageDenied):
@@ -692,7 +692,7 @@ def test_cannot_remove_current_project_but_can_remove_another_checkout(tmp_path)
                                      'git -C ~/wt/other--P3 reset --hard', 'touch ~/wt/x-check/file'])
 def test_forbidden_shell_operations_use_declared_rule(tmp_path, command, comms):
     rule = StorageRule()
-    thread = Thread('worker', frozenset(), Checkout(tmp_path), storage_roots=rule.initial_roots('worker'))
+    thread = NativeThread('worker', frozenset(), Checkout(tmp_path), storage_roots=rule.initial_roots('worker'))
     with pytest.raises(SelectedToolDenied):
         StorageProjection(rule, thread, comms).check(shell_storage_effects(command, tmp_path))
 

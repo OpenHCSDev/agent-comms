@@ -604,10 +604,21 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
     request: OwnerRequestId
     review_at: EventTime
     assigner: ThreadIncarnation
-    """The teammate sending the order; a created problem records it as its creator."""
+    """Who sent the order: the teammate, or a fork working inside its turn."""
 
     def bound_to(self, actor: ThreadIncarnation) -> ProblemOrderGoalAction:
         return replace(self, assigner=actor)
+
+    def sender_teammate(self, ctx: GoalActionContext) -> Thread:
+        """The teammate whose authority sends the order, read from the registry: the sender
+        itself, or the teammate whose turn a fork works inside. A created problem records it
+        as creator and the request must be its own."""
+        sender = ctx.goals.registry.require(self.assigner.name)
+        return ctx.goals.registry.require(sender.teammate())
+
+    def authority(self, ctx: GoalActionContext) -> ThreadIncarnation:
+        """Whose open request the order may serve: its sender teammate's."""
+        return self.sender_teammate(ctx).acting_identity
 
     @abstractmethod
     def reserve(self, ctx: GoalActionContext, generation: GoalId) -> None:
@@ -632,10 +643,10 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
                            ctx.goals.registry.snapshot()))
 
     def require_ready(self, ctx: GoalActionContext) -> None:
-        """Recheck goal consent and local request facts before reserving work or a child."""
-        ctx.thread.goal.require_work(self.assigner, ctx.thread)
-        self.require_sendable(ctx.goals.registry.snapshot().commander_project)
-        ctx.goals.todos.owner_request(self.request).require_open(self.assigner)
+        """Recheck local request facts before reserving work or a child; the Todo write that
+        reserves the work decides holder and goal consent."""
+        self.require_sendable(ctx.goals.registry.snapshot().team_project)
+        ctx.goals.todos.owner_request(self.request).require_open(self.authority(ctx))
         self.review_at.require_recorded("A review time")
 
     def require_sendable(self, project: TeamProject) -> None:
@@ -683,6 +694,10 @@ class ReissuedOrderGoalAction(OrderGoalAction):
     since, so they are not checked again against the moved tree.
     """
 
+    def authority(self, ctx: GoalActionContext) -> ThreadIncarnation:
+        """Core reissues under its own identity; no teammate's turn sends it."""
+        return self.assigner
+
     @classmethod
     def for_todo(cls, todo: Todo) -> Self:
         """Core reissues accepted unheld work, recording itself rather than an invented actor."""
@@ -706,7 +721,7 @@ class CreateProblemGoalAction(ProblemOrderGoalAction):
 
     def reserve(self, ctx: GoalActionContext, generation: GoalId) -> None:
         ctx.goals.todos.create(self.problem, self.repo, self.text,
-            creator=ctx.goals.registry.require(self.assigner.name), owner=ctx.thread,
+            creator=self.sender_teammate(ctx), owner=ctx.thread,
             assigner=self.assigner, generation=generation, request=self.request,
             review_at=self.review_at, order=self.order)
 

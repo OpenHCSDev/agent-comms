@@ -34,7 +34,7 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsGoalTool
 from agent_comms.reported_turn import NoReportedTurn
 from goal_owner_fixture import canonical_goal_wire
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.goal_scope import OneGoal
 
 
@@ -91,10 +91,9 @@ class AfterReadBus(Bus, declared_name=None):
 def reviewing(tmp_path):
     comms = canonical_goal_wire(tmp_path / "wire")
     for name in ("owner", "child"):
-        comms.registry.declare(Thread(
+        comms.registry.declare(NativeThread(
             name, frozenset(), Checkout(tmp_path),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-        ))
+            process_identity=ProcessIdentity.capture(os.getpid())))
     comms.agents.begin_turn("child", TurnId('83dcc89110e0b7e93d50dfc4d8f66d0f'))
     comms.goals.update_goal("owner", SetGoalAction(text="Review the child's work"))
     return comms
@@ -200,10 +199,9 @@ def replace_registration(comms, prepared, *, name):
     original = comms.registry.require(name)
     comms.registry.unregister(name)
     comms.registry.remove(name)
-    comms.registry.declare(Thread(
+    comms.registry.declare(NativeThread(
         name, frozenset(), original.worktree,
-        process_identity=ProcessIdentity.capture(os.getpid()),
-    ))
+        process_identity=ProcessIdentity.capture(os.getpid())))
 
 
 @pytest.mark.parametrize("change", (
@@ -243,7 +241,7 @@ def test_new_received_candidate_is_read_before_releasing_silence(reviewing, role
 
 
 def test_other_recipient_traffic_does_not_strand_terminal_wait(reviewing):
-    reviewing.registry.declare(Thread("other", frozenset(), Checkout(reviewing.root)))
+    reviewing.registry.declare(NativeThread("other", frozenset(), Checkout(reviewing.root)))
     reviewing.goals.update_goal("owner", standby(reviewing))
     fence = reviewing.agents.finish_turn(reviewing.registry.require("child").require_turn_lease())
     reviewing.bus.bus = AfterReadBus(reviewing.bus.bus.path, lambda: reviewing.messaging.send(
@@ -379,7 +377,7 @@ def recover_closed_wait(comms):
     edit_waiting_goal, edit_waiting_progress, edit_waiting_title, stop_unrelated_thread,
 ))
 def test_retained_wait_releases_in_same_call_after_concurrent_edit(reviewing, release, change):
-    reviewing.registry.declare(Thread("other", frozenset(), Checkout(reviewing.root)))
+    reviewing.registry.declare(NativeThread("other", frozenset(), Checkout(reviewing.root)))
     reviewing.goals.update_goal("owner", standby(reviewing))
     wait = reviewing.goals.goal_wait("owner")
     current_goal = reviewing.registry.require("owner").goal.require()

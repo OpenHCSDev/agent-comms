@@ -204,10 +204,10 @@ def test_required_hosted_merge_gate_distinguishes_source_review_from_combined_pr
     for source in inputs.sources:
         for head in source.heads:
             ReviewedHeadVerdict(VerdictReason("The exact source is accepted for this actual combined carrier")).post(
-                head.repo, head.head, "lead", "source")
+                head.repo, head.head, "colleague", "source")
     # A source review on the combined head is still not a merge promotion.
     ReviewedHeadVerdict(VerdictReason("The combined source is reviewed but not yet promoted for merge")).post(
-        carrier.repo, carrier.head, "lead", "combined source")
+        carrier.repo, carrier.head, "colleague", "combined source")
     local = inputs.source(pair.core.github)
     tested = pair.core.git(pair.core.checkout, "commit-tree", local.candidate_tree,
                            "-p", local.baseline.commit, "-p", carrier.head,
@@ -231,8 +231,8 @@ def test_required_hosted_merge_gate_distinguishes_source_review_from_combined_pr
     if event == "merge_group":
         assert "no explicit reviewed merge promotion" in result.stderr
     ReviewedHeadVerdict(VerdictReason("The actual combined carrier is explicitly reviewed for merge")).post(
-        carrier.repo, carrier.head, "lead", "source")
-    PromotedHeadReview().post(carrier.repo, carrier.head, "lead", "promotion")
+        carrier.repo, carrier.head, "colleague", "source")
+    PromotedHeadReview().post(carrier.repo, carrier.head, "colleague", "promotion")
     promoted = subprocess.run((*command, str(tmp_path / "after-promotion")), cwd=checkout.path,
                               env=environment, capture_output=True, text=True, timeout=120)
     assert promoted.returncode == 0, promoted.stdout + promoted.stderr
@@ -240,7 +240,7 @@ def test_required_hosted_merge_gate_distinguishes_source_review_from_combined_pr
     assert MergeHeadReview.accepted(carrier.repo, tested) is (event == "merge_group")
     member = inputs.source(pair.client.github).heads[0]
     QualifiedHeadVerdict(VerdictReason("This member is no longer accepted for the combined source")).post(
-        member.repo, member.head, "lead", "withdraw member")
+        member.repo, member.head, "colleague", "withdraw member")
     stale = subprocess.run((*command, str(tmp_path / "after-member-withdrawal")), cwd=checkout.path,
                            env=environment, capture_output=True, text=True, timeout=120)
     assert stale.returncode != 0 and "no accepted exact-head source review" in stale.stderr
@@ -263,7 +263,7 @@ def test_resolved_companion_keeps_multiple_original_links_and_the_published_carr
     primary = comms.goals.todos.get("P2")
     comms.goals.update_goal("worker", CreateProblemGoalAction(
         problem="P4", request=primary.request,
-        assigner=comms.registry.require("lead").incarnation,
+        assigner=comms.registry.require("colleague").incarnation,
         repo=peer.github, text="Include the second existing companion source",
         order=replace(primary.order.checked(), pull_requests=(peer.link,),
                       check=replace(primary.order.check, directory=peer.checkout)),
@@ -319,7 +319,7 @@ def test_actual_main_cli_keeps_merged_local_members_exact_and_refuses_later_head
     primary = pair.context.comms.goals.todos.get("P2")
     pair.context.comms.goals.update_goal("worker", CreateProblemGoalAction(
         problem="P4", request=primary.request,
-        assigner=pair.context.comms.registry.require("lead").incarnation,
+        assigner=pair.context.comms.registry.require("colleague").incarnation,
         repo=peer.github, text="Include the existing local source",
         order=replace(primary.order.checked(), pull_requests=(peer.link,),
                       check=replace(primary.order.check, directory=peer.checkout)),
@@ -504,13 +504,13 @@ def test_only_accepted_ready_members_are_selected(github_cli, tmp_path: Path):
         10, "unaccepted", source.main_commit, stamp, "main", reviewable_times=(stamp,),
     ))
     QualifiedHeadVerdict(VerdictReason("The source stage is reviewed while paired implementation remains incomplete")).post(
-        source.github, qualified, "lead", "source stage",
+        source.github, qualified, "colleague", "source stage",
     )
     run = integration.IntegrationRun(integration.IntegrationCheckout(source.checkout),
                                      tmp_path / "output", "ready-head selection")
     assert run.accepted_heads() == ()
     ReviewedHeadVerdict(VerdictReason("The declared class owns the reviewed behavior")).post(
-        source.github, source.branch_commit, "lead", "integration",
+        source.github, source.branch_commit, "colleague", "integration",
     )
     assert run.accepted_heads() == (PullRequestHead(source.github, 7, source.branch_commit),)
 
@@ -539,8 +539,8 @@ def test_qualification_captures_actual_orders_without_reviewing_or_arming_source
 def test_first_publication_requires_the_actual_holder_not_creator_authority(
     mutual_sources: MutualSources,
 ) -> None:
-    pair = mutual_sources.starting_publication("", checkout_owner="lead")
-    pair = replace(pair, context=pair.context.model_copy(update={"actor": PeerCaller("lead")}))
+    pair = mutual_sources.starting_publication("", checkout_owner="colleague")
+    pair = replace(pair, context=pair.context.model_copy(update={"actor": PeerCaller("colleague")}))
     primary = pair.context.comms.goals.todos.get("P3")
     primary.require_actor(pair.context.actor_identity, primary.held().generation)
     before = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
@@ -554,7 +554,7 @@ def test_first_publication_requires_the_actual_holder_not_creator_authority(
 def test_publication_refuses_sibling_checkout_before_commit_push_or_creation(
     mutual_sources: MutualSources,
 ) -> None:
-    pair = mutual_sources.starting_publication("", checkout_owner="lead")
+    pair = mutual_sources.starting_publication("", checkout_owner="colleague")
     before = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
     refs = pair.core.git(pair.core.remote_path, "show-ref")
     with pytest.raises(StorageDenied):
@@ -569,7 +569,7 @@ def test_publication_refuses_sibling_checkout_before_commit_push_or_creation(
 def test_existing_carrier_capture_refuses_sibling_checkout_before_mutation(
     mutual_sources: MutualSources,
 ) -> None:
-    pair = mutual_sources.starting_publication("", checkout_owner="lead")
+    pair = mutual_sources.starting_publication("", checkout_owner="colleague")
     carrier = pair.publish_carrier(pair.github)
     before = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
     refs = pair.core.git(pair.core.remote_path, "show-ref")
@@ -710,9 +710,9 @@ def test_explicit_recapture_refuses_wrong_holder_or_borrowed_checkout_before_mut
 ) -> None:
     pair = mutual_sources.starting_publication("")
     pair.publish(pair.output)
-    creator_checkout = pair.owned_checkout(pair.context, pair.core, "lead", "P3")
+    creator_checkout = pair.owned_checkout(pair.context, pair.core, "colleague", "P3")
     pair.core.git(creator_checkout.path, "switch", "-c", "creator-recapture")
-    context = pair.context if borrowed else pair.context.model_copy(update={"actor": PeerCaller("lead")})
+    context = pair.context if borrowed else pair.context.model_copy(update={"actor": PeerCaller("colleague")})
     before = pair.core.git(creator_checkout.path, "rev-parse", "HEAD").strip()
     refs = pair.core.git(pair.core.remote_path, "show-ref")
     output = pair.output.with_name("forbidden-recapture")
@@ -735,7 +735,7 @@ def test_explicit_recapture_rechecks_scope_before_integrating_core_main(
     before = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
     refs = pair.core.git(pair.core.remote_path, "show-ref")
     carrier = PullRequestHead.at(pair.core.github, pair.carrier_number)
-    Team.on_root("lead", (pair.client,), pair.context.root)
+    Team.on_root("colleague", (pair.client,), pair.context.root)
     output = pair.output.with_name("revoked-scope-recapture")
     with pytest.raises(ToolRefusedError):
         integration.IntegrationRun(pair.checkout, output, "Refuse revoked Core scope").recapture(
@@ -900,7 +900,7 @@ def test_qualification_refuses_an_entirely_unchanged_source_set(
     primary = pair.context.comms.goals.todos.get("P2")
     creation = CreateProblemGoalAction(
         problem="P4", request=primary.request,
-        assigner=pair.context.comms.registry.require("lead").incarnation,
+        assigner=pair.context.comms.registry.require("colleague").incarnation,
         repo=pair.core.github, text="Check a source selection without changed members",
         order=replace(primary.order.checked(), pull_requests=()),
         review_at=RecordedEventTime(9999999999.0))

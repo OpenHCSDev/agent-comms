@@ -52,9 +52,8 @@ from agent_comms.maintenance_barrier import (
 )
 from agent_comms.registry_store import RegistryStore
 from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
-from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.threads import ExternalThread, NativeThread
 from agent_comms.thread_status import RunningThreadStatus
-from agent_comms.threads import Thread
 from conftest import ledger_one_failure_short
 from fixture_git import IDENTITY
 
@@ -392,22 +391,22 @@ def test_a_restore_that_fails_midway_keeps_the_hold(comms, staged, noisy_step):
 def test_restart_selection_uses_receiving_declaration_with_connected_cli_inbox(comms, stack):
 
     process = ProcessIdentity.capture(os.getpid())
-    native = comms.registry.declare(replace(Thread(
+    native = comms.registry.declare(replace(NativeThread(
         'native-copy', frozenset(), Checkout(comms.root)), process_identity=process))
-    external = comms.registry.declare(Thread(
-        'cli-inbox-copy', frozenset(), Checkout(comms.root), execution=ExternalThreadExecution))
+    external = comms.registry.declare(ExternalThread(
+        'cli-inbox-copy', frozenset(), Checkout(comms.root)))
     with comms.registry.external_process(external.name, process):
         assert stack.running_owners(comms.root) == [native.name]
-        native.execution.require_native()
+        comms.registry.require_member(native.name, NativeThread)
         with pytest.raises(ValueError):
-            external.execution.require_native()
+            comms.registry.require_member(external.name, NativeThread)
 
 
 def test_owner_stop_batch_reports_refusal_after_stopping_available_owners(comms, stack):
     names = ["failed", "other", "last"]
     for name in names[1:]:
         comms.registry.declare(
-            Thread(name, frozenset(), Checkout(comms.root)), RunningThreadStatus()
+            NativeThread(name, frozenset(), Checkout(comms.root)), RunningThreadStatus()
         )
 
     # A missing target must not prevent the batch from stopping its available owners.
@@ -428,7 +427,7 @@ async def test_the_install_start_stops_owners_under_its_hold(
         comms = wire(native.root)
         maintenance = MaintenanceBarrier(RegistryStore.at(comms.root).path)
         with LaunchRoot.from_path(comms.root).selected():
-            comms.registry.declare(Thread("worker", frozenset(), Checkout(tmp_path)))
+            comms.registry.declare(NativeThread("worker", frozenset(), Checkout(tmp_path)))
             await Coordination.run_worker(partial(
                 comms.owners.start_many, ("worker",), agent_bin=GivenBinary("pi"),
                 agent_args=GivenArguments(NativeBackendFixture.native_arguments()),

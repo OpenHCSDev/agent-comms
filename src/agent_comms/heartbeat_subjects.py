@@ -115,10 +115,10 @@ class UnlandedHeadSubject(HeadSubject):
 class PassSubject(HeartbeatSubject):
     """The teammate's heartbeat pass: a pass that completes after the line answers it."""
 
-    commander: RecordedThreadIncarnation
+    teammate: RecordedThreadIncarnation
 
     def action_at(self, history: TeamHistory) -> EventTime:
-        return history.passes.heartbeat_completed_at(self.commander)
+        return history.passes.heartbeat_completed_at(self.teammate)
 
 
 @dataclass(frozen=True)

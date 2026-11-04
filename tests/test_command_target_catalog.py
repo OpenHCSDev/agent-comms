@@ -21,7 +21,7 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_status import (
     ArchivedThreadStatus, RunningThreadStatus, StoppedThreadStatus, ThreadStatus,
 )
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 @dataclass
@@ -58,7 +58,7 @@ def test_batch_completed_result_round_trips_with_its_command_result_type(target)
 
 @pytest.fixture
 def running_first(comms, tmp_path):
-    comms.registry.declare(Thread("first", frozenset(), Checkout(tmp_path)), RunningThreadStatus())
+    comms.registry.declare(NativeThread("first", frozenset(), Checkout(tmp_path)), RunningThreadStatus())
     return comms
 
 
@@ -90,7 +90,7 @@ def test_target_batch_reports_an_unknown_target_as_a_failed_outcome(running_firs
 def test_batch_capability_owns_selection_catalog_and_execution(comms, tmp_path):
     names = ("first", "second")
     for name in names:
-        comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path)),
+        comms.registry.declare(NativeThread(name, frozenset(), Checkout(tmp_path)),
                                StoppedThreadStatus())
     selected = CliCommand.selected_targets(tuple(CommandTarget.named(name) for name in names))
     catalog = CliCommand.target_catalog(comms, selected, project=Checkout(tmp_path))
@@ -113,7 +113,7 @@ def test_batch_capability_owns_selection_catalog_and_execution(comms, tmp_path):
 ])
 def test_channel_pin_filters_hidden_thread_presence(comms, tmp_path, presence, allowed):
     comms.registry.declare(
-        Thread("first", frozenset({"team"}), Checkout(tmp_path)),
+        NativeThread("first", frozenset({"team"}), Checkout(tmp_path)),
         ThreadStatus.member_named(presence)(),
     )
     if allowed:

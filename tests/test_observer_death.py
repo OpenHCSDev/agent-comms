@@ -25,8 +25,7 @@ from agent_comms.notification_reads import LiveNotificationRead
 from agent_comms.ui_model.observation import (
     ObservationProcess, ObserverDied, ReadNotifications, ReadOwnerOperation, StopSidebar,
 )
-from agent_comms.thread_execution import ExternalThreadExecution, NativeThreadExecution
-from agent_comms.threads import Thread
+from agent_comms.threads import ExternalThread, NativeThread
 from owner_socket_fixture import declare_owner
 
 
@@ -84,7 +83,7 @@ async def test_an_invalid_notification_reference_does_not_kill_the_observer(comm
 
 @pytest.mark.parametrize("read_type", owner_reads(OwnerLiveRead))
 async def test_unavailable_live_owner_reads_preserve_the_observer(comms, durable_home, read_type):
-    owner = Thread("read-subject", frozenset(), Checkout(comms.root.parent))
+    owner = NativeThread("read-subject", frozenset(), Checkout(comms.root.parent))
     comms.registry.declare(owner)
     async with ObservationProcess.awaited(comms.route) as process:
         with pytest.raises(RelationViolationError):
@@ -96,7 +95,7 @@ async def test_unavailable_live_owner_reads_preserve_the_observer(comms, durable
 
 @pytest.mark.parametrize("read_type", owner_reads())
 async def test_an_unregistered_owner_cannot_supply_a_held_read_incarnation(comms, durable_home, read_type):
-    owner = Thread("read-subject", frozenset(), Checkout(comms.root.parent))
+    owner = NativeThread("read-subject", frozenset(), Checkout(comms.root.parent))
     async with ObservationProcess.awaited(comms.route) as process:
         with pytest.raises(OwnerIdentityChangedError):
             await process.read(read_type(str(comms.root), owner.incarnation))
@@ -105,11 +104,11 @@ async def test_an_unregistered_owner_cannot_supply_a_held_read_incarnation(comms
         process.status.raise_if_failed()
 
 
-@pytest.mark.parametrize("execution", [NativeThreadExecution, ExternalThreadExecution])
+@pytest.mark.parametrize("execution", [NativeThread, ExternalThread])
 async def test_retained_delivery_reads_preserve_the_observer_without_a_native_queue(
     comms, durable_home, execution,
 ):
-    owner = Thread("read-subject", frozenset(), Checkout(comms.root.parent), execution=execution)
+    owner = execution("read-subject", frozenset(), Checkout(comms.root.parent))
     comms.registry.declare(owner)
     ledger = InputDispositions(comms.root)
     key = BusInputKey(1)
@@ -130,7 +129,7 @@ async def test_retained_delivery_reads_preserve_the_observer_without_a_native_qu
 @pytest.mark.parametrize("read_type", owner_reads())
 @pytest.mark.parametrize("other_root", [False, True])
 async def test_stale_owner_reads_preserve_the_observer(comms, durable_home, read_type, other_root):
-    owner = Thread("read-subject", frozenset(), Checkout(comms.root.parent))
+    owner = NativeThread("read-subject", frozenset(), Checkout(comms.root.parent))
     comms.registry.declare(owner)
     root = str(comms.root.parent / "another-wire") if other_root else str(comms.root)
     identity = owner.incarnation if other_root else RecordedThreadIncarnation(owner.name, 1.0)
@@ -148,7 +147,7 @@ async def test_external_live_owner_reads_refuse_before_waiting_for_a_socket(
 ):
     """An external bridge has a live process and no runtime socket: the read refuses with the
     original error instead of waiting for a socket that will never be served."""
-    owner = declare_owner(comms, "external-owner", runtime_processes[0].identity, ExternalThreadExecution)
+    owner = declare_owner(comms, "external-owner", runtime_processes[0].identity, ExternalThread)
     async with ObservationProcess.awaited(comms.route) as process:
         with pytest.raises(RelationViolationError):
             async with asyncio.timeout(30):

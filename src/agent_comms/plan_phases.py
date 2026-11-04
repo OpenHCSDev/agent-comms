@@ -36,8 +36,8 @@ class Plan(DeclaredFamily, affix="Plan"):
     document: ClassVar[str]
 
 
-class TeamNativePlan(Plan, declared_name="commander_native"):
-    document = "plans/commander-native-plan.md"
+class TeamNativePlan(Plan, declared_name="team_native"):
+    document = "plans/team-native-plan.md"
 
 
 class VirtualBusPlan(Plan):
@@ -221,7 +221,7 @@ class ReviewQueuePhase(TeamNativePhase):
     ))
 
 
-COMMANDER = "src/agent_comms/team/"
+TEAM_PACKAGE = "src/agent_comms/team/"
 
 
 class ControlPlanePhase(TeamNativePhase):
@@ -230,7 +230,7 @@ class ControlPlanePhase(TeamNativePhase):
     after = (RecordPlanePhase,)
     evidence = PathsAbsent(
         tuple(
-            COMMANDER + name
+            TEAM_PACKAGE + name
             for name in (
                 "rotate.py",
                 "capacity.py",
@@ -254,12 +254,12 @@ class StoryPhase(TeamNativePhase):
         (
             ClassDeclared("CommsOrderStoryTool", ("src/agent_comms/order_tools.py",)),
             ClassDeclared("CommsTeamStoryTool", ("src/agent_comms/order_tools.py",)),
-            PatternAbsent(r"^def roast\b", (COMMANDER + "judge.py",)),
+            PatternAbsent(r"^def roast\b", (TEAM_PACKAGE + "judge.py",)),
         )
     )
 
 
-class TeamPagePhase(TeamNativePhase, declared_name="commander_page"):
+class TeamPagePhase(TeamNativePhase, declared_name="team_page"):
     """A view of the native records and control plane, independent of cutover."""
 
     after = (RecordPlanePhase, ControlPlanePhase)
@@ -289,7 +289,7 @@ class SkillPhase(TeamNativePhase):
     """The skill names no script."""
 
     after = (CutoverPhase,)
-    evidence = PatternAbsent(r"agent-comms-commander", ("src/agent_comms/skills/comms-commander",))
+    evidence = PatternAbsent(r"agent-comms-team", ("src/agent_comms/skills/comms-team",))
 
 
 OLD_LOG_READ = r"\bWireLog\b|wire_log"
@@ -1026,7 +1026,7 @@ class LoadingSpinnerPhase(ToadAskPhase):
     """The top loading spinner is back; both were removed instead of keeping it."""
 
 
-class TeamLatencyPhase(OwnerAsksPhase, declared_name="commander_latency"):
+class TeamLatencyPhase(OwnerAsksPhase, declared_name="team_latency"):
     """Each teammate verb answers in under 5 s; they take about 30 s."""
 
     evidence = FunctionDeclared("test_team_verb_answers_under_five_seconds", ("tests",))

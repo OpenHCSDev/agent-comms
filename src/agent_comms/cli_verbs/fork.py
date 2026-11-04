@@ -8,10 +8,9 @@ from agent_comms.cli_support.thread_bound import ThreadBoundCliCommand
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument
 from agent_comms.nominal.field_codec import TargetBound
-from agent_comms.thread_execution import NativeOwnerCommand
+from agent_comms.threads import NativeOwnerCommand, Thread
 from agent_comms.thread_management import ForkSpec
 from agent_comms.thread_management import GivenTags
-from agent_comms.threads import Thread
 from agent_comms.repo import Checkout
 from dataclasses import dataclass
 from typing import Annotated

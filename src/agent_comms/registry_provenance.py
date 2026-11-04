@@ -78,7 +78,9 @@ class RegisteredRecipient(KnownRecipient):
         return (self.thread,)
 
     def activity(self, observations, snapshot):
-        return self.thread.execution.observe_recipient(observations, snapshot, self.thread)
+        """The owner binding decides whether this recipient's activity is observable."""
+        return self.thread.owner_binding(snapshot).recipient_activity(
+            observations, snapshot, self.thread)
 
     def input_owners(self) -> tuple[Thread, ...]:
         return (self.thread,)
@@ -179,6 +181,10 @@ class RegistryNames(Generic[Member]):
             return self.threads[canonical]
         except KeyError as error:
             raise UnregisteredThreadError(f"Thread {canonical!r} is not registered.") from error
+
+    def require_member[Kind: Thread](self, name: str, kind: type[Kind]) -> Kind:
+        """The registered declaration, narrowed to the member an operation needs."""
+        return kind.stored(self.require(name))
 
 
 @dataclass(frozen=True, slots=True)

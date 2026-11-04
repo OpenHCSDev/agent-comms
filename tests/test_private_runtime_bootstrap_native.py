@@ -16,7 +16,7 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from test_coordinated_runtime import tmp_path as private_root_fixture
 from agent_comms.thread_model import DeclaredModel
 
@@ -108,7 +108,7 @@ def test_production_peer_wake_and_restart(tmp_path, monkeypatch, base_only_owner
     comms = wire(tmp_path / "wire")
     for name in ("sender", "recipient"):
         comms.registry.declare(
-            Thread(name, frozenset(), Checkout(tmp_path), model=DeclaredModel('selected-offline/fixture'), thinking_level=OffThinkingLevel)
+            NativeThread(name, frozenset(), Checkout(tmp_path), model=DeclaredModel('selected-offline/fixture'), thinking_level=OffThinkingLevel)
         )
     # Ordinary publication must reach the same bootstrap as explicit protocol install.
     first = comms.messaging.send("sender", "recipient", "BOOTSTRAP_FIRST").message

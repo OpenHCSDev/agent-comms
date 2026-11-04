@@ -10,7 +10,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.repo import Checkout
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from delivery_owner_fixture import canonical_agent, start_headless_owner
 
 
@@ -19,7 +19,7 @@ async def test_original_session_launches_share_host_and_refuse_changed_selection
     try:
         expected = {}
         for name in ("older", "current"):
-            comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path)))
+            comms.registry.declare(NativeThread(name, frozenset(), Checkout(tmp_path)))
             launch = agent.inputs.configuration.launch
             original = replace(launch, environment={
                 **launch.environment, "AUTHORED_CREDENTIAL": name,

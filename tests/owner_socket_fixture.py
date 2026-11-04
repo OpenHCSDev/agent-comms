@@ -20,8 +20,7 @@ from agent_comms.comms import Comms
 from agent_comms.private_path import PrivateSocketRole
 from agent_comms.repo import Checkout
 from agent_comms.owner_connection import socket_path
-from agent_comms.thread_execution import NativeThreadExecution, ThreadExecution
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread, Thread
 
 
 @pytest.fixture
@@ -40,11 +39,10 @@ def runtime_processes() -> Iterator[tuple[SpawnedProcess, SpawnedProcess]]:
 
 def declare_owner(
     comms: Comms, name: str, process: ProcessIdentity,
-    execution: type[ThreadExecution] = NativeThreadExecution,
+    execution: type[Thread] = NativeThread,
 ) -> Thread:
-    return comms.registry.declare(Thread(
-        name, frozenset(), Checkout(comms.root.parent), process_identity=process, execution=execution,
-    ))
+    return comms.registry.declare(execution(
+        name, frozenset(), Checkout(comms.root.parent), process_identity=process))
 
 
 @asynccontextmanager

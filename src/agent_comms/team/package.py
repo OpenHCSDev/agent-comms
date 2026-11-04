@@ -70,7 +70,7 @@ class TeamPackage:
 
     @classmethod
     def skill(cls) -> Path:
-        return Path(str(files("agent_comms.skills") / "comms-commander/SKILL.md"))
+        return Path(str(files("agent_comms.skills") / "comms-team/SKILL.md"))
 
     @classmethod
     def patterns(cls) -> Path:

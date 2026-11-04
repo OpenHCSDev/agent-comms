@@ -49,7 +49,7 @@ from agent_comms.root_runtime import RootRuntime
 from agent_comms.storage_rules import StorageRule
 from agent_comms.typed_table import ReconciledFile
 from conftest import declare_test_bus, publish_initial
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 
@@ -123,7 +123,7 @@ def test_runtime_producer_digests_ignore_foreign_source(installed_home, tmp_path
     source = foreign / "src/agent_comms/messages.py"
     # A producer digest covers column declarations, not reader source (P978), so the
     # dirty review retypes one projection column.
-    declared = '    commander_lookup: ThreadLookup\n    indexes = (Index(("commander_lookup", "seq")),)\n'
+    declared = '    teammate_lookup: ThreadLookup\n    indexes = (Index(("teammate_lookup", "seq")),)\n'
     text = source.read_text()
     assert text.count(declared) == 1
     source.write_text(text.replace(declared, declared.replace("ThreadLookup", "str")))
@@ -185,7 +185,7 @@ def test_install_rehearses_without_changing_the_bus(installed_comms, installed_h
     """
     comms = installed_comms
     declare_test_bus(comms, channels=("comms",), threads=(
-        Thread(name="worker", tags=frozenset(), worktree=Checkout(tmp_path)),))
+        NativeThread(name="worker", tags=frozenset(), worktree=Checkout(tmp_path)),))
     publish_initial(comms, "worker", "#all", "One message before the install")
     rewritten = (drop_one_index(comms.root),) if drifted else ()
     checkout = install_checkout
@@ -237,7 +237,7 @@ def test_failed_live_migration_restores_data_checkout_and_runtime(
         installed_comms, installed_home, install_checkout, tmp_path):
     comms, checkout = installed_comms, install_checkout
     declare_test_bus(comms, channels=("comms",), threads=(
-        Thread(name="worker", tags=frozenset(), worktree=Checkout(tmp_path)),))
+        NativeThread(name="worker", tags=frozenset(), worktree=Checkout(tmp_path)),))
     publish_initial(comms, "worker", "#all", "Retained before migration")
     saved = comms.root / "saved"
     saved.write_text("original")
@@ -366,7 +366,7 @@ def test_installed_entry_reports_completion_after_target_source_retirement(
     assert len(history) == (1 if fresh else 2)
     assert history[-1].sender == "installer"
     assert history[-1].body.startswith("Install finished")
-    # The installer no longer waits on a commander pass, so neither its phases nor its post claim one.
+    # The installer no longer waits on a teammate pass, so neither its phases nor its post claim one.
     assert not any("heartbeat" in timing.line().lower() for timing in result.phases)
     assert "heartbeat" not in history[-1].body.lower()
     if not fresh:

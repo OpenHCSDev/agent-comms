@@ -25,7 +25,7 @@ from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_text import GivenThreadText
 from bus_record_fixture import prepare_native_comms
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 class RegistryTitleCarry(Carry):
@@ -74,7 +74,7 @@ class CarryingRoot:
     @classmethod
     def prepared(cls, tmp_path: Path) -> "CarryingRoot":
         comms = prepare_native_comms(wire(tmp_path / "wire"))
-        comms.registry.declare(Thread("worker", frozenset(), Checkout(tmp_path)))
+        comms.registry.declare(NativeThread("worker", frozenset(), Checkout(tmp_path)))
         active_route_path().parent.mkdir(mode=0o700, parents=True)
         return cls(tmp_path, comms)
 

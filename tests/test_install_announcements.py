@@ -33,10 +33,9 @@ from agent_comms.installer.owner_starts import RefusedOwner, StartedOwner
 from agent_comms.install_choices import LiveMode, RehearsalMode
 from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime
 from agent_comms.root_runtime import RootRuntimeStore
-from agent_comms.thread_execution import ExternalThreadExecution, ServiceThreadExecution
+from agent_comms.threads import ExternalThread, ServiceThread, NativeThread
 from agent_comms.thread_identity import ServiceThreadRole, UserThreadRole
 from agent_comms.errors import RelationViolationError, ThreadNotStoppedError
-from agent_comms.threads import Thread
 from cli_command import core
 from conftest import declare_test_bus
 from source_revision_fixture import SourceRepository
@@ -118,7 +117,7 @@ def test_typed_results_publish_as_installer_and_survive_history_read(private_com
     assert diagnostics.getvalue().splitlines()[1:] == [timed.line() for timed in installed.phases]
     assert installed.phases[-1].line() not in messages[1].body
     sender = comms.registry.require("installer")
-    assert sender.execution is ServiceThreadExecution
+    assert type(sender) is ServiceThread
     assert sender.role is ServiceThreadRole
 
 
@@ -154,8 +153,8 @@ def test_a_fresh_bus_carries_the_installer_report_into_its_declared_channel(priv
 
 def test_archived_installer_is_redeclared_as_a_publisher_not_a_colleague(private_comms):
     comms = declare_test_bus(private_comms, channels=("comms",))
-    original = comms.registry.declare(Thread(
-        "installer", frozenset(), Checkout(comms.root), execution=ExternalThreadExecution))
+    original = comms.registry.declare(ExternalThread(
+        "installer", frozenset(), Checkout(comms.root)))
     comms.threads.archive(original.name)
     before = comms.bus.bus.revision()
     with pytest.raises(RelationViolationError):
@@ -167,9 +166,9 @@ def test_archived_installer_is_redeclared_as_a_publisher_not_a_colleague(private
     sender = comms.registry.require(original.name)
     assert sender.incarnation == original.incarnation
     assert sender.role is ServiceThreadRole
-    assert sender.execution is ServiceThreadExecution
+    assert type(sender) is ServiceThread
     assert sender.role.executor(sender) == ()
-    assert sender.execution.channel_recipients(sender) == ()
+    assert sender.channel_recipients() == ()
     assert original.name not in {thread.name for thread in comms.registry.snapshot().channel_audience()}
     comms.registry.status(original.name).require_publication()
     with pytest.raises(RelationViolationError):
@@ -177,7 +176,7 @@ def test_archived_installer_is_redeclared_as_a_publisher_not_a_colleague(private
     with pytest.raises(ThreadNotStoppedError):
         comms.threads.archive(original.name)
 
-    writer = comms.registry.declare(Thread("writer", frozenset(), Checkout(comms.root)))
+    writer = comms.registry.declare(NativeThread("writer", frozenset(), Checkout(comms.root)))
     before = comms.bus.bus.revision()
     with pytest.raises(RelationViolationError):
         comms.messaging.send(original.name, CommsTag.channel(), "Wrong agent origin")
@@ -195,7 +194,7 @@ def test_archived_installer_is_redeclared_as_a_publisher_not_a_colleague(private
 
 def test_service_registration_does_not_replace_a_human_participant(private_comms):
     comms = declare_test_bus(private_comms, channels=("comms",))
-    original = comms.registry.declare(Thread(
+    original = comms.registry.declare(NativeThread(
         "installer", frozenset(), Checkout(comms.root), role=UserThreadRole))
     before = comms.bus.bus.revision()
     with pytest.raises(RelationViolationError):
@@ -207,7 +206,7 @@ def test_service_registration_does_not_replace_a_human_participant(private_comms
 def test_unconfirmed_announcement_keeps_the_worker_failure_not_runtime_authority(
         private_comms, monkeypatch, capsys):
     comms = declare_test_bus(private_comms, channels=("comms",))
-    original = comms.registry.declare(Thread(
+    original = comms.registry.declare(NativeThread(
         "installer", frozenset(), Checkout(comms.root), role=UserThreadRole))
     before = RootRuntimeStore.at(comms.root).read()
     revision = comms.bus.bus.revision()

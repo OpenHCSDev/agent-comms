@@ -22,7 +22,7 @@ from agent_comms.pi_counts import PiCount
 from bus_history import read_history
 from conftest import installed_comms
 from agent_comms.thread_model import DeclaredModel
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 def _send_messages(root: str, sender: str, count: int, start: Event) -> None:
@@ -35,7 +35,7 @@ def _send_messages(root: str, sender: str, count: int, start: Event) -> None:
 def _register_thread(root: str, name: str, start: Event) -> None:
     start.wait()
     comms = wire(root)
-    comms.registry.declare(Thread(name=name, tags=frozenset({'worker'}), worktree=Checkout(Path('/tmp'))))
+    comms.registry.declare(NativeThread(name=name, tags=frozenset({'worker'}), worktree=Checkout(Path('/tmp'))))
 
 
 def _register_thread_same_tick(root: str, name: str, start: Event) -> None:
@@ -43,7 +43,7 @@ def _register_thread_same_tick(root: str, name: str, start: Event) -> None:
 
     store_files.time.time = lambda: 1_700_000_000.0
     comms = wire(root)
-    comms.registry.declare(Thread(name=name, tags=frozenset({'worker'}), worktree=Checkout(Path('/tmp'))))
+    comms.registry.declare(NativeThread(name=name, tags=frozenset({'worker'}), worktree=Checkout(Path('/tmp'))))
 
 
 def _claim_thread(root: str, result_queue: Any, start: Event) -> None:
@@ -99,7 +99,7 @@ class TestConcurrentWire:
         comms = installed_comms(root)
         senders = [f"worker-{index}" for index in range(6)]
         for sender in senders:
-            comms.registry.declare(Thread(name=sender, tags=frozenset(), worktree=Checkout(Path('/tmp'))))
+            comms.registry.declare(NativeThread(name=sender, tags=frozenset(), worktree=Checkout(Path('/tmp'))))
 
         ctx = multiprocessing.get_context("spawn")
         _run_concurrently(

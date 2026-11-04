@@ -6,7 +6,6 @@ import asyncio
 from collections.abc import AsyncIterator, Iterable
 from contextlib import aclosing, asynccontextmanager
 from functools import partial
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .coordination_errors import Refused
@@ -21,7 +20,7 @@ from .config_options import (CatalogConfigOption,
 from .coordinator import Coordination
 from .nominal.field_codec import AcpSessionId, FieldCodec
 from .native_failures import NativePiUnavailable
-from .threads import ChosenModel, NextTurnConfiguration
+from .threads import ChosenModel, NextTurnConfiguration, Thread
 from .thread_model import CatalogSelection
 from .watched import FileSource
 
@@ -34,7 +33,6 @@ if TYPE_CHECKING:
     from .session_effects import SessionEffects
     from .session_lifecycle import SessionLifecycle
     from .input_drain import OwnerSession
-    from .threads import Thread
 
 
 class SessionConfigOptions:

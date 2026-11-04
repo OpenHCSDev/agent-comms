@@ -36,20 +36,20 @@ def test_unscanned_repository_is_pending_not_lost(head_bus, reviewed_source):
     github.put(source.github, ClosedListedPullRequest(
         7, 'closed/7', source.branch_commit, closed_at=stamp, updated=stamp,
         base='main', reviewable_times=(stamp,)))
-    repos = comms.registry.snapshot().commander_project.require().repository_names()
+    repos = comms.registry.snapshot().team_project.require().repository_names()
     plans = TeamHeartbeat()
 
     def rules(frame):
-        return (ClosedUnmergedPullRequest.scan_observed(comms, 'lead', (), frame),
-                ClosedPullRequestScanPending.scan_observed(comms, 'lead', (), frame))
+        return (ClosedUnmergedPullRequest.scan_observed(comms, (), frame),
+                ClosedPullRequestScanPending.scan_observed(comms, (), frame))
 
-    lost, pending = rules(capture_frame(comms, 'lead', ProgressRead(()), plans))
+    lost, pending = rules(capture_frame(comms, ProgressRead(()), plans))
     assert lost == ()
     assert {rule.repo for rule in pending} == set(repos)
 
     watch = ClosedPullRequestWatch()
     asyncio.run(watch.run(lambda: nullcontext(comms)))
-    lost, pending = rules(capture_frame(comms, 'lead', ProgressRead(()), plans))
+    lost, pending = rules(capture_frame(comms, ProgressRead(()), plans))
     assert {rule.request.pr for rule in lost} == {7}
     assert source.github not in {rule.repo for rule in pending}
 
@@ -67,9 +67,9 @@ def test_unrelated_closed_head_does_not_poison_its_repository(head_bus, reviewed
             base='main', reviewable_times=(stamp,)))
     watch = ClosedPullRequestWatch()
     asyncio.run(watch.run(lambda: nullcontext(comms)))
-    frame = capture_frame(comms, 'lead', ProgressRead(()), TeamHeartbeat())
+    frame = capture_frame(comms, ProgressRead(()), TeamHeartbeat())
     rules = {rule.request.pr: rule for rule in
-             ClosedUnmergedPullRequest.scan_observed(comms, 'lead', (), frame)}
+             ClosedUnmergedPullRequest.scan_observed(comms, (), frame)}
     assert set(rules) == {7, 10}
     assert rules[7].base == SharedCommitBase(source.main_commit)
     assert rules[10].base == UnrelatedCommitBase()
@@ -93,9 +93,9 @@ def test_closed_head_no_ref_reaches_is_compared_and_an_unservable_one_is_its_own
             number, f'closed/{number}', closed, updated=stamp, closed_at=stamp,
             base='main', reviewable_times=(stamp,)))
     asyncio.run(ClosedPullRequestWatch().run(lambda: nullcontext(comms)))
-    frame = capture_frame(comms, 'lead', ProgressRead(()), TeamHeartbeat())
+    frame = capture_frame(comms, ProgressRead(()), TeamHeartbeat())
     rules = {rule.request.pr: rule for rule in
-             ClosedUnmergedPullRequest.scan_observed(comms, 'lead', (), frame)}
+             ClosedUnmergedPullRequest.scan_observed(comms, (), frame)}
     assert rules[7].base == SharedCommitBase(source.main_commit)
     assert rules[10].base == UnservableCommitBase()
     assert rules[10].commits == (gone,)
@@ -136,14 +136,14 @@ def test_closed_unmerged_pull_request_flags_lost_commits(head_bus, reviewed_sour
         9, 'merged', landed, merge=PullRequestCommit(landed), merged=stamp, **common))
 
     def scan(frame):
-        return ClosedUnmergedPullRequest.scan_observed(comms, 'lead', (), frame)
+        return ClosedUnmergedPullRequest.scan_observed(comms, (), frame)
 
     watch = ClosedPullRequestWatch()
     plans = TeamHeartbeat()
 
     def capture():
         asyncio.run(watch.run(lambda: nullcontext(comms)))
-        return capture_frame(comms, 'lead', ProgressRead(()), plans)
+        return capture_frame(comms, ProgressRead(()), plans)
 
     frame = capture()
     found = {rule.request.pr: rule for rule in scan(frame)}
@@ -157,10 +157,10 @@ def test_closed_unmerged_pull_request_flags_lost_commits(head_bus, reviewed_sour
     assert judge.SupersededVerb in ClosedUnmergedPullRequest.clearing_verbs
     accepted = ReviewedHeadVerdict(VerdictReason('The owner implements the requested behavior without competing decisions.'))
     review = CommsHeadVerdictTool(request=request, operation=accepted, order=NoHeadOrder())
-    review.invoke(comms, review.arguments, caller=ThreadCaller('lead'))
+    review.invoke(comms, review.arguments, caller=ThreadCaller('colleague'))
     assert set(scan(capture())) == {lost, old_lost}
     ping = replace(RulePing.capture(lost), since=RecordedEventTime(lost.began()))
-    assert not ping.acted(TeamHistory.read(comms, frozenset(('lead',))))
+    assert not ping.acted(TeamHistory.read(comms, frozenset(('colleague',))))
     assert FieldCodec.decode(RulePing, FieldCodec.encode(ping)) == ping
 
     verdict = judge.SupersededVerb(
@@ -169,7 +169,7 @@ def test_closed_unmerged_pull_request_flags_lost_commits(head_bus, reviewed_sour
     assert verdict == SupersededHeadVerdict(VerdictReason(
         'The replacement includes the useful work and deliberately drops this obsolete implementation.'), 'P2')
     tool = CommsHeadVerdictTool(request=request, operation=verdict, order=NoHeadOrder())
-    tool.invoke(comms, tool.arguments, caller=ThreadCaller('lead'))
+    tool.invoke(comms, tool.arguments, caller=ThreadCaller('colleague'))
     assert set(scan(frame)) == {lost, old_lost}  # A later write cannot alter this snapshot.
     assert scan(capture()) == (old_lost,)
 

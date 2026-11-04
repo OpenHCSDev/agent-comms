@@ -276,7 +276,7 @@ class BoardReadTool(ThreadReadTool, declared_name=None):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsTeamLoadTool(BoardReadTool, declared_name="comms_commander_load"):
+class CommsTeamLoadTool(BoardReadTool, declared_name="comms_team_load"):
     label = "Measured teammate load"
     description = "Read retained teammate load with recorded service failures and its original completion clock."
 
@@ -673,7 +673,7 @@ class TeammateRead(
     UiRead[TeammateDetail],
     ReadTool,
     NativeToolRequest,
-    declared_name="comms_commander_unit",
+    declared_name="comms_team_unit",
 ):
     """One unit's card on a teammate's published frame, expanded with its orders' bounded
     instructions, stories, commits and activity. The held incarnations and orders select the
@@ -685,19 +685,19 @@ class TeammateRead(
         "bounded instructions, stories and commits, and its recent activity. "
         "Refuses when either incarnation or the teammate's assignment changed."
     )
-    commander: Annotated[
-        ThreadIncarnation, *tool_field("Team incarnation whose frame shows the card")
+    frame_owner: Annotated[
+        ThreadIncarnation, *tool_field("Teammate incarnation whose published frame shows the card")
     ]
     unit: Annotated[ThreadIncarnation, *tool_field("Teammate incarnation on that card")]
     orders: Annotated[tuple[OrderId, ...], *tool_field("The card's orders, exactly as published")]
 
     def apply(self, comms: Comms, reader: ReadAuthority) -> TeammateDetail:
         snapshot = comms.registry.snapshot()
-        if not self.commander.current(snapshot) or not self.unit.current(snapshot):
+        if not self.frame_owner.current(snapshot) or not self.unit.current(snapshot):
             raise ToolRefusedError(
                 "The selected teammate or teammate incarnation is no longer current"
             )
-        hud = TeamFrame.current(comms, self.commander.name)
+        hud = TeamFrame.current(comms, self.frame_owner.name)
         hud.require_current()
         for card in hud.units:
             if card.unit == self.unit:

@@ -16,9 +16,8 @@ from agent_comms.harness_install import Harness, PiHarness
 from agent_comms.importing import ImportLimits, KeptPiSession
 from agent_comms.repo import Checkout
 from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.threads import ExternalThread, NativeThread
 from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.threads import Thread
 from conftest import installed_comms
 
 
@@ -69,7 +68,7 @@ def test_import_source_copy_allows_other_writers_and_rechecks_name_before_publis
         try:
             assert paused_import.snapshot.entered.wait(5)
             name = "copied" if collision else "unrelated"
-            competitor = workers.submit(comms.registry.declare, Thread(
+            competitor = workers.submit(comms.registry.declare, NativeThread(
                 name, frozenset(), Checkout(tmp_path)))
             declared = competitor.result(timeout=2)
         finally:
@@ -90,8 +89,8 @@ def test_rehome_refuses_a_changed_original_before_publishing_the_staged_copy(
     tmp_path, paused_import,
 ):
     comms = installed_comms(tmp_path / "wire")
-    original = comms.registry.declare(Thread(
-        "external", frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution))
+    original = comms.registry.declare(ExternalThread(
+        "external", frozenset(), Checkout(tmp_path)))
     changed_project = tmp_path / "changed"
     changed_project.mkdir()
     with ThreadPoolExecutor(max_workers=2) as workers:
@@ -105,7 +104,7 @@ def test_rehome_refuses_a_changed_original_before_publishing_the_staged_copy(
         with pytest.raises(RelationViolationError):
             rehomed.result(timeout=5)
     current = comms.registry.require(original.name)
-    assert current.execution is ExternalThreadExecution
+    assert type(current) is ExternalThread
     assert current.project_path == changed_project
     assert not tuple((comms.root / "imported_sessions").iterdir())
 
@@ -114,7 +113,7 @@ def test_deleting_remains_fenced_while_cleanup_allows_unrelated_registry_writers
     comms = installed_comms(tmp_path / "wire")
     session = tmp_path / "victim.jsonl"
     session.write_bytes(b"saved original")
-    original = comms.registry.declare(Thread(
+    original = comms.registry.declare(NativeThread(
         "victim", frozenset(), Checkout(tmp_path),
         session_file=RegistrySessionLocation.from_path(str(session), comms.root)),
         StoppedThreadStatus())
@@ -126,7 +125,7 @@ def test_deleting_remains_fenced_while_cleanup_allows_unrelated_registry_writers
             while comms.registry.snapshot().status(original.name).declared_name != "deleting":
                 assert time.monotonic() < deadline
                 time.sleep(.01)
-            other = workers.submit(comms.registry.declare, Thread(
+            other = workers.submit(comms.registry.declare, NativeThread(
                 "unrelated", frozenset(), Checkout(tmp_path)))
             other.result(timeout=2)
             selected = comms.registry.require(original.name)

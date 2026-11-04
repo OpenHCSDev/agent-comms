@@ -12,17 +12,16 @@ from agent_comms.nominal.field_codec import TurnId
 from agent_comms.registry_store import RegistryStore
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 def test_copied_registry_resolves_turn_from_its_new_location(tmp_path):
     source = tmp_path / 'source'
     copied = tmp_path / 'copied'
     comms = wire(source)
-    comms.registry.declare(Thread(
+    comms.registry.declare(NativeThread(
         'worker', frozenset(), Checkout(source),
-        process_identity=ProcessIdentity.capture(os.getpid()),
-    ))
+        process_identity=ProcessIdentity.capture(os.getpid())))
     original = comms.agents.begin_turn(
         'worker', TurnId('0d8da7dc169a0c12f0a6f121b819ca38')
     ).turn_lease.record

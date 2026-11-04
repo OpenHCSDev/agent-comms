@@ -88,7 +88,7 @@ class ClosedPullRequestWatch(JoinedWatch):
 
     def watch_pass(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
         with opened_wire() as comms:
-            for repo in comms.registry.snapshot().commander_project.unique_repositories():
+            for repo in comms.registry.snapshot().team_project.unique_repositories():
                 self.observe_repository(comms.goals.todos, repo).commit(comms.goals.todos)
 
     @staticmethod

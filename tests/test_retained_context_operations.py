@@ -20,7 +20,7 @@ from agent_comms.input_key import AcpInputKey
 from agent_comms.context_segments.retained import RetainedSegment
 from agent_comms.turn_lease import NoTurnLease
 from stored_inputs import stored_inputs
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 ORIGINAL_UNKNOWN_KEY = AcpInputKey(InputId.mint())
@@ -41,7 +41,7 @@ def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
     saved_source(saved)
     goal = Goal("Original task goal, not an exported human constraint", original_goal_id,
         published_seq=0, revision=7)
-    owner = comms.registry.declare(Thread('reader', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(saved), comms.root), goal=goal))
+    owner = comms.registry.declare(NativeThread('reader', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(saved), comms.root), goal=goal))
     wording = "Original human constraint λ; preserve UNKNOWN and its source."
     original = comms.messaging.send_user_message(CommandTarget.named(owner.name), wording, worktree=owner.worktree)
     comms.messaging.pin_user_constraint(owner.name, original.reference, worktree=owner.worktree)
@@ -67,8 +67,8 @@ def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
 
 
 def test_original_human_pin_revision_drop_and_atomic_export(comms, capsys):
-    owner = comms.registry.declare(Thread('recipient', frozenset(), Checkout(comms.root)))
-    other = comms.registry.declare(Thread('unaddressed', frozenset(), Checkout(comms.root)))
+    owner = comms.registry.declare(NativeThread('recipient', frozenset(), Checkout(comms.root)))
+    other = comms.registry.declare(NativeThread('unaddressed', frozenset(), Checkout(comms.root)))
     wording = "Never replay UNKNOWN.\nPreserve exact λ /source/owned bytes."
     original = comms.messaging.send_user_message(CommandTarget.named(owner.name), wording, worktree=owner.worktree)
     original_prefix = read_history(comms)
@@ -159,7 +159,7 @@ async def original_input_consumer_journey(tmp_path, command):
         claim_scope=origin.claimed_identity.claimed_generation, target="beta", text=wording)
     inputs = agent.inputs.dispositions
     original_inputs = inputs.path.read_bytes()
-    other = comms.registry.declare(Thread('unaddressed', frozenset(), Checkout(Path(origin.project))))
+    other = comms.registry.declare(NativeThread('unaddressed', frozenset(), Checkout(Path(origin.project))))
 
     def invoke(*args):
         result = command(comms.root, args)

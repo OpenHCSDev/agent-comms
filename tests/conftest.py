@@ -56,12 +56,13 @@ from agent_comms.native_entries import NativeEvidenceScope
 from agent_comms.cursor_publication import CursorDelivery
 from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.team.order import Team
+from agent_comms.tool_caller import PeerCaller
 from agent_comms.repo import Repo
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.installer.probes.interpreter import InterpreterBuildProbe, RecordedInterpreterBuild
 from source_programs import SourcePrograms
 from source_revision_fixture import SourceRepository
-from agent_comms.threads import Thread
+from agent_comms.threads import Thread, NativeThread
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.registry_document import RegisteredTeamProject
 
@@ -425,7 +426,7 @@ def root(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def configured_repository(durable_home: Path, github_cli) -> Callable[[Comms, *tuple[Repo, ...]], Team]:
-    """Declare the temporary lead on its bus and use its real plan-bearing checkout."""
+    """Declare the temporary colleague on its bus and use its real plan-bearing checkout."""
     from agent_comms.team.order import Team
     from agent_comms.repo import Repo
 
@@ -434,7 +435,7 @@ def configured_repository(durable_home: Path, github_cli) -> Callable[[Comms, *t
     def configure(bus: Comms, *check_repositories: Repo) -> Team:
         github_cli.configure(*(repo.github for repo in (*check_repositories, repository)))
         return Team.on_root(
-            'lead', (*check_repositories, repository), bus.root,
+            'colleague', (*check_repositories, repository), bus.root,
         )
 
     return configure
@@ -570,19 +571,23 @@ def thread_registration(tmp_path_factory: pytest.TempPathFactory) -> Registratio
 def wired(comms: Comms) -> Comms:
     """A wire with PR111 (parent) and fixer (child) registered."""
     return declare_test_bus(comms, channels=("base", "auth"), threads=(
-        Thread(name='PR111', tags=frozenset({'base'}), worktree=Checkout(Path('/tmp/wt1'))),
-        Thread(name='fixer', tags=frozenset({'auth'}), worktree=Checkout(Path('/tmp/wt1')), parent=ForkedParent('PR111'), task=GivenThreadText('fix auth')),
+        NativeThread(name='PR111', tags=frozenset({'base'}), worktree=Checkout(Path('/tmp/wt1'))),
+        NativeThread(name='fixer', tags=frozenset({'auth'}), worktree=Checkout(Path('/tmp/wt1')), parent=ForkedParent('PR111'), task=GivenThreadText('fix auth')),
     ))
 
 
 
 
-def declare_team(comms: Comms, lead: Thread) -> Comms:
-    """The bus's team project, led by `lead`: the one test owner of a team, for a test whose
-    goals need a lead to assign them."""
-    comms.registry.declare(lead)
-    comms.registry.set_team_project(RegisteredTeamProject(
-        comms.registry.require(lead.name).incarnation, ()))
+def team_as(root: Path, teammate: str) -> Team:
+    """A team verb's context acting as ``teammate``, the CLI's ``--as``: no verb acts without
+    naming the teammate running it."""
+    return Team.read_root(root).model_copy(update={"actor": PeerCaller(teammate)})
+
+
+def declare_team(comms: Comms, colleague: Thread) -> Comms:
+    """The bus's team project with `colleague` as a teammate: the one test owner of a team."""
+    comms.registry.declare(colleague)
+    comms.registry.set_team_project(RegisteredTeamProject(()))
     return comms
 
 
@@ -623,22 +628,22 @@ def answer_deal(deal: PiRedeal) -> None:
 
 @pytest.fixture
 def team_bus(tmp_path):
-    """A bus whose team project `claude-code` leads, beside a teammate `unit-x`. Its
+    """A team bus with the teammates `claude-code` and `unit-x`. Its
     storage rule keeps scratch under the bus root, so no deal reaches the developer's home
     whatever HOME holds when the bus is built."""
-    bus = declare_team(installed_comms(tmp_path / "bus"), Thread(
+    bus = declare_team(installed_comms(tmp_path / "bus"), NativeThread(
         "claude-code", frozenset(), Checkout(tmp_path),
         model=DeclaredModel("anthropic/claude-opus-4-6")))
-    bus.registry.declare(Thread(
+    bus.registry.declare(NativeThread(
         "unit-x", frozenset(), Checkout(tmp_path),
         model=DeclaredModel("anthropic/claude-opus-4-6")))
     return bus
 
 
 @pytest.fixture
-def commanding_session(tmp_path, monkeypatch, team_bus):
-    """Claude session `s` bound to the thread that leads the registry's team project: the only
-    way a session leads, so hooks see the same answer the registry gives."""
+def team_session(tmp_path, monkeypatch, team_bus):
+    """Claude session `s` bound to the teammate `claude-code`, so hooks see the thread the
+    registry holds."""
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     WatchClaim("s").enrol(WatchRecord("claude-code", str(team_bus.root), (), tmp_path / "state"))
     return team_bus

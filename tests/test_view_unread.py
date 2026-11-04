@@ -13,16 +13,16 @@ from agent_comms.comms import wire
 from conftest import installed_comms
 from agent_comms.private_path import FileRevision
 from agent_comms.view_unread import Counted, ReplyIndex
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 def team_channel(root, *outsiders):
     """alice and bob in #team; each outsider registered with no tags."""
     comms = installed_comms(root)
     for name in ("alice", "bob"):
-        comms.registry.declare(Thread(name, frozenset({'team'}), Checkout(root)))
+        comms.registry.declare(NativeThread(name, frozenset({'team'}), Checkout(root)))
     for name in outsiders:
-        comms.registry.declare(Thread(name, frozenset(), Checkout(root)))
+        comms.registry.declare(NativeThread(name, frozenset(), Checkout(root)))
     return comms
 
 

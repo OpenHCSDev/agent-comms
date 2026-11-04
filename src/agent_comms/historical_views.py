@@ -66,7 +66,8 @@ from .registry_provenance import RegistryProvenance
 from .revision_views import BusSourceView
 from .store_files import SingleFileStore, SourceTier, StoreOwner
 from .thread_identity import UnrecordedThreadIncarnation
-from .threads import ThreadProvenance
+from .display_references import ReferenceContext
+from .threads import Thread, ThreadProvenance
 from .transcript_routes import TranscriptRoutes
 
 from collections.abc import Collection
@@ -77,7 +78,6 @@ if TYPE_CHECKING:
     from .catalog_document import CatalogDocument
     from .history_views import HistoryViews
     from .presentation import BusPresentation
-    from .threads import Thread
 
 
 @dataclass(frozen=True, slots=True)

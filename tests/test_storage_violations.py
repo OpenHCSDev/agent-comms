@@ -26,7 +26,7 @@ from agent_comms.storage_rules import StorageRule, UnitStorage
 from agent_comms.todos import PendingProblemOrder, PresentCheckout, ProgressRead
 from agent_comms.ui_model.teammate_state import TeammateState
 from order_scope_fixture import FIX_SCOPE
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 @pytest.mark.parametrize(
@@ -88,20 +88,20 @@ def test_storage_family_renders_each_broken_fact(
         json.dumps(FieldCodec.encode(StorageRule(checkout_base=base)))
     )
     comms = wire(root)
-    lead = comms.registry.declare(Thread("lead", frozenset(), Checkout(repository)))
+    colleague = comms.registry.declare(NativeThread("colleague", frozenset(), Checkout(repository)))
     configured_repository(comms)
     worker = comms.registry.declare(
-        Thread("worker", frozenset(), Checkout(home))
+        NativeThread("worker", frozenset(), Checkout(home))
     )
     comms.goals.todos.create(
         "P1",
         RepositoryName.from_wire("OpenHCSDev/agent-comms"),
         "Fix the filesystem paths",
-        creator=lead, assigner=lead.incarnation,
+        creator=colleague, assigner=colleague.incarnation,
         owner=worker,
         generation=storage_case_goal_id,
         review_at=RecordedEventTime(1000),
-        request=comms.goals.todos.add_request(lead.incarnation, "Fix the filesystem paths").id,
+        request=comms.goals.todos.add_request(colleague.incarnation, "Fix the filesystem paths").id,
         order=PendingProblemOrder(
             scope=FIX_SCOPE,
             owner=FileLine(__file__, 1),
@@ -114,9 +114,9 @@ def test_storage_family_renders_each_broken_fact(
             first_call_deadline=RecordedEventTime(130),
         ),
     )
-    frame = capture_frame(comms, "lead", ProgressRead())
+    frame = capture_frame(comms, ProgressRead())
     found = StorageViolation.broken(
-        comms, "lead", observed=TeammateState.current(comms, "lead", frame), frame=frame)
+        comms, observed=TeammateState.current(comms, frame), frame=frame)
     storage = UnitStorage.read(comms.registry.storage_rule, worker, RepositoryReads())
     assert {type(violation) for violation in found} == expected
     assert all(violation.storage == storage for violation in found)

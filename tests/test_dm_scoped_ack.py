@@ -14,12 +14,12 @@ from conftest import installed_comms
 from agent_comms.read_basis import DMSelection, EmptyTail
 from agent_comms.coordination_errors import DMPaintedBoundChanged, DMScopeChanged, TranscriptChanged
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.threads import Thread
+from agent_comms.threads import Thread, NativeThread
 from agent_comms.message_page import PageBounds
 
 
 def _thread(root: Path, name: str) -> Thread:
-    return Thread(name, frozenset({'talk'}), Checkout(root), process_identity=ProcessIdentity.capture(os.getpid()))
+    return NativeThread(name, frozenset({'talk'}), Checkout(root), process_identity=ProcessIdentity.capture(os.getpid()))
 
 
 def test_dm_page_marks_covered_range_preserving_omitted_older_unread(tmp_path: Path):

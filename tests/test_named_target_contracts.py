@@ -7,18 +7,16 @@ from agent_comms.channel_targets import CommandTarget, IncarnationThreadTarget, 
 from agent_comms.errors import HumanSendRefusedError, UnregisteredThreadError
 from agent_comms.historical_views import UnobservedConversation, DMDisplayHistory
 from agent_comms.read_basis import NamedViewer
-from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.threads import ExternalThread, NativeThread
 from bus_record_fixture import context_comms
-from agent_comms.threads import Thread
 
 
 @pytest.fixture
 def named_target_journey(tmp_path):
     comms = context_comms(tmp_path)
     worktree = Checkout(tmp_path)
-    comms.registry.declare(Thread(
-        "cli", frozenset({"team"}), worktree, execution=ExternalThreadExecution,
-    ))
+    comms.registry.declare(ExternalThread(
+        "cli", frozenset({"team"}), worktree))
     viewer = comms.messaging.user_identity(worktree).name
     comms.messaging.send("cli", "Alice", "Agent direct message")
     comms.messaging.send("cli", viewer, "Human direct message")
@@ -88,7 +86,7 @@ def test_retained_dm_refuses_a_removed_birth_at_every_selection_boundary(tmp_pat
     comms.registry.unregister("Alice")
     comms.registry.remove("Alice")
     if recreate:
-        comms.registry.declare(Thread("Alice", frozenset({"team"}), worktree))
+        comms.registry.declare(NativeThread("Alice", frozenset({"team"}), worktree))
     before = comms.bus.bus.revision()
     with pytest.raises(HumanSendRefusedError):
         comms.messaging.send_user_message(target, "must not reach successor", worktree=worktree)

@@ -14,7 +14,7 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.tool_denial import StorageDenied
 from agent_comms.storage_projection import StorageProjection
 from agent_comms.storage_rules import StorageRule
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.tool_caller import ThreadCaller
 from source_revision_fixture import SourceRepository
 
@@ -36,7 +36,7 @@ def test_canonical_sync_and_publication_preserve_source_and_prior_release(privat
     (checkout.path / "current").symlink_to("release/old")
     editing = Checkout.add(checkout.path, tmp_path / "editing", NewBranchStart("editing", "main"))
     editing_head = repository.git(editing.path, "rev-parse", "HEAD").strip()
-    worker = comms.registry.declare(Thread("publisher", frozenset(), editing))
+    worker = comms.registry.declare(NativeThread("publisher", frozenset(), editing))
     caller = ThreadCaller(worker.name)
     rule = comms.registry.storage_rule
     with pytest.raises(StorageDenied):

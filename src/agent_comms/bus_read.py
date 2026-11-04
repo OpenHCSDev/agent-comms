@@ -54,7 +54,7 @@ class OwnerScopedRead[Result: ToolResult = ToolResult](BusRead[Result], ThreadRe
             OwnerIdentityChangedError("Wire root disappeared before the read.")
         ).identity
         thread = self.require_recipient(cut.snapshot, owner)
-        binding = thread.execution.owner_binding(cut.snapshot, thread)
+        binding = thread.owner_binding(cut.snapshot)
         read = binding.select_read(
             partial(self.unavailable_answer, comms, owner, cut),
             partial(self.live_answer, comms, owner),

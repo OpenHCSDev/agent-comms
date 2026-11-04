@@ -44,7 +44,7 @@ from agent_comms.standing_rules import (
 )
 from agent_comms.thread_identity import ReportedTools, ToolName
 from agent_comms.thread_text import ForkedParent
-from agent_comms.threads import Thread
+from agent_comms.threads import Thread, NativeThread
 from agent_comms.todos import (
     ClaimOrder,
     DraftListedPullRequest,
@@ -72,7 +72,7 @@ pytest_plugins = ("github_fixture",)
 
 @dataclass
 class Team:
-    """One commander, one repository and the units its seeds add."""
+    """One teammate, one repository and the units its seeds add."""
 
     comms: Comms
     source: SourceRepository
@@ -81,7 +81,7 @@ class Team:
     request: str
     github: GitHubFixture
     problems: dict[str, str] = field(default_factory=dict)
-    commander: ClassVar[str] = "lead"
+    teammate: ClassVar[str] = "colleague"
 
     @property
     def repository(self) -> RepositoryName:
@@ -110,7 +110,7 @@ class Team:
 
     def observe(self) -> TeamObservation:
         return observe_team(
-            self.comms, self.comms.registry.require(self.commander), ProgressRead()
+            self.comms, ProgressRead()
         )
 
     def thread(self, name: str) -> Thread:
@@ -137,7 +137,7 @@ class Team:
         """Register a home, publish its order and populate the allocated order checkout."""
         declare_test_bus(
             self.comms,
-            threads=(Thread(name=name, tags=frozenset({"comms"}), worktree=Checkout(worktree)),),
+            threads=(NativeThread(name=name, tags=frozenset({"comms"}), worktree=Checkout(worktree)),),
         )
         todo = self.order(name, worktree, at=time.time() if at is None else at)
         rule = self.comms.registry.storage_rule
@@ -155,7 +155,7 @@ class Team:
             CreateProblemGoalAction(
                 problem=problem,
                 request=self.request,
-                assigner=self.thread(self.commander).incarnation,
+                assigner=self.thread(self.teammate).incarnation,
                 repo=self.repository,
                 text=f"Repair {name}",
                 review_at=RecordedEventTime(time.time() + 3600),
@@ -176,13 +176,13 @@ class Team:
 
     def claim(self, todo: Todo, number: int, head: str, *, at: float) -> OrderClaim:
         """The unit delivers through the claim writer, linking its pull request to the order."""
-        lead = self.thread(self.commander).incarnation
+        colleague = self.thread(self.teammate).incarnation
         unit = self.thread(todo.held().owner).incarnation
         original = self.comms.messaging.send(
-            self.commander, unit.name, todo.order.instructions(todo)
+            self.teammate, unit.name, todo.order.instructions(todo)
         ).message
         todo = self.comms.goals.todos.apply(
-            todo.id, OrderMessage(todo.revision, lead, original.message_id, at=RecordedEventTime(time.time()))
+            todo.id, OrderMessage(todo.revision, colleague, original.message_id, at=RecordedEventTime(time.time()))
         )
         claimed = OrderClaim.for_order(
             todo,
@@ -412,12 +412,11 @@ class LostToolsSeed(IncidentSeed):
         declare_test_bus(
             fleet.comms,
             threads=(
-                Thread(
+                NativeThread(
                     name="restarted",
                     tags=frozenset({"comms"}),
                     worktree=Checkout(fleet.source.checkout),
-                    parent=ForkedParent(fleet.commander),
-                ),
+                    parent=ForkedParent(fleet.teammate)),
             ),
         )
         registry.observe_offered_tools(
@@ -444,11 +443,11 @@ def fleet(comms, tmp_path, configured_repository, installed_runtime, github_cli)
         comms,
         channels=("comms",),
         threads=(
-            Thread(name=Team.commander, tags=frozenset({"comms"}), worktree=Checkout(source.checkout)),
+            NativeThread(name=Team.teammate, tags=frozenset({"comms"}), worktree=Checkout(source.checkout)),
         ),
     )
     request = comms.goals.todos.add_request(
-        comms.registry.require(Team.commander).incarnation, "Keep the team on its plans"
+        comms.registry.require(Team.teammate).incarnation, "Keep the team on its plans"
     ).id
     project = configured_repository(comms)
     github_cli.configure(source.github, *(repo.github for repo in project.repos))
@@ -546,7 +545,7 @@ def test_held_branch_rules_consume_the_complete_cut_after_worktree_mutation(
         with pytest.raises(WorkBranchError) as unprepared:
             pulls.require_branch_difference(path)
         assert str(path) in str(unprepared.value)
-        inputs = TeamInputs.prepare(built.comms, Team.commander, pulls, plans)
+        inputs = TeamInputs.prepare(built.comms, built.comms.registry.snapshot().team_project.require(), pulls, plans)
         difference = inputs.pulls.require_branch_difference(path)
         assert difference.branch == 'unpushed'
         (publication,) = difference.unpublished
@@ -565,7 +564,7 @@ def test_held_branch_rules_consume_the_complete_cut_after_worktree_mutation(
         prepared = git_case.snapshot()
         trace = tmp_path / 'prepared-observation.trace2.jsonl'
         monkeypatch.setenv('GIT_TRACE2_EVENT', str(trace))
-        observed = TeamObservation.read(built.comms, built.thread(Team.commander),
+        observed = TeamObservation.read(built.comms,
                                              inputs, plans=plans)
         monkeypatch.delenv('GIT_TRACE2_EVENT')
         assert inputs.pulls.require_branch_difference(path) == difference
@@ -581,7 +580,7 @@ def test_held_branch_rules_consume_the_complete_cut_after_worktree_mutation(
         assert not any(event.get('event') == 'child_start' and
                        any('upload-pack' in argument for argument in event.get('argv', ()))
                        for event in events)
-        fresh = observe_team(built.comms, built.thread(Team.commander),
+        fresh = observe_team(built.comms,
                                  ProgressRead(), plans=plans)
         if mutation == 'retire':
             assert path.resolve() not in fresh.frame.pulls.captured_branch_paths
@@ -624,8 +623,8 @@ def test_allocated_clone_owns_its_custom_upstream_not_the_primary(fleet, configu
         primary = pulls.checkout(todo.order.checked().check.directory).branches
         primary.prepare_upstreams()
         assert branch not in primary.upstreams
-        inputs = TeamInputs.prepare(built.comms, Team.commander, pulls, plans)
-        observed = TeamObservation.read(built.comms, built.thread(Team.commander),
+        inputs = TeamInputs.prepare(built.comms, built.comms.registry.snapshot().team_project.require(), pulls, plans)
+        observed = TeamObservation.read(built.comms,
                                              inputs, plans=plans)
         assert not any(isinstance(card, Unreadable) and card.unit.name == 'unpushed'
                        for card in observed.states)
@@ -662,7 +661,7 @@ def test_holders_in_one_plain_directory_share_no_worktree(fleet, tmp_path):
     declare_test_bus(
         built.comms,
         threads=tuple(
-            Thread(name=name, tags=frozenset({"comms"}), worktree=Checkout(home))
+            NativeThread(name=name, tags=frozenset({"comms"}), worktree=Checkout(home))
             for name in ("first-home", "second-home")
         ),
     )
@@ -711,7 +710,7 @@ def test_a_merged_order_running_its_proof_is_not_spinning(fleet):
     # This fixture's repository is no installed package: the HUD line says so, never raises.
     observed = built.observe()
     assert not any(type(rule) is SpinningTeammate for rule in observed.rules)
-    hud = current_hud(built.comms, Team.commander, observed.frame, observed.states)
+    hud = current_hud(built.comms, Team.teammate, observed.frame, observed.states)
     assert any(order.state == "Merged, no runtime install, waiting on the run"
                for unit in hud.units for order in unit.orders)
 

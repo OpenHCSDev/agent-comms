@@ -34,12 +34,12 @@ from agent_comms.store_files import ExclusiveLock
 from agent_comms.goal_states import ActiveGoal, PausedGoal
 from agent_comms.tools import CommsGoalHistoryTool
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 def _wire(tmp_path) -> Comms:
     comms = installed_comms(tmp_path / "wire")
-    comms.registry.declare(Thread('worker', frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(NativeThread('worker', frozenset(), Checkout(tmp_path)))
     return comms
 
 

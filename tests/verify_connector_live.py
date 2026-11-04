@@ -21,7 +21,7 @@ from pathlib import Path
 from connector_readiness import ConnectorReadiness
 from agent_comms.comms import wire
 from agent_comms.connector_store import ConnectorStore
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 
 
 def curl_call(port, token, body, *, arguments=None):
@@ -44,7 +44,7 @@ def main(scratch: Path):
         Bus.install(Bus.path_in(root))
         comms = wire(root)
         for name in ("claude-ai", "worker"):
-            comms.registry.declare(Thread(name, frozenset(), Checkout(base)))
+            comms.registry.declare(NativeThread(name, frozenset(), Checkout(base)))
         home = base / "home"
         store_root = home / ".local/state/agent-comms/connector"
         store_root.mkdir(mode=0o700, parents=True)

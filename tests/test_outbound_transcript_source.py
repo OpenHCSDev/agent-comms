@@ -27,7 +27,7 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import invoke_tool
 from agent_comms.transcripts import EarlierThan, TranscriptRead
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.notification_assignment import AssignmentActivityEvidence
 from agent_comms.assignment_states import DeferredAssignment
@@ -331,7 +331,7 @@ def test_published_source_binding_keeps_exact_original_request(tmp_path):  # noq
     assert comms.transcripts.bind_page_read("renamed", identity).identity is identity
     comms.registry.unregister("renamed")
     comms.registry.remove("renamed")
-    comms.registry.declare(Thread('renamed', frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(NativeThread('renamed', frozenset(), Checkout(tmp_path)))
     with pytest.raises(StaleRevision):
         comms.transcripts.bind_page_read("renamed", identity)
 

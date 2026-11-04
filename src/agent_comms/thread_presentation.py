@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, fields, replace
-from typing import TYPE_CHECKING, ClassVar, NoReturn, Self
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.coordination_errors import StaleRevision
 from agent_comms.errors import RelationViolationError, RouteChangedError, UnregisteredThreadError

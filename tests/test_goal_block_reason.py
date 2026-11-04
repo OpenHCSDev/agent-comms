@@ -20,7 +20,7 @@ from agent_comms.goal_actions import (
 from agent_comms.goal_scope import OneGoal
 from agent_comms.goal_states import UnrecordedBlockGoal
 from agent_comms.goals import Goal
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsGoalTool
 from agent_comms.turn_failure import BackendFailed
@@ -29,7 +29,7 @@ from conftest import installed_comms
 
 def _owner(tmp_path):
     comms = installed_comms(tmp_path)
-    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=Checkout(tmp_path)))
+    comms.registry.declare(NativeThread(name='worker', tags=frozenset(), worktree=Checkout(tmp_path)))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Finish selected work"))
     assert goal is not None
     return comms, goal

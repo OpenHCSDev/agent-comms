@@ -923,7 +923,7 @@ class HeadReviewOrder(HeadReviewRelation, declared_name=None):
         self, goals: Goals, request: PullRequestHead, actor: ThreadIncarnation
     ) -> None:
         snapshot = goals.registry.snapshot()
-        snapshot.commander_project.require_scope(snapshot, actor, request.repo)
+        snapshot.team_project.require_scope(snapshot, actor, request.repo)
 
     @abstractmethod
     def record_review(
@@ -1048,7 +1048,7 @@ class PromotedHeadReview(MergeHeadReview):
         self, goals: Goals, request: PullRequestHead, reviewer: ThreadIncarnation
     ) -> None:
         snapshot = goals.registry.snapshot()
-        project = snapshot.commander_project.require_scope(snapshot, reviewer, request.repo)
+        project = snapshot.team_project.require_scope(snapshot, reviewer, request.repo)
         inputs = self.require_combined(request, project.repos)
         goals.todos.require_input_sources(inputs)
 

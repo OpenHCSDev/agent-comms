@@ -46,7 +46,7 @@ from agent_comms.goal_presentation import IdleGoalExecution
 from agent_comms.goals import NoGoal
 from agent_comms.pi_wire import McpLiveAcknowledgement
 from agent_comms.thread_identity import ClaimedIdentity, RecordedThreadIncarnation
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.transcripts import NativeTranscriptCursor
 from agent_comms.turn_context import ContextManifest, NextContextTurn
 from agent_comms.turn_lease import ActiveTurn, FinishedTurn, TurnState
@@ -55,7 +55,7 @@ from agent_comms.turn_lease import ActiveTurn, FinishedTurn, TurnState
 def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
     from conftest import installed_comms
     comms = installed_comms(tmp_path)
-    comms.registry.declare(Thread('pilot', frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(NativeThread('pilot', frozenset(), Checkout(tmp_path)))
     read = comms.transcripts.capture_page_read("pilot")
     owner = ClaimedIdentity(RecordedThreadIncarnation("pilot", 1.0), 1)
     queue_scope = LiveQueueScope(

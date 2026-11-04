@@ -20,7 +20,7 @@ from agent_comms.goal_presentation import RunnableExecution, StandbyExecution, G
 from agent_comms.goal_waits import GoalWaits
 from goal_owner_fixture import canonical_goal_wire
 from agent_comms.goal_waits import RecordedGoalWait, NoGoalWait
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.goal_scope import OneGoal
 
 
@@ -28,7 +28,7 @@ def live_wire(tmp_path, *names, working=()):
     """A canonical goal wire whose named threads run in this process."""
     comms = canonical_goal_wire(tmp_path)
     for name in names:
-        comms.registry.declare(Thread(
+        comms.registry.declare(NativeThread(
             name, frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     for name in working:
         comms.agents.begin_turn(name, TurnId.mint())
@@ -58,7 +58,7 @@ def unchecked_cycle(comms, tmp_path, *, bound_turn):
 
 def test_edit_preserves_owner_pause_and_standby_requires_declared_targets(tmp_path):
     comms = canonical_goal_wire(tmp_path)
-    comms.registry.declare(Thread('parent', frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(NativeThread('parent', frozenset(), Checkout(tmp_path)))
     goal = comms.goals.update_goal("parent", SetGoalAction(text="Goal with @mention"))
     with pytest.raises(ValueError):
         standby(comms, "parent", goal)
@@ -181,7 +181,7 @@ def test_new_live_dependency_turn_keeps_old_wait_group_open(tmp_path, bound_old_
 def test_standby_refuses_canonical_reply_that_arrived_before_wait(tmp_path, read_by_human):
     comms = canonical_goal_wire(tmp_path)
     for name in ("parent", "child"):
-        comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path)))
+        comms.registry.declare(NativeThread(name, frozenset(), Checkout(tmp_path)))
     goal = comms.goals.update_goal("parent", SetGoalAction(text="Delegate work"))
     comms.messaging.send("child", "parent", "Finished immediately")
     if read_by_human:
@@ -198,7 +198,7 @@ def test_standby_on_a_paused_bridge_waits_only_while_its_process_lives(tmp_path,
     from agent_comms.thread_status import PausedBridgeThreadStatus
 
     comms = live_wire(tmp_path, "waiter")
-    teammate = Thread("teammate", frozenset(), Checkout(tmp_path))
+    teammate = NativeThread("teammate", frozenset(), Checkout(tmp_path))
     if bridge_alive:
         teammate = replace(teammate, process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.register(teammate, PausedBridgeThreadStatus())

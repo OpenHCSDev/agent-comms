@@ -74,13 +74,13 @@ def test_assignment_row_changes_attribute_only_their_view(
     from agent_comms.assignment_states import DeferredAssignment
     from agent_comms.coordination_cohort import sealed_cohort_assignments
     from agent_comms.coordinator import Coordination
-    from agent_comms.threads import Thread
+    from agent_comms.threads import NativeThread
     from agent_comms.notification_read import NotificationsRead
     from agent_comms.notification_reads import LiveNotificationRead
 
     root, root_id, comms, initial, _people = _root(private_directory, direct=True)
     for name in ('gamma', 'outside'):
-        comms.registry.declare(Thread(name, frozenset(), Checkout(private_directory)))
+        comms.registry.declare(NativeThread(name, frozenset(), Checkout(private_directory)))
     for name in ('alpha', 'gamma', 'outside'):
         message = publish_initial(comms, 'sender', name, f'Work for {name}')
         with Coordination(str(root / 'coordination.sqlite3')) as store:

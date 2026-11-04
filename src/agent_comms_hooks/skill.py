@@ -27,7 +27,6 @@ from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.held_orders import HeldOrders
 from agent_comms.pattern_sources import PostmortemFailure
 from agent_comms.registry_document import RegistrySnapshot
-from agent_comms.threads import Thread
 from agent_comms.comms import Comms
 from agent_comms.cli_bridges.shared import Binding
 from agent_comms.rule_deal import (
@@ -307,8 +306,7 @@ class DeckStart(DealtDeck):
         prompts = self.prompts()
         self.prepare(reader, prompts, trigger)
         return (
-            trigger.reason() + " " + self.notice(snapshot.commander_project.leads(snapshot)) + " "
-            + self.delivery().told(reader.sources(), self.audit),
+            trigger.reason() + " " + self.delivery().told(reader.sources(), self.audit),
             self.template_once(self.current().due),
             self.owner_words(prompts),
             reader.header(self, trigger, comms, snapshot),
@@ -360,8 +358,7 @@ class DeckStart(DealtDeck):
     def widened(self, reader: DeckReader, comms: Comms,
                 snapshot: RegistrySnapshot) -> tuple[str, ...]:
         """A session newly bound after startup receives the shared sources. Retained reads
-        and audit survive when the context remains; changing a tag or storage lead adds no
-        second deck or rank-specific source set."""
+        and audit survive when the context remains; changing a tag adds no second deck."""
         deck = self.deck(reader)
         if deck.exists():
             return ()
@@ -369,12 +366,6 @@ class DeckStart(DealtDeck):
             self, type(reader), lambda: self.dealt(reader, self.source.reason().trigger(self), comms, snapshot), ())
         deck.write_text(json.dumps(reader.slices()), encoding="utf-8")
         return said
-
-    @staticmethod
-    def notice(commanders: tuple[Thread, ...]) -> str:
-        names = [thread.name for thread in commanders]
-        return ("Storage lead: " + ", ".join(names) + ". All collaborators share responsibility." if names
-                else "No project storage lead is registered for this session.")
 
 
 @dataclass(frozen=True)

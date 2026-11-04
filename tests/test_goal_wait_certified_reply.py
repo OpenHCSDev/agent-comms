@@ -13,13 +13,13 @@ from agent_comms.goal_actions import GoalPrecondition, SetGoalAction, StandbyGoa
 from agent_comms.goal_presentation import GoalWaitTarget
 from goal_owner_fixture import canonical_goal_wire
 from agent_comms.goal_waits import NoGoalWait
-from agent_comms.threads import Thread
+from agent_comms.threads import NativeThread
 from agent_comms.goal_scope import OneGoal
 
 
 def register(comms, name):
     comms.registry.declare(
-        Thread(name, frozenset(), Checkout(comms.root), process_identity=ProcessIdentity.capture(os.getpid()))
+        NativeThread(name, frozenset(), Checkout(comms.root), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     return comms.registry.require(name)
 
