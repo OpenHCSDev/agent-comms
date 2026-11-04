@@ -15,6 +15,7 @@ import pytest
 
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.cli_verbs.fork import ForkCliCommand
+from agent_comms.heartbeat_delivery import OffHeartbeatDelivery, OnHeartbeatDelivery
 from agent_comms.thread_management import GivenTags
 from agent_comms.team_heartbeat import TeamHeartbeat, TeamObservation
 from agent_comms.comms import Comms
@@ -65,7 +66,13 @@ def notification_bus(held_bus, installed_runtime, monkeypatch, tmp_path):
     # endpoint rather than querying the operator's live account on every beat.
     monkeypatch.setattr(CodexConnection, "CONTROL_SOCKET", tmp_path / "no-account.sock")
     colleague = held_bus.registry.require("colleague")
-    held_bus.registry.register(replace(colleague, process_identity=ProcessIdentity.capture(os.getpid())))
+    assert colleague.heartbeat_delivery is OffHeartbeatDelivery
+    # These tests are about publication, which a thread turns on: the default is off.
+    held_bus.registry.register(replace(
+        colleague, heartbeat_delivery=OnHeartbeatDelivery,
+        process_identity=ProcessIdentity.capture(os.getpid())))
+    for teammate in ("worker", "outsider"):
+        held_bus.threads.set_heartbeat_delivery(teammate, OnHeartbeatDelivery)
     with LaunchRoot.from_path(held_bus.root).selected():
         yield held_bus
 
@@ -107,7 +114,6 @@ def test_heartbeat_delivery_preserves_membership_board_history_and_direct_messag
 
 
 def test_disabled_heartbeat_failure_retains_service_error_without_bus_publication(notification_bus):
-    from agent_comms.heartbeat_delivery import OffHeartbeatDelivery, OnHeartbeatDelivery
 
     comms = notification_bus
     comms.threads.set_heartbeat_delivery("colleague", OffHeartbeatDelivery)
@@ -130,7 +136,6 @@ def test_disabled_heartbeat_failure_retains_service_error_without_bus_publicatio
 
 
 def test_muted_pending_work_keeps_its_age_and_wakes_when_enabled(notification_bus):
-    from agent_comms.heartbeat_delivery import OffHeartbeatDelivery, OnHeartbeatDelivery
 
     comms = notification_bus
     teammate = comms.registry.require("colleague")
@@ -155,7 +160,6 @@ def test_muted_pending_work_keeps_its_age_and_wakes_when_enabled(notification_bu
 
 
 def test_muted_changed_quiet_display_publishes_once_when_enabled(notification_bus):
-    from agent_comms.heartbeat_delivery import OffHeartbeatDelivery, OnHeartbeatDelivery
 
     comms = notification_bus
     first = beat(comms)

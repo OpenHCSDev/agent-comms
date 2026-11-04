@@ -34,7 +34,7 @@ from .goals import (
     NoGoal,
 )
 from .launch_runtime import ThreadLaunch
-from .heartbeat_delivery import HeartbeatDelivery, OnHeartbeatDelivery
+from .heartbeat_delivery import HeartbeatDelivery, OffHeartbeatDelivery
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Executing
 from .locked_store import DurableFile, PatternFile
@@ -347,7 +347,7 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread")
     ] = field(default_factory=ReadyThreadWorkState, kw_only=True)
     heartbeat_delivery: Annotated[
         type[HeartbeatDelivery], RegistrationPolicy(InheritPrevious), WireOmitDefault()
-    ] = field(default=OnHeartbeatDelivery, kw_only=True)
+    ] = field(default=OffHeartbeatDelivery, kw_only=True)
     task: ThreadText = field(default_factory=NoThreadText)
     process_identity: Annotated[ProcessState, RegistrationPolicy(InheritApplied)] = field(
         default_factory=NoProcess
