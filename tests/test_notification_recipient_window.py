@@ -13,7 +13,7 @@ from agent_comms.comms import Comms
 from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery
 from agent_comms.coordinator import Coordination
 from agent_comms.harness_delivery_states import PersistedOutcome
-from agent_comms.notification_assignment import NotificationAssignment, NotificationSelection
+from agent_comms.notification_assignment import AssignmentSource, NotificationAssignment, NotificationSelection
 from agent_comms.notification_progress import AnsweredResponse
 from agent_comms.notification_evidence import AfterRecipient, AllOutcomes, OwnerOutcomes, RecipientLimit
 from agent_comms.message_notification import MessageNotification
@@ -85,9 +85,9 @@ def test_retained_cut_ignores_other_recipient_change_but_observes_its_own_proof(
     selection = NotificationSelection.of(AllOutcomes(), (source,), limit=RecipientLimit(3))
     before = NotificationAssignment.read(comms.root, selection)
     record_attempt(comms, source, len(source.recipients) - 1)
-    assert NotificationAssignment.changed((before,), comms.root) == ()
+    assert NotificationAssignment.changed((before,), AssignmentSource(comms.root)) == ()
     record_attempt(comms, source, 0)
-    assert NotificationAssignment.changed((before,), comms.root) == (before,)
+    assert NotificationAssignment.changed((before,), AssignmentSource(comms.root)) == (before,)
     changed = NotificationAssignment.read(comms.root, selection)
     assert tuple(changed.consumption) == ((source.recipients[0].recipient_lookup, source.reference),)
 
@@ -140,7 +140,7 @@ def test_independent_reply_changes_retained_evidence_without_claiming_context(
     reads = ReadLedger.at(comms.root).read()
     response = comms.messaging.send(recipient.canonical_thread, source.message.sender,
                                     "An independent answer", answers=(source.message.reference,)).message
-    assert NotificationAssignment.changed((before,), comms.root) == (before,)
+    assert NotificationAssignment.changed((before,), AssignmentSource(comms.root)) == (before,)
     after = NotificationAssignment.read(comms.root, selection)
     window = MessageNotification.delivery_window(comms.root, comms.registry, after)
     row, = window.outcomes[source.message.seq, source.message.message_id]
@@ -150,7 +150,7 @@ def test_independent_reply_changes_retained_evidence_without_claiming_context(
     assert ReadLedger.at(comms.root).read() == reads
     later = comms.messaging.send(recipient.canonical_thread, source.message.sender,
                                  "A later independent answer", answers=(source.message.reference,)).message
-    assert NotificationAssignment.changed((after,), comms.root) == ()
+    assert NotificationAssignment.changed((after,), AssignmentSource(comms.root)) == ()
     assert AnsweredResponse(later.reference, later.at_ms).answered(row) is row
 
 
@@ -167,7 +167,7 @@ def test_independent_reply_without_any_claim_is_retained_without_context_or_read
     assert before.rows == () and not before.consumption
     response = comms.messaging.send(recipient.canonical_thread, source.message.sender,
                                     "An answer without an input claim", answers=(message.reference,)).message
-    assert NotificationAssignment.changed((before,), comms.root) == (before,)
+    assert NotificationAssignment.changed((before,), AssignmentSource(comms.root)) == (before,)
     after = NotificationAssignment.read(comms.root, selection)
     assert after.rows == () and not after.consumption
     assert after.responses[recipient.recipient_lookup, message.reference] == AnsweredResponse(
