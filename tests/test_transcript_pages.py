@@ -10,6 +10,7 @@ from conftest import installed_comms, transcript_records
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.coordination_errors import TranscriptChanged
 import json
+import time
 from datetime import UTC, datetime
 from dataclasses import replace
 
@@ -279,3 +280,35 @@ def test_fork_header_stays_at_the_fork_point_while_the_parent_grows(tmp_path):
             parent_file.write(json.dumps(record) + "\n")
 
     assert [event.text for event in comms.transcripts.capture_page_read("child").read().events] == forked_view
+
+
+def test_a_fork_of_a_fork_stops_at_the_earlier_fork(tmp_path):
+    """A grandchild sees its grandparent's history only up to the parent's fork, not its own."""
+    root_path = tmp_path / "root.jsonl"
+    transcript(root_path, 2)
+    comms = installed_comms(tmp_path / "wire")
+    comms.registry.declare(
+        NativeThread('root', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(root_path), comms.root))
+    )
+    comms.registry.declare(
+        NativeThread('middle', frozenset(), Checkout(tmp_path), parent=ForkedParent('root'), task=GivenThreadText('Middle task'))
+    )
+    time.sleep(0.05)
+    comms.registry.declare(
+        NativeThread('leaf', frozenset(), Checkout(tmp_path), parent=ForkedParent('middle'), task=GivenThreadText('Leaf task'))
+    )
+    between_forks = datetime.fromtimestamp(comms.registry.require("middle").incarnation.wire_birth + 0.02, UTC)
+    assert between_forks.timestamp() < comms.registry.require("leaf").incarnation.wire_birth
+    with root_path.open("a") as root_file:
+        record = transcript_records.message(
+            {"role": "assistant", "content": [{"type": "text", "text": "After the middle fork"}],
+             "timestamp": int(between_forks.timestamp() * 1000)})
+        record["timestamp"] = between_forks.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        root_file.write(json.dumps(record) + "\n")
+
+    assert [event.text for event in comms.transcripts.capture_page_read("leaf").read().events] == [
+        "Record 0",
+        "Record 1",
+        "Forked from @middle. This thread started with:",
+        "Leaf task",
+    ]

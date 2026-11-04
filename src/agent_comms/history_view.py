@@ -33,6 +33,10 @@ class HistoryView(ABC):
         """One page's events with the fork rows where this view places them."""
         return events
 
+    def seen_from_fork(self, fork_birth: float) -> HistoryView:
+        """This history as a fork born at ``fork_birth`` sees it: only what came before."""
+        return ParentHistory(fork_birth)
+
 
 @dataclass(frozen=True, slots=True)
 class OwnHistory(HistoryView):
@@ -60,6 +64,10 @@ class ParentHistory(HistoryView):
 
     def kept(self, events: tuple[Event, ...]) -> tuple[Event, ...]:
         return tuple(event for event in events if event.before(self.fork_birth))
+
+    def seen_from_fork(self, fork_birth: float) -> HistoryView:
+        """A fork of a fork sees only what came before the earlier of the two forks."""
+        return ParentHistory(min(self.fork_birth, fork_birth))
 
     def framed(
         self, events: tuple[Event, ...], fork_rows: tuple[Event, ...], *,

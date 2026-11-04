@@ -11,7 +11,6 @@ from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from .history_view import ParentHistory
 from .agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
 from .channel_targets import DeclaredTag, Tag
 from .child_process import NoProcess, ProcessIdentity, ProcessState
@@ -419,8 +418,8 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread")
         visited.add(self.name)
         for name in self.parent.names():
             parent = registry.require(name)
-            for location, _ in parent.runtime.history_locations(parent, registry, visited):
-                yield location, ParentHistory(self.incarnation.wire_birth)
+            for location, view in parent.runtime.history_locations(parent, registry, visited):
+                yield location, view.seen_from_fork(self.incarnation.wire_birth)
 
     def contains_worktree(self, worktree: Checkout, rule: StorageRule) -> bool:
         """A project this conversation ran in, or this unit's physical home and extra checkouts."""
