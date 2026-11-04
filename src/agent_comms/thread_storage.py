@@ -21,9 +21,7 @@ from .nominal.field_codec import (
 from .repository_name import RepositoryName
 
 if TYPE_CHECKING:
-    from .repo import RepositoryReads
-    from .storage_rules import StorageRule
-    from .threads import Thread
+    from .storage_rules import CheckoutReuse, StorageRule
 
 StoragePath = Annotated[Path, PathText]
 
@@ -46,9 +44,8 @@ class RepositoryChoice(ABC):
     __slots__ = ()
 
     @abstractmethod
-    def reused_checkout(self, rule: StorageRule, owner: Thread, repository: RepositoryName,
-                        fresh: Path, reads: RepositoryReads) -> Path:
-        """The checkout this choice reuses, or ``fresh`` when no owned tree exists."""
+    def reused_checkout(self, reuse: CheckoutReuse) -> Path:
+        """The checkout this choice reuses, or the reuse's fresh path when no owned tree exists."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,18 +59,16 @@ class SelectedCheckout(RecordMember, RepositoryChoice):
         if not self.path.is_absolute():
             raise ValueError("A selected checkout requires an absolute path.")
 
-    def reused_checkout(self, rule: StorageRule, owner: Thread, repository: RepositoryName,
-                        fresh: Path, reads: RepositoryReads) -> Path:
-        return rule.require_selectable_checkout(owner, self.path, repository, reads)
+    def reused_checkout(self, reuse: CheckoutReuse) -> Path:
+        return reuse.selected(self.path)
 
 
 @dataclass(frozen=True, slots=True)
 class NoRepositoryChoice(RepositoryChoice):
     """No explicit choice: the current project, else the sole owned tree, else ``fresh``."""
 
-    def reused_checkout(self, rule: StorageRule, owner: Thread, repository: RepositoryName,
-                        fresh: Path, reads: RepositoryReads) -> Path:
-        return rule.unselected_checkout(owner, repository, fresh, reads)
+    def reused_checkout(self, reuse: CheckoutReuse) -> Path:
+        return reuse.unselected()
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,7 +79,8 @@ class StorageRoots(RecordMember, ThreadStorage):
     def __post_init__(self) -> None:
         if not self.scratch.is_absolute():
             raise ValueError("Storage scratch requires an absolute path.")
-        if len({choice.repository for choice in self.selected_checkouts}) != len(self.selected_checkouts):
+        repositories = {choice.repository for choice in self.selected_checkouts}
+        if len(repositories) != len(self.selected_checkouts):
             raise ValueError("A repository can have only one selected checkout.")
 
     def choice(self, repository: RepositoryName) -> RepositoryChoice:
