@@ -62,6 +62,8 @@ from .registry_store import RegistryEdit
 from .attempt_resolution import ComplianceDecision, OrderDecision, RetryDecision
 
 if TYPE_CHECKING:
+    from pydantic import JsonValue
+    from .runtime_server import AttachedRuntimeRequest
     from .goal_management import Goals
     from .registry_document import TeamProject
     from .goal_presentation import GoalSnapshot
@@ -187,21 +189,26 @@ class GoalAction[Result: GoalDeclaration](
     @classmethod
     async def submit_control(
         cls,
+        thread: ThreadIncarnation,
         observe: Callable[[], Awaitable[GoalSnapshot]],
-        invoke: Callable[..., Awaitable[dict]],
+        invoke: Callable[[AttachedRuntimeRequest], Awaitable[JsonValue]],
         text: str = "",
-    ) -> dict:
+    ) -> GoalDeclaration:
         goal = (await observe()).goal.require()
-        return await cls.submit_checkpoint(invoke, goal)
+        return await cls.submit_checkpoint(thread, invoke, goal)
 
     @classmethod
-    async def submit_checkpoint(cls, invoke: Callable[..., Awaitable[dict]], goal: Goal) -> dict:
+    async def submit_checkpoint(
+        cls, thread: ThreadIncarnation,
+        invoke: Callable[[AttachedRuntimeRequest], Awaitable[JsonValue]], goal: Goal,
+    ) -> GoalDeclaration:
+        from .acp_extension import GoalSnapshotReply
         from .runtime_requests import UpdateGoalRuntimeRequest
 
-        return await invoke(
-            FieldCodec.encode(UpdateGoalRuntimeRequest), status=cls,
-            goal_id=goal.id, expected_revision=goal.revision,
-        )
+        reply = await invoke(UpdateGoalRuntimeRequest(
+            thread=thread.name, status=cls, goal_id=goal.id, expected_revision=goal.revision,
+        ))
+        return FieldCodec.decode(GoalSnapshotReply, reply).goal
 
     def require_actor(self, actor: type) -> None:
         if not isinstance(self, actor):
@@ -557,10 +564,15 @@ class SetGoalAction(ReplacementGoalAction[Goal], OwnerInvocable, RuntimeInvocabl
     goal_id: GoalId = field(default_factory=GoalId.mint)
 
     @classmethod
-    async def submit_control(cls, observe, invoke, text: str = "") -> dict:
-        from .runtime_requests import SetGoalRuntimeRequest
+    async def submit_control(
+        cls, thread: ThreadIncarnation,
+        observe: Callable[[], Awaitable[GoalSnapshot]],
+        invoke: Callable[[AttachedRuntimeRequest], Awaitable[JsonValue]], text: str = "",
+    ) -> GoalDeclaration:
+        from .runtime_requests import GoalReply, SetGoalRuntimeRequest
 
-        return await invoke(FieldCodec.encode(SetGoalRuntimeRequest), text=text)
+        reply = await invoke(SetGoalRuntimeRequest(thread=thread.name, text=text))
+        return FieldCodec.decode(GoalReply, reply).goal
 
     def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         if goal.id == self.goal_id:
@@ -753,13 +765,16 @@ class RetryGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, Runt
         return GoalPrecondition(goal_id=OneGoal(goal_id))
 
     @classmethod
-    async def submit_checkpoint(cls, invoke, goal: Goal) -> dict:
-        from .runtime_requests import RetryGoalRuntimeRequest
+    async def submit_checkpoint(
+        cls, thread: ThreadIncarnation,
+        invoke: Callable[[AttachedRuntimeRequest], Awaitable[JsonValue]], goal: Goal,
+    ) -> GoalDeclaration:
+        from .runtime_requests import GoalReply, RetryGoalRuntimeRequest
 
-        return await invoke(
-            FieldCodec.encode(RetryGoalRuntimeRequest),
-            goal_id=goal.id, expected_revision=goal.revision,
-        )
+        reply = await invoke(RetryGoalRuntimeRequest(
+            thread=thread.name, goal_id=goal.id, expected_revision=goal.revision,
+        ))
+        return FieldCodec.decode(GoalReply, reply).goal
 
     def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:
         return ActiveGoal()
