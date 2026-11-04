@@ -129,13 +129,13 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
         """The header's identity column; decode_event reads it back as the message id."""
         return str(self.message.message_id)
 
-    def header(self, number: int, total: int) -> str:
-        return (f'{self.HEADER_PREFIX}{self.sender} · '
-                f'{self.identity} · {number}/{total}\n')
+    @property
+    def header(self) -> str:
+        return f'{self.HEADER_PREFIX}{self.sender} · {self.identity}\n'
 
     @cached_property
     def inline(self) -> str:
-        return self.header(1, 1) + self.message.body
+        return self.header + self.message.body
 
     @cached_property
     def shown_lines(self) -> tuple[str, ...]:
@@ -257,14 +257,12 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
 
     @classmethod
     def decode_header(cls, line: str) -> MonitorFrame:
-        columns = line.removeprefix(cls.HEADER_PREFIX).rsplit(' · ', 2)
-        if len(columns) != 3 or columns[2] != '1/1':
-            return ForeignMonitorFrame(text=line)
+        sender, _, message_id = line.removeprefix(cls.HEADER_PREFIX).rpartition(' · ')
         try:
-            identity = FieldCodec.decode(MessageId, columns[1])
+            identity = FieldCodec.decode(MessageId, message_id)
         except MalformedRecord:
             return ForeignMonitorFrame(text=line)
-        return MonitorShown(id=identity, sender=columns[0], lines=())
+        return MonitorShown.model_validate(dict(id=identity, sender=sender, lines=()))
 
     @classmethod
     def decode_event(cls, event: str) -> tuple[MonitorFrame, ...]:
@@ -293,20 +291,26 @@ class MonitorShown(MonitorFrame, declared_name='shown'):
     sender: str
     lines: tuple[str, ...]
 
-    def continued(self, line: str, decode: Callable[[str], MonitorFrame]) -> tuple[MonitorFrame, ...]:
+    def continued(
+        self, line: str, decode: Callable[[str], MonitorFrame],
+    ) -> tuple[MonitorFrame, ...]:
         """A line that is none of ours is this message's next body line."""
         if ClaudeMonitorFrame.claims(line):
             return super().continued(line, decode)
         return (self.model_copy(update=dict(lines=(*self.lines, line))),)
 
-    async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> tuple[MessageReference, ...]:
+    async def confirm(
+        self, bridge: LineMonitorBridge, record: ObservedMonitor,
+    ) -> tuple[MessageReference, ...]:
         """The one whole part this event proves, confirmed as any other part; an event that is
         not exactly the original's rendering confirms nothing and says so."""
         with bridge.uncertain_on_contention(self.id):
             for delivery in await bridge.attempts(self.id):
                 message = await bridge.message(delivery.reference)
-                if ClaudeMonitorFrame(message).observed_body != tuple(line.rstrip() for line in self.lines):
-                    await bridge.record_mismatch(delivery, 'Shown lines do not equal the original message')
+                observed = tuple(line.rstrip() for line in self.lines)
+                if ClaudeMonitorFrame(message).observed_body != observed:
+                    await bridge.record_mismatch(
+                        delivery, 'Shown lines do not equal the original message')
                     continue
                 return await MonitorPart(id=self.id, sender=self.sender, number=1, total=1,
                                          body=message.body).confirm(bridge, record)

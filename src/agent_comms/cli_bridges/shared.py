@@ -1515,7 +1515,9 @@ class MonitorFrame(TaggedWire, ABC, affix=""):
     ) -> tuple[MessageReference, ...]:
         return ()
 
-    def continued(self, line: str, decode: Callable[[str], MonitorFrame]) -> tuple[MonitorFrame, ...]:
+    def continued(
+        self, line: str, decode: Callable[[str], MonitorFrame],
+    ) -> tuple[MonitorFrame, ...]:
         """This frame and the next line of its event; only a frame with a body takes the line."""
         return self, decode(line)
 

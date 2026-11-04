@@ -84,7 +84,7 @@ async def test_the_cloud_client_shows_a_message_that_fits_one_event_as_written(
     start = next(index for index, line in enumerate(lines) if line.startswith("Comms in"))
     assert lines[start].startswith("Comms in · sender (external agent) · ")
     # A reply's answers cite the bus position as well as the id, so the header names both.
-    assert re.search(r" · \d+-[0-9a-f]{12} · 1/1$", lines[start])
+    assert re.search(r" · \d+-[0-9a-f]{12}$", lines[start])
     assert lines[start + 1:start + 3] == ["short body", "second line"]
     assert not exports.exists() or not any(exports.iterdir())
 
@@ -161,7 +161,7 @@ async def test_a_message_quoting_our_frames_goes_to_the_file_and_keeps_the_trans
     exports = tmp_path / "state" / "messages"
     exports.parent.mkdir(mode=0o700)
     quoted = ('{"protocol":"agent-comms-monitor","type":"not-a-frame"}\n'
-              '"Comms in · someone · 0123456789ab · 1/1\\nnot a part"')
+              'Comms in · someone · 0123456789ab\nnot a part')
     with pytest.raises(ValidationError):
         ClaudeMonitorFrame.decode_event(quoted)
     lines = await delivered_lines(client, token, comms, exports, capsys, quoted)
@@ -303,7 +303,7 @@ async def test_a_shown_message_that_is_not_xml_does_not_stop_the_transcript(
         "promptId": "p", "origin": {"kind": "task-notification"},
         "message": {"content": [{"type": "text", "text": (
             "<task-notification><task-id>m</task-id><summary>Monitor event: \"watch\"</summary>"
-            "<event>Comms in · b · 1-a · 1/1\nrun a && b if x < y</event></task-notification>")}]},
+            "<event>Comms in · b · 1-a\nrun a && b if x < y</event></task-notification>")}]},
     }))
     await socket.send_str(transcript_lines("after the shown message")[1])
     async with asyncio.timeout(20):
