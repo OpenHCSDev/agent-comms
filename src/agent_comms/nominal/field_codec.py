@@ -2287,6 +2287,10 @@ class ClaimId(Id128):
     pass
 
 
+class RpcCallId(Id128):
+    """One JSON-RPC call this client posts: its request id and its progress token."""
+
+
 class TurnId(Id128):
     pass
 
