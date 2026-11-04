@@ -245,7 +245,7 @@ class NativeTranscript(TranscriptSource):
         with closing(self.forward(context.session_entry_start, cut.offset)) as records:
             anchor = next(records)
             if not anchor.project(lambda original: original.entry.require_entry_id() == context.session_entry_id):
-                raise TranscriptChanged("Native answer input changed after its proof was read")
+                raise TranscriptChanged()
             own_turn = takewhile(
                 lambda record: not record.project(lambda original: original.entry.input_boundary), records)
             finals = tuple(record for record in own_turn if record.project(lambda original:
@@ -253,7 +253,7 @@ class NativeTranscript(TranscriptSource):
                     text for event in original.events for text in event.assistant_parts())))
             answered = anchor in self.inputs_for(finals, floor=context.session_entry_start)
         if not cut.holds(self.cut(), cut.offset):
-            raise TranscriptChanged("Native answer source changed during its read")
+            raise TranscriptChanged()
         return answered
 
     def _tool_call_times(self, since: float = -inf) -> Generator[float]:
@@ -549,13 +549,13 @@ class RetainedNativeTranscript(NativeTranscript):
 
     def require_revision(self, revision: FileObservation) -> None:
         if revision != self.revision:
-            raise TranscriptChanged("Retained native journal differs from its binding")
+            raise TranscriptChanged()
 
     def require_retained(self) -> None:
         self.require_revision(FileRevision.capture(self.path))
 
     def missing_cut(self, error: FileNotFoundError) -> SessionCut:
-        raise TranscriptChanged("Bound retained native journal could not be opened") from error
+        raise TranscriptChanged() from error
 
     def require_opened(self, stream: BinaryIO) -> None:
         self.require_revision(FileRevision.from_file(stream))
@@ -563,9 +563,9 @@ class RetainedNativeTranscript(NativeTranscript):
         try:
             stream.seek(0)
             if SessionEntry.read(stream.readline()).id != self.original.session_id:
-                raise TranscriptChanged("Retained native journal header differs from its binding")
+                raise TranscriptChanged()
         except MalformedRecord as error:
-            raise TranscriptChanged("Retained native journal header differs from its binding") from error
+            raise TranscriptChanged() from error
         finally:
             stream.seek(position)
 

@@ -683,7 +683,7 @@ class TranscriptReadState(RuntimeFile, PublishedSQLiteFile, ThreadOwnedState):
             for location in keys.runtime.read_locations():
                 key = location.read_key
                 if key in locations and locations[key] != location:
-                    raise TranscriptChanged("Logical source has conflicting read bindings")
+                    raise TranscriptChanged()
                 locations[key] = location
         if not revisions:
             return TranscriptUnread({name: ReplyUnread(0) for name in threads})

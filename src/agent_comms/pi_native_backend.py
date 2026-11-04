@@ -159,7 +159,7 @@ class RetainedPiSessionFile(PiSessionFile):
     def read_revision(self, observed: FileObservation) -> FileObservation:
         with self.transcript.reading():
             if observed != self.revision:
-                raise TranscriptChanged("Retained journal revision changed")
+                raise TranscriptChanged()
             return observed
 
     def read_inode(self, revision: FileRevision) -> int:
