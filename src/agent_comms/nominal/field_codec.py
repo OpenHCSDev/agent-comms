@@ -4021,14 +4021,6 @@ class ErrorRecord(SubclassUnion, affix=""):
     def decodes_tagged_records(cls) -> bool:
         return True
 
-    @staticmethod
-    def of(value: BaseException) -> ErrorRecord:
-        """The boundary: an outgoing error is foreign until it is recorded here."""
-        error_class = f"{type(value).__module__}.{type(value).__qualname__}"
-        if isinstance(value, DeclaredError):
-            return DeclaredErrorRecord(error_class, value.to_wire())
-        return ReportedErrorRecord(error_class, str(value))
-
     @abstractmethod
     def error(self, target: type[BaseException]) -> BaseException: ...
 
@@ -4053,7 +4045,7 @@ class ReportedErrorRecord(TaggedRecordMember, ErrorRecord):
         return ReportedError.reporting_for(target)(self.error_class, self.message)
 
 
-class _ExceptionDecoder(ValueDecoder[BaseException]):
+class _ExceptionDecoder(MroDispatch, ValueDecoder[BaseException]):
     """An error crosses as its ErrorRecord and arrives as the error that record answers for
     the field's type, refused when it is not one."""
 
@@ -4073,7 +4065,20 @@ class _ExceptionDecoder(ValueDecoder[BaseException]):
     def encode(self, value: object) -> object:
         if not isinstance(value, self.target):
             raise TypeError(f"Expected {self.target.__name__}, received {type(value).__name__}")
-        return FieldCodec.encode(ErrorRecord.of(value), ErrorRecord)
+        error_class = f"{type(value).__module__}.{type(value).__qualname__}"
+        recorded = self.handler_for(type(value))(value, error_class)
+        return FieldCodec.encode(recorded, ErrorRecord)
+
+    @handles(DeclaredError)
+    @staticmethod
+    def declared(value: DeclaredError, error_class: str) -> ErrorRecord:
+        return DeclaredErrorRecord(error_class, value.to_wire())
+
+    @handles(object)
+    @staticmethod
+    def reported(value: BaseException, error_class: str) -> ErrorRecord:
+        """Object stays after every declared capability, even on Exception-first errors."""
+        return ReportedErrorRecord(error_class, str(value))
 
 
 class _MemberDecoders(dict[object, ValueDecoder[object]]):
