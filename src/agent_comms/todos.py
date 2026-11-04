@@ -6371,6 +6371,14 @@ class OwnerRequestStore(DurableStore):
             )
             return tuple(islice(requests, None if limit < 0 else limit))
 
+    def open_requests_of(self, teammates: tuple[ThreadIncarnation, ...]) -> tuple[OwnerRequest, ...]:
+        """The open requests any of these teammates acts for, each once."""
+        with self.snapshot() as db:
+            return tuple(
+                request for request in OwnerRequest.stream(
+                    db, state=OpenRequestState(), order_by=("created_at", "id"), descending=True)
+                if any(teammate.acts_for(request.teammate) for teammate in teammates))
+
     def requesters(self) -> tuple[ThreadIncarnation, ...]:
         """Each owner an open request waits on, once: read from the requests, never by asking
         every thread the registry has ever held."""
