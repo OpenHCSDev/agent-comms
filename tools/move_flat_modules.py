@@ -17,9 +17,12 @@ src = root / "src" / "agent_comms"
 dest = src / package
 names = "|".join(modules)
 
-dest.mkdir(exist_ok=True)
-(dest / "__init__.py").touch()
-for module in modules:
+# A consumer repository (Toad, Textual) declares none of the modules: rewrite its references only.
+owns = (src / f"{modules[0]}.py").exists()
+if owns:
+    dest.mkdir(exist_ok=True)
+    (dest / "__init__.py").touch()
+for module in modules if owns else ():
     subprocess.run(["git", "-C", repo, "mv", f"src/agent_comms/{module}.py",
                     f"src/agent_comms/{package}/{module}.py"], check=True)
 
@@ -68,7 +71,7 @@ FROM_PACKAGE = re.compile(rf"(?m)^(\s*from\s+agent_comms)(\s+import\s+)({names})
 QUOTED_BARE = re.compile(rf"\"({names})\.py\"")
 
 for path in sorted({*(p for d in ("src", "tests", "tools", "stack") for p in (root / d).rglob("*.py")),
-                    root / "pyproject.toml"}):
+                    *(p for p in (root / "pyproject.toml",) if p.exists())}):
     text = path.read_text()
     original = text
     if path.is_relative_to(src):
