@@ -10,6 +10,8 @@ from itertools import islice
 from pathlib import Path
 from typing import ClassVar, Never, Self
 
+from . import HookRefused
+
 
 class ShellText(io.StringIO):
     """shlex skips comments with readline; the shell still needs their newline."""
@@ -525,8 +527,9 @@ class GroupParser(ShellParser):
         raise ValueError('Unterminated parenthesized command')
 
 
-class NotStandalone(ValueError):
-    """This shell syntax is outside the decoder's admitted grammar."""
+class NotStandalone(HookRefused):
+    """This shell syntax is outside the decoder's admitted grammar; every Bash refusal
+    answers it as its reason, and it is still the decoder's ValueError."""
 
 
 class LiteralShellParser(ShellParser):
