@@ -47,6 +47,7 @@ from agent_comms_hooks import ToolRefusedError
 from aiohttp import web
 from aiohttp.typedefs import Handler
 from aiohttp.web_urldispatcher import AbstractResource, ResourceRoute, SystemRoute
+from yarl import URL
 from pydantic import JsonValue
 
 
@@ -66,7 +67,7 @@ from .coordination_errors import CoordinationError, Refused
 from .work_branches import WorkBranchError
 from .nominal.field_codec import (
     Argument, FieldCodec, GitCommitText, MalformedRecord, NullMember, PathText, SingleFieldValue,
-    SubclassUnion, WireName, WireOmitDefault, RecordMember, boundary_decoder, projected,
+    SubclassUnion, WireName, WireOmitDefault, WireTransient, RecordMember, boundary_decoder, projected,
 )
 from .exporting import CancellableWireExport, WireExportCancelled, WireExportObserver, WireExportProgress
 from agent_comms.channel_targets import NamedTarget
@@ -91,9 +92,11 @@ from .coordinator import Coordination
 from .service_passes import ServicePassStore
 from .tool_result import ToolResult
 from .task_sources import OwnerRequestAttachment
+from .inbox_watch import InboxWatch, WatchTickets
+from .tool_caller import ThreadCaller
 from .tools import CommsSendTool, SendTool
 from .order_tools import CommsHeadVerdictTool, HeadVerdictTool, MessagePublished
-from .tool_request import ToolCall, ToolRequest, tool_field
+from .tool_request import ConnectorService, NoConnectorService, ToolCall, ToolRequest, tool_field
 
 JsonRpcId = int | str
 """A JSON-RPC request id, as the client chose it."""
@@ -127,6 +130,25 @@ class ConnectorSendTool(SendTool, ConnectorTool, declared_name=CommsSendTool.dec
     def attachment(self, comms: Comms, target: NamedTarget) -> OwnerRequestAttachment:
         requests = self.request.for_message(comms.goals.todos, target, comms.registry)
         return OwnerRequestAttachment(tuple(request.id for request in requests))
+
+
+@dataclass(frozen=True, kw_only=True)
+class ConnectorWatchTool(ConnectorTool, declared_name="comms_watch"):
+    label = "Watch Inbox"
+    description = (
+        "Get a one-use wss:// URL that pushes your inbox, so a message wakes this session. Open it "
+        "at once with your Monitor tool's ws source: each frame is one message as JSON, and your "
+        "thread shows as bridged while the socket stays open. The URL expires in a minute. When "
+        "the Monitor expires or the socket closes, call this again. Never post the URL anywhere."
+    )
+    service: Annotated[ConnectorService, WireTransient()] = field(
+        default_factory=NoConnectorService, compare=False)
+
+    def served_by(self, service: ConnectorService) -> Self:
+        return replace(self, service=service)
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> ToolResult:
+        return self.service.watch_url(caller.identity(comms).name)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -680,7 +702,7 @@ class StreamedLine:
 
 
 @dataclass(frozen=True)
-class Connector:
+class Connector(ConnectorService):
     """The MCP endpoint and the OAuth authorization server in front of it."""
 
     store: ConnectorStore
@@ -704,6 +726,33 @@ class Connector:
     watch_tasks: set[asyncio.Task[None]] = field(
         default_factory=set, init=False, repr=False, compare=False,
     )
+    inbox_sockets: dict[str, web.WebSocketResponse] = field(
+        default_factory=dict, init=False, repr=False, compare=False,
+    )
+
+    watch_tickets: WatchTickets = field(
+        default_factory=WatchTickets, init=False, repr=False, compare=False,
+    )
+
+    def watch_url(self, thread: str) -> ToolResult:
+        return self.watch_tickets.issued(thread, URL(self.issuer))
+
+    async def inbox_watch(self, request: web.Request) -> web.WebSocketResponse:
+        """The ticket in the path is the only credential; log_route logs the route's template.
+        A newer socket for a thread replaces the older one, as a re-armed watch does."""
+        ticket = self.watch_tickets.taken(request.match_info["ticket"])
+        socket = web.WebSocketResponse(heartbeat=25.0)
+        await socket.prepare(request)
+        replaced = self.inbox_sockets.get(ticket.thread)
+        self.inbox_sockets[ticket.thread] = socket
+        if replaced is not None:
+            await replaced.close()
+        try:
+            await InboxWatch(ticket.thread, self.root).carried(socket)
+        finally:
+            if self.inbox_sockets.get(ticket.thread) is socket:
+                del self.inbox_sockets[ticket.thread]
+        return socket
 
     def log_pending(self) -> None:
         """The existing task owners name pending work; idle watches may also be listed."""
@@ -731,6 +780,8 @@ class Connector:
         retirement = self.git_children.start_shutdown()
         for task in self.watch_tasks:
             task.cancel()
+        for socket in tuple(self.inbox_sockets.values()):
+            await socket.close()
         await join_retirement(retirement)
 
     async def stop_calls(self, app: web.Application) -> None:
@@ -771,7 +822,7 @@ class Connector:
         with self.opened_wire() as comms:
             acting, rest = caller.acting(arguments)
             caller.prepare_call(comms, acting)
-            return tool.decoded(comms, rest).bound(observer).replied(comms, acting)
+            return tool.decoded(comms, rest).bound(observer).served_by(self).replied(comms, acting)
 
     def cancel_call(self, request_id: JsonRpcId) -> None:
         """A cancel names a running observed call by its request id; any other call runs on."""
@@ -798,6 +849,7 @@ class Connector:
                 web.post("/token", self.token),
                 web.post("/mcp", self.mcp),
                 web.get("/observe", self.observe),
+                web.get("/watch/{ticket}", self.inbox_watch),
             ]
         )
         return app
