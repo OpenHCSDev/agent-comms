@@ -19,7 +19,7 @@ from agent_comms.locked_store import RegistryFile, RootFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceHolder
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.registry_document import RegistryDocument
-from agent_comms.store_files import AtomicFile
+from agent_comms.registry_store import RegistryStore
 
 
 class TeamProjectLead(Carry):
@@ -45,5 +45,5 @@ class TeamProjectLead(Carry):
         if apply:
             MaintenanceBarrier(path).read().require_held_by(
                 MaintenanceHolder.current(), "Drop the stored team lead")
-            AtomicFile(path).write_text(json.dumps(document, indent=2))
+            RegistryStore(path).carry_text(json.dumps(document, indent=2))
         return Carried(1, rewritten=(path.relative_to(self.root),) if apply else ())

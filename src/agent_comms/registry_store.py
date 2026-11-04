@@ -538,6 +538,13 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         source.revision.require(FileNotFoundError(self.path))
         self.cache.entry = RegistryRevision(source, document.copy(), raw)
 
+    def carry_text(self, text: str) -> None:
+        """A carry's rewrite of the stored registry, before the current decoder can read its old
+        form: under the exclusive lock and through the private guard, which records the new
+        bytes' digest so the next read accepts them."""
+        with self.guarded_write():
+            self._write_unlocked(text)
+
     def _write_unlocked(self, text: str) -> None:
         # The two-file private guard protocol cannot use A8's rollback writer.
         self.cache.entry = UncachedRegistry()
