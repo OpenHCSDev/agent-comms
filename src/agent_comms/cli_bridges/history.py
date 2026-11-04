@@ -61,6 +61,11 @@ class ClaudeHistory(HarnessHistory):
     harness = ClaudeCodeHarness
 
 
+class RemoteWatchHistory(ClaudeHistory):
+    """A Claude session on another machine, watching its thread's inbox through Core: it reads
+    nothing on this machine and only names the delivery attempts its watch records."""
+
+
 class CodexHistory(HarnessHistory):
     harness = CodexHarness
 

@@ -10,14 +10,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, ClassVar
 
-from .agent_inbox import SecondsWait, TakenInputPosition, TakenInputStart
+from .agent_inbox import SecondsWait
 from .command import Command
 from .declared_verb import DeclaredVerb
 from .nominal.field_codec import Argument, FieldCodec, PathText, boundary_decoder
 from .connector_profile import ThreadCredential
 from .messages import Message
 from .remote_core import ConnectorCalls, RemoteThreadAccess
-from .tools import CommsInboxTool
+from .tools import CommsInboxTakenTool, CommsInboxTool
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -52,14 +52,15 @@ class WatchInboxVerb(RemoteThreadVerb, declared_name="watch-inbox"):
         return 0
 
     def messages(self, ctx: ConnectorCalls[ThreadCredential]) -> Iterator[Message]:
-        """Each untaken message once, in order; a read that finds none waits on Core again."""
-        after: TakenInputPosition = TakenInputStart()
+        """Each untaken message once, in order, across restarts: once the caller has handled a
+        message it is recorded as taken, so a restart replays at most the one in hand. A read
+        that finds none waits on Core again."""
         wait = SecondsWait(self.seconds)
         while True:
-            page = ctx.call(CommsInboxTool(thread=ctx.credential.thread, after=after, wait=wait))
+            page = ctx.call(CommsInboxTool(thread=ctx.credential.thread, wait=wait))
             for message in page.messages:
                 yield message
-                after = after.advanced(message.reference)
+                ctx.call(CommsInboxTakenTool(reference=message.reference))
 
 
 @boundary_decoder

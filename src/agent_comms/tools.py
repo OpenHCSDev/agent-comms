@@ -63,6 +63,10 @@ from agent_comms.cli_verbs.threads import ThreadsCliCommand
 from .config_options import ConfigOptions
 from .cli_command import PreparedTargetAction, TargetAction, TargetActionCommand, TargetEdit
 from .cli_result import CliResult, TargetEditResult
+from .coordination_database import CoordinationStore
+from .coordinator import Coordination
+from .harness_delivery_states import DeliveredOutcome
+from .coordination_tables.harness_deliveries import HarnessDelivery
 from .coordination_tables.refusals import SendRefusal
 from .display_order import ChannelSort, ThreadSort
 from .errors import RelationViolationError
@@ -102,7 +106,7 @@ from .turn_context import ContextManifest
 from .importing import ImportedSessionMetadata, ThreadImported
 from .exporting import WireExportFormat, WireExportLimit, WireExportProvenance, WireExportScope
 from .historical_views import AllHistoricalSenders, HistoricalSenders, HistoricalThread
-from .cli_bridges.history import ExpectedSession, OfflineHistory
+from .cli_bridges.history import ExpectedSession, OfflineHistory, RemoteWatchHistory
 from .harness_install import Harness
 from .thread_management import ImportDirectory
 from .registry_document import RegistryEntry
@@ -1798,6 +1802,41 @@ class CommsInboxTool(NativeToolRequest[ToolCaller, InboxPageRead]):
             page.page.messages, page.remaining, tuple(comms.goals.unresolved_inputs(thread)),
             standby_review=review,
         )
+
+
+@dataclass(frozen=True)
+class InboxTaken(ToolResult):
+    """The message a remote harness received, which has now left its thread's inbox."""
+
+    reference: MessageReference
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsInboxTakenTool(NativeToolRequest[ToolCaller, InboxTaken]):
+    label = "Comms Inbox Taken"
+    description = (
+        "Record that this thread's remote harness received its oldest inbox message, so the "
+        "message leaves the inbox and a restarted watch does not replay it. Refuses any other "
+        "message: the inbox decides what is this thread's, in order."
+    )
+    reference: Annotated[MessageReference, *tool_field("The message the harness received")]
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> InboxTaken:
+        identity = caller.identity(comms)
+        oldest = comms.bus.inbox_at(
+            identity.name, comms.registry.snapshot(), CommandTarget.named(AnyChannel.address()),
+            after=TakenInputStart(), bounds=PageBounds(limit=1),
+        ).page.messages
+        if self.reference not in tuple(message.reference for message in oldest):
+            raise ToolRefusedError(
+                f"{self.reference} is not {identity.name}'s oldest inbox message.")
+        delivery = HarnessDelivery(
+            RemoteWatchHistory, identity.require_recorded().lookup, self.reference.message_id,
+            self.reference.seq, DeliveredOutcome)
+        with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
+            with store.session.writing() as db:
+                delivery.begin(store.assignments, db)
+        return InboxTaken(self.reference)
 
 
 @dataclass(frozen=True, kw_only=True)
