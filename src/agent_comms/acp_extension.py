@@ -46,13 +46,13 @@ from .nominal.field_codec import (
 )
 from .goal_presentation import GoalSnapshot, GoalExecution
 from .input_attempt import InputAttempt
-from .input_origin import InputOrigin, UnattributedInputOrigin
+from .input_origin import HumanInputOrigin, InputOrigin, UnattributedInputOrigin
 from .native_runtime_input import CurrentNativeCursor
 from .owner_protocol import IncompatibleOwner
 from agent_comms.pi_wire import McpLiveAcknowledgement
 from .reported_turn import ReportedTurn, ReportedTurnState
 from .routing import MessageRoute, NoMessageRoute
-from .thread_identity import ClaimScoped, ClaimedIdentity, ThreadIncarnation
+from .thread_identity import ClaimScoped, ThreadIncarnation
 from .tool_result import ToolResult
 from .transcripts import (
     LivePageSource, NativeCommittedPrefix, PageSource, TranscriptCursor, TranscriptPage, TranscriptRead, TranscriptReadIdentity,
@@ -518,7 +518,7 @@ class QueueProjection(DeclaredFamily, affix="QueueProjection"):
     def without_scope(self) -> None:
         """Do not offer queue access while its state is missing or still loading."""
 
-    def input_identity(self, acquire_scope: Callable[[], QueueScope]) -> ClaimedIdentity:
+    def capture_human_input(self, comms, acquire_scope: Callable[[], QueueScope]) -> HumanInputOrigin:
         """Refuse input until the queue's current state has been read."""
         raise ValueError(self.feedback(True))
 
@@ -568,9 +568,8 @@ class AvailableQueueProjection(QueueProjection):
     def without_scope(self) -> None:
         raise ValueError('Available input queue has no original attachment scope.')
 
-    def input_identity(self, acquire_scope: Callable[[], QueueScope]) -> ClaimedIdentity:
-        """The identity queued input claims; Core's host captures its author witness."""
-        return acquire_scope().claimed_identity
+    def capture_human_input(self, comms, acquire_scope: Callable[[], QueueScope]) -> HumanInputOrigin:
+        return HumanInputOrigin.capture(comms, acquire_scope().claimed_identity)
 
 
 @dataclass(frozen=True)

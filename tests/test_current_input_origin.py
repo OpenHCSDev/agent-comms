@@ -64,8 +64,6 @@ async def test_queue_observation_owns_capture_and_rejects_malformed_available_sc
         AvailableQueueProjection, PendingQueueProjection, QueueChangedUpdate,
         LiveQueueScope, NoQueueScope, UnavailableQueueProjection,
     )
-    from agent_comms.core_access import LocalCoreAccess
-    from agent_comms.tools import CommsCaptureHumanInputTool
     comms, agent = live_owner
     scope = await agent.inputs.queue_binding(AcpSessionId('beta'))
     assert scope == LiveQueueScope(
@@ -78,15 +76,13 @@ async def test_queue_observation_owns_capture_and_rejects_malformed_available_sc
         def unavailable_scope():
             raise AssertionError('Unavailable projection acquired input scope')
         with pytest.raises(ValueError):
-            observation.projection.input_identity(unavailable_scope)
+            observation.projection.capture_human_input(comms, unavailable_scope)
     malformed = FieldCodec.encode(QueueChangedUpdate(scope, 0, AvailableQueueProjection()))
     malformed['scope'] = None
     with pytest.raises(ValueError):
         FieldCodec.decode(QueueChangedUpdate, malformed)
     observation = QueueChangedUpdate(scope, 0, AvailableQueueProjection())
-    assert observation.projection.input_identity(lambda: scope) == scope.claimed_identity
-    assert LocalCoreAccess(comms).call(
-        CommsCaptureHumanInputTool(claimed_identity=scope.claimed_identity)) == capture(comms)
+    assert observation.projection.capture_human_input(comms, lambda: scope) == capture(comms)
     assert not stored_inputs(agent.inputs.dispositions.root).rows
 
 
