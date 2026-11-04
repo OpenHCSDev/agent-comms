@@ -60,8 +60,14 @@ class HttpsMcpEndpoint(SingleFieldValue):
             raise MalformedRecord(refusal)
 
 
+class ConnectorCredential:
+    """The bearer a connector client presents; the server decides what it may do."""
+
+    token: BearerSecret
+
+
 @dataclass(frozen=True)
-class UiCredential:
+class UiCredential(ConnectorCredential):
     """The one returned secret and immutable issuance facts, not client-side authority."""
 
     grant_id: UiGrantId
@@ -71,18 +77,27 @@ class UiCredential:
 
 
 @dataclass(frozen=True)
-class UiConnectionProfile:
-    """Local UI configuration. The server still decides expiry, scope and revocation."""
+class ThreadCredential(ConnectorCredential):
+    """A thread grant's secret: the bearer acts as this one bus thread until reissued."""
+
+    thread: str
+    token: BearerSecret = field(repr=False)
+
+
+@dataclass(frozen=True)
+class ConnectorProfile:
+    """Private connection data for one connector. The server still decides expiry, scope
+    and revocation."""
 
     endpoint: HttpsMcpEndpoint
-    credential: UiCredential
+    credential: ConnectorCredential
 
     def write_new(self, path: Path) -> Path:
         """Publish privately and atomically; never replace an existing credential."""
         path = path.expanduser()
         path = path.parent.resolve() / path.name
         PrivateDirectoryRole.make_parents(path.parent)
-        refusal = ValueError("The UI profile requires an owner-only private directory")
+        refusal = ValueError("A connector profile requires an owner-only private directory")
         directory = PrivateDirectoryRole.read(path.parent, refusal)
         try:
             ExclusiveDirectoryAtomicFile(path=path, directory=directory).write_text(
@@ -95,9 +110,23 @@ class UiConnectionProfile:
     def read(cls, path: Path) -> Self:
         """Decode once from a private regular file, without following a leaf symlink."""
         descriptor = PrivateFileRole.read(
-            path.expanduser(), ValueError("The UI profile is not a private credential file"))
+            path.expanduser(), ValueError("The connector profile is not a private credential file"))
         with os.fdopen(descriptor, "r", encoding="utf-8") as source:
             return FieldCodec.decode(cls, FieldCodec.parse(source.read()))
+
+
+@dataclass(frozen=True)
+class UiConnectionProfile(ConnectorProfile):
+    """An owner UI's profile: an expiring grant with a revocable public ID."""
+
+    credential: UiCredential
+
+
+@dataclass(frozen=True)
+class ThreadConnectionProfile(ConnectorProfile):
+    """One bus thread's profile: its harness reads that thread's inbox from another machine."""
+
+    credential: ThreadCredential
 
 
 @dataclass(frozen=True)

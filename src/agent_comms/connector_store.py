@@ -17,7 +17,8 @@ from .connector_caller import (
     UiCaller, UiReadCaller,
 )
 from .connector_profile import (
-    BearerSecret, HttpsMcpEndpoint, UiConnectionProfile, UiCredential, UiGrantId, UiGrantSummary,
+    BearerSecret, HttpsMcpEndpoint, ThreadConnectionProfile, ThreadCredential, UiConnectionProfile,
+    UiCredential, UiGrantId, UiGrantSummary,
 )
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import FieldCodec, NominalSpelling, NominalText, RootId
@@ -309,6 +310,13 @@ class ConnectorGrants:
             held.credential(token),
         )
 
+    def thread_issued(self, thread: str) -> DocumentChange[ConnectorGrants, ThreadCredential]:
+        """A fresh bearer for one thread; it replaces any earlier grant for that thread."""
+        token = BearerSecret(secrets.token_urlsafe(32))
+        return DocumentChange(replace(self, access={
+            key: grant for key, grant in self.access.items() if not grant.holds_thread(thread)
+        } | {digest(token): ThreadGrant(thread)}), ThreadCredential(thread, token))
+
     def ui_revoked(self, grant_id: UiGrantId) -> ConnectorGrants:
         return replace(self, access={
             key: grant for key, grant in self.access.items()
@@ -355,14 +363,19 @@ class ConnectorStore(SingleFileStore, CarriedDocument[ConnectorGrants], Connecto
     def empty(self) -> ConnectorGrants:
         return ConnectorGrants()
 
-    def thread_granted(self, thread: str) -> str:
-        token = secrets.token_urlsafe(32)
-        return self.update(lambda grants: DocumentChange(
-            replace(grants, access={
-                key: grant for key, grant in grants.access.items() if not grant.holds_thread(thread)
-            } | {digest(token): ThreadGrant(thread)}),
-            token,
-        ))
+    def thread_granted(self, thread: str) -> BearerSecret:
+        return self.update(lambda grants: grants.thread_issued(thread)).token
+
+    def publish_thread_profile(
+        self, thread: str, endpoint: HttpsMcpEndpoint, path: Path,
+    ) -> Path:
+        """Publish one thread's private profile before activating its bearer, in one owned
+        edit, as publish_ui_profile does; a failed publication never commits a grant."""
+        def publish(grants: ConnectorGrants) -> DocumentChange[ConnectorGrants, Path]:
+            changed = grants.thread_issued(thread)
+            profile = ThreadConnectionProfile(endpoint, changed.result).write_new(path)
+            return DocumentChange(changed.document, profile)
+        return self.update(publish)
 
     def publish_ui_profile(
         self, namespace: RootId, endpoint: HttpsMcpEndpoint, path: Path,

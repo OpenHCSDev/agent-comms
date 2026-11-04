@@ -1178,6 +1178,24 @@ class GrantUiVerb(ConnectorRootOptions, declared_name="grant-ui"):
 
 
 @dataclass(frozen=True, kw_only=True)
+class GrantThreadVerb(ConnectorVerb, declared_name="grant-thread"):
+    help = "Provision one bus thread's private profile, replacing any earlier grant for it"
+
+    thread: Annotated[str, Argument(flags=("--thread",), options={"help": "Bus thread name"})]
+    endpoint: Annotated[
+        HttpsMcpEndpoint,
+        Argument(flags=("--endpoint",), options={"help": "Public HTTPS MCP resource URL"}),
+    ]
+    profile: Annotated[
+        Path, PathText,
+        Argument(flags=("--profile",), options={"help": "New private profile; never overwritten"}),
+    ]
+
+    def apply(self, ctx: ConnectorStore) -> str:
+        return str(ctx.publish_thread_profile(self.thread, self.endpoint, self.profile))
+
+
+@dataclass(frozen=True, kw_only=True)
 class RevokeUiVerb(ConnectorVerb, declared_name="revoke-ui"):
     help = "Revoke one UI grant by public ID, leaving other grants untouched"
 

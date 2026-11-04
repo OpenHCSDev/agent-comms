@@ -19,7 +19,10 @@ from multiprocessing.connection import Connection
 from yarl import URL
 
 from .connector import CancelledMessage, JsonRpcId, StreamedLine, ToolsCallMessage, ToolsCallReply
-from .connector_profile import HttpsMcpEndpoint, UiConnectionProfile, UiCredential
+from .connector_profile import (
+    ConnectorCredential, HttpsMcpEndpoint, ThreadConnectionProfile, ThreadCredential,
+    UiConnectionProfile, UiCredential,
+)
 from .core_access import CoreAccess
 from .exporting import WireExportCancelled
 from .nominal.field_codec import FieldCodec
@@ -139,12 +142,12 @@ class ConnectorObservationPeer(ObservationPeer):
         return ConnectorObserverClosed(self.url, self.ending)
 
 
-class ConnectorClient(ObservationSource):
+class ConnectorClient[Credential: ConnectorCredential](ObservationSource):
     """Reaching one connector: its endpoint, the credential it accepts, and the TLS trust
     both the calls and the observation use."""
 
     endpoint: HttpsMcpEndpoint
-    credential: UiCredential
+    credential: Credential
 
     def tls(self) -> ssl.SSLContext:
         """One context for every connection to this connector, built when connecting, so the
@@ -156,12 +159,13 @@ class ConnectorClient(ObservationSource):
         return ConnectorObservationPeer(self)
 
 
-class RemoteCoreAccess(UiConnectionProfile, CoreAccess, ConnectorClient, RequestPoster):
-    """The owner's UI profile is the remote access: its endpoint and credential are all a
-    call needs, and the server still decides scope, expiry and revocation."""
+class ConnectorCalls[Credential: ConnectorCredential](
+    CoreAccess, ConnectorClient[Credential], RequestPoster,
+):
+    """Core reached through one connector's tools/call: the endpoint and credential are all
+    a call needs, and the server still decides scope, expiry and revocation."""
 
     timeout_seconds = 30
-
 
     def call[R: ToolResult](self, request: ToolRequest[ToolCaller, R]) -> R:
         return FieldCodec.decode(request.result_type(), request.posted(self))
@@ -221,3 +225,11 @@ class RemoteCoreAccess(UiConnectionProfile, CoreAccess, ConnectorClient, Request
         async with session.post(str(self.endpoint.url), data=FieldCodec.compact(
                 FieldCodec.encode(notice)), headers=self.headers):
             return
+
+
+class RemoteCoreAccess(UiConnectionProfile, ConnectorCalls[UiCredential]):
+    """The owner's UI profile is the remote access."""
+
+
+class RemoteThreadAccess(ThreadConnectionProfile, ConnectorCalls[ThreadCredential]):
+    """One bus thread's profile is its harness's access to that thread on a remote Core."""
