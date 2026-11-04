@@ -419,16 +419,24 @@ class StorageRule(RoomAllocation, DurableFile):
         """Keep one existing owned tree for a repository across work identities.
 
         A stored repository choice wins independently of the current project.
-        Without one, the existing current-project/sole-tree policy applies;
-        unselected ambiguity still refuses rather than allocating another tree.
         """
-        for selected in self.roots_of(owner).chosen(repository):
-            self.require_physical_allocation(selected)
-            self.require_destination(owner, selected)
-            if not self.owns_editable_checkout(owner, selected, repository, reads):
-                self.deny(f'Selected checkout {selected} is no longer an owned editable '
-                          f'checkout of {repository}; select its replacement explicitly')
-            return selected
+        return self.roots_of(owner).choice(repository).reused_checkout(
+            self, owner, repository, fresh, reads)
+
+    def require_selectable_checkout(self, owner: Thread, path: Path,
+                                    repository: RepositoryName, reads: RepositoryReads) -> Path:
+        """The one check a repository choice passes when it is made and every time it is reused."""
+        self.require_physical_allocation(path)
+        self.require_destination(owner, path)
+        if not self.owns_editable_checkout(owner, path, repository, reads):
+            self.deny(f'{path} is no longer an owned editable checkout of {repository}; '
+                      'select its replacement explicitly')
+        return path
+
+    def unselected_checkout(self, owner: Thread, repository: RepositoryName,
+                            fresh: Path, reads: RepositoryReads) -> Path:
+        """Without a choice, the current project wins, then the sole owned tree; unselected
+        ambiguity refuses rather than allocating another tree."""
         if self.owns_editable_checkout(owner, owner.project_path, repository, reads):
             return owner.project_path
         candidates = self.owned_checkouts(owner, repository, reads)

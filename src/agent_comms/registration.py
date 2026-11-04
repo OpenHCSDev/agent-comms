@@ -111,11 +111,7 @@ class Registration:
             if current.incarnation != owner:
                 raise RelationViolationError('Checkout owner changed before selection')
             rule = self.storage_rule
-            rule.require_physical_allocation(path)
-            rule.require_destination(current, path)
-            reads = RepositoryReads()
-            if not rule.owns_editable_checkout(current, path, repository, reads):
-                rule.deny(f'{path} is not an owned editable checkout of {repository}')
+            rule.require_selectable_checkout(current, path, repository, RepositoryReads())
             roots = rule.roots_of(current).choosing(repository, path)
             edit.document.threads[current.name] = replace(current, storage_roots=roots)
             edit.commit()

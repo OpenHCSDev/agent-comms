@@ -40,6 +40,7 @@ from agent_comms.storage_rules import (
 from agent_comms.thread_storage import (
     StoragePath,
     StorageRoots,
+    NoRepositoryChoice,
     SelectedCheckout,
     UnassignedThreadStorage,
 )
@@ -508,7 +509,8 @@ def test_independent_repository_choices_survive_navigation_and_reopening(
     assert chosen == replace(original, storage_roots=rule.roots_of(chosen))
     assert comms.registry.require(peer.name) == peer
     for pair in multiple_repository_checkouts:
-        assert rule.roots_of(chosen).chosen(pair.repository) == (pair.first,)
+        assert rule.roots_of(chosen).choice(pair.repository) == SelectedCheckout(
+            pair.repository, pair.first)
     comms.threads.set_project(chosen.incarnation, str(multiple_repository_checkouts[0].second))
     reopened = wire(comms.root)
     owner = reopened.registry.require('worker')
@@ -631,11 +633,12 @@ def test_repository_choices_are_nominal_and_transfer_only_the_selected_path(tmp_
     same = RepositoryName('openhcsdev', 'Agent-Comms')
     original = StorageRoots(tmp_path, (SelectedCheckout(repository, tmp_path / 'first'),))
     changed = original.choosing(same, tmp_path / 'second')
-    assert changed.chosen(repository) == (tmp_path / 'second',)
+    assert changed.choice(repository) == SelectedCheckout(same, tmp_path / 'second')
     assert len(changed.selected_checkouts) == 1
     assert FieldCodec.decode(StorageRoots, FieldCodec.encode(changed)) == changed
-    assert changed.relocated(tmp_path / 'second', tmp_path / 'third').chosen(repository) == (
-        tmp_path / 'third',)
+    assert changed.relocated(tmp_path / 'second', tmp_path / 'third').choice(repository) == (
+        SelectedCheckout(same, tmp_path / 'third'))
+    assert changed.choice(RepositoryName('OpenHCSDev', 'toad')) == NoRepositoryChoice()
     with pytest.raises(ValueError, match='only one'):
         StorageRoots(tmp_path, (*original.selected_checkouts, SelectedCheckout(same, tmp_path / 'second')))
 

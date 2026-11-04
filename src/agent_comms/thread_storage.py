@@ -1,7 +1,7 @@
 """Stored thread storage declarations, independent of enforcement and live process state."""
 from __future__ import annotations
 
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, cast
@@ -21,7 +21,9 @@ from .nominal.field_codec import (
 from .repository_name import RepositoryName
 
 if TYPE_CHECKING:
+    from .repo import RepositoryReads
     from .storage_rules import StorageRule
+    from .threads import Thread
 
 StoragePath = Annotated[Path, PathText]
 
@@ -38,8 +40,19 @@ class ThreadStorage(SubclassUnion, affix="ThreadStorage"):
         """The roots a registry row records."""
 
 
+class RepositoryChoice(ABC):
+    """Which owned editable checkout a thread reuses for one repository."""
+
+    __slots__ = ()
+
+    @abstractmethod
+    def reused_checkout(self, rule: StorageRule, owner: Thread, repository: RepositoryName,
+                        fresh: Path, reads: RepositoryReads) -> Path:
+        """The checkout this choice reuses, or ``fresh`` when no owned tree exists."""
+
+
 @dataclass(frozen=True, slots=True)
-class SelectedCheckout(RecordMember):
+class SelectedCheckout(RecordMember, RepositoryChoice):
     """One repository's editable checkout, chosen independently of navigation."""
 
     repository: RepositoryName
@@ -48,6 +61,19 @@ class SelectedCheckout(RecordMember):
     def __post_init__(self) -> None:
         if not self.path.is_absolute():
             raise ValueError("A selected checkout requires an absolute path.")
+
+    def reused_checkout(self, rule: StorageRule, owner: Thread, repository: RepositoryName,
+                        fresh: Path, reads: RepositoryReads) -> Path:
+        return rule.require_selectable_checkout(owner, self.path, repository, reads)
+
+
+@dataclass(frozen=True, slots=True)
+class NoRepositoryChoice(RepositoryChoice):
+    """No explicit choice: the current project, else the sole owned tree, else ``fresh``."""
+
+    def reused_checkout(self, rule: StorageRule, owner: Thread, repository: RepositoryName,
+                        fresh: Path, reads: RepositoryReads) -> Path:
+        return rule.unselected_checkout(owner, repository, fresh, reads)
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,9 +87,9 @@ class StorageRoots(RecordMember, ThreadStorage):
         if len({choice.repository for choice in self.selected_checkouts}) != len(self.selected_checkouts):
             raise ValueError("A repository can have only one selected checkout.")
 
-    def chosen(self, repository: RepositoryName) -> tuple[Path, ...]:
-        return tuple(choice.path for choice in self.selected_checkouts
-                     if choice.repository == repository)
+    def choice(self, repository: RepositoryName) -> RepositoryChoice:
+        return next((choice for choice in self.selected_checkouts
+                     if choice.repository == repository), NoRepositoryChoice())
 
     def choosing(self, repository: RepositoryName, path: Path) -> StorageRoots:
         return replace(self, selected_checkouts=(*(
