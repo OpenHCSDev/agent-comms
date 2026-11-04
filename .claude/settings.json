@@ -1,4 +1,7 @@
 {
+  "permissions": {
+    "allow": ["mcp__Comms_crt", "mcp__comms"]
+  },
   "env": {
     "BASH_DEFAULT_TIMEOUT_MS": "15000"
   },
