@@ -79,7 +79,7 @@ class SnapshotRestored:
 
     def __reduce__(self) -> tuple[type[Self], tuple[object, ...]]:
         return type(self), tuple(
-            SnapshotValue.of(plan).copy(getattr(self, plan.name))
+            SnapshotValue.of(plan).copy(plan.current(self))
             for plan in FieldCodec.field_plans(type(self)) if plan.declared.init
         )
 

@@ -741,7 +741,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         return replace(
             self,
             **{
-                plan.name: ThreadSlice.of(plan).copy(getattr(self, plan.name))
+                plan.name: ThreadSlice.of(plan).copy(plan.current(self))
                 for plan in FieldCodec.field_plans(type(self))
                 if plan.declared.init and plan.records
             },
@@ -1157,7 +1157,7 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
         for plan in FieldCodec.field_plans(type(self)):
             if plan.declared.init:
                 object.__setattr__(
-                    self, plan.name, SnapshotValue.of(plan).freeze(getattr(self, plan.name)),
+                    self, plan.name, SnapshotValue.of(plan).freeze(plan.current(self)),
                 )
         # ThreadRows validates names when rows enter; aliases and births belong to this cut.
         self.require_alias_names()
@@ -1174,7 +1174,7 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
         every = frozenset((*self.threads, *earlier.threads, *self.aliases, *earlier.aliases))
         return frozenset().union(*(
             ThreadSlice.of(plan).changed_names(
-                getattr(earlier, plan.name), getattr(self, plan.name), every)
+                plan.current(earlier), plan.current(self), every)
             for plan in FieldCodec.field_plans(type(self)) if plan.declared.init
         ))
 
