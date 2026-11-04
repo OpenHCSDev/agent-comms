@@ -114,7 +114,7 @@ class ProviderDiagnosticError(PiPayload, DeclaredFamily, affix="ProviderDiagnost
 
     @property
     def description(self) -> str:
-        return self.name or "Provider transport error"
+        return self.name.text_or("Provider transport error")
 
 
 @dataclass(frozen=True)
