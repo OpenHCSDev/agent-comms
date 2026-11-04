@@ -18,6 +18,8 @@ from agent_comms.snapshot_slices import MappingRowsSlice, SnapshotRestored, Whol
 from agent_comms.thread_identity import ThreadIncarnation
 
 if TYPE_CHECKING:
+    from agent_comms.historical_views import HistorySource
+    from agent_comms.messages import MessageHistory
     from agent_comms.registry_document import RegistrySnapshot
 
 
@@ -102,8 +104,13 @@ class ReferenceContext(ABC):
     def accepts_history(self, root):
         return False
 
+    def for_source(self, source: MessageHistory) -> ReferenceContext:
+        """The names a body from `source` links through."""
+        return source.references_from(self)
+
     @abstractmethod
-    def for_source(self, source): ...
+    def for_history(self, source: HistorySource) -> ReferenceContext:
+        """The names a body recorded by an attached history links through."""
 
 
 @dataclass(frozen=True)
@@ -114,8 +121,8 @@ class RootedReferences(ReferenceContext):
     async def acquire_from(self, read):
         return await read(self.root)
 
-    def for_source(self, source):
-        return self if source is None else DisplayReferences.recorded(self.root, source)
+    def for_history(self, source: HistorySource) -> DisplayReferences:
+        return DisplayReferences.recorded(self.root, source)
 
 
 @dataclass(frozen=True)
@@ -123,10 +130,8 @@ class ProjectReferences(ReferenceContext):
     """An ordinary project view has no coordination identity to recognize."""
     description = ""
 
-    def for_source(self, source):
-        if source is not None:
-            raise ValueError("Recorded references require their original coordination root")
-        return self
+    def for_history(self, source: HistorySource) -> ReferenceContext:
+        raise ValueError("Recorded references require their original coordination root")
 
 
 @dataclass(frozen=True)
@@ -166,9 +171,7 @@ class DisplayReferences(RootedReferences):
                    for name, thread in registry.named_members()}
         return DisplayReferences(str(root), targets)
 
-    def for_source(self, source) -> DisplayReferences:
-        if source is None:
-            return self
+    def for_history(self, source: HistorySource) -> DisplayReferences:
         try:
             return self.sourced[source.snapshot_identity]
         except KeyError:

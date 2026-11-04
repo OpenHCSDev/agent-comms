@@ -5,6 +5,7 @@ import pickle
 from agent_comms.comms import Comms
 from agent_comms.display_references import CurrentDisplayReferences, DisplayReferences
 from agent_comms.historical_views import HistorySource
+from agent_comms.messages import NO_HISTORY_SOURCE
 from agent_comms.messages import InfoKind, Message, PublicRecord
 from agent_comms.repo import Checkout
 from agent_comms.thread_identity import RecordedThreadIncarnation
@@ -40,7 +41,7 @@ def test_source_projection_reuses_real_captures_without_merging_revisions(comms:
         str(comms.root), comms.registry.snapshot(), ("#team",))
     earlier = HistorySource.capture_original(comms.root)
     recorded = references.for_source(earlier)
-    assert references.for_source(None) is references
+    assert references.for_source(NO_HISTORY_SOURCE) is references
     assert references.for_source(HistorySource.capture_original(comms.root)) is recorded
     assert recorded.targets["#team"] == references.targets["#team"]
     assert recorded.find(f"@{original.name}")[0].reference.incarnation == original.incarnation
