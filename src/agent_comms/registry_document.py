@@ -232,6 +232,12 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
         """Whether a message sent now is read now; an unregistered name reads nothing."""
         return name in self.threads and self.status(name).receiving
 
+    def stopped(self, names: Iterable[str]) -> frozenset[str]:
+        """The registered threads among ``names`` that read nothing sent now; a channel or an
+        unregistered name is not a stopped thread."""
+        return frozenset(name for name in names
+                         if name in self.threads and not self.receiving(name))
+
     def require_active(self, name: str) -> Thread:
         try:
             thread = self.require(name)

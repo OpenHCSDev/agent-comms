@@ -21,6 +21,7 @@ from agent_comms.plan_phases import PlanPhase
 from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.service_passes import ServicePasses, ServicePassStore
+from agent_comms.team_service import TeamService
 from agent_comms.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from agent_comms.todos import HeadVerdict, StoredHeadReview
 
@@ -50,7 +51,17 @@ class TeamHistory:
 
     @classmethod
     def read(cls, comms: Comms, actors: frozenset[str]) -> Self:
+        return cls.of(comms, comms.registry.snapshot(), actors)
+
+    @classmethod
+    def of_team(cls, comms: Comms) -> Self:
+        """The team's executable collaborators, read from the same snapshot this history holds:
+        one registry read, where computing the actors first read it twice."""
         snapshot = comms.registry.snapshot()
+        return cls.of(comms, snapshot, TeamService.actors(snapshot))
+
+    @classmethod
+    def of(cls, comms: Comms, snapshot: RegistrySnapshot, actors: frozenset[str]) -> Self:
         return cls(comms, snapshot, frozenset(snapshot.require(actor).incarnation for actor in actors))
 
     @cached_property
@@ -75,10 +86,17 @@ class HeartbeatSubject(DeclaredFamily, affix="Subject"):
         """Original action evidence is shared, while each line retains its own start."""
         return history.action_at(self).since(since)
 
+    def threads(self) -> tuple[str, ...]:
+        """The threads this subject is about; most subjects name none."""
+        return ()
+
 
 @dataclass(frozen=True)
 class TeammateSubject(HeartbeatSubject, declared_name="unit"):
     unit: ThreadIncarnation
+
+    def threads(self) -> tuple[str, ...]:
+        return (self.unit.name,)
 
     def action_at(self, history: TeamHistory) -> EventTime:
         return max((RecordedEventTime(message.timestamp)
@@ -119,6 +137,9 @@ class PassSubject(HeartbeatSubject):
 
     def action_at(self, history: TeamHistory) -> EventTime:
         return history.passes.heartbeat_completed_at(self.teammate)
+
+    def threads(self) -> tuple[str, ...]:
+        return (self.teammate.name,)
 
 
 @dataclass(frozen=True)

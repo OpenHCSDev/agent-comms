@@ -75,7 +75,7 @@ class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
                                          failed_at=retained.failed_at)
             now = time.time()
             snapshot = comms.registry.snapshot()
-            actions = TeamHistory.read(comms, self.actors(snapshot))
+            actions = TeamHistory.of(comms, snapshot, self.actors(snapshot))
             duty = self.duty(comms.registry, comms.goals)
             for thread in self.served(comms.registry, comms.goals):
                 for update in TeamUpdate.report_failure(
@@ -84,7 +84,8 @@ class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
                     published=TeamUpdate.published(comms, thread.incarnation), now=now,
                 ):
                     TeamUpdateStore.record(comms.root, update)
-                    sections = AlarmGroup.sections((update,), update.open_pings(actions))
+                    sections = AlarmGroup.sections((update,), update.open_pings(actions),
+                                                   update.stopped(snapshot))
                     duty.publish(lambda update=update, sections=sections: update.send(comms, (
                         HudUnavailableGroup.heading(),
                         *TeamHud.alarm_text(sections, now),
@@ -132,7 +133,7 @@ class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
                 )
                 usage = CodexUsage.read()
                 # Include acknowledgements committed during forge/provider reads and enforcement.
-                history = TeamHistory.read(comms, self.actors(comms.registry.snapshot()))
+                history = TeamHistory.of_team(comms)
                 states = tuple(state for state in observed.states if state not in rejected)
                 rules = tuple(rule for rule in observed.rules if rule not in rejected)
                 not_applied = tuple(rule.rejected_line(error) for rule, error in rejected.items())

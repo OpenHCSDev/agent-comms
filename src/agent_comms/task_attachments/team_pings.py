@@ -17,7 +17,6 @@ from agent_comms.locked_store import DocumentChange, DurableFile, LockedStore, P
 from agent_comms.store_files import DependentStateTier, SingleFileStore
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.harness_delivery_states import DeliveredOutcome, Outcome
-from agent_comms.team_service import TeamService
 from agent_comms.errors import RelationViolationError
 from agent_comms.disclosure_text import AccentTone, ViewHeading, ViewTable, WarningTone
 from agent_comms.nominal.field_codec import (
@@ -65,6 +64,7 @@ class Ping(DeclaredFamily, affix="Ping"):
     text: str = field(compare=False, kw_only=True)
     subjects: tuple[HeartbeatSubject, ...] = field(default=(), compare=False, kw_only=True)
     since: EventTime = field(default_factory=UnrecordedEventTime, compare=False, kw_only=True)
+    threads: tuple[str, ...] = field(default=(), compare=False, kw_only=True)
 
     @property
     def urgent(self) -> bool:
@@ -88,11 +88,6 @@ class Ping(DeclaredFamily, affix="Ping"):
         began = self.since.recorded_at("A line")
         return any(subject.disposed(history, began) for subject in self.subjects)
 
-    def undisposed(self, history: TeamHistory, cut: float) -> bool:
-        """Waiting on the teammate past the cut, without a recorded subject disposition.
-        Only such a line is restated as waiting and locks the verbs."""
-        return self.waits_on_team(cut) and not self.acted(history)
-
     def waits_on_team(self, cut: float) -> bool:
         """The teammate's to dispose of, began before ``cut``, and about a subject a verb can
         act on: a line about nothing a verb touches never waits."""
@@ -101,6 +96,14 @@ class Ping(DeclaredFamily, affix="Ping"):
     def on_board(self, history: TeamHistory) -> bool:
         """The teammate's to dispose of, and no recorded action has yet."""
         return self.team_disposes and not self.acted(history)
+
+    def addresses(self, reader: str) -> bool:
+        """Tristan's own rows address every teammate; any other row, the threads it names."""
+        return self.owner_flagged or reader in self.threads
+
+    def parked(self, stopped: frozenset[str]) -> bool:
+        """It waits on a thread that reads nothing now, so it leaves the main view."""
+        return not stopped.isdisjoint(self.threads)
 
     @property
     @abstractmethod
@@ -114,7 +117,7 @@ class Ping(DeclaredFamily, affix="Ping"):
             key: value for key, value in FieldCodec.encode(self).items() if key not in ignored
         }))
         since = self.since.recorded_at("A heartbeat line")
-        return BoardEntry(content.value, self.text, since, since + AwaitingTeam.seconds, self.owner_flagged)
+        return BoardEntry(content.value, self.text, since, since + AwaitingTeam.seconds)
 
     def render(self, now: float) -> str:
         return f"{self.text} ({self.since.age(now)})"
@@ -153,7 +156,8 @@ class RulePing(Ping):
 
     @classmethod
     def capture(cls, rule: StandingRule) -> Self:
-        return cls(type(rule), rule.observation_key(), text=rule.line(), subjects=rule.subjects())
+        return cls(type(rule), rule.observation_key(), text=rule.line(), subjects=rule.subjects(),
+                   threads=rule.named_threads())
 
 
 @dataclass(frozen=True)
@@ -193,6 +197,7 @@ class TeammatePing(Ping, declared_name="unit"):
                   for todo in state.source.todos if todo.id in state.orders),
             tuple(message.reference for message in state.owed),
             state.observation_key(), text=state.line(), subjects=state.subjects(),
+            threads=state.named_threads(),
         )
 
 
@@ -260,8 +265,19 @@ class TeamUpdate(OwnerNotice, declared_name=None):
 
     def board(self, comms: Comms) -> tuple[BoardEntry, ...]:
         """Any teammate's recorded action disposes of its subject on the shared board."""
-        history = TeamHistory.read(comms, TeamService.actors(comms.registry.snapshot()))
-        return tuple(ping.board_entry() for ping in self.open_pings(history))
+        return tuple(ping.board_entry() for ping in self.open_pings(TeamHistory.of_team(comms)))
+
+    def reader_board(self, comms: Comms, reader: str) -> tuple[BoardEntry, ...]:
+        """The open lines addressing ``reader`` that wait on no stopped thread: a tool call
+        carries what is that session's own, and the whole board stays in comms_hud."""
+        history = TeamHistory.of_team(comms)
+        stopped = self.stopped(history.snapshot)
+        return tuple(ping.board_entry() for ping in self.open_pings(history)
+                     if ping.addresses(reader) and not ping.parked(stopped))
+
+    def stopped(self, snapshot: RegistrySnapshot) -> frozenset[str]:
+        """The threads its lines name that read nothing now."""
+        return snapshot.stopped(name for ping in self.handled for name in ping.threads)
 
     def open_pings(self, history: TeamHistory) -> tuple[Ping, ...]:
         return tuple(ping for ping in self.handled if ping.on_board(history))
@@ -272,10 +288,6 @@ class TeamUpdate(OwnerNotice, declared_name=None):
     @abstractmethod
     async def wake(self, bridge: CliBridge, message: Message) -> type[Outcome]:
         """The packet's wake decision is the same on every harness."""
-
-    def undisposed(self, history: TeamHistory, cut: float) -> tuple[Ping, ...]:
-        """Read every subject through this pass's one captured actor/history reader."""
-        return tuple(ping for ping in self.handled if ping.undisposed(history, cut))
 
     def require_target(self, target: str, registry: RegistrySnapshot) -> None:
         if registry.require(target).incarnation != self.teammate:
@@ -297,9 +309,9 @@ class TeamUpdate(OwnerNotice, declared_name=None):
 
     @classmethod
     def current_board(cls, comms: Comms, recipient: str) -> tuple[BoardEntry, ...]:
-        """The retained observation's board, derived at the moment of asking."""
+        """The retained observation's rows for ``recipient``'s tool calls, derived when asked."""
         return tuple(entry for latest in cls.latest(comms, comms.registry.require(recipient).incarnation)
-                     for entry in latest.board(comms))
+                     for entry in latest.reader_board(comms, recipient))
 
     @classmethod
     def derive(cls, recipient: ThreadIncarnation, states: tuple[TeammateState, ...],
@@ -332,13 +344,16 @@ class TeamUpdate(OwnerNotice, declared_name=None):
         notice = TeamUpdateNotice(recipient, handled, not_applied=not_applied)
         opened = notice.open_pings(history)
         open_members = frozenset(opened)
+        # A line waiting on a stopped thread is parked: it is kept and shown, never woken for.
+        stopped = notice.stopped(history.snapshot)
+        wakes = any(not ping.parked(stopped) for ping in (*new, *opened))
         packet = TeamDecisions(
             recipient, handled, new,
             tuple(ping for ping in handled
                   if ping in began and ping in open_members
                   and ping.waits_on_team(now - AwaitingTeam.seconds)),
             not_applied=not_applied,
-        ) if new or opened or not_applied else notice
+        ) if wakes or not_applied else notice
         return TeamDelivery(packet, opened)
 
     @classmethod
@@ -438,16 +453,36 @@ class AlarmGroup(ViewHeading, affix="Alarms"):
         return True
 
     @classmethod
-    def sections(cls, packets: tuple[TeamUpdate, ...],
-                 opened: tuple[Ping, ...]) -> tuple[AlarmSection, ...]:
+    @abstractmethod
+    def admits(cls, ping: Ping, stopped: frozenset[str]) -> bool: ...
+
+    @classmethod
+    def row_lines(cls, section: AlarmSection, now: float) -> tuple[str, ...]:
+        """Every line of every rule, its shared words printed once in the rule's header."""
+        return tuple(line for kind, pings in section.by_kind().items()
+                     for line in FoldedRule.of(kind, pings).lines(now))
+
+    @classmethod
+    def sections(cls, packets: tuple[TeamUpdate, ...], opened: tuple[Ping, ...],
+                 stopped: frozenset[str]) -> tuple[AlarmSection, ...]:
         new = tuple(line for packet in packets for ping in packet.new_pings()
                     for line in ping.alarm_pings())
         return tuple(AlarmSection(group, members)
                      for group in cls.members_with(cls)
-                     for members in (group.members(packets, opened, new),) if members)
+                     for members in (tuple(ping for ping in group.members(packets, opened, new)
+                                           if group.admits(ping, stopped)),) if members)
 
 
-class NewAlarms(AlarmGroup):
+class MainAlarms(AlarmGroup, declared_name=None):
+    """The groups of the main view: together they are what a parked line would have shown."""
+
+    @classmethod
+    def admits(cls, ping: Ping, stopped: frozenset[str]) -> bool:
+        """A line waiting on a stopped thread leaves every main-view group."""
+        return not ping.parked(stopped)
+
+
+class NewAlarms(MainAlarms):
     tone = AccentTone
 
     @classmethod
@@ -456,7 +491,7 @@ class NewAlarms(AlarmGroup):
         return new
 
 
-class StillOpenAlarms(AlarmGroup):
+class StillOpenAlarms(MainAlarms):
     tone = WarningTone
 
     @classmethod
@@ -466,7 +501,7 @@ class StillOpenAlarms(AlarmGroup):
         return tuple(line for ping in opened for line in ping.alarm_pings() if line not in new_members)
 
 
-class WatchingAlarms(AlarmGroup):
+class WatchingAlarms(MainAlarms):
     """A still-failing source remains visible, but it has no teammate disposal to wake for."""
 
     @classmethod
@@ -479,6 +514,30 @@ class WatchingAlarms(AlarmGroup):
         new_members = frozenset(new)
         return tuple(line for packet in packets for ping in packet.handled
                      if not ping.team_disposes for line in ping.alarm_pings() if line not in new_members)
+
+
+class ParkedAlarms(AlarmGroup):
+    """Lines waiting on a stopped thread: one count below the cards, never on the board.
+    Their rows stay in comms_hud's records, and return when the thread runs again."""
+
+    @classmethod
+    def needs_disposal(cls) -> bool:
+        return False
+
+    @classmethod
+    def row_lines(cls, section: AlarmSection, now: float) -> tuple[str, ...]:
+        return ()
+
+    @classmethod
+    def admits(cls, ping: Ping, stopped: frozenset[str]) -> bool:
+        return ping.parked(stopped)
+
+    @classmethod
+    def members(cls, packets: tuple[TeamUpdate, ...],
+                opened: tuple[Ping, ...], new: tuple[Ping, ...]) -> tuple[Ping, ...]:
+        """Exactly what the main-view groups would have shown, each line once."""
+        return tuple(dict.fromkeys(line for group in MainAlarms.members_with(MainAlarms)
+                                   for line in group.members(packets, opened, new)))
 
 
 @dataclass(frozen=True)
@@ -514,9 +573,7 @@ class AlarmSection:
         return f"{self.heading()}: {counts}. Oldest, {oldest.since.age(now)}: {named}"
 
     def text_lines(self, now: float) -> tuple[str, ...]:
-        """Every line of every rule, its shared words printed once in the rule's header."""
-        return tuple(line for kind, pings in self.by_kind().items()
-                     for line in FoldedRule.of(kind, pings).lines(now))
+        return self.group.row_lines(self, now)
 
     def tables(self, now: float) -> tuple[ViewTable[AlarmLine], ...]:
         return (ViewTable(AlarmLine, HudExclude, tuple(

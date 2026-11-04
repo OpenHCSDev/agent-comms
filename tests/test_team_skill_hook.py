@@ -46,7 +46,7 @@ from agent_comms.threads import ForkThread, NativeThread
 from agent_comms.ui_model.teammate_state import AwaitingTeam
 from agent_comms.todos import ProgressRead, ReviewedHeadVerdict
 from agent_comms_hooks.board import (
-    AbsentSessionSocket, BoardEntry, BoardSummary, SessionBoard, UnexpectedBoardReply,
+    AbsentSessionSocket, BoardEntry, SessionBoard, UnexpectedBoardReply,
 )
 from agent_comms.cli_bridges.hook_reread import BoardReminder, DeafReminder, SliceReminder
 from agent_comms.cli_bridges.hook_deferral import StopHook
@@ -307,22 +307,32 @@ def test_a_recorded_verdict_drops_its_board_line_on_the_next_tool_call(
     claim.path.parent.mkdir(parents=True)
     record = WatchRecord("colleague", str(comms.root), ("watch",), tmp_path / "inbox")
     worker = RecordedThreadIncarnation("worker", 1.0)
+    colleague = comms.registry.require("colleague").incarnation
     rules = (*OrderlessUnreviewedHead.scan_reviews(comms.goals, ProgressRead(())),
-             ReviewTimerUp("P1", worker, "order-P1", RecordedEventTime(1000.0)),
+             ReviewTimerUp("P1", colleague, "order-P1", RecordedEventTime(1000.0)),
              SpinningTeammate("P2", worker, 92))
     beat(comms, rules)
     beat(comms, rules)
+    head_line = f"--pr {request.pr} --head {request.head}"
+
+    def shared_board() -> tuple[str, ...]:
+        return tuple(entry.text for packet in TeamUpdate.latest(comms, colleague)
+                     for entry in packet.board(comms))
     with (claim.held(record), claim.reader_held(), Binding.open(tmp_path / "delivery") as db,
           socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server):
         server.bind(str(claim.socket_path))
         server.listen()
         server.settimeout(5)
         assert DeckStart.decode(hook_record(tmp_path / "session.jsonl", "SessionStart")).take(comms, admitted_binding(comms, "colleague"))
+        # Only the row naming this session rides its tool call; the unowned head and the
+        # worker's row stay on the shared board.
         board = tool_call(hook, server, comms, db, time.time())
-        assert len(board) == len(rules)
+        assert len(board) == 1 and "P1" in board[0]
+        assert len(shared_board()) == len(rules)
+        assert any(head_line in line for line in shared_board())
         invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
-        assert [line for line in tool_call(hook, server, comms, db, time.time())
-                if f"--pr {request.pr} --head {request.head}" in line] == []
+        assert not any(head_line in line for line in shared_board())
+        assert tool_call(hook, server, comms, db, time.time()) == ()
 
 
 def test_board_decoder_names_a_refusal_instead_of_a_constructor_error():
@@ -370,8 +380,13 @@ def test_board_start_line_disappears_when_its_phase_order_is_sent(notification_b
         server.listen()
         server.settimeout(5)
         assert DeckStart.decode(hook_record(tmp_path / "session.jsonl", "SessionStart")).take(comms, admitted_binding(comms, "colleague"))
-        before = tool_call(hook, server, comms, db, time.time())
-        assert sum(phase_name in line for line in before) == 1
+        def shared_board() -> tuple[str, ...]:
+            return tuple(entry.text for packet in TeamUpdate.latest(comms, colleague)
+                         for entry in packet.board(comms))
+
+        # A ready phase names nobody: it stays on the shared board, off every tool call.
+        assert tool_call(hook, server, comms, db, time.time()) == ()
+        assert sum(phase_name in line for line in shared_board()) == 1
         # The worker holds P1 and P2 already; the idle outsider takes the phase order.
         comms.goals.update_goal("outsider", CreateProblemGoalAction(
             problem="P3", request=request, assigner=colleague,
@@ -380,27 +395,15 @@ def test_board_start_line_disappears_when_its_phase_order_is_sent(notification_b
             order=replace(original, id=OrderId.mint(), serves=BusWriterPhase,
                           at=RecordedEventTime(time.time())),
         ))
-        after = tool_call(hook, server, comms, db, time.time())
-        assert sum(phase_name in line for line in after) == 0
-        assert not after
+        assert sum(phase_name in line for line in shared_board()) == 0
+        assert tool_call(hook, server, comms, db, time.time()) == ()
 
 
-def unchanged_summary(pings, now):
-    return BoardSummary(tuple(ping.board_entry() for ping in pings), now).line()
-
-
-def test_the_summary_leads_with_tristans_lines_and_never_parks_on_one_row():
-    """2026-10-30: min(since) printed metaclass-registry#11 on every tool call for 1180 min."""
-    stale = BoardEntry("stale", "UNORDERED metaclass-registry#11", 0.0, 0.0)
-    other = BoardEntry("other", "JUDGE #3751", 600.0, 600.0)
-    his = (BoardEntry("a", "ACT owner directive a", 1200.0, 1200.0, True),
-           BoardEntry("b", "ADVANCE request b", 1800.0, 1800.0, True))
-    board = (stale, other, *his)
-    at = 6000.0
-    minutes = tuple(BoardSummary(board, at + 60 * step).shown for step in range(4))
-    assert set(minutes) == set(his)
-    assert "4 unchanged, 2 from Tristan: " in BoardSummary(board, at).line()
-    assert {BoardSummary((stale, other), at + 60 * step).shown for step in range(2)} == {stale, other}
+def test_a_board_row_rides_a_tool_call_as_one_short_line():
+    long = BoardEntry("long", "ADVANCE request " + "x" * 400, 0.0, 0.0)
+    line = long.line(120.0)
+    assert line.startswith("BOARD: ADVANCE request x") and line.endswith("… (2 min)")
+    assert len(line) < BoardEntry.shown_chars + 20
 
 
 def test_a_notice_naming_a_deleted_rule_decodes_as_history():
@@ -419,11 +422,14 @@ def test_rules_carrying_his_words_flag_their_board_lines():
     since = RecordedEventTime(1.0)
     worker = TeammateSubject(RecordedThreadIncarnation("worker", 1.0))
     flagged = RulePing(DirectiveUnacted, TextDigest.of("d"), text="ACT", subjects=(worker,), since=since)
-    plain = RulePing(ReviewTimerUp, TextDigest.of("t"), text="Review", subjects=(worker,), since=since)
-    assert flagged.board_entry().owner_flagged and not plain.board_entry().owner_flagged
+    plain = RulePing(ReviewTimerUp, TextDigest.of("t"), text="Review", subjects=(worker,),
+                     since=since, threads=("worker",))
+    assert flagged.addresses("colleague") and not plain.addresses("colleague")
+    assert plain.addresses("worker")
 
 
-def test_the_board_prints_changes_once_then_an_unchanged_count(notification_bus, tmp_path, monkeypatch):
+def test_a_tool_call_prints_only_new_rows_naming_its_session(
+        notification_bus, tmp_path, monkeypatch):
     """Retained observations, bridge delivery journal and socket; publication stays muted."""
     from agent_comms.heartbeat_delivery import OffHeartbeatDelivery
     from agent_comms.task_attachments.team_pings import TeamUpdateStore
@@ -441,11 +447,16 @@ def test_the_board_prints_changes_once_then_an_unchanged_count(notification_bus,
     worker = comms.registry.require("worker").incarnation
     began = time.time()
     first = RulePing(SpinningTeammate, TextDigest.of("first"), text="Read worker P1",
-                     subjects=(TeammateSubject(worker),), since=RecordedEventTime(began))
+                     subjects=(TeammateSubject(worker),), since=RecordedEventTime(began),
+                     threads=("colleague",))
     second = RulePing(ReviewTimerUp, TextDigest.of("second"), text="Review worker P2",
-                      subjects=(TeammateSubject(worker),), since=RecordedEventTime(began))
+                      subjects=(TeammateSubject(worker),), since=RecordedEventTime(began),
+                      threads=("colleague",))
+    elsewhere = RulePing(ReviewTimerUp, TextDigest.of("elsewhere"), text="Review worker P3",
+                         subjects=(TeammateSubject(worker),), since=RecordedEventTime(began),
+                         threads=("worker",))
     TeamUpdateStore.record(comms.root, TeamDecisions(
-        colleague, (first, second), (first, second), ()))
+        colleague, (first, second, elsewhere), (first, second, elsewhere), ()))
     with (claim.held(record), claim.reader_held(), Binding.open(tmp_path / "delivery") as db,
           socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server):
         server.bind(str(claim.socket_path))
@@ -453,30 +464,20 @@ def test_the_board_prints_changes_once_then_an_unchanged_count(notification_bus,
         server.settimeout(5)
         assert DeckStart.decode(hook_record(tmp_path / "session.jsonl", "SessionStart")).take(comms, admitted_binding(comms, "colleague"))
         assert tool_call(hook, server, comms, db, began + 90) == (
-            "BOARD: Read worker P1 (seen for 1 min)",
-            "BOARD: Review worker P2 (seen for 1 min)",
+            "BOARD: Read worker P1 (1 min)",
+            "BOARD: Review worker P2 (1 min)",
         )
-        assert tool_call(hook, server, comms, db, began + 91) == (
-            unchanged_summary((first, second), began + 91),
-        )
+        assert tool_call(hook, server, comms, db, began + 91) == ()
         changed = replace(first, observation=TextDigest.of("changed"), since=RecordedEventTime(began + 90))
         TeamUpdateStore.record(comms.root, TeamDecisions(
             colleague, (changed, second), (changed,), ()))
-        assert tool_call(hook, server, comms, db, began + 92) == (
-            "BOARD: Read worker P1 (seen for 0 min)",
-            unchanged_summary((second,), began + 92),
-        )
+        assert tool_call(hook, server, comms, db, began + 92) == ("BOARD: Read worker P1 (0 min)",)
         # A fresh packet does not reset delivery, and the answer window rings only once.
         TeamUpdateStore.record(comms.root, TeamDecisions(
             colleague, (changed, second), (), ()))
         alarm = began + AwaitingTeam.seconds
-        assert tool_call(hook, server, comms, db, alarm + 1) == (
-            "BOARD: Review worker P2 (seen for 5 min)",
-            unchanged_summary((changed,), alarm + 1),
-        )
-        assert tool_call(hook, server, comms, db, alarm + 2) == (
-            unchanged_summary((changed, second), alarm + 2),
-        )
+        assert tool_call(hook, server, comms, db, alarm + 1) == ("BOARD: Review worker P2 (5 min)",)
+        assert tool_call(hook, server, comms, db, alarm + 2) == ()
         assert DeliveredBoardContent.count(db) == 2
         TeamUpdateStore.record(comms.root, TeamDecisions(colleague, (), (), ()))
         assert tool_call(hook, server, comms, db, alarm + 3) == ()
@@ -1086,3 +1087,24 @@ def test_turns_that_changed_nothing_are_held_up_against_what_the_session_wrote(
     assert stopped(said("Skipped"), ended, said("Skipped"), ended) == ""  # two is not a pattern
     assert stopped(said("Skipped"), ended, called("Bash"), result, said("done"), ended,
                    said("Skipped"), ended, said("Skipped"), ended) == ""  # a call ran
+
+
+def test_rows_waiting_on_a_stopped_thread_leave_the_main_view():
+    """2026-11-04: the Pi units are stopped until Nov 9; their rows filled NEW and STILL OPEN."""
+    from agent_comms.task_attachments.team_pings import AlarmGroup, NewAlarms, ParkedAlarms
+
+    since = RecordedEventTime(1.0)
+    worker = TeammateSubject(RecordedThreadIncarnation("worker", 1.0))
+    live = RulePing(SpinningTeammate, TextDigest.of("live"), text="Read claude P1",
+                    subjects=(worker,), since=since, threads=("claude",))
+    parked = RulePing(SpinningTeammate, TextDigest.of("parked"), text="Read pi P2",
+                      subjects=(worker,), since=since, threads=("pi-stopped",))
+    claude = RecordedThreadIncarnation("claude", 1.0)
+    packet = TeamDecisions(claude, (live, parked), (live, parked), ())
+    sections = AlarmGroup.sections((packet,), (live, parked), frozenset({"pi-stopped"}))
+    groups = {section.group: section for section in sections}
+    assert groups[NewAlarms].pings == (live,)
+    assert groups[ParkedAlarms].pings == (parked,)
+    assert groups[ParkedAlarms].text_lines(2.0) == ()
+    assert not ParkedAlarms.needs_disposal()
+    assert parked.parked(frozenset({"pi-stopped"})) and not live.parked(frozenset({"pi-stopped"}))

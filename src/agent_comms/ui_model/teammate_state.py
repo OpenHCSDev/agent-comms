@@ -220,6 +220,10 @@ class IdleGroup(HudGroup):
     pass
 
 
+class ParkedGroup(HudGroup):
+    """Cards of teammates that read nothing now: one count, below the working groups."""
+
+
 class ReadyForApplication:
     """Delivered and installed states share their declared presentation capability."""
 
@@ -396,6 +400,25 @@ class Unreadable(NeedsTeamAttention, TeammateState):
 
 
 @dataclass(frozen=True)
+class Detached(TeammateState):
+    """A holder whose presence takes no delivery: an order sent now is not read now, so its
+    card waits below the board and raises no line until it runs again. The registered status
+    owns that fact; the inbox's read marker is the owner's and says nothing about the unit."""
+
+    hud_group = ParkedGroup
+    question = "it's stopped. can its orders wait for it?"
+    action = "leave it parked, or reassign an order that cannot wait"
+
+    @classmethod
+    def derive(cls, source: TeammateObservation) -> Iterator[Self]:
+        if not source.presence.receiving:
+            yield cls(source.thread.incarnation, source.orders, source.presence, source)
+
+    def detail(self) -> str:
+        return f"{self.presence.declared_name}, takes no delivery; {super().detail()}"
+
+
+@dataclass(frozen=True)
 class Blocked(NeedsTeamAttention, TeammateState):
     goal: GoalSnapshot
     question = "its goal is blocked. what does it need?"
@@ -419,24 +442,6 @@ class Blocked(NeedsTeamAttention, TeammateState):
             block.unit_block_line(self.unit.name, self.orders)
             for block in self.goal.execution.unit_blocks()
         )
-
-
-@dataclass(frozen=True)
-class Detached(NeedsTeamAttention, TeammateState):
-    """A pending order whose holder's presence takes no delivery: an order sent now is not
-    read now. The registered status owns that fact; the inbox's read marker is the owner's,
-    marks what he opened, and says nothing about the unit."""
-
-    question = "is anyone home, or are we yelling into an inbox?"
-    action = "wake it or reassign the order"
-
-    @classmethod
-    def derive(cls, source: TeammateObservation) -> Iterator[Self]:
-        if source.pending and not source.presence.receiving:
-            yield cls(source.thread.incarnation, source.orders, source.presence, source)
-
-    def detail(self) -> str:
-        return f"{self.presence.declared_name}, takes no delivery; {super().detail()}"
 
 
 @dataclass(frozen=True)

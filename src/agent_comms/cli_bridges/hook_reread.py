@@ -44,7 +44,7 @@ class DeafReminder(SliceReminder):
 
 @dataclass(frozen=True)
 class BoardReminder(DeafReminder):
-    """New and changed current lines once, then one unchanged count per tool call.
+    """Each new or changed line addressing this session, once; an unchanged line says nothing.
 
     The bridge derives current lines from Core and owns their delivery evidence.
     """
