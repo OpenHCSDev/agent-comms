@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from agent_comms.cli_command import TargetActionCommand
 from agent_comms.channel_targets import SurroundingChannel
 
 from agent_comms.catalog_document import CatalogAccess
@@ -19,7 +20,8 @@ from typing import Self
 
 
 @dataclass(frozen=True, kw_only=True)
-class ThreadTagsCliCommand(NamedCliCommand, declared_name="thread-tags"):
+class ThreadTagsCliCommand(NamedCliCommand, TargetActionCommand[ThreadTagsResult],
+                           declared_name="thread-tags"):
     help = "Edit thread tags"
     tags: Annotated[
         frozenset[str],

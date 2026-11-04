@@ -542,7 +542,7 @@ def expiry_period_changed(before: int, now: int) -> bool:
 
 
 @dataclass(frozen=True, slots=True)
-class WireRevision(ReadState):
+class WireRevision(ReadState, ToolResult):
     """One observation of every Comms store a view derives from, by name."""
 
     registry: Annotated[

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from agent_comms.cli_command import CliCommand
+from agent_comms.cli_command import TargetActionCommand
 from agent_comms.cli_command import MultipleTargets
 from agent_comms.cli_commands import ThreadArchivedResult
 from agent_comms.cli_support.named_thread import NamedThreadCliCommand
@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True, kw_only=True)
 class ArchiveCliCommand(MultipleTargets, ArchiveOwnerControl, NamedThreadCliCommand,
-                        CliCommand[ThreadArchivedResult]):
+                        TargetActionCommand[ThreadArchivedResult]):
     help = "Archive a stopped thread"
 
     def apply(self, ctx: Comms) -> ThreadArchivedResult:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from agent_comms.cli_command import CliCommand
+from agent_comms.cli_command import TargetActionCommand
 from agent_comms.cli_support.thread_lifecycle import ThreadLifecycleCliCommand
 from agent_comms.comms import Comms
 from agent_comms.launch_runtime import LaunchRuntime
@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True, kw_only=True)
-class QueueRestartCliCommand(ThreadLifecycleCliCommand, CliCommand[RestartQueued]):
+class QueueRestartCliCommand(ThreadLifecycleCliCommand, TargetActionCommand[RestartQueued]):
     """A selected owner restarts at its next idle point: at once when idle, never mid-turn."""
 
     help = "Restart process"

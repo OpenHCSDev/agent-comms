@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from agent_comms.cli_command import CliCommand
+from agent_comms.cli_command import TargetActionCommand
 from agent_comms.cli_commands import OwnersRestartedResult
 from agent_comms.cli_commands import _shell_words
-from agent_comms.cli_result import CliResult
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument
 from agent_comms.nominal.field_codec import NamedArgumentGroup
@@ -22,7 +21,7 @@ from typing import Annotated
 
 
 @dataclass(frozen=True, kw_only=True)
-class RestartCliCommand(CliCommand):
+class RestartCliCommand(TargetActionCommand[OwnersRestartedResult]):
     help = "Restart process"
     name: Annotated[
         RestartTarget,
@@ -56,6 +55,6 @@ class RestartCliCommand(CliCommand):
         # Explicit CLI launch overrides are independent operator arguments.
         return ()
 
-    def apply(self, ctx: Comms) -> CliResult:
+    def apply(self, ctx: Comms) -> OwnersRestartedResult:
         results = ctx.owners.restart_owners(self.name, agent_bin=self.agent_bin, agent_args=self.agent_args)
         return OwnersRestartedResult(results)

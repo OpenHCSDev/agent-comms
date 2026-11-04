@@ -303,13 +303,8 @@ class GoalChangedError(GoalRefused, RejectedEnforcementError):
     reason: ClassVar[str] = "goal changed"
 
     def __init__(self, thread: Thread, expected: GoalCheckpoint) -> None:
-        self.thread = thread
-        self.expected = expected
-        super().__init__(str(self))
-
-    def __str__(self) -> str:
-        return (
-            f"{self.thread.name}: observed {self.expected}, now {self.thread.goal.captured}; "
+        super().__init__(
+            f"{thread.name}: observed {expected}, now {thread.goal.captured}; "
             "the action was not applied"
         )
 

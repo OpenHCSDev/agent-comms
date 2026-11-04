@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import get_original_bases
-from typing import Annotated, ClassVar, NoReturn, cast, get_args, get_origin
+from typing import Self, Annotated, ClassVar, NoReturn, cast, get_args, get_origin
 
 from agent_comms_hooks import ToolRefusedError
 from pydantic import JsonValue
@@ -16,7 +16,9 @@ from pydantic import JsonValue
 from .child_process import AsyncWork, ReadWork
 from .comms import Comms
 from .nominal.declared_family import DeclaredFamily
+from .exporting import WireExportObserver
 from .nominal.field_codec import (
+    WireTransient,
     ContextSource,
     DefaultNonNull,
     Description,
@@ -137,34 +139,51 @@ class ToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResu
     @classmethod
     def result_type(cls) -> type[Result]:
         """The result this request declares once, as the family's second type argument in its
-        own or an inherited class header; a remote reply decodes into it."""
+        own or an inherited class header, followed through every intermediate generic parent;
+        a remote reply decodes into it."""
+        bindings: dict[object, object] = {}
         requests = cls.__mro__[:cls.__mro__.index(ToolRequest) + 1]
-        for declaration in requests:
-            for base in get_original_bases(declaration):
-                if get_origin(base) in requests:
-                    match get_args(base):
-                        case (_, result):
-                            return cast(type[Result], result)
-        raise TypeError(f"{cls.__qualname__} declares no result in its class header")
+        for declaration in cls.__mro__:
+            generic = (base for base in get_original_bases(declaration) if get_origin(base) in requests)
+            for base in generic:
+                for parameter, argument in zip(get_origin(base).__type_params__, get_args(base)):
+                    bindings.setdefault(parameter, bindings.get(argument, argument))
+        declared = ToolRequest.__type_params__[1]
+        return cast(type[Result], bindings.get(declared, declared))
 
     @classmethod
     def invoke(
         cls, comms: Comms, arguments: Mapping[str, object], *, caller: ToolCaller
     ) -> dict[str, JsonValue]:
         """The reply every adapter receives: the encoding of the tool's declared result."""
+        return cls.decoded(comms, arguments).replied(comms, caller)
+
+    @classmethod
+    def decoded(cls, comms: Comms, arguments: Mapping[str, object]) -> Self:
+        """This tool's request as the wire's arguments declare it."""
         if cls.family_discriminator in arguments:
             raise ToolArgumentsRefusedError(f"Unknown tool argument: {cls.family_discriminator}")
         try:
-            request = FieldCodec.decode_record(
+            return FieldCodec.decode_record(
                 cls, dict(arguments), field_types=cls.context_types(comms, arguments))
         except MalformedRecord as error:
             raise ToolArgumentsRefusedError(
                 f"Invalid {cls.declared_name} arguments: {error}"
             ) from error
+
+    def bound(self, observer: WireExportObserver) -> Self:
+        """A request that reports no progress runs the same whatever observes it."""
+        return self
+
+    def posted(self, remote: RequestPoster) -> dict[str, JsonValue]:
+        """How a remote access sends this request: one posted call and its reply."""
+        return remote.post(self)
+
+    def replied(self, comms: Comms, caller: ToolCaller) -> dict[str, JsonValue]:
         # A request decoded from the wire meets whichever caller arrived; the caller's own
         # invoke checks at runtime that it may apply this request (thread-only refusals).
-        applied = caller.invoke(cast(ToolRequest, request), comms)
-        return request.reply(FieldCodec.encode(applied.to_wire()), caller)
+        applied = caller.invoke(cast(ToolRequest, self), comms)
+        return self.reply(FieldCodec.encode(applied.to_wire()), caller)
 
     def require_read_only(self) -> None:
         """Mutating declarations cannot run under a read-only connector principal."""
@@ -188,6 +207,54 @@ class ToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResu
         self: ToolRequest[ToolCaller, R], comms: Comms, caller: NoThreadCaller
     ) -> R:
         return self.apply(comms, caller)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ObservedToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResult](
+    ToolRequest[Caller, Result], declared_name=None,
+):
+    """A tool whose run reports progress to an observer and stops when it is cancelled. The
+    observer never crosses the wire: each end binds its own, and a remote call streams the
+    progress between them and carries a cancel back."""
+
+    observer: Annotated[WireExportObserver, WireTransient()] = field(
+        default_factory=WireExportObserver, compare=False)
+
+    def observed_by(self, observer: WireExportObserver) -> Self:
+        return replace(self, observer=observer)
+
+    def bound(self, observer: WireExportObserver) -> Self:
+        return self.observed_by(observer)
+
+    def posted(self, remote: RequestPoster) -> dict[str, JsonValue]:
+        return remote.post_observed(self)
+
+
+class RequestPoster(ABC):
+    """Who sends a request to a Core across the connector; each request picks which way it is
+    sent, plainly or with its progress and cancel streamed."""
+
+    @abstractmethod
+    def post[C: ToolCaller, R: ToolResult](self, request: ToolRequest[C, R]) -> dict[str, JsonValue]: ...
+
+    @abstractmethod
+    def post_observed[C: ToolCaller, R: ToolResult](
+        self, request: ObservedToolRequest[C, R],
+    ) -> dict[str, JsonValue]: ...
+
+
+class HumanToolRequest[Result: ToolResult = ToolResult](
+    ToolRequest[ToolCaller, Result], declared_name=None,
+):
+    """A request only the owner's UI may make: Core checks the human caller here, once,
+    and the member answers from comms alone."""
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> Result:
+        caller.require_human()
+        return self.answered(comms)
+
+    @abstractmethod
+    def answered(self, comms: Comms) -> Result: ...
 
 
 class NativeToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResult](
@@ -245,6 +312,10 @@ class ReadTool(ReadWork, FreshIngress):
     @classmethod
     def require_entry_open(cls, root: Path) -> None:
         """Declared reads remain available to the installer's readiness checks."""
+
+
+class CoreRead[Result: ToolResult = ToolResult](ReadTool, ToolRequest[ToolCaller, Result], declared_name=None):
+    """A read any caller may ask of Core, answering its declared result and changing nothing."""
 
 
 @dataclass(frozen=True, kw_only=True)

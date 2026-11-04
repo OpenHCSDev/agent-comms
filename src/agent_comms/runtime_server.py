@@ -34,10 +34,11 @@ from .coordinator import Coordination
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .nominal.field_codec import WireOmitDefault
+from .thread_identity import ThreadIncarnation
 from .maintenance_barrier import MaintenanceHolder, NoMaintenanceHolder
 from .owner_protocol import OwnerResult
 from .tool_result import DeclaredReply
-from agent_comms.owner_connection import NoControllerToken, OwnerConnection
+from agent_comms.owner_connection import AnyOwner, NoControllerToken, OwnerConnection, RequestedOwner
 if TYPE_CHECKING:
     from .acp import CommsAgent
     from agent_comms.acp import AcpSelectedWriteAuthority
@@ -69,12 +70,14 @@ class RuntimeRequest[Ctx: RuntimeRequestContext](
     family_discriminator: ClassVar[str] = "action"
     thread: str
     holder: Annotated[MaintenanceHolder, WireOmitDefault()] = NoMaintenanceHolder()
+    captured: Annotated[RequestedOwner, WireOmitDefault()] = AnyOwner()
 
     @classmethod
     def proxy_payload(
-        cls, thread: str, controller_token: str | NoControllerToken, parameters: dict[str, object]
+        cls, owner: ThreadIncarnation, controller_token: str | NoControllerToken,
+        parameters: dict[str, object],
     ) -> dict[str, object]:
-        return OwnerConnection.wire_request(cls.declared_name, thread, parameters)
+        return OwnerConnection.wire_request(cls.declared_name, owner, parameters)
 
     @abstractmethod
     async def bind(
@@ -87,6 +90,7 @@ class AttachedRuntimeRequest(RuntimeRequest[AttachedRuntimeRequestContext]):
         owner = entry.thread
         if not owner.process_identity.runs_here() or not entry.status.running:
             raise RelationViolationError("This process no longer owns the thread.")
+        self.captured.require(owner)
         return owner
 
     async def bind(

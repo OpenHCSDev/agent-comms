@@ -115,6 +115,28 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
         assert {session: published.name for session, published in owner.sessions.published.items()} == {
             "original-acp-session": "registered",
         }
+        # A same-name replacement in this process owns none of the original's loaded sessions.
+        shadowed = Thread("shadowed-owner", frozenset(), Checkout(project),
+                          process_identity=ProcessIdentity.capture(os.getpid()))
+        comms.registry.declare(shadowed)
+        loaded = comms.registry.require("shadowed-owner")
+        await owner.sessions.bind_owned(loaded, AcpSessionId("shadowed-acp-session"))
+        comms.registry.remove("shadowed-owner")
+        comms.registry.declare(Thread("shadowed-owner", frozenset(), Checkout(project),
+                                      process_identity=ProcessIdentity.capture(os.getpid())))
+        replacement = comms.registry.entry("shadowed-owner").entry
+        assert replacement.thread.incarnation != loaded.incarnation
+        with pytest.raises(Refused):
+            owner.sessions.require_owned_session(replacement)
+        # Restoring the same birth allocates a new owner lease; the retained session keeps
+        # the old allocation, so the restored row does not own it either.
+        comms.registry.remove("shadowed-owner")
+        comms.registry.declare(loaded)
+        restored = comms.registry.entry("shadowed-owner").entry
+        assert restored.thread.incarnation == loaded.incarnation
+        with pytest.raises(Refused):
+            owner.sessions.require_owned_session(restored)
+        await asyncio.to_thread(comms.owners.stop, "shadowed-owner")
         assert not (root / "native-sessions").exists()
         assert not (root / "input_dispositions.sqlite3").exists()
     finally:
@@ -122,3 +144,31 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
         await client.shutdown()
         await owner.shutdown()
     assert not socket_path(root, os.getpid()).exists()
+
+
+def test_a_captured_owner_binds_only_its_birth_after_its_name_is_reused_in_process(tmp_path):
+    """The owner a caller checked is the owner the request binds: a same-process replacement
+    under the same name is refused at bind, and a rename of the captured owner still binds."""
+    from agent_comms.owner_connection import AnyOwner, CapturedOwner
+    from agent_comms.errors import RelationViolationError
+
+    comms = wire(tmp_path / "wire")
+    project = tmp_path / "project"
+    project.mkdir()
+    here = ProcessIdentity.capture(os.getpid())
+    original = Thread("bound-owner", frozenset(), Checkout(project), process_identity=here)
+    comms.registry.declare(original)
+    captured = comms.registry.require("bound-owner").incarnation
+
+    comms.registry.rename("bound-owner", "renamed-owner")
+    renamed = comms.registry.entry("renamed-owner").entry
+    GoalHistoryRuntimeRequest(thread="renamed-owner", captured=CapturedOwner(captured)).require_owner(renamed)
+
+    comms.registry.remove("renamed-owner")
+    comms.registry.declare(Thread("renamed-owner", frozenset(), Checkout(project), process_identity=here))
+    replacement = comms.registry.entry("renamed-owner").entry
+    assert replacement.thread.incarnation != captured
+    with pytest.raises(RelationViolationError, match="incarnation changed"):
+        GoalHistoryRuntimeRequest(thread="renamed-owner", captured=CapturedOwner(captured)).require_owner(replacement)
+    assert GoalHistoryRuntimeRequest(thread="renamed-owner", captured=AnyOwner()).require_owner(replacement) \
+        == replacement.thread

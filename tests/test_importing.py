@@ -1,4 +1,6 @@
 
+from agent_comms.core_access import LocalCoreAccess
+from agent_comms.tools import CommsImportedSourceTool
 from agent_comms.repo import Checkout
 from agent_comms.comms import Comms
 from agent_comms.registration import Registration
@@ -299,11 +301,11 @@ def test_codex_instructions_are_authenticated_historical_references_not_current_
     entry = NativeEntry.from_wire(saved[1])
     assert isinstance(entry, ImportedMetadataEntry)
     assert entry.to_wire() == saved[1]
-    assert ImportedSessionMetadata.public_source_text(
-        comms.registry, original_owner, refs[1], comms).text == "Historical developer λ.\n"
+    core = LocalCoreAccess(comms)
+    assert core.call(CommsImportedSourceTool(
+        owner=original_owner, source=refs[1])).text == "Historical developer λ.\n"
     with pytest.raises(ValueError):
-        ImportedSessionMetadata.public_source_text(
-            comms.registry, original_owner, replace(refs[1], instruction=999), comms)
+        core.call(CommsImportedSourceTool(owner=original_owner, source=replace(refs[1], instruction=999)))
     with pytest.raises(ValueError):
         ImportedSessionMetadata.sources_for_owner(
             comms.registry, replace(original_owner, created_at=RecordedCreationTime(original_owner.created_at + 1)))

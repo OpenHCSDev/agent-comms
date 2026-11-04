@@ -16,11 +16,12 @@ from typing import Annotated, TYPE_CHECKING
 
 
 from .cli_result import CliResult
+from .tool_result import ToolResult
 from .nominal.field_codec import FieldCodec, WireName
 from .harness_install import Harness
 from .thread_text import NoThreadText, ThreadText
 from .transcript_events import ImportedInput, ImportedMessage, NoRetainedRequest
-from .turn_context import CodexRolloutProvenance, ContextSourceText
+from .turn_context import CodexRolloutProvenance
 from .turn_item import NativeItemId
 from .native_session_reopen import PiSessionId
 
@@ -62,12 +63,6 @@ class ImportedSessionMetadata:
         if current.session_file != owner.session_file:
             raise ValueError("Imported context selected session changed")
         return current.runtime.imported_sources()
-
-    @classmethod
-    def public_source_text(cls, registry, owner, source, comms):
-        if source not in cls.sources_for_owner(registry, owner):
-            raise ValueError("Source is outside the original imported snapshot")
-        return ContextSourceText(source.public_description(), source.public_text(comms))
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -232,7 +227,7 @@ class ImportBuffer:
 
 
 @dataclass(frozen=True, slots=True)
-class ThreadImported(CliResult):
+class ThreadImported(CliResult, ToolResult):
     thread: str
     session_file: str
     harness: type[Harness]

@@ -23,7 +23,7 @@ from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.channel_targets import NamedTarget
 from agent_comms.child_process import AsyncWork
 from agent_comms.native_build_inputs import GitLaunch
-from agent_comms.channels import AnyChannel
+from agent_comms.channels import AnyChannel, Channel
 from agent_comms.context_segments.awareness import AwarenessSegment
 from agent_comms.coordinator import Coordination
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -131,7 +131,7 @@ class MessageBus[Writes: Publisher]:
     def opened_activity(self) -> Iterator[ActivityClocks]:
         yield self.bus.activity_clocks()
 
-    def require_channel(self, target: str):
+    def require_channel(self, target: str) -> Channel:
         with self.opened_activity() as activity:
             return self._channels.read().require_channel(target, activity)
 

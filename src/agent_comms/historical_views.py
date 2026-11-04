@@ -23,7 +23,7 @@ from .child_process import Platform
 from .coordination_errors import HistoricalSourceChanged
 from .errors import UnregisteredThreadError
 from .nominal.field_codec import (
-    FieldCodec, NullMember, RecordMember, ScratchName, SubclassUnion, TaggedRecordMember,
+    FieldCodec, NullMember, RecordMember, ScratchName, SingleFieldValue, SubclassUnion, TaggedRecordMember,
 )
 from .locked_store import DocumentChange, RegistryFile, RootFile
 from .maintenance_barrier import CarriedDocument
@@ -304,7 +304,7 @@ class DMDisplayHistory(ConversationHistoryView, DMHistory):
         snapshot = presentation.registry.snapshot()
         peer = self.second.selected_name(snapshot)
         missing = peer not in snapshot.threads
-        if missing and bus.history.threads(peer):
+        if missing and bus.history.threads(NamedHistoricalSender(peer)):
             return MessagePage((), False, False, NoDisplaySelection())
         return DMDisplayBasis.fetch_page(
             bus,
@@ -517,6 +517,27 @@ class HistoricalMessage(CarriesEnvelope, Message):
         }
 
 
+class HistoricalSenders(SubclassUnion, affix="HistoricalSender"):
+    """Whose preserved threads a history lists: every sender (null) or one name."""
+
+    @abstractmethod
+    def includes(self, thread: ThreadProvenance, provenance: RegistryProvenance) -> bool: ...
+
+
+@dataclass(frozen=True)
+class AllHistoricalSenders(NullMember, HistoricalSenders):
+    def includes(self, thread: ThreadProvenance, provenance: RegistryProvenance) -> bool:
+        return True
+
+
+@dataclass(frozen=True)
+class NamedHistoricalSender(SingleFieldValue, HistoricalSenders):
+    name: str
+
+    def includes(self, thread: ThreadProvenance, provenance: RegistryProvenance) -> bool:
+        return thread.incarnation.matches_recorded_name(self.name, provenance)
+
+
 @dataclass(frozen=True, slots=True)
 class HistoricalThread:
     source: HistorySource
@@ -700,11 +721,11 @@ class HistoryArchive(SingleFileStore, CarriedDocument[tuple[HistorySource, ...]]
             historical_page,
         )
 
-    def threads(self, name: str | None = None) -> tuple[HistoricalThread, ...]:
+    def threads(self, senders: HistoricalSenders) -> tuple[HistoricalThread, ...]:
         result: list[HistoricalThread] = []
         for source in self.sources():
             source.validate()
             result.extend(HistoricalThread(source, thread)
                           for thread in source.provenance.threads.values()
-                          if name is None or thread.incarnation.matches_recorded_name(name, source.provenance))
+                          if senders.includes(thread, source.provenance))
         return tuple(result)

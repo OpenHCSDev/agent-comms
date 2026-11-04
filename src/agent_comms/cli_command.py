@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from agent_comms.channels import Channel
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
@@ -30,13 +31,17 @@ from agent_comms.channel_targets import (
     SurroundingChannel,
 )
 from agent_comms.cli_failures import CLI_FAILURES
-from agent_comms.cli_result import CliResult, ResultShower
+from agent_comms.cli_result import CliResult, ResultShower, TargetEditResult
 from agent_comms.command import Command
 from agent_comms.comms import Comms
-from agent_comms.config_options import ConfigOptions
+from agent_comms.config_options import CatalogChoice, ConfigOptions
+from agent_comms.tool_result import ToolResult
 from agent_comms.nominal.declared_family import ModuleMembers
 from agent_comms.declared_verb import DeclaredCommand
-from agent_comms.nominal.field_codec import FieldCodec, FieldPlan, RecordMember, TargetBound, WireValue
+from agent_comms.nominal.field_codec import (
+    TaggedUnion,
+    FieldCodec, FieldPlan, RecordMember, TaggedRecordMember, TargetBound, WireValue,
+)
 from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, StartedOwner
 from agent_comms.lifecycle_capability import LifecycleCapability, Successful
 from agent_comms.registry_document import RegistrySnapshot
@@ -208,9 +213,7 @@ class CliCommand(
             if not entry.setting(TargetBound, False)
         )
 
-    async def prepare_fields(self) -> tuple[TargetField, ...]:
-
-        catalogs = ConfigOptions.configured()
+    async def prepare_fields(self, catalogs: ConfigOptions) -> tuple[TargetField, ...]:
         return tuple([await item.prepare(catalogs, self) for item in self.editable_fields])
 
     def describe(self, comms: Comms, target: CommandTarget, project: Checkout) -> TargetAction:
@@ -275,7 +278,7 @@ class CliCommand(
     def execute_target(cls, comms: Comms, target: TargetSelection, arguments: Mapping[str, object],
                        *, confirmed: bool = False,
                        channel: ChannelSelection = NoChannel(),
-                       project: Checkout) -> CliResult:
+                       project: Checkout) -> Answer | TargetBatchResult:
         if not cls.channel_fields():
             channel.require_unbound()
             channel = NoChannel()
@@ -299,8 +302,11 @@ class TargetAction:
     def editable_fields(self) -> tuple[TargetField, ...]:
         return self.bound[0].editable_fields
 
-    async def prepare_fields(self) -> tuple[TargetField, ...]:
-        return await self.bound[0].prepare_fields()
+    async def prepared(self, catalogs: ConfigOptions) -> PreparedTargetAction:
+        """Core's host prepares the fields; a remote editor receives what it offered."""
+        fields = await self.bound[0].prepare_fields(catalogs)
+        return PreparedTargetAction(self.bound, self.targets, self.declaration, self.channels,
+                                    offered=tuple(item.offered() for item in fields))
 
     @property
     def label(self) -> str:
@@ -330,6 +336,18 @@ class TargetAction:
                     'required': [item.name for item in self.editable_fields if item.required]},
                 'confirmation': self.confirmation, 'targets': list(self.targets),
                 'bound_count': len(self.bound)}
+
+
+@dataclass(frozen=True)
+class PreparedTargetAction(TargetAction, ToolResult):
+    """An action whose fields were prepared where its configuration lives: one tuple of
+    offered choices per editable field, in their declared order."""
+    offered: tuple[tuple[CatalogChoice, ...], ...] = field(default=(), kw_only=True)
+
+    @property
+    def fields(self) -> tuple[TargetField, ...]:
+        return tuple(item.with_offered(options)
+                     for item, options in zip(self.editable_fields, self.offered, strict=True))
 
 
 class TargetOutcome(LifecycleCapability, ABC):
@@ -390,7 +408,7 @@ class TargetFailed(TargetOutcome):
 
 
 @dataclass(frozen=True)
-class TargetBatchResult(CliResult):
+class TargetBatchResult(RecordMember, TargetEditResult):
     outcomes: tuple[TargetCompleted | TargetFailed, ...]
 
     def show(self, shower: ResultShower, label: str, title: str) -> None:
@@ -426,9 +444,11 @@ class CommandSelectionChanged(ToolRefusedError):
 
 
 @dataclass(frozen=True)
-class TargetSelection(ABC):
-    """The targets one execution runs on; each kind owns how its result comes back."""
+class TargetSelection(TaggedUnion, affix="Target"):
+    """The targets one execution runs on; each kind owns how its result comes back. A
+    remote UI sends it to Core, so each record carries its kind."""
     targets: tuple[CommandTarget, ...]
+
 
     def __post_init__(self) -> None:
         if not self.targets:
@@ -443,13 +463,14 @@ class TargetSelection(ABC):
         return member
 
     @abstractmethod
-    def run(self, declaration: type[CliCommand], comms: Comms, arguments: Mapping[str, object],
+    def run[R: CliResult](self, declaration: type[CliCommand[R]], comms: Comms, arguments: Mapping[str, object],
             *, confirmed: bool, channel: ChannelSelection, project: Checkout,
-            snapshot: RegistrySnapshot, catalog: CatalogAccess) -> CliResult:
+            snapshot: RegistrySnapshot, catalog: CatalogAccess) -> R | TargetBatchResult:
         """Bind, authorize and apply the declaration on this selection."""
 
 
-class OneTarget(TargetSelection):
+@dataclass(frozen=True)
+class OneTarget(TaggedRecordMember, TargetSelection):
     """A single target: resolve errors raise and the bound command's own result returns."""
 
     def __post_init__(self) -> None:
@@ -457,7 +478,7 @@ class OneTarget(TargetSelection):
         if len(self.targets) != 1:
             raise ValueError('This action requires a single target')
 
-    def run(self, declaration: type[CliCommand], comms: Comms, arguments: Mapping[str, object], *, confirmed: bool, channel: ChannelSelection, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> CliResult:
+    def run[R: CliResult](self, declaration: type[CliCommand[R]], comms: Comms, arguments: Mapping[str, object], *, confirmed: bool, channel: ChannelSelection, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> R | TargetBatchResult:
         name, = self.targets
         resolved = name.resolve(snapshot, comms.bus.require_channel)
         bindings = tuple(bound for context in name.contexts(declaration, channel)
@@ -484,7 +505,8 @@ class TargetBatchSchedule:
     together: dict[type[AppliedTogether], list[tuple[int, CommandTarget, AppliedTogether]]]
 
 
-class TargetBatch(TargetSelection):
+@dataclass(frozen=True)
+class TargetBatch(TaggedRecordMember, TargetSelection):
     """Every other selection: each target's failure is collected and a TargetBatchResult returns."""
 
     def command_members(self, family: type[CliCommand]) -> tuple[type[CliCommand], ...]:
@@ -493,7 +515,7 @@ class TargetBatch(TargetSelection):
     def listed_declaration(self, member: type[CliCommand]) -> type[CliCommand]:
         return member.catalog_declaration()
 
-    def run(self, declaration: type[CliCommand], comms: Comms, arguments: Mapping[str, object], *, confirmed: bool, channel: ChannelSelection, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> CliResult:
+    def run[R: CliResult](self, declaration: type[CliCommand[R]], comms: Comms, arguments: Mapping[str, object], *, confirmed: bool, channel: ChannelSelection, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> R | TargetBatchResult:
         declaration.require_batch()
         declarations = (tuple(member for member in CliCommand.members_with(CliCommand)
                               if member.catalog_declaration() is declaration)
@@ -561,19 +583,27 @@ class AppliedTogether(CliCommand[Answer]):
 
 
 @dataclass(frozen=True)
-class TargetEdit(Command[Comms, CliResult]):
+class TargetEdit(Command[Comms, TargetEditResult | Channel]):
     """Accepted editor values use the declared field and current bound command."""
-    declaration: type[CliCommand]
+    declaration: type[TargetActionCommand]
     target: TargetSelection
     arguments: Mapping[str, object]
     confirmed: bool = False
     channel: ChannelSelection = NoChannel()
     project: Checkout = field(kw_only=True)
 
-    def apply(self, ctx: Comms) -> CliResult:
+    def apply(self, ctx: Comms) -> TargetEditResult | Channel:
         arguments = self.declaration.editor_arguments(self.arguments)
         return self.declaration.execute_target(ctx, self.target, arguments,
                                               confirmed=self.confirmed, channel=self.channel, project=self.project)
+
+
+@dataclass(frozen=True, kw_only=True)
+class TargetActionCommand[Result: TargetEditResult | Channel = TargetEditResult | Channel](
+    CliCommand[Result], declared_name=None,
+):
+    """A command a thread or channel menu offers. Its answer is one a remote UI decodes, and
+    the menu's catalog lists exactly these members."""
 
 
 class MultipleTargets:

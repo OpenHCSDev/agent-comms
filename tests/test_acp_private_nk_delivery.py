@@ -71,7 +71,7 @@ def test_private_owner_rename_during_active_attempt_can_complete(tmp_path, manag
         )).value.fence
         active = store.participants.get(lookup)
     if managed:
-        comms.threads.rename_managed_thread("beta", "gamma", owner=ProcessIdentity.capture(os.getpid()))
+        comms.threads.rename_managed_thread(comms.registry.require("beta").incarnation, "gamma", owner=ProcessIdentity.capture(os.getpid()))
     else:
         comms.threads._rename_thread("beta", "gamma")
     assert comms.registry.require("beta").name == "gamma"

@@ -6,6 +6,10 @@ from contextlib import contextmanager
 from copyreg import __newobj__
 from typing import ClassVar, Never, Self
 
+from pydantic import JsonValue
+
+from .nominal.field_codec import DeclaredError, FieldCodec, ReportedError
+
 
 class DrainDeferred(Exception):  # noqa: N818 - capability, not an outcome
     """A failure an inbox drain records and retries later instead of stopping on."""
@@ -25,11 +29,14 @@ class DrainUnavailable(DrainDeferred):
     """A failure meaning the drain's store or coordinator is unavailable right now."""
 
 
-class Refused(CommandFailure, DrainUnavailable):
+class Refused(CommandFailure, DrainUnavailable, DeclaredError):
     """A Core refusal; JSON-RPC 2.0 section 5.1 declares its standard wire codes.
 
-    ACP translates this value at its boundary, never inside Core's producers.
+    ACP translates this value at its boundary, never inside Core's producers. Its code,
+    message and data are its whole state, so a remote UI receives the refusal itself.
     """
+
+    wire_type: ClassVar[object] = tuple[int, str, JsonValue]
 
     INVALID_PARAMS: ClassVar[int] = -32602
     METHOD_NOT_FOUND: ClassVar[int] = -32601
@@ -46,6 +53,18 @@ class Refused(CommandFailure, DrainUnavailable):
     def message(self) -> str:
         return str(self)
 
+    def to_wire(self) -> JsonValue:
+        return [self.code, self.message, FieldCodec.encode(self.data)]
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        """Rebuilt from its declared state, never through a member's narrowed constructor:
+        a member that adds state declares it by overriding this pair."""
+        code, message, details = FieldCodec.decode(tuple[int, str, JsonValue], data)
+        error = cls.__new__(cls)
+        Refused.__init__(error, code, message, details)
+        return error
+
     @classmethod
     def invalid_params(cls, data: object = None) -> Self:
         return cls(cls.INVALID_PARAMS, "Invalid params", data)
@@ -61,6 +80,12 @@ class CoordinationError(RuntimeError, DrainUnavailable, CommandFailure):
 
 class DeferredRead(Exception):  # noqa: N818 - capability, not an outcome
     """A read refused only for now, for currentness or contention; retrying may answer it."""
+
+
+class ReportedDeferredRead(ReportedError, DeferredRead):  # noqa: N818 - reported capability
+    """A deferred read reported across a boundary: still deferred, so retrying may answer it."""
+
+    reports = DeferredRead
 
 
 class CoordinationReadUnavailable(CoordinationError, DeferredRead):
@@ -124,9 +149,12 @@ class StaleRevision(CoordinationError, DeferredRead):  # noqa: N818 - nominal ou
     """The supplied CAS revision is not the authoritative revision."""
 
 
-class ReloadRequired(StaleRevision):  # noqa: N818 - nominal outcome name
+class ReloadRequired(StaleRevision, DeclaredError):  # noqa: N818 - nominal outcome name
     """The read's own bounds name a source that is gone; retrying them never succeeds,
-    so the caller is answered and re-reads from fresh bounds."""
+    so the caller is answered and re-reads from fresh bounds. Its message is its whole state,
+    so a remote UI receives the same reload signal."""
+
+    wire_type: ClassVar[object] = tuple[str]
 
 
 class TranscriptChanged(ReloadRequired):  # noqa: N818 - nominal outcome name

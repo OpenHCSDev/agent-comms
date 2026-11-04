@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import MessageId, NullMember, OrderId, RetryDecisionId, SubclassUnion, TaggedRecordMember, TurnId
+from .nominal.field_codec import MessageId, NullMember, OrderId, RetryDecisionId, TaggedUnion, TaggedRecordMember, TurnId
 
 
 class WorkDecision(DeclaredFamily, affix="Decision"):
@@ -32,12 +32,9 @@ class OrderDecision(WorkDecision):
     order: OrderId
 
 
-class AttemptResolution(SubclassUnion, affix="Resolution"):
+class AttemptResolution(TaggedUnion, affix="Resolution"):
     """Why an attempt ended; the absent member keeps the original null wire shape."""
 
-    @classmethod
-    def decodes_tagged_records(cls) -> bool:
-        return True
 
 
 class RecordedResolution(TaggedRecordMember, AttemptResolution, declared_name=None):

@@ -543,6 +543,7 @@ class IntegrationInput(DeclaredFamily, affix="Input"):
         with path.open("a") as output:
             output.write(f"base={self.source(repository).baseline.commit}\n")
             output.write(f"combined={str(self.combined).lower()}\n")
+            output.write(f"tested={self.tested}\n")
 
     def require_carrier(self, core: Repo, carrier: PullRequestHead) -> None:
         raise ToolRefusedError("An individual source is not a captured combined carrier")
@@ -558,6 +559,16 @@ class IntegrationInput(DeclaredFamily, affix="Input"):
     @property
     def digest(self) -> str:
         return hashlib.sha256(self.canonical.encode("utf-8")).hexdigest()
+
+    @property
+    def tested(self) -> str:
+        """What a run over these inputs measures: each repository's baseline commit and the tree
+        it tests. A pull request's merge commit and its merge-queue commit are different commits
+        whose sources agree here, so a queue entry with the same tested sources as a green
+        pull-request run has nothing new to check."""
+        cut = [[source.repository.to_wire(), source.baseline.commit, source.candidate_tree]
+               for source in self.sources]
+        return hashlib.sha256(FieldCodec.compact(cut).encode("utf-8")).hexdigest()
 
     @property
     def trailer(self) -> str:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from agent_comms.cli_command import TargetActionCommand
 from agent_comms.channel_management import KeepThreadsTagDisposition
 from agent_comms.channel_management import TagChangeResult
 from agent_comms.channel_management import TagDisposition
@@ -18,7 +19,8 @@ import dataclasses
 
 
 @dataclass(frozen=True, kw_only=True)
-class DeleteTagCliCommand(MultipleTargets, ExactTagCliCommand, declared_name="delete-tag"):
+class DeleteTagCliCommand(MultipleTargets, ExactTagCliCommand, TargetActionCommand[TagChangeResult],
+                          declared_name="delete-tag"):
     help = "Remove tag, archive tagged threads, or delete tagged threads"
     disposition: Annotated[
         TagDisposition,

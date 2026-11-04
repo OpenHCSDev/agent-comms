@@ -32,6 +32,7 @@ from conftest import transcript_records
 
 from agent_comms.bus import Bus
 from agent_comms.comms import Comms, wire
+from agent_comms.exporting import WireExportObserver
 from agent_comms.connector import (
     ApprovalLink,
     InitializeResult,
@@ -481,7 +482,8 @@ def test_fresh_connector_publication_refuses_before_entering_held_stores(connect
         barrier.begin(MaintenanceOperator.current()), PausedPhase), InstallingPhase)
     try:
         with pytest.raises(MaintenanceHeldError):
-            connector.invoke(ConnectorSendTool, {"to": "worker", "body": "Held send"}, CALLER)
+            connector.invoke(
+                ConnectorSendTool, {"to": "worker", "body": "Held send"}, CALLER, WireExportObserver())
     finally:
         barrier.advance(held, ReadyPhase)
     assert comms.bus.bus.revision() == before
@@ -1158,3 +1160,63 @@ def test_every_session_is_told_how_to_take_its_own_name() -> None:
     fork = FieldCodec.record_schema(CommsSendTool, ActingFork)["properties"]["fork"]
     assert "Your own name on the bus" in fork["description"]
     assert "distinct name" in InitializeResult().instructions
+
+
+async def test_connector_reports_the_root_its_core_serves(client, comms):
+    """A remote UI keys its observation by the served root, read through the same tools/call."""
+    headers = {"Authorization": f"Bearer {await approved_token(client, comms)}"}
+    response = await client.post("/mcp", headers=headers, json={
+        "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+        "params": {"name": "comms_served_root", "arguments": {}},
+    })
+    result = (await response.json())["result"]
+    assert result["isError"] is False
+    assert result["structuredContent"]["root"] == str(comms.root.resolve())
+
+
+async def test_a_call_that_asks_for_progress_streams_it_then_its_reply(client, store, comms, tmp_path):
+    """MCP progress: a tools/call carrying a progress token is answered as server-sent events,
+    the export's progress notices first and its reply last."""
+    from agent_comms.connector import ProgressNotice, StreamedLine, ToolsCallReply
+    from agent_comms.exporting import EverythingScope, FullLimit, JsonlFormat
+    from agent_comms.tools import CommsExportWireTool
+
+    prepare_native_comms(comms)
+    namespace = comms.registry.store.privacy().namespace
+    token = store.update(lambda grants: grants.ui_issued(namespace, 60, UiAccess)).token
+    destination = tmp_path / "export.jsonl"
+    response = await client.post("/mcp", headers={
+        "Authorization": f"Bearer {token}", "Accept": "text/event-stream"}, json={
+        "jsonrpc": "2.0", "id": "export-1", "method": "tools/call",
+        "params": {"name": "comms_export_wire", "_meta": {"progressToken": "export-1"},
+                   "arguments": CommsExportWireTool(
+                       destination=destination, format=JsonlFormat(), scope=EverythingScope(),
+                       limit=FullLimit()).called().arguments}})
+    assert response.headers["Content-Type"].startswith("text/event-stream")
+
+    class Recorded(WireExportObserver):
+        def __init__(self):
+            self.progress = []
+
+        def advanced(self, progress):
+            self.progress.append(progress)
+
+    observer, replies = Recorded(), []
+    async for line in response.content:
+        StreamedLine(line).delivered(observer, replies)
+    (reply,) = replies
+    assert reply.structured()["destination"] == str(destination)
+    assert destination.exists()
+
+
+async def test_a_cancel_reaches_the_running_call_it_names(connector):
+    """notifications/cancelled stops the observed call with that request id and no other."""
+    from agent_comms.connector import CancelledMessage
+    from agent_comms.exporting import CancellableWireExport
+
+    named, other = CancellableWireExport(), CancellableWireExport()
+    connector.observed["export-1"] = named
+    connector.observed["export-2"] = other
+    message = CancelledMessage(jsonrpc="2.0", params={"requestId": "export-1"})
+    assert (await message.answer(connector, None, None)).status == 202
+    assert named.cancelled() and not other.cancelled()

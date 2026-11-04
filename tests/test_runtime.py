@@ -1,6 +1,9 @@
 """Single-owner attachment and idle wakeup through real processes and sockets."""
 from agent_comms.repo import Checkout
-from agent_comms.owner_connection import OwnerReplyLostError
+from agent_comms.runtime_requests import QueueActionRuntimeRequest
+from agent_comms.owner_connection import (
+    CapturedOwner, OwnerIdentityChangedError, OwnerReplyConnection, OwnerReplyLostError, socket_path,
+)
 from agent_comms.controller import SessionUpdateSink
 
 import asyncio
@@ -27,13 +30,11 @@ from agent_comms.input_key import BusInputKey
 from agent_comms.bus_read import OwnerReadRuntimeRequest
 from agent_comms.order_tools import InputDeliveryRead
 from agent_comms.runtime_server import RuntimeRequest
-from agent_comms.owner_connection import OwnerIdentityChangedError, OwnerReplyConnection
 from agent_comms.threads import ExternalThread, NativeThread
 from agent_comms.tool_caller import ToolCaller
 from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import AcpSessionId, RootId
 from agent_comms.owner_protocol import OwnerAnnouncement, OwnerReady, OwnerResult, OwnerUpdate
-from agent_comms.owner_connection import socket_path
 from agent_comms.runtime import RuntimeConnection, present_session
 from agent_comms.private_path import PrivateSocketRole
 from agent_comms.thread_identity import RecordedThreadIncarnation
@@ -81,14 +82,14 @@ async def test_an_input_delivery_read_without_a_reply_is_lost_after_one_dispatch
     """The owner received exactly the declared operation once, then hung up: the caller
     gets the original reply loss, and no durable input moved. The peer runs no domain body."""
     process = ProcessIdentity.capture(os.getpid())
-    declare_owner(comms, "held", process)
+    owner = declare_owner(comms, "held", process)
     before = recorded_input(comms)
     async with silent_socket(comms, process) as received:
         with pytest.raises(OwnerReplyLostError):
             await mcp_input_delivery(comms, include_history)
     assert [FieldCodec.decode(RuntimeRequest, request) for request in received] == [
         OwnerReadRuntimeRequest(
-            thread="held", operation=InputDeliveryRead(thread="held", include_history=include_history),
+            thread="held", captured=CapturedOwner(owner.incarnation), operation=InputDeliveryRead(thread="held", include_history=include_history),
         ),
     ]
     assert stored_inputs(comms.root) == before
@@ -234,7 +235,7 @@ async def test_subscription_replay_uses_requested_alias(
         with Coordination(str(comms.root / "coordination.sqlite3")) as store:
             store.participants.register(thread.incarnation.lookup, committed=True)
         comms.threads.attach_session(thread, str(journal), process=thread.process_identity)
-        comms.threads.rename_managed_thread(original, "renamed", owner=ProcessIdentity.capture(os.getpid()))
+        comms.threads.rename_managed_thread(comms.registry.require(original).incarnation, "renamed", owner=ProcessIdentity.capture(os.getpid()))
         requested = original if request_original else AcpSessionId("renamed")
         proxy = client._create_runtime_proxy(comms.registry.require(requested), requested)
         await proxy.subscribe()
@@ -346,7 +347,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
             replace(comms.registry.require("worker"), session_file=RegistrySessionLocation.from_path(str(tmp_path / "session.jsonl"), comms.root))
         )
         assert await proxy.request("cancel") == {"owner": "old"}
-        comms.threads.rename_managed_thread("worker", "renamed", owner=old)
+        comms.threads.rename_managed_thread(comms.registry.require("worker").incarnation, "renamed", owner=old)
         comms.registry.register(replace(comms.registry.require("renamed"), process_identity=new))
         old_server.close()
         for writer in connections:
@@ -425,3 +426,18 @@ async def test_new_session_metadata_has_a_display_title_before_first_switch(
         )
     finally:
         await agent.shutdown()
+
+
+@pytest.mark.parametrize("queue_request", RuntimeRequest.members_with(QueueActionRuntimeRequest))
+async def test_a_queue_action_binds_the_incarnation_its_caller_read(comms, queue_request):
+    """Send-now and clear go straight to the owner's socket, not through a connection's
+    payload; the request still carries the birth, so a same-name replacement refuses it."""
+    process = ProcessIdentity.capture(os.getpid())
+    owner = declare_owner(comms, "held", process)
+    async with silent_socket(comms, process) as received:
+        with pytest.raises(OwnerReplyLostError):
+            async with asyncio.timeout(30):
+                await asyncio.to_thread(queue_request.at_owner, comms.root, owner)
+    assert [FieldCodec.decode(RuntimeRequest, sent) for sent in received] == [
+        queue_request(thread="held", captured=CapturedOwner(owner.incarnation)),
+    ]

@@ -12,7 +12,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.native_arguments import GivenBinary
 from agent_comms.notification_reads import LiveNotificationRead
 from agent_comms.ui_model.observation import (
-    ObservationProcess,
+    LocalRouteObservation, ObservationProcess,
     ObserverDied,
     ReadNotifications,
     StopObserving,
@@ -86,21 +86,21 @@ async def test_subscriptions_share_process_and_last_close_joins_it(headless_owne
 
 
 async def test_broken_pipe_ends_subscription_with_observer_died(headless_owner):
-    process = ObservationProcess(headless_owner._comms.route)
+    process = ObservationProcess(LocalRouteObservation(headless_owner._comms.route))
     pending = asyncio.create_task(process.read(
         ReadNotifications(str(headless_owner._comms.root), LiveNotificationRead(()))))
     try:
         await asyncio.sleep(0)
-        process.process.terminate()
-        process.process.join(timeout=10)
-        assert not process.process.is_alive()
+        process.peer.process.terminate()
+        process.peer.process.join(timeout=10)
+        assert not process.peer.process.is_alive()
         with pytest.raises(ObserverDied) as failed_send:
             process.request(StopObserving())
         with pytest.raises(ObserverDied) as failed_read:
             await pending
         assert failed_send.value is failed_read.value is process.status
         assert process.ended(None) is failed_send.value
-        assert failed_send.value.pid == process.process.pid
+        assert failed_send.value.pid == process.peer.process.pid
         assert process.reads == {}
     finally:
         await process.close()

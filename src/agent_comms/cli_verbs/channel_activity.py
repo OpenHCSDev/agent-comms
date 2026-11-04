@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from agent_comms.cli_command import TargetActionCommand
 from agent_comms.repo import Checkout
 
 from typing import Self
@@ -17,7 +18,8 @@ from typing import Annotated
 
 
 @dataclass(frozen=True, kw_only=True)
-class ChannelActivityCliCommand(NamedCliCommand, declared_name="channel-activity"):
+class ChannelActivityCliCommand(NamedCliCommand, TargetActionCommand[Channel],
+                                declared_name="channel-activity"):
     help = "Toggle member activity"
     enabled: Annotated[
         bool, TargetBound(), Argument(flags=("--enabled",))

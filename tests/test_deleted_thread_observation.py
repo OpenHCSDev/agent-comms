@@ -14,7 +14,7 @@ from agent_comms.thread_presentation import ThreadRetired
 from agent_comms.thread_presentation import NoThreadPresentation
 from agent_comms.notification_reads import LiveNotificationRead
 from agent_comms.ui_model.observation import (
-    ObservationProcess, ObserveThreads, ObserveViews, ReadNotifications,
+    LocalRouteObservation, ObservationProcess, ObserveThreads, ObserveViews, ReadNotifications,
     ThreadPresented, ThreadsObserved, ViewsRetired,
 )
 from agent_comms.ui_model.status import OpenThreadStatus
@@ -82,7 +82,7 @@ async def test_observer_process_survives_deleted_interest_and_keeps_serving(comm
     original = comms.registry.require('deleted').incarnation
     names = frozenset({'surviving', 'deleted'})
     delivered = ObservedQueue()
-    async with ObservationProcess(comms.route) as process:
+    async with ObservationProcess(LocalRouteObservation(comms.route)) as process:
         process.start_receiving(delivered.observed, delivered.failed)
         process.request(ObserveThreads(names))
         process.request(ObserveViews(frozenset({original}), frozenset()))
@@ -106,7 +106,7 @@ async def test_observer_process_survives_deleted_interest_and_keeps_serving(comm
         updated = await delivered.until(lambda result: isinstance(result, ThreadsObserved)
                                         and 'surviving' in result.changed)
         assert isinstance(updated.activity['surviving'], ObservedActivity)
-        assert process.process.is_alive()
+        assert process.peer.process.is_alive()
         async with asyncio.timeout(30):
             assert (await process.read(ReadNotifications(str(comms.root), LiveNotificationRead(())))).outcomes == {}
 
