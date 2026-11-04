@@ -913,6 +913,11 @@ class MessageInput(Timestamped, Addressed, BusCapability):
         PublicationExclude(),
     ] = ()
 
+    @property
+    def sender_label(self) -> str:
+        """Who sent this as its reader sees it: the thread and what kind of sender it is."""
+        return f"{self.sender} ({self.sender_role.origin_label})"
+
 
 @dataclass(frozen=True, slots=True)
 class Message(MessageInput, TurnOrigin):

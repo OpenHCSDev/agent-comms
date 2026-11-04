@@ -108,7 +108,7 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
         return cls.units(json.dumps(text, ensure_ascii=False))
 
     def header(self, number: int, total: int) -> str:
-        return (f'{self.HEADER} · {self.message.sender} · '
+        return (f'{self.HEADER} · {self.message.sender_label} · '
                 f'{self.message.message_id} · {number}/{total}\n')
 
     @cached_property
@@ -136,7 +136,7 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
     @cached_property
     def export_lines(self) -> tuple[str, ...]:
         """The readable message: who sent it, then its lines as written."""
-        return (f'{self.HEADER} · {self.message.sender} · {self.message.message_id}',
+        return (f'{self.HEADER} · {self.message.sender_label} · {self.message.message_id}',
                 *(part.removesuffix('\n') for part in self.slices))
 
     def read_parts(self, rows: tuple[tuple[int, str], ...]) -> tuple[MonitorPart, ...]:
@@ -148,7 +148,7 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
         if any(not 1 <= number <= len(lines) or lines[number - 1] != text for number, text in shown):
             return ()
         return tuple(MonitorPart.model_validate(dict(
-                         id=self.message.message_id, sender=self.message.sender,
+                         id=self.message.message_id, sender=self.message.sender_label,
                          number=number - 1, total=len(self.slices),
                          body=self.slices[number - 2]))
                      for number, _ in shown if number > 1)

@@ -76,7 +76,8 @@ async def test_the_cloud_client_shows_a_message_that_fits_one_event_as_written(
     exports.parent.mkdir(mode=0o700)
     lines = await delivered_lines(client, token, comms, exports, capsys, "short body\nsecond line")
     start = next(index for index, line in enumerate(lines) if line.startswith("Comms in"))
-    assert lines[start].startswith("Comms in · sender · ") and lines[start].endswith(" · 1/1")
+    assert lines[start].startswith("Comms in · sender (external agent) · ")
+    assert lines[start].endswith(" · 1/1")
     assert lines[start + 1:start + 3] == ["short body", "second line"]
     assert not exports.exists() or not any(exports.iterdir())
 
@@ -92,7 +93,8 @@ async def test_the_cloud_client_names_the_whole_body_of_a_message_too_long_for_o
     notice = next(json.loads(line) for line in lines if line.startswith('{"protocol"'))
     assert notice["type"] == "read-file"
     written = Path(notice["path"]).read_text()
-    assert written.startswith("Comms in · sender · ") and written.count("a line of a long body") == 40
+    assert written.startswith("Comms in · sender (external agent) · ")
+    assert written.count("a line of a long body") == 40
 
 
 async def test_a_burst_of_pushed_messages_never_shares_one_monitor_batch(
