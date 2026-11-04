@@ -23,7 +23,7 @@ from agent_comms.held_orders import HeldOrders
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.order_tools import CommsOrderDoneTool, CommsTodoCreateTool
+from agent_comms.order_tools import CommsOrderDoneTool, CommsProblemNumberTool, CommsTodoCreateTool
 from agent_comms.todos import (
     CommitDelivery, DoneTodoState, FixShape, OrderScope,
     PendingProblemOrder, ReportDelivery, ReportedProblemOrder, TodoStore, TriageScope,
@@ -154,3 +154,18 @@ def test_a_check_named_by_repository_runs_in_its_registered_checkout(tmp_path):
         OrderCheck(Path("nowhere"), "true").bound_in(project)
     # A bus with no team project keeps the written directory, as before.
     assert OrderCheck(tmp_path / "x", "true").bound_in(NoTeamProject()).directory == tmp_path / "x"
+
+
+def test_reserved_problem_numbers_never_collide_and_create_cleanly(comms, source_repository):
+    """comms_todo_create made each caller pick a number, so concurrent resends raced for
+    the same one (a TodoConflict). comms_problem_number reserves through the allocation
+    order send already uses: two callers get two numbers, and the reserved one creates."""
+    for name in ('colleague', 'worker'):
+        comms.registry.declare(NativeThread(name, frozenset(), Checkout(comms.root)))
+    caller = ThreadCaller('colleague')
+    first = CommsProblemNumberTool().apply(comms, caller).problem
+    second = CommsProblemNumberTool().apply(comms, caller).problem
+    assert first != second
+    _, created = requested(comms, TriageScope(), source_repository, first, ('Classify it',))
+    assert created.id == first
+    assert CommsProblemNumberTool().apply(comms, caller).problem not in (first, second)

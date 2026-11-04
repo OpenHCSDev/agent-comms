@@ -125,6 +125,11 @@ class ProblemClosed(ToolResult):
 
 
 @dataclass(frozen=True)
+class ProblemNumberReserved(ToolResult):
+    problem: str
+
+
+@dataclass(frozen=True)
 class MessagePublished(ToolResult):
     """The Pi adapter decodes this reply as PublishedMessageToolDetails by its agentCommsKind."""
 
@@ -402,6 +407,18 @@ class CommsOrderTool(ThreadToolRequest):
         goal = comms.goals.update_goal(self.owner, order)
         return ProblemOrdered(goal, tuple(comms.goals.todos.get(problem)
                                           for problem in self.order.problems()))
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsProblemNumberTool(ThreadToolRequest):
+    label = "Reserve problem number"
+    description = (
+        "Reserve the next free problem number for comms_todo_create, the same allocation "
+        "order send uses: concurrent callers each get a distinct number, so none guesses one."
+    )
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> ProblemNumberReserved:
+        return ProblemNumberReserved(comms.goals.todos.allocate_problem())
 
 
 @dataclass(frozen=True, kw_only=True)
