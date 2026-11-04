@@ -221,7 +221,7 @@ def test_a_teammate_files_its_own_second_row_beside_the_one_it_holds(held_team, 
     reviewer = ctx.comms.registry.require(ctx.actor_name).incarnation
     ThreadCaller("worker").invoke(CommsOrderDeliverTool(
         problem="P2", pull_request=PullRequestLink(held.repo, 7), head="b" * 40,
-        report=DeliveryReport("The second workflow's stale decision is dead; check the PR head."),
+        report=DeliveryReport("The second workflow was broken by a stale decision; check the PR head."),
         reviewer=SelectedClaimReviewer(reviewer),
     ), ctx.comms)
     claim, = ctx.comms.goals.todos.get("P2").order.team_claims()

@@ -274,7 +274,7 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
         PullRequestLink(awaiting_todo.repo, 2),
         "b" * 40,
         "The request's work is ready for review.",
-        original.reference,
+        (original.reference,),
     )
     claimed = store.apply(
         awaiting_todo.id,
