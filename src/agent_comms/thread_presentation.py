@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, fields, replace
-from typing import TYPE_CHECKING, ClassVar, NoReturn, Self
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.coordination_errors import StaleRevision
 from agent_comms.errors import RelationViolationError, RouteChangedError, UnregisteredThreadError
@@ -17,7 +17,12 @@ from .message_reference import MessageReference
 import agent_comms.session_load as session_load
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from .activity import ObservedActivity
+    from .agent_activity import RecipientActivity
     from .presentation import MessageNotification
+    from .threads import Thread
     from .transcripts import AcquiredThreadPresentation, TranscriptReadIdentity
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.transcripts import Transcripts
@@ -156,7 +161,8 @@ class ThreadOwnerBinding(DeclaredFamily, affix="ThreadOwnerBinding"):
     ) -> None:
         """An unavailable owner cannot supply a new existing-session load."""
 
-    def recipient_activity(self, activity, snapshot, thread):
+    def recipient_activity(self, activity: Mapping[str, ObservedActivity],
+                           snapshot: RegistrySnapshot, thread: Thread) -> RecipientActivity:
         from .agent_activity import UnavailableRecipientActivity
 
         return UnavailableRecipientActivity()
@@ -185,7 +191,8 @@ class LiveThreadOwnerBinding(ThreadOwnerBinding):
     def native_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
         return ordinary
 
-    def recipient_activity(self, activity, snapshot, thread):
+    def recipient_activity(self, activity: Mapping[str, ObservedActivity],
+                           snapshot: RegistrySnapshot, thread: Thread) -> RecipientActivity:
         from .agent_activity import LiveRecipientActivity
 
         return LiveRecipientActivity(thread, activity[thread.name])

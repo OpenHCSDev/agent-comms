@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property
 from pathlib import Path
@@ -73,7 +73,11 @@ from .thread_model import (
     UndeclaredModel,
     UnselectedModel,
 )
-from .thread_presentation import ThreadOwnerBinding, ThreadPresentation, UnavailableThreadOwnerBinding
+from .thread_presentation import (
+    ThreadOwnerBinding,
+    ThreadPresentation,
+    UnavailableThreadOwnerBinding,
+)
 from .thread_status import ServiceThreadStatus, ThreadStatus
 from .thread_storage import (
     AssignedStorageRoots,
@@ -81,9 +85,11 @@ from .thread_storage import (
     UnassignedThreadStorage,
 )
 from .thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
+from .activity import ObservedActivity
 from .turn_lease import FinishedTurn, NoTurnRecord, TurnLease, TurnLeaseFence, TurnRecord, TurnState
 
 if TYPE_CHECKING:
+    from .agent_activity import RecipientActivity
     from .goal_management import Goals
     from .registry_document import RegistrySnapshot
     from .storage_rules import StorageRule
@@ -123,12 +129,12 @@ class ArchiveOwnerControl(OwnerLifecycleControl):
         return status.stopped
 
 
-class ConversationPreparation(ABC):
+class ConversationPreparation[T](ABC):
     @abstractmethod
-    def native(self): ...
+    def native(self) -> T: ...
 
     @abstractmethod
-    def external(self): ...
+    def external(self) -> T: ...
 
 
 class NoChannelInbox:
@@ -479,7 +485,7 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread")
     def turn_state(self) -> TurnState:
         return self.turn_record.state()
 
-    def restart_candidates(self, status):
+    def restart_candidates(self, status: ThreadStatus) -> tuple[Thread, ...]:
         return ()
 
     def teammate(self) -> str:
@@ -488,7 +494,8 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread")
         return self.name
 
     def require_native(self) -> None:
-        raise RelationViolationError("This participant checks its CLI inbox; it has no native prompt transport.")
+        raise RelationViolationError(
+            "This participant checks its CLI inbox; it has no native prompt transport.")
 
     def require_external(self) -> None:
         raise RelationViolationError("Only an external CLI can publish a bridge process.")
@@ -499,7 +506,7 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread")
     def require_subagent(self) -> None:
         raise RelationViolationError('This thread is not a declared subagent.')
 
-    def prepare_conversation(self, preparation: ConversationPreparation):
+    def prepare_conversation[T](self, preparation: ConversationPreparation[T]) -> T:
         return preparation.external()
 
     def native_command_available(self, command: type[ThreadCommandAvailability],
@@ -540,16 +547,16 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread")
                      binding: ThreadOwnerBinding) -> ThreadPresentation:
         return ordinary
 
-    def observe_recipient(self, agents, snapshot: RegistrySnapshot):
-        from .agent_activity import UnavailableRecipientActivity
-
-        return UnavailableRecipientActivity()
+    def observe_recipient(self, agents: Mapping[str, ObservedActivity],
+                          snapshot: RegistrySnapshot) -> RecipientActivity:
+        """The owner binding decides whether this recipient's activity is observable."""
+        return self.owner_binding(snapshot).recipient_activity(agents, snapshot, self)
 
     def holds_activity(self, status: ThreadStatus) -> bool:
         """An executing native turn keeps its last activity current."""
         return self.executing
 
-    def project_activity(self, activity):
+    def project_activity(self, activity: ObservedActivity) -> ObservedActivity:
         """External participants report their own activity events."""
         return activity
 
@@ -799,12 +806,12 @@ class NativeThread(Thread):
                                  status: ThreadStatus) -> bool:
         return command.available_for(status, process=self.process_identity)
 
-    def restart_candidates(self, status):
+    def restart_candidates(self, status: ThreadStatus) -> tuple[Thread, ...]:
         if self.process_identity.runs_here():
             return ()
         return status.restart_candidates(self)
 
-    def prepare_conversation(self, preparation: ConversationPreparation):
+    def prepare_conversation[T](self, preparation: ConversationPreparation[T]) -> T:
         return preparation.native()
 
     def require_native(self) -> None:
@@ -817,10 +824,7 @@ class NativeThread(Thread):
                      binding: ThreadOwnerBinding) -> ThreadPresentation:
         return status.native_presentation(self.process_identity, ordinary, binding)
 
-    def observe_recipient(self, agents, snapshot: RegistrySnapshot):
-        return self.owner_binding(snapshot).recipient_activity(agents, snapshot, self)
-
-    def project_activity(self, activity):
+    def project_activity(self, activity: ObservedActivity) -> ObservedActivity:
         """A running native owner displays its current turn phase."""
         return self.turn_record.read().project_activity(activity)
 

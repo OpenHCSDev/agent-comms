@@ -59,6 +59,7 @@ class RegisterCliCommand(NameArgument, CliCommand):
             worktree=self.worktree,
             parent=self.parent,
             task=self.task,
-            process_identity=self.process)
+            process_identity=self.process,
+        )
         ctx.registry.declare(thread)
         return RegisteredResult(self.name)

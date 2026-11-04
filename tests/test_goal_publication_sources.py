@@ -101,7 +101,7 @@ async def test_requested_refresh_observes_activity_with_unchanged_durable_goal_f
     assert second.goal == first.goal
     assert isinstance(second.execution, StandbyExecution)
     assert tuple(target.incarnation.name for target in second.execution.inactive_wait_for) == (child.name,)
-    assert second.presentation(session).summary == "Standby · waiting for @child; no active turn: @child"
+    assert second.execution.presentation(session).summary == "Standby · waiting for @child; no active turn: @child"
     await scheduler.sync_goal_execution(session)
     assert len(client.published) == 2
 

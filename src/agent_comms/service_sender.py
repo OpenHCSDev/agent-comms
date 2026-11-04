@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .bus_publication import ServiceOrigin
 from .repo import Checkout
-from .threads import ServiceThread
 from .thread_identity import ServiceThreadRole
+from .threads import ServiceThread
 
 if TYPE_CHECKING:
     from .registration import Registration
@@ -29,5 +29,6 @@ class ServiceSender:
                 cls.sender,
                 frozenset(),
                 Checkout(registry.store.path.parent),
-                role=ServiceThreadRole)
+                role=ServiceThreadRole,
+            )
         )

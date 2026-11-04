@@ -75,10 +75,7 @@ class HarnessInstallation:
         registered = tuple(name for name in harness.bus_threads if not names.taken(name))
         for name in registered:
             ctx.registry.declare(
-                ExternalThread(
-                    name=name,
-                    tags=frozenset(),
-                    worktree=Checkout(self.project))
+                ExternalThread(name=name, tags=frozenset(), worktree=Checkout(self.project))
             )
         return registered
 

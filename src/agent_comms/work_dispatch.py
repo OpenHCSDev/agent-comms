@@ -66,7 +66,8 @@ class WorkDispatch:
             frozenset(),
             Checkout(checkout),
             model=defaults.model,
-            thinking_level=defaults.thinking_level)
+            thinking_level=defaults.thinking_level,
+        )
         self.action.require_ready(GoalActionContext(comms.goals, candidate))
         comms.registry.require_declaration_available(candidate, StoppedThreadStatus())
         repository = Repo.of(self.action.order.check.directory)
