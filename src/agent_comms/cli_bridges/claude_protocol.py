@@ -97,6 +97,8 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
     BATCH_CHARS = 3000
     READ_LINE_CHARS = 2000
     HEADER = 'Comms in'
+    PART_PREFIX = '"' + HEADER + ' · '
+    """How an encoded part's line starts, before its JSON string is decoded."""
     JSON_TEXT = WireModel.adapter(str)
 
     @staticmethod
@@ -107,9 +109,20 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
     def event_size(cls, text: str) -> int:
         return cls.units(json.dumps(text, ensure_ascii=False))
 
+    @property
+    def sender(self) -> str:
+        """The header's sender column; decode_line reads it back, and its stored observed parts
+        are compared with the message's sender."""
+        return self.message.sender
+
+    @property
+    def identity(self) -> str:
+        """The header's identity column; decode_line reads it back as the message id."""
+        return str(self.message.message_id)
+
     def header(self, number: int, total: int) -> str:
-        return (f'{self.HEADER} · {self.message.sender} · '
-                f'{self.message.message_id} · {number}/{total}\n')
+        return (f'{self.HEADER} · {self.sender} · '
+                f'{self.identity} · {number}/{total}\n')
 
     @cached_property
     def inline(self) -> str:
@@ -117,7 +130,12 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
 
     @cached_property
     def fits_one_event(self) -> bool:
-        return self.event_size(self.inline) <= self.EVENT_CHARS
+        return self.event_size(self.inline) <= self.EVENT_CHARS and self.shows_safely_inline
+
+    @property
+    def shows_safely_inline(self) -> bool:
+        """One JSON string carries the whole message, so no body line reaches the decoder alone."""
+        return True
 
     @cached_property
     def slices(self) -> tuple[str, ...]:
@@ -136,7 +154,7 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
     @cached_property
     def export_lines(self) -> tuple[str, ...]:
         """The readable message: who sent it, then its lines as written."""
-        return (f'{self.HEADER} · {self.message.sender} · {self.message.message_id}',
+        return (f'{self.HEADER} · {self.sender} · {self.message.message_id}',
                 *(part.removesuffix('\n') for part in self.slices))
 
     def read_parts(self, rows: tuple[tuple[int, str], ...]) -> tuple[MonitorPart, ...]:
@@ -153,20 +171,33 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
                          body=self.slices[number - 2]))
                      for number, _ in shown if number > 1)
 
-    async def emit_to(self, attachment: MonitorAttachment, window_bytes: int, exports: Path) -> None:
-        """A body that fits one event goes inline. Any larger body is the private file the one
-        notice names, whole and readable, so no piece reaches the model on its own."""
+    def shown_inline(self) -> str:
+        """A bridged session confirms delivery by decoding this exact event back out of its
+        transcript, where Monitor joins nearby lines, so it is one reversible JSON string."""
+        return LineMonitorBridge.encode(self.inline)
+
+    def event(self, exports: Path) -> tuple[int, str]:
+        """The message's one Monitor event and the reservation it fills. A body that fits one
+        event goes inline. Any larger body is the private file the one notice names, whole and
+        readable, so no piece reaches the model on its own."""
         if self.fits_one_event:
-            await attachment.emit(self.message.message_id, 1, LineMonitorBridge.encode(self.inline),
-                                  window_bytes)
-            return
+            return 1, self.shown_inline()
         notice = MonitorReadFile.naming(exports, self.message.reference)
         line = notice.model_dump_json()
         if self.units(line) > self.EVENT_CHARS:
             raise ValueError(f'The read notice for {self.message.message_id} exceeds one '
                              f'Monitor event: {notice.path}')
-        await asyncio.to_thread(notice.export, self.export_lines)
-        await attachment.emit(self.message.message_id, notice.reservation, line, window_bytes)
+        notice.export(self.export_lines)
+        return notice.reservation, line
+
+    async def emit_to(self, attachment: MonitorAttachment, window_bytes: int, exports: Path) -> None:
+        number, line = await asyncio.to_thread(self.event, exports)
+        await attachment.emit(self.message.message_id, number, line, window_bytes)
+
+    @classmethod
+    def claims(cls, line: str) -> bool:
+        """Whether the transcript decoder reads this line as one of our frames rather than foreign."""
+        return line.startswith((MonitorProtocolFrame.wire_prefix, cls.PART_PREFIX))
 
     @classmethod
     def decode_line(cls, line: str) -> MonitorFrame:
@@ -178,7 +209,7 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
                 return ForeignMonitorFrame(text=line)
             return MONITOR_FRAME.validate_json(line)
         # Classify the external header before decoding its JSON string.
-        if not line.startswith('"' + cls.HEADER + ' · '):
+        if not line.startswith(cls.PART_PREFIX):
             return ForeignMonitorFrame(text=line)
         raw_header, separator, _ = line.partition(r'\n')
         if not separator or not line.endswith('"'):

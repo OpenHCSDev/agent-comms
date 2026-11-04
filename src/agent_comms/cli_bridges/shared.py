@@ -1146,8 +1146,7 @@ class IncomingFrame(ABC):
 
     @property
     def text(self) -> str:
-        origin = self.message.sender_role.origin_label
-        return (f'Comms in · {self.message.sender} ({origin})\n'
+        return (f'Comms in · {self.message.sender_label}\n'
                 f'{self.message.body}\nMessage ID: {self.message.message_id}')
 
 class BridgeLog(io.TextIOBase):
@@ -1560,7 +1559,7 @@ class MonitorReadFile(MonitorProtocolFrame, declared_name='read-file'):
     @classmethod
     def naming(cls, directory: Path, reference: MessageReference) -> Self:
         return cls.model_validate(dict(
-            reference=reference, path=str(directory / f'{reference.seq}-{reference.message_id}.txt')))
+            reference=reference, path=str(directory / f'{reference.name}.txt')))
 
     @classmethod
     def exported_at(cls, directory: Path, path: str) -> tuple[Self, ...]:

@@ -1,6 +1,7 @@
 """The real PreToolUse hook preserves each bypass's pin and review contract."""
 
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -19,6 +20,8 @@ from test_head_review import ACCEPTED, QUALIFIED, REASON, invoke, opened
 pytest_plugins = ("test_head_review",)
 
 ADMIN_MERGE = "gh pr merge 2557 --admin --merge"
+GH = shutil.which("gh")
+"""The guard runs the gh a command names; an absolute spelling names this host's gh."""
 
 
 def resident_tool_use(command: str, transcript: Path, bridge: ClaudeBridge) -> HookReply:
@@ -41,7 +44,7 @@ def pre_tool_use(command: str, transcript: Path = Path("s.jsonl")) -> subprocess
     ("cd x && gh pr merge 12 --merge --admin -R OpenHCSDev/toad", "--admin"),
     ("gh api -X PUT repos/OpenHCSDev/agent-comms/pulls/2557/merge -f merge_method=merge",
      "pulls/N/merge"),
-    ("/usr/bin/gh api --method PUT /repos/OpenHCSDev/toad/pulls/1133/merge", "pulls/N/merge"),
+    (f"{GH} api --method PUT /repos/OpenHCSDev/toad/pulls/1133/merge", "pulls/N/merge"),
 ])
 def test_a_merge_around_the_queue_is_denied(command, refused):
     result = pre_tool_use(command)
