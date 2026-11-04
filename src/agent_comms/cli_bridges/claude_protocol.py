@@ -72,6 +72,7 @@ from agent_comms.turn_item import NativeItemId, NativeTurnId, NamedSourceTurn, N
 from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
 
 from ..session_receipts import SessionReceipts
+from ..tool_declaration import ContextRows
 from ..wire_models import WireModel
 from .shared import (
     MONITOR_FRAME,
@@ -376,7 +377,7 @@ class ClaudeToolDraft(ToolDraft):
         Reads in this session still have open. A failed Read showed no file but ends its call."""
         observed = ReadResultObserved if ok else FailedReadObserved
         return tuple(observed(path, text, ObservedMonitor(record.uuid, record.timestamp), reading,
-                              source_turn=source_turn)
+                              source_turn=source_turn, layout=self.call.context_rows)
                      for path in self.call.context_read_paths())
 
 
@@ -972,24 +973,16 @@ class ReadResultObserved(ConfirmedDelivery):
     record: ObservedMonitor
     reading: frozenset[str]
     """Paths other Reads in this session had open when this one returned."""
+    layout: ContextRows = field(default_factory=ContextRows, kw_only=True)
 
     def closing(self, export: MonitorReadFile) -> tuple[MonitorReadFile, ...]:
         """The export this Read may retire: none while another Read of it is still open."""
         return () if export.path in self.reading else (export,)
 
     def rows(self) -> tuple[tuple[int, str], ...]:
-        """Claude shows each file line as its number, a tab, then the line. The leading
-        numbered block is the file; numbers that do not run consecutively make no line count.
-        Records end only at a physical LF: a line may hold U+2028, U+0085 or other characters
-        str.splitlines would split on."""
-        rows: list[tuple[int, str]] = []
-        for row in self.text.split('\n'):
-            number, tab, line = row.partition('\t')
-            if not (tab and number.isdecimal()):
-                break
-            rows.append((int(number), line))
-        consecutive = all(later[0] == earlier[0] + 1 for earlier, later in zip(rows, rows[1:], strict=False))
-        return tuple(rows) if consecutive else ()
+        """The lines the reading tool showed, in the layout that tool declares: Read numbers
+        them, cat prints them as they are."""
+        return self.layout.rows(self.text)
 
     async def confirmed_by(self, bridge: TranscriptConfirmsDelivery) -> ConfirmedDelivery:
         return replace(self, references=await bridge.read_export(self))

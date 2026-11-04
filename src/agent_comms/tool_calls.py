@@ -22,7 +22,7 @@ from .nominal.field_codec import (
     ToolCallId,
 )
 from .native_tools import BashTool, EditTool, GlobTool, GrepTool, ReadTool, WriteTool
-from .tool_declaration import ReplacementEdit, ToolDeclaration
+from .tool_declaration import ContextRows, ReplacementEdit, ToolDeclaration
 from .tool_results import ToolDiff
 from .transcript_events import ToolEndTranscript, ToolStartTranscript
 from .turn_item import NativeItemId
@@ -65,6 +65,10 @@ class ToolCall:
         """A call Core did not decode reads nothing it can name."""
         return ()
 
+    @property
+    def context_rows(self) -> ContextRows:
+        return ContextRows()
+
 
 @dataclass(frozen=True)
 class DecodedToolCall(ToolCall):
@@ -81,6 +85,10 @@ class DecodedToolCall(ToolCall):
 
     def context_read_paths(self) -> tuple[str, ...]:
         return self.tool.context_read_paths()
+
+    @property
+    def context_rows(self) -> ContextRows:
+        return self.tool.context_rows
 
     def patched(self, diff: ToolDiff) -> PatchedToolCall:
         return PatchedToolCall(self.id, self.name, self.arguments, self.tool, diff)

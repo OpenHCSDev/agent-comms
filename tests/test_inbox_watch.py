@@ -704,3 +704,35 @@ async def test_a_cloud_message_sent_as_a_file_is_delivered_once_its_read_shows_i
             await asyncio.sleep(0.05)
     assert attempt_outcome(comms, forged) == "unconfirmed"
     await socket.close()
+
+
+def cat_records(path: str, text: str) -> tuple[str, str]:
+    """The transcript records Claude writes for a Bash `cat` of one file and its output."""
+    started, returned = map(json.loads, read_records(path, text))
+    started["message"]["content"][0].update(name="Bash", input={"command": f"cat {path}"})
+    return json.dumps(started), json.dumps(returned)
+
+
+async def test_a_cloud_message_sent_as_a_file_is_delivered_once_a_cat_shows_it(
+    session, comms: Comms,
+) -> None:
+    """A session that reads its messages with Bash cat, as auto mode suggests, put every file
+    sent message in reserve forever (claude-g-standby). The cat output is the file as it is,
+    judged against the bus message like a Read; a cat of an edited copy confirms nothing."""
+    client, token = session
+    socket = await client.ws_connect(await watch_path(client, token, "cloud"))
+    body = "\n".join(f"line {number} " + "x" * 60 for number in range(80))
+    whole = comms.messaging.send("sender", "cloud", body).message
+    edited = comms.messaging.send("sender", "cloud", body.replace("line 7 ", "line 7?")).message
+    for _ in range(2):
+        await frame(socket)
+    await inbox_emptied(comms, "cloud")
+    for message in (whole, edited):
+        path = f"/elsewhere/state/messages/{message.reference.name}.txt"
+        for record in cat_records(path, "\n".join(ClaudeMonitorFrame(whole).export_lines)):
+            await socket.send_str(record)
+    async with asyncio.timeout(20):
+        while attempt_outcome(comms, whole) != "delivered":
+            await asyncio.sleep(0.05)
+    assert attempt_outcome(comms, edited) == "unconfirmed"
+    await socket.close()

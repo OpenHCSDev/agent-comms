@@ -81,6 +81,30 @@ class OtherAction(ToolAction):
     """A tool with no more specific action."""
 
 
+class ContextRows:
+    """How a reading tool lays out a file in the model's context: Claude's Read shows each line
+    as its number, a tab, then the line. The leading numbered block is the file; numbers that do
+    not run consecutively make no line count. Records end only at a physical LF: a line may hold
+    U+2028, U+0085 or other characters str.splitlines would split on."""
+
+    def rows(self, text: str) -> tuple[tuple[int, str], ...]:
+        rows: list[tuple[int, str]] = []
+        for row in text.split('\n'):
+            number, tab, line = row.partition('\t')
+            if not (tab and number.isdecimal()):
+                break
+            rows.append((int(number), line))
+        consecutive = all(later[0] == earlier[0] + 1 for earlier, later in zip(rows, rows[1:], strict=False))
+        return tuple(rows) if consecutive else ()
+
+
+class PlainContextRows(ContextRows):
+    """A file printed as it is, as `cat` shows it: its lines in order, numbered by position."""
+
+    def rows(self, text: str) -> tuple[tuple[int, str], ...]:
+        return tuple(enumerate(text.split('\n'), start=1))
+
+
 class ToolDeclaration(DeclaredFamily, affix="Tool"):
     family_discriminator: ClassVar[str] = "tool"
     label: ClassVar[str]
@@ -144,6 +168,9 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
         """Files whose visible text the call puts in the model's context: none unless the tool
         reads one."""
         return ()
+
+    context_rows: ClassVar[ContextRows] = ContextRows()
+    """How those files' lines appear in the call's result."""
 
     def digest(self) -> str:
         """What the call does in one line, enough to judge it."""

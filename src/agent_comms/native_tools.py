@@ -5,6 +5,7 @@ from __future__ import annotations
 from agent_comms.nominal.field_codec import ArgumentsExclude
 
 import json
+import shlex
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -24,10 +25,12 @@ from .recorded_time import EventTime
 from .rule_deal import ReadSpan
 from .shell_effects import WriteStorageEffect, physical_path, shell_storage_effects
 from .tool_declaration import (
+    ContextRows,
     EditAction,
     EditCall,
     ExecuteAction,
     GlobalCommsExtension,
+    PlainContextRows,
     ReadAction,
     ReplacementEdit,
     SearchAction,
@@ -212,6 +215,17 @@ class BashTool(ExecuteAction, CodingTool):
 
     def reads(self) -> str:
         return self.command
+
+    context_rows: ClassVar[ContextRows] = PlainContextRows()
+
+    def context_read_paths(self) -> tuple[str, ...]:
+        """A command that is exactly `cat` of one file puts that file in context as it is; any
+        other command's output is its own text, never a file's."""
+        try:
+            words = shlex.split(self.command)
+        except ValueError:
+            return ()
+        return tuple(words[1:]) if len(words) == 2 and words[0] == "cat" else ()
 
     def _parse_resource(self) -> None:
         return None
