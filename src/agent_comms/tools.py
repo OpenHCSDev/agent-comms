@@ -1379,6 +1379,24 @@ class CommsRegistryTool(CoreRead[RegistrySnapshot]):
 
 
 @dataclass(frozen=True)
+class ChannelNames(ToolResult):
+    """Every channel the catalog declares, in roster order."""
+
+    names: tuple[str, ...]
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsChannelNamesTool(CoreRead[ChannelNames]):
+    """A remote UI resolves #channel links without the activity a full channel read needs."""
+
+    label = "Channel names"
+    description = "Every channel name the catalog declares, read without channel activity."
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> ChannelNames:
+        return ChannelNames(comms.channels.catalog.read().channel_names())
+
+
+@dataclass(frozen=True)
 class MessageOutcomes(ToolResult):
     """One message once, then each recipient outcome its caller may read."""
 
