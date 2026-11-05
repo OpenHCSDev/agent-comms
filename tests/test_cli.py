@@ -184,7 +184,7 @@ class TestCliSuccess:
     def test_rename_self_uses_declared_caller(self, cli, tmp_path):
         cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
         code, out = cli(tmp_path, "tool", "--tool", "comms_rename_self", "--from", "a",
-                        "--arguments", '{"new_name":"renamed"}')
+                        "--arguments", '{"display_name":"renamed"}')
         assert code == 0
         assert out == {"previous": "a", "current": "renamed", "changed": True}
         _, detail = cli(tmp_path, "thread", "--name", "a")

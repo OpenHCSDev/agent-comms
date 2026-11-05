@@ -10,6 +10,8 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.threads import NativeThread
+from agent_comms.thread_management import ThreadTitleResult
+from agent_comms.tool_caller import ThreadCaller
 
 
 def _declare(comms, name, worktree):
@@ -49,9 +51,30 @@ def test_rename_takes_its_own_alias_and_refuses_another_threads(tmp_path):
     names = comms.registry.snapshot()
     assert names.taken("worker") and not names.taken("worker", owner="renamed")
     with pytest.raises(RelationViolationError):
-        comms.threads._rename_thread("other", "worker")
-    assert comms.threads._rename_thread("renamed", "worker").current == "worker"
+        comms.threads.rename_self("worker", caller=ThreadCaller("other"))
+    assert comms.threads.rename_self("worker", caller=ThreadCaller("renamed")).current == "worker"
     assert comms.registry.canonical_name("renamed") == "worker"
+
+
+def test_a_thread_corrects_its_own_title_without_renaming(tmp_path):
+    """The label is writable on its own, so an imported title is never frozen.
+
+    Nothing else could do this: a rename refuses another thread's name but this takes
+    only the caller's own authority, which is the party that can see the stale label.
+    """
+    comms = wire(tmp_path / "wire")
+    _declare(comms, "worker", str(tmp_path))
+    comms.registry.rename("worker", "renamed")
+    assert comms.threads.set_own_title(
+        "A corrected label", caller=ThreadCaller("renamed")) == ThreadTitleResult(
+            "renamed", "A corrected label")
+    thread = comms.registry.require("renamed")
+    assert thread.name == "renamed" and thread.display_title == "A corrected label"
+    assert comms.registry.canonical_name("worker") == "renamed"
+    with pytest.raises(ValueError):
+        comms.threads.set_own_title(
+            "one two three four five six seven", caller=ThreadCaller("renamed"))
+    assert comms.registry.require("renamed").display_title == "A corrected label"
 
 
 def test_a_remote_ui_reads_the_registry_with_its_renames(tmp_path):

@@ -21,6 +21,7 @@ from agent_comms.bus_publication import Delivered
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import AwarenessClaimGenerations, ClaimBatchAcknowledgements
 from agent_comms.comms import Comms, wire
+from agent_comms.tool_caller import ThreadCaller
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.assignment_states import EngagedAssignment, FullPendingAssignment, TriagePendingAssignment
@@ -299,7 +300,7 @@ def test_normal_rename_preserves_selected_claims_for_the_same_owner(
     comms, store, index, root_id = _root(tmp_path)
     try:
         old, old_claim = _accepted(comms, store, root_id, "member000", "old pending")
-        comms.threads._rename_thread("member000", "gamma")
+        comms.threads.rename_self("gamma", caller=ThreadCaller("member000"))
         current_message = publish_initial(comms, "sender", "gamma", "new selected")
         current = comms.bus.bus.delivery(current_message.seq)
         (current_claim,) = accept_initial(comms.bus, root_id, current_message.seq, store)

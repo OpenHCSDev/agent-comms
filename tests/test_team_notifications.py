@@ -19,6 +19,7 @@ from agent_comms.heartbeat_delivery import OffHeartbeatDelivery, OnHeartbeatDeli
 from agent_comms.thread_management import GivenTags
 from agent_comms.team_heartbeat import TeamHeartbeat, TeamObservation
 from agent_comms.comms import Comms
+from agent_comms.tool_caller import ThreadCaller
 from team_heartbeat_fixture import ObservedHeartbeat, capture_frame, current_hud
 from agent_comms.team_hud import (
     TeamFrame, TeamHud, TeamPlan, Teammate, CodexUsage, PhasesDoneByPlanGroup, UnreadableUsage,
@@ -550,7 +551,7 @@ def test_failure_packet_follows_the_team_rename_alias(notification_bus):
     comms = notification_bus
     failed_pass(comms, RuntimeError("down"))
     first, = notifications(comms)
-    comms.threads._rename_thread("colleague", "renamed-colleague")
+    comms.threads.rename_self("renamed-colleague", caller=ThreadCaller("colleague"))
     failed_pass(comms, RuntimeError("still down"))
     page = MessagePageRequest(DMDisplayScope.capture(
         owner(comms).name, "renamed-colleague", comms.registry.snapshot(),
@@ -783,7 +784,7 @@ def test_latest_observation_follows_the_team_rename_alias(notification_bus):
     beat(comms, (ServicePassFailing(watch="watch", since=1.0, error="failed source read",
                                     failed_at=1.0),))
     first, = notifications(comms)
-    comms.threads._rename_thread("colleague", "renamed-colleague")
+    comms.threads.rename_self("renamed-colleague", caller=ThreadCaller("colleague"))
     previous = TeamUpdate.latest(comms, comms.registry.require("renamed-colleague").incarnation)
     assert previous == (first.task,)
 
