@@ -23,7 +23,6 @@ from agent_comms.errors import (
     TodoConflict,
     TodoError,
     HumanSendRefusedError,
-    RelationViolationError,
 )
 from agent_comms.nominal.field_codec import (
     FieldCodec,
