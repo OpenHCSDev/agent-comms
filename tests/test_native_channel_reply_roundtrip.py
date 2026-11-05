@@ -66,6 +66,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
     failures = []
     request_times = []
     request_inputs = []
+    committed = set()
     parallel_triage = threading.Event()
     seed_count = 2 if restart_after_reply else 0
 
@@ -84,24 +85,35 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                 from agent_comms.native_runtime_input import NativeRuntimeInput
                 from agent_comms.native_transcript import NativeTranscript
 
+                # Pi commits each tracked input in a request's context (session
+                # entry, generation, context digest) right before sending it
+                # (native-input.patch), and Core records that commit from Pi's
+                # emitted record. So the input this request carries is the one
+                # recorded since the previous request; a seed or continuity
+                # request carries none. The record can trail the request.
+                deadline = time.monotonic() + 2
+                while True:
+                    with Coordination(comms.root / "coordination.sqlite3") as store:
+                        with store.session.read():
+                            pending = tuple(row for row in NativeRuntimeInput.select(
+                                store.session._connection,
+                                where=(
+                                    "owner_lookup=? AND session_id IS NOT NULL AND session_entry_id IS NOT NULL"
+                                    if broadcast else "session_id IS NOT NULL AND session_entry_id IS NOT NULL"
+                                ),
+                                parameters=((comms.registry.require(request["model"]).incarnation.lookup,) if broadcast else ()),
+                            ) if row.input_id not in committed)
+                    if pending or time.monotonic() > deadline:
+                        break
+                    time.sleep(0.02)
+                committed.update(row.input_id for row in pending)
                 with Coordination(comms.root / "coordination.sqlite3") as store:
                     with store.session.read():
-                        pending = NativeRuntimeInput.select(
-                            store.session._connection,
-                            where=(
-                                "owner_lookup=? AND session_id IS NOT NULL AND session_entry_id IS NULL"
-                                if broadcast else "session_id IS NOT NULL AND session_entry_id IS NULL"
-                            ),
-                            parameters=((comms.registry.require(request["model"]).incarnation.lookup,) if broadcast else ()),
-                        )
-                        # Native send records session_id before writing prompt bytes.
-                        # An ungranted reservation cannot identify this HTTP request.
-                        # Retain earlier unresolved inputs, but identify this request
-                        # from the journal's actual latest tracked user boundary.
+                        # The commit's transcript entry must be the session's latest tracked user.
                         current_inputs = tuple((row, next(
                             entry for entry in NativeTranscript(Path(row.session_file)).tail()
                             if entry.input_boundary).require_tracked_user()) for row in pending)
-                        pending = tuple((row, user) for row, user in current_inputs if row.input_id == user.input_id)
+                        pending = tuple((row, user) for row, user in current_inputs if row.input_id == user.require_input_id())
                         if not pending:
                             assert not broadcast
                             request_text = json.dumps(request.get("messages", ()))
@@ -116,7 +128,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                                 (row.input_id, row.stage.declared_name, row.session_file, str(row.session_id))
                                 for row, _ in pending)
                             original, user = pending[0]
-                            assert user.input_id == original.input_id
+                            assert user.require_input_id() == original.input_id
                             is_triage = original.stage is TriageNativeExecution
                             assignments = tuple(WakeAssignment.one(
                                 store.session._connection, assignment_id=identity
@@ -343,20 +355,17 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                 }
                 assert len({json.dumps(row["turn"], sort_keys=True) for row in samples}) == 1
                 assert len({tuple(row["native_process"].items()) for row in samples}) == 1
-            for index, original in enumerate(request_inputs):
+            for original in request_inputs:
                 acquisitions = [row["acquisition"] for row in observations
                                 if row.get("input_id") == original["input_id"]
                                 and "acquisition" in row]
                 assert len(acquisitions) == 1
                 selection = acquisitions[0]["operations"]["native_launch_selection"]
-                # CursorDelivery owns session-cumulative timing counters. Each
-                # original input must add exactly one launch selection, even
-                # after that owner has already handled another peer's reply.
-                expected_count = sum(
-                    earlier["owner"] == original["owner"]
-                    for earlier in request_inputs[:index + 1]
-                )
-                assert selection["count"] == expected_count and selection["total_ns"] > 0
+                # Each original input owns its acquisition counters
+                # (PrivateSendClaim.reserve, diagnostics.py: "The original input
+                # owns these counters, not the recipient's cursor lifetime"), so
+                # each records exactly one launch selection of its own.
+                assert selection["count"] == 1 and selection["total_ns"] > 0
             return
         await until(lambda: len(requests) >= seed_count + 1, "B actual native request")
         await until(
