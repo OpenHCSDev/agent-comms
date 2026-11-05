@@ -171,11 +171,18 @@ class ParticipantNotRegistered(IdentityConflict):  # noqa: N818 - nominal outcom
     """No participant aggregate is recorded for the lookup."""
 
 
-class StaleRevision(CoordinationError, DeferredRead):  # noqa: N818 - nominal outcome name
+class ReadAgain(CoordinationError):  # noqa: N818 - capability, not an outcome
+    """The read's answer no longer stands, and reading again from fresh bounds can answer it.
+    An observer that derives its bounds when it reads answers both members the same way:
+    drop this answer and let the next observation read. Only the members differ on whether
+    the same bounds may still answer (StaleRevision) or never can (ReloadRequired)."""
+
+
+class StaleRevision(ReadAgain, DeferredRead):  # noqa: N818 - nominal outcome name
     """The supplied CAS revision is not the authoritative revision."""
 
 
-class ReloadRequired(CoordinationError, DeclaredError):  # noqa: N818 - nominal outcome name
+class ReloadRequired(ReadAgain, DeclaredError):  # noqa: N818 - nominal outcome name
     """The read's own bounds name a source that is gone; retrying them never succeeds,
     so it is no DeferredRead: the caller is answered and re-reads from fresh bounds. Its message is its whole state,
     so a remote UI receives the same reload signal."""
