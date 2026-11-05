@@ -6,14 +6,12 @@ from agent_comms.repo import Checkout
 from bus_history import read_history
 from delivery_owner_fixture import qualified_owner_launch, start_headless_owner  # noqa: F401
 import asyncio
-import os
 
 import pytest
 
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import CursorAdvancedUpdate, decode_updates
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.owner_protocol import OwnerLine, OwnerUpdate
 from agent_comms.runtime_server import SocketClient
@@ -31,7 +29,8 @@ async def test_trusted_load_recovers_after_real_sql_contention(
     # Draining an owned inbox publishes native cursors, which only a private root may do.
     comms = private_comms
     owner = comms.registry.declare(
-        NativeThread('reader', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+        # No live PID: acquire_thread returns a live thread untouched, reserving no owner lease.
+        NativeThread('reader', frozenset(), Checkout(tmp_path))
     )
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.participants.register(
