@@ -7,6 +7,7 @@ import faulthandler
 import json
 import multiprocessing as mp
 import time
+import uuid
 from dataclasses import replace
 from multiprocessing.queues import Queue
 from multiprocessing.synchronize import Event
@@ -76,7 +77,8 @@ def main() -> None:
     with (root / "source.jsonl").open("w") as stream:
         for kind, text in (("user", "Scratch input"), ("assistant", "Scratch reply")):
             content = [dict(type="text", text=text)]
-            event.update(type=kind, uuid=kind, message=dict(role=kind, content=content))
+            event.update(type=kind, uuid=str(uuid.uuid5(uuid.NAMESPACE_URL, kind)),
+                         message=dict(role=kind, content=content))
             print(json.dumps(event), file=stream)
     comms.registry.register(declaration(root, "sentinel"), StoppedThreadStatus())
     reading = ObserveSidebar(Checkout(root), True, False).observation()
