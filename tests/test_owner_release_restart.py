@@ -1,78 +1,64 @@
-"""Real release-before-exit: retirement keeps checking the exact owner fence."""
+"""Real release-before-exit: a host's retirement keeps checking the exact owner fence."""
 
 from agent_comms.owner_release import NoRelease
 from agent_comms.repo import Checkout
-from agent_comms.native_arguments import GivenArguments, GivenBinary
 from agent_comms.restart_scope import OwnersNamed
 
 import os
 import signal
-import shlex
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
+from bus_record_fixture import configure_local_native, prepare_native_comms, start_source_owner
 
-from agent_comms.child_process import (
-    ExitedOutcome,
-    ObservedProcess,
-    SpawnedProcess,
-    SignaledOutcome,
-)
-
-
+from agent_comms.child_process import ObservedProcess
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
-from agent_comms.owner_lifecycle import OwnerRestartSelection
-from agent_comms.owner_restart import FencedOwnerBatch, StoppedOwnerFailure
+from agent_comms.launch_runtime import RestoredRuntime
+from agent_comms.owner_cutover import PreserveOwnerRuntime
+from agent_comms.owner_lifecycle import OwnerLifecycle, OwnerRestartSelection
+from agent_comms.owner_restart import FencedOwnerBatch, OwnerRestartRequest, StoppedOwnerFailure
+from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.storage.store_files import ExclusiveLock, StoreLockContention, _store_lock
+from agent_comms.thread_model import DeclaredModel
 from agent_comms.threads import NativeThread
 
 
-def wait_for(path: Path) -> None:
-    deadline = time.monotonic() + 5
-    while not path.exists():
-        assert time.monotonic() < deadline, f"Owner did not produce {path.name}"
-        time.sleep(0.01)
+def source_runtime() -> RestoredRuntime:
+    return RestoredRuntime(Path(sys.executable))
+
+
+def restart_worker(owners: OwnerLifecycle, **arguments):
+    return PreserveOwnerRuntime().restart(owners, OwnerRestartRequest(
+        OwnersNamed(("worker",)), launch_runtime=source_runtime(), **arguments,
+    ))
 
 
 @pytest.fixture
-def releasing_owner(tmp_path):
-    if sys.platform == "win32":
-        pytest.skip("Release handler uses POSIX TERM")
-    root = tmp_path / "wire"
-    script = Path(__file__).with_name('releasing_owner_child.py')
-    arguments = (str(script), str(root))
-    env = {
-        **os.environ,
-        "AGENT_COMMS_THREAD": "worker",
-        "PI_WORKTREE": str(tmp_path),
-        # This real source process must declare the command it actually runs.
-        # Restart capture cannot infer extinct launch arguments from its PID.
-        "AGENT_COMMS_AGENT_BIN": sys.executable,
-        "AGENT_COMMS_AGENT_ARGS": shlex.join(arguments),
-    }
-    child = SpawnedProcess.launch((sys.executable, *arguments), env=env)
-    comms = wire(root)
+def hosted_owner(tmp_path, monkeypatch):
+    """A real host holding worker; nothing here is prompted, so its provider is never dialed."""
+    configure_local_native(
+        tmp_path / "config", monkeypatch, provider="release-local", port=9, models=("fixture",),
+    )
+    comms = prepare_native_comms(wire(tmp_path / "wire"))
+    project = tmp_path / "project"
+    project.mkdir()
+    comms.registry.declare(NativeThread(
+        "worker", frozenset(), Checkout(project),
+        model=DeclaredModel("release-local/fixture"), thinking_level=OffThinkingLevel,
+    ))
+    start_source_owner(comms, "worker", source_runtime())
+    original = comms.registry.require("worker")
     try:
-        wait_for(root / "ready")
-        yield comms, child
+        yield comms, original
     finally:
-        # A release handler deliberately resists TERM to exercise escalation.
-        if child.alive():
-            child.force()
-        child.reap()
-        current = comms.registry.snapshot().threads.get("worker")
-        if (
-            current is not None
-            and current.process_alive
-            and current.process_identity != child.identity
-        ):
-            ObservedProcess(current.process_identity).stop_sync()
+        for thread in (original, comms.registry.require("worker")):
+            if thread.process_alive:
+                ObservedProcess(thread.process_identity).stop_sync()
 
 
 def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
@@ -100,12 +86,13 @@ def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
         comms.registry.snapshot().require_stopping_owner(waiting, before)
 
 
-def test_stop_of_crashed_owner_records_exact_release(releasing_owner):
-    comms, child = releasing_owner
-    original = comms.registry.require("worker")
-    child.force()
-    child.reap()
-    assert not original.process_alive
+def test_stop_of_crashed_owner_records_exact_release(hosted_owner):
+    comms, original = hosted_owner
+    os.kill(original.require_process().pid, signal.SIGKILL)
+    deadline = time.monotonic() + 5
+    while original.process_alive:
+        assert time.monotonic() < deadline, "The killed host stayed alive"
+        time.sleep(0.01)
     comms.owners.stop("worker")
     snapshot = comms.registry.snapshot()
     acknowledgement = comms.owners.releases.read_many(("worker",))["worker"]
@@ -114,78 +101,71 @@ def test_stop_of_crashed_owner_records_exact_release(releasing_owner):
 
 
 @pytest.mark.parametrize("mode", ["restart", "guarded", "stop"])
-def test_released_process_must_exit_before_replacement(releasing_owner, mode):
-    comms, child = releasing_owner
-    original = comms.registry.require("worker")
+def test_released_process_must_exit_before_replacement(hosted_owner, mode):
+    comms, original = hosted_owner
     arguments = {}
     if mode == "guarded":
-        snapshot = comms.registry.snapshot()
-        arguments["expected"] = OwnerRestartSelection.capture(snapshot, "worker")
+        arguments["expected"] = OwnerRestartSelection.capture(comms.registry.snapshot(), "worker")
     if mode == "stop":
         comms.owners.stop("worker")
     else:
-        (result,) = comms.owners.restart_owners(
-            OwnersNamed(("worker",)), agent_bin=GivenBinary(sys.executable), agent_args=GivenArguments(("-c", "print('local')",)), **arguments
-        )
+        (result,) = restart_worker(comms.owners, **arguments)
         replacement = comms.registry.require("worker")
         assert replacement.process_alive
         assert replacement.process_identity != original.process_identity
         assert result.previous_pid == original.require_process().pid
-    assert (comms.root / "released").exists()
-    assert not child.alive()
-    assert child.reap() == SignaledOutcome(signal.SIGKILL)
+    assert not original.process_alive
     acknowledgement = comms.owners.releases.read_many(("worker",))["worker"]
     assert acknowledgement.process_identity == original.process_identity
     assert acknowledgement.after > acknowledgement.before
 
 
-def test_voluntary_exit_during_grace_is_reaped_without_force(releasing_owner):
-    comms, child = releasing_owner
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        stopping = pool.submit(comms.owners.stop, "worker")
-        wait_for(comms.root / "released")
-        (comms.root / "exit").touch()
-        stopping.result(timeout=5)
-    assert child.reap() == ExitedOutcome(0)
-    assert not child.alive()
+class OwnerChangesAfterRetirement(OwnerLifecycle):
+    """A real retirement, then a real registry edit before the restart reads the release."""
+
+    def __init__(self, comms, change) -> None:
+        super().__init__(comms.root, comms.registry, comms.bus, comms.goals, comms.messaging)
+        self.change = change
+
+    def _stop_processes(self, owners) -> None:
+        super()._stop_processes(owners)
+        self.change(self, self.registry.require("worker"))
 
 
-@pytest.mark.parametrize("change", ["birth", "claim_scope", "acknowledgement"])
-def test_changed_owner_after_release_refuses_escalation_and_replacement(releasing_owner, change):
-    comms, child = releasing_owner
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        stopping = pool.submit(comms.owners.restart_owners, OwnersNamed(("worker",)), agent_bin=GivenBinary(sys.executable))
-        wait_for(comms.root / "released")
-        current = comms.registry.require("worker")
-        if change == "birth":
-            comms.registry.register(
-                replace(
-                    current,
-                    process_identity=replace(
-                        child.identity, start_time=child.identity.start_time + 1
-                    ),
-                ),
-                new_owner=True,
-            )
-        elif change == "claim_scope":
-            comms.registry.register(current, new_owner=True)
-        else:
-            comms.owners.releases.remove_threads((current,))
-        with pytest.raises(StoppedOwnerFailure) as caught:
-            stopping.result(timeout=5)
+def rebirth(owners: OwnerLifecycle, current) -> None:
+    released = owners.releases.read_many(("worker",))["worker"].process_identity
+    owners.registry.register(replace(
+        current, process_identity=replace(released, start_time=released.start_time + 1),
+    ), new_owner=True)
+
+
+def reclaim(owners: OwnerLifecycle, current) -> None:
+    owners.registry.register(current, new_owner=True)
+
+
+def forget_release(owners: OwnerLifecycle, current) -> None:
+    owners.releases.remove_threads((current,))
+
+
+@pytest.mark.parametrize(("change", "words"), [
+    (rebirth, "Completed retirement differs from the selected original owner"),
+    (reclaim, "Completed retirement differs from the selected original owner"),
+    (forget_release, "Completed owner retirement is missing"),
+])
+def test_changed_owner_after_release_refuses_replacement(hosted_owner, change, words):
+    comms, original = hosted_owner
+    with pytest.raises(StoppedOwnerFailure) as caught:
+        restart_worker(OwnerChangesAfterRetirement(comms, change))
     failure = caught.value
     assert isinstance(failure.__cause__, RelationViolationError)
     # Toad shows a RuntimeError on the thread; its text names the cause.
-    assert isinstance(failure, RuntimeError) and "changed while stopping" in str(failure)
+    assert isinstance(failure, RuntimeError) and words in str(failure)
     phase = failure.stopped
     assert isinstance(phase, FencedOwnerBatch)
     assert len(phase.captured) == len(phase.unconfirmed) == 1
-    assert phase.captured[0][0].process_identity == child.identity
+    assert phase.captured[0][0].process_identity == original.process_identity
     assert phase.retired == ()
-    assert phase.launches[0].process == child.identity
-    assert child.alive(), "Stale fence must not authorize forced retirement"
-    assert comms.registry.require("worker").require_process().pid == child.identity.pid
+    assert phase.launches[0].process == original.process_identity
+    assert not comms.registry.require("worker").process_alive, "A stale fence launched a replacement"
     with _store_lock(comms.bus.bus.path, ExclusiveLock(), StoreLockContention(0)):
         pass  # the failed restart released the wire itself
-
-

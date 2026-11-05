@@ -2,7 +2,9 @@
 
 
 from agent_comms.repo import Checkout
+import json
 import os
+import sys
 from multiprocessing.context import ForkServerContext
 from pathlib import Path
 
@@ -13,6 +15,8 @@ from agent_comms.bus_publication import Delivered, KeyedPublication
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.envelope_claim_transitions import UnscopedClaims
+from agent_comms.launch_runtime import RestoredRuntime
+from agent_comms.native_arguments import NativeArguments
 from agent_comms.nominal.field_codec import ClaimId, InputId, RootId, ThreadLookup
 from agent_comms.messages import ClaimMessage, ConversationRole, InfoKind, Message
 from agent_comms.response_acknowledgement import (
@@ -40,6 +44,52 @@ def prepare_native_comms(comms: Comms) -> Comms:
     """Validate native-root authority before installing data or opening a coordinator."""
     comms.registry.store.prepare_native_root()
     return comms
+
+
+def configure_local_native(directory: Path, monkeypatch, *, provider: str, port: int,
+                           models: tuple[str, ...]) -> None:
+    """Point native Pi at a local provider, so a real host starts with no credential or network."""
+    directory.mkdir(mode=0o700)
+    (directory / "models.json").write_text(json.dumps({"providers": {provider: {
+        "baseUrl": f"http://127.0.0.1:{port}/v1",
+        "api": "openai-completions",
+        "models": [{"id": name, "name": name, "contextWindow": 32768, "maxTokens": 2048}
+                   for name in models],
+    }}}))
+    (directory / "auth.json").write_text(json.dumps({provider: {"type": "api_key", "key": "local-only"}}))
+    (directory / "settings.json").write_text(json.dumps({
+        "compaction": {"enabled": False},
+        "retry": {"enabled": False, "maxRetries": 0},
+    }))
+    for key, value in {
+        "PI_CODING_AGENT_DIR": str(directory),
+        "AGENT_COMMS_NATIVE_CONFIG_DIR": str(directory),
+        "AGENT_COMMS_AGENT_BIN": str(Path(sys.executable).with_name("pi-comms-native")),
+        "PYTHONPATH": os.pathsep.join(
+            str(Path(__file__).parents[1] / name) for name in ("src", "tests", "")
+        ),
+        "AGENT_COMMS_AGENT_MODELS": ",".join(f"{provider}/{name}" for name in models),
+        "AGENT_COMMS_AGENT_ARGS": "--offline --no-extensions --no-skills --no-context-files",
+    }.items():
+        monkeypatch.setenv(key, value)
+    for key in ("PI_PROMPT", "PI_PARENT_ID", "AGENT_COMMS_THREAD"):
+        monkeypatch.delenv(key, raising=False)
+
+
+def start_source_owner(comms: Comms, name: str, runtime: RestoredRuntime):
+    """Use the shared interpreter, but retain this fixture's exact source imports.
+
+    Ordinary owner starts intentionally discard PYTHONPATH and would launch
+    shared main, making the branch client a read-only other-build attachment.
+    The retained restart request uses this same explicit source-runtime policy.
+    """
+    thread = comms.registry.require(name)
+    with comms.registry.storage_rule.room_for_start(thread, comms.root):
+        with comms.owners.launching_owner(
+            thread, NativeArguments.default_binary,
+            launch_runtime=runtime,
+        ) as owner:
+            return owner
 
 
 def context_comms(directory: Path) -> Comms:

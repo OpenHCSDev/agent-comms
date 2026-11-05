@@ -26,7 +26,6 @@ from agent_comms.acp_extension import (
 from agent_comms.comms import wire
 from agent_comms.launch_runtime import RestoredRuntime
 from agent_comms.lifecycle_capability import Executing
-from agent_comms.native_arguments import NativeArguments
 from agent_comms.native_input_record import TriageNativeExecution
 from agent_comms.owner_cutover import PreserveOwnerRuntime
 from agent_comms.owner_restart import OwnerRestartRequest
@@ -36,23 +35,7 @@ from agent_comms.thread_model import DeclaredModel
 from agent_comms.turn_lease import NoTurnRecord
 from agent_comms.threads import NativeThread
 from bus_history import read_history
-from bus_record_fixture import prepare_native_comms
-
-
-def start_source_owner(comms, name, runtime: RestoredRuntime):
-    """Use the shared interpreter, but retain this fixture's exact source imports.
-
-    Ordinary owner starts intentionally discard PYTHONPATH and would launch
-    shared main, making the branch client a read-only other-build attachment.
-    The retained restart request uses this same explicit source-runtime policy.
-    """
-    thread = comms.registry.require(name)
-    with comms.registry.storage_rule.room_for_start(thread, comms.root):
-        with comms.owners.launching_owner(
-            thread, NativeArguments.default_binary,
-            launch_runtime=runtime,
-        ) as owner:
-            return owner
+from bus_record_fixture import configure_local_native, prepare_native_comms, start_source_owner
 
 
 @pytest.mark.parametrize(
@@ -184,65 +167,10 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     serving = threading.Thread(target=server.serve_forever, daemon=True)
     serving.start()
-    config = tmp_path / "config"
-    config.mkdir(mode=0o700)
-    (config / "models.json").write_text(
-        json.dumps(
-            {
-                "providers": {
-                    "roundtrip-local": {
-                        "baseUrl": f"http://127.0.0.1:{server.server_port}/v1",
-                        "api": "openai-completions",
-                        "models": [
-                            {
-                                "id": "fixture",
-                                "name": "Local roundtrip",
-                                "contextWindow": 32768,
-                                "maxTokens": 2048,
-                            }
-                        ] if not broadcast else [
-                            {"id": name, "name": name, "contextWindow": 32768, "maxTokens": 2048}
-                            for name in ("questioner", "answerer", "answerer2")
-                        ],
-                    }
-                }
-            }
-        )
+    configure_local_native(
+        tmp_path / "config", monkeypatch, provider="roundtrip-local", port=server.server_port,
+        models=("questioner", "answerer", "answerer2") if broadcast else ("fixture",),
     )
-    (config / "auth.json").write_text(
-        json.dumps(
-            {
-                "roundtrip-local": {
-                    "type": "api_key",
-                    "key": "local-only",
-                }
-            }
-        )
-    )
-    (config / "settings.json").write_text(
-        json.dumps(
-            {
-                "compaction": {"enabled": False},
-                "retry": {"enabled": False, "maxRetries": 0},
-            }
-        )
-    )
-    for key, value in {
-        "PI_CODING_AGENT_DIR": str(config),
-        "AGENT_COMMS_NATIVE_CONFIG_DIR": str(config),
-        "AGENT_COMMS_AGENT_BIN": str(Path(sys.executable).with_name("pi-comms-native")),
-        "PYTHONPATH": os.pathsep.join(
-            str(Path(__file__).parents[1] / name) for name in ("src", "tests", "")
-        ),
-        "AGENT_COMMS_AGENT_MODELS": (
-            "roundtrip-local/questioner,roundtrip-local/answerer,roundtrip-local/answerer2"
-            if broadcast else "roundtrip-local/fixture"
-        ),
-        "AGENT_COMMS_AGENT_ARGS": "--offline --no-extensions --no-skills --no-context-files",
-    }.items():
-        monkeypatch.setenv(key, value)
-    for key in ("PI_PROMPT", "PI_PARENT_ID", "AGENT_COMMS_THREAD"):
-        monkeypatch.delenv(key, raising=False)
     comms = prepare_native_comms(wire(tmp_path / "wire"))
     projects = {}
     for name in (("questioner", "answerer", "answerer2") if broadcast else ("questioner", "answerer")):
