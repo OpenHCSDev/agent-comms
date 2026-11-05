@@ -534,7 +534,7 @@ class MaintenanceState(MaintenanceMarker, MaintenanceStatus):
 
 @dataclass(frozen=True, kw_only=True)
 class HoldTarget(DurableFile, MaintenanceWitness):
-    """The runtime a hold admits, kept beside the witness. Only runtimes that know targets
+    """The runtime a hold lets through, kept beside the witness. Only runtimes that know targets
     read this file, so the witness keeps the shape every runtime that may still observe,
     restore or recover this root reads. It applies only to the witness write that stamped it:
     an interrupted write leaves no target, the closed side."""
