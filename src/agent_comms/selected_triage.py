@@ -49,8 +49,7 @@ class SelectedTriage(DeclaredFamily, affix="SelectedTriage"):
 
     @classmethod
     def output_values(cls) -> dict[str, str]:
-        names = [member.declared_name for member in cls.members_with(cls)]
-        return dict(discriminator=cls.family_discriminator, names=json.dumps(names))
+        return dict(discriminator=cls.family_discriminator, names=json.dumps(cls.names()))
 
     @classmethod
     def parse(cls, text: str) -> SelectedTriage:
@@ -190,7 +189,7 @@ class RejectedTriageOutcome(SelectedTriageOutcome):
 
     def reason(self) -> str:
         """The refusal and the answer it refused, bounded for one published line."""
-        accepted = ", ".join(json.loads(SelectedTriage.output_values()["names"]))
+        accepted = ", ".join(SelectedTriage.names())
         received = " ".join(self.received.split())[:200]
         return (f"The selected model returned an invalid triage decision ({self.error}). "
                 f"Received: {received!r}. Reply with exactly one decision: {accepted}.")
