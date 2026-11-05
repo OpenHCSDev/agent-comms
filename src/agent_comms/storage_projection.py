@@ -57,6 +57,10 @@ class StorageProjection:
             for allocation in CheckoutAllocation.for_path(self.rule, owner, root)
             for boundary in allocation.edit_boundary(self.rule, owner, root, store, self.reads)
         )
+        # A checkout this conversation moved away from stays editable: leaving a
+        # project does not strip the thread's ownership of the work it did there.
+        # The current project is unchanged: being home still grants no edit.
+        allowed = allowed.union(project.resolved() for project in owner.earlier_projects)
         in_project = resolved.is_relative_to(owner.project_path.resolve())
         if (sources or path.is_relative_to(self.rule.checkout_base) or in_project) and not any(
             resolved.is_relative_to(root) for root in allowed

@@ -150,3 +150,19 @@ def test_recreated_holder_cannot_use_the_prepared_birth(allocation_bus):
                                             frozenset({current.order.id})),
                 comms.registry.snapshot(), prepared.prepared_edits())
     assert comms.goals.todos.get(current.id) == current
+
+
+def test_a_checkout_the_thread_moved_away_from_stays_editable(allocation_bus):
+    comms, source, template = allocation_bus
+    rule = StorageRule.load(comms.root)
+    one = comms.registry.require('first')
+    # Home alone grants no edit: being the current project is not ownership.
+    with pytest.raises(StorageDenied):
+        StorageProjection(rule, one, comms).check((
+            WriteStorageEffect(source.checkout / 'declaration.py'),))
+    # The thread is moved off its old project; that old checkout stays editable.
+    comms.threads.set_project(one.incarnation, str(comms.root))
+    moved = comms.registry.require('first')
+    assert moved.project_path == comms.root.resolve()
+    StorageProjection(rule, moved, comms).check((
+        WriteStorageEffect(source.checkout / 'declaration.py'),))
