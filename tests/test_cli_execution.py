@@ -46,12 +46,12 @@ def isolated_cli(isolated_home):
             text=True,
             timeout=20,
         )
-        assert result.returncode in (0, 1), result.stderr
+        # Every call here must succeed; a refusal names its own answer and stderr.
+        assert result.returncode == 0, (arguments, result.stdout, result.stderr)
         # Protocol TypeErrors must never be hidden.
         assert "TypeError:" not in result.stderr, (arguments, result.stderr)
-        value = json.loads(result.stdout) if result.stdout.strip() else None
-        assert result.returncode != 0 or result.stdout.strip(), (arguments, result.stderr)
-        return result.returncode, value
+        assert result.stdout.strip(), (arguments, result.stderr)
+        return json.loads(result.stdout)
 
     return run
 
@@ -114,13 +114,10 @@ def test_real_send_publishes_and_history_retains_it(tmp_path, isolated_cli):
     root = tmp_path / "bus"
     Bus.install(Bus.path_in(root))
     for name in ("sender", "reader"):
-        assert isolated_cli(root, "register", "--name", name, "--worktree", str(tmp_path))[0] == 0
+        isolated_cli(root, "register", "--name", name, "--worktree", str(tmp_path))
     body = "P363 real dispatcher publication"
-    code, sent = isolated_cli(root, "send", "--from", "sender", "--to", "reader", "--body", body)
-    assert code == 0
-    code, history = isolated_cli(root, "history")
-    assert code == 0
-    entries = history["everything"]
+    sent = isolated_cli(root, "send", "--from", "sender", "--to", "reader", "--body", body)
+    entries = isolated_cli(root, "history")["everything"]
     assert any(entry["id"] == sent["id"] and entry["text"] == body for entry in entries)
 
 
