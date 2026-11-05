@@ -167,6 +167,24 @@ class PushedTranscript(ReceivesWatchReports, TranscriptConfirmsDelivery, ClaudeJ
 
 
 @dataclass(frozen=True)
+class TranscriptStopped:
+    """What #comms is told when a session's transcript stops reaching the bus."""
+
+    thread: str
+    failures: BaseExceptionGroup
+
+    def text(self) -> str:
+        # A decoder's first line lists its whole union, so what went wrong is at the end.
+        causes = "; ".join(f"{type(failure).__name__}: {str(failure)[-400:]}"
+                           for failure in self.failures.exceptions)
+        # A watch run from a newer commit sends frames this host has never declared;
+        # naming the host's build is what tells that apart from a broken frame.
+        return (f"{self.thread}'s work stopped reaching the bus, though its push still works: "
+                f"{causes}. This host runs {STAMP.commit()[:12]}: a watch run from a newer "
+                f"commit sends frames it cannot read, so run the watch from that commit.")
+
+
+@dataclass(frozen=True)
 class InboxWatch:
     """One open socket: the thread's bridge while it stays open."""
 
@@ -285,15 +303,7 @@ class InboxWatch:
                 await PushedTranscript(comms, self.thread, socket, reported).publish_transcript()
             except* Exception as failures:
                 logging.exception("Transcript from %s stopped", self.thread)
-                # A decoder's first line lists its whole union, so what went wrong is at the end.
-                causes = "; ".join(f"{type(failure).__name__}: {str(failure)[-400:]}"
-                                   for failure in failures.exceptions)
-                # A watch run from a newer commit sends frames this host has never declared;
-                # naming the host's build is what tells that apart from a broken frame.
-                comms.messaging.send(self.thread, "#comms", (
-                    f"{self.thread}'s work stopped reaching the bus, though its push still works: "
-                    f"{causes}. This host runs {STAMP.commit()[:12]}: a watch run from a newer "
-                    f"commit sends frames it cannot read, so run the watch from that commit."))
+                comms.messaging.send(self.thread, "#comms", TranscriptStopped(self.thread, failures).text())
         async for _ in socket:
             pass
 
