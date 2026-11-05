@@ -172,6 +172,7 @@ class TranscriptStopped:
 
     thread: str
     failures: BaseExceptionGroup
+    host_commit: str
 
     def text(self) -> str:
         # A decoder's first line lists its whole union, so what went wrong is at the end.
@@ -180,8 +181,8 @@ class TranscriptStopped:
         # A watch run from a newer commit sends frames this host has never declared;
         # naming the host's build is what tells that apart from a broken frame.
         return (f"{self.thread}'s work stopped reaching the bus, though its push still works: "
-                f"{causes}. This host runs {STAMP.commit()[:12]}: a watch run from a newer "
-                f"commit sends frames it cannot read, so run the watch from that commit.")
+                f"{causes}. This host runs {self.host_commit[:12]}; a watch run from a newer "
+                f"commit sends frames this host has never declared.")
 
 
 @dataclass(frozen=True)
@@ -298,12 +299,14 @@ class InboxWatch:
     ) -> None:
         """Publish what the session sends. A failure there must not cost it its push, so it is
         said on the bus and the socket keeps being read."""
+        # Read before the transcript runs, so a failing read cannot cost the report below.
+        host_commit = await asyncio.to_thread(STAMP.commit)
         with self.wire() as comms:
             try:
                 await PushedTranscript(comms, self.thread, socket, reported).publish_transcript()
             except* Exception as failures:
                 logging.exception("Transcript from %s stopped", self.thread)
-                comms.messaging.send(self.thread, "#comms", TranscriptStopped(self.thread, failures).text())
+                comms.messaging.send(self.thread, "#comms", TranscriptStopped(self.thread, failures, host_commit).text())
         async for _ in socket:
             pass
 
