@@ -11,7 +11,7 @@ from agent_comms.order_tools import CommsTodoCreateTool
 from agent_comms.repo import Checkout
 from agent_comms.shell_effects import WriteStorageEffect
 from agent_comms.tool_denial import StorageDenied
-from agent_comms.storage_rules import StorageRule
+from agent_comms.storage_rules import CheckoutAllocation, EditableCheckoutAllocation, StorageRule
 from agent_comms.storage_projection import StorageProjection
 from agent_comms.threads import ExternalThread
 from agent_comms.thread_model import DeclaredModel
@@ -166,3 +166,22 @@ def test_a_checkout_the_thread_moved_away_from_stays_editable(allocation_bus):
     assert moved.project_path == comms.root.resolve()
     StorageProjection(rule, moved, comms).check((
         WriteStorageEffect(source.checkout / 'declaration.py'),))
+
+
+def test_a_held_stranded_checkout_contributes_no_editable_root(allocation_bus, tmp_path):
+    """An unreadable held tree is skipped while authorizing a write, never fatal to it.
+
+    Selection still refuses to allocate around unreadable history; this walk serves the
+    owner's own write, so a stranded held checkout contributes nothing and raises nothing.
+    """
+    comms, source, template = allocation_bus
+    stranded = issue(comms, source, template, 'first', 'P41')
+    one = comms.registry.require('first')
+    rule = StorageRule.load(comms.root)
+    path = rule.order_checkout(rule.roots_of(one), stranded.id)
+    path.mkdir(parents=True)
+    allocation = next(member for member in CheckoutAllocation.for_path(rule, one, path)
+                      if isinstance(member, EditableCheckoutAllocation))
+    (path / '.git').write_text(f'gitdir: {tmp_path}/vanished/.git/worktrees/old\n')
+    assert isinstance(allocation.editable_roots(rule, one, comms.goals.todos, source.github),
+                      frozenset)
