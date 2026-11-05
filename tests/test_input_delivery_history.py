@@ -30,7 +30,7 @@ from agent_comms.reported_turn import ReportedTurn
 from agent_comms.threads import ExternalThread, NativeThread, Thread
 from agent_comms.thread_status import ConnectedThreadStatus, StoppedThreadStatus, ThreadStatus
 from agent_comms.owner_connection import OwnerIdentityChangedError
-from agent_comms.coordination.errors import StaleFence, StaleRevision
+from agent_comms.coordination.errors import ReloadRequired, StaleFence
 from agent_comms.tool_caller import ToolCaller
 from agent_comms.ui_model.observation import ReadOwnerOperation, ReadAnswered, ReadRefused
 from bus_record_fixture import prepare_native_comms
@@ -301,7 +301,7 @@ async def test_retained_read_refuses_replaced_root_and_foreign_ui_root(tmp_path:
     operation = InputDeliveryRead()
     foreign = await ReadOwnerOperation(str(tmp_path / "foreign"), owner.incarnation, operation).answer(comms)
     assert isinstance(foreign, ReadRefused)
-    assert isinstance(foreign.error, StaleRevision)
+    assert isinstance(foreign.error, ReloadRequired)
     cut = comms.registry.store.snapshot_with_authority()
     root.rename(tmp_path / "original")
     replacement = prepare_native_comms(wire(root))

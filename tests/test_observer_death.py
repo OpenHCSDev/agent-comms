@@ -10,7 +10,7 @@ import signal
 import pytest
 
 from agent_comms.active_route import LocalRoute
-from agent_comms.coordination.errors import StaleRevision
+from agent_comms.coordination.errors import ReloadRequired
 from agent_comms.errors import RelationViolationError
 from agent_comms.input_attempt import UnobservedInputDeliveryScope
 from agent_comms.input_disposition import InputDispositions
@@ -134,7 +134,7 @@ async def test_stale_owner_reads_preserve_the_observer(comms, durable_home, read
     root = str(comms.root.parent / "another-wire") if other_root else str(comms.root)
     identity = owner.incarnation if other_root else RecordedThreadIncarnation(owner.name, 1.0)
     async with ObservationProcess.awaited(comms.route) as process:
-        with pytest.raises(StaleRevision if other_root else OwnerIdentityChangedError):
+        with pytest.raises(ReloadRequired if other_root else OwnerIdentityChangedError):
             await process.read(read_type(root, identity))
         assert (await process.read(empty_window(comms.root))).outcomes == {}
         assert process.peer.process.is_alive()
