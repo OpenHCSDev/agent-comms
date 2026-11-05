@@ -109,7 +109,8 @@ async def test_trusted_load_recovers_after_real_sql_contention(
             assert loaded.observation.status == "unavailable"
             assert loaded.scope == before.scope
             await agent.cursors.publish(session, owner.name)
-        agent.inputs.ensure_live_drain(session)
+        # The writer committed nothing, so no change marker wakes anyone: the
+        # deferred read's own retry must publish once the lock clears.
         recovered = await receive(loaded.revision)
         assert recovered.observation.status == "none"
         assert recovered.scope == loaded.scope

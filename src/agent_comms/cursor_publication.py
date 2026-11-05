@@ -54,6 +54,11 @@ class CursorDelivery:
     source_reads: NativeEvidenceScope = field(default_factory=NativeEvidenceScope, repr=False)
     observation_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
     measurements: PublicationMeasurements = field(default_factory=PublicationMeasurements, repr=False)
+    # A deferred read owns one retry. Both DeferredRead producers on this path
+    # (SQLite BUSY past busy_timeout, the store flock past its contention) spend
+    # the store's whole wait first, so each retry is one bounded read, never a
+    # drain-speed loop; nothing else announces a writer that changed no rows.
+    retry: asyncio.Task[None] | None = field(default=None, repr=False)
 
     @asynccontextmanager
     async def reading(self) -> AsyncIterator[NativeEvidenceScope]:
@@ -76,7 +81,16 @@ class CursorDelivery:
             )
             return await owner.advance_async(participant.bus, source_reads=source_reads)
 
+    def owes_retry(self) -> bool:
+        return self.retry is None or self.retry.done() or self.retry is asyncio.current_task()
+
+    def consume_retry(self) -> None:
+        retry, self.retry = self.retry, None
+        if retry is not None and retry is not asyncio.current_task():
+            retry.cancel()
+
     def close(self) -> None:
+        self.consume_retry()
         self.source_reads.close()
 
     def next_revision(self) -> int:
@@ -185,7 +199,12 @@ class CursorPublication:
             # requires another read when the lock clears, without input replay.
             if selected_status is not None:
                 delivery.published = None
+            if delivery.owes_retry():
+                delivery.retry = self.runtime.background(
+                    self.publish(session_id, thread_name, advance=advance)
+                )
             return
+        delivery.consume_retry()
         delivery.advanced = advance
         if selected_status is None and delivery.already_published(observed):
             return
