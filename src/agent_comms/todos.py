@@ -3223,7 +3223,7 @@ class ClaimReviewer(DeclaredFamily, affix="ClaimReviewer"):
 @dataclass(frozen=True)
 class AssignedClaimReviewer(ClaimReviewer):
     def identity(self, todo: Todo) -> ThreadIncarnation:
-        return todo.held().parent_identity
+        return todo.held().consent.assigned_reviewer(todo)
 
 
 @dataclass(frozen=True)
@@ -3696,6 +3696,10 @@ class HolderConsent(ABC):
     def answered(self, todo: Todo) -> tuple[MessageId, ...]:
         """The order message a delivery of this work answers."""
 
+    @abstractmethod
+    def assigned_reviewer(self, todo: Todo) -> ThreadIncarnation:
+        """Who reviews a delivery when the deliver call names nobody."""
+
 
 class HandedWork(HolderConsent):
     """Work a colleague hands over: a busy holder refuses it unless it belongs to held work."""
@@ -3706,6 +3710,9 @@ class HandedWork(HolderConsent):
 
     def answered(self, todo: Todo) -> tuple[MessageId, ...]:
         return (todo.latest_message.message_id,)
+
+    def assigned_reviewer(self, todo: Todo) -> ThreadIncarnation:
+        return todo.held().parent_identity
 
 
 class SelfFiledWork(HolderConsent):
@@ -3719,6 +3726,11 @@ class SelfFiledWork(HolderConsent):
     def answered(self, todo: Todo) -> tuple[MessageId, ...]:
         """Nobody sent this order, so its delivery answers no message."""
         return ()
+
+    def assigned_reviewer(self, todo: Todo) -> ThreadIncarnation:
+        """The assigner is the holder, and nobody reviews their own delivery."""
+        raise TodoError(f"{todo.id} is self-filed: name its reviewer with `reviewer` "
+                        "(an independent teammate's name and birth).")
 
 
 @dataclass(frozen=True)
