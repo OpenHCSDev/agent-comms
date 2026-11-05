@@ -36,6 +36,7 @@ from agent_comms.exporting import WireExportObserver
 from agent_comms.connector import (
     ApprovalLink,
     InitializeResult,
+    SESSION_HEADER,
     AuthorizationCodeGrant,
     Connector,
     ConnectorSendTool,
@@ -595,6 +596,29 @@ async def test_connector_lists_every_tool(client, store, comms):
     writes = [tool["description"] for tool in listed if not tool["annotations"]["readOnlyHint"]]
     assert writes and all(description.endswith(ToolRequest.bus_effect) for description in writes)
     assert all("claude-ai to call this without asking" in description for description in writes)
+
+
+async def test_a_session_from_an_earlier_process_initializes_again(client, comms):
+    """A client held open across an install keeps its old tool list until it re-lists; the
+    id from the earlier process is answered 404, which makes the client initialize again."""
+    headers = {"Authorization": f"Bearer {await approved_token(client, comms)}"}
+    initialize = {"jsonrpc": "2.0", "id": "initialize", "method": "initialize", "params": {
+        "protocolVersion": "2025-06-18", "capabilities": {},
+        "clientInfo": {"name": "connector-client", "version": "1"},
+    }}
+    past = {**headers, SESSION_HEADER: "an id an earlier process issued"}
+    assert (await client.post("/mcp", headers=past, json=LIST)).status == 404
+    assert (await client.post("/mcp", headers=past, json={
+        "jsonrpc": "2.0", "method": "notifications/initialized",
+    })).status == 404
+    started = await client.post("/mcp", headers=past, json=initialize)
+    session = started.headers[SESSION_HEADER]
+    assert started.status == 200 and session != past[SESSION_HEADER]
+    current = {**headers, SESSION_HEADER: session}
+    listed = (await (await client.post("/mcp", headers=current, json=LIST)).json())["result"]["tools"]
+    assert [tool["name"] for tool in listed] == list(CALLER.exposed())
+    # A client that keeps no session is answered as before.
+    assert (await client.post("/mcp", headers=headers, json=LIST)).status == 200
 
 
 async def test_connector_reads_two_newest_first_conversation_pages(client, store, comms):
