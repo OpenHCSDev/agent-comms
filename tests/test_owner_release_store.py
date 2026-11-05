@@ -16,10 +16,15 @@ def test_release_survives_metadata_changes_and_reads_only_its_row(tmp_path):
     comms = wire(tmp_path)
     originals = [comms.registry.declare(NativeThread(name, frozenset(), Checkout(tmp_path)))
                  for name in ('worker', 'other')]
-    generation = comms.registry.snapshot().claim_generation('worker')
+    before = comms.registry.snapshot()
+    generation = before.claim_generation('worker')
     for thread in originals:
         comms.owners.stop(thread.name)
     snapshot = comms.registry.snapshot()
+    # Stopping a thread with no live owner records no release (test_owner_release_restart),
+    # so this store test writes each release through the store's own writer.
+    comms.owners.releases.record(snapshot, tuple(
+        (thread, before.claim_generation(thread.name)) for thread in originals))
     current = snapshot.threads['worker']
     comms.registry.register(replace(current, title=GivenThreadText('changed title'), task=GivenThreadText('changed task')),
                             status=snapshot.statuses['worker'])
