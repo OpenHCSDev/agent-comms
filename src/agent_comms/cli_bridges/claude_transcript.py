@@ -118,10 +118,12 @@ class RunningClaude(ClaudeTranscript, OnlineHistory):
     so the running session is read from the same file as a stored one."""
 
     def __init__(self, thread: str) -> None:
+        """Claude writes a session again under another project directory when it restarts
+        in a new working directory; the one it is writing now is the newest."""
         matches = tuple((Path.home() / '.claude/projects').glob(f'*/{thread}.jsonl'))
-        if len(matches) != 1:
-            raise ValueError(f'Expected one Claude transcript for {thread}; found {len(matches)}')
-        super().__init__(matches[0], NamedSession(thread))
+        if not matches:
+            raise ValueError(f'No Claude transcript for {thread}')
+        super().__init__(max(matches, key=lambda path: path.stat().st_mtime), NamedSession(thread))
 
     @classmethod
     def connected(cls, thread: str, address: HarnessAddress, directory: Path) -> Self:

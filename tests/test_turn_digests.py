@@ -318,3 +318,20 @@ def test_turn_windows_distinguish_first_and_last_event_time():
     assert TurnsSince(2.0).take((turn,)) == (turn,)
     assert not TurnDigest(empty_turn_id, ()).starts_before(2.0)
     assert not TurnsBefore(at=1.0, count=1).take((turn,))
+
+
+def test_a_restarted_session_reads_the_transcript_claude_is_writing(tmp_path, monkeypatch):
+    """A restart in another working directory leaves the session's transcript in two project
+    directories; the running session is the newer one, and no match at all still refuses."""
+    from agent_comms.cli_bridges.claude_transcript import RunningClaude
+
+    monkeypatch.setenv('HOME', str(tmp_path))
+    projects = tmp_path / '.claude/projects'
+    with pytest.raises(ValueError, match='No Claude transcript for session'):
+        RunningClaude('session')
+    older, newer = projects / 'before/session.jsonl', projects / 'after/session.jsonl'
+    for path, written in ((older, 1_000), (newer, 2_000)):
+        path.parent.mkdir(parents=True)
+        path.write_text('')
+        os.utime(path, (written, written))
+    assert RunningClaude('session').source == newer
