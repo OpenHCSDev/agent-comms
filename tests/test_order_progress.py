@@ -22,7 +22,7 @@ from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.launch_runtime import LaunchRoot
 from agent_comms.order_tools import CommsTodoCreateTool
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repo import GitCommandError
+from agent_comms.repo import CommitsNaming, EveryCommit, GitCommandError
 from agent_comms.repository_name import RepositoryName
 from agent_comms.threads import NativeThread
 from agent_comms.todos import (
@@ -199,8 +199,9 @@ def test_every_order_reads_the_newest_match_git_grep_gives(tmp_path):
     checkout = PresentCheckout(worktree)
     # The capture resolves the named refs it read (for-each-ref), as callers pass them; not HEAD.
     refs = (git(worktree, 'symbolic-ref', 'HEAD').strip(),)
-    for pattern in (*(rf'(^|[^A-Za-z0-9_]){problem}([^A-Za-z0-9_]|$)' for problem in ('P1', 'P12', 'P3', 'P4')),
-                    'second', ''):
+    for problem in ('P1', 'P12', 'P3', 'P4'):
         expected = git(worktree, 'log', '-1', '--extended-regexp', '--regexp-ignore-case',
-                       f'--grep={pattern}', '--format=%H', *refs, '--not')
-        assert [point.sha for point in checkout.commits(pattern, refs)] == expected.split()
+                       f'--grep=(^|[^A-Za-z0-9_]){problem}([^A-Za-z0-9_]|$)', '--format=%H', *refs, '--not')
+        assert [point.sha for point in checkout.commits(CommitsNaming(problem), refs)] == expected.split()
+    newest = git(worktree, 'rev-parse', 'HEAD')
+    assert [point.sha for point in checkout.commits(EveryCommit(), refs)] == newest.split()

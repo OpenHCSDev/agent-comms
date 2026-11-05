@@ -271,6 +271,8 @@ def test_inbox_page_bound_keeps_the_next_page_unread(inbox_comms):
     page = comms.bus.inbox_at("b", comms.registry.snapshot(), bounds=PageBounds(limit=2))
     assert page.page.messages == tuple(expected[:2])
     assert page.remaining == 3
+    untaken = comms.bus.untaken_at("b", comms.registry.snapshot(), bounds=PageBounds(limit=2))
+    assert untaken.page == page.page
     for _ in range(2):
         result = invoke_tool(
             comms, "comms_inbox", {"thread": "b", "limit": 2}, caller=NoThreadCaller(),

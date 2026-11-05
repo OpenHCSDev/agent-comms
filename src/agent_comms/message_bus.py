@@ -14,6 +14,7 @@ from collections.abc import (
     Sequence,
 )
 from contextlib import AbstractContextManager, aclosing, contextmanager
+from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -30,7 +31,7 @@ from agent_comms.coordination.coordinator import Coordination
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.historical_views import HistoryArchive
 from agent_comms.storage.maintenance_barrier import FreshIngress, MaintenanceBarrier, MaintenanceHeldError
-from agent_comms.message_page import InboxPage, MessagePageRequest, PageBounds
+from agent_comms.message_page import DisplayedMessagePage, InboxPage, MessagePageRequest, PageBounds
 from agent_comms.message_reference import (
     FirstUnreadStart,
     NewestUnreadStart,
@@ -39,8 +40,8 @@ from agent_comms.message_reference import (
 from agent_comms.peer_relevance import Prioritized
 from agent_comms.publisher import Publisher
 from agent_comms.read_selection import CapturedSelection
-from agent_comms.read_basis import AnonymousViewer, DisplayViewer, ListedDeliveries, NamedViewer
-from agent_comms.read_ledger import ReadLedger
+from agent_comms.read_basis import AnonymousViewer, DisplayViewer, ListedDeliveries, NamedViewer, ReadCursor
+from agent_comms.read_ledger import ReadDocument, ReadLedger
 from agent_comms.agent_inbox import TakenInputCursor
 from agent_comms.routing import DeliveryScope
 
@@ -118,6 +119,38 @@ class WatchPass[Observed](PreparedWatchPass[None, Observed]):
         pass
 
 
+@dataclass(frozen=True)
+class UnreadCut:
+    """One unread page's rows in one source cut; a count of the rest must read the same cut."""
+
+    messages: MessageBus
+    source: BusSnapshot
+    snapshot: RegistrySnapshot
+    target: NamedTarget
+    require_channel: Callable[[str], Channel]
+    delivery: DeliveryScope
+    seen: ReadCursor
+    cursor: int
+    request: MessagePageRequest
+    document: ReadDocument
+
+    def counts(self) -> Mapping[str, int]:
+        """Inside the cut: what is pending for this thread, per conversation."""
+        actor = self.delivery.actor
+        return self.source.unseen_counts(
+            self.snapshot, {actor: self.delivery}, {actor: self.seen}, after=self.cursor,
+        )[actor]
+
+    def pending(self, counts: Mapping[str, int]) -> int:
+        return self.target.pending_count(counts, self.snapshot, self.require_channel)
+
+    def displayed(self) -> DisplayedMessagePage:
+        return self.request.displayed(
+            self.messages.reads, self.document, self.delivery.actor,
+            self.snapshot, self.snapshot, self.messages.bus,
+        )
+
+
 class MessageBus[Writes: Publisher]:
     def __init__(
         self, root: Path, registry: Registration, publisher: type[Writes],
@@ -165,6 +198,26 @@ class MessageBus[Writes: Publisher]:
         self, name: str, snapshot: RegistrySnapshot, target: NamedTarget = AnyChannel.target(), *,
         after: InboxStart = FirstUnreadStart(), bounds: PageBounds = PageBounds(),
     ) -> InboxPage:
+        with self._unread_cut(name, snapshot, target, after, bounds) as cut:
+            counts = cut.counts()
+        result = cut.displayed()
+        return InboxPage(result.page, result.displayed, cut.pending(counts) - len(result.page.messages))
+
+    def untaken_at(
+        self, name: str, snapshot: RegistrySnapshot, target: NamedTarget = AnyChannel.target(), *,
+        after: InboxStart = FirstUnreadStart(), bounds: PageBounds = PageBounds(),
+    ) -> DisplayedMessagePage:
+        """The page alone. A watch wakes on every bus commit and never reads the remainder:
+        counting it was a second full route query per empty wake per open socket."""
+        with self._unread_cut(name, snapshot, target, after, bounds) as cut:
+            pass
+        return cut.displayed()
+
+    @contextmanager
+    def _unread_cut(
+        self, name: str, snapshot: RegistrySnapshot, target: NamedTarget, after: InboxStart,
+        bounds: PageBounds,
+    ) -> Iterator[UnreadCut]:
         catalog = self._channels.read()
         require_channel = partial(self.channel_in, catalog)
         delivery = DeliveryScope.capture(name, snapshot, catalog)
@@ -180,16 +233,14 @@ class MessageBus[Writes: Publisher]:
                 snapshot, delivery, seen, after=cursor, scope=selection, limit=bounds.limit + 1,
                 traversal=traversal,
             )
-            counts = source.unseen_counts(
-                snapshot, {delivery.actor: delivery}, {delivery.actor: seen}, after=cursor,
-            )[delivery.actor]
-        total = target.pending_count(counts, snapshot, require_channel)
-        listed = ListedDeliveries(selection, frozenset(row.seq for row in unread),
-                                  frozenset(row.target for row in unread))
-        result = MessagePageRequest(
-            listed, PageBounds(traversal, bounds.limit),
-        ).displayed(self.reads, document, delivery.actor, snapshot, snapshot, self.bus)
-        return InboxPage(result.page, result.displayed, total - len(result.page.messages))
+            yield UnreadCut(
+                self, source, snapshot, target, require_channel, delivery, seen, cursor,
+                MessagePageRequest(
+                    ListedDeliveries(selection, frozenset(row.seq for row in unread),
+                                     frozenset(row.target for row in unread)),
+                    PageBounds(traversal, bounds.limit),
+                ), document,
+            )
 
     def oldest_untaken(self, names: Sequence[str], snapshot: RegistrySnapshot) -> Mapping[str, float]:
         """When each thread's oldest message no harness took was sent: one read for them all,

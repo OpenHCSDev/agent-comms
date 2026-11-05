@@ -205,7 +205,7 @@ class InboxWatch:
         with self.wire() as comms:
             request = CommsInboxTool(
                 thread=self.thread, after=after, wait=SecondsWait(self.wait_seconds))
-            return request.page(comms).page.messages
+            return request.messages(comms)
 
     def taken(self, message: Message, ledger: TakingLedger) -> None:
         """A message leaves the inbox before its frame goes out: the client may ack a print

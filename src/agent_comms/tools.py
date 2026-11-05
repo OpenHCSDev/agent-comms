@@ -36,7 +36,7 @@ from .native_tools import CommunicationCall
 import dataclasses
 import threading
 from abc import abstractmethod
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Type
@@ -78,7 +78,7 @@ from .goal_waits import NoStandbyReview, StandbyReview
 from .goals import GoalDeclaration
 from .history_result import HistoryPageResult
 from .input_attempt import UnresolvedInput
-from .message_page import NEWEST_PAGE, InboxPage, MessagePage, PageBounds
+from .message_page import NEWEST_PAGE, DisplayedMessagePage, InboxPage, MessagePage, PageBounds
 from .page_traversal import LatestSequence, LiveCursor
 from .historical_views import ConversationObservation, ConversationRevision, UnobservedConversation
 from .message_reference import MessageReference
@@ -1885,10 +1885,17 @@ class CommsInboxTool(NativeToolRequest[ToolCaller, InboxPageRead]):
         )
 
     def page(self, comms: Comms) -> InboxPage:
-        """The messages alone: a reader that shows no unresolved inputs need not project them."""
+        return self.waited(comms, comms.bus.inbox_at)
+
+    def messages(self, comms: Comms) -> tuple[Message, ...]:
+        """The messages alone: a reader that shows no unresolved inputs and no remainder need
+        not project them."""
+        return self.waited(comms, comms.bus.untaken_at).page.messages
+
+    def waited[Page: DisplayedMessagePage](self, comms: Comms, read: Callable[..., Page]) -> Page:
         if not (target := self.target.strip()):
             raise ToolRefusedError("An inbox target cannot be empty.")
-        return self.wait.read(comms.bus.bus, lambda: comms.bus.inbox_at(
+        return self.wait.read(comms.bus.bus, lambda: read(
             self.thread, comms.registry.snapshot(), CommandTarget.named(target),
             after=self.after, bounds=PageBounds(limit=self.limit),
         ))
