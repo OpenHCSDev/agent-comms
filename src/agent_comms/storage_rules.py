@@ -7,6 +7,7 @@ import shutil
 import time
 from abc import abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from functools import partial
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
@@ -162,7 +163,7 @@ class EditableCheckoutAllocation(CheckoutAllocation):
     def editable_roots(self, rule: StorageRule, owner: Thread, store: TodoStore,
                        repository: RepositoryName) -> frozenset[Path]:
 
-        def readable(declared: Callable[[], Iterable[Path]]) -> Iterable[Path]:
+        def readable(declared: Callable[[], Iterable[Path]]) -> frozenset[Path]:
             """The roots a declaration supplies when its own checkout can be read.
 
             This walk serves the owner's own write, so an unreadable declaration
@@ -172,19 +173,20 @@ class EditableCheckoutAllocation(CheckoutAllocation):
             refuses to allocate around unreadable history.
             """
             try:
-                return declared()
+                return frozenset(declared())
             except GitCommandError:
                 return frozenset()
 
         roots: set[Path] = set()
         for goal in owner.goal:
-            roots |= set(readable(lambda goal=goal: GoalCheckoutAllocation.for_goal(
-                rule, owner, goal.id, repository)))
+            roots |= readable(partial(
+                GoalCheckoutAllocation.for_goal, rule, owner, goal.id, repository))
         for current in store.held_by(owner.incarnation):
             companions = current.order.source_repositories()
             if repository in (current.repo, *companions):
-                roots |= set(readable(lambda current=current: rule.edit_boundaries(
-                    owner, current.id, current.repo, companions, current.held().generation)))
+                roots |= readable(partial(
+                    rule.edit_boundaries, owner, current.id, current.repo, companions,
+                    current.held().generation))
         return frozenset(roots)
 
     def reserves_boundary(self) -> bool:
