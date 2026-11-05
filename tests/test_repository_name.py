@@ -1,9 +1,11 @@
 """Repository identities cross the wire and SQL once, without case-sensitive aliases."""
 
+import subprocess
+
 import pytest
 
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.repository_name import RepositoryName
+from agent_comms.repository_name import READ_ATTEMPTS, READ_TIMEOUT_SECONDS, RepositoryName
 from agent_comms.todos import PullRequests, UnmergedListedPullRequest
 from github_fixture import GitHubFixture
 
@@ -63,4 +65,38 @@ def test_graphql_variables_cross_the_foreign_boundary(github_cli: GitHubFixture)
         "nodes": [{"number": 7, "headRefName": "fix/seven", "isCrossRepository": False}],
         "pageInfo": {"hasNextPage": False, "endCursor": None},
     }}}}
+
+
+def test_a_stalled_read_is_attempted_again_and_a_named_method_is_not(monkeypatch):
+    """One stalled GitHub read must not fail the run that made it.
+
+    A request that names its method may already have been applied, so a timeout there
+    is the answer rather than a reason to send it again.
+    """
+    calls: list[tuple[str, ...]] = []
+
+    def stalled_then_answered(arguments, **kwargs):
+        calls.append(arguments)
+        if len(calls) < READ_ATTEMPTS:
+            raise subprocess.TimeoutExpired(arguments, READ_TIMEOUT_SECONDS)
+        return subprocess.CompletedProcess(arguments, 0, "{}", "")
+
+    monkeypatch.setattr(subprocess, "run", stalled_then_answered)
+    assert RepositoryName("OpenHCSDev", "agent-comms").api("user").stdout == "{}"
+    assert len(calls) == READ_ATTEMPTS
+
+    def always_stalled(arguments, **kwargs):
+        calls.append(arguments)
+        raise subprocess.TimeoutExpired(arguments, READ_TIMEOUT_SECONDS)
+
+    calls.clear()
+    monkeypatch.setattr(subprocess, "run", always_stalled)
+    with pytest.raises(subprocess.TimeoutExpired):
+        RepositoryName("OpenHCSDev", "agent-comms").api("user")
+    assert len(calls) == READ_ATTEMPTS
+
+    calls.clear()
+    with pytest.raises(subprocess.TimeoutExpired):
+        RepositoryName("OpenHCSDev", "agent-comms").rest("pulls/1", "--method", "POST")
+    assert len(calls) == 1
 

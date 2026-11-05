@@ -10,6 +10,13 @@ from typing import ClassVar
 
 from .nominal.field_codec import MalformedRecord, WireValue
 
+# A read that outlives the timeout is attempted again: one stalled call otherwise fails
+# the run that made it, and in the gate that run is the one the merge queue waits on.
+# A request naming its method is attempted once, because a timeout cannot say whether
+# it was applied.
+READ_ATTEMPTS = 2
+READ_TIMEOUT_SECONDS = 60
+
 
 @dataclass(frozen=True, slots=True, eq=False)
 class RepositoryName(WireValue):
@@ -41,9 +48,21 @@ class RepositoryName(WireValue):
 
     @staticmethod
     def command(*arguments: str, input: str = "") -> subprocess.CompletedProcess[str]:
-        """The GitHub process boundary shared by API reads and normal merge requests."""
-        return subprocess.run(("gh", *arguments), input=input,
-                              capture_output=True, text=True, timeout=60)
+        """The GitHub process boundary shared by API reads and normal merge requests.
+
+        A read that stalls past its timeout is attempted again; a request that names
+        its method is attempted once and its timeout is the caller's answer.
+        """
+        attempts = 1 if "--method" in arguments else READ_ATTEMPTS
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                return subprocess.run(("gh", *arguments), input=input, capture_output=True,
+                                      text=True, timeout=READ_TIMEOUT_SECONDS)
+            except subprocess.TimeoutExpired:
+                if attempt >= attempts:
+                    raise
 
     def api(self, *arguments: str, input: str = "") -> subprocess.CompletedProcess[str]:
         """GitHub's API protocol; callers judge its response."""
