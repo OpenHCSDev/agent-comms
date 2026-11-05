@@ -13,7 +13,7 @@ import pytest
 
 from agent_comms.storage.locked_store import DocumentBytes, DocumentChange, LockedStore
 from agent_comms.storage.private_path import FileRevision, MissingFile
-from agent_comms.coordination.errors import StaleRevision
+from agent_comms.coordination.errors import ContendedRead, CoordinationReadUnavailable, StaleRevision
 from agent_comms.pi_counts import PiCount
 from agent_comms.registry_store import RegistryStore
 from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoDocument, RuntimeInfoStore
@@ -401,3 +401,26 @@ def test_a_fresh_process_finds_root_files_outside_the_storage_package():
     outside = subprocess.run([sys.executable, "-c", probe], check=True,
                              capture_output=True, text=True).stdout
     assert "agent_comms.registry_store" in outside
+
+
+def test_only_a_read_that_waited_out_a_writer_is_retried_as_contended(tmp_path):
+    """The cursor retry re-reads only a ContendedRead: real SQLite BUSY decodes to one,
+    while a currentness deferral, which waited for nothing, never does."""
+    import sqlite3
+
+    path = tmp_path / "store.sqlite3"
+    writer = sqlite3.connect(path, isolation_level=None)
+    writer.execute("CREATE TABLE t (x)")
+    writer.execute("BEGIN EXCLUSIVE")
+    reader = sqlite3.connect(path, isolation_level=None, timeout=0)
+    try:
+        with pytest.raises(CoordinationReadUnavailable) as busy:
+            with CoordinationReadUnavailable.checking():
+                reader.execute("SELECT * FROM t").fetchall()
+        assert isinstance(busy.value, ContendedRead)
+        assert not isinstance(StaleRevision("owner generation changed"), ContendedRead)
+    finally:
+        writer.execute("ROLLBACK")
+        reader.close()
+        writer.close()
+

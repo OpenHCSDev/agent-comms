@@ -36,7 +36,7 @@ from agent_comms_hooks.process_claim import (
 )
 
 from ..child_process import LockHolder, Platform
-from ..coordination.errors import CoordinationReadUnavailable, DeferredRead, StaleRevision
+from ..coordination.errors import ContendedRead, CoordinationReadUnavailable, StaleRevision
 from ..nominal.declared_family import DeclaredFamily
 from ..errors import RelationViolationError
 from ..nominal.field_codec import PathText, ScratchName
@@ -76,7 +76,7 @@ class ExclusiveLock(ExclusiveFlock, LockMode):
         held.require_writer()
 
 
-class StoreLockBusyError(BlockingIOError, DeferredRead):
+class StoreLockBusyError(BlockingIOError, ContendedRead):
     """A store lock exhausted its wait budget, with the observed holders."""
 
     holders: tuple[LockHolder, ...]

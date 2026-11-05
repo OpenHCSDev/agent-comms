@@ -4,15 +4,14 @@
 
 from agent_comms.repo import Checkout
 from bus_history import read_history
+from delivery_owner_fixture import qualified_owner_launch, start_headless_owner  # noqa: F401
 import asyncio
-import os
 
 import pytest
 
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import CursorAdvancedUpdate, decode_updates
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.owner_protocol import OwnerLine, OwnerUpdate
 from agent_comms.runtime_server import SocketClient
@@ -25,11 +24,13 @@ def coordinator_writer(private_comms):
         yield store.session
 
 
-async def test_trusted_load_recovers_after_real_sql_contention(tmp_path, private_comms, coordinator_writer):
+async def test_trusted_load_recovers_after_real_sql_contention(
+        tmp_path, private_comms, coordinator_writer, qualified_owner_launch):
     # Draining an owned inbox publishes native cursors, which only a private root may do.
     comms = private_comms
     owner = comms.registry.declare(
-        NativeThread('reader', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+        # No live PID: acquire_thread returns a live thread untouched, reserving no owner lease.
+        NativeThread('reader', frozenset(), Checkout(tmp_path))
     )
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.participants.register(
@@ -39,9 +40,10 @@ async def test_trusted_load_recovers_after_real_sql_contention(tmp_path, private
         comms,
         auto_wake=False,
     )
-    # Production hands the cursor owner the AcpSessionId its encoded update carries.
+    # The live observer acts only for a session under its own lease (#3982); a PID-only owner's
+    # observer stops at owned(). start_owner publishes AcpSessionId(thread.name).
     session = AcpSessionId(owner.name)
-    agent.sessions.publish(session, owner)
+    await start_headless_owner(agent, owner.name, qualified_owner_launch)
     attached = asyncio.get_running_loop().create_future()
 
     def accept(reader, writer):
@@ -107,7 +109,8 @@ async def test_trusted_load_recovers_after_real_sql_contention(tmp_path, private
             assert loaded.observation.status == "unavailable"
             assert loaded.scope == before.scope
             await agent.cursors.publish(session, owner.name)
-        agent.inputs.ensure_live_drain(session)
+        # The writer committed nothing, so no change marker wakes anyone: the
+        # deferred read's own retry must publish once the lock clears.
         recovered = await receive(loaded.revision)
         assert recovered.observation.status == "none"
         assert recovered.scope == loaded.scope
