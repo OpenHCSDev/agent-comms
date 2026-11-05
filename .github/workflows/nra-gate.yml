@@ -180,6 +180,7 @@ jobs:
       # already tested would wait here forever. The reuse decision therefore belongs
       # on the steps, exactly as the debt legs already carry theirs.
       - if: needs.base.outputs.reused == 'true'
+        shell: bash
         run: echo "Already tested green on this head's pull request; nothing to re-run."
       - uses: actions/checkout@v4
         if: needs.base.outputs.reused != 'true'
