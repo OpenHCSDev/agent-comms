@@ -430,7 +430,8 @@ async def test_shutdown_cancels_publication_http_and_prevents_next_remote(
             pending = asyncio.create_task(Coordination.run_worker(prepare))
         try:
             assert await asyncio.to_thread(remote.entered.wait, 10)
-            child = await asyncio.to_thread(children.next_child)
+            # Local queries such as `rev-parse --git-common-dir` ran and exited before the request.
+            child = await asyncio.to_thread(children.next_alive)
             handles = (child,)
             members = child.platform.group_members(child.identity)
             assert handles and len(members) > len(handles), "Actual Git HTTP helper was not captured"
@@ -498,6 +499,12 @@ class RegisteredChildren(GitChildren):
 
     def next_child(self) -> SpawnedProcess:
         return self.registrations.get(timeout=10)
+
+    def next_alive(self) -> SpawnedProcess:
+        """The child still running, past the ones that finished before the server was entered."""
+        while not (child := self.next_child()).alive():
+            pass
+        return child
 
 
 class PausedRegistration(RegisteredChildren):
