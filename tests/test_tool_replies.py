@@ -26,10 +26,22 @@ def bus_read_result(tool: type[BusRead]) -> type:
 
 
 def apply_result(tool: type[ToolRequest]) -> type:
-    return get_type_hints(tool.apply, localns={
+    """apply's declared return; a type parameter is followed through the generic bases that bind
+    it (HumanToolRequest[QueueActionApplied] binds ToolRequest's Result) until a concrete type."""
+    hint = get_type_hints(tool.apply, localns={
         "Comms": Comms,
         **{param.__name__: param for param in ToolRequest.__type_params__},
     })["return"]
+    bindings = {
+        parameter: argument
+        for declaration in tool.__mro__
+        for base in get_original_bases(declaration)
+        for parameter, argument in zip(
+            getattr(get_origin(base), "__type_params__", ()), get_args(base))
+    }
+    while isinstance(hint, TypeVar):
+        hint = bindings[hint]
+    return hint
 
 
 def result_type(tool: type[ToolRequest]) -> type:

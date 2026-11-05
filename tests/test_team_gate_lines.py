@@ -22,18 +22,20 @@ def teammate_line(state: type[TeammateState], since: float) -> TeammatePing:
                     subjects=(TeammateSubject(TEAMMATE),), since=RecordedEventTime(since))
 
 
-def test_only_team_disposable_stale_lines_are_undisposed(comms):
+def test_only_team_disposable_stale_lines_lock_the_verbs(comms):
     """2026-10-25: AWAIT RUN lines, the holder's to dispose of, were restated as UNDISPOSED and
-    printed on every verb refusal beside the lines that actually locked."""
+    printed on every verb refusal beside the lines that actually locked. A line locks when it
+    is open (on_board) and has waited on the team past the cut (TeamUpdate, team_pings.py)."""
     cut = 1000.0
     history = TeamHistory.read(comms, frozenset())
     judge = RulePing(OrderlessUnreviewedHead, TextDigest.of("JUDGE"), text="JUDGE", subjects=(TeammateSubject(TEAMMATE),),
                      since=RecordedEventTime(10.0))
-    assert teammate_line(DeliveredUnclosed, 10.0).undisposed(history, cut)
-    assert judge.undisposed(history, cut)
-    assert not teammate_line(DeliveredUnclosed, 2000.0).undisposed(history, cut)
+    stale = teammate_line(DeliveredUnclosed, 10.0)
+    assert stale.on_board(history) and stale.waits_on_team(cut)
+    assert judge.on_board(history) and judge.waits_on_team(cut)
     assert not teammate_line(DeliveredUnclosed, 2000.0).waits_on_team(cut)
-    assert not teammate_line(AwaitingApplicationRun, 10.0).undisposed(history, cut)
+    awaiting_run = teammate_line(AwaitingApplicationRun, 10.0)
+    assert not awaiting_run.on_board(history) and not awaiting_run.waits_on_team(cut)
 
 
 def test_an_installed_application_order_waits_on_its_holder_not_the_team():
