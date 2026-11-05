@@ -92,7 +92,7 @@ from .notification_evidence import AfterRecipient, FirstRecipient, RecipientCurs
 from .message_notification import MessageNotification
 from .presentation import ChannelView, WireRevision
 from .runtime_requests import QueueActionRuntimeRequest
-from .runtime_server import RuntimeRequest
+from .runtime_request import RuntimeRequest
 from .owner_connection import OwnerConnection
 from .context_store import (
     LATEST_CONTEXT, CapturedContext, ContextManifestCursor, ContextManifestPage, ContextManifestReference,

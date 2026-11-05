@@ -17,7 +17,7 @@ from . import launch_runtime
 from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary, NativeArguments
 from .registry_document import RegistryEntry, RegistrySnapshot
 from .nominal.field_codec import AcpSessionId, FieldCodec
-from agent_comms.runtime_server import AttachedResultRuntimeRequest, AttachedRuntimeRequestContext, ResultRuntimeRequest, RuntimeRequestContext
+from agent_comms.runtime_request import AttachedResultRuntimeRequest, AttachedRuntimeRequestContext, ResultRuntimeRequest, RuntimeRequestContext
 from .owner_connection import OwnerConnection
 from .thread_identity import ClaimedIdentity, OwnerIdentity
 from .tool_result import DeclaredReply
