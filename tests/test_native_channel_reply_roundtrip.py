@@ -101,7 +101,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                         current_inputs = tuple((row, next(
                             entry for entry in NativeTranscript(Path(row.session_file)).tail()
                             if entry.input_boundary).require_tracked_user()) for row in pending)
-                        pending = tuple((row, user) for row, user in current_inputs if row.input_id == user.input_id)
+                        pending = tuple((row, user) for row, user in current_inputs if row.input_id == user.require_input_id())
                         if not pending:
                             assert not broadcast
                             request_text = json.dumps(request.get("messages", ()))
@@ -116,7 +116,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                                 (row.input_id, row.stage.declared_name, row.session_file, str(row.session_id))
                                 for row, _ in pending)
                             original, user = pending[0]
-                            assert user.input_id == original.input_id
+                            assert user.require_input_id() == original.input_id
                             is_triage = original.stage is TriageNativeExecution
                             assignments = tuple(WakeAssignment.one(
                                 store.session._connection, assignment_id=identity
