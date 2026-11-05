@@ -3,15 +3,12 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from fixture_git import IDENTITY
+import fixture_git
 
 from agent_comms.repo import Checkout, FailedGitCommand, RepositoryReads
 
 
-def git(path: Path, *arguments: str) -> str:
-    return subprocess.run(
-        ["git", *IDENTITY, *arguments], cwd=path, check=True, capture_output=True, text=True,
-    ).stdout.strip()
+git = fixture_git.run
 
 
 @pytest.fixture

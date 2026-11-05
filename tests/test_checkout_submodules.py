@@ -29,18 +29,12 @@ from agent_comms.threads import ExternalThread, NativeThread
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.todos import PendingProblemOrder, WithdrawTodo
 from cli_command import core, core_process
-from fixture_git import IDENTITY
+import fixture_git
 from order_scope_fixture import FIX_SCOPE
 from source_revision_fixture import SourceRepository
 
 
-def git(path: Path, *args: str) -> str:
-    return subprocess.run(
-        ("git", *IDENTITY, "-C", str(path), *args),
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout
+git = fixture_git.run
 
 
 @pytest.fixture

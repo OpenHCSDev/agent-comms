@@ -21,7 +21,7 @@ from agent_comms.child_process import DetachedChildStdio, ObservedProcess, Spawn
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms_project import AgentCommsProject, ClientTypeErrors
 from nominal_refactor_advisor import audit
-from fixture_git import IDENTITY
+import fixture_git
 from module_layers import StackClient
 from process_tree_fixture import TREE, identities, ready
 
@@ -53,9 +53,7 @@ class Checkout:
         self.git("remote", "add", "origin", str(SOURCE))
 
     def git(self, *args: str) -> str:
-        return subprocess.check_output(
-            ["git", *IDENTITY, "-C", str(self.path), *args], text=True, timeout=10
-        ).strip()
+        return fixture_git.run(self.path, *args)
 
     def commit(self, files: dict[str, str | None]) -> str:
         for name, source in files.items():

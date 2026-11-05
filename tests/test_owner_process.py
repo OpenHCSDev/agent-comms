@@ -39,7 +39,7 @@ from agent_comms.thread_text import GivenThreadText
 from agent_comms.threads import NativeThread
 from agent_comms.turn_failure import BackendFailed
 from delivery_owner_fixture import canonical_agent
-from fixture_git import IDENTITY
+import fixture_git
 from native_backend_fixture import native_backend_fixture
 
 
@@ -256,7 +256,7 @@ def test_failed_real_worker_startup_retains_private_trace(tmp_path: Path, monkey
     shutil.copy2(native_package.MANIFEST, checkout / "stack" / native_package.MANIFEST.name)
     # A source checkout stamps its build from its own repository's HEAD.
     for command in (("init", "-q"), ("add", "-A"), ("commit", "-q", "-m", "unprepared")):
-        subprocess.run(("git", *IDENTITY, "-C", str(checkout), *command), check=True)
+        fixture_git.run(checkout, *command)
     root = tmp_path / "root"
     root.mkdir(mode=0o700)
     launched = subprocess.run(

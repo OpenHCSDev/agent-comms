@@ -36,7 +36,7 @@ from agent_comms.todos import (
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.ui_model.teammate_state import Unreadable
 from agent_comms.work_branches import WorkBranchError, WorkBranches
-from fixture_git import IDENTITY
+import fixture_git
 from source_revision_fixture import SourceRepository
 from test_todos import order
 
@@ -44,8 +44,7 @@ pytest_plugins = ('test_holder_standing_rules',)
 
 
 
-def git(checkout, *args):
-    return subprocess.run(['git', *IDENTITY, '-C', str(checkout), *args], check=True, capture_output=True, text=True).stdout.strip()
+git = fixture_git.run
 
 
 def holder_checkout(path):
