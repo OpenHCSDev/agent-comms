@@ -715,8 +715,8 @@ class ToolsCallMessage(McpMessage, declared_name="tools/call"):
                 ToolRefusedError(f"The connector exposes no tool {self.params.name!r}.")
             )
         try:
-            reply = await connector.call(tool, self.params.arguments, caller, observer)
-            return ToolsCallResult((TextContent(json.dumps(reply)),), False, reply)
+            answered = await connector.call(tool, self.params.arguments, caller, observer)
+            return answered.result()
         except (
             # Invalid input (ToolRefusedError, MalformedRecord, an unrecorded time) and any
             # declared CommandFailure (git, Refused, coordination) are the caller's refusal;
@@ -731,6 +731,20 @@ class ToolsCallMessage(McpMessage, declared_name="tools/call"):
 class TextContent:
     text: str
     type: Literal["text"] = "text"
+
+
+@dataclass(frozen=True)
+class AnsweredCall:
+    """A tool's declared reply and the new board rows naming the caller who made it."""
+
+    reply: dict[str, JsonValue]
+    board: tuple[str, ...]
+
+    def result(self) -> ToolsCallResult:
+        """The rows ride as their own text after the reply, never inside it: structured
+        content stays exactly the declared result that remote cores decode."""
+        return ToolsCallResult((TextContent(json.dumps(self.reply)),
+                                *(TextContent(line) for line in self.board)), False, self.reply)
 
 
 @dataclass(frozen=True)
@@ -791,7 +805,7 @@ class Connector(ConnectorService):
     )
 
     calls: dict[
-        asyncio.Task[dict[str, JsonValue]], type[ToolRequest] | type[ConnectorTool],
+        asyncio.Task[AnsweredCall], type[ToolRequest] | type[ConnectorTool],
     ] = field(
         default_factory=dict, init=False, repr=False, compare=False,
     )
@@ -850,7 +864,7 @@ class Connector(ConnectorService):
     async def call(
         self, tool: type[ToolRequest] | type[ConnectorTool],
         arguments: Mapping[str, object], caller: ConnectorCaller, observer: WireExportObserver,
-    ) -> dict[str, JsonValue]:
+    ) -> AnsweredCall:
         """Start once; a disconnected HTTP client cannot abandon its write."""
         if self.git_children.closing.is_set():
             raise web.HTTPServiceUnavailable(text="Connector is stopping")
@@ -902,12 +916,13 @@ class Connector(ConnectorService):
     def invoke(
         self, tool: type[ToolRequest] | type[ConnectorTool], arguments: Mapping[str, object],
         caller: ConnectorCaller, observer: WireExportObserver,
-    ) -> dict[str, JsonValue]:
+    ) -> AnsweredCall:
         tool.require_entry_open(self.root)
         with self.opened_wire() as comms:
             acting, rest = caller.acting(arguments)
             caller.prepare_call(comms, acting)
-            return tool.decoded(comms, rest).bound(observer).served_by(self).replied(comms, acting)
+            request = tool.decoded(comms, rest).bound(observer).served_by(self)
+            return AnsweredCall(request.replied(comms, acting), request.board(comms, acting))
 
     def cancel_call(self, request_id: JsonRpcId) -> None:
         """A cancel names a running observed call by its request id; any other call runs on."""

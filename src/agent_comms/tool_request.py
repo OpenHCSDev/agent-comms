@@ -201,6 +201,11 @@ class ToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResu
         applied = caller.invoke(cast(ToolRequest, self), comms)
         return self.reply(FieldCodec.encode(applied.to_wire()), caller)
 
+    def board(self, comms: Comms, caller: ToolCaller) -> tuple[str, ...]:
+        """The new board rows naming the caller of this verb, carried beside its reply: the
+        reply itself stays the tool's declared result, which remote readers decode."""
+        return caller.board(comms)
+
     def require_read_only(self) -> None:
         """Mutating declarations cannot run under a read-only connector principal."""
         raise ToolRefusedError("This connector grant permits declared reads only.")
@@ -324,6 +329,10 @@ class ReadTool(ReadWork, FreshIngress):
 
     def require_read_only(self) -> None:
         """The declared read capability controls access, independently of MCP hints."""
+
+    def board(self, comms: Comms, caller: ToolCaller) -> tuple[str, ...]:
+        """A read is not a verb: it carries what it read, and the board stays in comms_board."""
+        return ()
 
     @classmethod
     def require_entry_open(cls, root: Path) -> None:

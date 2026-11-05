@@ -86,10 +86,6 @@ class DeckReader(DealtSources):
     def deaf(self, session: str) -> tuple[str, ...]:
         return tuple(deaf.line() for deaf in WatchClaim(session).deaf())
 
-    def board(self, session: str) -> tuple[str, ...]:
-        """Read this session's retained board; publication is independently configured."""
-        return WatchClaim(session).state().board()
-
     @classmethod
     def slices(cls) -> list[str]:
         """One slice of each stream per round, so the shortest stream comes back every round

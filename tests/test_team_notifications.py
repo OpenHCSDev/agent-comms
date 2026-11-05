@@ -463,7 +463,7 @@ def test_an_independent_heartbeat_message_never_replaces_the_board(notification_
     raw = independent_instruction(comms, "Heartbeat pass failed: an old raw alarm")
     colleague = comms.registry.require("colleague").incarnation
     assert TeamUpdate.latest(comms, colleague) == (board.task,)
-    assert TeamUpdate.current_board(comms, "colleague") == board.task.board(comms)
+    assert TeamUpdate.current_board(comms, comms.registry.require("colleague").incarnation) == board.task.board(comms)
     assert lead_hud(comms).board == board.task.board(comms)
     assert raw.reference in everything_to_lead(comms)
     # The next pass clears NEW without promoting a subjectless observation to STILL OPEN.
