@@ -9,6 +9,7 @@ import pytest
 from delivery_owner_fixture import canonical_agent
 from agent_comms.acp_extension import GoalChangedUpdate, decode_updates
 from agent_comms.comms import wire
+from agent_comms.coordination.errors import Refused
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec
 from agent_comms.goal_presentation import GoalExecution
 from agent_comms.goal_actions import (
@@ -30,7 +31,9 @@ async def test_goal_edit_and_history_over_owner_socket(tmp_path, monkeypatch, na
     comms = wire(tmp_path / "wire")
     owner = canonical_agent(comms, agent_bin=GivenBinary("pi"), agent_args=GivenArguments(()), runtime_enabled=True)
     # Keep this non-provider test's goal paused. Edits must preserve that state.
-    response = await owner.new_session(str(tmp_path / "project"))
+    project = tmp_path / "project"
+    project.mkdir()
+    response = await owner.new_session(str(project))
     session = FieldCodec.decode(AcpSessionId, response.session_id)
     goal = comms.goals.update_goal(session, SetGoalAction(text="Review @child's implementation"))
     paused = comms.goals.update_goal(session, PausedGoalAction(), actor=OwnerInvocable)
@@ -70,7 +73,7 @@ async def test_goal_edit_and_history_over_owner_socket(tmp_path, monkeypatch, na
         history = (await proxy.request("goal_history", goal_id=goal.id))["history"]
         assert history[-1]["before"]["text"] == paused.text
         assert history[-1]["after"] == result["goal"]
-        with pytest.raises(RuntimeError):
+        with pytest.raises(Refused):
             await proxy.request(
                 "edit_goal", goal_id=goal.id, expected_revision=paused.revision, text="stale edit"
             )
