@@ -77,6 +77,18 @@ class CheckoutAllocation(DeclaredFamily, affix="CheckoutAllocation"):
     """A path's declared allocation; each member owns its interpretation and Git needs."""
 
     @classmethod
+    def path_reserves_boundary(cls, rule: StorageRule, owners: Iterable[Thread],
+                               path: Path) -> bool:
+        """Whether any allocation declared for this path reserves its boundary.
+
+        The one declaration of that question. Ownership tests and spill decisions
+        both ask it, and asking it in two places let the answers drift apart.
+        """
+        return any(allocation.reserves_boundary()
+                   for owner in owners
+                   for allocation in cls.for_path(rule, owner, path))
+
+    @classmethod
     def for_path(cls, rule: StorageRule, owner: Thread,
                  path: Path) -> Iterator[CheckoutAllocation]:
         allocated = rule.roots_of(owner).allocation_name
@@ -442,9 +454,9 @@ class StorageRule(RoomAllocation, DurableFile):
                                repository: RepositoryName, reads: RepositoryReads) -> bool:
         """Qualify this exact reuse target, without inventorying unrelated history."""
         return ((path / '.git').is_file() and not path.is_symlink()
-                and any(allocation.reserves_boundary()
-                        and allocation.owns_present(self, owner, path, reads)
-                        for allocation in CheckoutAllocation.for_path(self, owner, path))
+                and any(allocation.owns_present(self, owner, path, reads)
+                        for allocation in CheckoutAllocation.for_path(self, owner, path)
+                        if allocation.reserves_boundary())
                 and reads.repository(path).github == repository)
 
     def owned_checkouts(self, owner: Thread, repository: RepositoryName,
