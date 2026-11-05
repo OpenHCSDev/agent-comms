@@ -237,7 +237,7 @@ def test_a_ui_reads_a_renamed_thread_from_a_registry_cut(tmp_path):
     _declare(comms, "worker", str(tmp_path))
     _declare(comms, "bystander", str(tmp_path))
     comms.registry.rename("worker", "renamed")
-    request = CommsRegistryCutTool(names=("worker",))
+    request = CommsRegistryCutTool(threads=("worker",))
     answer = LocalCoreAccess(comms).call(FieldCodec.decode(CommsRegistryCutTool, FieldCodec.encode(request)))
     cut = FieldCodec.decode(RegistrySnapshot, FieldCodec.encode(answer))
 

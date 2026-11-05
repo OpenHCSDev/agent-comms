@@ -1416,7 +1416,8 @@ class RegistryCut(RegistrySnapshot):
     outside the cut, not unregistered, so its refusal says which."""
 
     def unregistered(self, name: str) -> UnregisteredThreadError:
-        return OutsideRegistryCut(f"Thread {name!r} is not in this registry cut; ask for it by name.")
+        return OutsideRegistryCut(
+            f"Thread {name!r} is not in this registry cut; ask for it by name.")
 
 
 class UnreadRegistry:

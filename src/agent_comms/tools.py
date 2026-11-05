@@ -1387,10 +1387,10 @@ class CommsRegistryCutTool(CoreRead[RegistryCut]):
     label = "Thread registry cut"
     description = ("The thread registry snapshot holding only the named threads: their rows, "
                    "statuses, aliases and owner generations, with the fields every thread shares.")
-    names: Annotated[tuple[str, ...], *tool_field("Thread names, current or renamed")]
+    threads: Annotated[tuple[str, ...], *tool_field("Thread names, current or renamed")]
 
     def apply(self, comms: Comms, caller: ToolCaller) -> RegistryCut:
-        return comms.registry.snapshot().only(self.names)
+        return comms.registry.snapshot().only(self.threads)
 
 
 @dataclass(frozen=True, kw_only=True)
