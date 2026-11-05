@@ -322,6 +322,21 @@ jobs:
         with:
           python-version-file: pyproject.toml
 
+      # The checker environment and uv's own download/build cache depend only on the locks,
+      # so every head that changes only src/ or tools/ rebuilds the same bytes. Restoring them
+      # turns the cold resolve, download and install into a verify; both steps below still run
+      # and still check the pins, so a stale or partial entry can only cost time, never truth.
+      - name: Restore the checker environment and uv's cache
+        if: steps.reach.outputs.reaches == 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/uv
+            ${{ runner.temp }}/checker-venv
+          key: checker-${{ runner.os }}-${{ matrix.kind }}-${{ hashFiles('uv.lock', 'stack/uv.lock', 'pyproject.toml') }}
+          restore-keys: |
+            checker-${{ runner.os }}-${{ matrix.kind }}-
+
       - name: Bootstrap only Core and locked checker dependencies
         if: steps.reach.outputs.reaches == 'true'
         run: |
