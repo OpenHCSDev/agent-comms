@@ -18,6 +18,7 @@ from agent_comms.installer.practice import PracticeCopy
 from agent_comms.storage.locked_store import RootFile
 from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.queued_input import InitialInput
+from conftest import answer_rules
 from native_backend_fixture import native_backend_fixture, wait_for
 
 
@@ -30,30 +31,35 @@ async def test_message_injects_into_next_tool_call(
         practice = PracticeCopy(private_comms.root, native.root)
         practice.include(tuple(RootFile.existing_in(private_comms.root)))
         await native.author_history()
-        release = native.project / 'release-tool'
-        ready = native.project / 'tool-running'
-        returned = native.project / 'tool-returned'
-        os.mkfifo(release, mode=0o600)
-        release_fd = os.open(release, os.O_RDWR | os.O_NONBLOCK)
-        try:
-            native.provider.tool_call = ('bash', {'command': (
-                f'printf running > {shlex.quote(str(ready))}; '
-                f'IFS= read -r released < {shlex.quote(str(release))}; '
-                f'printf returned > {shlex.quote(str(returned))}; '
-                'printf "%s\\n" "$released"'
-            )})
-            async with native.open_owner(
-                runtime_enabled=True, auto_wake=True, native_options=(),
-            ) as (agent, session):
-                comms = agent._comms
-                comms.threads.claim_thread('sender', tags=frozenset(), worktree=Checkout(native.project))
-                worker = agent.sessions.require(session)
+        async with native.open_owner(
+            runtime_enabled=True, auto_wake=True, native_options=(),
+        ) as (agent, session):
+            comms = agent._comms
+            comms.threads.claim_thread('sender', tags=frozenset(), worktree=Checkout(native.project))
+            worker = agent.sessions.require(session)
+            answer_rules(comms, worker)
+            # The thread's scratch is where its storage rule lets its tools write.
+            scratch = comms.registry.storage_rule.roots_of(comms.registry.require(worker)).scratch
+            release = scratch / 'release-tool'
+            ready = scratch / 'tool-running'
+            returned = scratch / 'tool-returned'
+            os.mkfifo(release, mode=0o600)
+            release_fd = os.open(release, os.O_RDWR | os.O_NONBLOCK)
+            try:
+                native.provider.tool_call = ('bash', {'command': (
+                    f'printf running > {shlex.quote(str(ready))}; '
+                    f'IFS= read -r released < {shlex.quote(str(release))}; '
+                    f'printf returned > {shlex.quote(str(returned))}; '
+                    'printf "%s\\n" "$released"'
+                )})
                 turn = asyncio.create_task(InitialInput.run(
                     agent.inputs, session, worker, 'Run the held bash tool, then answer.',
                     display_text='Run the held bash tool, then answer.', input_id=InputId.mint(),
                 ))
                 try:
-                    await wait_for(ready.exists)
+                    # A refused tool ends the turn, so its refusal is the failure, not a 30 s wait.
+                    await wait_for(lambda: ready.exists() or turn.done())
+                    assert ready.exists(), native.provider.requests[-1]['messages'][-1]
                     running = backend.TurnSession.active[turn]
                     forwarding = running.inputs
                     assert not returned.exists()
@@ -66,18 +72,17 @@ async def test_message_injects_into_next_tool_call(
                         await Coordination.run_worker(partial(
                             comms.messaging.send, 'sender', session, marker,
                         ))
-                        while True:
-                            forwarding.changed.clear()
-                            accepted = tuple(
-                                item for item in forwarding.pending.values()
-                                if item.input_id in forwarding.accepted and marker in item.content.text
+                        def written():
+                            return tuple(
+                                entry for entry in forwarding.pending.values()
+                                if marker in entry.request.input.content.text
                             )
-                            if accepted:
-                                break
-                            await forwarding.changed.wait()
+                        await wait_for(written)
+                        # The native acknowledgement proves it reached the child's queue.
+                        await written()[0].response()
                         queued = perf_counter()
-                    assert len(accepted) == 1
-                    assert accepted[0].when_busy is SteerInputPolicy
+                    assert len(written()) == 1
+                    assert written()[0].request.input.when_busy is SteerInputPolicy
                     assert queued - send_started < 2
                     assert not returned.exists(), 'The native tool returned before steer acknowledgement'
                     assert not turn.done()
@@ -90,5 +95,5 @@ async def test_message_injects_into_next_tool_call(
                 assert marker in json.dumps(native.provider.requests[-1])
                 assert 'released' in json.dumps(native.provider.requests[-1])
                 assert comms.registry.require(worker).turn_generation == 1
-        finally:
-            os.close(release_fd)
+            finally:
+                os.close(release_fd)
