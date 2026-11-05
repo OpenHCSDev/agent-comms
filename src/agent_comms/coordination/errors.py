@@ -175,9 +175,9 @@ class StaleRevision(CoordinationError, DeferredRead):  # noqa: N818 - nominal ou
     """The supplied CAS revision is not the authoritative revision."""
 
 
-class ReloadRequired(StaleRevision, DeclaredError):  # noqa: N818 - nominal outcome name
+class ReloadRequired(CoordinationError, DeclaredError):  # noqa: N818 - nominal outcome name
     """The read's own bounds name a source that is gone; retrying them never succeeds,
-    so the caller is answered and re-reads from fresh bounds. Its message is its whole state,
+    so it is no DeferredRead: the caller is answered and re-reads from fresh bounds. Its message is its whole state,
     so a remote UI receives the same reload signal."""
 
     wire_type: ClassVar[object] = tuple[str]

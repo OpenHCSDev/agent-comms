@@ -17,7 +17,7 @@ from .agent_backend import RuntimeLocation
 from .bus import Bus
 from .bus_publication import Delivered
 from .coordination.database import CoordinationStore
-from .coordination.errors import CoordinationReadUnavailable, StaleRevision, TranscriptChanged
+from .coordination.errors import CoordinationReadUnavailable, ReloadRequired, StaleRevision, TranscriptChanged
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .external_transcript import ExternalTranscript
@@ -489,9 +489,9 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
         registry = self.namespace(owner)
         requested = registry.threads.get(registry.canonical_name(name))
         if requested is None:
-            raise StaleRevision("Transcript request has no current source")
+            raise ReloadRequired("Transcript request has no current source")
         if self.thread.incarnation.resolved(registry) != requested.incarnation:
-            raise StaleRevision("Transcript witness belongs to another original thread")
+            raise ReloadRequired("Transcript witness belongs to another original thread")
 
     @projected(view=ContentExclude, name="bus")
     def content_bus(self) -> RecordedBusIdentity:
@@ -566,7 +566,7 @@ class RecordedTranscriptReadIdentity(TranscriptReadIdentity):
     def namespace(self, owner: Transcripts) -> RegistryProvenance:
         current = HistorySource.require(owner.bus.history.sources(), self.source.key)
         if current != self.source:
-            raise StaleRevision("Transcript witness belongs to another recorded source")
+            raise ReloadRequired("Transcript witness belongs to another recorded source")
         return current.provenance
 
     def recapture(self, owner: Transcripts) -> TranscriptReadIdentity:
@@ -759,9 +759,9 @@ class Transcripts:
     ) -> TranscriptRead:
         """Bind the original published witness to this actual source request."""
         if identity.root != str(self.root):
-            raise StaleRevision("Transcript witness belongs to another root")
+            raise ReloadRequired("Transcript witness belongs to another root")
         if (identity.position, identity.limit) != (position, limit):
-            raise StaleRevision("Transcript witness belongs to another page window")
+            raise ReloadRequired("Transcript witness belongs to another page window")
         identity.require_binding(self, name)
         source = identity.page_source.resolve(self, name, Through(identity.page_bound))
         return TranscriptRead(self, identity, source)

@@ -247,3 +247,36 @@ async def test_unknown_saved_member_does_not_kill_the_real_observation_process(c
         assert process.peer.process.is_alive()
         assert comms.contexts.path.read_bytes() == original
         assert comms.bus.bus.path.read_bytes() == original_bus
+
+
+def test_a_reload_reads_afresh_once_and_answers_reload_only_when_its_bounds_stay_stale():
+    """A read derives its bounds when it runs: one reload re-reads at once and answers its
+    value; a read whose own bounds are stale reloads again, and that is its answer, after
+    exactly two reads, never a pending wait on someone else's write."""
+    from agent_comms.coordination.errors import ReloadRequired
+    from agent_comms.ui_model.observation import ReadReload, ReadValue, UnreadableHistory
+
+    reads = []
+
+    def moved_once():
+        reads.append("moved")
+        if len(reads) == 1:
+            raise ReloadRequired("source moved during the read")
+        return "fresh"
+
+    assert UnreadableHistory.outcome(moved_once) == ReadValue("fresh")
+    assert reads == ["moved", "moved"]
+
+    reads.clear()
+
+    def stale_bounds():
+        reads.append("stale")
+        raise ReloadRequired("witness belongs to another page window")
+
+    outcome = UnreadableHistory.outcome(stale_bounds)
+    assert isinstance(outcome, ReadReload)
+    assert reads == ["stale", "stale"]
+    assert outcome.answer(
+        lambda value: "value", lambda error: "deferred", lambda error: "unreadable",
+        lambda error: f"reload: {error}",
+    ) == "reload: witness belongs to another page window"

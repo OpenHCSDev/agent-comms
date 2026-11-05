@@ -16,7 +16,7 @@ from agent_comms.registration import Registration
 from agent_comms.bus import Bus, PublicRecord
 from agent_comms.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.comms import wire
-from agent_comms.coordination.errors import HistoricalSourceChanged
+from agent_comms.coordination.errors import HistoricalSourceChanged, ReloadRequired
 from agent_comms.nominal.field_codec import InputId
 from agent_comms.turn_item import FreshNativeId
 from agent_comms.historical_views import HistoricalMessage, HistoryArchive, HistorySource
@@ -38,7 +38,6 @@ from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.transcripts import RecordedTranscriptReadIdentity, TranscriptReadIdentity
 from agent_comms.order_tools import TranscriptPageRead
 from test_transcript_pages import shared_page
-from agent_comms.coordination.errors import StaleRevision
 from dataclasses import fields
 from agent_comms.registry_provenance import RegistryProvenance
 from agent_comms.threads import ThreadProvenance
@@ -295,7 +294,7 @@ def test_detached_recorded_witness_cannot_rebind_to_same_name_live_thread(migrat
 
     _old, _prior, live, source = migrated
     read = live.transcripts.capture_page_read("alice", page_source=RecordedPageSource(source.key))
-    with pytest.raises(StaleRevision):
+    with pytest.raises(ReloadRequired):
         live.transcripts.bind_page_read("bob", read.identity)
     live.bus.history.path.write_text("[]")
     with pytest.raises(HistoricalSourceChanged):

@@ -13,7 +13,7 @@ import pytest
 
 from agent_comms.channels import AnyChannel
 from agent_comms.comms import wire
-from agent_comms.coordination.errors import StaleRevision
+from agent_comms.coordination.errors import ReloadRequired, StaleRevision
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.notification_assignment import AssignmentSource, NotificationAssignment
@@ -318,11 +318,11 @@ def test_published_source_binding_keeps_exact_original_request(tmp_path):  # noq
     _path, _root_id, comms, _initial, _people = _root(tmp_path)
     identity = comms.views.thread_presentations(("beta",)).require("beta").read_identity
     assert comms.transcripts.bind_page_read("beta", identity).identity is identity
-    with pytest.raises(StaleRevision):
+    with pytest.raises(ReloadRequired):
         comms.transcripts.bind_page_read("alpha", identity)
-    with pytest.raises(StaleRevision):
+    with pytest.raises(ReloadRequired):
         wire(tmp_path / "other").transcripts.bind_page_read("beta", identity)
-    with pytest.raises(StaleRevision):
+    with pytest.raises(ReloadRequired):
         comms.transcripts.bind_page_read(
             "beta", identity,
             position=EarlierThan(identity.page_bound.at_offset(0)),
@@ -332,7 +332,7 @@ def test_published_source_binding_keeps_exact_original_request(tmp_path):  # noq
     comms.registry.unregister("renamed")
     comms.registry.remove("renamed")
     comms.registry.declare(NativeThread('renamed', frozenset(), Checkout(tmp_path)))
-    with pytest.raises(StaleRevision):
+    with pytest.raises(ReloadRequired):
         comms.transcripts.bind_page_read("renamed", identity)
 
 
