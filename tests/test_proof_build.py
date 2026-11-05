@@ -53,7 +53,6 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.order_tools import CommsOrderDoneTool, CommsProblemCloseTool, CommsTodoCreateTool
 from github_fixture import GitHubFixture
 import fixture_git
-from fixture_git import IDENTITY
 from order_scope_fixture import FIX_SCOPE
 from source_revision_fixture import SourceRepository
 from agent_comms.threads import NativeThread
@@ -83,19 +82,8 @@ def proof_build_checkouts(
         checkout = source.checkout
         commits = []
         for number in range(3):
-            subprocess.run(
-                (
-                    "git",
-                    *IDENTITY,
-                    "commit",
-                    "--allow-empty",
-                    "-m",
-                    f"{package.repository.to_wire()} proof {number}",
-                ),
-                cwd=checkout,
-                check=True,
-                capture_output=True,
-            )
+            fixture_git.run(
+                checkout, "commit", "--allow-empty", "-m", f"{package.repository.to_wire()} proof {number}")
             commits.append(
                 subprocess.check_output(
                     ("git", "rev-parse", "HEAD"), cwd=checkout, text=True

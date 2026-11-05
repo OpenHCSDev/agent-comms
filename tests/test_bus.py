@@ -66,7 +66,7 @@ from agent_comms.storage.typed_table import (
     WriterOwnedFile,
 )
 from bus_record_fixture import publication_processes, record_from
-from fixture_git import IDENTITY
+import fixture_git
 
 
 @dataclass(frozen=True)
@@ -91,10 +91,7 @@ def pristine_projection(tmp_path_factory: pytest.TempPathFactory) -> PristinePro
     (source.parent / "agent_comms_hooks").symlink_to(
         original / "agent_comms_hooks", target_is_directory=True)
     subprocess.run(("git", "init", "-q", str(checkout)), check=True, capture_output=True)
-    subprocess.run(
-        ("git", *IDENTITY, "-C", str(checkout), "commit", "--allow-empty", "-qm", "Source fixture"),
-        check=True, capture_output=True,
-    )
+    fixture_git.run(checkout, "commit", "--allow-empty", "-qm", "Source fixture")
     return PristineProjection(checkout, projection_source_digest(source))
 
 

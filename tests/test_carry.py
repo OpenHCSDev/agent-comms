@@ -55,7 +55,7 @@ from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
 from agent_comms.threads import ExternalThread, NativeThread
 from agent_comms.thread_status import RunningThreadStatus
 from conftest import ledger_one_failure_short
-from fixture_git import IDENTITY
+import fixture_git
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
@@ -82,7 +82,7 @@ class Repository:
         self.git("init", "-q")
 
     def git(self, *args: str) -> str:
-        return subprocess.check_output(["git", *IDENTITY, "-C", str(self.path), *args], text=True, timeout=10).strip()
+        return fixture_git.run(self.path, *args)
 
     def commit(self, steps: dict[str, str | None]) -> str:
         """One commit per step, in order, as the main line adds steps one at a time."""
