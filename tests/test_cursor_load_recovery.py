@@ -50,7 +50,7 @@ async def test_trusted_load_recovers_after_real_sql_contention(tmp_path, private
     server = await asyncio.start_server(accept, "127.0.0.1", 0)
     reader, writer = await asyncio.open_connection(*server.sockets[0].getsockname())
     server_writer = await attached
-    agent._runtime.clients[owner.name] = {SocketClient(server_writer)}
+    agent._runtime.clients[session] = {SocketClient(server_writer)}
 
     async def receive(after=0):
         async with asyncio.timeout(2.5):
@@ -107,7 +107,7 @@ async def test_trusted_load_recovers_after_real_sql_contention(tmp_path, private
             assert loaded.observation.status == "unavailable"
             assert loaded.scope == before.scope
             await agent.cursors.publish(session, owner.name)
-        agent.inputs.ensure_live_drain(owner.name)
+        agent.inputs.ensure_live_drain(session)
         recovered = await receive(loaded.revision)
         assert recovered.observation.status == "none"
         assert recovered.scope == loaded.scope
