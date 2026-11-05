@@ -82,7 +82,7 @@ class HereDocument(Redirection):
             if self.line_value(line) == self.target:
                 return
             self.check_line(line)
-        raise ValueError(f'Unterminated here-document {self.target!r}')
+        raise NotStandalone(f'Unterminated here-document {self.target!r}')
 
 
 class ExpandedHereDocument(HereDocument):
@@ -103,7 +103,7 @@ class ExpandedHereDocument(HereDocument):
 
     def check_line(self, line: str) -> None:
         if '$(' in line or '`' in line:
-            raise ValueError('Command substitution in an expanded here-document is not admitted')
+            raise NotStandalone('Command substitution in an expanded here-document is not admitted')
 
 
 class TabStrippedHereDocument(HereDocument):
@@ -291,7 +291,11 @@ class ShellLexer(shlex.shlex, ShellText):
         self.target = target
         self.word_type = ShellWord
         self.continuations.clear()
-        value = super().read_token()
+        try:
+            value = super().read_token()
+        except ValueError as unreadable:
+            # shlex is foreign: this is where its plain error enters the decoder's family.
+            raise NotStandalone(str(unreadable)) from unreadable
         if value is None:
             return None
         end = self.position
@@ -308,7 +312,7 @@ class Operator(ShellWord):
         spelling = next((key for key in sorted(cls.members, key=len, reverse=True)
                          if value.startswith(key)), '')
         if not spelling:
-            raise ValueError(f'Unsupported shell operator {value!r}')
+            raise NotStandalone(f'Unsupported shell operator {value!r}')
         end = next(islice(lexer.word_positions(end), len(spelling) - 1, None)) + 1
         selected = cls.members[spelling](spelling, lexer.word_start, end, spelling)
         # Admit one operator before recursive parsing; native lookahead stays here.
@@ -399,7 +403,7 @@ class CombinedWriteRedirect(WriteRedirect, spellings=('&>', '&>>')):
 class ReadDescriptorRedirect(NumberedRedirect, spellings=('<&',)):
     def bind(self, word: ShellWord) -> Redirection:
         if not word.descriptor_value():
-            raise ValueError('Input descriptor redirection requires a literal descriptor')
+            raise NotStandalone('Input descriptor redirection requires a literal descriptor')
         return super().bind(word)
 
 
@@ -452,7 +456,7 @@ class RedirectionTarget(ArgumentTarget):
         parser.target = ArgumentTarget()
 
     def require_word(self) -> None:
-        raise ValueError('Shell redirection requires a word operand')
+        raise NotStandalone('Shell redirection requires a word operand')
 
 
 class HereDocumentTarget(RedirectionTarget):
@@ -480,12 +484,13 @@ class ShellParser:
     def open_group(self) -> None:
         self.target.require_word()
         if self.words or self.redirections:
-            raise ValueError('A parenthesized command requires its own command position')
+            raise NotStandalone('A parenthesized command requires its own command position')
         self.pending.require_group_boundary()
         self.pending = CommandGroup((), body=tuple(GroupParser(self.lexer).commands()))
 
     def close_group(self) -> Never:
-        raise ValueError('Unexpected closing parenthesis')
+        raise NotStandalone('A closing parenthesis outside a group, such as a case pattern, '
+                            'is not admitted by the bounded shell grammar')
 
     def finish(self) -> None:
         self.target.require_word()
@@ -524,7 +529,7 @@ class GroupParser(ShellParser):
             self.finish()
             yield from self.flush()
             return
-        raise ValueError('Unterminated parenthesized command')
+        raise NotStandalone('Unterminated parenthesized command')
 
 
 class NotStandalone(HookRefused):
@@ -688,11 +693,11 @@ class CommandGroup(ShellCommand):
 
     def completed(self, words: tuple[ShellWord, ...], redirections: tuple[Redirection, ...]) -> Iterator[Self]:
         if words or not self.body:
-            raise ValueError('A parenthesized command requires a nonempty body and no trailing words')
+            raise NotStandalone('A parenthesized command requires a nonempty body and no trailing words')
         yield replace(self, redirections=redirections)
 
     def require_group_boundary(self) -> None:
-        raise ValueError('Adjacent groups require a command separator')
+        raise NotStandalone('Adjacent groups require a command separator')
 
     def nested(self) -> Iterator[ShellCommand]:
         return iter(self.body)
@@ -720,7 +725,7 @@ class Runner(Program):
         try:
             return getopt.getopt(args, cls.short_options, cls.long_options)
         except getopt.GetoptError as error:
-            raise ValueError(f'Incomplete or unknown runner option: {error}') from error
+            raise NotStandalone(f'Incomplete or unknown runner option: {error}') from error
 
     @classmethod
     def arguments(cls, args: list[str]) -> list[str]:
@@ -772,6 +777,6 @@ class ShellRunner(Runner, names=('bash', 'sh', 'zsh')):
         options, remaining = self.options(args)
         scripts = tuple(value for option, value in options if option == '-c')
         if not scripts and remaining and remaining[0].startswith('+'):
-            raise ValueError('Shell +options are not admitted; use explicit -options')
+            raise NotStandalone('Shell +options are not admitted; use explicit -options')
         for script in scripts:
             yield from ShellCommand.parsed(script)
