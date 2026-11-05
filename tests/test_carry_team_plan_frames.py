@@ -1,8 +1,9 @@
 import json
 
+import pytest
 from cutover.carry_team_plan_frames import TeamPlanFrames
 
-from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec, RecordProblems
 from agent_comms.plan_phases import ReviewQueuePhase
 from agent_comms.storage.locked_store import LiveFilesRequest
 from agent_comms.team.vibe_check import OverloadDegradation
@@ -30,6 +31,8 @@ def test_a_frame_written_with_its_own_phases_moves_them_to_the_team_plan(tmp_pat
     previous["phases"] = FieldCodec.encode(TeamPlan(phases), TeamPlan)["phases"]
     frame.write_text(json.dumps(previous))
     plan.unlink()
+    with pytest.raises(RecordProblems, match="phases"):
+        TeamFrame.at(tmp_path, owner).read()
     step = TeamPlanFrames(LiveFilesRequest(tmp_path), tmp_path / "spill")
     assert {frame} <= set(step.input_files())
 
