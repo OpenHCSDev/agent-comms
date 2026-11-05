@@ -15,7 +15,6 @@ from agent_comms.build_identity import InstalledBuild, RecordedBuildIdentity, Re
 from agent_comms.bus import BusReader
 from agent_comms import team
 from agent_comms.team.questions import UnansweredTeammateAsks
-from agent_comms.team_heartbeat import TeamHeartbeat
 from agent_comms.team_service import TeamService
 from agent_comms.channel_targets import ThreadTarget
 from agent_comms.task_attachments.owner_notices import OrderNotice, TeamNotice
@@ -51,7 +50,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import DEFAULT_ROSTER, RegistrySnapshot
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
-from agent_comms.service_passes import ServicePassStore
+from agent_comms.service_passes import ServicePassStore, TeamPass
 from agent_comms.standing_rules import (
     CoreActsStandingRule,
     DatedStandingRule,
@@ -674,8 +673,8 @@ class WaitingUnownedWheelSpin(UnownedWheelSpin):
 class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, FamilyScan, declared_name=None):
     """A missing or stale successful pass, independent of whether a DM needed sending."""
 
-    seconds: ClassVar[float] = TeamHeartbeat.completion_ceiling()
-    """A pass, the loop's sleep and a pass of slack: the heartbeat declares how long it takes."""
+    seconds: ClassVar[float] = TeamPass.completion_ceiling()
+    """A pass, the loop's sleep and a pass of slack: the team pass declares how long it takes."""
     since: float
     teammate: RecordedThreadIncarnation
 
