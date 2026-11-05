@@ -151,7 +151,7 @@ class SelectedTriageOutcome(DeclaredFamily, affix="TriageOutcome"):
         try:
             return DecidedTriageOutcome(SelectedTriage.parse(text))
         except InvalidTriageDecision as error:
-            return RejectedTriageOutcome(error)
+            return RejectedTriageOutcome(error, text)
 
     @abstractmethod
     def settle(self, participant: SelectedParticipant, stage: TriageNativeSend, claim_scope: PrivateSendClaim, context: NativeContextProof) -> tuple[WakeAssignment, ...]: ...
@@ -180,7 +180,20 @@ class DecidedTriageOutcome(SelectedTriageOutcome):
 
 @dataclass(frozen=True)
 class RejectedTriageOutcome(SelectedTriageOutcome):
+    """One unparseable decision, keeping the answer it received and what was accepted.
+
+    The raw text is retained so the terminal states what actually arrived. Without it
+    the only way to learn what the model sent is to go looking in the session file."""
+
     error: InvalidTriageDecision
+    received: str
+
+    def reason(self) -> str:
+        """The refusal and the answer it refused, bounded for one published line."""
+        accepted = ", ".join(json.loads(SelectedTriage.output_values()["names"]))
+        received = " ".join(self.received.split())[:200]
+        return (f"The selected model returned an invalid triage decision ({self.error}). "
+                f"Received: {received!r}. Reply with exactly one decision: {accepted}.")
 
     def settle(self, participant: SelectedParticipant, stage: TriageNativeSend, claim_scope: PrivateSendClaim, context: NativeContextProof) -> tuple[WakeAssignment, ...]:
         return stage.fail_decision(participant.store, participant.identity,
@@ -194,7 +207,7 @@ class RejectedTriageOutcome(SelectedTriageOutcome):
 
         sent = await Coordination.run_worker(partial(
             publish_native_failure, participant, input_id,
-            "The selected model returned an invalid triage decision.",
+            self.reason(),
             source_error=self.error,
         ))
 
