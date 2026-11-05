@@ -541,6 +541,9 @@ class LiteralShellParser(ShellParser):
     def word(self, word: ShellWord) -> None:
         if set(word.spelling) & {'$', '`'}:
             raise NotStandalone('Recovery requires literal, single-line words')
+        if not self.words and word.assignment():
+            raise NotStandalone('Recovery does not admit environment assignments: '
+                                'LD_PRELOAD= or PYTHONPATH= would run other code as the command')
         super().word(word)
 
     def operator(self, operator: Operator) -> Iterator[ShellCommand]:
@@ -598,8 +601,9 @@ class EmergencyHookStop:
 
     @classmethod
     def is_whole_of(cls, command_line: str) -> bool:
+        """By its bare name: a path could name any file, and PATH finds the real one."""
         commands = tuple(ShellCommand.standalone(command_line))
-        return len(commands) == 1 and commands[0].invokes(cls.program, cls.verb)
+        return len(commands) == 1 and commands[0].words[:2] == (cls.program.name, cls.verb)
 
 
 @dataclass(frozen=True)

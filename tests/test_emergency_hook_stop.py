@@ -16,7 +16,17 @@ STOP = "agent-comms-hooks stop --from someone --why 'the gate is wrong'"
 
 @pytest.mark.parametrize("command, passes", (
     (STOP, True),
-    ("/home/ts/.local/bin/agent-comms-hooks stop --from a --why b", True),
+    ("agent-comms-hooks stop --from a --why x=y", True),
+    ("/home/ts/.local/bin/agent-comms-hooks stop --from a --why b", False),
+    ("./agent-comms-hooks stop --from a --why b", False),
+    ("/tmp/x/agent-comms-hooks stop --from a --why b", False),
+    ("LD_PRELOAD=/tmp/x.so agent-comms-hooks stop --from a --why b", False),
+    ("PYTHONPATH=/tmp/evil agent-comms-hooks stop --from a --why b", False),
+    ("BASH_ENV=/tmp/x PATH=/tmp agent-comms-hooks stop --from a --why b", False),
+    ("env A=1 agent-comms-hooks stop --from a --why b", False),
+    ("$(echo agent-comms-hooks) stop --from a --why b", False),
+    ("agent-comms-hooks stop --from a --why `id`", False),
+    ("agent-comms-hooks stop --from a --why b > /tmp/x", False),
     (f"{STOP}; rm -rf /tmp/x", False),
     (f"{STOP} && echo smuggled", False),
     (f"echo smuggled; {STOP}", False),
