@@ -247,8 +247,9 @@ class TeamPlanDocument(TeamPlanFile, JsonDocument[TeamPlan]):
     record_type = TeamPlan
 
     @classmethod
-    def at(cls, root: Path, reading: ServiceReading | None = None) -> Self:
-        return cls(cls.path_in(root), reading=reading or ServiceReading())
+    def at(cls, root: Path, reading: ServiceReading = ServiceReading()) -> Self:
+        """A frozen empty reading is the default; readers with health pass theirs."""
+        return cls(cls.path_in(root), reading=reading)
 
     def empty(self) -> TeamPlan:
         raise BoardUnavailable(self.reading, f'team plan missing: {self.path}')
