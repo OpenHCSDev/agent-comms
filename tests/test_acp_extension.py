@@ -68,7 +68,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
     from agent_comms.sent_message import AssignedSourceIdentity
     from agent_comms.transcripts import NativeCommittedPrefix
     from agent_comms.native_transcript import PresentSessionCut
-    from agent_comms.private_path import FileRevision
+    from agent_comms.storage.private_path import FileRevision
     sample_path = tmp_path / "session.jsonl"
     sample_path.write_text("{}\n")
     committed = NativeCommittedPrefix(

@@ -11,9 +11,9 @@ from agent_comms.cli_bridges.session_watch import (
 from agent_comms.cli_bridges.shared import WatchRecordStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.installer.probes.carry import Carried, Carry
-from agent_comms.locked_store import RootFile
-from agent_comms.store_files import ExclusiveAtomicFile
-from agent_comms.typed_table import WriterOwnedResource
+from agent_comms.storage.locked_store import RootFile
+from agent_comms.storage.store_files import ExclusiveAtomicFile
+from agent_comms.storage.typed_table import WriterOwnedResource
 
 
 class WatchRecordSiblings(Carry):

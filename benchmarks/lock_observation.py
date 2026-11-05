@@ -12,7 +12,7 @@ from array import array
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 
-from agent_comms import store_files
+from agent_comms.storage import store_files
 
 
 def distribution(values):

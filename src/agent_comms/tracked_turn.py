@@ -22,7 +22,7 @@ from .errors import RelationViolationError
 from .external_transcript import DraftPublication, DraftRow
 from .nominal.field_codec import InputId, MalformedRecord
 from .following_inputs import FollowingInputs
-from .maintenance_barrier import UNCOORDINATED_INGRESS, MaintenanceIngress
+from .storage.maintenance_barrier import UNCOORDINATED_INGRESS, MaintenanceIngress
 from .native_arguments import SelectedModel
 from .native_attestation import AttestationError, ObservedAttestation
 from .native_failures import NativePiUnavailable

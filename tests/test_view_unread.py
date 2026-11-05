@@ -11,7 +11,7 @@ import pytest
 
 from agent_comms.comms import wire
 from conftest import installed_comms
-from agent_comms.private_path import FileRevision
+from agent_comms.storage.private_path import FileRevision
 from agent_comms.view_unread import Counted, ReplyIndex
 from agent_comms.threads import NativeThread
 

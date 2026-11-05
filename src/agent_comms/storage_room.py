@@ -20,11 +20,11 @@ from .activity import ActivityState
 from .child_process import ProcessIdentity, ResidentMemory
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import RoomTicket
-from .locked_store import PublishedProperty
-from .store_files import StoreContention
+from .storage.locked_store import PublishedProperty
+from .storage.store_files import StoreContention
 from .thread_identity import ThreadIncarnation
 from .tool_denial import StorageDenied
-from .typed_table import (
+from .storage.typed_table import (
     Column,
     DurableTables,
     JsonStorage,

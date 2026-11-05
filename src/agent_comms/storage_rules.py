@@ -19,7 +19,7 @@ from agent_comms.nominal.field_codec import (
     MalformedRecord,
     ValueDirective,
 )
-from agent_comms.locked_store import DurableFile
+from agent_comms.storage.locked_store import DurableFile
 from agent_comms.errors import TodoError
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.repo import Checkout, GitCommandError, Repo, RepositoryReads
@@ -35,8 +35,8 @@ from .thread_storage import (
     StorageRoots,
 )
 from .threads import Thread
-from .store_files import ExclusiveAtomicFile
-from .private_path import PrivateDirectoryRole
+from .storage.store_files import ExclusiveAtomicFile
+from .storage.private_path import PrivateDirectoryRole
 
 if TYPE_CHECKING:
     from agent_comms.registration import Registration

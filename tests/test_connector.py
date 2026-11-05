@@ -55,7 +55,7 @@ from agent_comms.connector_store import (
 )
 from agent_comms.coordination_errors import TranscriptChanged
 from agent_comms.coordinator import Coordination
-from agent_comms.locked_store import DocumentChange
+from agent_comms.storage.locked_store import DocumentChange
 from agent_comms.message_bus import WatchPass
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import ServicePassFailing
@@ -67,11 +67,11 @@ from agent_comms.launch_root import LaunchRoot
 from agent_comms.native_transcript import NativeTranscript
 from agent_comms.order_tools import MessagePublished, TranscriptPageRead
 from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.maintenance_barrier import (
+from agent_comms.storage.maintenance_barrier import (
     InstallingPhase, MaintenanceBarrier, MaintenanceHeldError, MaintenanceOperator, PausedPhase,
     ReadyPhase,
 )
-from agent_comms.store_files import ExclusiveLock, StoreGuard, _store_lock
+from agent_comms.storage.store_files import ExclusiveLock, StoreGuard, _store_lock
 from agent_comms.tools import ChannelListing, CommsChannelsTool, CommsPinChannelTool, CommsSendTool, CommsUserSendTool, invoke_tool
 from agent_comms.tool_caller import HumanCaller, NoThreadCaller, ThreadCaller
 from agent_comms.thread_identity import UserThreadRole

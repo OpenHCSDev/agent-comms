@@ -26,7 +26,7 @@ from agent_comms_hooks.process_claim import ProcessSingleton
 from agent_comms_hooks.watch import HeldSocketWatch, SessionCommandError, SessionEndpoint, SessionFailure, SocketWatch
 
 from ..registry_store import RegistryStore
-from ..store_files import AtomicFile
+from ..storage.store_files import AtomicFile
 
 import agent_comms.cli_bridges
 

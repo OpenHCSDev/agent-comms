@@ -12,9 +12,9 @@ from dataclasses import dataclass
 
 from pydantic import Field
 
-from agent_comms.locked_store import SQLiteFile
+from agent_comms.storage.locked_store import SQLiteFile
 from agent_comms.runtime_updates import RuntimeUpdate
-from agent_comms.typed_table import SQLiteSchemaObject, TypedRow
+from agent_comms.storage.typed_table import SQLiteSchemaObject, TypedRow
 
 from ..wire_models import WireModel
 from .history import OfflineHistory, OpenCodeHistory

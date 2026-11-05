@@ -5,8 +5,8 @@ import stat
 
 import pytest
 
-from agent_comms.private_path import PrivateDirectoryRole
-from agent_comms.store_files import AtomicFile, ExclusiveAtomicFile, ExclusiveDirectoryAtomicFile
+from agent_comms.storage.private_path import PrivateDirectoryRole
+from agent_comms.storage.store_files import AtomicFile, ExclusiveAtomicFile, ExclusiveDirectoryAtomicFile
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX directory flush")

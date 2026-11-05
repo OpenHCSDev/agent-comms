@@ -21,7 +21,7 @@ from agent_comms.goal_actions import EditGoalAction, SetGoalAction, StandbyGoalA
 from agent_comms.goal_attempts import Generation, GoalAttemptStore, StorageUncertainError
 from agent_comms.goal_presentation import StandbyExecution
 from agent_comms.goal_waits import GoalWaits
-from agent_comms.locked_store import GoalWakeFile, RegistryFile
+from agent_comms.storage.locked_store import GoalWakeFile, RegistryFile
 from agent_comms.repo import Checkout
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.threads import ExternalThread, NativeThread

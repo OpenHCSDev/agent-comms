@@ -13,7 +13,7 @@ from agent_comms.team.order import OrderFile, main
 from agent_comms.team.request import RequestAddVerb
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId
 from agent_comms.installer.practice import PracticeCopy
-from agent_comms.locked_store import RootFile
+from agent_comms.storage.locked_store import RootFile
 from agent_comms.coordination_errors import Refused
 from agent_comms.errors import GoalRefused
 from agent_comms.goal_actions import ClearGoalAction, CreateProblemGoalAction, SetGoalAction

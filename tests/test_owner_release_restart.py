@@ -29,7 +29,7 @@ from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.owner_restart import FencedOwnerBatch, StoppedOwnerFailure
-from agent_comms.store_files import ExclusiveLock, StoreLockContention, _store_lock
+from agent_comms.storage.store_files import ExclusiveLock, StoreLockContention, _store_lock
 from agent_comms.threads import NativeThread
 
 

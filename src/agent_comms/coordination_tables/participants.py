@@ -9,7 +9,7 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_schema import CoordinatorRow
 from agent_comms.nominal.field_codec import ThreadLookup
 from agent_comms.participant_identity import ParticipantIdentity
-from agent_comms.typed_table import (
+from agent_comms.storage.typed_table import (
     Column,
     ColumnGuard,
     CounterAdvance,

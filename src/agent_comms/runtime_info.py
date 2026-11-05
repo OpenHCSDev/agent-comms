@@ -11,10 +11,10 @@ from .context_reading import ContextReading, UnmeasuredContext
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .nominal.field_codec import FieldCodec, SingleFieldValue, WireName, WireRequired
-from .locked_store import DocumentChange
-from .maintenance_barrier import CarriedDocument
+from .storage.locked_store import DocumentChange
+from .storage.maintenance_barrier import CarriedDocument
 from .pi_counts import PiCount, UnreportedCount
-from .store_files import DependentStateTier, SingleFileStore
+from .storage.store_files import DependentStateTier, SingleFileStore
 from .thread_model import ThreadModel, UndeclaredModel
 from .thread_owned_state import ThreadOwnedState
 

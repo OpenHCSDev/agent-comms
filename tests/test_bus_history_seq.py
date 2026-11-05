@@ -18,7 +18,7 @@ from agent_comms.comms import wire
 from agent_comms.errors import HumanSendRefusedError
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, MessageId
 from agent_comms.historical_views import HistoryArchive
-from agent_comms.locked_store import RegistryFile
+from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.message_bus import MessageBus
 from agent_comms.message_page import MessagePageRequest, PageBounds
 from agent_comms.native_transcript import NativeTranscript
@@ -30,7 +30,7 @@ from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.registration import Registration
 from agent_comms.revision_views import BusSourceView, StoresView
 from agent_comms.transcripts import NativeTranscriptCursor, TranscriptCursor
-from agent_comms.typed_table import RowNotFoundError
+from agent_comms.storage.typed_table import RowNotFoundError
 from agent_comms.threads import NativeThread
 
 

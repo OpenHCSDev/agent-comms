@@ -5,9 +5,9 @@ from contextvars import Context
 from functools import partial
 
 from .child_process import AsyncWork
-from .maintenance_barrier import MaintenanceHolder
+from .storage.maintenance_barrier import MaintenanceHolder
 from .native_build_inputs import GitLaunch
-from .store_files import StoreLock
+from .storage.store_files import StoreLock
 
 
 class CoordinationWork:

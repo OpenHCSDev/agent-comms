@@ -4,7 +4,7 @@ from agent_comms.repo import Checkout
 from collections.abc import Callable
 from contextlib import asynccontextmanager, contextmanager, suppress
 from agent_comms.cli_bridges.shared import CoreWatchEnded, core_watch_failure
-from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError, MaintenanceOperator
+from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError, MaintenanceOperator
 import asyncio
 import os
 import shutil
@@ -26,7 +26,7 @@ from bus_record_fixture import prepare_native_comms
 from conftest import accept_initial, declare_test_bus, publish_initial
 
 from agent_comms.installer.practice import PracticeCopy
-from agent_comms.locked_store import RootFile
+from agent_comms.storage.locked_store import RootFile
 
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines

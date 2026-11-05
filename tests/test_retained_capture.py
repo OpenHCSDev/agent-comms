@@ -22,13 +22,13 @@ from agent_comms.installer.request import InstallRequest
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.probes.inputs import SelectedInputsProbe
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.maintenance_barrier import (
+from agent_comms.storage.maintenance_barrier import (
     MaintenanceBarrier, MaintenanceNotHeldError, MaintenanceOperator, NoMaintenanceHolder,
 )
 from agent_comms.nominal.field_codec import FieldCodec, TurnId
 from agent_comms.repo import Checkout
 from agent_comms.threads import NativeThread
-from agent_comms.typed_table import WalStore
+from agent_comms.storage.typed_table import WalStore
 from bus_record_fixture import prepare_native_comms
 
 

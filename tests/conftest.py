@@ -39,8 +39,8 @@ from agent_comms.bus import Bus, BusRecord
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.comms import Comms, wire
-from agent_comms.locked_store import RegistryFile
-from agent_comms.maintenance_barrier import (
+from agent_comms.storage.locked_store import RegistryFile
+from agent_comms.storage.maintenance_barrier import (
     MaintenanceBarrier, MaintenanceClaimHolder, MaintenanceHolder, MaintenanceOperator,
 )
 from agent_comms.message_bus import MessageBus
@@ -51,7 +51,7 @@ from agent_comms.pi_durable_backend import PiDurableBackend
 from agent_comms.publisher import InitialWrites, ParticipantPublisher
 from agent_comms.registration import Registration
 from agent_comms.thread_text import ForkedParent, GivenThreadText
-from agent_comms.typed_table import TypedTable
+from agent_comms.storage.typed_table import TypedTable
 from agent_comms.native_entries import NativeEvidenceScope
 from agent_comms.cursor_publication import CursorDelivery
 from agent_comms.native_package import VerifiedNativePackage
@@ -525,7 +525,7 @@ def ledger_one_failure_short(root: Path) -> Path:
     from agent_comms.goal_attempts import GoalAttemptStore
     from agent_comms.goal_failure_observation import FailedTurnEvidence
     from agent_comms.turn_failure import TurnFailure
-    from agent_comms.typed_table import sql_literal
+    from agent_comms.storage.typed_table import sql_literal
 
     directory = root / GoalAttemptStore.root_directory
     directory.mkdir(mode=0o700)

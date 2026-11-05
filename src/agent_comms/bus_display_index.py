@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Annotated
 
 from .bus_activity_index import ActivityMaximum
-from .typed_table import Column
+from .storage.typed_table import Column
 
 
 @dataclass(frozen=True)

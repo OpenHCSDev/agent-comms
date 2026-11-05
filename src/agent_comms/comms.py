@@ -21,7 +21,7 @@ from .coordinator import Coordination
 from .errors import UnregisteredThreadError
 from .goal_management import Goals
 from .history_views import HistoryViews
-from .maintenance_barrier import MaintenanceBarrier
+from .storage.maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .message_page import InboxPage
 from .message_reference import InboxStart
@@ -33,7 +33,7 @@ from .publisher import OwnerPublisher
 from .relationships import ThreadRelationships
 from .agent_activity import AgentActivity
 from .registration import Registration
-from .private_path import FileRevision
+from .storage.private_path import FileRevision
 from .registry_document import RegistrySnapshot, UnreadRegistry
 from .route_client import ActivityClient
 from .thread_configuration import ThreadConfiguration

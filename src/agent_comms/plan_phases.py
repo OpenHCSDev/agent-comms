@@ -13,7 +13,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.store_files import SqliteStore
+from agent_comms.storage.store_files import SqliteStore
 from agent_comms.installer.probes.carry import Carry
 from agent_comms.pi_events import PiEvent
 from agent_comms.private_registry_guard import RegistryPrivacy
@@ -167,7 +167,7 @@ class Id128NominalPhase(PlanPhase, declared_name=None):
 class StoreGuardsPhase(PlanPhase, declared_name=None):
     plan = StoreGuardsPlan
     owners: ClassVar[tuple[str, ...]] = (
-        ":!src/agent_comms/store_files.py", ":!src/agent_comms/locked_store.py",
+        ":!src/agent_comms/storage/store_files.py", ":!src/agent_comms/storage/locked_store.py",
         ":!src/agent_comms/skills/",
     )
 
@@ -416,7 +416,7 @@ class TriggersPhase(MultipleInheritancePhase):
     """1D: every trigger derives from its table's capability in ``typed_table.py``."""
 
     evidence = PatternAbsent(
-        r"BEFORE (UPDATE|DELETE|INSERT)", ("src", ":!src/agent_comms/typed_table.py")
+        r"BEFORE (UPDATE|DELETE|INSERT)", ("src", ":!src/agent_comms/storage/typed_table.py")
     )
 
 
@@ -466,7 +466,7 @@ class DuplicatesPhase(MultipleInheritancePhase):
                         "cohort_schema.py",
                         "coordinated_runtime_schema.py",
                         "coordination_response.py",
-                        "typed_table.py",
+                        "storage/typed_table.py",
                     ),
                 ),
                 (
@@ -670,7 +670,7 @@ class AbsencePhase(RemainingSlopPhase):
         tuple(
             f"src/agent_comms/{path}"
             for path in (
-                "typed_table.py",
+                "storage/typed_table.py",
                 "backend.py",
                 "input_drain.py",
                 "turn_watchdog.py",
@@ -735,7 +735,7 @@ class PlatformFactsPhase(RemainingSlopPhase):
             "src/agent_comms/goal_history.py",
             "src/agent_comms/goal_attempts.py",
             "src/agent_comms/coordination_database.py",
-            "src/agent_comms/maintenance_barrier.py",
+            "src/agent_comms/storage/maintenance_barrier.py",
         ),
     )
 
@@ -952,12 +952,12 @@ class StoreGuardFamiliesPhase(StoreGuardsPhase):
 
     evidence = AllEvidence(
         (
-            ClassDeclared(SqliteStore.__name__, ("src/agent_comms/store_files.py",)),
+            ClassDeclared(SqliteStore.__name__, ("src/agent_comms/storage/store_files.py",)),
             ClassDeclared(ProcessSingleton.__name__, ("src/agent_comms_hooks/process_claim.py",)),
             PatternAbsent(r"fcntl\.flock\(",
                           ("src", ":!src/agent_comms_hooks/process_claim.py", ":!src/agent_comms/skills/")),
-            PatternAbsent(r"_store_lock\(", ("src/agent_comms/typed_table.py",)),
-            PatternAbsent(r"_store_lock\(path\), closing", ("src/agent_comms/locked_store.py",)),
+            PatternAbsent(r"_store_lock\(", ("src/agent_comms/storage/typed_table.py",)),
+            PatternAbsent(r"_store_lock\(path\), closing", ("src/agent_comms/storage/locked_store.py",)),
         )
     )
 
@@ -968,8 +968,8 @@ class ReadWriteMembersPhase(StoreGuardsPhase):
     after = (StoreGuardFamiliesPhase,)
     evidence = AllEvidence(
         (
-            ClassDeclared("SingleFileStore", ("src/agent_comms/store_files.py",)),
-            ClassDeclared("MultiFileStore", ("src/agent_comms/store_files.py",)),
+            ClassDeclared("SingleFileStore", ("src/agent_comms/storage/store_files.py",)),
+            ClassDeclared("MultiFileStore", ("src/agent_comms/storage/store_files.py",)),
             PatternAbsent(r"(\.locked|_store_lock|_async_store_lock|ordered)\([^)]*(mode|contention)=",
                           ("src", ":!src/agent_comms/skills/")),
             PatternAbsent(r"def locked\(", ("src", *StoreGuardsPhase.owners)),
@@ -991,8 +991,8 @@ class MaintenanceInWritePhase(StoreGuardsPhase):
     after = (ReadWriteMembersPhase,)
     evidence = PatternAbsent(
         r"assert_open_unlocked\(\)|require_maintenance_open\((path)?\)",
-        ("src", *StoreGuardsPhase.owners, ":!src/agent_comms/typed_table.py",
-         ":!src/agent_comms/maintenance_barrier.py"),
+        ("src", *StoreGuardsPhase.owners, ":!src/agent_comms/storage/typed_table.py",
+         ":!src/agent_comms/storage/maintenance_barrier.py"),
     )
 
 
@@ -1068,6 +1068,7 @@ class PackageStoragePhase(PackageStructurePhase):
     evidence = PathsAbsent((
         "src/agent_comms/store_files.py", "src/agent_comms/locked_store.py",
         "src/agent_comms/private_path.py", "src/agent_comms/maintenance_barrier.py",
+        "src/agent_comms/typed_table.py",
     ))
 
 

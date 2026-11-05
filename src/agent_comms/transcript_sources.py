@@ -48,7 +48,7 @@ from .transcript_events import (
     TurnDigest,
 )
 from .turn_item import NativeTurnId
-from .typed_table import StoreWriter
+from .storage.typed_table import StoreWriter
 
 
 class WireFrontier(DeclaredFamily, affix="WireFrontier"):

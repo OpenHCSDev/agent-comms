@@ -19,7 +19,7 @@ from .source_proof_requirement import (
     SourceProofRequirement,
     TriageSourceProof,
 )
-from .typed_table import sql_literal
+from .storage.typed_table import sql_literal
 
 
 class MessageAudience(StrEnum):

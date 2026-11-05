@@ -30,7 +30,7 @@ from .thread_identity import (
 )
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread
-from .typed_table import (
+from .storage.typed_table import (
     Column,
     DurableStore,
     JsonStorage,

@@ -18,7 +18,7 @@ from .coordination_schema import CoordinatorTable
 from .nominal.field_codec import AssignmentId, MessageId, RootId, SubclassUnion, ThreadLookup, WireName
 from .thread_text import AbsentText, GivenText, TextChoice
 from .response_acknowledgement import _canonical
-from .typed_table import (
+from .storage.typed_table import (
     Column,
     ColumnGuard,
     ComposedSchemas,

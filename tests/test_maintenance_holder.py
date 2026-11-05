@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
-from agent_comms.maintenance_barrier import (
+from agent_comms.storage.maintenance_barrier import (
     DeadHolderReleasedPhase,
     DrainingPhase,
     InstallingPhase,
@@ -27,7 +27,7 @@ from agent_comms.maintenance_barrier import (
     NoMaintenanceHolder,
     PausedPhase,
 )
-from agent_comms.store_files import (
+from agent_comms.storage.store_files import (
     ExclusiveLock,
     SharedLock,
     StoreGuard,

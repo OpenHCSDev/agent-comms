@@ -10,7 +10,7 @@ from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.refusals import OwnersNotRestarted, UpgradeRefused
 from agent_comms.installer.upgrade import OwnersStopped, Stack
 from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime, RunningRuntime, RunningSource
-from agent_comms.maintenance_barrier import TargetRuntime
+from agent_comms.storage.maintenance_barrier import TargetRuntime
 
 
 def test_runtime_family_recognizes_this_process():

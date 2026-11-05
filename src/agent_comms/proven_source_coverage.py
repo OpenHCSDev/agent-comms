@@ -30,7 +30,7 @@ from .historical_native_inputs import HistoricalNativeInput, read_historical_nat
 from .message_bus import MessageBus
 from .native_input_record import NumberNativeColumn, TextNativeColumn, UnrecordedNativeColumn
 from .native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
-from .private_path import FileIdentity, ObservedPath, PresentPath
+from .storage.private_path import FileIdentity, ObservedPath, PresentPath
 from .wake_policy import RecipientDecision
 
 if TYPE_CHECKING:

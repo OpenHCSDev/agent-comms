@@ -53,8 +53,8 @@ from .input_attempt import (
 from .input_disposition import InputDispositions, InputDocument
 from .input_effects import InputEffects
 from .lifecycle_capability import Executing
-from .maintenance_barrier import MaintenanceIngress
-from .locked_store import GoalWakeFile
+from .storage.maintenance_barrier import MaintenanceIngress
+from .storage.locked_store import GoalWakeFile
 from .native_input_owner import RegistryOwner
 from .proven_source_coverage import SourcePrefix
 from .queued_input import DeliveredInput, InputHandoffRefused, QueuedInput
@@ -72,7 +72,7 @@ from .turn_terminal import OwnerStop
 from .watched import ChangeSignal, FileLifetimeSource, FileSource
 
 from .nominal.declared_family import DeclaredFamily
-from .maintenance_barrier import MaintenanceStatus
+from .storage.maintenance_barrier import MaintenanceStatus
 from .reservation_rules import ReservationRule, RuleCheck, ReservationViolationError
 from .turn_outcome import TurnOutcome
 from .turn_input_source import NoTurnAcceptance

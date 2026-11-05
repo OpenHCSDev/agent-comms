@@ -38,7 +38,7 @@ from .native_entries import (
 )
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .native_session_reopen import NativeSessionIdentity
-from .private_path import FileRevision
+from .storage.private_path import FileRevision
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .transcript_sources import TranscriptRecord, TranscriptSource
 from .turn_item import FreshNativeId, NativeItemId

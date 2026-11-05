@@ -34,7 +34,7 @@ from agent_comms.attempt_states import (
     SucceededAttempt,
 )
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.store_files import StoreBusy
+from agent_comms.storage.store_files import StoreBusy
 from agent_comms.coordination_errors import IntegrityViolationError, SchemaVersionError
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.coordination_snapshot import RecoverySnapshot
@@ -67,7 +67,7 @@ from agent_comms.execution_states import (
     PendingExecution,
 )
 from agent_comms.attempt_states import AttemptState, LiveAttempt
-from agent_comms.typed_table import HeldBusFile, JsonStorage
+from agent_comms.storage.typed_table import HeldBusFile, JsonStorage
 from agent_comms.messages import InfoKind, Message
 from agent_comms.obligation_states import (
     PendingResponse,

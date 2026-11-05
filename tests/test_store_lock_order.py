@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.store_files import CatalogTier, RankedStoreLock, RegistryTier, StoreGuard
+from agent_comms.storage.store_files import CatalogTier, RankedStoreLock, RegistryTier, StoreGuard
 from store_lock_graph import StoreLockGraph
 
 
@@ -51,7 +51,7 @@ def test_new_lock_method_and_wrapper_are_discovered(tmp_path):
     (source / "store_files.py").write_text(Path(getfile(StoreGuard)).read_text())
     (source / "new_methods.py").write_text("""
 from contextlib import contextmanager
-from agent_comms.store_files import CatalogTier, RegistryTier
+from agent_comms.storage.store_files import CatalogTier, RegistryTier
 
 class NewRegistry(RegistryTier):
     @contextmanager

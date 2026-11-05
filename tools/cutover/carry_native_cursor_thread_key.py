@@ -7,9 +7,9 @@ from typing import ClassVar
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.installer.probes.carry import Carried, Carry
-from agent_comms.locked_store import RootFile
+from agent_comms.storage.locked_store import RootFile
 from agent_comms.native_runtime_input import CurrentNativeCursor
-from agent_comms.typed_table import SQLiteCatalogObject, SQLiteColumnShape
+from agent_comms.storage.typed_table import SQLiteCatalogObject, SQLiteColumnShape
 
 
 class NativeCursorThreadKey(Carry):

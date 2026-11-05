@@ -30,7 +30,7 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordinator import Coordination
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.publication_measurements import PublicationMeasurements
-from agent_comms.locked_store import RegistryFile
+from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.errors import RelationViolationError
 from agent_comms.native_prompt_send import (
     PromptSendNotWritten,
@@ -38,7 +38,7 @@ from agent_comms.native_prompt_send import (
     _write_fenced,
     send_fenced_prompt,
 )
-from agent_comms.store_files import StoreBusy, store_lock_path
+from agent_comms.storage.store_files import StoreBusy, store_lock_path
 from conftest import installed_comms
 from test_coordinated_runtime import tmp_path as private_root_fixture
 from agent_comms.threads import NativeThread

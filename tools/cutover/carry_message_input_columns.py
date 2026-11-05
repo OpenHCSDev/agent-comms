@@ -11,7 +11,7 @@ from typing import ClassVar
 from agent_comms.bus import Bus
 from agent_comms.errors import RelationViolationError
 from agent_comms.installer.probes.carry import Carried, Carry
-from agent_comms.locked_store import RootFile
+from agent_comms.storage.locked_store import RootFile
 from agent_comms.messages import Message, MessageInput
 
 

@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.locked_store import DurableFile, SQLiteFile
+from agent_comms.storage.locked_store import DurableFile, SQLiteFile
 
 from .nominal.field_codec import FieldCodec
 from .image_input import ImageInput
@@ -35,9 +35,9 @@ from .image_input import ImageInput
 if TYPE_CHECKING:
     from .turn_inbox import StreamingInputPolicy
 
-from .private_path import ObservedPath, PrivateFileRole, TrustedAncestorRole
-from .store_files import ExclusiveLock, StoreOwner
-from .typed_table import (
+from .storage.private_path import ObservedPath, PrivateFileRole, TrustedAncestorRole
+from .storage.store_files import ExclusiveLock, StoreOwner
+from .storage.typed_table import (
     AllObjectsTables,
     DurableTables,
     ImmutableRows,

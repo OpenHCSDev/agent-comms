@@ -50,16 +50,16 @@ from .native_prompt_binding import (
     expected_prompt_matches_journal,
 )
 from .pi_vocabulary import PendingStopReason, PiStopReason
-from .private_path import (
+from .storage.private_path import (
     FileRevision,
     MissingFile,
 )
 from .private_send_stage import TriageNativeSend
 from .lifecycle_capability import Deferred
-from agent_comms.typed_table import RowNotFoundError
+from agent_comms.storage.typed_table import RowNotFoundError
 from .nominal.field_codec import MalformedRecord, ScratchName, ThreadLookup
 from .input_disposition import InputDispositions
-from .locked_store import RegistryFile
+from .storage.locked_store import RegistryFile
 from .registration import Registration
 from .threads import Thread
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from .coordination_errors import SchemaVersionError
-from .typed_table import (
+from .storage.typed_table import (
     DurableTables,
     SharedFileTables,
     TypedTable,

@@ -10,7 +10,7 @@ from typing import Annotated
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from agent_comms.nominal.field_codec import Sha256Text
-from agent_comms.private_path import FileRevision
+from agent_comms.storage.private_path import FileRevision
 
 
 class BuildArtifact(BaseModel):

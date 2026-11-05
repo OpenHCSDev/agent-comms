@@ -7,10 +7,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .cli_result import CliResult
-from .locked_store import SQLiteFile
+from .storage.locked_store import SQLiteFile
 from .nominal.declared_family import UnknownFamilyMember
 from .nominal.field_codec import FieldCodec
-from .typed_table import SQLiteSchemaDifference, SQLiteSchemaObject, SQLiteTableName, TypedTable
+from .storage.typed_table import SQLiteSchemaDifference, SQLiteSchemaObject, SQLiteTableName, TypedTable
 
 
 @dataclass(frozen=True)

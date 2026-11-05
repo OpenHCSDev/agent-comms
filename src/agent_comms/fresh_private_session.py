@@ -13,7 +13,7 @@ from .native_failures import NativePiUnavailable
 from agent_comms.native_session_files import NativeSessionFiles
 from .native_session_files import PrivateSession, BusTranscriptFile
 from .native_session_reopen import NativeSessionIdentity
-from .private_path import PrivateFileRole
+from .storage.private_path import PrivateFileRole
 
 
 def create_fresh_private_session(

@@ -39,7 +39,7 @@ from .mentions import ThreadMention
 from .message_reference import MessageReference
 from .messages import MessageInput
 from .notification_evidence import AllOutcomes, DisplayOutcomes, OutcomeViewer
-from .private_path import FileObservation, MissingFile
+from .storage.private_path import FileObservation, MissingFile
 from .projection_source import ProjectionSource
 from .recorded_bus import RecordedBus, RecordedBusIdentity
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation

@@ -14,7 +14,7 @@ import tempfile
 from pathlib import Path
 
 from agent_comms.native_build_inputs import McpClientSource, NativeRepositoryInputs
-from agent_comms.private_path import PrivateDirectoryRole
+from agent_comms.storage.private_path import PrivateDirectoryRole
 
 LOADER_SHA = "a1393de916487a2c47107ac7239f3139dcdb938705f88ba1ea5a954b3c8bb483"
 # Pi's own session store; a dependency shipping another is a second writer.

@@ -27,8 +27,8 @@ from .nominal.declared_family import DeclaredFamily
 from .display_order import CreatedThreadSort, LastActivityThreadSort, ThreadSort
 from .errors import RelationViolationError, UnregisteredThreadError
 from .goals import Goal, GoalMentionBinding
-from .locked_store import DocumentChange
-from .maintenance_barrier import CarriedDocument
+from .storage.locked_store import DocumentChange
+from .storage.maintenance_barrier import CarriedDocument
 from .messages import Message
 from .peer_relevance import (
     ChannelmateRelevance,
@@ -39,7 +39,7 @@ from .peer_relevance import (
 )
 from .registry_document import RegistrySnapshot, RosterVisibility
 from .routing import DeliveryScope
-from .store_files import DependentStateTier, SingleFileStore
+from .storage.store_files import DependentStateTier, SingleFileStore
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread

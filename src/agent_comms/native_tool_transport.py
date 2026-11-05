@@ -31,7 +31,7 @@ from .native_tool_call import (
     ToolOutcomeUnknown,
 )
 from .pi_payloads import AssistantMessage
-from .private_path import PrivateDirectoryRole, PrivateSocketRole
+from .storage.private_path import PrivateDirectoryRole, PrivateSocketRole
 from .tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:

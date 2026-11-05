@@ -16,7 +16,7 @@ from agent_comms.coordination_tables.attempts import AttemptRecord
 from agent_comms.coordination_tables.executions import ExecutionReference
 from agent_comms.reason_codes import GivenReasonCode, RecoveryDetail
 from agent_comms.recovery_states import RecoveryCondition
-from agent_comms.typed_table import (
+from agent_comms.storage.typed_table import (
     Column,
     ForeignKey,
     ImmutableRows,

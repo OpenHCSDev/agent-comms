@@ -24,11 +24,13 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Self, TypeVar
 
 from pydantic import JsonValue
 
-from .child_process import Platform
-from .coordination_errors import CoordinationBeginUnavailable, CoordinationReadUnavailable
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import FieldCodec, MalformedRecord, PathText
-from .errors import RelationViolationError
+import agent_comms
+
+from ..child_process import Platform
+from ..coordination_errors import CoordinationBeginUnavailable, CoordinationReadUnavailable
+from ..nominal.declared_family import DeclaredFamily
+from ..nominal.field_codec import FieldCodec, MalformedRecord, PathText
+from ..errors import RelationViolationError
 from .private_path import FileObservation, FileRevision, MissingFile, PrivateDirectoryRole, PrivateFileRole
 from .store_files import (
     AtomicFile,
@@ -217,11 +219,12 @@ class RootFile:
     @staticmethod
     @cache
     def load_declarations() -> None:
-        """Import every module of the package once per process, so ``declarations_in`` walks
-        the whole family and not only the owners some caller happened to import."""
-        package = import_module(__package__)
-        for module in walk_packages(package.__path__, f"{package.__name__}."):
-            if not module.name.startswith(f"{package.__name__}.skills"):
+        """Import every module of agent_comms once per process, so ``declarations_in`` walks
+        the whole family and not only the owners some caller happened to import. The package
+        is imported, not taken from ``__package__``: this module lives in a subpackage."""
+        prefix = f"{agent_comms.__name__}."
+        for module in walk_packages(agent_comms.__path__, prefix):
+            if not module.name.startswith(f"{prefix}skills"):
                 import_module(module.name)
 
     @classmethod
@@ -761,7 +764,7 @@ class RegistryFile(RollbackRetained, GoalWakeFile):
     def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
         """The copy names no live process: a signal, stop or wake aimed through it would reach
         the source root's units."""
-        from .registry_store import RegistryStore
+        from ..registry_store import RegistryStore
 
         registry = RegistryStore(source)
         with registry.guarded_read():

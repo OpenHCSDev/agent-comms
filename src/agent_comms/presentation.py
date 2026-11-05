@@ -42,7 +42,7 @@ from .nominal.field_codec import (
 )
 from .goal_presentation import GoalExecution
 from .goal_waits import GoalWaits
-from .locked_store import GoalWakeFile
+from .storage.locked_store import GoalWakeFile
 from .mentions import MentionCandidate
 from .message_page import (
     NEWEST_PAGE,
@@ -52,7 +52,7 @@ from .message_page import (
 from .message_reference import MessageReference
 from .notification_assignment import NotificationAssignment
 from agent_comms.message_notification import NotificationPass
-from .private_path import FileRevision
+from .storage.private_path import FileRevision
 from .read_selection import CapturedSelection
 from .read_basis import AnonymousViewer, ChannelDisplayScope, DisplayViewer, NamedViewer
 from .read_ledger import NoReadNotice, ReadNotice

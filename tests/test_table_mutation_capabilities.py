@@ -11,7 +11,7 @@ from conftest import maintenance_held
 
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import SchemaVersionError
-from agent_comms.locked_store import SQLiteFile
+from agent_comms.storage.locked_store import SQLiteFile
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
@@ -24,7 +24,7 @@ from agent_comms.execution_states import (
     PendingExecution,
 )
 from agent_comms.lifecycle import LifecycleState
-from agent_comms.typed_table import (
+from agent_comms.storage.typed_table import (
     AccumulatingBits,
     Column,
     ColumnGuard,

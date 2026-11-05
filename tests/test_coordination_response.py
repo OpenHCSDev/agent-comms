@@ -43,7 +43,7 @@ from agent_comms.publisher import ParticipantPublisher
 from agent_comms.registration import Registration
 from agent_comms.selected_source_batch import SelectedSource
 from agent_comms.threads import NativeThread
-from agent_comms.typed_table import TypedTable
+from agent_comms.storage.typed_table import TypedTable
 from bus_record_fixture import prepare_native_comms
 
 # Private bus publication requires POSIX owner/mode ancestry; Windows stat

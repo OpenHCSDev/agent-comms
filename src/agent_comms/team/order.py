@@ -58,7 +58,7 @@ from agent_comms.nominal.field_codec import (
 from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
 from agent_comms.goals import CheckCommand, CheckResult, CountCheckResult, OrderCheck
 from agent_comms.held_orders import HeldOrders
-from agent_comms.maintenance_barrier import MaintenanceHeldError
+from agent_comms.storage.maintenance_barrier import MaintenanceHeldError
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import Message
 from agent_comms.order_tools import (
@@ -125,7 +125,7 @@ from agent_comms.todos import (
     WithdrawTodo,
 )
 from agent_comms.tool_caller import ForkCaller, PeerCaller, NoThreadCaller
-from agent_comms.typed_table import RowNotFoundError
+from agent_comms.storage.typed_table import RowNotFoundError
 
 
 def refuse(text, *families):

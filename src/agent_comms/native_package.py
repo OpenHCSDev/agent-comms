@@ -27,9 +27,9 @@ from agent_comms.child_process import Platform
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, PathText, Sha256Text, WireName
 from agent_comms.native_build_inputs import INPUTS_PREFIX, NativeBuildInputs, built_tree_pin
 from agent_comms.native_failures import NativePiUnavailable
-from agent_comms.private_path import PrivateDirectoryRole, TrustedAncestorRole
+from agent_comms.storage.private_path import PrivateDirectoryRole, TrustedAncestorRole
 
-from .store_files import AtomicFile
+from .storage.store_files import AtomicFile
 
 TREE_PREFIX = "# agent-comms-native-tree-v1 "
 MAX_ENTRIES = 30_000

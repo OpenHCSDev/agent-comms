@@ -23,7 +23,7 @@ from .thread_identity import (
     TurnFence,
     TurnIdentity,
 )
-from .typed_table import Column, DurableTables, ForeignKey, TextStorage, TypedTable
+from .storage.typed_table import Column, DurableTables, ForeignKey, TextStorage, TypedTable
 
 if TYPE_CHECKING:
     from agent_comms.goal_attempts import FailedTurnObservation

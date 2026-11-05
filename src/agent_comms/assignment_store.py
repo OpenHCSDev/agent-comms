@@ -18,7 +18,7 @@ from agent_comms.coordination_errors import (
 from agent_comms.coordination_results import AlreadyApplied, Applied
 from agent_comms.coordination_session import CoordinationSession
 from agent_comms.coordination_tables.assignments import WakeAssignment
-from agent_comms.typed_table import sql_literal
+from agent_comms.storage.typed_table import sql_literal
 
 
 class AssignmentStore:

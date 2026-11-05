@@ -13,8 +13,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from agent_comms.channel_targets import ThreadTarget
-from agent_comms.locked_store import DocumentChange, DurableFile, LockedStore, PatternFile
-from agent_comms.store_files import DependentStateTier, SingleFileStore
+from agent_comms.storage.locked_store import DocumentChange, DurableFile, LockedStore, PatternFile
+from agent_comms.storage.store_files import DependentStateTier, SingleFileStore
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.harness_delivery_states import DeliveredOutcome, Outcome
 from agent_comms.errors import RelationViolationError
@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     from agent_comms.cli_bridges.shared import CliBridge
     from agent_comms.comms import Comms
     from agent_comms.registry_document import RegistrySnapshot
-    from agent_comms.typed_table import TypedTable
+    from agent_comms.storage.typed_table import TypedTable
 
 
 @dataclass(frozen=True)

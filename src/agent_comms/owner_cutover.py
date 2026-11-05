@@ -12,7 +12,7 @@ from .launch_runtime import LaunchRuntime
 from .restart_refusals import OwnerMaintenancePendingRefusal
 
 if TYPE_CHECKING:
-    from .maintenance_barrier import MaintenanceState
+    from .storage.maintenance_barrier import MaintenanceState
     from .owner_lifecycle import OwnerLifecycle, OwnerRestartResult, OwnerRestartSelection
     from .owner_restart import OwnerRestartRequest, StoppedOwnerBatch, StoppedOwnerFailure
     from .registry_document import RegistrySnapshot

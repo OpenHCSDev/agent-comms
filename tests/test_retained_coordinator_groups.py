@@ -32,7 +32,7 @@ from agent_comms.participant_store import ParticipantRows, ParticipantStore
 from agent_comms.reason_codes import GivenReasonCode, NoDetail
 from agent_comms.recovery_states import ModelStalledRecovery
 from agent_comms.triage_native_sources import TriageNativeSource
-from agent_comms.typed_table import AttachedPracticeRebuild, NoDelete, TypedTable, UnallocatedRowId
+from agent_comms.storage.typed_table import AttachedPracticeRebuild, NoDelete, TypedTable, UnallocatedRowId
 from agent_comms.wake_policy import FullWake, MessageAudience
 from bus_record_fixture import (
     FIRST_INPUT_ID, SECOND_INPUT_ID, THIRD_INPUT_ID, RECIPIENT_LOOKUP, prepare_native_comms,

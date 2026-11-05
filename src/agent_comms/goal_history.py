@@ -26,11 +26,11 @@ from .nominal.field_codec import FieldCodec, HistoryExclude, MalformedRecord
 from .goal_failure_observation import FailedTurnEvidence
 from .goal_scope import GoalScope
 from .goals import GoalDeclaration, NoGoal
-from .locked_store import DurableFile
+from .storage.locked_store import DurableFile
 from .private_registry_guard import PrivateRegistryGuard
-from .store_files import AtomicFile
+from .storage.store_files import AtomicFile
 from .tool_result import ToolResult
-from .typed_table import (
+from .storage.typed_table import (
     Column,
     DurableTables,
     Index,

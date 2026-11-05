@@ -32,7 +32,7 @@ from agent_comms.installer.interpreter_operation import (
 )
 from agent_comms.installer.refusals import InterpreterWorkerDied, UpgradeRefused
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.maintenance_barrier import MaintenanceHolder
+from agent_comms.storage.maintenance_barrier import MaintenanceHolder
 from agent_comms.repo import GitCommandError, Repo
 
 

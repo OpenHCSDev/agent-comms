@@ -11,14 +11,14 @@ from dataclasses import dataclass, field, replace
 
 import pytest
 
-from agent_comms.locked_store import DocumentBytes, DocumentChange, LockedStore
-from agent_comms.private_path import FileRevision, MissingFile
+from agent_comms.storage.locked_store import DocumentBytes, DocumentChange, LockedStore
+from agent_comms.storage.private_path import FileRevision, MissingFile
 from agent_comms.coordination_errors import StaleRevision
 from agent_comms.pi_counts import PiCount
 from agent_comms.registry_store import RegistryStore
 from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoDocument, RuntimeInfoStore
 from agent_comms.child_process import Platform
-from agent_comms.store_files import (
+from agent_comms.storage.store_files import (
     ExclusiveLock,
     StoreLockBusyError,
     StoreLockContention,
@@ -380,3 +380,24 @@ def test_declared_wait_is_not_spent_by_another_acquisition(tmp_path):
             assert policy.seconds == .01
 
 
+
+
+def test_a_fresh_process_finds_root_files_outside_the_storage_package():
+    """load_declarations walks agent_comms, not the subpackage RootFile lives in: a process that
+    imported nothing else still reaches every owner (reconcile, practice copy, carry probe)."""
+    import subprocess
+    import sys
+
+    probe = (
+        "from agent_comms.storage.locked_store import RootFile\n"
+        "RootFile.load_declarations()\n"
+        "def every(cls):\n"
+        "    for sub in cls.__subclasses__():\n"
+        "        yield sub\n"
+        "        yield from every(sub)\n"
+        "print(sorted({c.__module__ for c in every(RootFile)\n"
+        "              if not c.__module__.startswith('agent_comms.storage')}))\n"
+    )
+    outside = subprocess.run([sys.executable, "-c", probe], check=True,
+                             capture_output=True, text=True).stdout
+    assert "agent_comms.registry_store" in outside

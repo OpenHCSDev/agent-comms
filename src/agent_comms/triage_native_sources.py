@@ -10,7 +10,7 @@ from typing import Annotated
 
 from .nominal.field_codec import AssignmentId, InputId
 from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
-from .typed_table import (
+from .storage.typed_table import (
     Column,
     GuardedInserts,
     ImmutableRows,

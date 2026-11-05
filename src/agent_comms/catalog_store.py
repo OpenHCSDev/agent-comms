@@ -8,9 +8,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 from .catalog_document import CatalogDocument
-from .locked_store import DocumentChange
-from .maintenance_barrier import CarriedDocument
-from .store_files import CatalogTier, SingleFileStore
+from .storage.locked_store import DocumentChange
+from .storage.maintenance_barrier import CarriedDocument
+from .storage.store_files import CatalogTier, SingleFileStore
 from .thread_owned_state import ThreadOwnedState
 
 if TYPE_CHECKING:

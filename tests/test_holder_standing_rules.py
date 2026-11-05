@@ -70,7 +70,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import OwedAnswer, StandingRule
-from agent_comms.store_files import ExclusiveLock, StoreLockContention, _store_lock
+from agent_comms.storage.store_files import ExclusiveLock, StoreLockContention, _store_lock
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.threads import NativeThread

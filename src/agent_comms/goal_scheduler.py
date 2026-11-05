@@ -30,7 +30,7 @@ from .goal_actions import (
     SetGoalAction,
 )
 from .goal_presentation import GoalPublicationSnapshot, UnpublishedGoalSnapshot
-from .locked_store import GoalWakeFile
+from .storage.locked_store import GoalWakeFile
 from .goal_scope import OneGoal
 from .goals import Goal, GoalDeclaration, GoalRevision
 from .registry_document import RegistryDocument, RegistrySnapshot

@@ -6,7 +6,7 @@ from contextlib import AsyncExitStack, aclosing
 
 import pytest
 
-from agent_comms.locked_store import RegistryFile
+from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.comms import wire
 from agent_comms.registration import Registration
 from bus_record_fixture import append_reply

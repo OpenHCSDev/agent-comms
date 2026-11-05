@@ -18,13 +18,13 @@ from .goal_presentation import GoalExecution, GoalWaitTarget, StandbyExecution
 from .goals import Goal, GoalDeclaration
 from .input_key import InputKey, InputKeyText
 from .input_attempt import StoredInput, UnresolvedInput
-from .locked_store import GoalWakeFile
+from .storage.locked_store import GoalWakeFile
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 from .registry_document import RegistrySnapshot
 from .threads import Thread
 from .turn_lease import TurnCompletion, TurnLease
-from .typed_table import (
+from .storage.typed_table import (
     Column, DurableStore, ForeignKey, FULL_SCHEMA_REBUILD, Index, SchemaRebuild,
     StoreRows, TypedTable,
 )

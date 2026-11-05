@@ -12,11 +12,11 @@ from itertools import repeat
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, Never, Self, TextIO, cast
 
-from .locked_store import DurableFile
+from .storage.locked_store import DurableFile
 from .native_failures import NativePiUnavailable
 from .native_evidence_read import NativeEvidencePrefixChanged, NativeInputUncommitted, PrivateEvidenceRead
 from .native_session_files import BusTranscriptFile, NativeSessionFiles
-from .store_files import AtomicFile
+from .storage.store_files import AtomicFile
 
 if TYPE_CHECKING:
     from .importing import ImportedConversation

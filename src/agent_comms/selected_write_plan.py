@@ -17,8 +17,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 from .coordination_database import CoordinationStore
-from .locked_store import DurableFile, PatternFile
-from .store_files import AtomicFile
+from .storage.locked_store import DurableFile, PatternFile
+from .storage.store_files import AtomicFile
 
 if TYPE_CHECKING:
     from .acp_extension import SelectedWriteAcceptedUpdate
@@ -36,7 +36,7 @@ from .envelope_claim_transitions import ExistingFileClaim
 from .nominal.field_codec import AssignmentId, ClaimId, FieldCodec, MalformedRecord, MessageId, RootId
 from .repo import Checkout
 from .message_reference import MessageReference
-from .private_path import PrivateDirectoryRole, PrivateFileRole
+from .storage.private_path import PrivateDirectoryRole, PrivateFileRole
 from .thread_identity import ClaimedIdentity, ClaimScoped, RecordedThreadIncarnation
 
 _MAX_BYTES = 1024 * 1024

@@ -29,7 +29,7 @@ from agent_comms.comms import Comms, wire
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.goals import OrderCheck
 from agent_comms.installer.practice import PracticeCopy
-from agent_comms.locked_store import RootFile
+from agent_comms.storage.locked_store import RootFile
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime

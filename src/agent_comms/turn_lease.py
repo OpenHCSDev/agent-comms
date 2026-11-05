@@ -26,14 +26,14 @@ from .nominal.field_codec import (
 from .goal_presentation import RunningExecution
 from .input_disposition import InputDispositions
 from .lifecycle_capability import Executing, LifecycleCapability
-from .locked_store import (
+from .storage.locked_store import (
     DocumentBytes, DocumentChange, DocumentTransactions, DurableFile, LockedFile,
     PatternFile,
 )
 from .message_reference import MessageReference
 from .reported_turn import NoReportedTurn, ReportedTurn, ReportedTurnState
 from .routing import NoTurnRouting, Routing
-from .store_files import DependentStateTier, SingleFileStore
+from .storage.store_files import DependentStateTier, SingleFileStore
 from .thread_identity import (
     NoObservedTurn,
     ObservedTurn,

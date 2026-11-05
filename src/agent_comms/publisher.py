@@ -42,7 +42,7 @@ from .errors import (
     UnregisteredThreadError,
 )
 from .mentions import ThreadMention
-from .private_path import FileRevision
+from .storage.private_path import FileRevision
 from .registry_document import DEFAULT_ROSTER, RegistrySnapshot
 from .registration import Registration
 from .wake import OrdinaryControl, resolve_wake_cohort

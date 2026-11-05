@@ -33,18 +33,18 @@ from .errors import RelationViolationError
 from .nominal.field_codec import FieldCodec, RecordMember, RestartId, WireOmitDefault
 from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .lifecycle_capability import Active, LifecycleCapability, Pending
-from .locked_store import RuntimeFile
-from .maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError, MaintenanceHolder
+from .storage.locked_store import RuntimeFile
+from .storage.maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError, MaintenanceHolder
 from .native_arguments import GivenBinary, NativeArguments
 from .owner_cutover import PreserveOwnerRuntime
 from .owner_launch import RetainedOwnerLaunch
 from .owner_lifecycle import OwnerRestartSelection
 from .owner_restart import OwnerRestartRequest, StoppedOwnerFailure
-from .private_path import PrivateDirectoryRole
+from .storage.private_path import PrivateDirectoryRole
 from .restart_refusals import RestartRefusal
 from .restart_scope import OwnersNamed
 from .thread_identity import OwnerIdentity, RecordedThreadIncarnation, ThreadIncarnationRecord
-from .typed_table import Column, DurableStore, FrozenColumn, Generated, Index, StoreRows, TypedTable, sql_literal
+from .storage.typed_table import Column, DurableStore, FrozenColumn, Generated, Index, StoreRows, TypedTable, sql_literal
 from .watched import ChangeSignal, FileSource
 
 DIRECTORY = "owner-restart-queue"

@@ -22,7 +22,7 @@ from .notification_progress import (
     UnrecordedProgress,
 )
 from .source_proof_requirement import ProvedByInput, SettledWithoutInput, SourceSettlement, Unproved
-from .typed_table import sql_literal
+from .storage.typed_table import sql_literal
 from .wake_policy import BoundedTriageWake, Engagement, FullWake, PassiveWake, WakePolicy
 
 if TYPE_CHECKING:

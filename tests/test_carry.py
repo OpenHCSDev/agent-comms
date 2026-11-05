@@ -15,7 +15,7 @@ import pytest
 from agent_comms_project import AgentCommsProject
 from nominal_refactor_advisor import audit
 
-from agent_comms.locked_store import LiveFilesRequest
+from agent_comms.storage.locked_store import LiveFilesRequest
 from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.cli_command import TargetBatchResult
 from agent_comms.installer.backup import StoreBackup, bus_files
@@ -44,7 +44,7 @@ from agent_comms.installer.launch import InstallReport
 from agent_comms.installer.target_tree import TargetTree
 from agent_comms.cli_bridges.shared import SessionBridgeResumes
 from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime
-from agent_comms.maintenance_barrier import (
+from agent_comms.storage.maintenance_barrier import (
     DrainingPhase,
     MaintenanceBarrier,
     MaintenanceOperator,

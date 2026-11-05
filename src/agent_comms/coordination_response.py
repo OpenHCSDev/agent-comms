@@ -48,7 +48,7 @@ from agent_comms.private_registry_guard import RegistryPrivacy
 from agent_comms.private_send_rules import RunningTurnRegistryCheck
 from agent_comms.publisher import ResponseWrites
 from agent_comms.registry_document import RegistrySnapshot
-from agent_comms.typed_table import (
+from agent_comms.storage.typed_table import (
     Column,
     ForeignKey,
     ImmutableRows,
@@ -59,7 +59,7 @@ from agent_comms.typed_table import (
 
 from .nominal.field_codec import MessageId, RootId, ThreadLookup
 from .input_disposition import InputDispositions
-from .locked_store import RegistryFile
+from .storage.locked_store import RegistryFile
 from .response_conversation import ResponseConversation
 
 

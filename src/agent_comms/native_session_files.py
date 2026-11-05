@@ -15,10 +15,10 @@ from pathlib import Path
 from typing import Self
 
 from agent_comms.child_process import Platform, ProcessIdentity
-from agent_comms.locked_store import DurableFile, PatternFile
+from agent_comms.storage.locked_store import DurableFile, PatternFile
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.participant_identity import ParticipantIdentity
-from agent_comms.private_path import PrivateDirectoryRole, TrustedAncestorRole
+from agent_comms.storage.private_path import PrivateDirectoryRole, TrustedAncestorRole
 from agent_comms_hooks.process_claim import ProcessSingleton
 
 from .errors import RelationViolationError

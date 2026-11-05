@@ -22,8 +22,8 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import FieldCodec, MessageId, TranscriptRecordId
 from agent_comms.harness_delivery_states import EmittedOutcome, MonitorEvidence, Outcome, UnrecordedMonitor
 from agent_comms.installer.probes.carry import Carried, Carry
-from agent_comms.locked_store import RootFile
-from agent_comms.typed_table import SQLiteTableName, TypedRow, WriterOwnedFile, WriterOwnedResource
+from agent_comms.storage.locked_store import RootFile
+from agent_comms.storage.typed_table import SQLiteTableName, TypedRow, WriterOwnedFile, WriterOwnedResource
 
 
 @dataclass(frozen=True)

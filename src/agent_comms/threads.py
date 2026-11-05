@@ -37,7 +37,7 @@ from .launch_runtime import ThreadLaunch
 from .heartbeat_delivery import HeartbeatDelivery, OffHeartbeatDelivery
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Executing
-from .locked_store import DurableFile, PatternFile
+from .storage.locked_store import DurableFile, PatternFile
 from .pi_vocabulary import (
     NoThinkingOverride,
     ServiceTier,

@@ -63,27 +63,60 @@ def rewrite_relative(path: Path, text: str, old_parts: list[str]) -> str:
     return RELATIVE.sub(fix, text)
 
 
-# `from . import store_files` forms
-BARE = re.compile(rf"(?m)^(\s*from\s+)(\.+)(\s+import\s+)({names})\b")
+IMPORT_LIST = re.compile(r"(?m)^([ \t]*)from[ \t]+(\.+|agent_comms)[ \t]+import[ \t]+(\([^)]*\)|[^\n#]+)")
+
+
+def split_moved_names(path_parts: list[str], text: str) -> str:
+    """`from agent_comms import a, store_files` or `from . import store_files`: the moved names
+    leave for the package, the rest stay, each list resolved from where the file now lives."""
+
+    def fix(match: re.Match[str]) -> str:
+        indent, spec, listed = match[1], match[2], match[3]
+        base = resolve(path_parts, len(spec), "") if spec.startswith(".") else ["agent_comms"]
+        if base != ["agent_comms"]:
+            return match[0]
+        names = [n.strip() for n in listed.strip().strip("()").replace("\n", " ").split(",") if n.strip()]
+        moved = [n for n in names if n.split()[0] in MOVED]
+        if not moved:
+            return match[0]
+        rest = [n for n in names if n not in moved]
+        home = spec if not spec.startswith(".") else relative(path_parts, ["agent_comms"])
+        destination = (f"agent_comms.{package}" if not spec.startswith(".")
+                       else relative(path_parts, ["agent_comms", package]))
+        lines = [f"{indent}from {home} import {', '.join(rest)}"] if rest else []
+        lines.append(f"{indent}from {destination} import {', '.join(moved)}")
+        return "\n".join(lines) + ("\n" if match[0].endswith("\n") else "")
+
+    return IMPORT_LIST.sub(fix, text)
 ABSOLUTE = re.compile(rf"\bagent_comms\.({names})\b")
 SLASHED = re.compile(rf"\bsrc/agent_comms/({names})\.py\b")
-FROM_PACKAGE = re.compile(rf"(?m)^(\s*from\s+agent_comms)(\s+import\s+)({names})\b")
+ABSENT = re.compile(r"PathsAbsent\(\((?:[^()]|\([^()]*\))*\)\)")
 QUOTED_BARE = re.compile(rf"\"({names})\.py\"")
 
-for path in sorted({*(p for d in ("src", "tests", "tools", "stack") for p in (root / d).rglob("*.py")),
+ROOTS = ("src", "tests", "tools", "stack", "benchmarks", "experiments", "scripts", "extensions")
+for module in MOVED if owns else ():
+    # A module that finds its siblings from its own position moves to a new set of siblings.
+    for number, line in enumerate((dest / f"{module}.py").read_text().splitlines(), 1):
+        if re.search(r"__package__|__file__|__name__\)", line):
+            print(f"SELF-LOCATING {dest.name}/{module}.py:{number}: {line.strip()}")
+
+for path in sorted({*(p for d in ROOTS for p in (root / d).rglob("*.py")),
                     *(p for p in (root / "pyproject.toml",) if p.exists())}):
     text = path.read_text()
     original = text
     if path.is_relative_to(src):
-        moved_now = path.parent == dest and path.stem in MOVED
+        moved_now = owns and path.parent == dest and path.stem in MOVED
         old_parts = ["agent_comms"] if moved_now else package_depth(path)
         text = rewrite_relative(path, text, old_parts)
-        if not moved_now:
-            parts = package_depth(path)
-            text = BARE.sub(lambda m: f"{m[1]}{relative(parts, ['agent_comms', package])}{m[3]}{m[4]}", text)
+        text = split_moved_names(package_depth(path), text)
     text = ABSOLUTE.sub(rf"agent_comms.{package}.\1", text)
+    # A PathsAbsent claim names the old paths on purpose: they are what must stay deleted.
+    claims = ABSENT.findall(text)
     text = SLASHED.sub(rf"src/agent_comms/{package}/\1.py", text)
-    text = FROM_PACKAGE.sub(rf"\1.{package}\2\3", text)
+    for claim, rewritten in zip(claims, ABSENT.findall(text), strict=True):
+        text = text.replace(rewritten, claim, 1)
+    if not path.is_relative_to(src):
+        text = split_moved_names(["outside"], text)
     if path.name == "plan_phases.py":
         text = QUOTED_BARE.sub(rf'"{package}/\1.py"', text)
     if text != original:

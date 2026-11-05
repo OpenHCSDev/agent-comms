@@ -31,7 +31,7 @@ from .notification_progress import (
 )
 from .private_registry_guard import RegistryPrivacy
 from .registry_store import RegistryStore
-from .typed_table import BooleanStorage, TypedRow
+from .storage.typed_table import BooleanStorage, TypedRow
 from .wake_policy import RecipientDecision
 
 from dataclasses import field

@@ -21,7 +21,7 @@ from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, Message
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import Message
 from agent_comms.response_acknowledgement import canonical_publication_key
-from agent_comms.typed_table import (
+from agent_comms.storage.typed_table import (
     Column,
     ExactStorage,
     ForeignKey,

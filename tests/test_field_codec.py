@@ -456,7 +456,7 @@ def test_declared_scalar_capabilities_and_new_case_use_the_same_boundary() -> No
     import sqlite3
     from pathlib import Path
 
-    from agent_comms.typed_table import Column, TextStorage, TypedTable
+    from agent_comms.storage.typed_table import Column, TextStorage, TypedTable
 
     class HexInteger(TextRepresentation):
         @classmethod

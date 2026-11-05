@@ -17,17 +17,17 @@ from weakref import WeakValueDictionary, finalize
 
 from .agent_backend import RuntimeLocation
 from .coordination_errors import CoordinationReadUnavailable
-from .locked_store import PublishedSQLiteFile, RuntimeFile, SQLiteFile
-from .store_files import StoreBusy
+from .storage.locked_store import PublishedSQLiteFile, RuntimeFile, SQLiteFile
+from .storage.store_files import StoreBusy
 from .bus import Bus
 from .native_entries import NativeEntry
 from .native_transcript import SessionCut, record_end, reverse_records
-from .private_path import FileObservation, FileRevision, MissingFile
+from .storage.private_path import FileObservation, FileRevision, MissingFile
 from .read_ledger import ReadDocument, ReadLedger
 from .registry_document import RosterVisibility
 from .thread_identity import ThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
-from .typed_table import (
+from .storage.typed_table import (
     Column,
     JsonStorage,
     SQLiteTableName,

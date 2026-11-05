@@ -30,7 +30,7 @@ from agent_comms.nominal.field_codec import (
     DisclosedRecord, DisclosureIdentity, HudExclude, OrderId, PublicationExclude, projected,
 )
 from agent_comms.heartbeat_frame import HeartbeatFrame
-from agent_comms.locked_store import JsonDocument
+from agent_comms.storage.locked_store import JsonDocument
 from agent_comms.plan_phases import Plan, PlanPhase
 from agent_comms.order_story import OrderStory
 from agent_comms.recorded_time import RecordedEventTime

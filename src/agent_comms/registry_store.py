@@ -19,10 +19,10 @@ from .coordination_database import CoordinationStore, ReadableStore
 from .coordination_errors import StaleFence
 from .errors import RelationViolationError
 from .nominal.field_codec import FieldCodec, NullMember, TurnId
-from .locked_store import DocumentBytes, LockedStore, PublishedProperty, RegistryFile
-from .maintenance_barrier import CarriedDocument
+from .storage.locked_store import DocumentBytes, LockedStore, PublishedProperty, RegistryFile
+from .storage.maintenance_barrier import CarriedDocument
 from .native_input_owner import RegistryOwner
-from .private_path import FileObservation, FileRevision, MissingFile
+from .storage.private_path import FileObservation, FileRevision, MissingFile
 from .private_registry_guard import PrivateRegistryGuard, PublicRegistry, RegistryPrivacy
 from .private_runtime_schema import PrivateCoordinatorTable
 from .registration_change import InitialRegistration, NativeSourcePublication
@@ -34,7 +34,7 @@ from .registry_document import (
 )
 from .routing import Routing
 from .session_file import RegistrySessionLocation
-from .store_files import RegistryLocking
+from .storage.store_files import RegistryLocking
 from .thread_identity import TurnIdentity
 from .threads import Thread
 from .turn_lease import (

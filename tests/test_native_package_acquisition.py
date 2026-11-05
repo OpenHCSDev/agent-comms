@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 import agent_comms.native_package as native_package
-from agent_comms.private_path import PrivateDirectoryRole
+from agent_comms.storage.private_path import PrivateDirectoryRole
 from native_package_acquisition_fixture import PackageTrace
 from test_native_package import launcher as launcher
 from test_native_package import load_resource_module

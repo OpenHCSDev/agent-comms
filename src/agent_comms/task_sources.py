@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     from .retained_task_facts import RetainedTaskFacts
     from .threads import Thread
     from .turn_context import ContextSegment
-    from .typed_table import TypedTable
+    from .storage.typed_table import TypedTable
 
 
 @dataclass(frozen=True, kw_only=True)

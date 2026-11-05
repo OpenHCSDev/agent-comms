@@ -15,7 +15,7 @@ from agent_comms_hooks.process_claim import ProcessSingleton
 
 from .child_process import ProcessIdentity
 from .launch_runtime import LaunchRuntime
-from .store_files import SourceTier
+from .storage.store_files import SourceTier
 
 
 class LeaseStart(ABC):

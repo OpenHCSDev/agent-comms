@@ -19,7 +19,7 @@ from agent_comms.installer.practice import PracticeCopy, PracticeMeasurement
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.probes.inputs import SelectedInputsProbe
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.message_reference import MessageReference
 from agent_comms.nominal.field_codec import MessageId, TurnId
 from agent_comms.repo import Checkout

@@ -10,7 +10,7 @@ import pytest
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.comms import wire
 from conftest import installed_comms
-from agent_comms.private_path import FileRevision
+from agent_comms.storage.private_path import FileRevision
 from agent_comms.registry_document import DEFAULT_ROSTER
 from agent_comms.ui_model.unread import CappedReplyUnread, EmptyCappedReplyUnread, ReplyUnread
 from agent_comms.view_unread import (

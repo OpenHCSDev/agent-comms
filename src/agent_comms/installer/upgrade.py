@@ -51,7 +51,7 @@ from agent_comms.cli_result import CliResult
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import PathText
-from agent_comms.typed_table import ExternalStore
+from agent_comms.storage.typed_table import ExternalStore
 from agent_comms.host_services import HostService, RestartedService
 from agent_comms.install_choices import InstallerChoice
 from agent_comms.installer.backup import (
@@ -137,10 +137,10 @@ from agent_comms.installer.runtime_wire import CrossesRuntimes
 from agent_comms.installer.target_tree import TargetTree
 from agent_comms.installer.refusals import RuntimeWireChanged
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.locked_store import (
+from agent_comms.storage.locked_store import (
     BusFile, DeclaredFile, FilesRequest, InstallationFiles, LiveFilesRequest, UndeclaredFile,
 )
-from agent_comms.maintenance_barrier import (
+from agent_comms.storage.maintenance_barrier import (
     MaintenanceBarrier,
     MaintenanceOperator,
     MaintenanceState,

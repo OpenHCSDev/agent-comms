@@ -9,8 +9,8 @@ from agent_comms.cohort_schema import ClaimBatchAcknowledgements, CohortDeliveri
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.installer.probes.carry import Carried, Carry
-from agent_comms.locked_store import RootFile
-from agent_comms.typed_table import SQLiteCatalogObject, SQLiteForeignKeys
+from agent_comms.storage.locked_store import RootFile
+from agent_comms.storage.typed_table import SQLiteCatalogObject, SQLiteForeignKeys
 
 
 class CohortDeliveryKind(Carry):

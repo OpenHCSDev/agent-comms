@@ -27,7 +27,7 @@ from agent_comms.errors import (
 from agent_comms.response_acknowledgement import (
     KeyedResponseAcknowledgement,
 )
-from agent_comms.typed_table import Column, Generated, sql_literal
+from agent_comms.storage.typed_table import Column, Generated, sql_literal
 
 from .nominal.field_codec import FieldCodec, MessageId, ThreadLookup
 from .repo import Checkout

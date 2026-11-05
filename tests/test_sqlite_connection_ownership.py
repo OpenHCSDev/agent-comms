@@ -12,7 +12,7 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.coordination_session import CoordinationSession, system_clock
 from agent_comms.coordinator import Coordination
-from agent_comms.store_files import StoreBusy, StoreContention
+from agent_comms.storage.store_files import StoreBusy, StoreContention
 from bus_record_fixture import OWNER_LOOKUP, RECIPIENT_LOOKUP, SENDER_LOOKUP
 
 PACKAGE = Path(__file__).parents[1] / "src" / "agent_comms"

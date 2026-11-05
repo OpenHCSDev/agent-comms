@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.locked_store import DocumentChange
+from agent_comms.storage.locked_store import DocumentChange
 from agent_comms.runtime_info import RuntimeInfoStore
 from agent_comms.shared_ledger import SharedLedger
 from agent_comms.threads import NativeThread

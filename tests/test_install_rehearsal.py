@@ -22,7 +22,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.locked_store import LiveFilesRequest
+from agent_comms.storage.locked_store import LiveFilesRequest
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.history_result import ChannelHistoryPageResult
 from agent_comms.installer.backup import bus_files
@@ -41,13 +41,13 @@ from agent_comms.installer.upgrade import (
     Upgrade,
 )
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.maintenance_barrier import MaintenanceBarrier
+from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
 from agent_comms.messages import TeamUpdatePosition, Message
 from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import ScratchCheckout
 from agent_comms.root_runtime import RootRuntime
 from agent_comms.storage_rules import StorageRule
-from agent_comms.typed_table import ReconciledFile
+from agent_comms.storage.typed_table import ReconciledFile
 from conftest import declare_test_bus, publish_initial
 from agent_comms.threads import NativeThread
 
@@ -141,7 +141,7 @@ import agent_comms
 from agent_comms import cli
 from agent_comms.messages import BusProjectionTables
 from agent_comms.package_stamp import STAMP
-from agent_comms.typed_table import ProjectionProducer
+from agent_comms.storage.typed_table import ProjectionProducer
 rows = BusProjectionTables.projection_rows()
 print(json.dumps({'source': agent_comms.__file__, 'stamp': type(STAMP).__name__,
                   'computed': {row.declared_name: row.producer_digest() for row in rows},
@@ -248,7 +248,7 @@ def test_failed_live_migration_restores_data_checkout_and_runtime(
     step = checkout / "tools/cutover/carry_fault.py"
     step.write_text('''from pathlib import Path
 from agent_comms.installer.probes.carry import Carry, Carried
-from agent_comms.locked_store import DurableFile
+from agent_comms.storage.locked_store import DurableFile
 class Saved(DurableFile):
     filename = "saved"
 class Fault(Carry):

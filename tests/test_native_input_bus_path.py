@@ -14,8 +14,8 @@ from agent_comms.turn_inbox import ClearQueue, InputContent, InputRequest, Steer
 from agent_comms.backend import NativeSession
 from agent_comms.child_process import Platform
 from agent_comms.nominal.field_codec import InputId
-from agent_comms.locked_store import RegistryFile
-from agent_comms.store_files import RegistryLocking
+from agent_comms.storage.locked_store import RegistryFile
+from agent_comms.storage.store_files import RegistryLocking
 from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.turn_watchdog import ModelWait
 from agent_comms.native_arguments import NativeInputProofArgument

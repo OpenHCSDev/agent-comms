@@ -3,7 +3,7 @@
 from contextvars import Context
 
 
-from agent_comms.store_files import StoreLock
+from agent_comms.storage.store_files import StoreLock
 
 
 

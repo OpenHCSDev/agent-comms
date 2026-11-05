@@ -128,7 +128,7 @@ async def test_turn_owned_draft_commit_reaches_a_watching_reader(tmp_path):
 def test_turn_owned_draft_refuses_maintenance_without_changing_the_saved_draft(tmp_path):
     from agent_comms.errors import RelationViolationError
     from agent_comms.external_transcript import TurnDraftPublication
-    from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+    from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 
     comms = wire(tmp_path / 'wire')
     comms.registry.declare(NativeThread('cli', frozenset(), Checkout(tmp_path)))

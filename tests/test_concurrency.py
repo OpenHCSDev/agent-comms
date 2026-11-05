@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 
-import agent_comms.store_files as store_files
+import agent_comms.storage.store_files as store_files
 from agent_comms.activity import ActivityState
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.comms import wire

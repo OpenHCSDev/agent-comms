@@ -283,7 +283,7 @@ def test_delivery_kind_carry_preserves_consistent_rows_and_refuses_disagreement(
 ) -> None:
     from cutover.carry_cohort_delivery_kind import CohortDeliveryKind
     from agent_comms.errors import RelationViolationError
-    from agent_comms.locked_store import LiveFilesRequest
+    from agent_comms.storage.locked_store import LiveFilesRequest
 
     path = CoordinationStore.path_in(private_comms.root)
     with Coordination(str(path)) as store:

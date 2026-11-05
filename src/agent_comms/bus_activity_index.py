@@ -10,7 +10,7 @@ from .class_fact import ClassFact
 from .projection_source import ProducedRow
 from . import activity_clocks
 from .messages import BusProjectionTables
-from .typed_table import Column
+from .storage.typed_table import Column
 
 
 class ActivityMaximum(BusProjectionTables, declared_name=None):

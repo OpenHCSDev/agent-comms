@@ -30,7 +30,7 @@ from .private_send_rules import NativeIdentityCheck
 from .private_sidecar import PrivateSnapshotFile, native_request_digest
 from .reservation_rules import ReservationViolationError
 from .threads import Thread
-from .typed_table import (
+from .storage.typed_table import (
     Column,
     DurableTables,
     ImmutableRows,
