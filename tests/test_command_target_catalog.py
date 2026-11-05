@@ -8,11 +8,13 @@ import pytest
 
 from agent_comms.channel_targets import CommandTarget, IncarnationThreadTarget, ProjectTarget
 from agent_comms.cli_command import (
+    TargetActionCommand,
     CliCommand, OneTarget, TargetBatch, TargetBatchResult, TargetCompleted, TargetFailed,
 )
 from agent_comms.cli_commands import ThreadStoppedResult
 from agent_comms.cli_result import ResultShower
 from agent_comms.cli_verbs.archive import ArchiveCliCommand
+from agent_comms.cli_verbs.new import NewThreadCliCommand
 from agent_comms.cli_verbs.queue_restart import QueueRestartCliCommand
 from agent_comms.cli_verbs.restart import RestartCliCommand
 from agent_comms.cli_verbs.stop import StopCliCommand
@@ -123,3 +125,11 @@ def test_channel_pin_filters_hidden_thread_presence(comms, tmp_path, presence, a
         with pytest.raises(ValueError, match="not a member"):
             comms.channels.set_thread_pinned("#team", "first", True)
         assert "first" not in comms.channels.catalog.read().pinned_members().get("#team", frozenset())
+
+
+def test_a_project_menu_offers_a_new_thread(comms, tmp_path):
+    """Toad's "+ New Session" opens the project's new-thread action; the catalog lists it."""
+    project = Checkout(tmp_path)
+    actions = TargetActionCommand.target_catalog(
+        comms, TargetActionCommand.selected_targets((ProjectTarget(project),)), project=project)
+    assert [action.declaration for action in actions] == [NewThreadCliCommand]
