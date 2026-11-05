@@ -124,7 +124,9 @@ from agent_comms.recorded_time import (
     UnrecordedEventTime,
 )
 from agent_comms.registry_store import RegistryStore
-from agent_comms.repo import Checkout, FailedGitCommand, GitCommandError, Repo, RepositoryReads
+from agent_comms.repo import (
+    Checkout, FailedGitCommand, GitCommandError, Repo, RepositoryReads, SourceReadFailure,
+)
 from agent_comms.repository_name import RepositoryName
 from agent_comms.slop import DeclarationDerivation, Slop
 from agent_comms.storage_rules import CheckoutAllocation, StorageRule
@@ -168,6 +170,9 @@ from .goal_scope import OneGoal
 
 from agent_comms.change_report import CitationProject, FetchedRevision, OrderRoots
 from agent_comms.registry_document import TeamProject
+
+# What reading one source checkout or its listing can raise: one source's failure is data.
+SOURCE_READ_FAILURES = (OSError, SourceReadFailure, TimeoutExpired)
 
 if TYPE_CHECKING:
     from agent_comms.held_orders import LiveHold
@@ -1697,7 +1702,7 @@ class ProgressSource(PullRequestSource):
         worktrees = tuple(pulls.checkout(path) for path in Checkout.git_roots(*owned))
         try:
             return cls.capture(todo, pulls, checkout, worktrees, storage, owner)
-        except (OSError, GitCommandError, WorkBranchError, subprocess.TimeoutExpired) as failure:
+        except SOURCE_READ_FAILURES as failure:
             return cls(todo, pulls, UnreadCheckout(path, str(failure)), worktrees=worktrees)
 
     @classmethod
@@ -1774,8 +1779,7 @@ class OrderProgress(DisclosedRecord, DeclaredFamily, affix="Progress"):
             source.checkout.require_read()
             return next((progress for member in members
                          for progress in member.observations(source)), NoCommitProgress())
-        except (OSError, GitCommandError,
-                WorkBranchError, subprocess.TimeoutExpired) as unread:
+        except SOURCE_READ_FAILURES as unread:
             return UnreadProgress(str(unread))
 
     def require_read(self) -> None:
@@ -4587,7 +4591,7 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
             reader.prepare_pull_request(current.base, current.head)
             reviewed_change = record.request.change_identity(reader, current.base)
             current_change = current.change_identity(reader, current.base)
-        except (GitCommandError, WorkBranchError, subprocess.TimeoutExpired):
+        except (SourceReadFailure, TimeoutExpired):
             return False
         if reviewed_change != current_change:
             return False
@@ -6967,7 +6971,14 @@ class EditWorkplaces:
         trees: dict[RepositoryName, dict[str, tuple[str, ...]]] = {}
         for repo in repositories:
             branches = trees.setdefault(repo.github, {})
-            for branch, worktrees in pulls.worktrees(repo).items():
+            try:
+                listing = pulls.worktrees(repo)
+            except SOURCE_READ_FAILURES as error:
+                # Only orders on this repository go unread.
+                pulls.unread((hold.todo for hold in holds
+                              if repo.github in (hold.todo.repo, *declared[hold.todo.id])), error)
+                continue
+            for branch, worktrees in listing.items():
                 branches[branch] = (*branches.get(branch, ()), *worktrees)
         listed = {Path(path) for branches in trees.values()
                   for worktrees in branches.values() for path in worktrees}
@@ -7015,7 +7026,7 @@ class EditWorkplaces:
                             for branch, worktrees in extra.items():
                                 if str(source) in worktrees:
                                     branches[branch] = (*branches.get(branch, ()), str(source))
-                    except (OSError, GitCommandError, WorkBranchError, TimeoutExpired) as error:
+                    except SOURCE_READ_FAILURES as error:
                         pulls.unread(affected.values(), error)
         owners = prepared.owners
         # The allocation cut is the only problem ownership map. Qualify its source

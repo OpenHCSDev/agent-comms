@@ -40,7 +40,14 @@ class RepositorySelection(ABC):
         """What a bus without a team becomes under this choice."""
 
 
-class GitCommandError(RuntimeError, CommandFailure):
+class SourceReadFailure(Exception):  # noqa: N818 - capability, not an outcome
+    """A checkout, its Git history or its forge could not answer one source read.
+
+    Every boundary that turns one source's failure into data catches this family, so a
+    new failure kind joins the boundary by inheriting here, never by editing an except."""
+
+
+class GitCommandError(RuntimeError, CommandFailure, SourceReadFailure):
     """An unreadable Git input; concrete failures own the evidence for narrower answers."""
 
     def source_path_absent(self, sha: str, file: str) -> bool:
