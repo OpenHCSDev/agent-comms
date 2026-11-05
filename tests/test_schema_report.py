@@ -1,10 +1,11 @@
+import sys
 """The CLI reports stored declarations without changing existing databases."""
 from contextlib import closing
 from dataclasses import MISSING, fields
 import hashlib
 import sqlite3
 
-from agent_comms.cli import main
+from agent_comms.cli import CliInvocation
 from agent_comms.cli_verbs.schema_report import SchemaReportCliCommand
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.todos import Todo
@@ -57,7 +58,7 @@ def test_cli_inspects_existing_stores_without_rewriting_them(tmp_path, capsys, d
     todo = next(row for row in result if row["path"] == str(path))
     # The old store has the table without its CHECKs and none of the indexes declared since.
     assert [change["name"] for change in todo["differences"]] == sorted(Todo.schema_objects())
-    assert main(["--root", str(comms.root), "schema-report"]) == 0
+    assert CliInvocation().invoke(["--root", str(comms.root), "schema-report"], sys.stdout) == 0
     assert '"differences"' in capsys.readouterr().out
     assert hashlib.sha256(path.read_bytes()).hexdigest() == digest
 

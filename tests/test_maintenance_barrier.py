@@ -1,3 +1,4 @@
+import sys
 """Provider-free disposable checks of the default-off maintenance claim seam."""
 
 
@@ -350,10 +351,10 @@ def test_activity_updates_runtime_state_without_publication_while_draining(tmp_p
     """Derived activity remains writable; maintenance still holds new bus publication."""
     from agent_comms.activity import ActivityState, ActivityStore
     from agent_comms.bus import Bus
-    from agent_comms.cli import main
+    from agent_comms.cli import CliInvocation
 
     def cli(*argv: str) -> tuple[int, str]:
-        code = main(['--root', str(tmp_path), *argv])
+        code = CliInvocation().invoke(['--root', str(tmp_path), *argv], sys.stdout)
         return code, capsys.readouterr().out
 
     bus = Bus.install(Bus.path_in(tmp_path))

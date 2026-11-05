@@ -1,6 +1,7 @@
 """agent-comms install: the bus it creates or practises on, and the route to it."""
 from __future__ import annotations
 
+import sys
 
 from agent_comms.repo import Checkout
 import json
@@ -124,7 +125,7 @@ def test_a_message_sent_while_the_bus_is_copied_preserves_one_database_cut(
     # its checkpoint's, so the copied checkpoint pointed past the end of the copied log.
     import threading
 
-    from agent_comms.cli import main
+    from agent_comms.cli import CliInvocation
     root, _ = bus(private_directory)
     (root / "storage.json").write_text(json.dumps({"floor_gib": 0}))
     bus_path = Bus.path_in(root)
@@ -144,7 +145,7 @@ def test_a_message_sent_while_the_bus_is_copied_preserves_one_database_cut(
     copy = practice.path
     monkeypatch.undo()
     writer.join(timeout=30)
-    assert main(["--root", str(copy), "history", "--limit", "50"]) == 0
+    assert CliInvocation().invoke(["--root", str(copy), "history", "--limit", "50"], sys.stdout) == 0
     assert '"failed"' not in capsys.readouterr().out
     assert Bus(Bus.path_in(copy)).revision() == 1
     assert Bus(bus_path).revision() == 2
@@ -232,7 +233,7 @@ def test_an_install_without_flags_keeps_native_team_and_parked_state(
 def test_a_practice_copy_of_a_bus_without_messages_reads_its_history_twice(private_directory, capsys):
     # The laptop's install refused this read: rebuilding the copy's empty index sealed it
     # inside an open transaction, so the commit moved the file past its own seal.
-    from agent_comms.cli import main
+    from agent_comms.cli import CliInvocation
 
     root = private_directory / "wire"
     root.mkdir(mode=0o700)
@@ -242,7 +243,7 @@ def test_a_practice_copy_of_a_bus_without_messages_reads_its_history_twice(priva
     practice.include(tuple(RootFile.existing_in(root)))
     copy = practice.path
     for _ in range(2):
-        assert main(["--root", str(copy), "history", "--limit", "50"]) == 0
+        assert CliInvocation().invoke(["--root", str(copy), "history", "--limit", "50"], sys.stdout) == 0
         assert '"failed"' not in capsys.readouterr().out
 
 

@@ -10,7 +10,7 @@ from contextlib import closing
 import pytest
 from pydantic import ValidationError
 
-from agent_comms.cli import _fail, main
+from agent_comms.cli import _fail, CliInvocation
 from agent_comms.cli_bridges.shared import Binding, GivenBinding, StoredBinding
 from agent_comms.cli_protocol import WATCH_LINE, FailedCoreError, UnavailableCoreError
 from agent_comms.coordination.errors import CoordinationReadUnavailable
@@ -54,7 +54,7 @@ def test_unknown_error_kind_is_not_a_retry():
 
 @pytest.mark.parametrize('arguments', [[], ['not-a-command'], ['watch']])
 def test_argument_errors_use_the_same_single_line(arguments, capsys):
-    assert main(arguments) == 1
+    assert CliInvocation().invoke(arguments, sys.stdout) == 1
     output = capsys.readouterr().out
     assert len(output.splitlines()) == 1
     assert isinstance(WATCH_LINE.validate_json(output), FailedCoreError)

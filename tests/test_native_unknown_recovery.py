@@ -18,7 +18,7 @@ from agent_comms.attempt_recovery import RecoveryMonitorCapability, VerifiedOwne
 from agent_comms.bus import Bus
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.storage.private_path import FileRevision
-from agent_comms.cli import main as cli_main
+from agent_comms.cli import CliInvocation
 from agent_comms.cli_protocol import CoreError, WATCH_LINE
 from agent_comms.native_arguments import GivenBinary
 from agent_comms.launch_root import LaunchRoot
@@ -241,7 +241,7 @@ def test_recover_owner_refuses_a_conflicting_input_identity(released_starting, c
         inputs = input_evidence(store)
     with pytest.raises(RecoveryBlocked) as blocked:
         RecoveryMonitorCapability.recover_owners(wire(released_starting).owners, (owner,))
-    assert cli_main(["--root", str(released_starting), "start", "--name", "beta"]) == 1
+    assert CliInvocation().invoke(["--root", str(released_starting), "start", "--name", "beta"], sys.stdout) == 1
     assert WATCH_LINE.validate_json(capsys.readouterr().out) == CoreError.from_exception(blocked.value)
     with Coordination(released_starting / "coordination.sqlite3") as store:
         assert store.get(execution_id) == before

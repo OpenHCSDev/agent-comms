@@ -1,3 +1,4 @@
+import sys
 """External contracts and adding commands without editing any consumer catalog."""
 
 import json
@@ -5,7 +6,7 @@ import json
 import pytest
 from acp.schema import PromptRequest, TextContentBlock
 
-from agent_comms.cli import build_parser, main
+from agent_comms.cli import build_parser, CliInvocation
 from agent_comms.comms import wire
 from agent_comms.history_result import (
     ChannelHistoryPageResult,
@@ -161,7 +162,7 @@ def test_normal_history_cli_keeps_migrated_content_and_source_identity(
         comms.messaging.send("alice", "bob", f"{comms.root.name} direct").message.message_id
     live.views.attach_history(old.root)
     live_bus = live.bus.bus.revision()
-    assert main(["--root", str(live.root), *arguments]) == 0
+    assert CliInvocation().invoke(["--root", str(live.root), *arguments], sys.stdout) == 0
     rows = json.loads(capsys.readouterr().out)[result_type.messages_key]
     historical = [row for row in rows if "history" in row]
     current = [row for row in rows if "history" not in row]

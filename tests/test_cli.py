@@ -1,3 +1,4 @@
+import sys
 
 
 from agent_comms.repo import Checkout, LaunchCheckout
@@ -12,7 +13,7 @@ from agent_comms.nominal.field_codec import FieldCodec, MessageId, TurnId, compi
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.channel_targets import CommandTarget, NoChannel, PerTargetChannels, ChannelTarget, ProjectTarget
 from agent_comms.catalog_document import NoCatalog
-from agent_comms.cli import main, build_parser
+from agent_comms.cli import build_parser, CliInvocation
 from agent_comms.threads import (
     ChosenServiceTier,
     NextTurnConfiguration,
@@ -61,7 +62,7 @@ def cli(capsys, tmp_path):
     Bus.install(Bus.path_in(tmp_path))
 
     def run(root_path, *argv: str) -> tuple[int, dict | None]:
-        code = main(["--root", str(root_path), *argv])
+        code = CliInvocation().invoke(["--root", str(root_path), *argv], sys.stdout)
         captured = capsys.readouterr().out
         return code, (json.loads(captured) if captured.strip() else None)
 

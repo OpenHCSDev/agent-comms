@@ -1,3 +1,4 @@
+import sys
 """One original human-source workflow through the public CLI and file effects."""
 from pathlib import Path
 
@@ -13,7 +14,7 @@ import json
 import pytest
 
 from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.cli import main
+from agent_comms.cli import CliInvocation
 from agent_comms.cli_commands import ConstraintPinnedResult
 from agent_comms.nominal.field_codec import InputId, FieldCodec, GoalId
 from agent_comms.input_key import AcpInputKey
@@ -50,7 +51,7 @@ def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
                   target=owner.name, text="Unpinned original UNKNOWN input; never export/replay")
 
     def command(*args):
-        code = main(["--root", str(comms.root), *args])
+        code = CliInvocation().invoke(["--root", str(comms.root), *args], sys.stdout)
         return code, json.loads(capsys.readouterr().out)
 
     protected = (saved, inputs.path, comms.registry.store.path)
@@ -74,7 +75,7 @@ def test_original_human_pin_revision_drop_and_atomic_export(comms, capsys):
     original_prefix = read_history(comms)
 
     def command(*args):
-        code = main(["--root", str(comms.root), *args])
+        code = CliInvocation().invoke(["--root", str(comms.root), *args], sys.stdout)
         return code, json.loads(capsys.readouterr().out)
 
     def reference(ref):
@@ -248,7 +249,7 @@ async def original_input_consumer_journey(tmp_path, command):
 
 async def test_original_input_pin_query_export_correction_and_drop(tmp_path, capsys):
     def command(root, args):
-        code = main(["--root", str(root), *args])
+        code = CliInvocation().invoke(["--root", str(root), *args], sys.stdout)
         return code, json.loads(capsys.readouterr().out)
 
     await original_input_consumer_journey(tmp_path, command)

@@ -1,3 +1,4 @@
+import sys
 from agent_comms.repo import Checkout
 from bus_history import read_history
 import hashlib
@@ -9,7 +10,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.channels import AnyOfMatch, ViewPredicate, ParticipantsView
-from agent_comms.cli import main
+from agent_comms.cli import CliInvocation
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.exporting import (
@@ -350,8 +351,7 @@ def test_export_wire_cli_requires_explicit_scope_and_bound_and_emits_receipt(
     destination = tmp_path / "cli.jsonl"
 
     assert (
-        main(
-            [
+        CliInvocation().invoke([
                 "--root",
                 str(root),
                 "export-wire",
@@ -361,8 +361,7 @@ def test_export_wire_cli_requires_explicit_scope_and_bound_and_emits_receipt(
                 "#team",
                 "--last",
                 "24h",
-            ]
-        )
+            ], sys.stdout)
         == 0
     )
     acknowledgement = json.loads(capsys.readouterr().out)
