@@ -24,7 +24,8 @@ class SelectedRequest:
     claim_scope: PrivateSendClaim
 
     @classmethod
-    async def reserve(cls, participant, session, stage, token, prompt: RenderedInput):
+    async def reserve(cls, participant, session, stage, token, prompt: RenderedInput,
+                      *, attempt: int = 0):
         return cls(
             participant,
             await PrivateSendClaim.reserve(
@@ -33,6 +34,7 @@ class SelectedRequest:
                 token=token,
                 prompt=prompt,
                 session=session,
+                attempt=attempt,
             ),
         )
 

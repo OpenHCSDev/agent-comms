@@ -252,11 +252,12 @@ class TriageNativeExecution(NativeInputExecution):
     ) -> str:
         from .triage_native_sources import TriageNativeSource
 
-        return (f"SELECT s.input_id, s.assignment_id, s.ordinal "
+        return (f"SELECT s.input_id, s.assignment_id, s.ordinal, s.attempt "
                 f"FROM {TriageNativeSource.qualified_table(table_source)} s")
 
     def record_sources(
         self, db: Connection, input_id: InputId, assignments: tuple[WakeAssignment, ...],
+        *, attempt: int = 0,
     ) -> None:
         from .triage_native_sources import TriageNativeSource
 
@@ -264,7 +265,7 @@ class TriageNativeExecution(NativeInputExecution):
             raise IdentityConflict("Native input membership names at least one original source")
         try:
             for ordinal, row in enumerate(assignments):
-                TriageNativeSource(input_id, ordinal, row.assignment_id).insert(db)
+                TriageNativeSource(input_id, ordinal, row.assignment_id, attempt).insert(db)
         except sqlite3.IntegrityError as error:
             # Only assignment_id is UNIQUE here; a key, CHECK or guard refusal is a bug.
             if error.sqlite_errorcode != sqlite3.SQLITE_CONSTRAINT_UNIQUE:
@@ -298,7 +299,8 @@ class FullNativeExecution(NativeInputExecution):
     ) -> str:
         from .native_runtime_input import NativeRuntimeInput
 
-        return (f"SELECT n.input_id, c.assignment_id, c.ordinal "
+        # A full execution has no replacement attempt: it joins once, as attempt 0.
+        return (f"SELECT n.input_id, c.assignment_id, c.ordinal, 0 AS attempt "
                 f"FROM {NativeRuntimeInput.qualified_table(table_source)} n "
                 f"JOIN {ExecutionAssignmentLink.qualified_table(table_source)} c "
                 "ON c.execution_id=n.execution_id "
@@ -306,7 +308,10 @@ class FullNativeExecution(NativeInputExecution):
 
     def record_sources(
         self, db: Connection, input_id: InputId, assignments: tuple[WakeAssignment, ...],
+        *, attempt: int = 0,
     ) -> None:
+        if attempt:
+            raise IdentityConflict("Only a triage input has a replacement attempt")
         if self.source_assignment_ids(db, input_id) != tuple(row.assignment_id for row in assignments):
             raise IdentityConflict("Full native input differs from its original execution membership")
 

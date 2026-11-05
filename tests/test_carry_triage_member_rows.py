@@ -41,9 +41,9 @@ def test_carry_splits_membership_into_rows_once(tmp_path):
     assert step.carry(apply=True).rewritten == (path.relative_to(root),)
     with closing(sqlite3.connect(path)) as db:
         assert sorted(TriageNativeSource.select(db), key=lambda row: row.assignment_id) == [
-            TriageNativeSource(FIRST, 0, AssignmentId("claim-1")),
-            TriageNativeSource(FIRST, 1, AssignmentId("claim-2")),
-            TriageNativeSource(SECOND, 0, AssignmentId("claim-3")),
+            TriageNativeSource(FIRST, 0, AssignmentId("claim-1"), 0),
+            TriageNativeSource(FIRST, 1, AssignmentId("claim-2"), 0),
+            TriageNativeSource(SECOND, 0, AssignmentId("claim-3"), 0),
         ]
         stored = {name for (name,) in db.execute(
             "SELECT name FROM sqlite_master WHERE tbl_name=? AND sql IS NOT NULL",

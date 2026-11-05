@@ -125,7 +125,7 @@ class NativeRuntimeInput(
         """Native context evidence for the caller's bounded assignment window ``w``."""
         triage_stage = sql_literal(TriageNativeExecution)
         return (
-            "WITH member AS MATERIALIZED (SELECT m.input_id,m.assignment_id,m.ordinal "
+            "WITH member AS MATERIALIZED (SELECT m.input_id,m.assignment_id,m.ordinal,m.attempt "
             f"FROM ({cls.source_membership_sql()}) m "
             "WHERE m.assignment_id IN (SELECT assignment_id FROM w)) "
             "SELECT w.assignment_id,"

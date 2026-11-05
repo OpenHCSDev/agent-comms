@@ -23,7 +23,8 @@ class TriageMemberRows(Carry):
                                   (self.previous,)).fetchone():
                     continue
                 split[path] = TriageNativeSource.read(db.execute(
-                    f'SELECT s.input_id, CAST(member.key AS INTEGER) AS ordinal, member.value AS assignment_id '
+                    f'SELECT s.input_id, CAST(member.key AS INTEGER) AS ordinal, member.value AS assignment_id, '
+                    f'0 AS attempt '
                     f'FROM "{self.previous}" s, json_each(s.assignment_ids) member'))
         if apply:
             for path, members in split.items():

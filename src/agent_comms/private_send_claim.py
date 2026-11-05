@@ -117,6 +117,7 @@ class PrivateSendClaim(PromptBoundary):
         token: str,
         prompt: RenderedInput,
         session: SelectedSession,
+        attempt: int = 0,
     ) -> PrivateSendClaim:
         """Reserve once and bind the exact prompt before any native process starts.
 
@@ -127,7 +128,7 @@ class PrivateSendClaim(PromptBoundary):
         digest = TextDigest.of(token).value
         def reserve(store):
             with measurements.operation("input_reservation_binding_worker"):
-                input_id = stage.reserve(store, selected.identity, digest)
+                input_id = stage.reserve(store, selected.identity, digest, attempt=attempt)
                 bind_expected_prompt(
                     store,
                     input_id=input_id,

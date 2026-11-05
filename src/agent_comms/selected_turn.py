@@ -25,7 +25,7 @@ from .selected_participant import SelectedParticipant
 from .selected_request import SelectedRequest
 from .selected_result import CoordinatedTurn
 from .selected_session import SelectedSession
-from .selected_triage import SelectedTriageOutcome
+from .selected_triage import RejectedTriageOutcome, SelectedTriageOutcome
 from .wake_candidate_index import WakeCandidateIndex
 from .context_segments.wake import SelectedWakeSegment
 from .context_segments.selected import SelectedTriageSegment, SelectedWorkSegment
@@ -288,6 +288,31 @@ class SelectedConsideration:
             )
             await participant.transition(PublishingPhase())
             outcome = SelectedTriageOutcome.acquire(result.text)
+            if isinstance(outcome, RejectedTriageOutcome):
+                # An unreadable decision costs the turn, not the claim: close the answer,
+                # return the claim to triage-pending, and ask once more with the refusal
+                # and the decisions that would have been accepted. A second unreadable
+                # answer is terminal, which settle() handles.
+                stage.burn_turn(participant.store, participant.identity,
+                                request.claim_scope.input_id, request.claim_scope.token_digest,
+                                result.context)
+                continued = session.continued(result.context)
+                request = await SelectedRequest.reserve(
+                    participant, continued, stage.refreshed(participant.store),
+                    prepare_fence_token(),
+                    replace(request.claim_scope.prompt,
+                            text=f"{request.claim_scope.prompt.text}\n\n{outcome.reason()}"),
+                    attempt=1,
+                )
+                await participant.transition(PromptAcceptancePhase())
+                result = await request.claim_scope.execute(
+                    execution,
+                    model=participant.model,
+                    selected_tool_mode=NoSelectedTools(),
+                    observe_event=participant.dispatch,
+                )
+                await participant.transition(PublishingPhase())
+                outcome = SelectedTriageOutcome.acquire(result.text)
             settled = outcome.settle(participant, stage, request.claim_scope, result.context)
             continued = session.continued(result.context)
         # The FULL request owns its own failure boundary. Never report its
