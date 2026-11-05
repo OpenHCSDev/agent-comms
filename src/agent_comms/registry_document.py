@@ -7,7 +7,9 @@ from .tool_result import ToolResult
 import time
 from abc import ABC, abstractmethod
 from collections import ChainMap
-from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, MutableMapping, Sequence
+from collections.abc import (
+    Callable, Collection, Iterable, Iterator, Mapping, MutableMapping, Sequence,
+)
 from pathlib import Path
 from dataclasses import dataclass, field, replace
 from functools import cached_property
@@ -1188,9 +1190,13 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
         beside every shared field. A remote UI opening one thread
         reads this, not the whole document, almost all of which is other threads' rows."""
         kept = frozenset().union(*(self.read_by(name) for name in names))
-        return RegistrySlice(*(ThreadSlice.of(plan).only(plan.current(self), kept)
-                              for plan in FieldCodec.field_plans(type(self)) if plan.declared.init),
-                             asked=frozenset(names))
+        # The snapshot's own fields, sliced; the slice adds only what it was asked for. Plans of
+        # type(self) would already hold a slice's ``asked`` when a slice is sliced again.
+        fields = [ThreadSlice.of(plan).only(plan.current(self), kept)
+                  for plan in FieldCodec.field_plans(RegistrySnapshot)
+                  if plan.declared.init]
+        fields.append(frozenset(names))
+        return RegistrySlice(*fields)
 
     def changed_names(self, earlier: RegistrySnapshot) -> frozenset[str]:
         """The names whose registry facts differ from ``earlier``'s, by each field's declared
@@ -1414,7 +1420,8 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
 @dataclass(frozen=True, slots=True)
 class RegistrySlice(RegistrySnapshot):
     """The rows a caller asked for, beside every shared field. A name it asked for and did not
-    get is unregistered; a name it never asked for is outside the slice, so its refusal says which."""
+    get is unregistered; a name it never asked for is outside the slice, so its refusal says
+    which."""
 
     asked: Annotated[frozenset[str], SlicePolicy(WholeDocumentValue)] = frozenset()
 

@@ -74,3 +74,11 @@ def test_a_name_asked_for_but_never_registered_is_unregistered(tmp_path: Path) -
     with pytest.raises(UnregisteredThreadError, match="is not registered") as refused:
         cut.require("nobody")
     assert not isinstance(refused.value, OutsideRegistrySlice)
+
+
+def test_a_slice_of_a_slice_keeps_what_both_asked_for(tmp_path: Path) -> None:
+    """Slicing a slice again narrows it; its own ``asked`` is not passed twice."""
+    snapshot = registry_with_a_fork(tmp_path).snapshot()
+    narrower = snapshot.only(("alpha-fork", "beta")).only(("alpha-fork",))
+    assert set(narrower.threads) == {"alpha-fork", "alpha"}
+    assert narrower.asked == frozenset({"alpha-fork"})
