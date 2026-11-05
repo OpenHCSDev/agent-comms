@@ -292,7 +292,8 @@ def test_unreadable_checkout_is_its_holders_state_and_the_pass_carries_on(
                       if isinstance(state, Unreadable))
         assert unreadable.unit == c.registry.require('worker').incarnation
         assert str(checkout) in unreadable.reason
-        assert 'not a git repository' in unreadable.line()
+        # The line carries the recorded failure; git's own wording varies by version.
+        assert unreadable.reason in unreadable.line()
 
 
 def test_order_closed_after_the_frame_read_does_not_fail_the_merge_read(

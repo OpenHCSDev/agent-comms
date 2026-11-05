@@ -57,7 +57,7 @@ def test_the_order_file_derives_what_the_order_creates_from_its_citations(source
 
 
 def test_done_is_refused_until_the_delivered_tree_declares_the_created_line(
-        comms, source_repository, github_cli: GitHubFixture):
+        comms, source_repository, github_cli: GitHubFixture, interpreter_build):
     _, current = assigned(comms, source_repository.scope(), source_repository)
     todo = replace(current, order=replace(current.order, created=(CREATED,),
                                           pull_requests=(PullRequestLink(current.repo, 1),)))
@@ -69,7 +69,7 @@ def test_done_is_refused_until_the_delivered_tree_declares_the_created_line(
             reviewable_times=('2026-10-25T12:00:00Z',), merge=PullRequestCommit(commit),
             merged='2026-10-25T12:00:00Z'))
         delivery = CommitDelivery(commit=commit, delivered_commit=commit,
-                                  proof_build=RecordedBuildIdentity(commits=()))
+                                  proof_build=RecordedBuildIdentity(commits=(), interpreter=interpreter_build))
         claims = {MergedClaim(commit): (WorkBranches.main,)}
         return asyncio.run(delivery.verified(todo, comms.registry, claims))
 

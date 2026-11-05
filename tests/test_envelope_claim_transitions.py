@@ -50,7 +50,9 @@ def test_same_name_can_take_a_previous_birth_only_with_current_registry_evidence
     comms.registry.declare(replace(thread("foreign", comms.root, 3.0),
                                    process_identity=ProcessIdentity.capture(os.getpid())), RunningThreadStatus())
     registry = comms.registry.snapshot()
-    scope = NativeClaim(owner_claimed_generation=1, operation_id=ClaimId("c" * 32),
+    # held_at compares exactly with the owner's current claim generation, so read it.
+    scope = NativeClaim(owner_claimed_generation=registry.claim_generation("owner"),
+                        operation_id=ClaimId("c" * 32),
                         turn_id=TurnId('5d1970910e79a04eb98c8e9533701156'), input_id=InputId.mint())
     held_message_id = MessageId.mint("msg-1")
     successor_message_id = MessageId.mint("msg-2")

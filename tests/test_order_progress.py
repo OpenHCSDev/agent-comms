@@ -198,7 +198,8 @@ def test_every_order_reads_the_newest_match_git_grep_gives(tmp_path):
     for message in ('P1 first', 'fix P12 slot', 'body only\n\nrefs p3 here', 'P1: second', 'XP1 is not P1x'):
         git(worktree, 'commit', '-q', '--allow-empty', '-m', message)
     checkout = PresentCheckout(worktree)
-    refs = ('HEAD',)
+    # The capture resolves the named refs it read (for-each-ref), as callers pass them; not HEAD.
+    refs = (git(worktree, 'symbolic-ref', 'HEAD').strip(),)
     for pattern in (*(rf'(^|[^A-Za-z0-9_]){problem}([^A-Za-z0-9_]|$)' for problem in ('P1', 'P12', 'P3', 'P4')),
                     'second', ''):
         expected = git(worktree, 'log', '-1', '--extended-regexp', '--regexp-ignore-case',

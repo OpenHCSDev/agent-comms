@@ -125,9 +125,12 @@ class TestOrderCompletion:
         assert closed.order.delivery.report == report.read_text()
         assert closed.assignment is None
 
-    def test_done_reports_missing_run_and_existing_checkout_together(
+    def test_done_reports_missing_evidence_together_and_keeps_the_reused_checkout(
         self, held_team: Team,
     ) -> None:
+        """Done names every missing piece of evidence at once. An owner keeps one checkout per
+        repository across orders (StorageRule.reused_checkout), so the order's checkout still
+        existing is no refusal."""
         ctx = held_team
         original = ctx.comms.goals.todos.get('P1')
         current = self.record(ctx, replace(original.order, run=ApplicationOrderRun(
@@ -139,15 +142,16 @@ class TestOrderCompletion:
         try:
             with pytest.raises(RecordProblems) as refused:
                 main(['done', 'worker', 'P1', '--op'], ctx)
-            assert refused.value.problems.keys() >= {'checkout', '--seen.run', '--seen.working'}
+            assert refused.value.problems.keys() >= {'--seen.run', '--seen.working'}
+            assert 'checkout' not in refused.value.problems
             assert ctx.comms.goals.todos.get('P1') == current
             result = subprocess.run(
                 [sys.executable, str(Path(sys.executable).with_name('agent-comms-team')),
-                 '--root', str(ctx.root), 'order', 'done', 'worker', 'P1', '--op'],
+                 '--root', str(ctx.root), 'order', 'done', 'worker', 'P1', '--op', '--as', 'colleague'],
                 cwd=ctx.root, capture_output=True, text=True, timeout=30,
             )
             assert result.returncode == 1, result.stdout + result.stderr
-            assert all(field in result.stderr for field in ('checkout', '--seen.run', '--seen.working'))
+            assert all(field in result.stderr for field in ('--seen.run', '--seen.working')), result.stderr
             assert ctx.comms.goals.todos.get('P1') == current
         finally:
             checkout.retire()
