@@ -116,7 +116,7 @@ from .turn_runner import RELAY_PREFIX
 @dataclass
 class AcpSelectedWriteAuthority(BoundSelectedWriteAuthority):
     agent: CommsAgent
-    session_id: str
+    session_id: AcpSessionId
     plans: SelectedWritePlans
 
     def select(self, assignment, owner, generation, action):

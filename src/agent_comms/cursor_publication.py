@@ -27,7 +27,7 @@ from .coordination.errors import DeferredRead
 from .coordination.coordinator import Coordination
 from .cursor_owner import CommittedCursorOwner, CursorOwner, CursorState
 from .publication_measurements import PublicationMeasurements
-from .nominal.field_codec import InputId
+from .nominal.field_codec import AcpSessionId, InputId
 from .message_bus import MessageBus
 from .native_entries import NativeEvidenceScope
 from .publisher import ResponseWrites
@@ -102,18 +102,18 @@ class CursorPublication:
 
     def __init__(self, comms: Comms, runtime: RuntimeServer):
         self.comms, self.runtime = comms, runtime
-        self.deliveries: dict[str, CursorDelivery] = {}
+        self.deliveries: dict[AcpSessionId, CursorDelivery] = {}
 
-    def delivery(self, session_id: str) -> CursorDelivery:
+    def delivery(self, session_id: AcpSessionId) -> CursorDelivery:
         return self.deliveries.setdefault(session_id, CursorDelivery())
 
-    def scope(self, thread_name: str, session_id: str) -> CursorScope:
+    def scope(self, thread_name: str, session_id: AcpSessionId) -> CursorScope:
         registry = self.comms.registry.store
         cut = registry.snapshot_with_authority()
         return cut.privacy.cursor_scope(cut.snapshot, thread_name, session_id)
 
     async def observe(
-        self, thread_name: str, session_id: str, *, defer_busy: bool = False,
+        self, thread_name: str, session_id: AcpSessionId, *, defer_busy: bool = False,
         advance: bool = False,
     ) -> CursorEnvelope:
         delivery = self.delivery(session_id)
@@ -125,7 +125,7 @@ class CursorPublication:
                 )
 
     async def _observe(
-        self, delivery: CursorDelivery, thread_name: str, session_id: str, *,
+        self, delivery: CursorDelivery, thread_name: str, session_id: AcpSessionId, *,
         source_reads: NativeEvidenceScope, defer_busy: bool, advance: bool,
     ) -> CursorEnvelope:
         revision = delivery.next_revision()
@@ -158,13 +158,13 @@ class CursorPublication:
         )
 
     async def trusted_metadata(
-        self, thread_name: str, session_id: str,
+        self, thread_name: str, session_id: AcpSessionId,
     ) -> tuple[CursorAdvancedUpdate, ...]:
         privacy = await Coordination.run_worker(self.comms.registry.store.privacy)
         return await privacy.cursor_metadata(self, thread_name, session_id)
 
     async def observed_metadata(
-        self, thread_name: str, session_id: str,
+        self, thread_name: str, session_id: AcpSessionId,
     ) -> tuple[CursorAdvancedUpdate, ...]:
         """A private root's trusted cursor read, published as session metadata."""
         observed = await self.observe(thread_name, session_id)
@@ -172,7 +172,7 @@ class CursorPublication:
         return (CursorAdvancedUpdate(observed),)
 
     async def publish(
-        self, session_id: str, thread_name: str, *, selected_status: str | None = None,
+        self, session_id: AcpSessionId, thread_name: str, *, selected_status: str | None = None,
         advance: bool = False,
     ) -> None:
         delivery = self.delivery(session_id)
@@ -202,7 +202,7 @@ class CursorPublication:
             raise
         delivery.published = observed
 
-    async def refresh(self, session_id: str, thread_name: str) -> None:
+    async def refresh(self, session_id: AcpSessionId, thread_name: str) -> None:
         if self.delivery(session_id).needs_refresh:
             # Resume only the cursor projection. The immutable native acknowledgement
             # supplies its recorded input grant; no claim or input is resumed.
