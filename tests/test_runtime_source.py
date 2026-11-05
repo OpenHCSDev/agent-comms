@@ -9,7 +9,10 @@ import pytest
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.refusals import OwnersNotRestarted, UpgradeRefused
 from agent_comms.installer.upgrade import OwnersStopped, Stack
-from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime, RunningRuntime, RunningSource
+from agent_comms.launch_runtime import (
+    LaunchRuntime, NoImportPath, RecordedRuntime, RestartEnvironment, RestoredRuntime, RunningRuntime,
+    RunningSource,
+)
 from agent_comms.storage.maintenance_barrier import TargetRuntime
 
 
@@ -80,3 +83,19 @@ def test_a_succeeding_install_restarts_its_owners_unless_taken_over(comms, tmp_p
         with taken.given_back_on(stack, comms.root):
             taken.retired()
         assert taken.started == ()
+
+
+def test_a_recorded_target_keeps_the_import_path_its_capture_selected(tmp_path):
+    """A queued restart rebuilds its runtime from the stored record. The capture projected the
+    queuing process's import path (a checkout's root first); the relaunch must not strip it, or
+    a checkout-run Core restarts its owner on whatever copy the interpreter has installed."""
+    interpreter = LaunchRuntime.running().interpreter
+    captured = RunningRuntime(interpreter).environment(
+        {**os.environ, "PYTHONPATH": str(tmp_path / "unrelated")})
+    recorded = RestartEnvironment.inherit(captured)
+    relaunched = RecordedRuntime(interpreter, recorded.pythonpath).environment(
+        {**os.environ, "PYTHONPATH": str(tmp_path / "the-queue-watcher's")})
+    assert relaunched.get("PYTHONPATH") == captured.get("PYTHONPATH")
+    installed = RecordedRuntime(interpreter, NoImportPath()).environment(
+        {**os.environ, "PYTHONPATH": str(tmp_path / "stray")})
+    assert "PYTHONPATH" not in installed
