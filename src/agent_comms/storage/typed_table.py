@@ -3043,10 +3043,11 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
     @classmethod
     @cache
     def _producer_digest(cls) -> str:
-        # Readers beside a producer change neither its columns nor its output contract.
+        # Readers beside a producer change neither its columns nor its output contract, and
+        # neither does the module a declaration lives in: a package move keeps every digest.
         source = "\0".join(sorted({
-            f"{owner.__module__}.{owner.__qualname__}\0"
-            f"{tuple((base.__module__, base.__qualname__) for base in owner.__mro__)}\0{member}"
+            f"{owner.__qualname__}\0"
+            f"{tuple(base.__qualname__ for base in owner.__mro__)}\0{member}"
             for owner, members in cls.producer_members()
             for member in members
         }))

@@ -895,3 +895,22 @@ def test_readonly_archive_and_backup_use_the_same_bus(tmp_path):
     assert destination.read_bytes() == before
     with pytest.raises(FileExistsError):
         bus.backup(destination)
+
+
+def relocate(source: Path, owner: type, module: str) -> None:
+    """Declare ``owner`` as living in ``module``, as a package move does to every class it moves."""
+    path = source.joinpath(*owner.__module__.split(".")[1:]).with_suffix(".py")
+    tree = ast.parse(path.read_text())
+    declaration, = (node for node in tree.body
+                    if isinstance(node, ast.ClassDef) and node.name == owner.__name__)
+    declaration.body.insert(0, ast.parse(f"__module__ = {module!r}").body[0])
+    path.write_text(ast.unparse(ast.fix_missing_locations(tree)) + "\n")
+
+
+def test_moving_the_table_base_to_another_package_keeps_every_producer_digest(
+    pristine_projection: PristineProjection, projection_source: Path,
+) -> None:
+    """Every projection's MRO passes through TypedTable; on 2026-11-04 moving it into storage/
+    made all 13 bus tables 'stored rows of an earlier producer' and cost a 128 s rehearsal."""
+    relocate(projection_source, TypedTable, "agent_comms.relocated.typed_table")
+    assert projection_source_digest(projection_source) == pristine_projection.digest
