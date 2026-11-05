@@ -64,7 +64,9 @@ from agent_comms.coordination.errors import (
 from agent_comms.errors import RelationViolationError
 from agent_comms.history_views import RetiredViews
 from agent_comms.message_notification import NotificationPass, NotificationWindow
-from agent_comms.notification_read import NotificationsRead, UnreadableNotificationsRead
+from agent_comms.notification_read import (
+    NotificationsRead, StaleNotificationsRead, UnreadableNotificationsRead,
+)
 from agent_comms.message_reference import MessageReference
 from agent_comms.nominal.field_codec import DeclaredError, FieldCodec, MessageId, TaggedRecordMember, TaggedUnion
 from agent_comms.nominal.fold import Absorbs, Accumulates, Fold
@@ -309,7 +311,20 @@ class UnreadableHistory(ValueError, DeclaredError):  # noqa: N818 - nominal stor
 
     @classmethod
     def outcome[T](cls, read: Callable[[], T]) -> StoredRead[T]:
-        """Run a stored read: its value, a read deferred to retry, or unreadable with its cause."""
+        """Run a stored read: its value, a read deferred to retry, a reload, or unreadable with
+        its cause. A read derives its bounds when it runs, so a reload reads once more now;
+        only a read whose own bounds are stale reloads again, and that is its answer."""
+        try:
+            return cls.attempt(read)
+        except ReloadRequired:
+            pass
+        try:
+            return cls.attempt(read)
+        except ReloadRequired as error:
+            return ReadReload(error)
+
+    @classmethod
+    def attempt[T](cls, read: Callable[[], T]) -> StoredRead[T]:
         try:
             return ReadValue(read())
         except DeferredRead as error:
@@ -348,11 +363,12 @@ class UnreadableHistory(ValueError, DeclaredError):  # noqa: N818 - nominal stor
 
 
 class StoredRead[T](ABC):
-    """A stored read's outcome: its value, or one of the two ways it fails."""
+    """A stored read's outcome: its value, or one of the three ways it fails."""
 
     @abstractmethod
     def answer[R](self, value: Callable[[T], R], deferred: Callable[[DeferredRead], R],
-                  unreadable: Callable[[UnreadableHistory], R]) -> R: ...
+                  unreadable: Callable[[UnreadableHistory], R],
+                  reload: Callable[[ReloadRequired], R]) -> R: ...
 
     @abstractmethod
     def raised(self) -> T:
@@ -364,7 +380,8 @@ class ReadValue[T](StoredRead[T]):
     value: T
 
     def answer[R](self, value: Callable[[T], R], deferred: Callable[[DeferredRead], R],
-                  unreadable: Callable[[UnreadableHistory], R]) -> R:
+                  unreadable: Callable[[UnreadableHistory], R],
+                  reload: Callable[[ReloadRequired], R]) -> R:
         return value(self.value)
 
     def raised(self) -> T:
@@ -378,8 +395,25 @@ class ReadDeferred[T](StoredRead[T]):
     error: DeferredRead
 
     def answer[R](self, value: Callable[[T], R], deferred: Callable[[DeferredRead], R],
-                  unreadable: Callable[[UnreadableHistory], R]) -> R:
+                  unreadable: Callable[[UnreadableHistory], R],
+                  reload: Callable[[ReloadRequired], R]) -> R:
         return deferred(self.error)
+
+    def raised(self) -> T:
+        raise self.error
+
+
+@dataclass(frozen=True)
+class ReadReload[T](StoredRead[T]):
+    """The read's own bounds name a source that is gone: retrying them never answers, so the
+    caller re-reads from fresh bounds instead of waiting."""
+
+    error: ReloadRequired
+
+    def answer[R](self, value: Callable[[T], R], deferred: Callable[[DeferredRead], R],
+                  unreadable: Callable[[UnreadableHistory], R],
+                  reload: Callable[[ReloadRequired], R]) -> R:
+        return reload(self.error)
 
     def raised(self) -> T:
         raise self.error
@@ -391,7 +425,8 @@ class ReadUnreadable[T](StoredRead[T]):
     cause: UnreadableHistory
 
     def answer[R](self, value: Callable[[T], R], deferred: Callable[[DeferredRead], R],
-                  unreadable: Callable[[UnreadableHistory], R]) -> R:
+                  unreadable: Callable[[UnreadableHistory], R],
+                  reload: Callable[[ReloadRequired], R]) -> R:
         return unreadable(self.cause)
 
     def raised(self) -> T:
@@ -411,7 +446,7 @@ class AwaitedRead(TaggedRecordMember, ObservationRequest, declared_name=None):
 
     @property
     def refusal_errors(self) -> tuple[type[Exception], ...]:
-        return (DeferredRead, RelationViolationError, UnreadableHistory)
+        return (DeferredRead, ReloadRequired, RelationViolationError, UnreadableHistory)
 
     def require_root(self, comms: Comms) -> None:
         if Path(self.root).expanduser().resolve() != comms.root.resolve():
@@ -439,8 +474,6 @@ class ReadRequest(AwaitedRead, declared_name=None):
             self.require_root(comms)
             try:
                 value = self.read(comms)
-            except ReloadRequired:
-                raise
             except self.deferred_reads:
                 return ReadBusy(self.request_id)
             return ReadAnswered.of(self.request_id, value)
@@ -660,7 +693,11 @@ class ObserveSidebar(InterestRequest):
             revision, self, snapshot := read(subject, visibility), SidebarModel.derive(snapshot),
         )).answer(
             lambda observed: observed, lambda error: SidebarPreparing(revision, self, error),
-            lambda error: SidebarUnreadable(revision, self, error))
+            lambda error: SidebarUnreadable(revision, self, error),
+            # This read takes no caller bounds, so no stale witness can reach it; only a
+            # source moving under both reads can (TranscriptChanged, DMScopeChanged), and
+            # that move is the write the next revision answers.
+            lambda error: SidebarPreparing(revision, self, error))
 
 
 class SidebarReadStage:
@@ -763,6 +800,7 @@ class TeamHudReading(ReadingObservation[ObserveTeamHud]):
             lambda observed: observed,
             lambda error: ObservationPending(),  # Keep the interest until its source can be read.
             lambda error: TeamHudUnreadable(revision, error),
+            lambda error: ObservationPending(),  # Bounds-free: only a frame replaced under both reads.
         )
 
 
@@ -891,7 +929,11 @@ class NotificationReading(ReadingObservation[ObserveNotifications]):
             lambda error: PendingBatch(),
             lambda error: NotificationBatch(
                 request, UnreadableNotificationsRead(revision),
-                NotificationsUnreadable(revision, request, error)))
+                NotificationsUnreadable(revision, request, error)),
+            # The request's own display cut is stale: answer it, so the UI asks afresh.
+            lambda error: NotificationBatch(
+                request, StaleNotificationsRead(revision),
+                NotificationsReload(revision, request, error)))
 
     def answer(self, request: ReadNotifications, revision: WireRevision) -> Iterator[Observed]:
         """Send a request its outcomes only when a batch behind them was read since."""
@@ -938,7 +980,8 @@ class ThreadReading(ReadingObservation[ObserveThreads]):
         yield from outcome.answer(
             lambda located: self.presented(located.reads, results),
             lambda error: self.failed(located.names, ThreadBusy(), results),
-            lambda error: self.failed(located.names, ThreadUnavailable(error), results))
+            lambda error: self.failed(located.names, ThreadUnavailable(error), results),
+            lambda error: self.failed(located.names, ThreadBusy(), results))
         results.update((name, value) for name, value in previous.results.items()
                        if name in self.request.threads and name not in located.names)
         observed = ThreadsObserved(revision, results, frozenset(), located.activity)
@@ -986,7 +1029,7 @@ class ThreadReading(ReadingObservation[ObserveThreads]):
         for name, read in reads.items():
             results[name] = UnreadableHistory.outcome(read).answer(
                 ThreadPresented,
-                lambda error: ThreadBusy(), ThreadUnavailable)
+                lambda error: ThreadBusy(), ThreadUnavailable, lambda error: ThreadBusy())
             yield ObservationPending()
 
 
@@ -1164,7 +1207,7 @@ class SidebarResult(PublishState, Observed, declared_name=None):
 class SidebarPreparing(SidebarResult, WaitingSidebar):
     """The first answer explains the unfinished read without replacing real rows."""
 
-    cause: DeferredRead
+    cause: DeferredRead | ReloadRequired
 
     def accepted_by(self, previous: PublishState) -> bool:
         return previous.accepts_preparing()
@@ -1294,6 +1337,13 @@ class NotificationsObserved(Accumulates, NotificationAnswer):
         keys = frozenset(self.request.keys)
         return replace(self, outcomes={**self.outcomes, **{
             key: rows for key, rows in batch.outcomes.items() if key in keys}})
+
+
+@dataclass(frozen=True)
+class NotificationsReload(Absorbs, NotificationAnswer):
+    """The request's display cut names a source that is gone; the UI reloads its page."""
+
+    error: ReloadRequired
 
 
 @dataclass(frozen=True)

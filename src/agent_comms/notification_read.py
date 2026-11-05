@@ -53,6 +53,14 @@ class NotificationsRead:
         ) or notifications.changed(self.notification_window, self.revision)
 
 
+class StaleNotificationsRead(NotificationsRead):
+    """The request's own display cut is stale: rereading it never answers, so only the UI's
+    fresh request, a different family, reads again."""
+
+    def live_changed(self, comms: Comms, notifications: NotificationPass) -> bool:
+        return False
+
+
 class UnreadableNotificationsRead(NotificationsRead):
     """An unreadable read names no participants, so any later revision reads again."""
 
