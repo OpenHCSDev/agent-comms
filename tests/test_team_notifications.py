@@ -934,7 +934,7 @@ def test_failed_quiet_publication_retries_identical_display_until_committed(noti
     with refused_publication(comms), pytest.raises(HumanSendRefusedError):
         beat(comms)
     owner = comms.registry.require("colleague").incarnation
-    unsent = TeamFrame.at(comms.root, owner).read()
+    unsent = TeamFrame.current(comms, "colleague")
     assert first_hud.display_facts != unsent.display_facts
     assert TeamUpdate.latest(comms, owner) == unsent.packets
     assert TeamUpdate.published(comms, owner) == (first.task,)
