@@ -21,8 +21,9 @@ def started() -> None:
     again at exit, so shutdown's full collection skips what it built since: that scan cost
     1.3-1.5 s per connector stop, 0.57 s per agent-comms-team call and 3.43 s in Toad's render
     workers. The exit freeze first collects the young generations, so recently dropped cycles
-    still finalize (an unclosed writer still flushes). Call once per process:
-    LaunchSelection.install also runs on every .selected() and never does."""
+    still finalize (an unclosed writer still flushes). Each process's entry calls it once.
+    LaunchRoot.startup never does: CliInvocation runs it per call, and the installer's interpreter
+    worker invokes the CLI once per probe in one long-lived process."""
     gc.freeze()
     atexit.register(_skip_final_collection)
 
@@ -113,7 +114,6 @@ class LaunchRoot(LaunchSelection, LaunchRequest):
         else:
             root = published()
         root.install()
-        started()
         return root
 
     @classmethod

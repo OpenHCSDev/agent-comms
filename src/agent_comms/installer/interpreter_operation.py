@@ -26,6 +26,7 @@ from agent_comms.child_process import Platform
 from agent_comms.native_build_inputs import GitLaunch
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.installer.runtime_wire import CrossesRuntimes
+from agent_comms.launch_root import started
 from agent_comms.nominal.field_codec import FieldCodec, JsonValue
 from agent_comms.storage.maintenance_barrier import HOLDER_NONCE
 from agent_comms.storage.store_files import BorrowedStoreLock
@@ -508,6 +509,7 @@ def serve() -> None:
           open(os.devnull) as empty_input):
         os.dup2(empty_input.fileno(), sys.stdin.fileno())
         os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
+        started()
         for line in requests:
             print(
                 FieldCodec.compact(

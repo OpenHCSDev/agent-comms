@@ -24,7 +24,7 @@ from .coordination.errors import IdentityConflict
 from .nominal.field_codec import (
     InputId,
 )
-from .launch_root import LaunchRoot
+from .launch_root import LaunchRoot, started
 from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
 from .native_arguments import NativeArguments, SelectedModel
 from .native_failures import NativePiUnavailable, NativeRequestFailure
@@ -116,6 +116,7 @@ class NativePiOperationFailed(NativePiUnavailable):
 def main() -> int:
     """Run the active route's pinned Pi for ordinary ACP owner sessions."""
     root = LaunchRoot.startup(sys.argv, ActiveRoute.published_launch)
+    started()
     package = resolve_comms_route(root.path).launch().require_private().validate()
     environment = dict(os.environ)
     argv, environment = NativePiRpcLaunch.bootstrap(

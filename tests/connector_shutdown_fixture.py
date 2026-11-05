@@ -11,7 +11,7 @@ from agent_comms.comms import Comms
 from agent_comms.connector import ServeVerb
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.nominal.field_codec import PathText
-from agent_comms.launch_root import LaunchRoot
+from agent_comms.launch_root import LaunchRoot, started
 from agent_comms.tool_caller import ToolCaller
 from agent_comms.tool_request import ReadTool, ToolRequest
 from agent_comms.tool_result import ToolResult
@@ -62,5 +62,6 @@ class ShutdownWriteTool(HeldCall, ToolRequest):
 
 if __name__ == "__main__":
     root, auth, port = sys.argv[1:]
+    started()  # This file is the process entry, as connector.main is for the real one.
     with LaunchRoot.from_path(Path(root)).selected():
         raise SystemExit(ServeVerb(root=Path(root), port=int(port)).apply(ConnectorStore.at(Path(auth))))

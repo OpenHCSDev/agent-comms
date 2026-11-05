@@ -8,7 +8,7 @@ from pathlib import Path
 import agent_comms.team as package
 from agent_comms.active_route import ActiveRoute, resolve_comms_route
 from agent_comms.cli_failures import CLI_FAILURES
-from agent_comms.launch_root import LaunchRoot
+from agent_comms.launch_root import LaunchRoot, started
 from agent_comms.team.order import Team
 
 def tool_name(module: str) -> str:
@@ -39,6 +39,7 @@ def main() -> None:
         # Every comms process selects its root once at startup, as the comms CLI does.
         root = LaunchRoot.startup(argv, lambda: (LaunchRoot.from_path(options.root) if options.root
                                                  else ActiveRoute.published_launch()))
+        started()
         context = Team.read_root(resolve_comms_route(root.path).root)
         tools[argv[0]].main(argv[1:], context)
     except CLI_FAILURES as refused:

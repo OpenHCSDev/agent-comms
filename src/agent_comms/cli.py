@@ -19,7 +19,7 @@ from typing import TextIO
 from agent_comms.active_route import resolve_comms_route
 from agent_comms.cli_failures import CLI_FAILURES
 from agent_comms.cli_protocol import CoreError
-from agent_comms.launch_root import LaunchRoot
+from agent_comms.launch_root import LaunchRoot, started
 
 
 def _fail(error: BaseException, output: TextIO) -> int:
@@ -72,6 +72,7 @@ class CliInvocation:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    started()
     try:
         arguments = argv if isinstance(argv, Sequence) else sys.argv[1:]
         return CliInvocation().invoke(arguments, sys.stdout)
