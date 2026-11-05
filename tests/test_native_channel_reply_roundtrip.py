@@ -435,7 +435,12 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                 claim = store.assignments.get(rejected[0].assignment_id)
                 assert type(claim.lifecycle) is FailedAssignment
                 rejected_input = rejected[0].input_id
-            assert "invalid triage decision" in read_history(comms, "#team")[-1].body
+            body = read_history(comms, "#team")[-1].body
+            assert "invalid triage decision" in body
+            # The terminal names what actually arrived and what is accepted, so the reader
+            # can send a valid decision instead of reading the session file to find out.
+            assert "Received: 'IGNORE'" in body
+            assert "IGNORE" in body and "FULL" in body
             fresh = comms.messaging.send("answerer", "#team", "CONTINUITY_FRESH_SOURCE").message
             await until(lambda: len(requests) == 3, "Fresh channel source authorized without retrying rejected input")
             await until(
