@@ -41,6 +41,7 @@ from .errors import RelationViolationError
 from .harness_delivery_states import EmittedOutcome, PrintLedgerId, TakingLedger, UnconfirmedOutcome
 from .message_reference import MessageReference
 from .messages import Message
+from .package_stamp import STAMP
 from .nominal.field_codec import FieldCodec, ThreadLookup
 from .runtime_updates import RuntimeUpdate
 from .tool_result import ToolResult
@@ -166,6 +167,25 @@ class PushedTranscript(ReceivesWatchReports, TranscriptConfirmsDelivery, ClaudeJ
 
 
 @dataclass(frozen=True)
+class TranscriptStopped:
+    """What #comms is told when a session's transcript stops reaching the bus."""
+
+    thread: str
+    failures: BaseExceptionGroup
+    host_commit: str
+
+    def text(self) -> str:
+        # A decoder's first line lists its whole union, so what went wrong is at the end.
+        causes = "; ".join(f"{type(failure).__name__}: {str(failure)[-400:]}"
+                           for failure in self.failures.exceptions)
+        # A watch run from a newer commit sends frames this host has never declared;
+        # naming the host's build is what tells that apart from a broken frame.
+        return (f"{self.thread}'s work stopped reaching the bus, though its push still works: "
+                f"{causes}. This host runs {self.host_commit[:12]}; if this watch runs from a "
+                f"newer commit, run it from {self.host_commit[:12]}.")
+
+
+@dataclass(frozen=True)
 class InboxWatch:
     """One open socket: the thread's bridge while it stays open."""
 
@@ -279,17 +299,14 @@ class InboxWatch:
     ) -> None:
         """Publish what the session sends. A failure there must not cost it its push, so it is
         said on the bus and the socket keeps being read."""
+        # Read before the transcript runs, so a failing read cannot cost the report below.
+        host_commit = await asyncio.to_thread(STAMP.commit)
         with self.wire() as comms:
             try:
                 await PushedTranscript(comms, self.thread, socket, reported).publish_transcript()
             except* Exception as failures:
                 logging.exception("Transcript from %s stopped", self.thread)
-                # A decoder's first line lists its whole union, so what went wrong is at the end.
-                causes = "; ".join(f"{type(failure).__name__}: {str(failure)[-400:]}"
-                                   for failure in failures.exceptions)
-                comms.messaging.send(self.thread, "#comms", (
-                    f"{self.thread}'s work stopped reaching the bus, though its push still works: "
-                    f"{causes}"))
+                comms.messaging.send(self.thread, "#comms", TranscriptStopped(self.thread, failures, host_commit).text())
         async for _ in socket:
             pass
 
