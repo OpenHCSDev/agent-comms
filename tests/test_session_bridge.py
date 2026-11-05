@@ -16,6 +16,7 @@ from agent_comms.cli_bridges.session_watch import (
 )
 from agent_comms.cli_bridges.shared import BridgeLog
 from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.storage.private_path import PrivateSocketRole
 
 
 def test_bridge_log_timestamps_each_line_including_fragmented_writes_and_tracebacks():
@@ -52,7 +53,8 @@ async def test_monitor_startup_eof_is_loud_before_reply_or_probe(
             writer.close()
             await writer.wait_closed()
 
-    server = await asyncio.start_unix_server(close_at_startup, str(endpoint))
+    with PrivateSocketRole.address(endpoint) as address:
+        server = await asyncio.start_unix_server(close_at_startup, path=address)
     async with server:
         with pytest.raises(SessionConnectionClosed):
             await anext(AttachMonitor().lines(endpoint))

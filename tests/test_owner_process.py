@@ -18,6 +18,7 @@ from pathlib import Path
 
 import pytest
 
+import agent_comms_hooks
 from agent_comms import native_package
 from agent_comms.turn_failure import FailedTurnResolution
 from agent_comms.child_process import NoProcess, ObservedProcess, SpawnedProcess
@@ -110,6 +111,7 @@ async def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path,
             ObservedProcess(current.process_identity).stop_sync()
 
 
+@pytest.mark.timeout(180)
 @pytest.mark.parametrize("owner_count", (3, 29))
 async def test_team_memory_stays_under_its_cap(tmp_path, native_workers, owner_count):
     from acp.schema import TextContentBlock
@@ -133,10 +135,12 @@ async def test_team_memory_stays_under_its_cap(tmp_path, native_workers, owner_c
         ))
         measurements.append(result)
         return result
+    declared = []
     try:
         for name in names:
             comms.registry.declare(NativeThread(name, frozenset(), Checkout(tmp_path),
                                           model=DeclaredModel("response-local/fixture")))
+            declared.append(name)
             await Coordination.run_worker(partial(
                 comms.owners.start_many, (name,),
                 agent_bin=GivenBinary(str(Path(sys.executable).with_name("pi-comms-native").resolve())),
@@ -214,7 +218,8 @@ async def test_team_memory_stays_under_its_cap(tmp_path, native_workers, owner_c
         assert all(comms.registry.require(name).process_identity == NoProcess() for name in names)
     finally:
         await client.shutdown()
-        await Coordination.run_worker(partial(comms.owners.stop, *names))
+        # Only what the loop reached: stopping an undeclared name would mask its failure.
+        await Coordination.run_worker(partial(comms.owners.stop, *declared))
 
 
 def test_stale_stored_birth_does_not_signal_real_process(tmp_path: Path) -> None:
@@ -235,16 +240,18 @@ def test_stale_stored_birth_does_not_signal_real_process(tmp_path: Path) -> None
 
 
 def test_failed_real_worker_startup_retains_private_trace(tmp_path: Path, monkeypatch) -> None:
-    """The production detached launch retains a failure before socket creation.
+    """The production detached launch retains a failure before serving, and no socket survives it.
 
     The owner is started from a checkout copy with no prepared native package, so the
     worker's launch fails for the real reason whether or not this checkout is prepared.
     """
     checkout = tmp_path / "unprepared"
-    package = Path(native_package.__file__).parent
-    # A clean checkout holds neither bytecode nor the untracked node_modules install.
-    shutil.copytree(package, checkout / "src" / package.name,
-                    ignore=shutil.ignore_patterns("__pycache__", "node_modules"))
+    # A clean checkout holds both source packages, and neither bytecode nor the untracked
+    # node_modules install. Copying one lets the other import from whatever is installed.
+    for module in (native_package, agent_comms_hooks):
+        package = Path(module.__file__).parent
+        shutil.copytree(package, checkout / "src" / package.name,
+                        ignore=shutil.ignore_patterns("__pycache__", "node_modules"))
     (checkout / "stack").mkdir()
     shutil.copy2(native_package.MANIFEST, checkout / "stack" / native_package.MANIFEST.name)
     # A source checkout stamps its build from its own repository's HEAD.

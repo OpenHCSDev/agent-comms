@@ -37,6 +37,7 @@ from agent_comms.cli_bridges.monitor import (
     ClaimedReplacement, InspectSession, PauseSession, SessionInformation,
 )
 from agent_comms.cli_bridges import claude
+from agent_comms.cli_bridges.claude_protocol import ClaudeMonitorFrame
 from agent_comms.cli_bridges.shared import (
     MONITOR_FRAME, Binding, MonitorBridgeStopped, MonitorBridgeSwapping, MonitorProbe, Serve, SessionBridge, SessionBridgeResumes,
     ReleasedSessionBridge, UnacknowledgedPause, UnobservedBridge,
@@ -208,8 +209,10 @@ def confirm(transcript, line, record):
 
 
 def relayed(child):
-    """A delivered message reaches the Monitor as its own text line, not a protocol frame."""
+    """A delivered message reaches the Monitor as text, not a protocol frame: its sender's
+    header line, then the one-line body these tests send."""
     assert select.select((child.stdout,), (), (), 15)[0], 'Monitor wrote nothing'
+    assert child.stdout.readline().decode().startswith(ClaudeMonitorFrame.HEADER_PREFIX)
     return child.stdout.readline().decode()
 
 
