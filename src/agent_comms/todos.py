@@ -7093,9 +7093,8 @@ class EditWorkplaces:
         parts = (original.relative_to(self.rule.checkout_base).parts
                  if original.is_relative_to(self.rule.checkout_base) else ())
         boundary = self.rule.checkout_base.joinpath(*parts[:1])
-        reserved = boundary in self.allocated or any(allocation.reserves_boundary()
-                       for thread in self.allocating(boundary)
-                       for allocation in CheckoutAllocation.for_path(self.rule, thread, boundary))
+        reserved = boundary in self.allocated or CheckoutAllocation.path_reserves_boundary(
+            self.rule, self.allocating(boundary), boundary)
         # Even a missing/released/unknown allocation reserves its lexical boundary. Only
         # captured actual Git identity may supply an owner; absence never enables spill.
         candidates = ({boundary: self.allocated.get(boundary, frozenset())}
