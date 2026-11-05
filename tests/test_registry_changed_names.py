@@ -42,3 +42,45 @@ def test_an_unchanged_registry_names_nothing(tmp_path: Path) -> None:
 def test_a_reader_that_read_no_cut_rereads_every_thread(tmp_path: Path) -> None:
     snapshot = registry_with_a_fork(tmp_path).snapshot()
     assert UnreadRegistry().changed_names_to(snapshot) >= {"alpha", "beta", "alpha-fork"}
+
+
+def test_a_slice_holds_what_the_named_presentation_reads(tmp_path: Path) -> None:
+    """A remote UI opening a fork reads its row and its parent's, never the other threads'."""
+    snapshot = registry_with_a_fork(tmp_path).snapshot()
+
+    cut = snapshot.only(("alpha-fork",))
+
+    assert set(cut.threads) == {"alpha-fork", "alpha"}
+    assert "beta" not in cut and "beta" not in cut.statuses
+    assert cut.require("alpha-fork").incarnation == snapshot.require("alpha-fork").incarnation
+    assert cut.status("alpha") == snapshot.status("alpha")
+    assert cut.team_project == snapshot.team_project
+
+
+def test_a_name_outside_the_slice_says_so(tmp_path: Path) -> None:
+    import pytest
+    from agent_comms.errors import OutsideRegistrySlice, UnregisteredThreadError
+
+    cut = registry_with_a_fork(tmp_path).snapshot().only(("alpha",))
+    with pytest.raises(OutsideRegistrySlice, match="not in this registry slice") as refused:
+        cut.require("beta")
+    # beta is registered; a handler for gone threads must not read this as one.
+    assert not isinstance(refused.value, UnregisteredThreadError)
+
+
+def test_a_name_asked_for_but_never_registered_is_unregistered(tmp_path: Path) -> None:
+    import pytest
+    from agent_comms.errors import OutsideRegistrySlice, UnregisteredThreadError
+
+    cut = registry_with_a_fork(tmp_path).snapshot().only(("alpha", "nobody"))
+    with pytest.raises(UnregisteredThreadError, match="is not registered") as refused:
+        cut.require("nobody")
+    assert not isinstance(refused.value, OutsideRegistrySlice)
+
+
+def test_a_slice_of_a_slice_keeps_what_both_asked_for(tmp_path: Path) -> None:
+    """Slicing a slice again narrows it; its own ``asked`` is not passed twice."""
+    snapshot = registry_with_a_fork(tmp_path).snapshot()
+    narrower = snapshot.only(("alpha-fork", "beta")).only(("alpha-fork",))
+    assert set(narrower.threads) == {"alpha-fork", "alpha"}
+    assert narrower.asked == frozenset({"alpha-fork"})

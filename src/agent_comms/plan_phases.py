@@ -72,18 +72,20 @@ class OrderPhase(DeclaredFamily, affix="Phase"):
     """What an order serves: one plan phase, or nothing in any plan."""
 
     @classmethod
-    def order_refusals(cls, read_plan: Callable[[], PlanReading], reason: str) -> tuple[str, ...]:
+    def order_refusals(cls, read_ready: Callable[[], tuple[type[PlanPhase], ...]],
+                       reason: str) -> tuple[str, ...]:
         return ()
 
 
 class UnplannedPhase(OrderPhase):
     @classmethod
-    def order_refusals(cls, read_plan: Callable[[], PlanReading], reason: str) -> tuple[str, ...]:
-        """Acquire plan evidence only when the stated reason does not answer the refusal."""
+    def order_refusals(cls, read_ready: Callable[[], tuple[type[PlanPhase], ...]],
+                       reason: str) -> tuple[str, ...]:
+        """Read the heartbeat's ready phases only when the stated reason does not answer the
+        refusal."""
         if len(reason.split()) >= 8:
             return ()
-        reading = read_plan()
-        ready = tuple(phase for phase in PlanPhase.members_with(PlanPhase) if phase.ready(reading))
+        ready = read_ready()
         if ready:
             return (
                 "Plan phases are ready: "

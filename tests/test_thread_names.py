@@ -224,3 +224,23 @@ def test_a_ui_lists_historical_identities_through_core(tmp_path):
     for senders in (AllHistoricalSenders(), NamedHistoricalSender("alice")):
         read = LocalCoreAccess(comms).call(CommsHistoricalThreadsTool(senders=senders))
         assert FieldCodec.decode(HistoricalThreadsRead, FieldCodec.encode(read)) == read
+
+
+def test_a_ui_reads_a_renamed_thread_from_a_registry_slice(tmp_path):
+    """The slice a remote UI reads answers under the old name and carries no other thread."""
+    from agent_comms.core_access import LocalCoreAccess
+    from agent_comms.nominal.field_codec import FieldCodec
+    from agent_comms.registry_document import RegistrySlice
+    from agent_comms.tools import CommsRegistrySliceTool
+
+    comms = wire(tmp_path / "wire")
+    _declare(comms, "worker", str(tmp_path))
+    _declare(comms, "bystander", str(tmp_path))
+    comms.registry.rename("worker", "renamed")
+    request = CommsRegistrySliceTool(threads=("worker",))
+    answer = LocalCoreAccess(comms).call(FieldCodec.decode(CommsRegistrySliceTool, FieldCodec.encode(request)))
+    cut = FieldCodec.decode(RegistrySlice, FieldCodec.encode(answer))
+
+    assert cut.canonical_name("worker") == "renamed"
+    assert cut.require("worker").incarnation == comms.registry.snapshot().require("renamed").incarnation
+    assert "bystander" not in cut
