@@ -66,7 +66,7 @@ def test_team_verb_answers_under_five_seconds(
     copied_root = tmp_path / "copied-bus"
     StoreBackup.copy_tree(comms.root, copied_root)
     copied = wire(copied_root)
-    assert len(copied.registry.snapshot().threads) == 502
+    assert set(copied.registry.snapshot().threads) == {*names, "colleague"}
     assert copied.bus.bus.revision() == 20000
     body = tmp_path / "reply.txt"
     body.write_text("The measurement is recorded.\n")
@@ -74,7 +74,7 @@ def test_team_verb_answers_under_five_seconds(
     started = time.monotonic()
     result = subprocess.run(
         (sys.executable, "-c", "from agent_comms.team.cli import main; main()",
-         "--root", str(copied_root), "order", "say", names[0], str(body)),
+         "--root", str(copied_root), "order", "say", names[0], str(body), "--as", "colleague"),
         cwd=checkout, env={**os.environ, "PYTHONPATH": str(checkout / "src")},
         capture_output=True, text=True, timeout=30,
     )
