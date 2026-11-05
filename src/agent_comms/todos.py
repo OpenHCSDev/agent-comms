@@ -124,7 +124,9 @@ from agent_comms.recorded_time import (
     UnrecordedEventTime,
 )
 from agent_comms.registry_store import RegistryStore
-from agent_comms.repo import Checkout, FailedGitCommand, GitCommandError, Repo, RepositoryReads
+from agent_comms.repo import (
+    Checkout, FailedGitCommand, GitCommandError, Repo, RepositoryReads, SourceReadFailure,
+)
 from agent_comms.repository_name import RepositoryName
 from agent_comms.slop import DeclarationDerivation, Slop
 from agent_comms.storage_rules import CheckoutAllocation, StorageRule
@@ -170,7 +172,7 @@ from agent_comms.change_report import CitationProject, FetchedRevision, OrderRoo
 from agent_comms.registry_document import TeamProject
 
 # What reading one source checkout or its listing can raise: one source's failure is data.
-SOURCE_READ_FAILURES = (OSError, GitCommandError, WorkBranchError, TimeoutExpired)
+SOURCE_READ_FAILURES = (OSError, SourceReadFailure, TimeoutExpired)
 
 if TYPE_CHECKING:
     from agent_comms.held_orders import LiveHold
@@ -4589,7 +4591,7 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
             reader.prepare_pull_request(current.base, current.head)
             reviewed_change = record.request.change_identity(reader, current.base)
             current_change = current.change_identity(reader, current.base)
-        except (GitCommandError, WorkBranchError, subprocess.TimeoutExpired):
+        except (SourceReadFailure, TimeoutExpired):
             return False
         if reviewed_change != current_change:
             return False

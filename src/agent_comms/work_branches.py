@@ -26,7 +26,7 @@ from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import GitCommitText, PathText, projected
 from .repo import (
     BranchUpstream, Checkout, CheckoutHistory, DetachedHead, GitCommandError, GitHead,
-    Repo, RepositoryReads, UnpushedHead,
+    Repo, RepositoryReads, SourceReadFailure, UnpushedHead,
 )
 from .repository_name import RepositoryName
 from .wire_models import WireModel
@@ -36,7 +36,7 @@ if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
 
 
-class WorkBranchError(ValueError):
+class WorkBranchError(ValueError, SourceReadFailure):
     """The checkout or the forge could not answer."""
 
 
