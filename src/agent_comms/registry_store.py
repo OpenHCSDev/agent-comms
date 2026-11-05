@@ -39,7 +39,7 @@ from .thread_identity import TurnIdentity
 from .threads import Thread
 from .turn_lease import (
     ActiveTurn, LockedTurn, NamedTurn, RecordedGeneration, RetiredTurn, StoredTurnRecord,
-    TurnDeclaration,
+    TurnDeclaration, TurnRecord,
 )
 
 
@@ -518,16 +518,23 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
             write()
 
     def retire_processes(self) -> None:
-        """A copied registry's processes belong to the root it was copied from, never to the copy.
-        An install copies the registry before its carries run, so the copy can hold a form the
-        current decoder refuses: this edits the stored rows, whose process key every form shares."""
+        """A copied registry's turns and processes belong to the root it was copied from, never to
+        the copy. An install copies the registry before its carries run, so the copy can hold a
+        form the current decoder refuses: this edits the stored rows' process and turn keys only,
+        and writes nothing when no row changes, so an idle copy keeps the source's bytes and guard."""
         threads = FieldCodec.record_key(RegistryDocument, "threads")
         process = FieldCodec.record_key(Thread, "process_identity")
+        turn = FieldCodec.record_key(Thread, "turn_record")
         with self.guarded_write():
-            document = json.loads(self.path.read_text(encoding="utf-8"))
+            stored = self.path.read_text(encoding="utf-8")
+            document = json.loads(stored)
             for row in document[threads].values():
                 row[process] = FieldCodec.encode(NoProcess())
-            self._write_unlocked(json.dumps(document, indent=2))
+                # An absent key is the field's default, NoTurnRecord, which has no turn to release.
+                if turn in row:
+                    row[turn] = FieldCodec.encode(FieldCodec.decode(TurnRecord, row[turn]).released())
+            if document != json.loads(stored):
+                self._write_unlocked(json.dumps(document, indent=2))
 
     def mark_historical(self) -> None:
         """Explicit archive creation/carry seals this declaration, idempotently."""
