@@ -4,7 +4,7 @@ import sqlite3
 import pytest
 
 from agent_comms_hooks import ToolRefusedError
-from agent_comms.native_tool_call import CodingCall
+from agent_comms.native_tool_call import AwaitingClaim, CodingCall, ExecutingCall
 from agent_comms.channel_coding_tools import CodingToolSocket
 from agent_comms.coordinator import Coordination
 from agent_comms.coordination_database import CoordinationStore
@@ -28,6 +28,29 @@ def test_edit_of_a_missing_file_inside_the_project_says_it_does_not_exist(tmp_pa
     with pytest.raises(ToolRefusedError) as refused:
         edit.allowed_claim().normalized(project)
     assert reply(refused.value) == f"File does not exist: {project / 'absent.py'}"
+
+
+def test_a_terminal_before_any_claim_records_the_refusal_instead_of_failing_the_turn(tmp_path):
+    """A call the harness refused never reaches consume, so it owes no terminal.
+
+    AwaitingClaim.consume moves the claim to UncertainClaim before awaiting the action,
+    so a claim still awaiting at terminal proves the action never started. Raising there
+    turned a refused call into a failed turn under a message naming the wrong cause.
+    """
+    def pending():
+        return CodingCall.decode(
+            "call", "edit", {"path": "owner.py", "edits": [{"oldText": "1", "newText": "2"}]}
+        )
+
+    refused = pending()
+    assert isinstance(refused.progress.claim_scope, AwaitingClaim)
+    refused.progress.observation = ExecutingCall()
+    refused.finish("edit", True, tmp_path / "coordination.sqlite3", InputId.mint(), 0)
+
+    succeeded = pending()
+    succeeded.progress.observation = ExecutingCall()
+    with pytest.raises(SelectedToolDenied, match="succeeded without owner claim_scope"):
+        succeeded.finish("edit", False, tmp_path / "coordination.sqlite3", InputId.mint(), 0)
 
 
 def test_busy_coordination_database_is_reported_as_busy(tmp_path, private_comms):
