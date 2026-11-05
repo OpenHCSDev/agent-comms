@@ -260,8 +260,16 @@ class CurrentTargets(Mapping[str, DisplayReference]):
         return len(self.members) + len(set(self.channels) - self.members.keys())
 
 
+class ThreadNames(ABC):
+    """What resolves a thread's exact birth to the name it currently goes by."""
+
+    @abstractmethod
+    def thread(self, incarnation: ThreadIncarnation) -> ThreadDisplayReference:
+        """The incarnation's current name, or this source's refusal to say."""
+
+
 @dataclass(frozen=True)
-class CurrentDisplayReferences(SnapshotRestored, DisplayReferences):
+class CurrentDisplayReferences(SnapshotRestored, DisplayReferences, ThreadNames):
     """Current targets keep each member's current incarnation by name, read once from the
     registry cut, never the cut itself: every rendered line, link and draft holds its
     reference set, and a held cut pins every thread's whole registry record.

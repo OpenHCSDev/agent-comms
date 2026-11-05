@@ -26,6 +26,8 @@ from agent_comms.ui_model.unread import UnreadPresentation, UnobservedUnread
 
 from ..display_references import (
     PendingReferences,
+    ThreadDisplayReference,
+    ThreadNames,
     UnavailableReferences,
 )
 
@@ -127,8 +129,22 @@ class SidebarObservation(ABC):
     def unavailable(self) -> NoReturn:
         raise RuntimeError("Sidebar source has not been observed")
 
+    def thread_names(self) -> ThreadNames:
+        """Names only a read answers; a destination that needs none never asks."""
+        return UnobservedThreadNames(self)
+
     @abstractmethod
     def references_for(self, root): ...
+
+
+@dataclass(frozen=True)
+class UnobservedThreadNames(ThreadNames):
+    """Before the sidebar is read, a thread's current name is this observation's refusal."""
+
+    observation: SidebarObservation
+
+    def thread(self, incarnation: ThreadIncarnation) -> ThreadDisplayReference:
+        self.observation.unavailable()
 
 
 @dataclass(frozen=True)
@@ -166,6 +182,9 @@ class ObservedSidebar(SidebarObservation):
 
     def require_snapshot(self) -> CoordinationSnapshot:
         return self.snapshot
+
+    def thread_names(self) -> ThreadNames:
+        return self.snapshot.references
 
     def channel_order(self) -> type[ChannelSort]:
         return self.snapshot.channel_order

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from agent_comms.cli_command import CliCommand
+from agent_comms.cli_command import TargetActionCommand
 from agent_comms.cli_commands import NameArgument
 from agent_comms.cli_commands import ThreadCreatedResult
 from agent_comms.cli_commands import _tag_choice_text
@@ -31,7 +31,8 @@ import asyncio
 
 
 @dataclass(frozen=True, kw_only=True)
-class NewThreadCliCommand(NameArgument, CatalogSelection, CliCommand, declared_name="new"):
+class NewThreadCliCommand(NameArgument, CatalogSelection, TargetActionCommand[ThreadCreatedResult],
+                          declared_name="new"):
     help = "Create a new pi thread"
     spec_type: ClassVar[type[NewThreadSpec]] = NewThreadSpec
     task: Annotated[
