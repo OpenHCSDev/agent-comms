@@ -104,7 +104,15 @@ class LaunchRoot(LaunchSelection, LaunchRequest):
 
     @classmethod
     def startup(cls, arguments: list[str], published: Callable[[], LaunchRoot]) -> LaunchRoot:
-        if cls.argument in arguments:
+        """Select this process's root from its own arguments, never from a child's.
+
+        A `--` ends this process's options: everything after it is a command this
+        process will run, so its `--comms-root` names that child's root. Reading it
+        here selected the child's root for this process, which then failed with an
+        unrelated thread-registration error instead of naming the real mistake.
+        """
+        own = arguments[:arguments.index("--")] if "--" in arguments else arguments
+        if cls.argument in own:
             index = arguments.index(cls.argument)
             if index + 1 == len(arguments):
                 raise ValueError(f"{cls.argument} requires a root")
