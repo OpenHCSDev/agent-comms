@@ -7,7 +7,8 @@ the durable cursor. Every observation reads the cursor owner's original proof.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
+from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from functools import partial
@@ -23,7 +24,7 @@ from .acp_extension import (
     encode_updates,
 )
 from .comms import Comms
-from .coordination.errors import ContendedRead, DeferredRead
+from .coordination.errors import DeferredRead
 from .coordination.coordinator import Coordination
 from .cursor_owner import CommittedCursorOwner, CursorOwner, CursorState
 from .publication_measurements import PublicationMeasurements
@@ -35,6 +36,41 @@ from .runtime_server import RuntimeServer
 
 if TYPE_CHECKING:
     from .selected_participant import SelectedParticipant
+
+
+class CursorRetry(ABC):
+    """Whether a deferred cursor read has its own retry in flight."""
+
+    @abstractmethod
+    def armed(self, start: Callable[[], asyncio.Task[None]]) -> CursorRetry: ...
+
+    @abstractmethod
+    def consumed(self) -> CursorRetry: ...
+
+
+class NoCursorRetry(CursorRetry):
+    def armed(self, start: Callable[[], asyncio.Task[None]]) -> CursorRetry:
+        return PendingCursorRetry(start())
+
+    def consumed(self) -> CursorRetry:
+        return self
+
+
+@dataclass(frozen=True)
+class PendingCursorRetry(CursorRetry):
+    task: asyncio.Task[None]
+
+    def armed(self, start: Callable[[], asyncio.Task[None]]) -> CursorRetry:
+        # A live retry already covers this deferral; a finished one, or the retry
+        # deferring again from inside itself, starts the next bounded read.
+        if self.task.done() or self.task is asyncio.current_task():
+            return PendingCursorRetry(start())
+        return self
+
+    def consumed(self) -> CursorRetry:
+        if self.task is not asyncio.current_task():
+            self.task.cancel()
+        return NoCursorRetry()
 
 
 @dataclass
@@ -57,7 +93,7 @@ class CursorDelivery:
     # A contended read owns one retry: nothing else announces a writer that
     # changed no rows. ContendedRead already spent the store's whole wait, so
     # each retry is one bounded read; other deferrals keep their own path.
-    retry: asyncio.Task[None] | None = field(default=None, repr=False)
+    retry: CursorRetry = field(default_factory=lambda: NoCursorRetry(), repr=False)
 
     @asynccontextmanager
     async def reading(self) -> AsyncIterator[NativeEvidenceScope]:
@@ -80,21 +116,8 @@ class CursorDelivery:
             )
             return await owner.advance_async(participant.bus, source_reads=source_reads)
 
-    def owes_retry(self) -> bool:
-        return self.retry is None or self.retry.done() or self.retry is asyncio.current_task()
-
-    def deferred(self, selected_status: str | None) -> None:
-        # A settled status was a one-shot fact; the next publication reads afresh.
-        if selected_status is not None:
-            self.published = None
-
-    def consume_retry(self) -> None:
-        retry, self.retry = self.retry, None
-        if retry is not None and retry is not asyncio.current_task():
-            retry.cancel()
-
     def close(self) -> None:
-        self.consume_retry()
+        self.retry = self.retry.consumed()
         self.source_reads.close()
 
     def next_revision(self) -> int:
@@ -198,19 +221,16 @@ class CursorPublication:
             observed = await self.observe(
                 thread_name, session_id, defer_busy=True, advance=advance
             )
-        except ContendedRead:
+        except DeferredRead as deferred:
             # Busy observation is not a new fact. A settled native operation
             # requires another read when the lock clears, without input replay.
-            delivery.deferred(selected_status)
-            if delivery.owes_retry():
-                delivery.retry = self.runtime.background(
-                    self.publish(session_id, thread_name, advance=advance)
-                )
+            if selected_status is not None:
+                delivery.published = None
+            delivery.retry = deferred.retried(delivery.retry, lambda: delivery.retry.armed(
+                lambda: self.runtime.background(
+                    self.publish(session_id, thread_name, advance=advance))))
             return
-        except DeferredRead:
-            delivery.deferred(selected_status)
-            return
-        delivery.consume_retry()
+        delivery.retry = delivery.retry.consumed()
         delivery.advanced = advance
         if selected_status is None and delivery.already_published(observed):
             return
