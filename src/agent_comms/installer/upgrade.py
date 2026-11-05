@@ -810,7 +810,9 @@ def upgrade(command: InstallRequest, root: Path, target: str, scratch: Path,
     ):
         with PreparePhase().running(commands.clock):
             StoreBackup.complete_interrupted(
-                root, command.spill_dir, Stack(command.checkout, commands).restore_stores)
+                root, command.spill_dir,
+                # restore_stores runs in the root's recorded runtime, never this stack's.
+                Stack(command.checkout, commands, runtime=runtime).restore_stores)
             current = commands.git(command.checkout, "rev-parse", "HEAD").strip()
             with commands.timing(GitPhase(
                 command.checkout, ("merge-base", "--is-ancestor", current, target),
@@ -826,9 +828,10 @@ def upgrade(command: InstallRequest, root: Path, target: str, scratch: Path,
             except ValueError as error:
                 raise UpgradeRefused(str(error)) from None
             member = Install.member(root, command.retire)
+            pointed = LaunchRuntime.at_prefix(LaunchRuntime.current_pointer()).interpreter
+            if not pointed.exists():
+                raise UpgradeRefused(f"No installed stack at {pointed}")
             installed = Stack(tree.path, commands)
-            if not installed.python.exists():
-                raise UpgradeRefused(f"No installed stack at {installed.python}")
             installed.require_runtime_wire()
             installed.require_uv()
         staged = TargetStack(tree.path, commands, runtime=runtime,
