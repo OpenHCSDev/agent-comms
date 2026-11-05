@@ -70,7 +70,7 @@ async def test_trusted_load_recovers_after_real_sql_contention(tmp_path, private
         await asyncio.gather(*drains, return_exceptions=True)
 
     try:
-        await agent.inputs.drain_inbox(owner.name)
+        await agent.inputs.drain_inbox(AcpSessionId(owner.name))
         before = await receive()
         assert before.observation.status == "none"
         # Drain initial queue/cursor publications before observing idle effects.
@@ -111,10 +111,10 @@ async def test_trusted_load_recovers_after_real_sql_contention(tmp_path, private
         assert recovered.scope == loaded.scope
         assert recovered.revision > loaded.revision
         await cancel_drains()
-        await agent.inputs.drain_inbox(owner.name)
+        await agent.inputs.drain_inbox(AcpSessionId(owner.name))
         settled_revision = agent.cursors.delivery(owner.name).revision
         for _ in range(20):
-            await agent.inputs.drain_inbox(owner.name)
+            await agent.inputs.drain_inbox(AcpSessionId(owner.name))
         assert agent.cursors.delivery(owner.name).revision == settled_revision
         assert read_history(comms) == []  # No input submitted or replayed.
     finally:

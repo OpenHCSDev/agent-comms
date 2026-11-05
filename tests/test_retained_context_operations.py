@@ -173,7 +173,7 @@ async def original_input_consumer_journey(tmp_path, command):
     pins = []
     for row in (originals[0], originals[0], originals[1]):
         code, result = invoke("pin-input-constraint", "beta", "--source", str(row.key),
-                              "--worktree", origin.project)
+                              "--worktree", str(origin.project))
         assert code == 0
         pinned = FieldCodec.decode(ConstraintPinnedResult, result)
         assert pinned.source == row.context_provenance()
@@ -202,7 +202,7 @@ async def original_input_consumer_journey(tmp_path, command):
     for recipient, key in ((other.name, originals[0].key), ("beta", "absent"),
                            ("beta", "neutral-original")):
         code, _ = invoke("pin-input-constraint", recipient, "--source", str(key),
-                         "--worktree", origin.project)
+                         "--worktree", str(origin.project))
         assert code == 1
         assert read_history(comms) == before_refusal
 
@@ -219,7 +219,7 @@ async def original_input_consumer_journey(tmp_path, command):
     assert code == 0 and result["exported_messages"] == 2
     replacement = "Keep only the human's corrected original instruction."
     code, _ = renamed("supersede-constraint", "renamed-beta", "--source", pins[1],
-                      "--body", replacement, "--worktree", origin.project)
+                      "--body", replacement, "--worktree", str(origin.project))
     assert code == 0
     code, result = renamed("export-retained", "renamed-beta", "--output", str(destination),
                            "--overwrite")
@@ -227,7 +227,7 @@ async def original_input_consumer_journey(tmp_path, command):
     assert destination.read_text().count(wording) == 1
     assert replacement in destination.read_text()
     code, _ = renamed("drop-constraint", "renamed-beta", "--source", pins[2],
-                      "--worktree", origin.project)
+                      "--worktree", str(origin.project))
     assert code == 0
     code, result = renamed("export-retained", "renamed-beta", "--output", str(destination),
                            "--overwrite")
