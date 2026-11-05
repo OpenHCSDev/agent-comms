@@ -14,6 +14,15 @@ from .errors import RelationViolationError
 from .nominal.field_codec import FieldCodec, PathText
 
 
+def started() -> None:
+    """A process has imported its program and is about to work: that heap lives as long as the
+    process, so freeze it. Collection never rescans it and exit skips finalizing it, which cost
+    1.3-1.5 s per connector stop and 0.57 s per agent-comms-team call. Call once per process:
+    freezing mid-run would pin per-request garbage, which is why LaunchSelection.install, also
+    run on every .selected(), never does."""
+    gc.freeze()
+
+
 class LaunchSelection(ABC):
     """The current selection owns its scoped installation and root requirement."""
 
@@ -95,9 +104,7 @@ class LaunchRoot(LaunchSelection, LaunchRequest):
         else:
             root = published()
         root.install()
-        # Startup runs once per process, after its program is imported: that heap lives as long
-        # as the process, so freezing it lets exit skip finalizing it (0.57 s per team CLI call).
-        gc.freeze()
+        started()
         return root
 
     @classmethod
