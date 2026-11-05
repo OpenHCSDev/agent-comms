@@ -4,6 +4,7 @@
 
 from agent_comms.repo import Checkout
 from bus_history import read_history
+from delivery_owner_fixture import qualified_owner_launch, start_headless_owner  # noqa: F401
 import asyncio
 import os
 
@@ -25,7 +26,8 @@ def coordinator_writer(private_comms):
         yield store.session
 
 
-async def test_trusted_load_recovers_after_real_sql_contention(tmp_path, private_comms, coordinator_writer):
+async def test_trusted_load_recovers_after_real_sql_contention(
+        tmp_path, private_comms, coordinator_writer, qualified_owner_launch):
     # Draining an owned inbox publishes native cursors, which only a private root may do.
     comms = private_comms
     owner = comms.registry.declare(
@@ -39,9 +41,10 @@ async def test_trusted_load_recovers_after_real_sql_contention(tmp_path, private
         comms,
         auto_wake=False,
     )
-    # Production hands the cursor owner the AcpSessionId its encoded update carries.
+    # The live observer acts only for a session under its own lease (#3982); a PID-only owner's
+    # observer stops at owned(). start_owner publishes AcpSessionId(thread.name).
     session = AcpSessionId(owner.name)
-    agent.sessions.publish(session, owner)
+    await start_headless_owner(agent, owner.name, qualified_owner_launch)
     attached = asyncio.get_running_loop().create_future()
 
     def accept(reader, writer):
