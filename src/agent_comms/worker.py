@@ -13,6 +13,7 @@ from .comms import Comms, wire
 from .coordination.database import CoordinationStore
 from .coordination.coordinator import Coordination
 from .launch_root import LaunchRoot
+from .owner_connection import socket_path
 from .root_runtime import RootRuntimeStore
 
 
@@ -26,20 +27,24 @@ async def run() -> None:
 
 async def run_host(comms: Comms, listener_fd: int) -> None:
     """Own the root's host, not whichever unit happened to launch it first."""
-    lower_priority()
-    comms.owners.require_private_launch()
-    comms.owners.launch_authority.check()
-    host = RootRuntimeStore.at(comms.root).read().host.observed(comms.root)
-    if not host.runs_here():
-        raise ValueError("This process is not the root's reserved worker host")
-    async with Coordination.worker(CoordinationStore.path_in(comms.root)):
-        agent = CommsAgent(comms, runtime_enabled=True)
-        stopped = asyncio.Event()
-        loop = asyncio.get_running_loop()
-        for sig in (signal.SIGTERM, signal.SIGINT):
-            loop.add_signal_handler(sig, stopped.set)
-        async with agent.host(listener_fd):
-            await stopped.wait()
+    try:
+        lower_priority()
+        comms.owners.require_private_launch()
+        comms.owners.launch_authority.check()
+        host = RootRuntimeStore.at(comms.root).read().host.observed(comms.root)
+        if not host.runs_here():
+            raise ValueError("This process is not the root's reserved worker host")
+        async with Coordination.worker(CoordinationStore.path_in(comms.root)):
+            agent = CommsAgent(comms, runtime_enabled=True)
+            stopped = asyncio.Event()
+            loop = asyncio.get_running_loop()
+            for sig in (signal.SIGTERM, signal.SIGINT):
+                loop.add_signal_handler(sig, stopped.set)
+            async with agent.host(listener_fd):
+                await stopped.wait()
+    finally:
+        # The launcher bound this path before we ran, so a host that dies before serving owns it too.
+        socket_path(comms.root, os.getpid()).unlink(missing_ok=True)
 
 
 # Native children inherit the host's background priority, not an interactive UI's.

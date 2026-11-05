@@ -167,6 +167,8 @@ def launcher(tmp_path, monkeypatch):
     for name in ("prepare-pi-native", "native-source", "repository-inputs.json"):
         shutil.copy2(repo / "stack/native" / name, stack / "native" / name)
     shutil.copyfile(repo / "stack/AGENTS.md", stack / "AGENTS.md")
+    (tmp_path / "tools").mkdir()
+    shutil.copy2(repo / "tools/render_native_proof_schema.py", tmp_path / "tools")
     staged = tmp_path / "staged"
     (staged / "dist").mkdir(parents=True)
     (staged / "dist/cli.js").write_text(

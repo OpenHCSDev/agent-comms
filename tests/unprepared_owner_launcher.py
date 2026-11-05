@@ -9,16 +9,21 @@ from __future__ import annotations
 
 from agent_comms.repo import Checkout
 import sys
+from contextlib import suppress
 from pathlib import Path
 
 from agent_comms.comms import wire
+from agent_comms.owner_connection import OwnerReplyLostError
 from agent_comms.threads import NativeThread
 
 
 def main(root: Path, name: str) -> None:
     comms = wire(root)
     comms.registry.declare(NativeThread(name, frozenset(), Checkout(root)))
-    print(comms.owners.start_many((name,))[0].pid)
+    # The worker dies on the invalid launch, taking the start's reply with it.
+    with suppress(OwnerReplyLostError):
+        comms.owners.start_many((name,))
+    print(comms.registry.require(name).process_identity.pid)
 
 
 if __name__ == "__main__":

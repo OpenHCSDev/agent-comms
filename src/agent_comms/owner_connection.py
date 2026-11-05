@@ -126,7 +126,11 @@ class OwnerConnection:
 
     @staticmethod
     def reply(response: IO[bytes]) -> object:
-        line = response.readline()
+        try:
+            line = response.readline()
+        except ConnectionResetError:
+            # A host that dies with our request unread resets instead of closing.
+            line = b""
         if not line:
             raise OwnerReplyLostError("Worker host disconnected after dispatch; outcome unknown")
         return OwnerLine.read(line).reply()

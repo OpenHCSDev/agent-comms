@@ -25,6 +25,7 @@ const { default: adapter } = await import(process.env.ADAPTER_URL);
 const handlers = {}, tools = {};
 adapter({
   registerFlag() {}, getFlag: () => process.env.CATALOG,
+  getActiveTools: () => [], setActiveTools() {},
   on: (event, handler) => { handlers[event] = handler; },
   registerTool: (tool) => { tools[tool.name] = tool; },
 });

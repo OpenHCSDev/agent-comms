@@ -44,9 +44,11 @@ class TestRpcParsing:
         assert ModelWait().budget > backend._PI_0_85_1_PROVIDER_IDLE_TIMEOUT_SECONDS
 
     async def test_partial_large_record_survives_cancelled_read(self):
-        stream = asyncio.StreamReader(limit=8)
+        stream = asyncio.StreamReader()
         reader = PiRpcChannel(stream)
-        stream.feed_data(b'{"text":"' + b"x" * 100)
+        # Past the channel's own reader limit, which the source stream's limit does not set.
+        text = b'{"text":"' + b"x" * (2 * reader.reader._limit)
+        stream.feed_data(text)
         pending = asyncio.create_task(reader.readline())
         while not reader.chunks:
             await asyncio.sleep(0)
@@ -54,7 +56,7 @@ class TestRpcParsing:
         await asyncio.gather(pending, return_exceptions=True)
         stream.feed_data(b'"}\nnext\n')
         stream.feed_eof()
-        assert await reader.readline() == b'{"text":"' + b"x" * 100 + b'"}\n'
+        assert await reader.readline() == text + b'"}\n'
         assert await reader.readline() == b"next\n"
         assert await reader.readline() == b""
 

@@ -38,6 +38,7 @@ from bus_history import read_history
 from bus_record_fixture import configure_local_native, prepare_native_comms, start_source_owner
 
 
+@pytest.mark.timeout(180)
 @pytest.mark.parametrize(
     ("restart_after_reply", "reject_triage", "broadcast"),
     [(False, False, False), (True, False, False), (False, True, False), (False, False, True)],

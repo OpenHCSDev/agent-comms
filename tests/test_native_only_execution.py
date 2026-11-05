@@ -12,14 +12,13 @@ from acp.schema import TextContentBlock
 
 import agent_comms.agent_events as events
 from agent_comms.acp_extension import CoordinationChangedUpdate, decode_updates
-from agent_comms.child_process import BoundedRun
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.threads import NativeThread
 from bus_history import read_history
 from bus_record_fixture import prepare_native_comms
 from pi_session_turn import one_turn_events
 
-@pytest.mark.parametrize("arguments,code", [(('--help',), 0), (('tools',), 2), ((), 1)])
+@pytest.mark.parametrize("arguments,code", [(('--help',), 0), (('tools',), 2), ((), 2)])
 def test_headless_discovery_cannot_admit_an_unnamed_owner(tmp_path, arguments, code):
     import subprocess
 
@@ -42,13 +41,13 @@ async def test_unvalidated_configuration_refuses_before_child(tmp_path, pinned_n
     assert caught.value.filename == str(missing)
 
 
-async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, native_runtime_package):
+async def test_headless_uses_existing_owner_runtime_and_owner_project(
+        monkeypatch, native_runtime_package):
     # The real private boundary disallows volatile or symlinked roots.
     import tempfile
 
     from agent_comms.acp import CommsClient
     from agent_comms.comms import wire
-    from agent_comms.owner_connection import socket_path
 
     with tempfile.TemporaryDirectory(prefix="l0b-headless-", dir="/var/tmp") as owned:
         base = Path(owned)
@@ -59,31 +58,19 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
         # Headless execution requires a private bus root (worker.py); its owner prepares one.
         comms = prepare_native_comms(wire(base / "wire"))
         comms.registry.declare(NativeThread('headless', frozenset(), Checkout(project)))
-        env = dict(
-            os.environ,
-            AGENT_COMMS_ROOT=str(comms.root),
-            AGENT_COMMS_THREAD="headless",
-            AGENT_COMMS_AGENT_BIN="pi",
-            AGENT_COMMS_AGENT_ARGS="",
-            PYTHONPATH=str(Path(events.__file__).parent.parent),
-            AGENT_COMMS_AGENT_MODELS="openrouter/z-ai/glm-5.3-flash",
-        )
-        for key in ("PI_PROMPT", "PI_PARENT_ID"):
-            env.pop(key, None)
-        async with BoundedRun.session(
-            (sys.executable, "-c", "from agent_comms.worker import main; raise SystemExit(main())",
-             *LaunchRoot.from_path(comms.root).arguments()),
-            cwd=caller_project,
-            env=env,
-            timeout=20,
-        ) as child:
-            async with asyncio.timeout(12):
-                while not socket_path(comms.root, child.pid).exists():
-                    if child.returncode is not None:
-                        raise AssertionError(await child.stderr_tail())
-                    await asyncio.sleep(0.05)
+        # A host only starts through its owner, which hands it the bound listener.
+        monkeypatch.chdir(caller_project)
+        monkeypatch.setenv("AGENT_COMMS_ROOT", str(comms.root))
+        monkeypatch.setenv("AGENT_COMMS_AGENT_BIN", "pi")
+        monkeypatch.setenv("AGENT_COMMS_AGENT_ARGS", "")
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "openrouter/z-ai/glm-5.3-flash")
+        monkeypatch.setenv("PYTHONPATH", str(Path(events.__file__).parent.parent))
+        for key in ("AGENT_COMMS_THREAD", "PI_PROMPT", "PI_PARENT_ID"):
+            monkeypatch.delenv(key, raising=False)
+        started, = await asyncio.to_thread(comms.owners.start_many, ("headless",))
+        try:
             registered = comms.registry.require("headless")
-            assert registered.require_process() == child.identity
+            assert registered.require_process().pid == started.pid
             assert registered.worktree == Checkout(project)
             client = CommsClient(comms)
             try:
@@ -105,4 +92,6 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
                 assert not comms.registry.require("headless").executing
             finally:
                 await client.shutdown()
+        finally:
+            await asyncio.to_thread(comms.owners.stop, "headless")
         assert not comms.registry.require("headless").process_alive
