@@ -64,6 +64,7 @@ from agent_comms.coordination.errors import (
 )
 from agent_comms.errors import RelationViolationError
 from agent_comms.history_views import RetiredViews
+from agent_comms.launch_root import started
 from agent_comms.message_notification import NotificationPass, NotificationWindow
 from agent_comms.notification_read import (
     NotificationsRead, StaleNotificationsRead, UnreadableNotificationsRead,
@@ -1744,6 +1745,7 @@ def serve_encoded(route: CommsRoute, service_socket: socket.socket) -> None:
 
 def serve(route: CommsRoute, connection: Connection) -> None:
     """Observe the caller's selected route, including its reviewed native package."""
+    started()
     try:
         asyncio.run(ObservationService(Comms(route), connection).run())
     except BaseException:
