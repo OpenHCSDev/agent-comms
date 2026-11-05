@@ -242,7 +242,7 @@ class ProgramOutput(ShellOutput):
 
     def context_files(self) -> tuple[str, ...]:
         match self.commands:
-            case (ShellCommand(redirections=()) as alone,):
+            case (alone,) if not alone.redirections:
                 return ShellProgram.named(alone.program).context_files(alone.args)
         return ()
 
