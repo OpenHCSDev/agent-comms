@@ -21,13 +21,14 @@ from agent_comms.build_identity import InstalledBuild
 from agent_comms.cli_bridges.codex_connection import CodexConnection
 from agent_comms.cli_bridges.codex_protocol import CodexRefused, RateLimitReading
 from agent_comms.team.vibe_check import OverloadDegradation
-from agent_comms.team_frame_file import TeamFrameFile
+from agent_comms.team_frame_file import TeamFrameFile, TeamPlanFile
 from agent_comms.team_service import TeamService
 from agent_comms.disclosure_text import (
     AccentTone, ErrorTone, ViewFacts, ViewSectionFacts, ViewTable,
 )
 from agent_comms.nominal.field_codec import (
-    DisclosedRecord, DisclosureIdentity, HudExclude, OrderId, PublicationExclude, projected,
+    DisclosedRecord, DisclosureIdentity, HudExclude, OrderId, PublicationExclude, WireTransient,
+    projected,
 )
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.storage.locked_store import JsonDocument
@@ -227,6 +228,34 @@ class FinishedPhases(HudRecord):
 
 
 @dataclass(frozen=True)
+class TeamPlan:
+    """The beat's plan phases: one copy for the whole team, which every frame reads."""
+
+    phases: tuple[TeamPhase, ...] = ()
+
+    def ready(self) -> tuple[type[PlanPhase], ...]:
+        return tuple(phase.phase for phase in self.phases if phase.ready)
+
+
+@dataclass(frozen=True)
+class TeamPlanDocument(TeamPlanFile, JsonDocument[TeamPlan]):
+    """The heartbeat replaces it with the frames, from the same board; it keeps no history."""
+
+    path: Path
+    reading: ServiceReading = field(default_factory=ServiceReading, compare=False, kw_only=True)
+
+    record_type = TeamPlan
+
+    @classmethod
+    def at(cls, root: Path, reading: ServiceReading = ServiceReading()) -> Self:
+        """A frozen empty reading is the default; readers with health pass theirs."""
+        return cls(cls.path_in(root), reading=reading)
+
+    def empty(self) -> TeamPlan:
+        raise BoardUnavailable(self.reading, f'team plan missing: {self.path}')
+
+
+@dataclass(frozen=True)
 class UnreadableUsage(RateLimitReading):
     reason: str
 
@@ -307,12 +336,16 @@ class TeamHud(TeamLoad):
 
     teammate: ThreadIncarnation
     units: tuple[Teammate, ...]
-    phases: tuple[TeamPhase, ...]
     forks: tuple[ThreadIncarnation, ...]
     usage: CodexUsage
     packets: tuple[TeamUpdate, ...] = ()
     open_pings: tuple[Ping, ...] = field(kw_only=True)
     stopped: frozenset[str] = field(default=frozenset(), kw_only=True)
+    phases: Annotated[tuple[TeamPhase, ...], WireTransient()] = field(default=(), kw_only=True)
+    """The team plan's phases, read from TeamPlanDocument with the frame, never stored in it."""
+
+    def with_plan(self, plan: TeamPlan) -> Self:
+        return replace(self, phases=plan.phases)
 
     @classmethod
     def read(cls, comms: Comms, teammate: str) -> TeamHud:
@@ -493,11 +526,17 @@ class TeamFrame(TeamFrameFile, JsonDocument[TeamHud]):
         hud = cls(cls.path_in(comms.root, lookup=str(owner.lookup)), reading=health).read()
         if hud.teammate != owner:
             raise BoardUnavailable(health, f'Tristan frame belongs to another incarnation of {owner.name}')
-        return hud.with_services(passes, owner)
+        return hud.with_services(passes, owner).with_plan(
+            TeamPlanDocument.at(comms.root, health).read())
 
     @classmethod
-    def replace_all(cls, root: Path, huds: tuple[TeamHud, ...]) -> None:
-        """Write one frame per teammate; a teammate no longer beating loses its frame."""
+    def replace_all(cls, root: Path, plan: TeamPlan, huds: tuple[TeamHud, ...]) -> None:
+        """Write the pass's team plan once and one frame per teammate; a teammate no longer
+        beating loses its frame. A pass with no board writes an empty plan, never leaves the
+        last one standing."""
+        document = TeamPlanDocument.at(root)
+        document.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        document._publish_unlocked(plan)
         written = set()
         for hud in huds:
             frame = cls.at(root, hud.teammate)
@@ -511,8 +550,10 @@ class TeamFrame(TeamFrameFile, JsonDocument[TeamHud]):
     def read_all(cls, root: Path) -> tuple[TeamHud, ...]:
         passes = ServicePassStore.at(root).read()
         health = ServiceReading(services=passes)
-        huds = tuple(sorted((hud.with_services(passes, hud.teammate.require_recorded())
-            for path in cls.matching_in(root) for hud in (cls(path, reading=health).read(),)),
+        frames = tuple(cls(path, reading=health).read() for path in cls.matching_in(root))
+        plan = TeamPlanDocument.at(root, health).read() if frames else TeamPlan()
+        huds = tuple(sorted((hud.with_services(passes, hud.teammate.require_recorded()).with_plan(plan)
+            for hud in frames),
             key=lambda hud: hud.teammate.name))
         if not huds and passes.failing:
             raise BoardUnavailable(health, 'no published teammate frame.')

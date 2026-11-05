@@ -7,7 +7,7 @@ from agent_comms.nominal.field_codec import OrderId
 from agent_comms.nominal_census import NominalCensus
 from agent_comms.plan_reading import PlanReading
 from agent_comms.phase_evidence import MainTree
-from agent_comms.plan_phases import BusWriterPhase
+from agent_comms.plan_phases import BusWriterPhase, PlanPhase
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import ReleaseTodo, StoredOrderStory, StrikeReason
 from test_todo_stories import recorded_problem
@@ -49,17 +49,8 @@ def test_an_unheld_order_does_not_count(recorded_problem, source_repository):
     assert not BusWriterPhase.ordered(reading)
 
 
-def test_an_unplanned_reason_answers_without_reading_main(source_repository):
-    from agent_comms.plan_phases import UnplannedPhase
-
-    reading = PlanReading((), MainTree.of(source_repository, NominalCensus()))
-    reason = "This repair keeps the order tool usable before the planned work resumes."
-    assert UnplannedPhase.order_refusals(lambda: reading, reason) == ()
-    assert not reading.reads
-
-
-def unavailable_plan() -> PlanReading:
-    raise OSError("The unrelated historical checkout is unreadable")
+def unavailable_plan() -> tuple[type[PlanPhase], ...]:
+    raise OSError("team plan missing")
 
 
 def test_explicit_unplanned_reason_needs_no_plan_acquisition():
@@ -73,8 +64,17 @@ def test_explicit_unplanned_reason_needs_no_plan_acquisition():
 def test_missing_unplanned_reason_still_requires_plan_evidence(reason):
     from agent_comms.plan_phases import UnplannedPhase
 
-    with pytest.raises(OSError, match="historical checkout"):
+    with pytest.raises(OSError, match="team plan missing"):
         UnplannedPhase.order_refusals(unavailable_plan, reason)
+
+
+def test_ready_phases_refuse_an_order_with_no_phase_or_reason():
+    from agent_comms.plan_phases import UnplannedPhase
+
+    assert UnplannedPhase.order_refusals(lambda: (BusWriterPhase,), "") == (
+        f"Plan phases are ready: {BusWriterPhase.declared_name}. "
+        "Name a phase, or provide an explicit unplanned_reason of 8+ words.",)
+    assert UnplannedPhase.order_refusals(lambda: (), "") == ()
 
 
 def test_a_named_plan_phase_needs_no_unrelated_plan_acquisition():

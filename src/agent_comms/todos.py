@@ -3076,7 +3076,7 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
         """The document's selected problems and phase must agree. Whether the unit is free
         for them is IncomingWork's decision, made in the assignment's own Todo transaction."""
         problems = list(self.phase.order_refusals(
-            lambda: context.plan_reading(context.comms.goals.todos.board_history()),
+            context.ready_phases,
             document.unplanned_reason,
         ))
         if not group or any(not ProblemNumber.accepts(pid) for pid in group):
