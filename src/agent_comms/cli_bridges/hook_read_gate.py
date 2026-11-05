@@ -182,7 +182,7 @@ class GatedCall(ClaudeToolHook, TranscriptWords, DealtRuleGate, BusVoice):
 
     def refuse(self, reason: str) -> None:
         self.respond(permissionDecision="deny",
-                     permissionDecisionReason=f"{reason}\n\n{EmergencyHookStop.way_out}")
+                     permissionDecisionReason=f"{EmergencyHookStop.way_out}\n\n{reason}")
 
     def voice(self) -> Voice:
         """The supplied resident bus and binding are already this call's speaking seat."""
