@@ -196,6 +196,8 @@ def test_integration_checkout_refuses_commits_absent_from_its_own_origin(
 ) -> None:
     source = source_repository
     foreign = SourceRepository.create(tmp_path / "foreign-origin")
+    # publish_change publishes the PR branch's descendant, so it commits on feature.
+    foreign.git(foreign.checkout, "switch", "feature")
     foreign_head = foreign.publish_change("Foreign-only source", *foreign.write_files({
         Path("foreign.py"): "foreign = True\n",
     }))
@@ -903,7 +905,10 @@ def test_qualification_refuses_an_entirely_unchanged_source_set(
         problem="P4", request=primary.request,
         assigner=pair.context.comms.registry.require("colleague").incarnation,
         repo=pair.core.github, text="Check a source selection without changed members",
-        order=replace(primary.order.checked(), pull_requests=()),
+        # held_bus's own source is no longer a team repository once source_pair registers
+        # core and client, so P4 checks the core checkout its repo names.
+        order=replace(primary.order.checked(), pull_requests=(), check=replace(
+            primary.order.checked().check, directory=pair.core.checkout)),
         review_at=RecordedEventTime(9999999999.0))
     PeerCaller("worker").invoke(
         CommsTodoCreateTool(owner="worker", order=creation), pair.context.comms)
