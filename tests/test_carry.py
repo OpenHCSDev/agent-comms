@@ -59,7 +59,7 @@ from fixture_git import IDENTITY
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from native_backend_fixture import NativeBackendFixture, native_backend_fixture

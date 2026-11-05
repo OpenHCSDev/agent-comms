@@ -14,12 +14,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, TYPE_CHECKING
 
-from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.coordination.coordinator import Coordination
 
 from .cohort_schema import CohortTable
-from .coordination_database import CoordinationStore
-from .coordination_session import ReadNativeCoordinationSession
+from .coordination.database import CoordinationStore
+from .coordination.session import ReadNativeCoordinationSession
 from .message_reference import MessageReference
 from .native_entries import NativeEvidenceScope
 from .native_transcript import NativeTranscript

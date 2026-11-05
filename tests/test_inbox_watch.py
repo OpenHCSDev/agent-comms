@@ -28,7 +28,7 @@ from agent_comms.channel_targets import CommandTarget
 from agent_comms.connector import Connector
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.message_reference import MessageReference
-from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery
+from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
 from agent_comms.repo import Checkout
 from agent_comms.thread_status import ConnectedThreadStatus, NoBridgeThreadStatus
 from agent_comms.threads import ExternalThread, NativeThread

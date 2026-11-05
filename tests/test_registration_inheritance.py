@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.coordination_errors import StaleFence
-from agent_comms.coordination_response import LiveResponseOwner
+from agent_comms.coordination.errors import StaleFence
+from agent_comms.coordination.response import LiveResponseOwner
 
 from agent_comms.repo import Checkout
 from typing import Annotated

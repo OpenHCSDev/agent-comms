@@ -15,8 +15,8 @@ from agent_comms.send_outcome import AuthorityChangedSend, SendBoundary, SendOut
 from . import agent_events as events
 from .agent_backend import InputStartListener
 from .channel_coding_tools import CodingToolOwner
-from .coordination_session import NativeCapture, NativeCommit
-from .coordinator import Coordination
+from .coordination.session import NativeCapture, NativeCommit
+from .coordination.coordinator import Coordination
 from .envelope_claim_transitions import NativeClaim
 from .nominal.field_codec import AcpSessionId, ClaimId, InputId, TurnId
 from .goal_attempts import GoalAttemptStore

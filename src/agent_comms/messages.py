@@ -35,7 +35,7 @@ from agent_comms.storage.typed_table import (
 
 from .change_report import NoChangeReport, ReportEvidence, SourceRoots
 from .channel_targets import CommandTarget, ThreadTarget
-from .coordination_errors import IdentityConflict
+from .coordination.errors import IdentityConflict
 from .nominal.declared_family import DeclaredFamily
 from .envelope_claim_transitions import (
     ClaimOwner, ClaimProducer, ClaimProjection, ClaimTransition, ClaimTransitionError, ResourceClaim,

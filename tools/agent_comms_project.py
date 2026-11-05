@@ -31,7 +31,7 @@ from nominal_refactor_advisor import audit
 
 import agent_comms
 from agent_comms_hooks import process_claim
-from agent_comms import coordination_schema
+from agent_comms.coordination import schema as coordination_schema
 from agent_comms.storage import locked_store, store_files, typed_table
 from agent_comms.nominal import field_codec
 from agent_comms.child_process import ForkedProcessPool, SpawnedProcess

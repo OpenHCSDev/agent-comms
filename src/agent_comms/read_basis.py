@@ -21,7 +21,7 @@ from agent_comms.repo import Checkout
 
 from .activity_clocks import ChannelActivity
 from .channel_targets import CommandTarget, ThreadTarget
-from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged
+from .coordination.errors import DMPaintedBoundChanged, DMScopeChanged
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
 from .nominal.field_codec import (

@@ -13,13 +13,13 @@ from .assignment_states import (
     EngagedAssignment,
     FailedAssignment,
 )
-from .coordination_errors import IdentityConflict, IntegrityViolationError, ResponseClaimBlocked
-from .coordinator_vocabulary import CoordinatorVocabulary
+from .coordination.errors import IdentityConflict, IntegrityViolationError, ResponseClaimBlocked
+from .coordination.vocabulary import CoordinatorVocabulary
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Active, Complete, Failed, Successful, Terminal
 
 if TYPE_CHECKING:
-    from .coordination_snapshot import RecoverySnapshot
+    from .coordination.snapshot import RecoverySnapshot
 
 
 class OrdinalRule:

@@ -7,7 +7,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.coordination_tables.executions import NoPointedAttempt, NoPointedExecution
+from agent_comms.coordination.tables.executions import NoPointedAttempt, NoPointedExecution
 from agent_comms.reason_codes import NoReasonCode
 from agent_comms.attempt_states import (
     AbortingAttempt,
@@ -25,8 +25,8 @@ from agent_comms.attempt_states import (
     UnknownOutcomeAttempt,
     UnsuccessfulTerminal,
 )
-from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayFact
-from agent_comms.coordination_tables.executions import CurrentExecutions, ExecutionRecord, AcpOrigin, ReplayAssessments
+from agent_comms.coordination.tables.attempts import AttemptRecord, ReplayFact
+from agent_comms.coordination.tables.executions import CurrentExecutions, ExecutionRecord, AcpOrigin, ReplayAssessments
 from agent_comms.execution_states import DeferredExecution, FailedExecution
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.pi_vocabulary import PendingStopReason

@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from pydantic import BaseModel, ConfigDict, InstanceOf, JsonValue, PlainSerializer, PlainValidator
 
-from .coordination_errors import CommandFailure
+from .coordination.errors import CommandFailure
 from .nominal.declared_family import DeclaredFamily
 from .errors import MissingSourceLine
 from .nominal.field_codec import FieldCodec, GitCommitText, PresentMember, SingleFieldValue, WireValue

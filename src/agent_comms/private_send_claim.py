@@ -17,8 +17,8 @@ from typing import TYPE_CHECKING
 
 from agent_comms.native_runtime_input import NativeRuntimeTable
 from .nominal.field_codec import AcpSessionId, InputId
-from .coordination_errors import IdentityConflict, RetryScheduled
-from .coordinator import Coordination
+from .coordination.errors import IdentityConflict, RetryScheduled
+from .coordination.coordinator import Coordination
 from .diagnostics import (
     record_acquisition_progress,
     record_request_progress,

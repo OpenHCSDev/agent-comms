@@ -12,10 +12,10 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated, Self
 
-from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.coordination_schema import CoordinatorRow
-from agent_comms.coordination_tables.assignments import WakeAssignment
-from agent_comms.coordination_tables.participants import Participants
+from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.coordination.schema import CoordinatorRow
+from agent_comms.coordination.tables.assignments import WakeAssignment
+from agent_comms.coordination.tables.participants import Participants
 from agent_comms.nominal.field_codec import MessageId, ThreadLookup, TranscriptRecordId
 from agent_comms.harness_delivery_states import (
     MonitorEvidence, Outcome, UnconfirmedOutcome, UnrecordedMonitor,

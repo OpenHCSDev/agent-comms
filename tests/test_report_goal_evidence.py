@@ -5,7 +5,7 @@ from functools import partial
 
 import pytest
 
-from agent_comms.coordination_errors import Refused
+from agent_comms.coordination.errors import Refused
 from agent_comms.errors import GoalRefused
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.owner_protocol import OwnerFailure, OwnerLine

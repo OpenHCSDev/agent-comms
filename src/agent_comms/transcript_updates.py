@@ -15,7 +15,7 @@ from .acp_extension import (
     TurnChangedUpdate,
     encode_updates,
 )
-from .coordinator import Coordination
+from .coordination.coordinator import Coordination
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import AcpSessionId
 from .order_tools import TranscriptPageRead

@@ -15,7 +15,7 @@ from . import backend
 from .native_failures import NativePiUnavailable
 from .native_package import VerifiedNativePackage
 from .native_startup import NativeStartup
-from .coordinator import Coordination
+from .coordination.coordinator import Coordination
 from .pi_payloads import StateData
 from . import prompt_state
 

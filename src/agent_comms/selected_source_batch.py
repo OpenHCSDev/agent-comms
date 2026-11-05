@@ -5,8 +5,8 @@ from dataclasses import dataclass
 
 from .assignment_store import AssignmentStore
 from .bus_publication import Delivered
-from .coordination_errors import IdentityConflict
-from .coordination_tables.assignments import WakeAssignment
+from .coordination.errors import IdentityConflict
+from .coordination.tables.assignments import WakeAssignment
 from .nominal.field_codec import AssignmentId, FieldCodec
 from .messages import InfoKind, Message
 from .native_failures import NativePiUnavailable

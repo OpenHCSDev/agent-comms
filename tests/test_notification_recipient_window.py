@@ -10,8 +10,8 @@ import pytest
 from agent_comms.bus_publication import Delivered
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.comms import Comms
-from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.harness_delivery_states import PersistedOutcome
 from agent_comms.notification_assignment import AssignmentSource, NotificationAssignment, NotificationSelection
 from agent_comms.notification_progress import AnsweredResponse

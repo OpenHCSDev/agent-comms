@@ -7,8 +7,8 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from functools import partial
 
-from .coordination_errors import StaleFence
-from .coordinator import Coordination
+from .coordination.errors import StaleFence
+from .coordination.coordinator import Coordination
 from .drain_failures import UNAVAILABLE_DRAIN_ERRORS
 from .native_pi import NativePiTerminalFailure
 from .native_failures import NativeRequestFailure

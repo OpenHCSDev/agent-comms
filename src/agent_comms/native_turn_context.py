@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Annotated
 
 from agent_comms.nominal import field_codec
 
-from .coordinator import Coordination
+from .coordination.coordinator import Coordination
 
 from .pi_payloads import PiResponseData, StrictFields
 from .thread_identity import OfferedTools

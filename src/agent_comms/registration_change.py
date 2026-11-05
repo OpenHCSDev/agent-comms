@@ -13,7 +13,7 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from .errors import RelationViolationError
-from .coordination_session import CoordinationSession
+from .coordination.session import CoordinationSession
 from .goals import GoalDeclaration, NoGoal
 from .participant_store import ParticipantStore
 from .thread_status import ThreadStatus

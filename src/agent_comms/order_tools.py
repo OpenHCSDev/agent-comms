@@ -48,7 +48,7 @@ from .acp_extension import (
 from .bus_read import OwnerLiveRead, OwnerScopedRead, UiRead
 from .team_hud import TeamFrame, TeamHud, TeamLoad, TeammateDetail
 from .comms import Comms
-from .coordinator import Coordination
+from .coordination.coordinator import Coordination
 from .nominal.field_codec import FieldCodec, MessageId, OrderId, RecordProblems, ToolCallId, WireName
 from .channel_targets import CommsTag
 from .goal_actions import CompliedGoalAction, CreateProblemGoalAction, OrderGoalAction, OwnerInvocable

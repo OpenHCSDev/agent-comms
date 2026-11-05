@@ -16,8 +16,8 @@ from .catalog_store import ChannelCatalog
 from .channel_management import ChannelManagement
 from .collaboration_ledger import CollaborationLedger
 from .context_store import ContextStore
-from .coordination_database import CoordinationStore
-from .coordinator import Coordination
+from .coordination.database import CoordinationStore
+from .coordination.coordinator import Coordination
 from .errors import UnregisteredThreadError
 from .goal_management import Goals
 from .history_views import HistoryViews

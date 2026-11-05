@@ -6,18 +6,18 @@ from typing import TYPE_CHECKING
 
 from agent_comms.reason_codes import GivenReasonCode, NoReasonCode
 from agent_comms.assignment_states import EngagedAssignment
-from agent_comms.coordination_errors import (
+from agent_comms.coordination.errors import (
     IdentityConflict,
     StaleRevision,
 )
-from agent_comms.coordination_results import AlreadyApplied, Applied
-from agent_comms.coordination_snapshot import RecoverySnapshot
-from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink, WakeAssignment
-from agent_comms.coordination_tables.executions import (
+from agent_comms.coordination.results import AlreadyApplied, Applied
+from agent_comms.coordination.snapshot import RecoverySnapshot
+from agent_comms.coordination.tables.assignments import ExecutionAssignmentLink, WakeAssignment
+from agent_comms.coordination.tables.executions import (
     ExecutionProvenance,
     ExecutionRecord,
 )
-from agent_comms.coordination_tables.responses import ResponseObligation
+from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.execution_states import (
     FailedExecution,
     PendingExecution,

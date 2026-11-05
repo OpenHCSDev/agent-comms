@@ -24,12 +24,12 @@ from agent_comms.assignment_states import (
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.comms import wire
-from agent_comms.coordination_database import CoordinationStore
-from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.harness_delivery_states import DeliveredOutcome, ObservedMonitor
 from agent_comms.notification_progress import HarnessConsumedProgress
-from agent_comms.coordination_errors import DMScopeChanged, SchemaVersionError
+from agent_comms.coordination.errors import DMScopeChanged, SchemaVersionError
 from agent_comms.nominal.field_codec import InputId, MessageId, TurnId
 from transcript_record_fixture import transcript_record
 from agent_comms.historical_views import HistoricalDisplay
@@ -336,7 +336,7 @@ def test_sent_recipient_progresses_through_durable_consumption_and_answer(archiv
 def test_delivered_assignment_uses_its_recorded_conversation_response(archived_notification):
     from agent_comms.assignment_states import DeferredAssignment
     from conftest import accept_initial
-    from agent_comms.coordinator import Coordination
+    from agent_comms.coordination.coordinator import Coordination
 
     old, _live, _source, messages, root_id = archived_notification
     original = messages[0]
@@ -416,7 +416,7 @@ def test_recorded_response_resolution_keeps_other_collective_lifecycles(
 ):
     from agent_comms.assignment_states import DeferredAssignment
     from conftest import accept_initial
-    from agent_comms.coordinator import Coordination
+    from agent_comms.coordination.coordinator import Coordination
 
     old, _live, _source, _messages, root_id = archived_notification
     from conftest import declare_test_bus
@@ -483,7 +483,7 @@ def test_live_cli_ack_does_not_become_archived_ack(archived_notification):
     assert archived.label == "Sent" and not archived.displayed_to
     # The root-free recorded operation reads the same archive, not today's live evidence,
     # and a key that is no longer attached refuses instead of falling back to live reads.
-    from agent_comms.coordination_errors import HistoricalSourceChanged
+    from agent_comms.coordination.errors import HistoricalSourceChanged
     from agent_comms.notification_reads import RecordedNotificationRead
 
     recorded, = RecordedNotificationRead((messages[0].reference,), source.key).read(live).outcomes[

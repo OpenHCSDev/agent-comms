@@ -21,7 +21,7 @@ from typing import Annotated, ClassVar, Literal, Self
 from agent_comms_hooks import ToolRefusedError
 
 from ..child_process import ProcessIdentity
-from ..coordination_errors import DrainUnavailable
+from ..coordination.errors import DrainUnavailable
 from .private_path import FileObservation, FileRevision, PrivateFileRole
 from ..nominal.declared_family import DeclaredFamily
 from ..errors import RelationViolationError

@@ -181,7 +181,7 @@ def accept_initial(bus: MessageBus, root_id: str, seq: int, store) -> tuple:
     from concurrent.futures import ThreadPoolExecutor
 
     from agent_comms.cohort_foreground import _accept_visible_deliveries
-    from agent_comms.coordination_cohort import sealed_cohort_assignments
+    from agent_comms.coordination.cohort import sealed_cohort_assignments
 
     recipients = bus.bus.delivery(seq).recipients
     if recipients:

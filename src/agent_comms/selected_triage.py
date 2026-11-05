@@ -9,9 +9,9 @@ from functools import partial
 from typing import TYPE_CHECKING, ClassVar, Literal
 
 from .assignment_states import FailedAssignment, IgnoredAssignment, TriagePendingAssignment
-from .coordination_tables.assignments import WakeAssignment
-from .coordination_tables.executions import WireOrigin
-from .coordinator import Coordination
+from .coordination.tables.assignments import WakeAssignment
+from .coordination.tables.executions import WireOrigin
+from .coordination.coordinator import Coordination
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import (
     FieldCodec,

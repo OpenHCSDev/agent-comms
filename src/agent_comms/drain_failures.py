@@ -15,8 +15,8 @@ from .activity import (
     StoppedDrainDiagnostic,
     UnavailableDrainDiagnostic,
 )
-from .coordination_errors import DrainDeferred, DrainUnavailable
-from .coordinator import Coordination
+from .coordination.errors import DrainDeferred, DrainUnavailable
+from .coordination.coordinator import Coordination
 from .native_failures import NativeRequestFailure
 
 # Failures raised outside our hierarchy, which cannot inherit the drain capabilities.

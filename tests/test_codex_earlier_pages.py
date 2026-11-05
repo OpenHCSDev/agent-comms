@@ -14,7 +14,7 @@ from agent_comms.nominal.field_codec import MessageId
 from agent_comms.cli_bridges.shared import Binding, StoredBinding, Watch
 from agent_comms.cli_protocol import WATCH_LINE, EarlierItems
 from agent_comms.comms import wire
-from agent_comms.coordination_errors import CoordinationReadUnavailable
+from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.external_transcript import ExternalItemRow
 from agent_comms.runtime_updates import ThreadOutput
 from agent_comms.threads import ExternalThread, NativeThread

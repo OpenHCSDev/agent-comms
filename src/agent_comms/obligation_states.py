@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
-from .coordination_errors import IdentityConflict, IntegrityViolationError
-from .coordinator_vocabulary import CoordinatorVocabulary
+from .coordination.errors import IdentityConflict, IntegrityViolationError
+from .coordination.vocabulary import CoordinatorVocabulary
 from .nominal.field_codec import MessageId, NullMember
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Deferred, Failed, Pending, Successful, Terminal
@@ -14,8 +14,8 @@ from .message_reference import MessageReference
 from .reason_codes import NoReasonCode
 
 if TYPE_CHECKING:
-    from .coordination_session import CoordinationSession
-    from .coordination_tables.responses import ResponseObligation
+    from .coordination.session import CoordinationSession
+    from .coordination.tables.responses import ResponseObligation
 
 
 @dataclass(frozen=True, slots=True)

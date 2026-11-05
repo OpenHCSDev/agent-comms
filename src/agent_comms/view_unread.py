@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, ClassVar, Annotated
 from weakref import WeakValueDictionary, finalize
 
 from .agent_backend import RuntimeLocation
-from .coordination_errors import CoordinationReadUnavailable
+from .coordination.errors import CoordinationReadUnavailable
 from .storage.locked_store import PublishedSQLiteFile, RuntimeFile, SQLiteFile
 from .storage.store_files import StoreBusy
 from .bus import Bus

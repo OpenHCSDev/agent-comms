@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.lifecycle_capability import Unresolved
 
-from .coordinator import Coordination
+from .coordination.coordinator import Coordination
 from .nominal.field_codec import AcpSessionId
 
 if TYPE_CHECKING:

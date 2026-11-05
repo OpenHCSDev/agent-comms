@@ -10,7 +10,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.coordination_errors import (
+from agent_comms.coordination.errors import (
     CoordinationBeginUnavailable,
     CoordinationReadUnavailable,
 )

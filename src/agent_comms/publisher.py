@@ -18,7 +18,7 @@ from agent_comms.frozen_recipient import FrozenRecipient
 from agent_comms.bus import Bus, BusReader, BusSnapshot, ClaimRecord, PrivateRecord, RecordBuilder
 from agent_comms.bus_publication import InitialOrigin
 from agent_comms.change_report import OrderRoots
-from agent_comms.coordination_tables.publications import (
+from agent_comms.coordination.tables.publications import (
     PublicationIntents,
 )
 from agent_comms.nominal.field_codec import ClaimId
@@ -26,8 +26,8 @@ from agent_comms.messages import BusRecord, ClaimNoticeKind, Message
 from agent_comms.response_acknowledgement import canonical_publication_key
 
 from .channel_targets import CommandTarget, NamedTarget
-from .coordination_database import CoordinationStore
-from .coordinator import Coordination
+from .coordination.database import CoordinationStore
+from .coordination.coordinator import Coordination
 from .envelope_claim_transitions import (
     ClaimOwner,
     ClaimRelease,
@@ -48,7 +48,7 @@ from .registration import Registration
 from .wake import OrdinaryControl, resolve_wake_cohort
 
 if TYPE_CHECKING:
-    from .coordination_session import NativeCapture
+    from .coordination.session import NativeCapture
     from .threads import Thread
 
 from .catalog_document import CatalogDocument

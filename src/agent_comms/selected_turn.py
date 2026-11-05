@@ -9,11 +9,11 @@ from functools import partial
 from .attempt_start import AttemptStart
 from .assignment_states import CompletedAssignment
 from .channel_coding_tools import SelectedCodingToolOwner
-from .coordination_errors import CoordinationError, IdentityConflict, StaleFence
-from .coordinator import Coordination
-from .coordination_tables.executions import WireOrigin
-from .coordination_snapshot import RecoverySnapshot
-from .coordination_tables.responses import ResponseObligation
+from .coordination.errors import CoordinationError, IdentityConflict, StaleFence
+from .coordination.coordinator import Coordination
+from .coordination.tables.executions import WireOrigin
+from .coordination.snapshot import RecoverySnapshot
+from .coordination.tables.responses import ResponseObligation
 from .durable_turn import DurableTurn
 from .envelope_claim_transitions import WakeClaim
 from .optional_awareness_projection import OptionalAwarenessProjection

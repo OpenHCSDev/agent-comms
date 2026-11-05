@@ -30,7 +30,7 @@ from .agent_event_updates import AcpEventConsumer
 from .acp_request_consumer import AcpRequestConsumer
 from agent_comms.cli_verbs.correct_annotation import CorrectAnnotationCliCommand
 from .context_store import ContextManifestReference
-from .coordinator import Coordination
+from .coordination.coordinator import Coordination
 from .errors import RelationViolationError
 from .nominal.field_codec import FieldCodec, WireName, WireValue, GoalId
 from .goal_actions import GoalAction

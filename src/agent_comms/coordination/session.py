@@ -11,8 +11,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
 from agent_comms.bus import StoredBusReader
-from agent_comms.coordination_database import CoordinationStore
-from agent_comms.coordination_errors import (
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.errors import (
     CoordinationReadUnavailable,
     IntegrityViolationError,
 )
@@ -23,12 +23,12 @@ from agent_comms.storage.store_files import (
 )
 
 if TYPE_CHECKING:
-    from .attempt_states import TerminalAttempt
-    from .coordination_snapshot import RecoverySnapshot
-    from .message_bus import MessageBus
-    from .registry_store import RegistryCut
-    from .registry_document import RegistrySnapshot
-    from .private_registry_guard import RegistryPrivacy
+    from ..attempt_states import TerminalAttempt
+    from .snapshot import RecoverySnapshot
+    from ..message_bus import MessageBus
+    from ..registry_store import RegistryCut
+    from ..registry_document import RegistrySnapshot
+    from ..private_registry_guard import RegistryPrivacy
 
 
 def system_clock() -> int:
@@ -179,7 +179,7 @@ class NativeCoordinationSession(CoordinationSession):
     @cached_property
     def bus(self) -> MessageBus:
         """Create native bus owners only when this session first needs a boundary."""
-        from . import message_bus, publisher, registration
+        from .. import message_bus, publisher, registration
 
         return message_bus.MessageBus(
             self.path.parent,

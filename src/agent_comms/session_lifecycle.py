@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 from .controller import NO_CONTROLLER, NoController
-from .coordination_errors import Refused
+from .coordination.errors import Refused
 from acp.schema import (
     AgentCapabilities,
     ClientCapabilities,
@@ -44,7 +44,7 @@ from .launch_runtime import ThreadLaunch
 from .owner_launch import RetainedOwnerLaunch
 from .turn_input_source import NoTurnAcceptance
 from .session_config_options import SessionConfigOptions
-from .coordinator import Coordination
+from .coordination.coordinator import Coordination
 from .errors import RelationViolationError
 from .nominal.field_codec import AcpSessionId, FieldCodec, MalformedRecord, boundary_decoder
 from .owner_protocol import IncompatibleOwner, IncompatibleOwnerError

@@ -12,7 +12,7 @@ import pytest
 from agent_comms.acp_extension import EmptyCursorObservation, VerifiedCursorObservation
 from agent_comms.assignment_states import TriagePendingAssignment
 from agent_comms.comms import wire
-from agent_comms.coordination_errors import IdentityConflict, StaleFence
+from agent_comms.coordination.errors import IdentityConflict, StaleFence
 from agent_comms.cursor_owner import (
     CommittedCursorOwner,
     CursorOwner,

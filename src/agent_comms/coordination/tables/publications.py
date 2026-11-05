@@ -5,17 +5,17 @@ from __future__ import annotations
 from dataclasses import dataclass, fields
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from agent_comms.coordination_contracts import (
+from agent_comms.coordination.contracts import (
     MAX_IDENTIFIER_CHARS,
     MAX_PUBLICATION_PAYLOAD_BYTES,
     require_bounded,
     require_nonempty,
     validate_execution_id,
 )
-from agent_comms.coordination_errors import CoordinationError, IntegrityViolationError
-from agent_comms.coordination_schema import CoordinatorRow
-from agent_comms.coordination_tables.executions import ExecutionRecord
-from agent_comms.coordination_tables.responses import ResponseObligation
+from agent_comms.coordination.errors import CoordinationError, IntegrityViolationError
+from agent_comms.coordination.schema import CoordinatorRow
+from agent_comms.coordination.tables.executions import ExecutionRecord
+from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, MessageId, WireName
 from agent_comms.message_reference import MessageReference

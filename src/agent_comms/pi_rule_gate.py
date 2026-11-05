@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Self
 
 from agent_comms_hooks.skill import DeckReader, RulesOnly
 
-from .coordinator import Coordination
+from .coordination.coordinator import Coordination
 from .bus_publication import Delivered
 from .comms import Comms
 from .nominal.field_codec import ThreadLookup

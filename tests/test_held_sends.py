@@ -14,8 +14,8 @@ from pathlib import Path
 import pytest
 
 from agent_comms.comms import wire
-from agent_comms.coordination_tables.refusals import SendRefusal
-from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination.tables.refusals import SendRefusal
+from agent_comms.coordination.database import CoordinationStore
 from agent_comms.storage.maintenance_barrier import MaintenanceOperator
 from agent_comms.storage.store_files import ExclusiveLock, StoreLockContention, _store_lock
 from agent_comms_hooks import ToolRefusedError

@@ -7,8 +7,8 @@ import sqlite3
 
 import pytest
 
-from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.nominal.field_codec import InputId
 from agent_comms.notification_progress import UnansweredResponse
 from agent_comms.native_input_proof import NativeContextJournal, NativeContextProof

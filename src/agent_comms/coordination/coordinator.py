@@ -13,23 +13,23 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Final, Self, TypeVar
 
-from .assignment_store import AssignmentStore
-from .attempt_store import AttemptStore
-from .child_process import join_retirement
-from .coordination_work import CoordinationWork
-from .coordination_session import (
+from ..assignment_store import AssignmentStore
+from ..attempt_store import AttemptStore
+from ..child_process import join_retirement
+from .work import CoordinationWork
+from .session import (
     CoordinationSession,
     NativeCoordinationSession,
     ReadNativeCoordinationSession,
     system_clock,
 )
-from .execution_store import ExecutionStore
-from .participant_store import ParticipantStore
-from .storage.store_files import DEFAULT_STORE_CONTENTION, StoreContention
-from .working_memory_annotations import WorkingMemoryAnnotations
+from ..execution_store import ExecutionStore
+from ..participant_store import ParticipantStore
+from ..storage.store_files import DEFAULT_STORE_CONTENTION, StoreContention
+from ..working_memory_annotations import WorkingMemoryAnnotations
 
 if TYPE_CHECKING:
-    from .comms import Comms
+    from ..comms import Comms
     from agent_comms.message_bus import Watch
     from agent_comms.service_passes import ServicePassStore
 

@@ -54,7 +54,7 @@ from agent_comms.child_process import (
 )
 from agent_comms.command import Command
 from agent_comms.team.rule_file import RuleFile
-from agent_comms.coordination_session import NativeCapture
+from agent_comms.coordination.session import NativeCapture
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.errors import (
     MissingSourceLine,

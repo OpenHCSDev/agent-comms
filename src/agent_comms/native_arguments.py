@@ -12,7 +12,7 @@ from functools import reduce
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-from .coordination_errors import IdentityConflict
+from .coordination.errors import IdentityConflict
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
 from .launch_runtime import LaunchRuntime

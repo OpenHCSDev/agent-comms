@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent_comms.coordination_errors import IdentityConflict
+from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.native_arguments import NativeArguments, NoSelectedModel
 
 

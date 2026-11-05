@@ -22,7 +22,7 @@ from .channel_targets import CommandTarget
 from .channels import Channel, ChannelMemberIndex, Channels
 from .cli_result import CliResult
 from .team_frame_file import TeamFrameFile
-from .coordination_errors import DMPaintedBoundChanged, StaleRevision
+from .coordination.errors import DMPaintedBoundChanged, StaleRevision
 from .nominal.declared_family import DeclaredFamily
 from .display_order import ChannelSort, NameChannelSort
 from .display_references import CurrentDisplayReferences

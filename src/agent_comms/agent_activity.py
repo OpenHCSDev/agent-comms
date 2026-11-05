@@ -32,7 +32,7 @@ from .activity import (
     NoDrainDiagnostic,
     ObservedActivity,
 )
-from .coordinator import Coordination
+from .coordination.coordinator import Coordination
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .nominal.field_codec import ThreadLookup, TurnId

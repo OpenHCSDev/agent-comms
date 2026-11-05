@@ -228,7 +228,7 @@ def test_stored_schema_text_is_the_same_whichever_bridge_imports_first(table):
         probe = (
             f"import agent_comms.cli_bridges.{first}\n"
             f"import agent_comms.cli_bridges.{second}\n"
-            f"from agent_comms.coordination_tables.harness_deliveries import {table}\n"
+            f"from agent_comms.coordination.tables.harness_deliveries import {table}\n"
             f"print('\\n'.join({table}.ddl()))\n"
         )
         return subprocess.run(

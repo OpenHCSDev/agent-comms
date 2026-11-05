@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from .turn_failure import TurnFailure
     from .turn_input_source import OriginalTurnInput
 
-from .coordination_errors import Refused
+from .coordination.errors import Refused
 from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from .delivery_presentation import DeliveryPresentation
 from .nominal.field_codec import (

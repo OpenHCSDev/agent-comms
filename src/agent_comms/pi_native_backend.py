@@ -25,7 +25,7 @@ from agent_comms.pi_payloads import PiResponseData
 from .agent_backend import CompactionOutcome, FailedCompaction, Forks, Interrupts, NewThreadBackend, NothingToCompaction, PlacedCompaction, RuntimeLocation
 from .thread_model import ThreadModel, UndeclaredModel
 from .turn_inbox import InputContent
-from .coordinator import Coordination
+from .coordination.coordinator import Coordination
 from .nominal.field_codec import AcpSessionId
 from .fresh_private_session import create_fresh_private_session
 from .native_arguments import NativeArguments

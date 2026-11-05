@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .child_process import Platform, ProcessIdentity, ProportionalMemory, ResidentMemory
-from .coordinator import Coordination
+from .coordination.coordinator import Coordination
 from .errors import RelationViolationError
 from . import launch_runtime
 from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary, NativeArguments

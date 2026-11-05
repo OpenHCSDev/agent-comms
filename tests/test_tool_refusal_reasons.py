@@ -6,8 +6,8 @@ import pytest
 from agent_comms_hooks import ToolRefusedError
 from agent_comms.native_tool_call import AwaitingClaim, CodingCall, ExecutingCall
 from agent_comms.channel_coding_tools import CodingToolSocket
-from agent_comms.coordinator import Coordination
-from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
 from agent_comms.nominal.field_codec import InputId
 from agent_comms.native_tool_call import SelectedToolBusy
 from agent_comms.tool_denial import SelectedToolDenied

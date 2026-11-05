@@ -8,7 +8,7 @@ import subprocess
 import pytest
 
 import agent_comms
-from agent_comms.coordination_errors import CommandFailure
+from agent_comms.coordination.errors import CommandFailure
 from agent_comms.repo import FailedGitCommand
 
 

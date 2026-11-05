@@ -14,7 +14,7 @@ from agent_comms.input_key import BusInputKey
 from agent_comms.bus_publication import Delivered
 from agent_comms.bus_tables import ReceivedSource
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.coordination_errors import StaleFence
+from agent_comms.coordination.errors import StaleFence
 from agent_comms.nominal.field_codec import GoalWaitId, TurnId
 from agent_comms.goal_actions import (
     EditGoalAction,

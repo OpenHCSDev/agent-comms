@@ -48,7 +48,7 @@ from agent_comms.cli_verbs.start import StartCliCommand
 from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.cli_verbs.target_action import TargetActionCliCommand
 from agent_comms.cli_result import CliResult
-from agent_comms.coordination_errors import CoordinationReadUnavailable
+from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import PathText
 from agent_comms.storage.typed_table import ExternalStore

@@ -204,7 +204,7 @@ def test_owner_cursor_scope_rebases_only_attachment_session_alias():
 async def test_subscription_replay_uses_requested_alias(
     tmp_path, request_original, private_comms, native_runtime_package
 ):
-    from agent_comms.coordinator import Coordination
+    from agent_comms.coordination.coordinator import Coordination
     from agent_comms.launch_root import LaunchRoot
 
     comms = private_comms

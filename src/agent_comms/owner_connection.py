@@ -14,7 +14,7 @@ from functools import partial
 from pathlib import Path
 from typing import IO, TYPE_CHECKING, ClassVar, Self, cast
 
-from .coordinator import Coordination
+from .coordination.coordinator import Coordination
 from .errors import RelationViolationError, UnregisteredThreadError
 from .nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
 from .jsonl_stream import JsonlStreamReader

@@ -12,14 +12,14 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING, Annotated
 
-from agent_comms.coordination_tables.executions import ExecutionRecord
-from agent_comms.coordination_tables.participants import Participants
+from agent_comms.coordination.tables.executions import ExecutionRecord
+from agent_comms.coordination.tables.participants import Participants
 from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 
 from .class_fact import ClassFact
-from .coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
-from .coordination_tables.participants import OwnerGenerations
-from .coordination_tables.responses import ResponseObligation
+from .coordination.errors import IdentityConflict, PublicationActivationBlocked, StaleFence
+from .coordination.tables.participants import OwnerGenerations
+from .coordination.tables.responses import ResponseObligation
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import (
     FieldCodec,
@@ -291,7 +291,7 @@ class NativeRuntimeInput(
         unrelated owner activity cannot revoke a prepared page. No counter or
         projection is persisted, and the read closes before presentation work.
         """
-        from .coordination_tables.executions import ExecutionRecord
+        from .coordination.tables.executions import ExecutionRecord
         from .transcripts import TranscriptRead
 
         with TranscriptRead.publication_source(root) as db:

@@ -22,7 +22,7 @@ from .acp_extension import LiveQueueScope, TranscriptChangedUpdate, encode_updat
 from .acp_failure import NativeTurnOutcome
 from .agent_event_updates import RoutedTurnEventConsumer, TurnEventConsumer
 from .context_store import UNREAD_CONTEXT, ContextPrior
-from .coordinator import Coordination
+from .coordination.coordinator import Coordination
 from .diagnostics import record_request_progress, record_terminal_failure
 from .publication_measurements import PublicationMeasurements
 from .messages import AlertKind, NoticeRole

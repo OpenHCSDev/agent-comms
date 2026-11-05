@@ -14,8 +14,8 @@ from agent_comms.nominal import field_codec
 from .bus import Bus
 from .bus_tables import MessageIdentitySource
 from .channel_targets import CommandTarget
-from .coordination_database import CoordinationStore, ReadableStore
-from .coordination_tables.harness_deliveries import HarnessDelivery
+from .coordination.database import CoordinationStore, ReadableStore
+from .coordination.tables.harness_deliveries import HarnessDelivery
 from .errors import RelationViolationError
 from .nominal.field_codec import GoalId, InputId, RootId, ThreadLookup, TurnId
 from .input_attempt import (

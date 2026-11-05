@@ -49,11 +49,11 @@ from agent_comms.harness_delivery_states import (
 from agent_comms.agent_inbox import TakenInputStart
 from agent_comms.errors import RelationViolationError
 from agent_comms.read_ledger import ReadLedger
-from agent_comms.coordination_database import CoordinationStore
-from agent_comms.coordination_errors import CoordinationReadUnavailable
-from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
-from agent_comms.coordinator import Coordination
-from agent_comms.coordination_tables.assignments import WakeAssignment
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.errors import CoordinationReadUnavailable
+from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.assignment_states import DeferredAssignment, DeliveredAssignment
 from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import FieldCodec, InputId
@@ -914,7 +914,7 @@ async def test_explicit_watch_does_not_mark_streamed_messages_read(wired):
 
 @pytest.mark.asyncio
 async def test_harness_outcome_lives_on_the_threads_claim_across_a_rehome(tmp_path):
-    from agent_comms.coordination_cohort import pending_sealed_assignments
+    from agent_comms.coordination.cohort import pending_sealed_assignments
 
     comms, root_id, lookup = native_viewer(tmp_path)
     with coordination(comms) as store:

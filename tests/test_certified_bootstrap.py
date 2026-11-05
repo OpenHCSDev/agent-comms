@@ -9,7 +9,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
 from agent_comms.channels import AnyChannel
 from conftest import accept_initial
-from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
+from agent_comms.coordination.errors import IdentityConflict, PublicationActivationBlocked
 from agent_comms.proven_source_coverage import SourceCoverage
 from agent_comms.cursor_owner import UnstartedCursor
 from bus_record_fixture import prepare_native_comms

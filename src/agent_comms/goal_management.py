@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 
 from agent_comms.nominal.field_codec import GoalId
 from .agent_activity import AgentActivity
-from .coordination_errors import StaleFence
+from .coordination.errors import StaleFence
 from .errors import BirthChangedError, RelationViolationError, UnregisteredThreadError
 from .goal_records import GoalRecords
 from .goal_actions import (

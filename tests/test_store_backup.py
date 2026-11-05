@@ -8,11 +8,11 @@ from pathlib import Path
 import pytest
 
 from agent_comms.installer.backup import BackupName, SavedFile, StoreBackup
-from agent_comms.coordination_database import (
+from agent_comms.coordination.database import (
     CoordinationStore, InvalidStore, MissingStore, ReadableStore,
 )
-from agent_comms.coordination_errors import CoordinationReadUnavailable
-from agent_comms.coordination_tables.refusals import SendRefusal
+from agent_comms.coordination.errors import CoordinationReadUnavailable
+from agent_comms.coordination.tables.refusals import SendRefusal
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.storage.locked_store import RollbackRetained, SQLiteFile
 from agent_comms.storage.store_files import StoreBusy

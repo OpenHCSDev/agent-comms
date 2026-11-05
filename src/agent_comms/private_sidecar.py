@@ -26,7 +26,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-from agent_comms.coordination_errors import IdentityConflict
+from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.storage.locked_store import DurableFile, SQLiteFile
 
 from .nominal.field_codec import FieldCodec

@@ -2,7 +2,7 @@
 from dataclasses import replace
 import pytest
 
-from agent_comms.coordination_database import ReadableStore
+from agent_comms.coordination.database import ReadableStore
 
 from agent_comms.turn_context import (
     ContextSpan, ContributionCoordinates, FileProvenance, SystemLayerSegment,

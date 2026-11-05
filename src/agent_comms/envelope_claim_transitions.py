@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 from agent_comms_hooks import ToolRefusedError
 
 from .class_fact import ClassFact
-from .coordination_errors import IdentityConflict
+from .coordination.errors import IdentityConflict
 from .nominal.field_codec import (
     AssignmentId,
     BoundedText,
@@ -39,7 +39,7 @@ from .projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
 from .thread_identity import GenerationCounter, RecordedThreadIncarnation
 
 if TYPE_CHECKING:
-    from .coordination_tables.attempts import AttemptRecord
+    from .coordination.tables.attempts import AttemptRecord
     from .registry_document import RegistrySnapshot
 
 if TYPE_CHECKING:

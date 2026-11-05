@@ -235,7 +235,7 @@ def test_claim_scope_cannot_decode_a_registry_process_owner(tmp_path):
 
 
 def test_coordination_assignment_generation_is_independent_of_registry_process(tmp_path):
-    from agent_comms.coordinator import Coordination
+    from agent_comms.coordination.coordinator import Coordination
 
     registry = registry_with_owner(tmp_path)
     initial = registry.snapshot().owner_identity("owner")

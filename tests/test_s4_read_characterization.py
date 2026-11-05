@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.coordination_errors import DMScopeChanged
+from agent_comms.coordination.errors import DMScopeChanged
 from agent_comms.read_basis import NamedViewer
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.repo import Checkout

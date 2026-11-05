@@ -3,7 +3,7 @@
 import re
 from abc import ABC, abstractmethod
 
-from .coordination_contracts import MAX_IDENTIFIER_CHARS
+from .coordination.contracts import MAX_IDENTIFIER_CHARS
 from .nominal.field_codec import MalformedRecord, ThreadLookup
 
 

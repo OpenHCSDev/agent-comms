@@ -14,7 +14,7 @@ from functools import partial
 from typing import TYPE_CHECKING, Generic, Self, TypeVar
 
 
-from .coordination_errors import Refused
+from .coordination.errors import Refused
 
 from .acp_extension import QueueItem
 
@@ -23,17 +23,17 @@ from .assignment_states import DeferredAssignment, DeliveredAssignment
 from .child_process import ProcessIdentity
 from .context_segments.wake import MessageDelivery
 from .controller import NO_CONTROLLER, Controller
-from .coordination_cohort import pending_sealed_assignments
-from .coordination_database import CoordinationStore
-from .coordination_errors import IdentityConflict, StaleRevision
-from .coordination_session import (
+from .coordination.cohort import pending_sealed_assignments
+from .coordination.database import CoordinationStore
+from .coordination.errors import IdentityConflict, StaleRevision
+from .coordination.session import (
     ReadNativeCoordinationSession,
 )
-from .coordinator import Coordination
+from .coordination.coordinator import Coordination
 from .errors import RelationViolationError
 from .nominal.field_codec import AcpSessionId, InputId, GoalId, RootId
 from .goals import GoalDeclaration, NoGoal
-from .coordination_tables.assignments import WakeAssignment
+from .coordination.tables.assignments import WakeAssignment
 from .messages import Message
 from .image_input import ImageInput
 from .input_attempt import InputAttempt, ReservedInput

@@ -110,7 +110,7 @@ def test_a_viewer_follows_frozen_lookups_through_rename_and_never_into_a_rebirth
 
 
 def test_a_public_root_without_a_coordinator_keeps_its_viewer_and_projects_visible_recipients(tmp_path):
-    from agent_comms.coordination_database import CoordinationStore
+    from agent_comms.coordination.database import CoordinationStore
 
     comms = wire(tmp_path / "bus")
     for name in ("sender", "peer-a", "peer-b"):
@@ -126,8 +126,8 @@ def test_a_public_root_without_a_coordinator_keeps_its_viewer_and_projects_visib
 
 
 def test_a_private_root_without_a_coordinator_still_refuses_notification_reads(private_comms):
-    from agent_comms.coordination_database import CoordinationStore
-    from agent_comms.coordination_errors import PublicationActivationBlocked
+    from agent_comms.coordination.database import CoordinationStore
+    from agent_comms.coordination.errors import PublicationActivationBlocked
 
     for name in ("sender", "peer-a"):
         private_comms.registry.declare(NativeThread(name, frozenset({"ci"}), Checkout(private_comms.root)))

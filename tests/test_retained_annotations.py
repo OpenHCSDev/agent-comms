@@ -10,9 +10,9 @@ from agent_comms.comms import wire
 from agent_comms.context_store import (
     UNREAD_CONTEXT, CapturedContext, ContextManifestReference, ContextStore,
 )
-from agent_comms.coordination_database import CoordinationStore, ReadableStore
-from agent_comms.coordination_tables.annotations import AnnotationRequestsRow, SpanAnnotationsRow
-from agent_comms.coordinator import StandaloneCoordination
+from agent_comms.coordination.database import CoordinationStore, ReadableStore
+from agent_comms.coordination.tables.annotations import AnnotationRequestsRow, SpanAnnotationsRow
+from agent_comms.coordination.coordinator import StandaloneCoordination
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.practice import PracticeCopy, PracticeMeasurement

@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Self
 
-from agent_comms.coordination_contracts import (
+from agent_comms.coordination.contracts import (
     MAX_IDENTIFIER_CHARS, require_bounded, require_nonempty, validate_execution_id,
 )
 from agent_comms.errors import RelationViolationError

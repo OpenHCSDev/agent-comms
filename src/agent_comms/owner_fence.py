@@ -6,7 +6,7 @@ import hashlib
 import secrets
 from dataclasses import dataclass
 
-from agent_comms.coordination_contracts import (
+from agent_comms.coordination.contracts import (
     MAX_IDENTIFIER_CHARS,
     require_bounded,
     require_nonempty,

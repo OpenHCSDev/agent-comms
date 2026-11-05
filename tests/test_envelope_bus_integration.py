@@ -22,7 +22,7 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
-from agent_comms.coordination_session import NativeCapture
+from agent_comms.coordination.session import NativeCapture
 from agent_comms.envelope_claim_transitions import ClaimConflict, ExistingFileClaim, NativeClaim
 from agent_comms.errors import RelationViolationError
 from agent_comms.exporting import EverythingScope, FullLimit, JsonlFormat

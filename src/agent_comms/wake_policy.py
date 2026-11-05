@@ -9,8 +9,8 @@ from typing import ClassVar
 
 from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
 
-from .coordination_errors import IntegrityViolationError
-from .coordinator_vocabulary import CoordinatorVocabulary
+from .coordination.errors import IntegrityViolationError
+from .coordination.vocabulary import CoordinatorVocabulary
 from .nominal.declared_family import DeclaredFamily
 from .lifecycle_capability import Active, LifecycleCapability
 from .source_proof_requirement import (

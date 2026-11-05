@@ -16,8 +16,8 @@ from .history_view import HistoryView, OwnHistory
 from .agent_backend import RuntimeLocation
 from .bus import Bus
 from .bus_publication import Delivered
-from .coordination_database import CoordinationStore
-from .coordination_errors import CoordinationReadUnavailable, StaleRevision, TranscriptChanged
+from .coordination.database import CoordinationStore
+from .coordination.errors import CoordinationReadUnavailable, StaleRevision, TranscriptChanged
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .external_transcript import ExternalTranscript
@@ -62,7 +62,7 @@ from .turn_lease import TurnLeaseFence
 if TYPE_CHECKING:
     from sqlite3 import Connection
 
-    from .coordination_database import InvalidStore, MissingStore
+    from .coordination.database import InvalidStore, MissingStore
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
     from .thread_identity import ThreadIncarnation

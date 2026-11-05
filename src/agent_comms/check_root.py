@@ -16,8 +16,8 @@ from .bus import Bus
 from .cli_result import CliResult
 from .comms import Comms, wire
 from .cohort_schema import AcceptanceFrontier
-from .coordinator import Coordination
-from .coordination_database import CoordinationStore
+from .coordination.coordinator import Coordination
+from .coordination.database import CoordinationStore
 from .fresh_private_session import create_fresh_private_session
 from .goals import NoGoal
 from .launch_root import LaunchRoot

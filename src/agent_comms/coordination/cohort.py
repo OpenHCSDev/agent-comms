@@ -24,18 +24,18 @@ from agent_comms.cohort_schema import (
     NoDeliveryClaim,
     SelectedClaim,
 )
-from agent_comms.coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
-from agent_comms.coordination_errors import (
+from agent_comms.coordination.contracts import POLICY_VERSION, RESOLVER_VERSION
+from agent_comms.coordination.errors import (
     IdentityConflict,
     IntegrityViolationError,
 )
-from agent_comms.coordination_results import AlreadyApplied, Applied
-from agent_comms.coordination_tables.assignments import WakeAssignment
-from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery
-from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.results import AlreadyApplied, Applied
+from agent_comms.coordination.tables.assignments import WakeAssignment
+from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
+from agent_comms.coordination.tables.participants import OwnerGenerations, Participants
+from agent_comms.coordination.coordinator import Coordination
 
-from .nominal.field_codec import AssignmentId, MessageId, WireName, RootId, ThreadLookup
+from ..nominal.field_codec import AssignmentId, MessageId, WireName, RootId, ThreadLookup
 
 _LOG = logging.getLogger(__name__)
 

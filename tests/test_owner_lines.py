@@ -3,7 +3,7 @@
 
 import pytest
 
-from agent_comms.coordination_errors import Refused
+from agent_comms.coordination.errors import Refused
 from agent_comms.errors import StaleAttemptError, UnresolvedAttemptError
 from agent_comms.goal_attempts import MissingGoalGenerationError, ReservationConflictError, StorageUncertainError
 from agent_comms.nominal.field_codec import GoalId

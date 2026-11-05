@@ -11,7 +11,7 @@ from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
-from .coordination_errors import CoordinationError
+from .coordination.errors import CoordinationError
 from .errors import RelationViolationError
 from .launch_runtime import LaunchRuntime, RestartEnvironment, RestoredRuntime
 from .native_arguments import (

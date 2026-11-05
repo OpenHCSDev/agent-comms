@@ -34,9 +34,9 @@ from .cli_bridges.history import RemoteWatchHistory
 from .cli_bridges.shared import MonitorReadFile, TranscriptConfirmsDelivery
 from .comms import Comms, client_wire
 from .connector_store import BearerSecret, digest
-from .coordination_database import CoordinationStore
-from .coordination_tables.harness_deliveries import HarnessDelivery
-from .coordinator import Coordination
+from .coordination.database import CoordinationStore
+from .coordination.tables.harness_deliveries import HarnessDelivery
+from .coordination.coordinator import Coordination
 from .errors import RelationViolationError
 from .harness_delivery_states import EmittedOutcome, PrintLedgerId, TakingLedger, UnconfirmedOutcome
 from .message_reference import MessageReference

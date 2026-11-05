@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated
 
-from .coordination_errors import TranscriptChanged
+from .coordination.errors import TranscriptChanged
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import (
     ToolCallId,

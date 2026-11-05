@@ -28,7 +28,7 @@ from .acp_failure import (
     UnrecordedFailureSource,
     UnresolvedNativeTurnOutcome,
 )
-from .coordinator import Coordination
+from .coordination.coordinator import Coordination
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import (
     InputId,

@@ -15,8 +15,8 @@ from pathlib import Path
 from typing import ClassVar, Self
 
 from .child_process import NoProcess
-from .coordination_database import CoordinationStore, ReadableStore
-from .coordination_errors import StaleFence
+from .coordination.database import CoordinationStore, ReadableStore
+from .coordination.errors import StaleFence
 from .errors import RelationViolationError
 from .nominal.field_codec import FieldCodec, NullMember, TurnId
 from .storage.locked_store import DocumentBytes, LockedStore, PublishedProperty, RegistryFile
@@ -594,8 +594,6 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
             return PrivateRegistryGuard.load(self.path)
         coordinator = CoordinationStore.path_in(self.path.parent)
         if coordinator.exists() or coordinator.is_symlink():
-            from .private_runtime_schema import PrivateCoordinatorTable
-
             with self.coordinator_reader.reader_snapshot() as db:
                 if PrivateCoordinatorTable.stored_schema(db):
                     raise RelationViolationError("Native runtime has no registry authority")

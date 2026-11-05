@@ -51,8 +51,8 @@ from acp.schema import (
 from acp.stdio import stdio_streams
 from pydantic import BaseModel, JsonValue, ValidationError
 
-from agent_comms.coordination_errors import IdentityConflict, Refused
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.errors import IdentityConflict, Refused
+from agent_comms.coordination.coordinator import Coordination
 
 from . import (
     acp_extension,
@@ -72,8 +72,8 @@ from .controller import (
     ACP_PERMISSION_TIMEOUT_SECONDS, Controller, NoController, SessionUpdateSink,
 )
 from .coordinated_runtime import SelectedExecution
-from .coordination_cohort import next_sealed_assignment
-from .coordination_database import CoordinationStore
+from .coordination.cohort import next_sealed_assignment
+from .coordination.database import CoordinationStore
 from .cursor_owner import CursorOwner
 from .cursor_publication import CursorPublication
 from .nominal.field_codec import AcpSessionId, AcpSessionIdText, ClaimId, FieldCodec, RootId
@@ -107,7 +107,7 @@ from .thread_identity import OwnerIdentity
 
 from agent_comms.selected_write_authority import BoundSelectedWriteAuthority
 if TYPE_CHECKING:
-    from .coordination_tables.assignments import WakeAssignment
+    from .coordination.tables.assignments import WakeAssignment
 
 from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary
 from .turn_runner import RELAY_PREFIX

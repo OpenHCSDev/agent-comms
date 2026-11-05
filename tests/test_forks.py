@@ -6,7 +6,7 @@ from agent_comms.cli_bridges.session_watch import WatchClaim, WatchRecord
 from agent_comms.cli_bridges.hook_requests import ReadGateRequest, SubagentStartRequest, SubagentStopRequest
 
 from agent_comms.team.order import Team, MessageNotification
-from agent_comms.coordination_errors import CoordinationReadUnavailable
+from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.repo import Checkout
 import asyncio
 import io

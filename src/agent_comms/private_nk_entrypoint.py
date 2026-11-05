@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
+from agent_comms.coordination.errors import IdentityConflict, PublicationActivationBlocked
 
 from .bus import Bus
 from .storage.locked_store import RegistryFile

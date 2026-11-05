@@ -14,13 +14,13 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, Self
 from pydantic import BaseModel
-from .coordination_errors import Refused
+from .coordination.errors import Refused
 from acp.schema import DeniedOutcome, PermissionOption, RequestPermissionResponse, ToolCallUpdate
 from .controller import UNBOUND_CONTROLLER, Controller, SessionUpdateSink
 from .nominal.field_codec import AcpSessionId, FieldCodec
 from .owner_protocol import ClientLine, OwnerFailure, OwnerLine, OwnerPermissionRequest, OwnerUpdate
 from .owner_connection import socket_path
-from .coordination_errors import CoordinationError, IdentityConflict
+from .coordination.errors import CoordinationError, IdentityConflict
 from .native_failures import NativeRequestFailure
 from .storage.private_path import PrivateSocketRole
 from typing import TYPE_CHECKING
@@ -30,7 +30,7 @@ from collections.abc import Awaitable
 from functools import partial
 from typing import Annotated, ClassVar
 from .command import Command
-from .coordinator import Coordination
+from .coordination.coordinator import Coordination
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .nominal.field_codec import WireOmitDefault

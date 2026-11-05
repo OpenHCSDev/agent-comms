@@ -12,7 +12,7 @@ import pytest
 
 import agent_comms.agent_events as events
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.messages import AlertKind, InfoKind, Message, NoticeRole
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.owner_launch import RetainedOwnerLaunch
@@ -137,7 +137,7 @@ async def test_original_turn_keeps_cleanup_lease_after_owner_fence(
 ) -> None:
     from functools import partial
 
-    from agent_comms.coordination_errors import StaleFence
+    from agent_comms.coordination.errors import StaleFence
     from agent_comms.turn_phase import CancellingPhase
 
     comms, agent, _root_id, session_id = _session(tmp_path)

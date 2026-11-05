@@ -9,21 +9,21 @@ from agent_comms.lifecycle_capability import Active, Complete
 from dataclasses import dataclass
 from typing import Annotated, TYPE_CHECKING
 
-from agent_comms.coordination_errors import (
+from agent_comms.coordination.errors import (
     IdentityConflict,
     IntegrityViolationError,
     PublicationUncertain,
     RecoveryBlocked,
     StaleFence,
 )
-from agent_comms.coordination_schema import COORDINATION_SNAPSHOT_VERSION
-from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink, WakeAssignment
-from agent_comms.coordination_tables.attempts import (
+from agent_comms.coordination.schema import COORDINATION_SNAPSHOT_VERSION
+from agent_comms.coordination.tables.assignments import ExecutionAssignmentLink, WakeAssignment
+from agent_comms.coordination.tables.attempts import (
     AttemptRecord,
     NoPreviousAttempt,
     PreviousAttempt,
 )
-from agent_comms.coordination_tables.executions import (
+from agent_comms.coordination.tables.executions import (
     CurrentExecutions,
     ExecutionRecord,
     NoPointedAttempt,
@@ -33,9 +33,9 @@ from agent_comms.coordination_tables.executions import (
     ReplayAssessment,
     ReplayAssessments,
 )
-from agent_comms.coordination_tables.publications import PublicationEvidence, PublicationIntents
-from agent_comms.coordination_tables.recovery import RecoveryAudit
-from agent_comms.coordination_tables.responses import ResponseObligation
+from agent_comms.coordination.tables.publications import PublicationEvidence, PublicationIntents
+from agent_comms.coordination.tables.recovery import RecoveryAudit
+from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.nominal.field_codec import (
     boundary_decoder,
     projected,
@@ -45,13 +45,13 @@ from agent_comms.nominal.field_codec import (
 )
 from agent_comms.reason_codes import ReasonCode
 
-from .attempt_states import SucceededAttempt
-from .execution_states import CompletedExecution
+from ..attempt_states import SucceededAttempt
+from ..execution_states import CompletedExecution
 
 
 if TYPE_CHECKING:
-    from .attempt_states import TerminalAttempt
-    from .coordination_session import CoordinationCapture, NativeCapture
+    from ..attempt_states import TerminalAttempt
+    from .session import CoordinationCapture, NativeCapture
 
 
 @dataclass(frozen=True, slots=True)
@@ -314,7 +314,7 @@ class RecoverySnapshot:
 
     def finish_publications(self, session, boundary: NativeCapture) -> None:
         """Release this one native attempt only when every original route settled."""
-        from .coordination_tables.executions import CurrentExecutions
+        from .tables.executions import CurrentExecutions
 
         if not all(row.lifecycle.published for row in self.require_wire_responses()):
             return

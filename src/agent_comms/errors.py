@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar
 
-from agent_comms.coordination_errors import DrainUnavailable, Refused
+from agent_comms.coordination.errors import DrainUnavailable, Refused
 from agent_comms_hooks import ToolRefusedError
 
 

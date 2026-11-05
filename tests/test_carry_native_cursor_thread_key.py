@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from cutover.carry_native_cursor_thread_key import NativeCursorThreadKey
 
-from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination.database import CoordinationStore
 from agent_comms.storage.locked_store import LiveFilesRequest
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import FieldCodec, RootId, ThreadLookup

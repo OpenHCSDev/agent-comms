@@ -10,8 +10,8 @@ import pytest
 from agent_comms.acp import CommsAgent
 from agent_comms.attempt_recovery import RecoveryMonitorCapability
 from agent_comms.attempt_states import UnknownOutcomeAttempt
-from agent_comms.coordination_errors import RecoveryBlocked, StaleFence
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.errors import RecoveryBlocked, StaleFence
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.nominal.field_codec import AcpSessionId

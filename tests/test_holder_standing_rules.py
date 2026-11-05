@@ -37,7 +37,7 @@ from agent_comms.team_hud import TeamFrame
 from agent_comms.task_attachments.team_pings import TeamUpdate
 from agent_comms.task_attachments.owner_notices import ChokeholdNotice, VibeCheckNotice
 from agent_comms.comms import wire
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.errors import (
     CommittedMessageError, HumanSendRefusedError, RelationViolationError, TodoConflict, TodoError,
 )

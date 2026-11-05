@@ -12,7 +12,7 @@ from agent_comms.bus import Bus
 from agent_comms.comms import Comms, wire
 from agent_comms.cli import build_parser
 from agent_comms.context_store import ContextStore
-from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination.database import CoordinationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_key import TurnInputKey

@@ -13,7 +13,7 @@ from functools import cached_property, partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-from .coordination_errors import Refused
+from .coordination.errors import Refused
 
 from .active_route import CommsRoute, resolve_comms_route
 from .launch_root import LaunchRoot
@@ -24,7 +24,7 @@ from .owner_launch import RetainedOwnerLaunch
 from .native_arguments import NativeArguments
 from .native_pi import NativePiRpcLaunch
 from .pi_vocabulary import ServiceTier, ThinkingChoice
-from .coordinator import Coordination
+from .coordination.coordinator import Coordination
 from .nominal.field_codec import FieldCodec
 from .threads import ChosenServiceTier, NextTurnConfiguration, Thread
 from .thread_model import CatalogSelection, ThreadModel

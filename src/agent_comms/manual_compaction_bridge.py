@@ -11,7 +11,7 @@ from metaclass_registry.mro_dispatch import (
     handles,
 )
 
-from .coordination_errors import Refused
+from .coordination.errors import Refused
 from acp.schema import AgentMessageChunk, PromptResponse, TextContentBlock
 
 from . import agent_events as events
@@ -26,7 +26,7 @@ from .agent_backend import (
     StaleCompaction,
 )
 from .agent_event_updates import TurnEventConsumer
-from .coordinator import Coordination
+from .coordination.coordinator import Coordination
 from .pi_vocabulary import ManualCompactionReason
 from .turn_phase import CompactionPhase, PublishingPhase
 

@@ -15,27 +15,27 @@ from agent_comms.attempt_states import ModelRunningAttempt, PromptAcceptedAttemp
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
 from conftest import accept_initial, publish_initial, responder
-from agent_comms.coordination_database import CoordinationStore
-from agent_comms.coordination_errors import (
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.errors import (
     IdentityConflict,
     StaleFence,
     StaleRevision,
 )
-from agent_comms.coordination_response import (
+from agent_comms.coordination.response import (
     LiveResponseOwner,
     PublicationAppendDispatches,
     prepare_fenced_response,
     publish_fenced_response,
 )
-from agent_comms.coordination_tables.executions import ExecutionRecord, NoPointedExecution, WireOrigin
-from agent_comms.coordination_tables.publications import PublicationEvidence, PublicationIntents
-from agent_comms.coordination_tables.responses import ResponseObligation
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.tables.executions import ExecutionRecord, NoPointedExecution, WireOrigin
+from agent_comms.coordination.tables.publications import PublicationEvidence, PublicationIntents
+from agent_comms.coordination.tables.responses import ResponseObligation
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.nominal.field_codec import AssignmentId, InputId, RootId, ThreadLookup, TurnId
 from agent_comms.lifecycle_capability import Active, Complete
 from agent_comms.message_bus import MessageBus
 from agent_comms.assignment_states import CompletedAssignment
-from agent_comms.coordination_results import AlreadyApplied
+from agent_comms.coordination.results import AlreadyApplied
 from agent_comms.execution_states import CompletedExecution
 from agent_comms.obligation_states import PendingResponse, PublishedResponse, PublishingResponse
 from agent_comms.owner_fence import OwnerFence, prepare_fence_token
@@ -298,7 +298,7 @@ def test_stale_owner_and_conflicting_payload_cannot_publish(tmp_path: Path) -> N
 @pytest.mark.parametrize("change", ["finish", "stop", "pid", "pid_reuse", "turn", "recipient"])
 def test_response_requires_current_exact_live_turn(tmp_path, change):
     """No PID-only or omitted-witness path can turn SQL finality into publication."""
-    from agent_comms.coordination_errors import StaleFence
+    from agent_comms.coordination.errors import StaleFence
 
     case = _ready(tmp_path)
     try:

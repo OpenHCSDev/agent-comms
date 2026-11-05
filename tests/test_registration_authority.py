@@ -237,7 +237,7 @@ def test_turn_read_still_rejects_abandoned_post_replacement_guard(tmp_path):
 
 def test_private_guard_check_survives_coordination_writes(tmp_path, monkeypatch):
     from agent_comms import private_registry_guard
-    from agent_comms.coordination_database import CoordinationStore
+    from agent_comms.coordination.database import CoordinationStore
 
     registry = registered(tmp_path)
     registry.store.prepare_native_root()

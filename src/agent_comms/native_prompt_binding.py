@@ -15,9 +15,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
-from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.coordination_tables.assignments import WakeAssignment
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.coordination.tables.assignments import WakeAssignment
+from agent_comms.coordination.coordinator import Coordination
 
 from .cohort_schema import CohortTable
 from .nominal.field_codec import FieldCodec, InputId, MalformedRecord, RootId, Sha256Text, ThreadLookup

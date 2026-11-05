@@ -13,10 +13,10 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.coordinator import Coordination
 
 from .comms import Comms
-from .coordination_database import CoordinationStore
+from .coordination.database import CoordinationStore
 from .envelope_claim_transitions import (
     ClaimOwner,
     FileClaimPath,
@@ -53,7 +53,7 @@ from .goals import GoalDeclaration
 from .goal_waits import GoalWait
 if TYPE_CHECKING:
     from .backend import TurnSession
-    from .coordination_tables.assignments import WakeAssignment
+    from .coordination.tables.assignments import WakeAssignment
     from .pi_payloads import PiToolResult
 
 

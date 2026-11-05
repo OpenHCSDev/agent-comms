@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 
 from agent_comms.comms import Comms, wire
-from agent_comms.coordination_database import CoordinationStore
-from agent_comms.coordination_session import NativeCapture
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.session import NativeCapture
 from agent_comms.envelope_claim_transitions import ExistingFileClaim, NativeClaim
 from agent_comms.nominal.field_codec import ClaimId, GoalId, InputId, TurnId
 from agent_comms.installer.backup import bus_files

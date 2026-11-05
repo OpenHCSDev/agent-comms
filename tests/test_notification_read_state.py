@@ -11,7 +11,7 @@ from agent_comms.message_notification import NotificationPass
 
 from agent_comms.bus_read import BusRead, UiRead
 from agent_comms.comms import Comms
-from agent_comms.coordination_errors import StaleRevision
+from agent_comms.coordination.errors import StaleRevision
 from agent_comms.nominal.field_codec import FieldCodec, MessageId
 from agent_comms.history_views import HistoryViews
 from agent_comms.message_reference import MessageReference

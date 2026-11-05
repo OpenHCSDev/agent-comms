@@ -27,7 +27,7 @@ from .agent_event_updates import AcpEventConsumer, TurnEventConsumer
 from .channel_targets import NamedTarget
 from .channels import AllChannel
 from .controller import Controller
-from .coordinator import Coordination
+from .coordination.coordinator import Coordination
 from .nominal.field_codec import AcpSessionId, GoalId, InputId, TurnId
 from .errors import RelationViolationError
 from .following_inputs import OwnerFollowingInputs

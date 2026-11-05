@@ -20,7 +20,7 @@ from .catalog_store import ChannelCatalog
 from .channel_targets import NamedTarget, ThreadTarget
 from .channels import Channel
 from .child_process import Platform
-from .coordination_errors import HistoricalSourceChanged
+from .coordination.errors import HistoricalSourceChanged
 from .errors import UnregisteredThreadError
 from .nominal.field_codec import (
     FieldCodec, NullMember, RecordMember, ScratchName, SingleFieldValue, SubclassUnion, TaggedRecordMember,
@@ -72,7 +72,7 @@ from .transcript_routes import TranscriptRoutes
 
 from collections.abc import Collection
 from typing import Self
-from .coordination_errors import DMScopeChanged
+from .coordination.errors import DMScopeChanged
 from agent_comms.read_basis import SelectedDisplay
 if TYPE_CHECKING:
     from .catalog_document import CatalogDocument

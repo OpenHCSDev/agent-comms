@@ -13,8 +13,8 @@ import pytest
 
 from agent_comms.channels import AnyChannel
 from agent_comms.comms import wire
-from agent_comms.coordination_errors import StaleRevision
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.errors import StaleRevision
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.notification_assignment import AssignmentSource, NotificationAssignment
 from agent_comms.notification_progress import (
@@ -28,12 +28,12 @@ from agent_comms.tools import invoke_tool
 from agent_comms.transcripts import EarlierThan, TranscriptRead
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 from agent_comms.threads import NativeThread
-from agent_comms.coordination_errors import CoordinationReadUnavailable
+from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.notification_assignment import AssignmentActivityEvidence
 from agent_comms.assignment_states import DeferredAssignment
-from agent_comms.coordination_cohort import sealed_cohort_assignments
+from agent_comms.coordination.cohort import sealed_cohort_assignments
 from agent_comms.activity import StoppedDrainDiagnostic
-from agent_comms.coordination_tables.assignments import WakeAssignment
+from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.transcripts import TranscriptSourceWindow
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.routing import MessageRoute, TurnRouting

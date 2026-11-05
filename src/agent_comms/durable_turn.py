@@ -31,11 +31,11 @@ from .attempt_states import (
     ToolRunningAttempt,
 )
 from .attempt_store import AttemptStore
-from .coordination_errors import IdentityConflict
-from .coordination_session import NativeCapture
-from .coordination_tables.attempts import ReplayFact
-from .coordination_tables.executions import ReplayAssessments
-from .coordinator import Coordination
+from .coordination.errors import IdentityConflict
+from .coordination.session import NativeCapture
+from .coordination.tables.attempts import ReplayFact
+from .coordination.tables.executions import ReplayAssessments
+from .coordination.coordinator import Coordination
 from .nominal.field_codec import InputId
 from .owner_fence import OwnerFence
 from .turn_failure import TurnFailure

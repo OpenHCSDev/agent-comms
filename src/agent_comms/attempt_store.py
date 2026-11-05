@@ -8,17 +8,17 @@ from agent_comms.reason_codes import GivenReasonCode, NoReasonCode, ReasonCode
 from agent_comms.assignment_states import EngagedAssignment
 from agent_comms.attempt_start import AttemptStart
 from agent_comms.attempt_states import AttemptState, TerminalAttempt, UnknownOutcomeAttempt
-from agent_comms.coordination_errors import (
+from agent_comms.coordination.errors import (
     IdentityConflict,
     PublicationUncertain,
     StaleFence,
     StaleRevision,
 )
-from agent_comms.coordination_results import AlreadyApplied, Applied
-from agent_comms.coordination_session import CoordinationCapture
-from agent_comms.coordination_snapshot import RecoverySnapshot
-from agent_comms.coordination_tables.assignments import WakeAssignment
-from agent_comms.coordination_tables.attempts import AttemptRecord
+from agent_comms.coordination.results import AlreadyApplied, Applied
+from agent_comms.coordination.session import CoordinationCapture
+from agent_comms.coordination.snapshot import RecoverySnapshot
+from agent_comms.coordination.tables.assignments import WakeAssignment
+from agent_comms.coordination.tables.attempts import AttemptRecord
 from agent_comms.owner_fence import OwnerFence
 from agent_comms.turn_failure import TurnFailure
 from agent_comms.recovery_reader import RecoveryReader

@@ -421,8 +421,8 @@ async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> N
 def test_a_registry_write_is_refused_to_all_but_the_maintenance_holder(tmp_path: Path, monkeypatch) -> None:
     """The installer stops only its owners; the connector, bridges and forks keep running, so the
     registry itself refuses their writes during a hold, and the holder's own writes still land."""
-    from agent_comms.coordination_errors import ParticipantNotRegistered
-    from agent_comms.coordination_session import CoordinationSession
+    from agent_comms.coordination.errors import ParticipantNotRegistered
+    from agent_comms.coordination.session import CoordinationSession
     from agent_comms.storage.maintenance_barrier import HOLDER_NONCE
     from agent_comms.participant_store import ParticipantStore
 

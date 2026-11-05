@@ -17,7 +17,7 @@ from agent_comms.child_process import BoundedRun, join_retirement
 from agent_comms.acp import SdkSessionConnection
 from agent_comms.comms import wire
 from agent_comms.controller import NO_CONTROLLER, NoController
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.cursor_publication import CursorDelivery
 from agent_comms.nominal.field_codec import AcpSessionId, InputId
 from agent_comms.fresh_private_session import create_fresh_private_session
