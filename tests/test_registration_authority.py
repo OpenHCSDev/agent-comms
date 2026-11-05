@@ -128,7 +128,8 @@ def test_a_phase_change_completes_while_another_process_reads_the_registry(tmp_p
     leased, _ = registry.lease_local_turn('owner', TurnId('a7937b64b8caa58f03721bb6bacf5c78'))
     lease = leased.require_turn_lease()
     ready, release = event(), event()
-    # A phase change still waiting on the registry outlives the holder's bound, which fails it.
+    # A phase change that waited on the registry would hit the store lock's own wait limit
+    # (StoreLockContention, store_files.py) and fail with StoreLockBusyError.
     with process(_hold_lock, registry.store.path, SharedLock(), ready, release):
         try:
             assert ready.wait(5)

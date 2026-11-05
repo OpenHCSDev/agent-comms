@@ -67,15 +67,13 @@ def clear(store, thread, *, timestamp=None):
 def _hold_lock(path, mode, ready, release):
     with _store_lock(path, mode, StoreGuard.contention):
         ready.set()
-        if not release.wait(10):
-            raise TimeoutError("lock holder was not released")
+        release.wait()
 
 
 def _hold_store_write(owner, path, ready, release):
     with owner.write_guard(path):
         ready.set()
-        if not release.wait(15):
-            raise TimeoutError("store writer was not released")
+        release.wait()
 
 
 def _record(path, start, prefix):
@@ -150,6 +148,9 @@ def _record_under_wire(path, ready):
 
 @contextmanager
 def process(target, *args):
+    """The one bound on a worker: it finishes within 10 s of the block ending, and is
+    terminated if the block fails. Holders wait for their release without a clock of their
+    own, so a slow sibling spawn cannot make one let go mid-test."""
     child = multiprocessing.get_context("spawn").Process(target=target, args=args)
     child.start()
     try:
