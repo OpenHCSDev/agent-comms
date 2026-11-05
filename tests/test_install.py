@@ -108,7 +108,8 @@ def test_practice_copy_is_the_declared_files_without_its_maintenance_witnesses(p
     assert measurement.bytes > 0
     for name in databases:
         query = "SELECT name FROM sqlite_schema ORDER BY name"
-        with (closing(sqlite3.connect(root / name)) as original,
+        # Read-only: a writable last close would checkpoint and delete the source's WAL.
+        with (closing(sqlite3.connect(f"file:{root / name}?mode=ro", uri=True)) as original,
               closing(sqlite3.connect(copy / name)) as practised):
             assert practised.execute(query).fetchall() == original.execute(query).fetchall()
     for name in copied - databases:
