@@ -59,5 +59,6 @@ async def test_toad_public_types_and_acp_agent_comms_metadata(tmp_path, consumer
     await AcpEventConsumer(agent, "worker", client).dispatch(Chunk(text="unrouted reply"))
     assert len(updates) == 2
     assert updates[1]["content"]["text"] == "unrouted reply"
-    assert "_meta" not in updates[1]
+    # An unrouted reply carries no agent-comms fact. An empty batch decodes to the same () as none.
+    assert decode_updates(updates[1].get("_meta")) == ()
     await agent.shutdown()
