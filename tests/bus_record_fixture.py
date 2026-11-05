@@ -84,12 +84,11 @@ def start_source_owner(comms: Comms, name: str, runtime: RestoredRuntime):
     The retained restart request uses this same explicit source-runtime policy.
     """
     thread = comms.registry.require(name)
-    with comms.registry.storage_rule.room_for_start(thread, comms.root):
-        with comms.owners.launching_owner(
-            thread, NativeArguments.default_binary,
-            launch_runtime=runtime,
-        ) as owner:
-            return owner
+    with comms.owners.launching_owner(
+        thread, NativeArguments.default_binary,
+        launch_runtime=runtime,
+    ) as owner:
+        return owner
 
 
 def context_comms(directory: Path) -> Comms:

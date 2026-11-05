@@ -88,7 +88,9 @@ async def test_installed_429_exhaustion_publishes_one_retry_owned_failure(
     agent.sessions.client = Client()
     try:
         async with asyncio.timeout(90):
-            await agent.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])
+            project = tmp_path / "project"
+            project.mkdir()
+            await agent.new_session(cwd=str(project), mcp_servers=[])
             with pytest.raises(NativeTurnError) as caught:
                 await agent.turns.run_agent_turn(
                     "project", "project", "One isolated request that remains rate limited",
