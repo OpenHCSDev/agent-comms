@@ -15,7 +15,7 @@ from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.locked_store import RootFile
 from agent_comms.coordination_errors import Refused
-from agent_comms.errors import GoalRefused, TodoError
+from agent_comms.errors import GoalRefused
 from agent_comms.goal_actions import ClearGoalAction, CreateProblemGoalAction, SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from agent_comms.owner_protocol import OwnerFailure, OwnerLine
@@ -217,13 +217,7 @@ def test_a_teammate_files_its_own_second_row_beside_the_one_it_holds(held_team, 
     ThreadCaller("worker").invoke(CommsTodoCreateTool(owner="worker", order=creation), ctx.comms)
     assert {todo.id for todo in ctx.comms.goals.todos.held_by(worker.incarnation)} == {"P1", "P2"}
 
-    # Nobody sent this order: delivered with no reviewer, it says to name one.
-    with pytest.raises(TodoError, match="name its reviewer"):
-        ThreadCaller("worker").invoke(CommsOrderDeliverTool(
-            problem="P2", pull_request=PullRequestLink(held.repo, 7), head="b" * 40,
-            report=DeliveryReport("The second workflow was broken by a stale decision; check the PR head."),
-        ), ctx.comms)
-    # Its delivery answers no message and goes to the reviewer named.
+    # Nobody sent this order, so its delivery answers no message and goes to the reviewer named.
     reviewer = ctx.comms.registry.require(ctx.actor_name).incarnation
     ThreadCaller("worker").invoke(CommsOrderDeliverTool(
         problem="P2", pull_request=PullRequestLink(held.repo, 7), head="b" * 40,

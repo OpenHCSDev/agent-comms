@@ -246,7 +246,7 @@ def test_self_assigned_claim_selects_a_reviewer_and_retains_its_choice(held_team
         problem=todo.id,
     )
     before = comms.bus.bus.revision()
-    with pytest.raises(RelationViolationError, match="cannot message itself"):
+    with pytest.raises(TodoError, match="name its reviewer"):
         ThreadCaller(todo.holder).invoke(request, comms)
     assert comms.goals.todos.get(todo.id) == todo
     assert comms.bus.bus.revision() == before
