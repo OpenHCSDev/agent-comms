@@ -8,11 +8,12 @@ from cutover.carry_triage_member_rows import TriageMemberRows
 
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.storage.locked_store import LiveFilesRequest
-from agent_comms.nominal.field_codec import AssignmentId, InputId
+from agent_comms.nominal.field_codec import AssignmentId, InputId, ThreadLookup
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.triage_native_sources import TriageNativeSource
 
 FIRST, SECOND = InputId("a" * 32), InputId("b" * 32)
+OWNER = ThreadLookup("c" * 32)  # the input table checks a 32-character owner lookup
 
 
 def old_triage_store(root: Path) -> Path:
@@ -22,8 +23,8 @@ def old_triage_store(root: Path) -> Path:
         db.execute(NativeRuntimeInput.schema_objects()[NativeRuntimeInput.declared_name])
         db.executemany(
             "INSERT INTO native_runtime_input (input_id, stage, owner_lookup, owner_generation,"
-            " owner_token_digest) VALUES (?, 'triage', 'owner', 1, ?)",
-            [(FIRST, "0" * 64), (SECOND, "0" * 64)])
+            " owner_token_digest) VALUES (?, 'triage', ?, 1, ?)",
+            [(FIRST, OWNER, "0" * 64), (SECOND, OWNER, "0" * 64)])
         db.execute('CREATE TABLE "native_runtime_triage_sources" ("input_id" TEXT NOT NULL,'
                    ' "assignment_ids" TEXT NOT NULL, PRIMARY KEY ("input_id")) WITHOUT ROWID')
         db.executemany("INSERT INTO native_runtime_triage_sources VALUES (?, ?)",

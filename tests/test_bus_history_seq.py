@@ -142,7 +142,7 @@ def test_user_identity_is_created_once_under_the_registry_owner(tmp_path):
     assert len(registered) == 1 and registered[0].incarnation == users[0].incarnation
 
 
-def test_reading_scope_reuses_one_read_only_snapshot_and_closes_it(tmp_path):
+def test_reading_scope_reuses_one_read_only_snapshot_and_ends_it(tmp_path):
     messages = channel_bus(tmp_path / "source")
     with messages.bus.reading() as reader:
         with reader.observing() as first, reader.observing() as second:
@@ -151,10 +151,14 @@ def test_reading_scope_reuses_one_read_only_snapshot_and_closes_it(tmp_path):
         assert reader.lookup_message(original.message_id).reference == original.reference
         messages.bus.append(lambda seq, db: PublicRecord.from_message(
             Message("author", "#history", "later", InfoKind, seq=seq)))
-        assert reader.revision() == 5 and messages.bus.revision() == 6
+        # Nested bus reads borrow the held snapshot (LockedStore.reader_snapshot), so the
+        # bus answers its live revision only once this reading scope closes.
+        assert reader.revision() == messages.bus.revision() == 5
         assert tuple(row.seq for row in reader.page(7, 2)) == (5, 4)
-    with pytest.raises(sqlite3.ProgrammingError):
-        reader.lookup(1)
+    # The per-thread reader keeps its connection (SQLiteReaders); leaving the scope ends the
+    # snapshot's read transaction, so the bus then answers its live revision.
+    assert not first.in_transaction
+    assert messages.bus.revision() == 6
 
 
 def test_view_revision_distinguishes_sequence_growth_from_source_replacement(tmp_path):
