@@ -196,6 +196,20 @@ class RestoredRuntime(LaunchRuntime):
         return dict(source)
 
 
+@dataclass(frozen=True)
+class RecordedRuntime(LaunchRuntime):
+    """A recorded launch target: its children import what the recording process selected.
+
+    The capture already projected the import path through the selected member (a checkout's
+    root first, or none for an installed copy); a launch from the record keeps that path."""
+
+    pythonpath: ImportPath
+
+    def child_environment(self, environment: Mapping[str, str]) -> dict[str, str]:
+        recorded = replace(RestartEnvironment.inherit(environment), pythonpath=self.pythonpath)
+        return recorded.apply_runtime(environment)
+
+
 class ImportPath(DeclaredFamily, JsonShapeFamily, affix="ImportPath"):
     """An inherited Python search path or its explicit removal."""
 

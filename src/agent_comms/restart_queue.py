@@ -31,7 +31,7 @@ from .coordination.coordinator import Coordination
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .nominal.field_codec import FieldCodec, RecordMember, RestartId, WireOmitDefault
-from .launch_runtime import LaunchRuntime, RestartEnvironment
+from .launch_runtime import LaunchRuntime, RecordedRuntime, RestartEnvironment
 from .lifecycle_capability import Active, LifecycleCapability, Pending
 from .storage.locked_store import RuntimeFile
 from .storage.maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError, MaintenanceHolder
@@ -162,7 +162,8 @@ class RestartTarget:
 
     @property
     def launch_runtime(self) -> LaunchRuntime:
-        return LaunchRuntime(Path(self.interpreter))
+        """The interpreter and the import path its capture selected (restart_environment)."""
+        return RecordedRuntime(Path(self.interpreter), self.runtime.pythonpath)
 
     def require_available(self, comms: Comms) -> None:
         self.launch_runtime.require_available()
