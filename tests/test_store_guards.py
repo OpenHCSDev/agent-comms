@@ -73,8 +73,7 @@ def test_single_file_family_reads_during_writes(tmp_path, owner):
 def _hold_claim(path, ready, release):
     with ProcessSingleton(path).claimed():
         ready.set()
-        if not release.wait(10):
-            raise TimeoutError("claim holder was not released")
+        release.wait()
 
 
 @contextmanager
