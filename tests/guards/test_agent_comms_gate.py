@@ -96,6 +96,15 @@ def repo(tmp_path: Path, request) -> Checkout:
     return Checkout(checkout, request.param)
 
 
+def test_carry_steps_are_read_from_source_without_importing_them():
+    """A step importing a sibling (Toad) is classified from its source: importing it would
+    judge the head by whatever Toad the checker holds. The arrow step derives from the key-mode
+    step's ToadSettingsCarry, so the family is followed across steps."""
+    steps = PROJECT.carry_steps("HEAD")
+    assert {"tools/cutover/carry_toad_key_mode.py", "tools/cutover/carry_toad_arrow_keys.py"} <= steps
+    assert "tools/cutover/__init__.py" not in steps
+
+
 def test_agent_comms_broad_swallows_stay_within_their_budget():
     root = SOURCE / "src/agent_comms"
     assert sum(audit.source_measures.BroadSwallow.count(PROJECT, path.read_bytes(), str(path)) for path in root.rglob("*.py")) <= 29

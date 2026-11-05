@@ -178,29 +178,39 @@ class AgentCommsProject(audit.project.Project[PlanPhase]):
                 for name, form in json.loads(result.stdout).items()}
 
     def carried(self, base: str, head: str) -> bool:
-        """A carry step is a module under STEPS declaring a member of the Carry family: one of
-        its classes derives from Carry or one of Carry's own subclasses, as that module binds it."""
-        added = [path for change in self.changes(base, head, str(STEPS)) for path in change.added()
-                 if self.python(path)]
-        families = self.carry_family()
-        for path, source in self.sources(head, set(added)):
-            tree = ast.parse(source, path)
-            module = audit.lexical.ModuleScope(tree, path)
-            bindings = [audit.lexical.DecoratorBinding.of(family, module) for family in families]
-            if any(binding.marks(base) for node in ast.walk(tree) if isinstance(node, ast.ClassDef)
-                   for base in node.bases for binding in bindings):
-                return True
-        return False
+        """A carry step is a module under STEPS declaring a member of the Carry family."""
+        added = {path for change in self.changes(base, head, str(STEPS)) for path in change.added()
+                 if self.python(path)}
+        return bool(added & self.carry_steps(head))
+
+    def carry_steps(self, head: str) -> frozenset[str]:
+        """The step modules at the head declaring a Carry family member: a class deriving from
+        Carry, or from a class another step derives from Carry, as each step's source binds it.
+        Read from source, never imported: a step may import a sibling such as Toad, which
+        imports the Core under measurement, so importing it judges the head by the sibling."""
+        modules = [audit.lexical.ModuleScope(ast.parse(source, path), path)
+                   for path, source in self.sources(head, set(self.python_paths(head, str(STEPS))))]
+        family = {(Carry.__module__, Carry.__name__)}
+        declaring: set[str] = set()
+        found = family
+        while found:
+            discovered = set()
+            for module in modules:
+                bindings = [audit.lexical.DecoratorBinding.named(owner, name, module)
+                            for owner, name in found]
+                for node in ast.walk(module.tree):
+                    if isinstance(node, ast.ClassDef) and any(
+                            binding.marks(base) for base in node.bases for binding in bindings):
+                        declaring.add(module.path)
+                        discovered.add((self.step_module(module.path), node.name))
+            found = discovered - family
+            family |= found
+        return frozenset(declaring)
 
     @staticmethod
-    @cache
-    def carry_family() -> tuple[type, ...]:
-        """Carry and every class a step derives from on its way to Carry: each member's MRO up to
-        Carry, so a base another step declares, such as ToadSettingsCarry, is one of them."""
-        return tuple(dict.fromkeys(
-            base for member in Carry.members_with(Carry)
-            for base in member.__mro__[:member.__mro__.index(Carry) + 1]
-        ))
+    def step_module(path: str) -> str:
+        """The dotted name a step imports as: STEPS's parent is its import root."""
+        return ".".join(Path(path).relative_to(STEPS.parent).with_suffix("").parts)
 
     def guard_roots(self) -> frozenset[str]:
         declared = Path(inspect.getfile(PlanPhase)).resolve()
