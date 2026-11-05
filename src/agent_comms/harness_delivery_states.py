@@ -21,7 +21,7 @@ from .notification_progress import HarnessConsumedProgress
 if TYPE_CHECKING:
     from .assignment_states import AssignmentState
     from .assignment_store import AssignmentStore
-    from .cli_bridges.shared import LineMonitorBridge, MonitorPart, MonitorReadFile
+    from .cli_bridges.shared import MonitorPart, MonitorReadFile, TranscriptConfirmsDelivery
     from .coordination_tables.harness_deliveries import HarnessDelivery
     from .notification_progress import DeliveryProgress
 
@@ -74,7 +74,7 @@ class EmittedOutcome(UnconfirmedOutcome):
 class MonitorEvidence(ConsumptionEvidence, DeclaredFamily):
     """Unsent and terminal observations cannot accept another delivery."""
 
-    async def confirm(self, bridge: LineMonitorBridge, delivery: HarnessDelivery,
+    async def confirm(self, bridge: TranscriptConfirmsDelivery, delivery: HarnessDelivery,
                       notification: MonitorPart, record: ObservedMonitor) -> tuple[MessageReference, ...]:
         return ()
 
@@ -92,6 +92,10 @@ class MonitorEvidence(ConsumptionEvidence, DeclaredFamily):
     def finished_with(self, export: MonitorReadFile) -> None:
         """A body without a complete original transcript proof keeps its export."""
 
+    def taken_under(self, ledger: TakingLedger) -> bool:
+        """Only a cloud watch's attempt names the ledger that took it; nothing else is replayed."""
+        return False
+
 
 @dataclass(frozen=True)
 class UnrecordedMonitor(MonitorEvidence):
@@ -102,7 +106,7 @@ class UnrecordedMonitor(MonitorEvidence):
 class ReceivingMonitor(MonitorEvidence):
     total: int
 
-    async def confirm(self, bridge: LineMonitorBridge, delivery: HarnessDelivery,
+    async def confirm(self, bridge: TranscriptConfirmsDelivery, delivery: HarnessDelivery,
                       notification: MonitorPart, record: ObservedMonitor) -> tuple[MessageReference, ...]:
         if notification.total != self.total:
             return ()
@@ -115,7 +119,41 @@ class ReceivingMonitor(MonitorEvidence):
             await bridge.record_mismatch(delivery, 'Observed parts do not equal the original message')
             return ()
         await bridge.finish(delivery, partial(replace, outcome=DeliveredOutcome, monitor=record))
-        return message.opening_references(bridge.binding.bus)
+        return message.opening_references(bridge.transcript_thread)
+
+
+class TakingLedger:
+    """No ledger took this attempt: an old client's, or one taken before its ledger arrived.
+    Its evidence names nothing, so nothing can prove it unshown and it is never sent again."""
+
+    def receiving(self, total: int) -> MonitorEvidence:
+        return ReceivingMonitor(total)
+
+
+@dataclass(frozen=True)
+class PrintLedgerId(TakingLedger):
+    """One client's printed ledger, born with its file: a ledger in a fresh container is
+    another ledger, so its silence proves nothing about what the old one took."""
+
+    token: str
+
+    def receiving(self, total: int) -> MonitorEvidence:
+        return LedgerReceivingMonitor(total, self)
+
+
+@dataclass(frozen=True)
+class TakenUnderLedger(MonitorEvidence):
+    ledger: PrintLedgerId
+
+    def taken_under(self, ledger: TakingLedger) -> bool:
+        return self.ledger == ledger
+
+
+@dataclass(frozen=True)
+class LedgerReceivingMonitor(TakenUnderLedger, ReceivingMonitor):
+    """A message a cloud watch took under this ledger, awaiting every part: its one inline
+    event, or each slice a Read of its export shows."""
+
 
 
 @dataclass(frozen=True)

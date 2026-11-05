@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
+import secrets
 import re
 import sys
 from abc import ABC, abstractmethod
@@ -27,12 +29,62 @@ from yarl import URL
 
 from agent_comms.bus import Bus
 from agent_comms.bus_publication import Delivered
+from agent_comms.harness_delivery_states import PrintLedgerId
+from agent_comms.message_reference import MessageReference
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.watched import FileSource
 
 from .claude_protocol import ClaudeMonitorFrame
-from .claude_transcript import WATCH_STOPPED, WINDOW_ENDED, RecentClaudeWindow, RunningClaude
+from .claude_transcript import (
+    WATCH_STOPPED, WINDOW_ENDED, PrintedLedger, PrintedNow, RecentClaudeWindow, RunningClaude,
+)
 from .session_watch import WatchClaim
+
+
+class PrintLedger:
+    """A session with no transcript is no session this machine can name: it keeps no ledger
+    and sends none, so a connector never replays anything to it."""
+
+    def record(self, reference: MessageReference) -> None:
+        """Nothing is kept, so nothing can be proved."""
+
+    def reports(self) -> tuple[str, ...]:
+        return ()
+
+
+@dataclass(frozen=True)
+class SessionLedger(PrintLedger):
+    """What one session's watches may have printed, one reference per line. It is the session's
+    own, so a channel message printed in one session proves nothing about another's attempt."""
+
+    path: Path
+
+    def record(self, reference: MessageReference) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with self.path.open("a") as stream:
+            stream.write(f"{reference.name}\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+
+    @property
+    def identity(self) -> PrintLedgerId:
+        """Born with the ledger and kept beside it: a fresh container's ledger is a new one."""
+        path = self.path.with_suffix(".id")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with path.open("x") as stream:
+                stream.write(secrets.token_hex(16))
+        except FileExistsError:
+            pass
+        return PrintLedgerId(path.read_text())
+
+    def reports(self) -> tuple[str, ...]:
+        try:
+            names = self.path.read_text().split()
+        except FileNotFoundError:
+            names = []
+        return (PrintedLedger(ledger=self.identity,
+                              printed=tuple(map(MessageReference.named, names))).line(),)
 
 
 class TranscriptRoute(ABC):
@@ -42,12 +94,18 @@ class TranscriptRoute(ABC):
     async def sent(self, socket: ClientWebSocketResponse) -> None:
         """Send until the socket ends; a route with nothing to send says why."""
 
+    def ledger(self, state: Path) -> PrintLedger:
+        return PrintLedger()
+
 
 @dataclass(frozen=True)
 class FollowedTranscript(RecentClaudeWindow, TranscriptRoute):
     """The session's own file, sent from its recent window onward as a local bridge reads it."""
 
     source: Path
+
+    def ledger(self, state: Path) -> PrintLedger:
+        return SessionLedger(state / "printed" / self.source.stem)
 
     watch_url: ClassVar[re.Pattern[str]] = re.compile(r'wss?://[^\s"\'\\]+/watch/[\w-]+')
     hidden_url: ClassVar[str] = '[inbox watch URL]'
@@ -152,11 +210,19 @@ class InboxSocket:
     local bridge holds such a burst in its window until the transcript shows each one seen; this
     side has no such confirmation, so each message gets a batch of its own."""
 
-    async def deliver(self, frame: str) -> None:
-        """Inline when one Monitor batch holds it, otherwise one notice naming its whole body."""
-        _, line = ClaudeMonitorFrame(FieldCodec.decode(Delivered, FieldCodec.parse(frame))).event(
-            self.exports)
+    @property
+    def ledger(self) -> PrintLedger:
+        return self.transcript.ledger(self.exports.parent)
+
+    async def deliver(self, frame: str, socket: ClientWebSocketResponse) -> None:
+        """Inline when one Monitor batch holds it, otherwise one notice naming its whole body.
+        The ledger is written first: a freeze between it and the print leaves a message the bus
+        never replays, never one the session saw twice."""
+        message = FieldCodec.decode(Delivered, FieldCodec.parse(frame))
+        _, line = ClaudeMonitorFrame(message).event(self.exports)
+        self.ledger.record(message.reference)
         print(line, flush=True)
+        await socket.send_str(PrintedNow(printed=(message.reference,)).line())
         await asyncio.sleep(self.batch_gap_seconds)
 
     async def publishing(self, socket: ClientWebSocketResponse) -> None:
@@ -181,11 +247,13 @@ class InboxSocket:
                 self.url, proxy=self.proxy, heartbeat=25.0
             ) as socket:
                 print("Watching your inbox; each message arrives as an event.", flush=True)
+                for report in self.ledger.reports():
+                    await socket.send_str(report)
                 publishing = asyncio.create_task(self.publishing(socket))
                 try:
                     async for frame in socket:
                         if frame.type is WSMsgType.TEXT:
-                            await self.deliver(frame.data)
+                            await self.deliver(frame.data, socket)
                 finally:
                     publishing.cancel()
                 return WatchEnd.closed(socket.close_code)

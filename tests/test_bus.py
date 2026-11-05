@@ -895,3 +895,20 @@ def test_readonly_archive_and_backup_use_the_same_bus(tmp_path):
     assert destination.read_bytes() == before
     with pytest.raises(FileExistsError):
         bus.backup(destination)
+
+
+
+def test_moving_a_producer_module_to_another_package_keeps_every_producer_digest(
+    pristine_projection: PristineProjection, projection_source: Path,
+) -> None:
+    """A package move changes where a producer's Python file lives, not what it writes. On
+    2026-11-04 #4084's storage move made all 13 bus tables 'stored rows of an earlier
+    producer' and cost a 128 s rehearsal rebuild."""
+    checkout = projection_source.parents[1]
+    # The codemod moves with `git mv`, so the copy's files are tracked first.
+    subprocess.run(("git", "-C", str(checkout), "add", "-A"), check=True, capture_output=True)
+    subprocess.run((sys.executable, str(Path(__file__).resolve().parents[1] / "tools" /
+                    "move_flat_modules.py"), str(checkout), "relocated", "messages"),
+                   check=True, capture_output=True, timeout=120)
+    assert (projection_source / "relocated" / "messages.py").exists()
+    assert projection_source_digest(projection_source) == pristine_projection.digest

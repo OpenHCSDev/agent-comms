@@ -48,6 +48,10 @@ class ShellProgram(NamedProgram):
     def following_directory(self, args: list[str], cwd: Path) -> Path:
         return cwd
 
+    def context_files(self, args: list[str]) -> tuple[str, ...]:
+        """Files this program's output shows as they are; most programs print their own text."""
+        return ()
+
     def effects(self, args: list[str], cwd: Path) -> tuple[StorageEffect, ...]:
         """Unknown programs have no declared effects; capabilities compose through super()."""
         return ()
@@ -198,6 +202,49 @@ class ChangeDirectoryProgram(ShellProgram, names=frozenset({'cd'})):
         if targets:
             cwd = physical_path(targets[0], cwd)
         return cwd
+
+
+class ConcatenatesFiles(ShellProgram, names=frozenset({'cat'})):
+    def context_files(self, args: list[str]) -> tuple[str, ...]:
+        """`cat` of exactly one file shows that file as it is; several run together unmarked."""
+        return tuple(args) if len(args) == 1 else ()
+
+
+class ShellOutput(ABC):
+    """What one shell command's output puts in the model's context."""
+
+    @abstractmethod
+    def context_files(self) -> tuple[str, ...]: ...
+
+    @classmethod
+    def of(cls, command: str) -> ShellOutput:
+        try:
+            return ProgramOutput(tuple(ShellCommand.parsed(command)))
+        except ValueError as error:
+            return UndecodedOutput(error)
+
+
+@dataclass(frozen=True)
+class UndecodedOutput(ShellOutput):
+    """A command the shell cannot decode prints the shell's own error, never a file."""
+
+    error: ValueError
+
+    def context_files(self) -> tuple[str, ...]:
+        return ()
+
+
+@dataclass(frozen=True)
+class ProgramOutput(ShellOutput):
+    """Only one program writing straight to the result can show a file as it is."""
+
+    commands: tuple[ShellCommand, ...]
+
+    def context_files(self) -> tuple[str, ...]:
+        match self.commands:
+            case (alone,) if not alone.redirections:
+                return ShellProgram.named(alone.program).context_files(alone.args)
+        return ()
 
 
 @dataclass(frozen=True)

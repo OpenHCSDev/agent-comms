@@ -22,12 +22,14 @@ from .native_tool_call import CodingCall
 from agent_comms.pi_wire import PiReported
 from .recorded_time import EventTime
 from .rule_deal import ReadSpan
-from .shell_effects import WriteStorageEffect, physical_path, shell_storage_effects
+from .shell_effects import ShellOutput, WriteStorageEffect, physical_path, shell_storage_effects
 from .tool_declaration import (
+    ContextRows,
     EditAction,
     EditCall,
     ExecuteAction,
     GlobalCommsExtension,
+    PlainContextRows,
     ReadAction,
     ReplacementEdit,
     SearchAction,
@@ -212,6 +214,13 @@ class BashTool(ExecuteAction, CodingTool):
 
     def reads(self) -> str:
         return self.command
+
+    context_rows: ClassVar[ContextRows] = PlainContextRows()
+
+    def context_read_paths(self) -> tuple[str, ...]:
+        """A command that is exactly `cat` of one file puts that file in context as it is; any
+        other command's output is its own text, never a file's."""
+        return ShellOutput.of(self.command).context_files()
 
     def _parse_resource(self) -> None:
         return None
