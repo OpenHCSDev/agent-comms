@@ -22,6 +22,6 @@ runs:
     - name: Sync the stack and the dev extra
       shell: bash
       run: |
-        uv sync --project stack --locked --python "$(command -v python)"
+        uv sync --project stack --locked --no-editable --python "$(command -v python)"
         uv pip install --python stack/.venv/bin/python -r pyproject.toml --extra dev
         echo "$PWD/stack/.venv/bin" >> "$GITHUB_PATH"
