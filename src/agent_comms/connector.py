@@ -92,6 +92,7 @@ from .coordination.coordinator import Coordination
 from .service_passes import ServicePassStore
 from .tool_result import ToolResult
 from .task_sources import OwnerRequestAttachment
+from .cli_bridges.claude_transcript import WATCH_REPLACED
 from .inbox_watch import InboxWatch, OpenWatch, WatchRoute, WatchTickets
 from .tool_caller import ThreadCaller
 from .tools import CommsSendTool, SendTool
@@ -827,11 +828,14 @@ class Connector(ConnectorService):
         replaced = tuple(held for held in self.open_watches if held.thread == thread)
         self.open_watches.append(watch)
         for held in replaced:
-            await held.viewer.close()
+            await held.viewer.close(code=WATCH_REPLACED, message=b"replaced by a newer watch")
         try:
             await InboxWatch(thread, self.root).carried(viewer)
         finally:
             self.open_watches.remove(watch)
+            # The access log says only that the socket ended; this says which side ended it.
+            logging.info("Watch for %s ended with close code %s; error %r",
+                         thread, viewer.close_code, viewer.exception())
         return viewer
 
     def log_pending(self) -> None:

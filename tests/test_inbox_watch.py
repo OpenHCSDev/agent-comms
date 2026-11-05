@@ -18,7 +18,7 @@ from yarl import URL
 from agent_comms.activity import ActivityState, ObservedActivity
 from agent_comms.cli_bridges.claude_protocol import ClaudeMonitorFrame
 from agent_comms.cli_bridges.claude_protocol import MonitorTaskNotification, TaskEnvelope
-from agent_comms.cli_bridges.claude_transcript import PrintedLedger
+from agent_comms.cli_bridges.claude_transcript import WATCH_REPLACED, PrintedLedger
 from agent_comms.harness_delivery_states import PrintLedgerId
 from agent_comms.cli_bridges.inbox_watch_client import (
     FollowedTranscript, InboxSocket, WatchDropped, WatchEnd, WatchStopped,
@@ -426,6 +426,8 @@ async def test_a_newer_socket_replaces_the_older_one(session, comms: Comms) -> N
     newer = await client.ws_connect(await watch_path(client, token, "cloud"))
     await asyncio.wait_for(older.receive(), timeout=10)
     assert older.closed
+    # The replaced socket says so; an unexplained 1006 is a drop someone has to go diagnose.
+    assert older.close_code == WATCH_REPLACED
     comms.messaging.send("sender", "cloud", "after")
     assert (await frame(newer))["text"] == "after"
     await newer.close()
@@ -477,6 +479,7 @@ def test_an_install_or_a_newer_watch_still_says_rearm() -> None:
     assert WatchEnd.closed(1006) == WatchDropped("closed with code 1006")
     assert WatchEnd.closed(1000) == WatchDropped("closed with code 1000")
     assert WatchEnd.closed(None).exit_code == 1
+    assert WatchEnd.closed(WATCH_REPLACED) == WatchDropped(f"closed with code {WATCH_REPLACED}")
     assert "start this again" in WatchEnd.closed(1006).line()
 
 
