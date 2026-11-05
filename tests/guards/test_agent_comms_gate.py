@@ -73,8 +73,9 @@ class Checkout:
 
     @contextmanager
     def comparing(self, base: str, head: str) -> Iterator[SpawnedProcess]:
-        """The command launched as its own process, for the tests of its process tree."""
-        command = (sys.executable, str(SOURCE / "tools/nra_gate.py"),
+        """The client gate launched as its own process, for the tests of its process tree: a
+        scratch repository ships no stored-format reader, so it is measured as a client is."""
+        command = (sys.executable, str(SOURCE / "tools/nra_client_gate.py"),
                    *self.arguments(base, head))
         with SpawnedProcess.launch(command, cwd=self.path, env=gate_environment(),
                                    stdio=DetachedChildStdio(stdout=subprocess.PIPE)) as child:
