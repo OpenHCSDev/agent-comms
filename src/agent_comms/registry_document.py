@@ -7,7 +7,7 @@ from .tool_result import ToolResult
 import time
 from abc import ABC, abstractmethod
 from collections import ChainMap
-from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, MutableMapping, Sequence
 from pathlib import Path
 from dataclasses import dataclass, field, replace
 from functools import cached_property
@@ -1183,13 +1183,14 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
     def lookup_names(self) -> Mapping[ThreadLookup, str]:
         return MappingProxyType(self.threads.lookup_names())
 
-    def only(self, names: Iterable[str]) -> RegistrySlice:
+    def only(self, names: Collection[str]) -> RegistrySlice:
         """The slice a caller reading ``names`` needs: the rows each one's presentation reads,
         beside every shared field. A remote UI opening one thread
         reads this, not the whole document, almost all of which is other threads' rows."""
         kept = frozenset().union(*(self.read_by(name) for name in names))
         return RegistrySlice(*(ThreadSlice.of(plan).only(plan.current(self), kept)
-                              for plan in FieldCodec.field_plans(type(self)) if plan.declared.init))
+                              for plan in FieldCodec.field_plans(type(self)) if plan.declared.init),
+                             asked=frozenset(names))
 
     def changed_names(self, earlier: RegistrySnapshot) -> frozenset[str]:
         """The names whose registry facts differ from ``earlier``'s, by each field's declared
@@ -1412,10 +1413,14 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
 
 @dataclass(frozen=True, slots=True)
 class RegistrySlice(RegistrySnapshot):
-    """The rows a caller asked for, beside every shared field. A name it did not ask for is
-    outside the slice, not unregistered, so its refusal says which."""
+    """The rows a caller asked for, beside every shared field. A name it asked for and did not
+    get is unregistered; a name it never asked for is outside the slice, so its refusal says which."""
+
+    asked: Annotated[frozenset[str], SlicePolicy(WholeDocumentValue)] = frozenset()
 
     def unregistered(self, name: str) -> UnregisteredThreadError:
+        if name in self.asked:
+            return super().unregistered(name)
         return OutsideRegistrySlice(
             f"Thread {name!r} is not in this registry slice; ask for it by name.")
 
