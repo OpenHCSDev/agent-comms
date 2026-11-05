@@ -54,6 +54,7 @@ from pydantic import JsonValue
 from .declared_verb import DeclaredVerb
 from .cli_protocol import CoreError
 from .command import Command
+from .launch_root import started
 from .child_process import GitChildren, OwnedGitOpening, join_retirement
 from .active_route import CommsRoute, resolve_comms_route
 from .comms import Comms, client_wire, wire
@@ -1281,6 +1282,9 @@ class ServeVerb(ConnectorOptions):
 
     async def serve(self, app: web.Application, connector: Connector) -> None:
         """Bind, then report ready, so a restart returns only once the port answers."""
+        # The connector serves its explicit --root, not a startup-selected route, so its process
+        # starts here rather than in LaunchRoot.startup.
+        started()
         runner = web.AppRunner(app, access_log=None)
         await runner.setup()
         stopped = asyncio.Event()

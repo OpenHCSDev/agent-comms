@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
@@ -11,6 +12,15 @@ from typing import Annotated, ClassVar, Self
 
 from .errors import RelationViolationError
 from .nominal.field_codec import FieldCodec, PathText
+
+
+def started() -> None:
+    """A process has imported its program and is about to work: that heap lives as long as the
+    process, so freeze it. Collection never rescans it and exit skips finalizing it, which cost
+    1.3-1.5 s per connector stop and 0.57 s per agent-comms-team call. Call once per process:
+    freezing mid-run would pin per-request garbage, which is why LaunchSelection.install, also
+    run on every .selected(), never does."""
+    gc.freeze()
 
 
 class LaunchSelection(ABC):
@@ -94,6 +104,7 @@ class LaunchRoot(LaunchSelection, LaunchRequest):
         else:
             root = published()
         root.install()
+        started()
         return root
 
     @classmethod
