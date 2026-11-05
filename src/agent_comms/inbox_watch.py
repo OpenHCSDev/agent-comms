@@ -181,8 +181,8 @@ class TranscriptStopped:
         # A watch run from a newer commit sends frames this host has never declared;
         # naming the host's build is what tells that apart from a broken frame.
         return (f"{self.thread}'s work stopped reaching the bus, though its push still works: "
-                f"{causes}. This host runs {self.host_commit[:12]}; a watch run from a newer "
-                f"commit sends frames this host has never declared.")
+                f"{causes}. This host runs {self.host_commit[:12]}; if this watch runs from a "
+                f"newer commit, run it from {self.host_commit[:12]}.")
 
 
 @dataclass(frozen=True)
