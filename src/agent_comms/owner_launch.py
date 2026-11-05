@@ -68,7 +68,10 @@ class RetainedOwnerLaunch(DeclaredReply):
             root, process, ReadOwnerLaunchRuntimeRequest(thread=thread.name, owner=selection.identity),
         ))
         if result.process != process or result.interpreter != selection.interpreter:
-            raise RelationViolationError("Selected source owner interpreter changed")
+            raise RelationViolationError(
+                f"Selected source owner interpreter changed: the owner reports {result.interpreter} "
+                f"in {result.process}; its selection recorded {selection.interpreter} in {process}"
+            )
         platform.require(process)
         route = launch_runtime.ThreadLaunch.current(result.environment).name
         if not result.environment.get(NativeArguments.binary_key):
