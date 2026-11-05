@@ -440,7 +440,8 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread")
     def ran_in(self, worktree: Checkout) -> bool:
         """The current project or one this conversation moved away from."""
         selected = worktree.resolved()
-        return selected == self.worktree.resolved() or selected in self.earlier_projects
+        return selected == self.worktree.resolved() or selected in {
+            project.resolved() for project in self.earlier_projects}
 
     def relocated_checkout(self, source: Checkout, destination: Checkout) -> Thread:
         """Replace only references to a physically relocated checkout; keep turn/history facts."""
