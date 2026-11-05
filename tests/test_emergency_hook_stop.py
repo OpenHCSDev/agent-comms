@@ -83,6 +83,20 @@ def test_a_dead_bus_does_not_undo_the_stop(tmp_path, monkeypatch, failure):
     assert "failed" in report
 
 
+@pytest.mark.parametrize("content", ('{"hooks": ', "[]"))
+def test_a_broken_settings_file_is_named_and_left_alone(tmp_path, content):
+    path = tmp_path / ".claude/settings.json"
+    path.parent.mkdir()
+    path.write_text(content)
+    with pytest.raises(ValueError, match="fix or move it"):
+        StopVerb(sender="a", why="b").run(tmp_path)
+    assert path.read_text() == content
+
+
+def test_the_post_cannot_outlast_the_foreground_cap():
+    assert HooksVerb.post_seconds < 15
+
+
 def test_the_verbs_parse_from_the_command_the_gate_passes():
     stop = HooksVerb.parse(["stop", "--from", "a", "--why", "b"])
     assert isinstance(stop, StopVerb) and stop.sender == "a" and stop.why == "b"

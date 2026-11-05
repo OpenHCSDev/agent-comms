@@ -25,7 +25,8 @@ class HooksVerb(DeclaredVerb, affix="Verb"):
     """One switch of the setting Claude Code reads on every hook."""
 
     setting: ClassVar[str] = "disableAllHooks"
-    post_seconds: ClassVar[int] = 30
+    post_seconds: ClassVar[int] = 10
+    """Under the 15 s foreground cap, so a wedged bus can't kill the stop before it reports."""
 
     @classmethod
     def tool(cls) -> str:
@@ -80,7 +81,11 @@ class StartVerb(HooksVerb, declared_name="start"):
 
 
 def main() -> int:
-    print(HooksVerb.parse(sys.argv[1:]).run(Path.home()))
+    try:
+        print(HooksVerb.parse(sys.argv[1:]).run(Path.home()))
+    except ValueError as error:
+        print(error, file=sys.stderr)
+        return 1
     return 0
 
 
