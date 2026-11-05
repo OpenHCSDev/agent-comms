@@ -29,6 +29,8 @@ async def headless_owner(comms, tmp_path, caplog, native_runtime_package):
         thread = await Coordination.run_worker(
             partial(owner.sessions.declare_thread, str(tmp_path))
         )
+        # canonical_agent connects a FakeClient; a headless owner has no client at all.
+        owner.on_connect(NO_CONTROLLER)
         await start_headless_owner(owner, thread.name, owner.inputs.configuration.launch)
         yield owner
     finally:
@@ -100,7 +102,7 @@ async def test_broken_pipe_ends_subscription_with_observer_died(headless_owner):
             await pending
         assert failed_send.value is failed_read.value is process.status
         assert process.ended(None) is failed_send.value
-        assert failed_send.value.pid == process.peer.process.pid
+        assert failed_send.value.process is process.peer.process
         assert process.reads == {}
     finally:
         await process.close()
