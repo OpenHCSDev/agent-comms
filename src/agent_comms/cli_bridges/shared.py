@@ -42,8 +42,8 @@ from agent_comms.child_process import (
 from agent_comms.cli_arguments import CliArguments
 from agent_comms.cli_protocol import CoreError, EarlierItems, TaggedWire
 from agent_comms.harness_delivery_states import (
-    DeliveredOutcome, EmittedOutcome, FilteredOutcome, MismatchedMonitor, ObservedMonitor,
-    Outcome, ReceivingMonitor, UnconfirmedOutcome,
+    DeliveredOutcome, EmittedOutcome, FilteredOutcome, MismatchedMonitor, MonitorEvidence,
+    ObservedMonitor, Outcome, TakingLedger, UnconfirmedOutcome,
 )
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination_errors import (
@@ -1168,8 +1168,83 @@ class BridgeLog(io.TextIOBase):
         return self.stream.fileno()
 
 
+class HarnessDeliveryRecords(WaitsOnBusyStore, ABC):
+    """The attempts one harness route records for its recipient, and every step that settles them.
+
+    A bridge beside the session and a watch socket for a session on another machine both record
+    through this parent: neither can store an outcome the other would have had to prove."""
+
+    comms: Comms
+
+    @property
+    @abstractmethod
+    def recipient_lookup(self) -> ThreadLookup: ...
+
+    @property
+    @abstractmethod
+    def delivery_kind(self) -> type[HarnessSession]:
+        """The harness route an attempt is keyed by."""
+
+    def attempt(self, message: messages.Message, outcome: type[Outcome]) -> HarnessDelivery:
+        reference = message.reference
+        return HarnessDelivery(self.delivery_kind, self.recipient_lookup, reference.message_id,
+                               reference.seq, outcome)
+
+    async def coordinator_write[Result](
+        self, operation: Callable[[AssignmentStore, sqlite3.Connection], Result],
+    ) -> Result:
+        """Attempts and their claim steps share the coordinator's one write, under the bus hold.
+
+        A busy store while the coordinator and its transaction are still being acquired is
+        CoordinationBeginUnavailable: the operation and its commit never ran. Once acquired,
+        the operation, its commit and close keep their own errors; none is relabelled."""
+        def write() -> Result:
+            with ExitStack() as held:
+                try:
+                    store = held.enter_context(
+                        Coordination(str(CoordinationStore.path_in(self.comms.root))))
+                    db = held.enter_context(store.session.writing())
+                except CoordinationBeginUnavailable:
+                    raise
+                except CoordinationReadUnavailable as error:
+                    raise CoordinationBeginUnavailable(
+                        CoordinationBeginUnavailable.busy_message) from error
+                return operation(store.assignments, db)
+        return await self.comms.bus.when_open(write)
+
+    async def coordinator_read[Result](self, operation: Callable[[sqlite3.Connection], Result]) -> Result:
+        def read() -> Result:
+            with self.comms.registry.store.coordinator_reader.reader_snapshot() as db:
+                return operation(db)
+        return await self.comms.bus.when_open(read)
+
+    async def attempts(self, message_id: MessageId) -> tuple[HarnessDelivery, ...]:
+        return await self.coordinator_read(lambda db: tuple(HarnessDelivery.select(
+            db, bridge=self.delivery_kind, recipient_lookup=self.recipient_lookup, message_id=message_id)))
+
+    async def message(self, reference: MessageReference) -> messages.Message:
+        message, = await self.comms.bus.when_open(
+            partial(self.comms.bus.bus.messages_for_references, (reference,)))
+        return message
+
+    @contextmanager
+    def uncertain_on_contention(self, message_id: MessageId) -> Iterator[None]:
+        """An exhausted store wait inside a confirmation leaves its attempt as stored: uncertain,
+        never replayed, and the transport keeps serving. Every other error propagates."""
+        try:
+            yield
+        except DeferredRead as error:
+            self.log(f'Message {message_id} remains uncertain; not replayed: {error}')
+
+    async def finish(self, delivery: HarnessDelivery,
+                     change: Callable[[HarnessDelivery], HarnessDelivery]) -> None:
+        with self.uncertain_on_contention(delivery.message_id):
+            stored = await self.coordinator_write(partial(delivery.apply, change))
+            self.log(f'{stored.outcome.declared_name}: {delivery.message_id}')
+
+
 @dataclass(eq=False, repr=False)
-class CliBridge(WaitsOnBusyStore, ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOptions], declared_name=None):
+class CliBridge(HarnessDeliveryRecords, ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOptions], declared_name=None):
     """Core delivery and lifetime shared by CLI-specific transports."""
 
     state_directory: ClassVar[Path]
@@ -1191,10 +1266,11 @@ class CliBridge(WaitsOnBusyStore, ExternalRuntime, DeliversInput, HarnessSession
     address: SessionBinding
     db: sqlite3.Connection
     binding: Binding = field(init=False)
+    comms: Comms = field(init=False)
 
-    @cached_property
-    def comms(self) -> Comms:
-        return wire(Path(self.address.root))
+    def __post_init__(self) -> None:
+        """The bus this bridge's address names; resolving it creates no store."""
+        self.comms = wire(Path(self.address.root))
 
     def watch_record(self, binding: SessionBinding) -> WatchRecord:
         return WatchRecord(binding.bus, binding.root,
@@ -1238,69 +1314,16 @@ class CliBridge(WaitsOnBusyStore, ExternalRuntime, DeliversInput, HarnessSession
     def recipient_lookup(self) -> ThreadLookup:
         return self.binding.owner.require_recorded().lookup
 
-    def attempt(self, message: messages.Message, outcome: type[Outcome]) -> HarnessDelivery:
-        reference = message.reference
-        return HarnessDelivery(type(self), self.recipient_lookup, reference.message_id,
-                               reference.seq, outcome)
-
-    async def coordinator_write[Result](
-        self, operation: Callable[[AssignmentStore, sqlite3.Connection], Result],
-    ) -> Result:
-        """Attempts and their claim steps share the coordinator's one write, under the bus hold.
-
-        A busy store while the coordinator and its transaction are still being acquired is
-        CoordinationBeginUnavailable: the operation and its commit never ran. Once acquired,
-        the operation, its commit and close keep their own errors; none is relabelled."""
-        def write() -> Result:
-            with ExitStack() as held:
-                try:
-                    store = held.enter_context(
-                        Coordination(str(CoordinationStore.path_in(Path(self.binding.root)))))
-                    db = held.enter_context(store.session.writing())
-                except CoordinationBeginUnavailable:
-                    raise
-                except CoordinationReadUnavailable as error:
-                    raise CoordinationBeginUnavailable(
-                        CoordinationBeginUnavailable.busy_message) from error
-                return operation(store.assignments, db)
-        return await self.comms.bus.when_open(write)
-
-    async def coordinator_read[Result](self, operation: Callable[[sqlite3.Connection], Result]) -> Result:
-        def read() -> Result:
-            with self.comms.registry.store.coordinator_reader.reader_snapshot() as db:
-                return operation(db)
-        return await self.comms.bus.when_open(read)
-
-    async def attempts(self, message_id: MessageId) -> tuple[HarnessDelivery, ...]:
-        return await self.coordinator_read(lambda db: tuple(HarnessDelivery.select(
-            db, bridge=type(self), recipient_lookup=self.recipient_lookup, message_id=message_id)))
-
-    async def message(self, reference: MessageReference) -> messages.Message:
-        message, = await self.comms.bus.when_open(
-            partial(self.comms.bus.bus.messages_for_references, (reference,)))
-        return message
+    @property
+    def delivery_kind(self) -> type[HarnessSession]:
+        return type(self)
 
     async def resume_after(self) -> InboxStart:
         """The binding and the attempts own progress, including uncertain emissions."""
         latest = await self.coordinator_read(
-            lambda db: HarnessDelivery.latest(db, type(self), self.recipient_lookup))
+            lambda db: HarnessDelivery.latest(db, self.delivery_kind, self.recipient_lookup))
         return max((self.binding.start, *(BridgeStart(reference) for reference in latest)),
                    key=lambda point: point.cursor())
-
-    @contextmanager
-    def uncertain_on_contention(self, message_id: MessageId) -> Iterator[None]:
-        """An exhausted store wait inside a confirmation leaves its attempt as stored: uncertain,
-        never replayed, and the transport keeps serving. Every other error propagates."""
-        try:
-            yield
-        except DeferredRead as error:
-            self.log(f'Message {message_id} remains uncertain; not replayed: {error}')
-
-    async def finish(self, delivery: HarnessDelivery,
-                     change: Callable[[HarnessDelivery], HarnessDelivery]) -> None:
-        with self.uncertain_on_contention(delivery.message_id):
-            stored = await self.coordinator_write(partial(delivery.apply, change))
-            self.log(f'{stored.outcome.declared_name}: {delivery.message_id}')
 
     async def prepare_delivery(self) -> None:
         """A transport may prepare its harness after the operation bound its reader."""
@@ -1505,10 +1528,20 @@ class TranscriptBridge(PublishesToBus, CliBridge[BridgeOptions]):
         return self.binding.bus
 
 
+WireReference = InstanceOf[
+    Annotated[
+        MessageReference,
+        PlainValidator(partial(FieldCodec.decode, MessageReference)),
+        PlainSerializer(FieldCodec.encode),
+    ]
+]
+"""A message reference on our wire lines, in the one spelling FieldCodec gives it."""
+
+
 class MonitorFrame(TaggedWire, ABC, affix=""):
     """Our line protocol inside the harness's task-notification envelope."""
     async def confirm(
-        self, bridge: LineMonitorBridge, record: ObservedMonitor,
+        self, bridge: TranscriptConfirmsDelivery, record: ObservedMonitor,
     ) -> tuple[MessageReference, ...]:
         return ()
 
@@ -1533,7 +1566,7 @@ class MonitorProbe(MonitorProtocolFrame, declared_name='probe'):
     session: str
     token: str
 
-    async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> tuple[MessageReference, ...]:
+    async def confirm(self, bridge: TranscriptConfirmsDelivery, record: ObservedMonitor) -> tuple[MessageReference, ...]:
         await bridge.confirm_probe(self)
         return ()
 
@@ -1546,13 +1579,7 @@ class MonitorReadFile(MonitorProtocolFrame, declared_name='read-file'):
     The message is instead the private file this notice names, read whole. Seeing the notice
     proves only that the notice arrived; a visible Read of the file confirms the body."""
 
-    reference: InstanceOf[
-        Annotated[
-            MessageReference,
-            PlainValidator(partial(FieldCodec.decode, MessageReference)),
-            PlainSerializer(FieldCodec.encode),
-        ]
-    ]
+    reference: WireReference
     path: str
     instruction: Literal['This is one message. Read this complete file before acting on it.'] = (
         'This is one message. Read this complete file before acting on it.')
@@ -1608,7 +1635,7 @@ class MonitorReadFile(MonitorProtocolFrame, declared_name='read-file'):
         with self.directory() as directory, suppress(FileNotFoundError):
             os.unlink(Path(self.path).name, dir_fd=directory)
 
-    async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> tuple[MessageReference, ...]:
+    async def confirm(self, bridge: TranscriptConfirmsDelivery, record: ObservedMonitor) -> tuple[MessageReference, ...]:
         """The notice frees only its own reservation; it confirms no body."""
         await bridge.part_observed(self.reference.message_id, self.reservation)
         return ()
@@ -1658,7 +1685,7 @@ class MonitorPart(MonitorFrame, declared_name='part'):
             raise ValueError('Monitor part number exceeds total')
         return self
 
-    async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> tuple[MessageReference, ...]:
+    async def confirm(self, bridge: TranscriptConfirmsDelivery, record: ObservedMonitor) -> tuple[MessageReference, ...]:
         """The whole confirmation (attempt read, observed parts, mismatch, final outcome) is one
         contention boundary: a busy coordinator cannot tear down the monitor mid-confirmation."""
         references: list[MessageReference] = []
@@ -1696,7 +1723,7 @@ class ConfirmedDelivery(DeliveredInput):
         return await bridge.confirm_delivery(self)
 
     @abstractmethod
-    async def confirmed_by(self, bridge: LineMonitorBridge) -> ConfirmedDelivery:
+    async def confirmed_by(self, bridge: TranscriptConfirmsDelivery) -> ConfirmedDelivery:
         """This observation with the original references its delivery confirms."""
 
 
@@ -1717,7 +1744,7 @@ class BridgeInputObserved(DeliveredInput, HiddenItem):
             if self.text != IncomingFrame(message).text:
                 raise RelationViolationError("Observed bus input differs from its original delivery")
             await bridge.finish(delivery, partial(replace, outcome=DeliveredOutcome))
-            references.extend(message.opening_references(bridge.binding.bus))
+            references.extend(message.opening_references(bridge.transcript_thread))
         return replace(self, references=tuple(references))
 
 
@@ -1726,18 +1753,82 @@ class MonitorObservation(ConfirmedDelivery):
     frame: MonitorFrame
     record: ObservedMonitor
 
-    async def confirmed_by(self, bridge: LineMonitorBridge) -> ConfirmedDelivery:
+    async def confirmed_by(self, bridge: TranscriptConfirmsDelivery) -> ConfirmedDelivery:
         return replace(self, references=await self.frame.confirm(bridge, self.record))
 
 
-class TranscriptConfirmsDelivery:
-    """Delivery is confirmed only by observing it in the bridge's own transcript subscription."""
+class TranscriptConfirmsDelivery(PublishesToBus, HarnessDeliveryRecords):
+    """Delivery is confirmed only by observing it in the route's own transcript subscription:
+    a bridge reading the session's file and a watch socket receiving its lines confirm alike."""
+
+    async def confirm_delivery(self, update: ConfirmedDelivery) -> ConfirmedDelivery:
+        return await update.confirmed_by(self)
+
+    async def observe_part(self, delivery: HarnessDelivery, notification: MonitorPart,
+                           record: ObservedMonitor) -> tuple[HarnessObservedPart, ...]:
+        """Record one transcript part as observed; every observed part of its message, in order."""
+        part = HarnessObservedPart(delivery.bridge, delivery.recipient_lookup, delivery.message_id,
+                                   notification.number, notification.sender, notification.body,
+                                   record.record_id, record.timestamp)
+
+        def observe(assignments: AssignmentStore, db: sqlite3.Connection) -> tuple[HarnessObservedPart, ...]:
+            part.insert_if_absent(db)
+            return HarnessObservedPart.of(db, delivery)
+        parts = await self.coordinator_write(observe)
+        await self.part_observed(delivery.message_id, notification.number)
+        return parts
+
+    async def record_mismatch(self, delivery: HarnessDelivery, reason: str) -> None:
+        await self.coordinator_write(
+            partial(delivery.apply, partial(replace, monitor=MismatchedMonitor(reason))))
+        self.log(f'Monitor parts mismatch; message remains pending: {delivery.message_id}')
+
+    async def part_observed(self, message_id: MessageId, number: int) -> None:
+        """Only a route that holds a window frees part of it."""
+
+    async def confirm_probe(self, probe: MonitorProbe) -> None:
+        """Only a bridge that sent a probe waits on one; an old probe in a replayed window is
+        history."""
+
+    incoming_frame: ClassVar[type[MonitorIncomingFrame]]
+
+    def exported(self, path: str) -> tuple[MonitorReadFile, ...]:
+        """The notice whose export a Read showed; a route that exported no file names none."""
+        return ()
+
+    async def retire_read(self, exact: HarnessDelivery, read: ReadResultObserved,
+                          notice: MonitorReadFile) -> None:
+        """A route that does not hold the export leaves it where it is."""
+
+    async def read_export(self, read: ReadResultObserved) -> tuple[MessageReference, ...]:
+        """A visible Read of this session's own export confirms the parts it shows, through the
+        same all-parts gate a Monitor event uses. The export names an exact reference: only the
+        attempt at that reference takes its parts, so a file at another sequence with the same
+        message id confirms nothing. The parts are judged against the bus message, never the
+        file: a read showing anything but the original's own lines confirms nothing."""
+        references: list[MessageReference] = []
+        for notice in self.exported(read.path):
+            identity = notice.reference.message_id
+            rows = read.rows()
+            with self.uncertain_on_contention(identity):
+                for exact in (attempt for attempt in await self.attempts(identity)
+                              if attempt.reference == notice.reference):
+                    message = await self.message(exact.reference)
+                    for part in self.incoming_frame(message).read_parts(rows):
+                        references.extend(await part.confirm(self, read.record))
+                    await self.retire_read(exact, read, notice)
+        return tuple(references)
 
 
 class MonitorIncomingFrame(IncomingFrame):
     @property
     @abstractmethod
     def parts(self) -> tuple[str, ...]: ...
+
+    def shown_evidence(self, ledger: TakingLedger) -> MonitorEvidence:
+        """What an attempt waits for, under the ledger that took it: every part, whether one
+        event shows the message whole or a Read of its export shows its slices."""
+        return ledger.receiving(len(self.parts))
 
     @abstractmethod
     async def emit_to(self, attachment: MonitorAttachment, window_bytes: int, exports: Path) -> None:
@@ -1752,7 +1843,6 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
     """Session-owned subscription and delivery journal, with replaceable readers."""
 
     output_type: ClassVar[type[ThreadOutput]] = ReplyingThreadOutput
-    incoming_frame: ClassVar[type[MonitorIncomingFrame]]
     window_bytes: ClassVar[int]
 
     def __init__(self, options: Options, address: SessionBinding, db: sqlite3.Connection) -> None:
@@ -1800,25 +1890,6 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
     async def part_observed(self, message_id: MessageId, number: int) -> None:
         await self.reader.part_observed(message_id, number)
 
-    async def observe_part(self, delivery: HarnessDelivery, notification: MonitorPart,
-                           record: ObservedMonitor) -> tuple[HarnessObservedPart, ...]:
-        """Record one transcript part as observed; every observed part of its message, in order."""
-        part = HarnessObservedPart(delivery.bridge, delivery.recipient_lookup, delivery.message_id,
-                                   notification.number, notification.sender, notification.body,
-                                   record.record_id, record.timestamp)
-
-        def observe(assignments: AssignmentStore, db: sqlite3.Connection) -> tuple[HarnessObservedPart, ...]:
-            part.insert_if_absent(db)
-            return HarnessObservedPart.of(db, delivery)
-        parts = await self.coordinator_write(observe)
-        await self.part_observed(delivery.message_id, notification.number)
-        return parts
-
-    async def record_mismatch(self, delivery: HarnessDelivery, reason: str) -> None:
-        await self.coordinator_write(
-            partial(delivery.apply, partial(replace, monitor=MismatchedMonitor(reason))))
-        self.log(f'Monitor parts mismatch; message remains pending: {delivery.message_id}')
-
     @staticmethod
     def encode(text: str) -> str:
         # One reversible JSON string per line; no truncation or lost line breaks.
@@ -1829,31 +1900,17 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
         """Where this session's messages too large for one event are read whole."""
         return self.options.state.absolute() / 'messages'
 
-    async def confirm_delivery(self, update: ConfirmedDelivery) -> ConfirmedDelivery:
-        return await update.confirmed_by(self)
+    def exported(self, path: str) -> tuple[MonitorReadFile, ...]:
+        """Only this session's own export directory holds a file this bridge wrote."""
+        return MonitorReadFile.exported_at(self.exports, path)
 
-    async def read_export(self, read: ReadResultObserved) -> tuple[MessageReference, ...]:
-        """A visible Read of this session's own export confirms the parts it shows, through the
-        same all-parts gate a Monitor event uses. The export names an exact reference: only the
-        attempt at that reference takes its parts, so a file at another sequence with the same
-        message id confirms nothing. Any other file, or a read showing anything but the exported
-        message's own lines, confirms nothing either. The export goes once that attempt, reread,
-        is consumed and no other Read of it is still running."""
-        references: list[MessageReference] = []
-        for notice in MonitorReadFile.exported_at(self.exports, read.path):
-            identity = notice.reference.message_id
-            rows = read.rows()
-            with self.uncertain_on_contention(identity):
-                attempted = await self.attempts(identity)
-                for exact in (attempt for attempt in attempted
-                              if attempt.reference == notice.reference):
-                    message = await self.message(exact.reference)
-                    for part in self.incoming_frame(message).read_parts(rows):
-                        references.extend(await part.confirm(self, read.record))
-                    for unread in read.closing(notice):
-                        for stored in await self.coordinator_read(exact.stored):
-                            stored.monitor.finished_with(unread)
-        return tuple(references)
+    async def retire_read(self, exact: HarnessDelivery, read: ReadResultObserved,
+                          notice: MonitorReadFile) -> None:
+        """The export goes once its attempt, reread, is consumed and no other Read of it is
+        still running."""
+        for unread in read.closing(notice):
+            for stored in await self.coordinator_read(exact.stored):
+                stored.monitor.finished_with(unread)
 
     def new_attachment(self, peer: MonitorPeer, token: str) -> MonitorAttachment:
         return MonitorAttachment(peer, MonitorProbe(session=self.binding.thread, token=token))
@@ -1863,7 +1920,7 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
 
     async def deliver_to(self, attachment: MonitorAttachment, message: messages.Message) -> type[Outcome]:
         frame = self.incoming_frame(message)
-        receiving = partial(replace, monitor=ReceivingMonitor(len(frame.parts)))
+        receiving = partial(replace, monitor=frame.shown_evidence(TakingLedger()))
         attempt = self.attempt(message, UnconfirmedOutcome)
         await self.coordinator_write(partial(attempt.apply, receiving))
         await frame.emit_to(attachment, self.window_bytes, self.exports)

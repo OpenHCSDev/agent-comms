@@ -1,6 +1,9 @@
 """A session on another machine is woken by a pushed frame, through the login it already has."""
 
 import asyncio
+import os
+import signal
+import sys
 import json
 import re
 from pathlib import Path
@@ -15,6 +18,8 @@ from yarl import URL
 from agent_comms.activity import ActivityState, ObservedActivity
 from agent_comms.cli_bridges.claude_protocol import ClaudeMonitorFrame
 from agent_comms.cli_bridges.claude_protocol import MonitorTaskNotification, TaskEnvelope
+from agent_comms.cli_bridges.claude_transcript import PrintedLedger
+from agent_comms.harness_delivery_states import PrintLedgerId
 from agent_comms.cli_bridges.inbox_watch_client import (
     FollowedTranscript, InboxSocket, WatchDropped, WatchEnd, WatchStopped,
 )
@@ -22,6 +27,8 @@ from agent_comms.comms import Comms
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.connector import Connector
 from agent_comms.connector_store import ConnectorStore
+from agent_comms.message_reference import MessageReference
+from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery
 from agent_comms.repo import Checkout
 from agent_comms.thread_status import ConnectedThreadStatus, NoBridgeThreadStatus
 from agent_comms.threads import ExternalThread, NativeThread
@@ -471,3 +478,261 @@ def test_an_install_or_a_newer_watch_still_says_rearm() -> None:
     assert WatchEnd.closed(1000) == WatchDropped("closed with code 1000")
     assert WatchEnd.closed(None).exit_code == 1
     assert "start this again" in WatchEnd.closed(1006).line()
+
+
+def attempt_outcome(comms: Comms, message) -> str:
+    with comms.registry.store.coordinator_reader.reader_snapshot() as db:
+        attempt, = HarnessDelivery.select(db, message_id=message.message_id)
+    return attempt.outcome.declared_name
+
+
+async def test_a_pushed_message_is_delivered_only_once_the_transcript_shows_it(
+    session, comms: Comms,
+) -> None:
+    """A frozen watch past its heartbeat took message 62380 and never showed it; the bus said
+    delivered because the socket write returned. The write proves nothing: only the session's
+    own Monitor event does, and a mangled one proves nothing either."""
+    client, token = session
+    socket = await client.ws_connect(await watch_path(client, token, "cloud"))
+    shown = comms.messaging.send("sender", "cloud", "shown as written").message
+    mangled = comms.messaging.send("sender", "cloud", "shown wrong").message
+    wrapped = comms.messaging.send("sender", "cloud", "word " * 240 + "\n\nafter a blank line").message
+    for _ in range(3):
+        await frame(socket)
+    await inbox_emptied(comms, "cloud")
+    assert {attempt_outcome(comms, message) for message in (shown, mangled, wrapped)} == {"unconfirmed"}
+
+    await socket.send_str(monitor_event_record(ClaudeMonitorFrame(shown).shown_inline()))
+    await socket.send_str(monitor_event_record(
+        ClaudeMonitorFrame(mangled).shown_inline().replace("wrong", "otherwise")))
+    await socket.send_str(monitor_event_record(ClaudeMonitorFrame(wrapped).shown_inline()))
+    async with asyncio.timeout(20):
+        while {attempt_outcome(comms, shown), attempt_outcome(comms, wrapped)} != {"delivered"}:
+            await asyncio.sleep(0.05)
+    assert attempt_outcome(comms, mangled) == "unconfirmed"
+    await socket.close()
+
+
+TOOK_IT = PrintLedgerId("the ledger that took it")
+
+
+def ledger_line(*messages, ledger: PrintLedgerId = TOOK_IT) -> str:
+    return PrintedLedger(ledger=ledger, printed=tuple(message.reference for message in messages)).line()
+
+
+async def ledger_reported(socket, client: TestClient, token: str, words: str) -> None:
+    """The reader takes the socket's frames in order: once a line sent after the ledger shows
+    as the session's work, the ledger was handled before it."""
+    await socket.send_str(ledger_line())
+    for line in transcript_lines(words):
+        await socket.send_str(line)
+    async with asyncio.timeout(20):
+        while words not in await turns_of(client, token, "cloud"):
+            await asyncio.sleep(0.05)
+
+
+async def bridged(comms: Comms, thread: str) -> None:
+    async with asyncio.timeout(20):
+        while not isinstance(comms.registry.snapshot().entry(thread).status, ConnectedThreadStatus):
+            await asyncio.sleep(0.05)
+
+
+async def outcome_becomes(comms: Comms, message, outcome: str) -> None:
+    async with asyncio.timeout(20):
+        while attempt_outcome(comms, message) != outcome:
+            await asyncio.sleep(0.05)
+
+
+async def test_a_message_the_client_printed_reads_emitted(session, comms: Comms, tmp_path: Path, capsys) -> None:
+    client, token = session
+    url = str(client.make_url(await watch_path(client, token, "cloud")))
+    source = tmp_path / "session-a.jsonl"
+    source.write_text("".join(f"{line}\n" for line in transcript_lines("before")))
+    watch = asyncio.create_task(
+        InboxSocket(url, tmp_path / "cloud" / "messages", FollowedTranscript(source)).carried())
+    await bridged(comms, "cloud")
+    message = comms.messaging.send("sender", "cloud", "printed here").message
+    await inbox_emptied(comms, "cloud")
+    await outcome_becomes(comms, message, "emitted")
+    ledgers = tmp_path / "cloud" / "printed"
+    assert sorted(path.name for path in ledgers.iterdir()) == ["session-a", "session-a.id"]
+    assert (ledgers / "session-a").read_text().split() == [message.reference.name]
+    watch.cancel()
+
+
+async def test_a_message_taken_but_never_printed_is_replayed_once_the_ledger_proves_it(
+    session, comms: Comms,
+) -> None:
+    """62380: a frozen watch took it, the socket died, and it was gone for good."""
+    client, token = session
+    frozen = await client.ws_connect(await watch_path(client, token, "cloud"))
+    await bridged(comms, "cloud")
+    await ledger_reported(frozen, client, token, "ledger in before the freeze")
+    lost = comms.messaging.send("sender", "cloud", "taken, never printed").message
+    shown = comms.messaging.send("sender", "cloud", "printed before the freeze").message
+    assert [(await frame(frozen))["text"] for _ in range(2)] == [lost.body, shown.body]
+    await inbox_emptied(comms, "cloud")
+    await frozen.close()
+
+    again = await client.ws_connect(await watch_path(client, token, "cloud"))
+    await again.send_str(ledger_line(shown))
+    assert (await frame(again))["text"] == lost.body
+    await outcome_becomes(comms, shown, "emitted")
+    assert attempt_outcome(comms, lost) == "unconfirmed"
+    with pytest.raises(TimeoutError):
+        await asyncio.wait_for(again.receive_str(), timeout=1)
+    await again.close()
+
+
+async def test_a_fresh_containers_empty_ledger_proves_nothing(session, comms: Comms) -> None:
+    """The container that printed it was reclaimed; the session came back with an empty ledger
+    under the same session id. That ledger never took the attempt, so its silence is no proof."""
+    client, token = session
+    reclaimed = await client.ws_connect(await watch_path(client, token, "cloud"))
+    await bridged(comms, "cloud")
+    await ledger_reported(reclaimed, client, token, "ledger in before the reclaim")
+    comms.messaging.send("sender", "cloud", "printed in the reclaimed container")
+    await frame(reclaimed)
+    await inbox_emptied(comms, "cloud")
+    await reclaimed.close()
+    fresh = await client.ws_connect(await watch_path(client, token, "cloud"))
+    await fresh.send_str(ledger_line(ledger=PrintLedgerId("born in the fresh container")))
+    with pytest.raises(TimeoutError):
+        await asyncio.wait_for(fresh.receive_str(), timeout=2)
+    await fresh.close()
+
+
+async def test_no_ledger_is_no_proof_so_nothing_is_replayed(session, comms: Comms) -> None:
+    client, token = session
+    old = await client.ws_connect(await watch_path(client, token, "cloud"))
+    await bridged(comms, "cloud")
+    comms.messaging.send("sender", "cloud", "taken by an old client")
+    await frame(old)
+    await inbox_emptied(comms, "cloud")
+    await old.close()
+    again = await client.ws_connect(await watch_path(client, token, "cloud"))
+    with pytest.raises(TimeoutError):
+        await asyncio.wait_for(again.receive_str(), timeout=2)
+    await again.close()
+
+
+async def test_a_watch_frozen_past_its_heartbeat_loses_nothing_and_shows_nothing_twice(
+    session, comms: Comms, tmp_path: Path,
+) -> None:
+    """The 62380 freeze with a real client process and a real SIGSTOP: the connector drops the
+    stopped socket at its heartbeat while the message it took sits unshown. Whatever the client
+    prints after SIGCONT is in its ledger, and the next watch sends exactly what it did not."""
+    client, token = session
+    url = str(client.make_url(await watch_path(client, token, "cloud")))
+    (tmp_path / ".claude" / "projects" / "p").mkdir(parents=True)
+    (tmp_path / ".claude" / "projects" / "p" / "frozen-session.jsonl").write_text(
+        "".join(f"{line}\n" for line in transcript_lines("before the freeze")))
+    environment = {**os.environ, "HOME": str(tmp_path), "CLAUDE_CODE_SESSION_ID": "frozen-session",
+                   "PYTHONPATH": str(Path(__file__).parents[1] / "src")}
+    watch = await asyncio.create_subprocess_exec(
+        sys.executable, "-c", "from agent_comms.cli_bridges.inbox_watch_client import main; main()", url,
+        env=environment, stdout=asyncio.subprocess.PIPE)
+    assert watch.stdout is not None
+    async with asyncio.timeout(30):
+        assert b"Watching your inbox" in await watch.stdout.readline()
+    os.kill(watch.pid, signal.SIGSTOP)
+    try:
+        message = comms.messaging.send("sender", "cloud", "sent into the freeze").message
+        await inbox_emptied(comms, "cloud")
+        async with asyncio.timeout(90):
+            while isinstance(comms.registry.snapshot().entry("cloud").status, ConnectedThreadStatus):
+                await asyncio.sleep(0.5)
+    finally:
+        os.kill(watch.pid, signal.SIGCONT)
+    async with asyncio.timeout(30):
+        printed = (await watch.stdout.read()).decode()
+    await watch.wait()
+    ledger = tmp_path / ".local" / "state" / "claude-comms-inbox" / "cloud" / "printed" / "frozen-session"
+    names = ledger.read_text().split() if ledger.exists() else []
+    assert (message.body in printed) == (message.reference.name in names)
+
+    again = await client.ws_connect(await watch_path(client, token, "cloud"))
+    identity = PrintLedgerId(ledger.with_suffix(".id").read_text())
+    await again.send_str(PrintedLedger(
+        ledger=identity, printed=tuple(MessageReference.named(n) for n in names)).line())
+    if message.reference.name in names:
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(again.receive_str(), timeout=2)
+    else:
+        assert (await frame(again))["text"] == message.body
+    await again.close()
+
+
+def read_records(path: str, text: str) -> tuple[str, str]:
+    """The transcript records Claude writes for one Read call and its visible result."""
+    call = str(uuid4())
+    started = {"type": "assistant", "uuid": str(uuid4()), "timestamp": "2026-11-04T00:00:01.000Z",
+               "sessionId": "s", "message": {"content": [
+                   {"type": "tool_use", "id": call, "name": "Read", "input": {"file_path": path}}]}}
+    returned = {"type": "user", "uuid": str(uuid4()), "timestamp": "2026-11-04T00:00:02.000Z",
+                "sessionId": "s", "promptId": "p", "message": {"content": [
+                    {"type": "tool_result", "tool_use_id": call, "content": text, "is_error": False}]}}
+    return json.dumps(started), json.dumps(returned)
+
+
+async def test_a_cloud_message_sent_as_a_file_is_delivered_once_its_read_shows_it(
+    session, comms: Comms,
+) -> None:
+    """A message too long for one event goes to a file on the session's machine. Its Read comes
+    up the socket in the transcript, and the lines are judged against the bus message, so a
+    Read of the right name with other lines confirms nothing."""
+    client, token = session
+    socket = await client.ws_connect(await watch_path(client, token, "cloud"))
+    body = "\n".join(f"line {number} " + "x" * 60 for number in range(80))
+    whole = comms.messaging.send("sender", "cloud", body).message
+    forged = comms.messaging.send("sender", "cloud", body.replace("line 7 ", "line 7?")).message
+    for _ in range(2):
+        await frame(socket)
+    await inbox_emptied(comms, "cloud")
+    assert not ClaudeMonitorFrame(whole).fits_one_event
+
+    def numbered(lines: tuple[str, ...]) -> str:
+        return "\n".join(f"{number}\t{line}" for number, line in enumerate(lines, 1))
+
+    for message, lines in ((whole, ClaudeMonitorFrame(whole).export_lines),
+                           (forged, ClaudeMonitorFrame(whole).export_lines)):
+        path = f"/elsewhere/state/messages/{message.reference.name}.txt"
+        for record in read_records(path, numbered(lines)):
+            await socket.send_str(record)
+    async with asyncio.timeout(20):
+        while attempt_outcome(comms, whole) != "delivered":
+            await asyncio.sleep(0.05)
+    assert attempt_outcome(comms, forged) == "unconfirmed"
+    await socket.close()
+
+
+def cat_records(path: str, text: str) -> tuple[str, str]:
+    """The transcript records Claude writes for a Bash `cat` of one file and its output."""
+    started, returned = map(json.loads, read_records(path, text))
+    started["message"]["content"][0].update(name="Bash", input={"command": f"cat {path}"})
+    return json.dumps(started), json.dumps(returned)
+
+
+async def test_a_cloud_message_sent_as_a_file_is_delivered_once_a_cat_shows_it(
+    session, comms: Comms,
+) -> None:
+    """A session that reads its messages with Bash cat, as auto mode suggests, put every file
+    sent message in reserve forever (claude-g-standby). The cat output is the file as it is,
+    judged against the bus message like a Read; a cat of an edited copy confirms nothing."""
+    client, token = session
+    socket = await client.ws_connect(await watch_path(client, token, "cloud"))
+    body = "\n".join(f"line {number} " + "x" * 60 for number in range(80))
+    whole = comms.messaging.send("sender", "cloud", body).message
+    edited = comms.messaging.send("sender", "cloud", body.replace("line 7 ", "line 7?")).message
+    for _ in range(2):
+        await frame(socket)
+    await inbox_emptied(comms, "cloud")
+    for message in (whole, edited):
+        path = f"/elsewhere/state/messages/{message.reference.name}.txt"
+        for record in cat_records(path, "\n".join(ClaudeMonitorFrame(whole).export_lines)):
+            await socket.send_str(record)
+    async with asyncio.timeout(20):
+        while attempt_outcome(comms, whole) != "delivered":
+            await asyncio.sleep(0.05)
+    assert attempt_outcome(comms, edited) == "unconfirmed"
+    await socket.close()

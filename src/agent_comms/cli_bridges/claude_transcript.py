@@ -4,19 +4,25 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import BinaryIO, ClassVar, Self
+import asyncio
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from typing import BinaryIO, ClassVar, Literal, Self
 
 from agent_comms.runtime_updates import RuntimeUpdate, SessionFacts
 from agent_comms.thread_text import NoThreadText, ThreadText
 
 from ..session_receipts import SessionReceipts
+from ..cli_protocol import TaggedWire
+from ..harness_delivery_states import PrintLedgerId, TakingLedger
+from ..message_reference import MessageReference
 from ..wire_models import WireModel
+from .shared import WireReference
 from .claude_protocol import CLAUDE_RECORD, ClaudeRecord, ClaudeSession, SubagentProgress
 from .history import (
     ClaudeHistory, HarnessAddress, JsonLines, JsonLinesFile, NamedSession,
     OfflineHistory, OnlineHistory,
 )
-
 
 class SubagentMeta(WireModel):
     description: str
@@ -93,6 +99,74 @@ WINDOW_ENDED = ""
 never blank (JsonLines.complete_lines), so this cannot be mistaken for one."""
 
 WATCH_STOPPED = 4000
+
+
+@dataclass
+class ReportedLedger:
+    """The printed ledger this socket's client reported, once it has: until then every message
+    is taken under no ledger, and nothing it takes can ever be proved unshown."""
+
+    current: TakingLedger = field(default_factory=TakingLedger)
+    arrival: asyncio.Event = field(default_factory=asyncio.Event)
+
+    def arrived(self, ledger: PrintLedgerId) -> None:
+        self.current = ledger
+        self.arrival.set()
+
+
+class ReceivesWatchReports(ABC):
+    """The connector's end of a watch socket, which the client's reports act on."""
+
+    reported: ReportedLedger
+
+    @abstractmethod
+    async def emitted(self, printed: frozenset[MessageReference]) -> None:
+        """The client printed these, or was about to: their attempts are never sent again."""
+
+
+class WatchReportFields(WireModel):
+    """The fields every watch report carries, protocol first so its lines start with the
+    prefix. They sit on a plain model, as TextDisplay's do, where constructors can see them."""
+
+    protocol: Literal['agent-comms-watch'] = 'agent-comms-watch'
+    wire_prefix: ClassVar[str] = '{"protocol":' + json.dumps(protocol) + ','
+    printed: tuple[WireReference, ...]
+
+
+class LedgerFields(WatchReportFields):
+    """A ledger report's fields: the common ones, then the ledger's id."""
+
+    ledger: PrintLedgerId
+
+
+class WatchReport(WatchReportFields, TaggedWire, ABC, affix="", declared_name=None):
+    """What a watch client says up its socket besides its transcript: the messages it may have
+    shown. A reference is written to the client's ledger before its event is printed, so the
+    ledger can only overstate what was shown; a message missing from it was never printed."""
+
+    def line(self) -> str:
+        return self.model_dump_json()
+
+    async def received(self, pushed: ReceivesWatchReports) -> None:
+        """Each printed message's attempt is emitted: shown or about to be, never sent again."""
+        await pushed.emitted(frozenset(self.printed))
+
+
+class PrintedNow(WatchReport, declared_name='printed'):
+    """The message just printed under the session's Monitor."""
+
+
+class PrintedLedger(LedgerFields, WatchReport, declared_name='ledger'):
+    """Everything this session's client may have printed, sent first on every connect, with the
+    ledger's own id. Once it is in, an attempt this ledger took and still unconfirmed provably
+    never reached a Monitor and may go again."""
+
+    async def received(self, pushed: ReceivesWatchReports) -> None:
+        await super().received(pushed)
+        pushed.reported.arrived(self.ledger)
+
+
+WATCH_REPORT = WireModel.adapter(WatchReport.declared_union())
 """On a watch socket: the close code saying this thread was stopped on the bus, so the session must
 not re-arm. It is in the application range (4000-4999): a re-armed watch replacing an older socket
 closes with 1000, and an install drops the socket (1006), and both of those mean re-arm."""
