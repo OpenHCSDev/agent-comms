@@ -2,6 +2,7 @@
 
 from agent_comms.context_store import UNREAD_CONTEXT
 from bus_history import read_history
+from delivery_owner_fixture import qualified_owner_launch  # noqa: F401
 from dataclasses import replace
 import hashlib
 import json
@@ -112,14 +113,19 @@ def test_current_core_context_is_independent_and_source_selection_is_current(tmp
 
 
 @pytest.mark.asyncio
-async def test_core_context_socket_reads_without_native_session_or_preview(tmp_path):
-    from delivery_owner_fixture import canonical_delivery_owner
+async def test_core_context_socket_reads_without_native_session_or_preview(
+        tmp_path, qualified_owner_launch):
+    from delivery_owner_fixture import canonical_delivery_owner, start_headless_owner
     from agent_comms.owner_connection import socket_path
     from agent_comms.runtime import RuntimeConnection
 
     async with canonical_delivery_owner(tmp_path) as (comms, agent, _, _):
         owner = comms.registry.require("alpha")
         assert owner.session_file == NoSessionFile()
+        # An owner answers live reads only for a session under its own lease (#3982). A
+        # headless owner holds that lease without any native Pi session file.
+        await start_headless_owner(agent, "alpha", qualified_owner_launch)
+        owner = comms.registry.require("alpha")
         connection = RuntimeConnection(comms, owner.incarnation,
                                        socket_path(comms.root, owner.require_process().pid))
         try:
