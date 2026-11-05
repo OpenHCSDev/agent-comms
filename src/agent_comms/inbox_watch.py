@@ -41,6 +41,7 @@ from .errors import RelationViolationError
 from .harness_delivery_states import EmittedOutcome, PrintLedgerId, TakingLedger, UnconfirmedOutcome
 from .message_reference import MessageReference
 from .messages import Message
+from .package_stamp import STAMP
 from .nominal.field_codec import FieldCodec, ThreadLookup
 from .runtime_updates import RuntimeUpdate
 from .tool_result import ToolResult
@@ -287,9 +288,12 @@ class InboxWatch:
                 # A decoder's first line lists its whole union, so what went wrong is at the end.
                 causes = "; ".join(f"{type(failure).__name__}: {str(failure)[-400:]}"
                                    for failure in failures.exceptions)
+                # A watch run from a newer commit sends frames this host has never declared;
+                # naming the host's build is what tells that apart from a broken frame.
                 comms.messaging.send(self.thread, "#comms", (
                     f"{self.thread}'s work stopped reaching the bus, though its push still works: "
-                    f"{causes}"))
+                    f"{causes}. This host runs {STAMP.commit()[:12]}: a watch run from a newer "
+                    f"commit sends frames it cannot read, so run the watch from that commit."))
         async for _ in socket:
             pass
 
