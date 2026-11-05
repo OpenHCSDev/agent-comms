@@ -560,8 +560,14 @@ class OwnedTurn:
             state = await Coordination.run_worker(self.settle_unbound)
             await self.progress.consumer.dispatch(events.PromptCancelled(state))
             raise
-        except (NativeRequestFailure, Refused) as error:
+        except NativeRequestFailure as error:
             await self.fail(error, error, BackendFailed)
+        except Refused as error:
+            # A refusal protects the turn's own work; it says nothing about the backend.
+            # Renaming it BackendFailed failed the turn and blocked the goal, so a capacity
+            # or validation refusal demanded an explicit retry forever after. CoordinationRefused
+            # is the declared member for this, and it resumes rather than blocks.
+            await self.fail(error, error, CoordinationRefused)
         except CoordinationError as error:
             await self.fail(error, error, CoordinationRefused)
         # The completed outcome owns notification delivery and request failure;

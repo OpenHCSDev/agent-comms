@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from .turn_failure import BackendFailed, TurnFailure
+from .turn_failure import BackendFailed, NoTurnFailure, TurnFailure
 
 if TYPE_CHECKING:
     from .agent_events import Done
@@ -33,7 +34,8 @@ class TurnTerminal(TurnInterruption):
         raise RuntimeError("Turn has no reported backend result")
 
     async def prepare_publication(self, progress: TurnProgress) -> Done:
-        return await progress.record_failure(EndedWithoutResult().turn_failure)
+        return await progress.record_failure(
+            EndedWithoutResult(failure=progress.terminal_failure).turn_failure)
 
     async def report_failure(self, progress: TurnProgress, error: Exception, kind: type[TurnFailure]):
         cause = error.__cause__ or error
@@ -52,7 +54,15 @@ class TurnTerminal(TurnInterruption):
 
 
 class FailedGoalTurn(TurnTerminal):
-    """Reported failures and missing results share the original failed ledger path."""
+    """Reported failures and missing results share the original failed ledger path.
+
+    Both paths end the turn with the failure it actually ended with, so this is where
+    that failure lives and where its one fallback is declared. Done already carried it;
+    the no-result path restated the fallback alone and dropped the failure.
+    """
+
+    text: str
+    failure: TurnFailure = NoTurnFailure()
 
     def failure_observation(self, account, permit, captured):
         snapshot = account.comms.registry.snapshot()
@@ -68,10 +78,10 @@ class FailedGoalTurn(TurnTerminal):
         )
 
     @property
-    @abstractmethod
     def turn_failure(self) -> TurnFailure:
         """The failure this turn ended with, its text included: the ledger, the diagnostic and
         the blocked line all say what broke, never only which kind."""
+        return self.failure.declared_or(BackendFailed(self.text))
 
     def settle_launched(self, account, permit, store, captured, current) -> None:
         if permit.has_verified_progress(store):
@@ -80,10 +90,16 @@ class FailedGoalTurn(TurnTerminal):
             permit, store, self.failure_observation(account, permit, captured))
 
 
+@dataclass(frozen=True)
 class EndedWithoutResult(FailedGoalTurn):
-    @property
-    def turn_failure(self) -> TurnFailure:
-        return BackendFailed("Native turn ended without a result")
+    """No native terminal reported, so the turn keeps whatever failure it did end with.
+
+    The recorded failure arrives already declared by TurnProgress; the generic text
+    below is the fallback for a turn that recorded no evidence at all.
+    """
+
+    text: str = "Native turn ended without a result"
+    failure: TurnFailure = field(default_factory=NoTurnFailure)
 
 
 class OperatorStopped(TurnTerminal):

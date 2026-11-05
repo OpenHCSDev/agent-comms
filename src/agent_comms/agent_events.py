@@ -51,7 +51,7 @@ from .pi_vocabulary import (
 from .thread_model import ThreadModel, UndeclaredModel
 from .tool_declaration import OtherAction, ToolAction, ToolDeclaration
 from .tool_results import NoSentMessage, NoToolDiff, ToolDiff
-from .turn_failure import BackendFailed, NoTurnFailure, TurnFailure
+from .turn_failure import NoTurnFailure, TurnFailure
 from .turn_goal_account import OriginGoalSettlement, VerifiedGoalSettlement
 from .turn_item import UsageChargeId
 from .turn_terminal import FailedGoalTurn
@@ -310,11 +310,6 @@ class Done(AgentEvent, FailedGoalTurn):
         outcome = (SuccessfulNativeTurnOutcome() if self.ok else
                    FailedNativeTurnOutcome.resolve(self, error, document, original))
         return replace(self, outcome=outcome)
-
-    @property
-    def turn_failure(self) -> TurnFailure:
-        """A failure the backend reported without a declared kind keeps the text it ended with."""
-        return self.failure.declared_or(BackendFailed(self.text))
 
     @property
     def reason_code(self) -> str | None:
