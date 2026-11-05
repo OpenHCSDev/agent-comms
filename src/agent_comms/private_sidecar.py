@@ -47,6 +47,7 @@ from .typed_table import (
     SingletonRow,
     SQLiteDatabase,
     SQLiteForeignKeys,
+    SQLiteSchemaDifference,
     SQLiteSchemaObject,
     TableSchema,
     TypedRow,
@@ -475,7 +476,9 @@ class PrivateSnapshotFile(DurableFile, ReconciledFile, DurableTables):
                 connection.close()
 
     @classmethod
-    def reconcile_at(cls, path: Path, practice: Practice = NoPractice()) -> bool:
+    def reconcile_at(
+        cls, path: Path, practice: Practice = NoPractice(),
+    ) -> tuple[SQLiteSchemaDifference, ...]:
         with _locked_directory(path) as directory:
             raw, identity = _read_snapshot(directory, path.name)
             connection = _connect(raw)
@@ -489,7 +492,8 @@ class PrivateSnapshotFile(DurableFile, ReconciledFile, DurableTables):
                 if not cls.schema_differs(connection):
                     cls.verify_schema(connection)
                     directory.unchanged(path.name, identity)
-                    return False
+                    return ()
+                differences = cls.schema_differences(connection)
                 cls.schema_change(path).require()
                 with SQLiteFile.write_transaction(connection):
                     # Metadata is derived from the schema; all original data rows remain.
@@ -502,7 +506,7 @@ class PrivateSnapshotFile(DurableFile, ReconciledFile, DurableTables):
                 cls.verify_schema(connection)
                 published = _publish(directory, path.name, identity, connection.serialize())
                 VerifiedSnapshots.published(path, cls, published)
-                return True
+                return differences
             finally:
                 connection.close()
 
