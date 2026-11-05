@@ -22,6 +22,7 @@ from agent_comms.nominal.field_codec import WireExclude
 
 
 import asyncio
+import gc
 import base64
 import hashlib
 import html
@@ -1275,6 +1276,10 @@ class ServeVerb(ConnectorOptions):
     def apply(self, ctx: ConnectorStore) -> int | str:
         connector = Connector(ctx, self.issuer.rstrip("/"), self.root)
         app = connector.application()
+        # Everything allocated so far lives as long as the process: freeze it, so collection
+        # never rescans it and exit skips its teardown. Without this, a stop that finished in
+        # 20 ms spent 1.3-1.5 s finalizing Core's import graph.
+        gc.freeze()
         logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
         asyncio.run(self.serve(app, connector))
         return 0
