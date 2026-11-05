@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
@@ -94,6 +95,9 @@ class LaunchRoot(LaunchSelection, LaunchRequest):
         else:
             root = published()
         root.install()
+        # Startup runs once per process, after its program is imported: that heap lives as long
+        # as the process, so freezing it lets exit skip finalizing it (0.57 s per team CLI call).
+        gc.freeze()
         return root
 
     @classmethod

@@ -1276,16 +1276,17 @@ class ServeVerb(ConnectorOptions):
     def apply(self, ctx: ConnectorStore) -> int | str:
         connector = Connector(ctx, self.issuer.rstrip("/"), self.root)
         app = connector.application()
-        # Everything allocated so far lives as long as the process: freeze it, so collection
-        # never rescans it and exit skips its teardown. Without this, a stop that finished in
-        # 20 ms spent 1.3-1.5 s finalizing Core's import graph.
-        gc.freeze()
         logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
         asyncio.run(self.serve(app, connector))
         return 0
 
     async def serve(self, app: web.Application, connector: Connector) -> None:
         """Bind, then report ready, so a restart returns only once the port answers."""
+        # The server starts here: everything allocated so far (Core's import graph and this
+        # application) lives as long as the process. Freezing it keeps collection from
+        # rescanning it and lets exit skip its teardown; without it a stop that finished in
+        # 20 ms spent another 1.3-1.5 s finalizing the process.
+        gc.freeze()
         runner = web.AppRunner(app, access_log=None)
         await runner.setup()
         stopped = asyncio.Event()
