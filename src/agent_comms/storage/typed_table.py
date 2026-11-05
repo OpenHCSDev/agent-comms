@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import annotationlib
 import ast
+from copy import deepcopy
 import builtins
 import hashlib
 import json
@@ -3022,6 +3023,18 @@ class WriterOwnedResource(DeclaredFile):
         return self.owner.live(root) / self.path.relative_to(self.owner.retained_filename())
 
 
+
+class WithoutImports(ast.NodeTransformer):
+    """Drops import statements from a member's body: they say where a name lives, not what
+    the member writes."""
+
+    def visit_Import(self, node: ast.Import) -> None:
+        return None
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        return None
+
+
 class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=None):
     """A table derives its producers from the writers that declare it as an output."""
 
@@ -3043,10 +3056,11 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
     @classmethod
     @cache
     def _producer_digest(cls) -> str:
-        # Readers beside a producer change neither its columns nor its output contract.
+        # Readers beside a producer change neither its columns nor its output contract, and
+        # neither does the module a declaration lives in: a package move keeps every digest.
         source = "\0".join(sorted({
-            f"{owner.__module__}.{owner.__qualname__}\0"
-            f"{tuple((base.__module__, base.__qualname__) for base in owner.__mro__)}\0{member}"
+            f"{owner.__qualname__}\0"
+            f"{tuple(base.__qualname__ for base in owner.__mro__)}\0{member}"
             for owner, members in cls.producer_members()
             for member in members
         }))
@@ -3092,10 +3106,16 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
         for owner, names in production.items():
             declaration = cast(ast.ClassDef, ast.parse(dedent(getsource(owner))).body[0])
             members.append((owner, tuple(
-                ast.unparse(statement) for statement in declaration.body
+                cls.contract_source(statement) for statement in declaration.body
                 if names & cls.bound_names(ast.unparse(statement))
             )))
         return tuple(members)
+
+    @staticmethod
+    def contract_source(statement: ast.stmt) -> str:
+        """A member's source as its contract: the names it uses, never where an import inside it
+        finds them, so a package move that respells `from .x` as `from ..x` changes no digest."""
+        return ast.unparse(ast.fix_missing_locations(WithoutImports().visit(deepcopy(statement))))
 
     @staticmethod
     def bound_names(statement: str) -> set[str]:
