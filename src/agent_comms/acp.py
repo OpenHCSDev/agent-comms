@@ -82,7 +82,7 @@ from .input_drain import InputDrain
 from .config_options import ConfigOptions
 from .owner_launch import RetainedOwnerLaunch
 from .input_effects import InputEffects
-from .launch_root import LaunchRoot
+from .launch_root import LaunchRoot, started
 from .message_bus import MessageBus
 from .publisher import ResponseWrites
 from .queued_input import DeliveredInput
@@ -626,6 +626,7 @@ class CommsClient(CommsAgent):
 
 def main() -> int:
     root = LaunchRoot.startup(sys.argv, ActiveRoute.published_launch)
+    started()
     if "--login" in sys.argv[1:]:
         from .login import run_login
 

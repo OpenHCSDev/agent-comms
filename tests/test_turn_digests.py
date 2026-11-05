@@ -1,3 +1,4 @@
+import sys
 """One query contract over the original native and external record owners."""
 
 from agent_comms.repo import Checkout
@@ -14,7 +15,7 @@ from agent_comms_hooks import ToolRefusedError
 from transcript_record_fixture import transcript_record
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.cli import main
+from agent_comms.cli import CliInvocation
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.shared import Binding, Options, Serve, StoredBinding, Watch
 from agent_comms.comms import wire
@@ -39,8 +40,8 @@ def endpoint(comms, name, window, *, detail='activity'):
     managed runtime's environment, and test_cli proves the console script around it."""
     output = io.StringIO()
     with redirect_stdout(output):
-        code = main(['--root', str(comms.root), 'tool', '--tool', 'comms_turns', '--arguments',
-                     json.dumps(dict(thread=name, window=FieldCodec.encode(window), detail=detail))])
+        code = CliInvocation().invoke(['--root', str(comms.root), 'tool', '--tool', 'comms_turns', '--arguments',
+                     json.dumps(dict(thread=name, window=FieldCodec.encode(window), detail=detail))], sys.stdout)
     assert code == 0, output.getvalue()
     return json.loads(output.getvalue())
 

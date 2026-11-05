@@ -14,7 +14,7 @@ from agent_comms.child_process import ReadWork
 from agent_comms.comms import Comms
 from agent_comms.connector import Connector, ServeVerb
 from agent_comms.connector_store import ConnectorStore
-from agent_comms.launch_root import LaunchRoot
+from agent_comms.launch_root import LaunchRoot, started
 from agent_comms.message_bus import Watch, WatchPass
 from agent_comms.repo import Repo
 from source_revision_fixture import SourceRepository
@@ -135,4 +135,5 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    started()  # This file is the process entry, as connector.main is for the real one.
     raise SystemExit(main())

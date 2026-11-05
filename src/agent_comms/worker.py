@@ -12,13 +12,14 @@ from .active_route import ActiveRoute
 from .comms import Comms, wire
 from .coordination.database import CoordinationStore
 from .coordination.coordinator import Coordination
-from .launch_root import LaunchRoot
+from .launch_root import LaunchRoot, started
 from .owner_connection import socket_path
 from .root_runtime import RootRuntimeStore
 
 
 async def run() -> None:
     root = LaunchRoot.startup(sys.argv, ActiveRoute.published_launch)
+    started()
     parser = argparse.ArgumentParser(prog="agent-comms-agent", description=__doc__)
     parser.add_argument("--listener-fd", type=int, required=True)
     options = parser.parse_args()

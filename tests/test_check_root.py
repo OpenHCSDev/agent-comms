@@ -11,7 +11,7 @@ from bus_record_fixture import append_reply
 
 from agent_comms.check_root import CheckRoot
 from agent_comms.child_process import NoProcess
-from agent_comms.cli import main
+from agent_comms.cli import CliInvocation
 from agent_comms.comms import Comms, wire
 from agent_comms.errors import UnreceivedAnswerError
 from agent_comms.messaging import TeamReceipts
@@ -108,9 +108,9 @@ def test_check_roots_contain_new_child_allocations_and_actual_rule_publication(
 
 def test_wrapped_nonzero_exit_removes_root_and_is_the_cli_exit(source, scratch_root, capsys):
     root = scratch_root / "command"
-    status = main(["--root", str(source.root), "check-root", "--threads", "B", "--into", str(root),
+    status = CliInvocation().invoke(["--root", str(source.root), "check-root", "--threads", "B", "--into", str(root),
                    "--", sys.executable, "-c",
-                   "import pathlib,sys; assert pathlib.Path(sys.argv[1]).is_dir(); sys.exit(7)", "{root}"])
+                   "import pathlib,sys; assert pathlib.Path(sys.argv[1]).is_dir(); sys.exit(7)", "{root}"], sys.stdout)
     assert status == 7
     assert json.loads(capsys.readouterr().out)["return_code"] == 7
     assert not root.exists()

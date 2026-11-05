@@ -1282,9 +1282,6 @@ class ServeVerb(ConnectorOptions):
 
     async def serve(self, app: web.Application, connector: Connector) -> None:
         """Bind, then report ready, so a restart returns only once the port answers."""
-        # The connector serves its explicit --root, not a startup-selected route, so its process
-        # starts here rather than in LaunchRoot.startup.
-        started()
         runner = web.AppRunner(app, access_log=None)
         await runner.setup()
         stopped = asyncio.Event()
@@ -1367,4 +1364,5 @@ class RevokeVerb(ConnectorVerb):
 @boundary_decoder
 def main(argv: Sequence[str] | None = None) -> int | str:
     arguments = sys.argv[1:] if argv is None else argv
+    started()
     return ConnectorVerb.parse(arguments).apply(ConnectorStore.owned())

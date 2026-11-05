@@ -1,3 +1,4 @@
+import sys
 
 from agent_comms.core_access import LocalCoreAccess
 from agent_comms.tools import CommsImportedSourceTool
@@ -44,7 +45,7 @@ from agent_comms.importing import (
     ImportedSessionMetadata,
     ThreadImported,
 )
-from agent_comms.cli import main
+from agent_comms.cli import CliInvocation
 from agent_comms.cli_bridges.claude_transcript import ClaudeTranscript
 from agent_comms.cli_bridges.codex import CodexAppServer
 from agent_comms.cli_bridges.codex_connection import CodexConnection
@@ -245,8 +246,8 @@ def test_import_subagents_names_each_thread_by_its_id(tmp_path: Path, capsys: py
         subagent = tmp_path / f"session/subagents/agent-{name}.jsonl"
         subagent.parent.mkdir(parents=True, exist_ok=True)
         lines(subagent, [claude_prompt("t", f"task {name}", cwd=str(tmp_path))])
-    assert main(["--root", str(comms.root), "import-subagents", "--session", str(session),
-                 "--prefix", "sub-"]) == 0
+    assert CliInvocation().invoke(["--root", str(comms.root), "import-subagents", "--session", str(session),
+                 "--prefix", "sub-"], sys.stdout) == 0
     result = json.loads(capsys.readouterr().out)
     assert sorted(item["thread"] for item in result["imported"]) == ["sub-a1", "sub-b2"]
     assert comms.registry.status("sub-a1") == StoppedThreadStatus()
@@ -313,7 +314,7 @@ def test_codex_instructions_are_authenticated_historical_references_not_current_
         ImportedSessionMetadata.sources_for_owner(
             comms.registry, replace(original_owner, session_file=RegistrySessionLocation.from_path(
                 str(tmp_path / "other.jsonl"), comms.root)))
-    assert main(["--root", str(comms.root), "context", "historical", "--imported"]) == 0
+    assert CliInvocation().invoke(["--root", str(comms.root), "context", "historical", "--imported"], sys.stdout) == 0
     result = json.loads(capsys.readouterr().out)
     assert FieldCodec.decode(tuple[CodexRolloutProvenance, ...], result["sources"]) == refs
     assert result["scope"].startswith("historical-imported-instructions")
@@ -793,8 +794,8 @@ def test_opencode_server_leaves_out_what_the_user_reverted() -> None:
 
 def test_import_cli_and_invalid_sources(tmp_path: Path, capsys: pytest.CaptureFixture[str], comms: Comms) -> None:
     source = opencode_export(tmp_path / "export.json", tmp_path)
-    assert main(["--root", str(comms.root), "import-thread", "--harness", "opencode",
-                 "--source", str(source), "--name", "copied"]) == 0
+    assert CliInvocation().invoke(["--root", str(comms.root), "import-thread", "--harness", "opencode",
+                 "--source", str(source), "--name", "copied"], sys.stdout) == 0
     assert json.loads(capsys.readouterr().out)["thread"] == "copied"
     with pytest.raises(ValueError):
         read(OpenCodeHarness, source, session=NamedSession("wrong"))
@@ -817,8 +818,8 @@ def test_pi_import_keeps_the_native_session_byte_for_byte(
     ])
     source.chmod(0o600)
     original = source.read_bytes()
-    assert main(["--root", str(comms.root), "import-thread", "--harness", "pi", "--source", str(source),
-                 "--name", "oopsla_paper", "--tags", "papers", "--model", "openai-codex/gpt-6.1-sol"]) == 0
+    assert CliInvocation().invoke(["--root", str(comms.root), "import-thread", "--harness", "pi", "--source", str(source),
+                 "--name", "oopsla_paper", "--tags", "papers", "--model", "openai-codex/gpt-6.1-sol"], sys.stdout) == 0
     reply = json.loads(capsys.readouterr().out)
     thread = comms.registry.require("oopsla_paper")
     assert (reply["source_id"], reply["imported_messages"], reply["omitted_messages"]) == ("pi-session", 1, 0)

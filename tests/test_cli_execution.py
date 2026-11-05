@@ -13,7 +13,7 @@ from contextlib import redirect_stdout
 import pytest
 
 from agent_comms.bus import Bus
-from agent_comms.cli import main
+from agent_comms.cli import CliInvocation
 from agent_comms.cli_bridges.shared import Send
 from agent_comms.cli_command import CliCommand
 
@@ -84,7 +84,7 @@ def _exercise_registered_commands(directory: Path) -> None:
         Bus.install(Bus.path_in(root))
         arguments = ['--root', str(root), declaration.declared_name]
         with redirect_stdout(output):
-            code = main(arguments)
+            code = CliInvocation().invoke(arguments, sys.stdout)
         assert code in (0, 1)
         json.loads(output.getvalue())
         visited.append(declaration.declared_name)
