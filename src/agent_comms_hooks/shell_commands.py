@@ -485,7 +485,8 @@ class ShellParser:
         self.pending = CommandGroup((), body=tuple(GroupParser(self.lexer).commands()))
 
     def close_group(self) -> Never:
-        raise ValueError('Unexpected closing parenthesis')
+        raise NotStandalone('A closing parenthesis outside a group, such as a case pattern, '
+                            'is not admitted by the bounded shell grammar')
 
     def finish(self) -> None:
         self.target.require_word()

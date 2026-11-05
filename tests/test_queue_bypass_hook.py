@@ -79,6 +79,14 @@ def test_a_command_outside_the_grammar_is_refused_with_its_reason(command):
     assert "Command substitution is not admitted" in decision["permissionDecisionReason"]
 
 
+def test_a_case_pattern_is_refused_by_name_and_never_as_a_traceback():
+    result = pre_tool_use('case "$r" in a) echo one;; esac')
+    assert result.returncode == 0, result.stderr
+    decision = json.loads(result.stdout)["hookSpecificOutput"]
+    assert decision["permissionDecision"] == "deny"
+    assert "closing parenthesis outside a group" in decision["permissionDecisionReason"]
+
+
 @pytest.mark.parametrize("command", [
     "gh pr merge 7 --admin -R OpenHCSDev/agent-comms --match-head-commit {head} -A author@example.com",
     "gh pr merge -A author@example.com 7 --admin --repo=OpenHCSDev/agent-comms --match-head-commit={head}",
