@@ -75,15 +75,14 @@ from agent_comms.order_tools import (
     TodoList,
 )
 from agent_comms.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
-from agent_comms.nominal_census import NominalPlanReadings
-from agent_comms.plan_reading import PlanReading
 from agent_comms.plan_phases import OrderPhase, PlanPhase
 from agent_comms.notification_evidence import AllOutcomes
 from agent_comms.message_notification import MessageNotification
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegisteredTeamProject
-from agent_comms.repo import Checkout, Repo, RepositoryReads
+from agent_comms.repo import Repo, RepositoryReads
 from agent_comms.repository_name import RepositoryName
+from agent_comms.team_hud import TeamPlanDocument
 from agent_comms.slop import Slop
 from agent_comms.standing_rules import (
     ClearingVerb,
@@ -381,11 +380,9 @@ class TeamContext(BaseModel):
         except ValueError as error:
             sys.exit(f'Refused order, nothing recorded:\n{error}')
 
-    def plan_reading(self, todos: tuple[Todo, ...]) -> PlanReading:
-        repository = Repo.declaring(self.repos, PlanPhase.__module__)
-        return NominalPlanReadings().prepare_reading(repository, todos, tuple(
-            phase.phase_evidence() for phase in PlanPhase.members_with(PlanPhase)),
-            history=Checkout(repository.checkout).read())
+    def ready_phases(self) -> tuple[type[PlanPhase], ...]:
+        """The phases the heartbeat last found ready; the CLI never counts main itself."""
+        return TeamPlanDocument.at(self.root).read().ready()
 
     @boundary_decoder
     def model_copy(self, *, update: Mapping[str, object] | None = None,
