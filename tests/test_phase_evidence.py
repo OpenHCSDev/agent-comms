@@ -161,8 +161,11 @@ def test_main_tree_grep_uses_the_same_repository_tree_as_its_module_reader(tmp_p
     git(checkout, "commit", "-qam", "dependency")
     git(checkout, "update-ref", "refs/remotes/origin/main", git(checkout, "rev-parse", "HEAD"))
     git(checkout, "config", "submodule.recurse", "true")
-    assert "src/dependency" in git(checkout, "grep", "--recurse-submodules", "-n",
-                                   "-e", "declared", "HEAD", "--", "src")
+    # The recorded submodule commit holds a matching line, so main's own grep must skip it.
+    # Read in the submodule itself: git 2.56 refuses to recurse into one while grepping a
+    # superproject commit ("unable to read tree"), and that refusal is not what this checks.
+    recorded = git(checkout, "rev-parse", "HEAD:src/dependency").strip()
+    assert git(checkout / "src/dependency", "grep", "-n", "-e", "declared", recorded, "--", "src")
     current = PlanReading((), MainTree.of(reading.main.repo, NominalCensus()))
     assert current.holds(RostersPhase.evidence)
     assert not current.main.matching_lines(r"declared", ("src",))
