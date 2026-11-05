@@ -46,8 +46,8 @@ class TestRpcParsing:
     async def test_partial_large_record_survives_cancelled_read(self):
         stream = asyncio.StreamReader()
         reader = PiRpcChannel(stream)
-        # Past the channel's own reader limit, which the source stream's limit does not set.
-        text = b'{"text":"' + b"x" * (2 * reader.reader._limit)
+        # Past the channel's own record buffer, which the source stream's limit does not set.
+        text = b'{"text":"' + b"x" * (2 * PiRpcChannel.RECORD_BUFFER_BYTES)
         stream.feed_data(text)
         pending = asyncio.create_task(reader.readline())
         while not reader.chunks:
