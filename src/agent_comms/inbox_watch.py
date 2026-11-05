@@ -26,7 +26,8 @@ from yarl import URL
 from .agent_inbox import SecondsWait, TakenInputPosition, TakenInputStart
 from .child_process import ProcessIdentity
 from .cli_bridges.claude_transcript import (
-    WATCH_REPORT, WATCH_STOPPED, WINDOW_ENDED, ClaudeJsonLines, WatchReport,
+    WATCH_REPORT, WATCH_STOPPED, WINDOW_ENDED, ClaudeJsonLines, ReceivesWatchReports,
+    ReportedLedger, WatchReport,
 )
 from .cli_bridges.claude_protocol import ClaudeMonitorFrame
 from .cli_bridges.history import RemoteWatchHistory
@@ -111,21 +112,8 @@ class WatchTickets:
         return ticket
 
 
-@dataclass
-class ReportedLedger:
-    """The printed ledger this socket's client reported, once it has: until then every message
-    is taken under no ledger, and nothing it takes can ever be proved unshown."""
-
-    current: TakingLedger = field(default_factory=TakingLedger)
-    arrival: asyncio.Event = field(default_factory=asyncio.Event)
-
-    def arrived(self, ledger: PrintLedgerId) -> None:
-        self.current = ledger
-        self.arrival.set()
-
-
 @dataclass(frozen=True)
-class PushedTranscript(TranscriptConfirmsDelivery, ClaudeJsonLines):
+class PushedTranscript(ReceivesWatchReports, TranscriptConfirmsDelivery, ClaudeJsonLines):
     """A session's transcript as lines on its watch socket. Holding the ticket proved which
     thread this is, so these lines publish on that thread and no other, and the Monitor events
     in them confirm that thread's deliveries as a local bridge's transcript does."""
