@@ -25,7 +25,7 @@ from .channel_targets import TeammatesTag, ResolvedTarget, SurroundingChannel
 from .channels import Channel, ChannelMemberIndex
 from .child_process import ProcessIdentity
 from .nominal.declared_family import DeclaredFamily
-from .errors import RelationViolationError, UnregisteredThreadError
+from .errors import OutsideRegistryCut, RelationViolationError, UnregisteredThreadError
 from .nominal.field_codec import (
     TaggedUnion,
     ExternalJsonShape,
@@ -499,6 +499,14 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
         result._binding = self._binding
         return result
 
+    def only(self, names: frozenset[str]) -> ThreadRows:
+        """The named rows alone, each still raw or decoded as it is here."""
+        result = ThreadRows()
+        result._raw = {name: row for name, row in self._raw.items() if name in names}
+        result._decoded = {name: thread for name, thread in self._decoded.items() if name in names}
+        result._binding = self._binding
+        return result
+
     def freeze(self) -> ThreadRows:
         result = FrozenThreadRows()
         result._raw = self._raw.copy()
@@ -533,6 +541,10 @@ class ThreadRowsSlice(OwnRow[ThreadRows]):
     def reuse(cls, rows: Mapping[str, object], kept: frozenset[str],
               earlier: ThreadRows, changed: ThreadRows) -> None:
         changed.reuse(rows, kept, earlier)
+
+    @classmethod
+    def only(cls, value: ThreadRows, names: frozenset[str]) -> ThreadRows:
+        return value.only(names)
 
     @classmethod
     def differing(cls, earlier: ThreadRows, current: ThreadRows) -> frozenset[str]:
@@ -1171,6 +1183,14 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
     def lookup_names(self) -> Mapping[ThreadLookup, str]:
         return MappingProxyType(self.threads.lookup_names())
 
+    def only(self, names: Iterable[str]) -> RegistryCut:
+        """The cut a caller reading ``names`` needs: the rows each one's presentation reads,
+        beside every shared field. A remote UI opening one thread
+        reads this, not the whole document, almost all of which is other threads' rows."""
+        kept = frozenset().union(*(self.read_by(name) for name in names))
+        return RegistryCut(*(ThreadSlice.of(plan).only(plan.current(self), kept)
+                            for plan in FieldCodec.field_plans(type(self)) if plan.declared.init))
+
     def changed_names(self, earlier: RegistrySnapshot) -> frozenset[str]:
         """The names whose registry facts differ from ``earlier``'s, by each field's declared
         slice: an own-row field answers its differing rows, a shared field answers every name.
@@ -1190,21 +1210,24 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
         """What a reader that last read this cut must re-read at ``later``."""
         return later.changed_names(self)
 
-    def affected_by(self, name: str, changed: frozenset[str]) -> bool:
-        """Whether a change to ``changed`` reaches ``name``'s presentation: its own rows, the
-        alias it was asked by, or a parent whose history a fork reads. The walk goes up only,
-        because a presentation reads no child's row; one that shows its forks must walk down."""
+    def read_by(self, name: str) -> frozenset[str]:
+        """The names whose rows ``name``'s presentation reads: its own, the alias it was asked
+        by, and every parent whose history a fork reads. The walk goes up only, because a
+        presentation reads no child's row; one that shows its forks must walk down."""
         seen: set[str] = set()
         pending = [name, self.canonical_name(name)]
         while pending:
             current = pending.pop()
-            if current in changed:
-                return True
-            if current in seen or current not in self.threads:
+            if current in seen:
                 continue
             seen.add(current)
-            pending.extend(self.threads[current].parent.names())
-        return False
+            if current in self.threads:
+                pending.extend(self.threads[current].parent.names())
+        return frozenset(seen)
+
+    def affected_by(self, name: str, changed: frozenset[str]) -> bool:
+        """Whether a change to ``changed`` reaches ``name``'s presentation."""
+        return not self.read_by(name).isdisjoint(changed)
 
     def born(self, lookup: ThreadLookup) -> Thread:
         """The one thread a creation lookup names; only its row decodes."""
@@ -1385,6 +1408,15 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
             raise RelationViolationError("Stopping owner process changed")
         if self.claim_generation(expected.name) != claim_scope:
             raise RelationViolationError("Stopping owner claim_scope changed")
+
+
+@dataclass(frozen=True, slots=True)
+class RegistryCut(RegistrySnapshot):
+    """The rows a caller asked for, beside every shared field. A name it did not ask for is
+    outside the cut, not unregistered, so its refusal says which."""
+
+    def unregistered(self, name: str) -> UnregisteredThreadError:
+        return OutsideRegistryCut(f"Thread {name!r} is not in this registry cut; ask for it by name.")
 
 
 class UnreadRegistry:

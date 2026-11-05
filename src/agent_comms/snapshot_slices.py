@@ -42,6 +42,11 @@ class ThreadSlice[Value](ABC):
         return ()
 
     @classmethod
+    def only(cls, value: Value, names: frozenset[str]) -> Value:
+        """This field in a cut holding only ``names``: a field every thread shares is whole."""
+        return value
+
+    @classmethod
     def changed_names(cls, earlier: Value, current: Value, every: frozenset[str]) -> frozenset[str]:
         """The names a change to this field can affect: a field shared by every thread
         affects all of them; an own-row field overrides this with the rows that differ."""
@@ -121,6 +126,10 @@ class MappingRowsSlice(OwnRow[MutableMapping]):
         merged = {name: (earlier if name in kept else changed)[name] for name in rows}
         changed.clear()
         changed.update(merged)
+
+    @classmethod
+    def only(cls, value: MutableMapping, names: frozenset[str]) -> MutableMapping:
+        return {name: row for name, row in value.items() if name in names}
 
     @classmethod
     def differing(cls, earlier: Mapping, current: Mapping) -> frozenset[str]:

@@ -185,7 +185,11 @@ class RegistryNames(Generic[Member]):
         try:
             return self.threads[canonical]
         except KeyError as error:
-            raise UnregisteredThreadError(f"Thread {canonical!r} is not registered.") from error
+            raise self.unregistered(canonical) from error
+
+    def unregistered(self, name: str) -> UnregisteredThreadError:
+        """The refusal for a name this namespace does not hold."""
+        return UnregisteredThreadError(f"Thread {name!r} is not registered.")
 
     def require_member[Kind: Thread](self, name: str, kind: type[Kind]) -> Kind:
         """The registered declaration, narrowed to the member an operation needs."""
