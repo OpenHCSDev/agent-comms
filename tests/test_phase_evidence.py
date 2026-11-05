@@ -1,6 +1,5 @@
 import ast
 import gc
-import subprocess
 import weakref
 from pathlib import Path
 
@@ -41,12 +40,10 @@ from agent_comms.plan_phases import BusDeletionPhase, FLAG, ExternalBoundariesPh
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.work_branches import WorkBranches
-from fixture_git import IDENTITY
+import fixture_git
 
 
-def git(checkout, *args):
-    return subprocess.run(("git", *IDENTITY, "-C", str(checkout), *args), check=True,
-                          capture_output=True, text=True, timeout=30).stdout.strip()
+git = fixture_git.run
 
 
 def test_evidence_reads_origin_main_and_never_the_worktree(tmp_path):

@@ -10,6 +10,8 @@ Importing this module also removes the caller's repository from the environment,
 test repository's git addresses the test repository even outside pytest's conftest."""
 
 import os
+import subprocess
+from pathlib import Path
 
 
 def _without_caller_repository() -> None:
@@ -42,3 +44,15 @@ ENVIRONMENT = {
     **{f"GIT_CONFIG_KEY_{index}": key for index, (key, _) in enumerate(SETTINGS)},
     **{f"GIT_CONFIG_VALUE_{index}": value for index, (_, value) in enumerate(SETTINGS)},
 }
+
+
+def run(checkout: Path | str, *args: str) -> str:
+    """One fixture git command under IDENTITY. A failure carries git's own stderr: a bare
+    "exit status 128" names no cause, and the runner's git can differ from a developer's."""
+    try:
+        done = subprocess.run(("git", *IDENTITY, "-C", str(checkout), *args), check=True,
+                              capture_output=True, text=True, timeout=30)
+    except subprocess.CalledProcessError as error:
+        error.add_note(f"git stderr: {error.stderr.strip()}")
+        raise
+    return done.stdout.strip()
