@@ -5,7 +5,7 @@ import shlex
 import subprocess
 
 import pytest
-from fixture_git import IDENTITY
+import fixture_git
 from module_layers import OutgoingWire
 
 from agent_comms.cli_bridges.monitor import PauseSession
@@ -29,8 +29,7 @@ def outgoing_tree(tmp_path):
     (cutover / "__init__.py").touch()
     subprocess.run(("git", "init", "-q", str(checkout)), check=True)
     subprocess.run(("git", "-C", str(checkout), "add", "src", "tools"), check=True)
-    subprocess.run(("git", *IDENTITY, "-C", str(checkout),
-                    "commit", "-qm", "outgoing source"), check=True)
+    fixture_git.run(checkout, "commit", "-qm", "outgoing source")
     return wire, checkout
 
 
@@ -61,13 +60,11 @@ def test_crosses_runtimes_installed_stamp_refuses_session_drift(outgoing_tree, t
     field, = (node for node in declaration.body if isinstance(node, ast.AnnAssign))
     field.target = ast.Name(id="old_process", ctx=ast.Store())
     path.write_text(ast.unparse(tree))
-    subprocess.run(("git", *IDENTITY, "-C", str(checkout),
-                    "commit", "-qam", "old wire"), check=True)
+    fixture_git.run(checkout, "commit", "-qam", "old wire")
     runtime = stamped_child(tmp_path, checkout)
     # HEAD is now compatible. Only the installed stamp still selects the older fields.
     path.write_text((wire.checkout / session.path).read_text())
-    subprocess.run(("git", *IDENTITY, "-C", str(checkout),
-                    "commit", "-qam", "new compatible HEAD"), check=True)
+    fixture_git.run(checkout, "commit", "-qam", "new compatible HEAD")
     with InstallCommands() as commands, pytest.raises(RuntimeWireChanged) as refused:
         Stack(checkout, commands, runtime=runtime).require_runtime_wire()
     assert "PauseSession declares (old_process: ProcessIdentity), sent as (process: ProcessIdentity)" in str(refused.value)

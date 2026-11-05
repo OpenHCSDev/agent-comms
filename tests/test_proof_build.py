@@ -52,6 +52,7 @@ from agent_comms.todos import (
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.order_tools import CommsOrderDoneTool, CommsProblemCloseTool, CommsTodoCreateTool
 from github_fixture import GitHubFixture
+import fixture_git
 from fixture_git import IDENTITY
 from order_scope_fixture import FIX_SCOPE
 from source_revision_fixture import SourceRepository
@@ -472,9 +473,8 @@ def test_a_one_minute_old_merge_is_due_and_names_its_request_without_launching(
     subprocess.run(("git", "init", "--bare", str(origin)), check=True, capture_output=True)
     Repo.git(checkout, "remote", "set-url", "origin", str(origin))
     Repo.git(checkout, "checkout", "-q", "--detach", graph.installed)
-    subprocess.run(("git", *IDENTITY, "commit", "--allow-empty", "-q", "-m",
-                    "Merge pull request #41 from OpenHCSDev/fix/due", "-m", "Install what merged"),
-                   cwd=checkout, check=True, capture_output=True)
+    fixture_git.run(checkout, "commit", "--allow-empty", "-q", "-m",
+                    "Merge pull request #41 from OpenHCSDev/fix/due", "-m", "Install what merged")
     merge = Repo.git(checkout, "rev-parse", "HEAD").strip()
     Repo.git(checkout, "push", "origin", f"{merge}:refs/heads/main")
     github_cli.configure(graph.repository.github)
