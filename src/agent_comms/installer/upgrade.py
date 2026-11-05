@@ -202,24 +202,17 @@ class OwnersPhase(SubjectPhase):
 
 @dataclass(frozen=True)
 class StepRun:
-    """One step's run on one bus."""
+    """One step's run on one bus, and the schema objects it rebuilt each store for: a rebuild
+    of a 1.18 GB bus that said only "1 changed" took a host read to explain. The differences
+    live on the step itself, because a report holds its steps as StepRun and the codec
+    encodes each by that declared type: a subclass's field never reached the reader."""
 
     carry: str
     carried: Carried
+    differences: tuple[StoreDifference, ...] = ()
 
     def lines(self) -> tuple[str, ...]:
-        return (f"Carried {self.carry}: {self.carried.changed} changed",)
-
-
-@dataclass(frozen=True)
-class ReconciledStepRun(StepRun):
-    """The reconcile names each store it rebuilt and what differed: a rebuild of a 1.18 GB
-    bus that said only "1 changed" took a host read to explain."""
-
-    differences: tuple[StoreDifference, ...]
-
-    def lines(self) -> tuple[str, ...]:
-        return (*super().lines(), *(
+        return (f"Carried {self.carry}: {self.carried.changed} changed", *(
             f"  {each.path}: {each.difference}" for each in self.differences))
 
 
@@ -1118,7 +1111,7 @@ class PreparedMigration(Extendable):
                 self.files, self.writer_stores,
                 scratch=StorageRule.load(self.files.source_root()).scratch_base))
             reconciled = staged.cli(self.root, ReconcileStoresCliCommand, *reconcile_arguments)
-            steps.append(ReconciledStepRun(ReconcileStoresCliCommand.declared_name, Carried(
+            steps.append(StepRun(ReconcileStoresCliCommand.declared_name, Carried(
                 len(reconciled.rewritten), rewritten=reconciled.rewritten), reconciled.differences))
             declared = tuple(steps)
             with AfterMigrationFileScanPhase().running(staged.commands.clock):

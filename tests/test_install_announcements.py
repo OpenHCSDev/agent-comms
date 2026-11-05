@@ -310,3 +310,16 @@ def test_terminal_report_follows_real_tree_cleanup_and_keeps_original_error(
             assert observed is refusal
         else:
             assert isinstance(observed, GitCommandError)
+
+
+def test_a_reported_reconcile_keeps_the_schema_objects_it_rebuilt():
+    """A report holds its steps as StepRun and crosses the worker as that declared type, so
+    what reconcile-stores rebuilt each store for must live on StepRun itself."""
+    from agent_comms.cli_commands import StoreDifference
+    from agent_comms.installer.upgrade import CarriedPass
+    from agent_comms.storage.typed_table import SQLiteSchemaDifference
+    difference = StoreDifference(Path("bus.sqlite3"), SQLiteSchemaDifference("messages", "old", "new"))
+    step = StepRun("reconcile-stores", Carried(1, rewritten=(Path("bus.sqlite3"),)), (difference,))
+    carried = CarriedPass((step,), RehearsalFiles(6, 1, (Path("bus.sqlite3"),), 1024), BusReadBack(1))
+    assert FieldCodec.decode(CarriedPass, FieldCodec.encode(carried)).steps == (step,)
+    assert "  bus.sqlite3: messages: stored old; declared new" in step.lines()
