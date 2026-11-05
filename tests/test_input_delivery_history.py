@@ -28,13 +28,13 @@ from agent_comms.goals import NoGoal
 from agent_comms.order_tools import InputDeliveryRead, OwnerGoalRead
 from agent_comms.reported_turn import ReportedTurn
 from agent_comms.threads import ExternalThread, NativeThread, Thread
-from agent_comms.thread_status import ConnectedThreadStatus, RunningThreadStatus, StoppedThreadStatus, ThreadStatus
+from agent_comms.thread_status import ConnectedThreadStatus, StoppedThreadStatus, ThreadStatus
 from agent_comms.owner_connection import OwnerIdentityChangedError
 from agent_comms.coordination.errors import StaleFence, StaleRevision
 from agent_comms.tool_caller import ToolCaller
 from agent_comms.ui_model.observation import ReadOwnerOperation, ReadAnswered, ReadRefused
 from bus_record_fixture import prepare_native_comms
-from delivery_owner_fixture import canonical_delivery_owner
+from delivery_owner_fixture import canonical_delivery_owner, qualified_owner_launch, start_headless_owner  # noqa: F401
 from stored_inputs import stored_inputs
 
 
@@ -120,12 +120,14 @@ def test_history_clear_is_notice_only_and_survives_rename_and_reopen(tmp_path):
     assert stored_inputs(ledger.root).rows[BusInputKey(7)].native_id == "b" * 32
 
 
-async def test_mcp_and_the_ui_read_input_delivery_from_the_live_owner_queue(tmp_path):
+async def test_mcp_and_the_ui_read_input_delivery_from_the_live_owner_queue(tmp_path, qualified_owner_launch):
     """2026-10-24: the colleague hand-wrote SQL to list pi-mi's lost inputs; the tool then
     answered from the connector's own process, where no owner queue exists. Both boundaries
     now carry one InputDeliveryRead to the owner and receive the owner's own answer."""
     async with canonical_delivery_owner(tmp_path) as (comms, agent, _, _):
-        comms.registry.register(comms.registry.require("alpha"), RunningThreadStatus())
+        # A live read is answered by the session the owner's lease holds
+        # (SessionLifecycle.require_owned_session); a status alone binds none.
+        await start_headless_owner(agent, "alpha", qualified_owner_launch)
         comms.agents.begin_turn("alpha", TurnId.mint(), "Held native fixture")
         agent.inputs.state("alpha").open_inbox()
         await agent.prompt("alpha", [TextContentBlock(type="text", text="queued")],
@@ -175,12 +177,14 @@ async def test_mcp_and_the_ui_read_input_delivery_from_the_live_owner_queue(tmp_
         assert InputDispositions(comms.root).path.read_bytes() == original_bytes
 
 
-async def test_mcp_and_the_ui_read_the_owner_goal_from_the_live_owner(tmp_path):
+async def test_mcp_and_the_ui_read_the_owner_goal_from_the_live_owner(tmp_path, qualified_owner_launch):
     """The owner answers comms_owner_goal under its own registration and session: MCP and the
     UI's owner envelope receive the owner's own projection, its turn metadata included, for an
     empty goal and for a set one."""
     async with canonical_delivery_owner(tmp_path) as (comms, agent, _, _):
-        comms.registry.register(comms.registry.require("alpha"), RunningThreadStatus())
+        # A live read is answered by the session the owner's lease holds
+        # (SessionLifecycle.require_owned_session); a status alone binds none.
+        await start_headless_owner(agent, "alpha", qualified_owner_launch)
         comms.agents.begin_turn("alpha", TurnId.mint(), "Held native fixture")
         owner = comms.registry.require("alpha")
         replies = []
