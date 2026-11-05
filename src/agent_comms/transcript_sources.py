@@ -458,7 +458,7 @@ class TranscriptSource:
 
     def resolve_sent(self, messages: tuple[SentTranscript, ...]):
         """Records without a sender assignment cannot qualify Send reports."""
-        return self.frontier.resolve_sent(messages)
+        return tuple(messages)
 
     frontier = NoWireFrontier()
 

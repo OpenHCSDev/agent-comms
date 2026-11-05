@@ -141,11 +141,31 @@ class CallClaim(ABC):  # noqa: B024 - shared rejection; leaves override valid tr
         raise SelectedToolDenied("Native tool ran without owner claim_scope")
 
 
-class AwaitingClaim(CallClaim):
+class NoSlotClaim(CallClaim):
+    """A call that consumed no slot: an error terminal is its whole outcome and owes no
+    acknowledgement, while a success without a claim is impossible."""
+
+    succeeded_without_claim: ClassVar[str]
+
+    def finish(
+        self, call: NativeToolCall, is_error: bool, coordination_path: Path,
+        input_id: InputId, round_number: int,
+    ) -> None:
+        if not is_error:
+            raise SelectedToolDenied(self.succeeded_without_claim)
+
+
+class AwaitingClaim(NoSlotClaim):
+    """A request that never consumed a slot: nothing ran, so nothing is acknowledged."""
+
+    succeeded_without_claim = "Native tool succeeded without owner claim_scope"
+
     def refuse(self, call: NativeToolCall, refusal: CallClaim) -> None:
         call.progress.observation.refuse(call, refusal)
 
     async def consume(self, call: NativeToolCall, action: Callable[[], Awaitable[None]]) -> None:
+        # The claim leaves this state before the action is awaited, so a terminal that
+        # finds it here proves the action never started.
         # No retry even when the callback is cancelled or its durable commit fails.
         call.progress.claim_scope = UncertainClaim()
         try:
@@ -157,15 +177,10 @@ class AwaitingClaim(CallClaim):
         call.progress.claim_scope = AuthorizedCall()
 
 
-class UnstartedClaim(CallClaim):
+class UnstartedClaim(NoSlotClaim):
     """A refused preflight consumed no slot and needs no terminal acknowledgement."""
 
-    def finish(
-        self, call: NativeToolCall, is_error: bool, coordination_path: Path,
-        input_id: InputId, round_number: int,
-    ) -> None:
-        if not is_error:
-            raise SelectedToolDenied("Native tool succeeded after its preflight was refused")
+    succeeded_without_claim = "Native tool succeeded after its preflight was refused"
 
 
 class AuthorizedCall(CallClaim):
