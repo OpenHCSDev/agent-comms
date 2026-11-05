@@ -19,12 +19,6 @@ from agent_comms.threads import NativeThread
 from agent_comms.wake import OrdinaryControl, resolve_wake_cohort
 
 
-class LaterThreadRole(AgentThreadRole):
-    @classmethod
-    def unread_since(cls, since: float | None, recorded_delivery: bool) -> float | None:
-        return super().unread_since(40000.0, recorded_delivery)
-
-
 class NoPythonCallbacks(sqlite3.Connection):
     def create_function(
         self, name: str, narg: int, func: Callable[..., object] | None, *,
@@ -38,8 +32,11 @@ def test_pending_counts_need_no_python_callback(
 ) -> None:
     comms.channels.create_tag("comms")
     names = tuple(f"actor-{index}" for index in range(500))
-    human, later = names[:2]
-    roles = (UserThreadRole, LaterThreadRole) + (AgentThreadRole,) * (len(names) - 2)
+    # The declared roles' own rules: a user counts from its boundary, an agent only once
+    # delivery was recorded. A test-only role would join ThreadRole in every process that
+    # imports this file and change the bus schema that process writes.
+    human = names[0]
+    roles = (UserThreadRole,) + (AgentThreadRole,) * (len(names) - 1)
     for index, (name, role) in enumerate(zip(names, roles, strict=True)):
         comms.registry.declare(NativeThread(
             name, frozenset({"comms"}), Checkout(tmp_path / name),
@@ -70,7 +67,7 @@ def test_pending_counts_need_no_python_callback(
             )
             if current and recent:
                 expected[human] += 1
-                if recipient not in (human, later):
+                if recipient != human:
                     expected[recipient] += 1
             audience = freeze_audience(
                 message, (FrozenRecipient(recipients[recipient], recipient),), "c" * 64,
