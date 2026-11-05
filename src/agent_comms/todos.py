@@ -6967,7 +6967,14 @@ class EditWorkplaces:
         trees: dict[RepositoryName, dict[str, tuple[str, ...]]] = {}
         for repo in repositories:
             branches = trees.setdefault(repo.github, {})
-            for branch, worktrees in pulls.worktrees(repo).items():
+            try:
+                listing = pulls.worktrees(repo)
+            except (OSError, GitCommandError, WorkBranchError, TimeoutExpired) as error:
+                # The same per-source boundary as below: only orders on this repository go unread.
+                pulls.unread((hold.todo for hold in holds
+                              if repo.github in (hold.todo.repo, *declared[hold.todo.id])), error)
+                continue
+            for branch, worktrees in listing.items():
                 branches[branch] = (*branches.get(branch, ()), *worktrees)
         listed = {Path(path) for branches in trees.values()
                   for worktrees in branches.values() for path in worktrees}

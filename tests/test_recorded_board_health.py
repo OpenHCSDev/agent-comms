@@ -152,30 +152,34 @@ def test_missing_frame_reports_recorded_failure_without_fabricating_a_board(fork
         TeamFrame.read_all(comms.root)
 
 
-def test_one_unreadable_source_preserves_the_other_original_edit(published_board, fork_bus, tmp_path):
+def test_one_unreadable_source_preserves_the_other_original_edit(
+        published_board, fork_bus, configured_repository, tmp_path):
     from agent_comms.repo import Checkout
-    from agent_comms.storage_rules import StorageRule
+    from agent_comms.repository_name import RepositoryName
     from agent_comms.threads import ExternalThread
     from agent_comms.thread_model import DeclaredModel
+    from source_revision_fixture import SourceRepository
     from test_edit_allocations import issue
 
     comms, source, template = fork_bus
+    # P41 checks a second registered repository, so breaking it leaves the parent's source readable.
+    unreadable = SourceRepository.create(
+        tmp_path / 'unreadable-source', RepositoryName.from_wire('example/unreadable'))
+    configured_repository(comms, source, unreadable)
     worker = comms.registry.declare(ExternalThread(
         'unreadable-worker', frozenset({'comms'}), Checkout(source.checkout),
         model=DeclaredModel('anthropic/claude-opus-4-6')))
-    rule = StorageRule.load(comms.root)
-    checkout = rule.order_checkout(rule.roots_of(worker), 'P41')
-    checkout.parent.mkdir(parents=True, exist_ok=True)
-    source.git(source.checkout, 'worktree', 'add', '-q', '-b', 'unreadable-edit-source', str(checkout))
-    issue(comms, source, replace(template, check=replace(template.check, directory=checkout)),
+    issue(comms, unreadable, replace(template, check=replace(template.check, directory=unreadable.checkout)),
           worker.name, 'P41')
-    metadata = checkout / '.git'
-    retained_metadata = tmp_path / 'unreadable-source-metadata'
-    metadata.rename(retained_metadata)
+    # A HEAD Git cannot parse keeps the folder a checkout (Checkout.git_roots) whose reads fail;
+    # removing `.git` would instead declare the folder retired.
+    head = unreadable.checkout / '.git' / 'HEAD'
+    retained_head = head.read_text()
+    head.write_text('not a reference\n')
     try:
         result = ThreadCaller('colleague').invoke(CommsUnjudgedTool(), comms)
     finally:
-        retained_metadata.rename(metadata)
+        head.write_text(retained_head)
     assert not result.complete
     assert len(result.unavailable) == 1 and str(result.unavailable[0].problem) == 'P41'
     assert tuple(edit.id for edit in result.edits) == (ToolCallId('parent-edit-0'),)
