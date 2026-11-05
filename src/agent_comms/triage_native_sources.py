@@ -40,6 +40,10 @@ class TriageNativeSource(
         Column(primary_key=True, references=TableReference(NativeRuntimeInput, ("input_id",)))
     ]
     ordinal: Annotated[int, Column(primary_key=True, check="ordinal>=0")]
-    # An original source joins at most one triage input; the uniqueness also indexes the
-    # notification reads that select membership by assignment.
-    assignment_id: Annotated[AssignmentId, Column(unique=True)]
+    # An original source joins at most one triage input per attempt: attempt 0 is the
+    # original ask, attempt 1 the single replacement an unparseable decision earns. The
+    # (assignment_id, attempt) uniqueness also indexes the notification reads.
+    assignment_id: Annotated[AssignmentId, Column()]
+    attempt: Annotated[int, Column(check="attempt>=0")]
+
+    unique = (("assignment_id", "attempt"),)

@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from contextlib import contextmanager
 from collections.abc import Iterator
 
-from .assignment_states import DeferredAssignment, FailedAssignment
+from .assignment_states import DeferredAssignment, FailedAssignment, TriagePendingAssignment
 from agent_comms.native_runtime_input import NativeRuntimeTable
 from .coordination.errors import IdentityConflict, RetryScheduled, StaleFence
 from .coordination.tables.assignments import WakeAssignment
@@ -110,12 +110,13 @@ class NativeSendStage(ABC):
     async def fail_unknown(self, bus, owner, witness) -> None:
         await Coordination.run_worker(lambda: owner.require_registry(bus._registry))
 
-    def reserve(self, store: Coordination, owner: ParticipantOwner, token_digest: str) -> str:
+    def reserve(self, store: Coordination, owner: ParticipantOwner, token_digest: str,
+                *, attempt: int = 0) -> str:
         input_id = InputId.mint()
         with store.session.writing() as db:
             NativeRuntimeTable.require_installed(db)
             owner.require(store, self.recipient_lookup)
-            self.reserve_claim(store, db)
+            self.reserve_claim(store, db, attempt=attempt)
             NativeRuntimeInput(
                 input_id=input_id,
                 stage=type(self.execution),
@@ -124,7 +125,7 @@ class NativeSendStage(ABC):
                 owner_generation=owner.generation,
                 owner_token_digest=token_digest,
             ).insert(db)
-            self.execution.record_sources(db, input_id, self.assignments)
+            self.execution.record_sources(db, input_id, self.assignments, attempt=attempt)
         return input_id
 
     def identity(self, input_id: InputId, owner) -> NativeInputIdentity:
@@ -288,6 +289,36 @@ class TriageNativeSend(NativeSendStage):
             row.commit_context(db, context)
             return self.fail_claims(store, db)
 
+    def refreshed(self, store: Coordination) -> TriageNativeSend:
+        """The same claims at their current revision, for a reservation after one turn."""
+        return TriageNativeSend(tuple(
+            store.assignments.get(captured.assignment_id) for captured in self.assignments
+        ))
+
+    def burn_turn(
+        self, store, owner, input_id, token_digest, context
+    ) -> None:
+        """Close the answer that failed and leave the claim owing a decision.
+
+        The reader gets one more ask because the decision was unreadable, not because
+        the provider failed: the claim returns to triage-pending so a replacement input
+        may be reserved for it.
+        """
+        with store.session.writing() as db:
+            row = self.pending_input(store, input_id, owner, token_digest)
+            self.require_claim(store)
+            row.commit_context(db, context)
+            for captured in self.assignments:
+                current = store.assignments.get(captured.assignment_id)
+                WakeAssignment.update(
+                    db,
+                    where="assignment_id=? AND revision=?",
+                    parameters=(current.assignment_id, current.revision),
+                    lifecycle=TriagePendingAssignment.build(current.lifecycle.mode, None, None),
+                    revision=current.revision + 1,
+                    updated_at_ms=store.session.now(current.updated_at_ms),
+                )
+
     def fail_claims(self, store: Coordination, db: sqlite3.Connection) -> tuple[WakeAssignment, ...]:
         """Move this triage's deferred claims to Failed inside the caller's transaction."""
         for captured in self.assignments:
@@ -311,16 +342,21 @@ class TriageNativeSend(NativeSendStage):
     def execution(self) -> TriageNativeExecution:
         return TriageNativeExecution()
 
-    def reserve_claim(self, store: Coordination, db: sqlite3.Connection) -> None:
+    def reserve_claim(self, store: Coordination, db: sqlite3.Connection,
+                      *, attempt: int = 0) -> None:
+        """Reserve the original ask, or the one replacement an unparseable decision earns."""
+        if attempt not in (0, 1):
+            raise IdentityConflict("A triage claim has one original ask and one replacement")
         for captured in self.assignments:
             current = store.assignments.get(captured.assignment_id)
             if current != captured or not current.lifecycle.requires_selected_triage():
                 raise IdentityConflict("triage claim changed before native batch reservation")
             if SqlValue.for_annotation(int).read(db.execute(
                 f"SELECT 1 FROM ({self.execution.source_membership_sql()}) members "
-                "WHERE members.assignment_id=? LIMIT 1", (captured.assignment_id,),
+                "WHERE members.assignment_id=? AND members.attempt>=? LIMIT 1",
+                (captured.assignment_id, attempt),
             )):
-                raise IdentityConflict("triage source was previously reserved; no retry")
+                raise IdentityConflict("triage source was previously reserved; no second replacement")
             # All original CASes and the one reserved input commit before Pi.
             update = WakeAssignment.update(
                 db,
@@ -402,7 +438,10 @@ class FullNativeSend(NativeSendStage):
 
         await Coordination.run_async(self.progress.attempts.session.path, settle)
 
-    def reserve_claim(self, store: Coordination, db: sqlite3.Connection) -> None:
+    def reserve_claim(self, store: Coordination, db: sqlite3.Connection,
+                      *, attempt: int = 0) -> None:
+        if attempt:
+            raise IdentityConflict("Only a triage input has a replacement attempt")
         snapshot, _ = store.require_fence(self.fence)
         self.require_claim(store)
         if snapshot.pointer_revision < 1 or self.assignments != snapshot.assignments:
