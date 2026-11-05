@@ -16,7 +16,6 @@ from agent_comms.cli_bridges.session_watch import (
 )
 from agent_comms.cli_bridges.shared import BridgeLog
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.storage.private_path import PrivateSocketRole
 
 
 def test_bridge_log_timestamps_each_line_including_fragmented_writes_and_tracebacks():
@@ -41,8 +40,10 @@ def test_bridge_log_timestamps_each_line_including_fragmented_writes_and_traceba
     (FieldCodec.compact(FieldCodec.encode(SessionReady())) + '\n').encode(),
 ))
 async def test_monitor_startup_eof_is_loud_before_reply_or_probe(
-        tmp_path: Path, wire_reply: bytes) -> None:
-    endpoint = tmp_path / 'startup.sock'
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, wire_reply: bytes) -> None:
+    # A real endpoint is short (WatchClaim.socket_path); a pytest temp directory need not be.
+    monkeypatch.chdir(tmp_path)
+    endpoint = Path('startup.sock')
 
     async def close_at_startup(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
@@ -53,8 +54,7 @@ async def test_monitor_startup_eof_is_loud_before_reply_or_probe(
             writer.close()
             await writer.wait_closed()
 
-    with PrivateSocketRole.address(endpoint) as address:
-        server = await asyncio.start_unix_server(close_at_startup, path=address)
+    server = await asyncio.start_unix_server(close_at_startup, path=endpoint)
     async with server:
         with pytest.raises(SessionConnectionClosed):
             await anext(AttachMonitor().lines(endpoint))

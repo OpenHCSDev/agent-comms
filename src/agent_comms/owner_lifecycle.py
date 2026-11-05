@@ -329,7 +329,14 @@ class OwnerLifecycle:
         return tuple(requests)
 
     def fence_stop(self, *names: str) -> tuple[tuple[Thread, int], ...]:
-        """Fence the complete selection in one edit, before any retirement joins."""
+        """Fence the complete selection in one edit, before any retirement joins.
+
+        An empty selection edits nothing: a retiring host with no owners left reaches here
+        while its stopper holds the registry cut, and waiting on that guard would outlast the
+        stop's grace and force-kill the host before its own cleanup runs.
+        """
+        if not names:
+            return ()
         with self.registry.store.editing() as edit:
             snapshot = edit.original.snapshot
             owners: list[tuple[Thread, int]] = []
