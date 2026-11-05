@@ -11,7 +11,7 @@ from agent_comms.message_notification import NotificationPass
 
 from agent_comms.bus_read import BusRead, UiRead
 from agent_comms.comms import Comms
-from agent_comms.coordination.errors import StaleRevision
+from agent_comms.coordination.errors import ReloadRequired
 from agent_comms.nominal.field_codec import FieldCodec, MessageId
 from agent_comms.history_views import HistoryViews
 from agent_comms.message_reference import MessageReference
@@ -250,7 +250,7 @@ def test_one_operation_in_two_root_envelopes_keeps_root_validation(comms):
     foreign = ReadNotifications(str(comms.root.parent / "another-wire"), operation)
     assert ours.operation is foreign.operation and ours != foreign
     ours.require_root(comms)
-    with pytest.raises(StaleRevision):
+    with pytest.raises(ReloadRequired):
         foreign.require_root(comms)
 
 
@@ -356,7 +356,7 @@ def test_one_shared_read_in_two_root_envelopes_keeps_root_validation(comms):
     foreign = ReadOperation(str(comms.root.parent / "another-wire"), operation)
     assert ours.operation is foreign.operation and ours != foreign
     ours.require_root(comms)
-    with pytest.raises(StaleRevision):
+    with pytest.raises(ReloadRequired):
         foreign.require_root(comms)
 
 

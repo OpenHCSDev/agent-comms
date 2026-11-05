@@ -57,6 +57,7 @@ from agent_comms.coordination.errors import (
     CoordinationError,
     CoordinationReadUnavailable,
     DeferredRead,
+    ReadAgain,
     ReloadRequired,
     Refused,
     StaleRevision,
@@ -450,7 +451,7 @@ class AwaitedRead(TaggedRecordMember, ObservationRequest, declared_name=None):
 
     def require_root(self, comms: Comms) -> None:
         if Path(self.root).expanduser().resolve() != comms.root.resolve():
-            raise StaleRevision("The read belongs to another Comms root than the observed one")
+            raise ReloadRequired("The read belongs to another Comms root than the observed one")
 
     def refused(self, error: Exception) -> ReadRefused:
         """Return the read owner's named failure without reclassifying it."""
@@ -1410,7 +1411,10 @@ class NoObserverFailure(ObserverStatus):
         process.abandon_reads(retired)
 
 
-class ObserverRetired(StaleRevision, ObserverStatus):
+class ObserverRetired(ReadAgain, ObserverStatus):
+    """This observation process closed and never answers again; the read is dropped, and the
+    owner's replacement process reads afresh. Retrying here never answers: no DeferredRead."""
+
     def raise_if_failed(self) -> None:
         raise self
 
@@ -1933,7 +1937,7 @@ class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
         """Tell the service what the UI shows, or report its end to this caller."""
         self.status.raise_if_failed()
         if self.connection.closed:
-            raise StaleRevision("Cannot request a retired Comms observation process")
+            raise ObserverRetired("Cannot request a retired Comms observation process")
         try:
             self.connection.send(request)
         except BrokenPipeError as error:
