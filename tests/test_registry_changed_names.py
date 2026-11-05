@@ -1,5 +1,7 @@
 """A registry revision names the threads it changed, so an observer re-reads only those."""
 
+import subprocess
+import sys
 from dataclasses import replace
 from pathlib import Path
 
@@ -42,3 +44,43 @@ def test_an_unchanged_registry_names_nothing(tmp_path: Path) -> None:
 def test_a_reader_that_read_no_cut_rereads_every_thread(tmp_path: Path) -> None:
     snapshot = registry_with_a_fork(tmp_path).snapshot()
     assert UnreadRegistry().changed_names_to(snapshot) >= {"alpha", "beta", "alpha-fork"}
+
+
+WRITE_TITLE = """
+import sys
+from dataclasses import replace
+from pathlib import Path
+from agent_comms.registration import Registration
+from agent_comms.thread_text import GivenThreadText
+registry = Registration(Path(sys.argv[1]))
+registry.register(replace(registry.require(sys.argv[2]), title=GivenThreadText(sys.argv[3])))
+"""
+
+
+def another_process_retitles(path: Path, name: str, title: str) -> None:
+    subprocess.run([sys.executable, "-c", WRITE_TITLE, str(path), name, title], check=True)
+
+
+def test_a_reader_process_decodes_each_unchanged_row_once(tmp_path: Path) -> None:
+    """The observer and connector only read the registry file, so every row they hold arrives
+    raw and is decoded through a frozen snapshot. Those decodes reach the revision the snapshot
+    was frozen from, so another process's write re-decodes only the rows it changed: on
+    2026-11-04 every heartbeat revision re-decoded all 2,911 rows, about 1 s per walk."""
+    path = tmp_path / "registry.json"
+    subprocess.run([sys.executable, "-c", (
+        "import sys; from pathlib import Path; sys.path.insert(0, sys.argv[2]);"
+        "from test_registry_changed_names import registry_with_a_fork;"
+        "registry_with_a_fork(Path(sys.argv[1]))"), str(tmp_path), str(Path(__file__).parent)],
+        check=True)
+    reader = Registration(path)
+    before = reader.snapshot()
+    read = {name: before.threads[name] for name in before.threads}
+    another_process_retitles(path, "alpha", "renamed")
+    after = reader.snapshot()
+
+    assert after.threads["beta"] is read["beta"]
+    assert after.threads["alpha-fork"] is read["alpha-fork"]
+    assert after.threads["alpha"].title == GivenThreadText("renamed")
+    renamed = after.threads["alpha"]
+    another_process_retitles(path, "beta", "moved")
+    assert reader.snapshot().threads["alpha"] is renamed
