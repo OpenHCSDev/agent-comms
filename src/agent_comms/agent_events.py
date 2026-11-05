@@ -51,7 +51,7 @@ from .pi_vocabulary import (
 from .thread_model import ThreadModel, UndeclaredModel
 from .tool_declaration import OtherAction, ToolAction, ToolDeclaration
 from .tool_results import NoSentMessage, NoToolDiff, ToolDiff
-from .turn_failure import BackendFailed, NoTurnFailure, TurnFailure
+from .turn_failure import NoTurnFailure, TurnFailure
 from .turn_goal_account import OriginGoalSettlement, VerifiedGoalSettlement
 from .turn_item import UsageChargeId
 from .turn_terminal import FailedGoalTurn

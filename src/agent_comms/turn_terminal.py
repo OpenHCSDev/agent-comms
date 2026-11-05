@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from .turn_failure import BackendFailed, ModelRequestFailed, NoTurnFailure, TurnFailure
+from .turn_failure import BackendFailed, NoTurnFailure, TurnFailure
 
 if TYPE_CHECKING:
     from .agent_events import Done
@@ -35,7 +35,7 @@ class TurnTerminal(TurnInterruption):
 
     async def prepare_publication(self, progress: TurnProgress) -> Done:
         return await progress.record_failure(
-            EndedWithoutResult.from_evidence(progress.terminal_error).turn_failure)
+            EndedWithoutResult(failure=progress.terminal_failure).turn_failure)
 
     async def report_failure(self, progress: TurnProgress, error: Exception, kind: type[TurnFailure]):
         cause = error.__cause__ or error
@@ -92,25 +92,14 @@ class FailedGoalTurn(TurnTerminal):
 
 @dataclass(frozen=True)
 class EndedWithoutResult(FailedGoalTurn):
-    """No native terminal reported, so the turn keeps whatever failure it did end with."""
+    """No native terminal reported, so the turn keeps whatever failure it did end with.
+
+    The recorded failure arrives already declared by TurnProgress; the generic text
+    below is the fallback for a turn that recorded no evidence at all.
+    """
 
     text: str = "Native turn ended without a result"
     failure: TurnFailure = field(default_factory=NoTurnFailure)
-
-    @classmethod
-    def from_evidence(cls, error) -> EndedWithoutResult:
-        """The raw evidence this turn already recorded names its declared failure.
-
-        Without a reported terminal the raw Error is the only account of what broke, and
-        it is the same account Done resolves. Falling back to the generic name is for a
-        turn that recorded no evidence at all, never for one that recorded a cause.
-        """
-        if error is None:
-            return cls()
-        return cls(
-            text=error.text,
-            failure=ModelRequestFailed.from_diagnostics(error.text, error.diagnostics),
-        )
 
 
 class OperatorStopped(TurnTerminal):

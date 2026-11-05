@@ -30,6 +30,7 @@ from .nominal.field_codec import AcpSessionId
 from .send_result import SendResult
 from .thread_identity import ClaimedIdentity
 from .transcript_updates import TurnTranscriptUpdate
+from .turn_failure import ModelRequestFailed, NoTurnFailure
 from .turn_lease import TurnState
 from .native_turn_context import ContextObserved
 from .turn_phase import NativePhaseChanged, PublishingPhase
@@ -73,6 +74,7 @@ class TurnProgress(events.AgentEventConsumer):
         self.finish_event, self.goals = finish_event, goals
         self.reply_parts: list[str] = []
         self.terminal_error: events.Error | None = None
+        self.terminal_failure: TurnFailure = NoTurnFailure()
         self.publication_measurements = PublicationMeasurements()
         # The turn keeps its last context record, so recording never re-reads it.
         self.context_prior: ContextPrior = UNREAD_CONTEXT
@@ -179,8 +181,11 @@ class TurnProgress(events.AgentEventConsumer):
     @handles(events.Error)
     async def error(self, event: events.Error) -> object:
         # Raw terminal evidence resolves the later Done; it is not itself a
-        # publishable completed outcome.
+        # publishable completed outcome. It also names the failure a turn
+        # ending without a result keeps, so no caller re-derives it.
         self.terminal_error = event
+        self.terminal_failure = ModelRequestFailed.from_diagnostics(
+            event.text, event.diagnostics)
         return self.DISCARD
 
     @handles(events.Done)
