@@ -142,7 +142,8 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                     assert original is not None
                     request_inputs.append({"input_id": original.input_id,
                                            "stage": original.stage.declared_name,
-                                           "owner": comms.registry.snapshot().born(original.owner_lookup).name})
+                                           "owner": comms.registry.snapshot().born(original.owner_lookup).name,
+                                           "session": str(original.session_id)})
                 if broadcast and len(requests) <= 2:
                     # Both actual owners must reach the endpoint while the
                     # first request is still open. No model turn may retain
@@ -361,11 +362,12 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                                 and "acquisition" in row]
                 assert len(acquisitions) == 1
                 selection = acquisitions[0]["operations"]["native_launch_selection"]
-                # CursorDelivery owns session-cumulative timing counters. Each
-                # original input must add exactly one launch selection, even
-                # after that owner has already handled another peer's reply.
+                # CursorDelivery owns one Pi session's cumulative timing counters
+                # (cursor_publication.py:41). Each original input adds exactly one
+                # launch selection to its session's count; an owner's triage and
+                # full inputs run in different sessions.
                 expected_count = sum(
-                    earlier["owner"] == original["owner"]
+                    earlier["session"] == original["session"]
                     for earlier in request_inputs[:index + 1]
                 )
                 assert selection["count"] == expected_count and selection["total_ns"] > 0
