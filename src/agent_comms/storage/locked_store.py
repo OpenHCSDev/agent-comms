@@ -24,6 +24,8 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Self, TypeVar
 
 from pydantic import JsonValue
 
+import agent_comms
+
 from ..child_process import Platform
 from ..coordination_errors import CoordinationBeginUnavailable, CoordinationReadUnavailable
 from ..nominal.declared_family import DeclaredFamily
@@ -219,10 +221,10 @@ class RootFile:
     def load_declarations() -> None:
         """Import every module of agent_comms once per process, so ``declarations_in`` walks
         the whole family and not only the owners some caller happened to import. The package
-        is named, not taken from ``__package__``: this module lives in a subpackage."""
-        package = import_module("agent_comms")
-        for module in walk_packages(package.__path__, f"{package.__name__}."):
-            if not module.name.startswith(f"{package.__name__}.skills"):
+        is imported, not taken from ``__package__``: this module lives in a subpackage."""
+        prefix = f"{agent_comms.__name__}."
+        for module in walk_packages(agent_comms.__path__, prefix):
+            if not module.name.startswith(f"{prefix}skills"):
                 import_module(module.name)
 
     @classmethod
