@@ -82,6 +82,12 @@ class DeferredRead(Exception):  # noqa: N818 - capability, not an outcome
     """A read refused only for now, for currentness or contention; retrying may answer it."""
 
 
+class ContendedRead(DeferredRead):  # noqa: N818 - capability, not an outcome
+    """Another writer held the store through this read's whole wait budget. The same read
+    can answer once that writer finishes, so retrying it is one bounded read, never a spin;
+    a currentness deferral (StaleRevision) carries no such wait and is not one."""
+
+
 class ReportedDeferredRead(ReportedError, DeferredRead):  # noqa: N818 - reported capability
     """A deferred read reported across a boundary: still deferred, so retrying may answer it."""
 
@@ -110,11 +116,20 @@ class CoordinationReadUnavailable(CoordinationError, DeferredRead):
     def raise_from(cls, error: sqlite3.OperationalError) -> Never:
         """Decode SQLite's contention codes once, never its error wording."""
         if error.sqlite_errorcode & 0xFF in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED):
-            busy = cls(cls.busy_message)
+            busy = cls.contended(cls.busy_message)
             busy.sqlite_errorcode = error.sqlite_errorcode
             busy.sqlite_errorname = error.sqlite_errorname
             raise busy from error
         raise error
+
+    @classmethod
+    def contended(cls, message: str) -> CoordinationReadUnavailable:
+        """SQLite's busy handler already spent this connection's busy_timeout."""
+        return CoordinationReadBusy(message)
+
+
+class CoordinationReadBusy(CoordinationReadUnavailable, ContendedRead):
+    """A snapshot refused by SQLite BUSY or LOCKED after the busy handler's whole wait."""
 
 
 class CoordinationBeginUnavailable(CoordinationReadUnavailable, sqlite3.OperationalError):
@@ -123,6 +138,10 @@ class CoordinationBeginUnavailable(CoordinationReadUnavailable, sqlite3.Operatio
     It is SQLite's own refusal too, so every handler of a storage error still answers it."""
 
     busy_message = "The database write transaction did not start"
+
+    @classmethod
+    def contended(cls, message: str) -> CoordinationReadUnavailable:
+        return cls(message)
 
 
 class SchemaVersionError(CoordinationError):

@@ -23,7 +23,7 @@ from .acp_extension import (
     encode_updates,
 )
 from .comms import Comms
-from .coordination.errors import DeferredRead
+from .coordination.errors import ContendedRead, DeferredRead
 from .coordination.coordinator import Coordination
 from .cursor_owner import CommittedCursorOwner, CursorOwner, CursorState
 from .publication_measurements import PublicationMeasurements
@@ -54,10 +54,9 @@ class CursorDelivery:
     source_reads: NativeEvidenceScope = field(default_factory=NativeEvidenceScope, repr=False)
     observation_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
     measurements: PublicationMeasurements = field(default_factory=PublicationMeasurements, repr=False)
-    # A deferred read owns one retry. Both DeferredRead producers on this path
-    # (SQLite BUSY past busy_timeout, the store flock past its contention) spend
-    # the store's whole wait first, so each retry is one bounded read, never a
-    # drain-speed loop; nothing else announces a writer that changed no rows.
+    # A contended read owns one retry: nothing else announces a writer that
+    # changed no rows. ContendedRead already spent the store's whole wait, so
+    # each retry is one bounded read; other deferrals keep their own path.
     retry: asyncio.Task[None] | None = field(default=None, repr=False)
 
     @asynccontextmanager
@@ -83,6 +82,11 @@ class CursorDelivery:
 
     def owes_retry(self) -> bool:
         return self.retry is None or self.retry.done() or self.retry is asyncio.current_task()
+
+    def deferred(self, selected_status: str | None) -> None:
+        # A settled status was a one-shot fact; the next publication reads afresh.
+        if selected_status is not None:
+            self.published = None
 
     def consume_retry(self) -> None:
         retry, self.retry = self.retry, None
@@ -194,15 +198,17 @@ class CursorPublication:
             observed = await self.observe(
                 thread_name, session_id, defer_busy=True, advance=advance
             )
-        except DeferredRead:
+        except ContendedRead:
             # Busy observation is not a new fact. A settled native operation
             # requires another read when the lock clears, without input replay.
-            if selected_status is not None:
-                delivery.published = None
+            delivery.deferred(selected_status)
             if delivery.owes_retry():
                 delivery.retry = self.runtime.background(
                     self.publish(session_id, thread_name, advance=advance)
                 )
+            return
+        except DeferredRead:
+            delivery.deferred(selected_status)
             return
         delivery.consume_retry()
         delivery.advanced = advance
