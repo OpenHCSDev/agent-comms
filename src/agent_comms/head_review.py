@@ -781,8 +781,8 @@ class Side(DeclaredFamily, affix="Side"):
     def require_materialized(cls, directory: Path, source: IntegrationSource) -> Path:
         checkout = cls.checkout(directory, source.repository)
         source.require_origin(Repo.of(checkout))
-        if Repo.git(checkout, "status", "--porcelain"):
-            raise ToolRefusedError(f"Preserve dirty materialized source: {checkout}")
+        if dirty := Repo.git(checkout, "status", "--porcelain").strip():
+            raise ToolRefusedError(f"Preserve dirty materialized source: {checkout}:\n{dirty}")
         cls.require_revision(checkout, source)
         return checkout
 

@@ -405,7 +405,9 @@ def test_real_client_checker_compares_the_matched_tuple_in_its_one_interpreter(
             "mypy_source_plugin.py", "src/workflow.py", "tools/acceptance.py", "tools/performance/capture_live.py"]
         # Python's script entrypoint and the plugin's import must see this same cut.
         entry = subprocess.run((sys.executable, "tools/acceptance.py"), cwd=client.checkout,
-            env={**os.environ, "PYTHONPATH": os.pathsep.join((
+            # The probe imports from the materialized client; its bytecode would dirty that
+            # source before the next side requires it clean.
+            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "PYTHONPATH": os.pathsep.join((
                 str(side.require_materialized(pair.output, source) / "src"), *client.import_paths))},
             capture_output=True, text=True, timeout=30)
         assert entry.returncode == 0, entry.stdout + entry.stderr

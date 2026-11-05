@@ -35,6 +35,7 @@ from agent_comms.coordination import schema as coordination_schema
 from agent_comms.storage import locked_store, store_files, typed_table
 from agent_comms.nominal import field_codec
 from agent_comms.child_process import ForkedProcessPool, SpawnedProcess
+from agent_comms.launch_runtime import RestoredRuntime
 from agent_comms.core_stamp import WheelStamp
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import boundary_decoder
@@ -279,8 +280,16 @@ class ClientTypeErrors(audit.checkers.SideCounts[AgentCommsProject]):
                 (sys.executable, "-m", *audit.checkers.TypeErrors.mypy(
                     cache, "--follow-imports=silent", "--ignore-missing-imports", *selected)),
                 cwd=client.checkout, timeout=600,
-                env={**os.environ, "MYPYPATH": os.pathsep.join(
-                    (str(Path(scratch, "src")), str(client.checkout / "src")))},
+                # MYPYPATH serves type checking; a configured plugin is imported as Python, so it
+                # needs the same cut on PYTHONPATH, and it must not write bytecode into the
+                # materialized client source the next side requires clean. The running runtime
+                # would put this checkout's own src first (CheckoutSource), so the environment
+                # is kept as given, as integration.py runs a combined checkout's tests.
+                runtime=RestoredRuntime(Path(sys.executable)),
+                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1",
+                     "PYTHONPATH": os.pathsep.join((str(Path(scratch, "src")), *client.import_paths)),
+                     "MYPYPATH": os.pathsep.join(
+                         (str(Path(scratch, "src")), str(client.checkout / "src")))},
             )
         output = cls.checker_output(result, f"{client.name} at {ref}")
         return side, tuple(dataclasses.replace(site, path=f"{client.name}/{site.path}")
