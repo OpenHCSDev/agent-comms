@@ -171,19 +171,30 @@ jobs:
   native-scripts:
     name: native-scripts
     needs: [ready, base]
-    if: needs.base.outputs.reused != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      # A required context must post on every commit the queue measures. A job-level
+      # `if` makes this job report `skipped`, which is not a conclusion the required
+      # check accepts, so a merge-group entry whose sources a green pull-request run
+      # already tested would wait here forever. The reuse decision therefore belongs
+      # on the steps, exactly as the debt legs already carry theirs.
+      - if: needs.base.outputs.reused == 'true'
+        run: echo "Already tested green on this head's pull request; nothing to re-run."
       - uses: actions/checkout@v4
+        if: needs.base.outputs.reused != 'true'
       - uses: actions/setup-python@v5
+        if: needs.base.outputs.reused != 'true'
         with:
           python-version-file: pyproject.toml
       - name: Install Core
+        if: needs.base.outputs.reused != 'true'
         run: python -m pip install -e .
       - name: Prepare pinned native Pi
+        if: needs.base.outputs.reused != 'true'
         uses: ./.github/actions/prepare-native
       - name: Run every native script
+        if: needs.base.outputs.reused != 'true'
         run: |
           export PI_NATIVE_PACKAGE_DIR="$(python -c 'from agent_comms.native_package import pinned_native_package; print(pinned_native_package())')"
           for script in stack/test-*; do
