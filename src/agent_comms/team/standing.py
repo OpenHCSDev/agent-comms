@@ -421,7 +421,7 @@ class UnitAskUnanswered(TeammateOwedAnswer, UndatedStandingRule):
                 f"answer it in a message to {self.unit.name}")
 
     def line(self) -> str:
-        return (f"ANSWER {self.unit.name} asked {self.cited} at {RecordedEventTime(self.message.timestamp).stamp()}. why is it still waiting on you?"
+        return (f"ANSWER {self.debtor.name} owes {self.unit.name}: asked {self.cited} at {RecordedEventTime(self.message.timestamp).stamp()}. why is it still waiting?"
                 f" -> {self.clearing_action()}")
 
 
