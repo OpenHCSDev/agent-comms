@@ -602,8 +602,8 @@ class TargetEdit(Command[Comms, TargetEditResult | Channel]):
 class TargetActionCommand[Result: TargetEditResult | Channel = TargetEditResult | Channel](
     CliCommand[Result], declared_name=None,
 ):
-    """A command a thread or channel menu offers. Its answer is one a remote UI decodes, and
-    the menu's catalog lists exactly these members."""
+    """A command a thread, channel or project menu offers. Its answer is one a remote UI
+    decodes, and the menu's catalog lists exactly these members."""
 
 
 class MultipleTargets:

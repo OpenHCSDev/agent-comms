@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from agent_comms.cli_command import TargetActionCommand
-from agent_comms.cli_commands import ThreadCreatedResult
 from agent_comms.channel_targets import DeclaredTag
 from agent_comms.cli_verbs.new import NewThreadCliCommand
 from agent_comms.cli_support.thread_bound import ThreadBoundCliCommand
@@ -18,8 +16,7 @@ from typing import Self
 
 
 @dataclass(frozen=True, kw_only=True)
-class ForkCliCommand(NativeOwnerCommand, ThreadBoundCliCommand, NewThreadCliCommand,
-                     TargetActionCommand[ThreadCreatedResult]):
+class ForkCliCommand(NativeOwnerCommand, ThreadBoundCliCommand, NewThreadCliCommand):
     help = "Fork a child pi thread"
     spec_type = ForkSpec
     parent: Annotated[
