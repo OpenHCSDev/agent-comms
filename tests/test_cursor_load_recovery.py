@@ -39,7 +39,9 @@ async def test_trusted_load_recovers_after_real_sql_contention(tmp_path, private
         comms,
         auto_wake=False,
     )
-    agent.sessions.publish(AcpSessionId(owner.name), owner)
+    # Production hands the cursor owner the AcpSessionId its encoded update carries.
+    session = AcpSessionId(owner.name)
+    agent.sessions.publish(session, owner)
     attached = asyncio.get_running_loop().create_future()
 
     def accept(reader, writer):
@@ -70,7 +72,7 @@ async def test_trusted_load_recovers_after_real_sql_contention(tmp_path, private
         await asyncio.gather(*drains, return_exceptions=True)
 
     try:
-        await agent.inputs.drain_inbox(AcpSessionId(owner.name))
+        await agent.inputs.drain_inbox(session)
         before = await receive()
         assert before.observation.status == "none"
         # Drain initial queue/cursor publications before observing idle effects.
@@ -83,15 +85,15 @@ async def test_trusted_load_recovers_after_real_sql_contention(tmp_path, private
         # the last trusted owner snapshot. After release, no duplicate should
         # reach the socket and schedule idle reader preparation.
         with coordinator_writer.writing():
-            await agent.cursors.publish(owner.name, owner.name)
-        await agent.cursors.publish(owner.name, owner.name)
+            await agent.cursors.publish(session, owner.name)
+        await agent.cursors.publish(session, owner.name)
         with pytest.raises(TimeoutError):
             await asyncio.wait_for(receive(), 0.05)
         # A settled turn cannot lose its cursor update to the same lock. The
         # idle observer must revisit the durable row once contention clears.
         with coordinator_writer.writing():
-            await agent.cursors.publish(owner.name, owner.name, selected_status="unavailable")
-        await agent.cursors.refresh(owner.name, owner.name)
+            await agent.cursors.publish(session, owner.name, selected_status="unavailable")
+        await agent.cursors.refresh(session, owner.name)
         before = await receive(before.revision)
         assert before.observation.status == "none"
         with pytest.raises(TimeoutError):
@@ -99,23 +101,23 @@ async def test_trusted_load_recovers_after_real_sql_contention(tmp_path, private
         with coordinator_writer.writing():
             loaded = next(
                 update.envelope
-                for update in (await agent.cursors.trusted_metadata(owner.name, owner.name))
+                for update in (await agent.cursors.trusted_metadata(owner.name, session))
                 if isinstance(update, CursorAdvancedUpdate)
             )
             assert loaded.observation.status == "unavailable"
             assert loaded.scope == before.scope
-            await agent.cursors.publish(owner.name, owner.name)
+            await agent.cursors.publish(session, owner.name)
         agent.inputs.ensure_live_drain(owner.name)
         recovered = await receive(loaded.revision)
         assert recovered.observation.status == "none"
         assert recovered.scope == loaded.scope
         assert recovered.revision > loaded.revision
         await cancel_drains()
-        await agent.inputs.drain_inbox(AcpSessionId(owner.name))
-        settled_revision = agent.cursors.delivery(owner.name).revision
+        await agent.inputs.drain_inbox(session)
+        settled_revision = agent.cursors.delivery(session).revision
         for _ in range(20):
-            await agent.inputs.drain_inbox(AcpSessionId(owner.name))
-        assert agent.cursors.delivery(owner.name).revision == settled_revision
+            await agent.inputs.drain_inbox(session)
+        assert agent.cursors.delivery(session).revision == settled_revision
         assert read_history(comms) == []  # No input submitted or replayed.
     finally:
         await cancel_drains()
