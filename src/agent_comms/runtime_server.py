@@ -423,11 +423,11 @@ class RuntimeServer(SessionUpdateSink):
         except asyncio.CancelledError:
             pass
         except Refused as error:
-            # Reply to this requester, then propagate the original failure to the server task.
+            # The reply is the whole answer: a correct refusal is not a fault.
             with suppress(SubscriberClosed):
                 await client.send(OwnerFailure.refused(error))
-            raise
         except (ValueError, CoordinationError, NativeRequestFailure) as error:
+            # The client gets only the text, so the fault stays loud on this side.
             with suppress(SubscriberClosed):
                 await client.send(OwnerFailure.of(error))
             raise

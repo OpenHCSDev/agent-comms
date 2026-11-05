@@ -26,7 +26,7 @@ def goal_updates(metadata) -> tuple[GoalChangedUpdate, ...]:
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
-async def test_goal_edit_and_history_over_owner_socket(tmp_path, monkeypatch, native_runtime_package):
+async def test_goal_edit_and_history_over_owner_socket(tmp_path, monkeypatch, native_runtime_package, caplog):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
     owner = canonical_agent(comms, agent_bin=GivenBinary("pi"), agent_args=GivenArguments(()), runtime_enabled=True)
@@ -78,6 +78,8 @@ async def test_goal_edit_and_history_over_owner_socket(tmp_path, monkeypatch, na
                 "edit_goal", goal_id=goal.id, expected_revision=paused.revision, text="stale edit"
             )
         assert wire(comms.root).registry.require(session).goal == changed
+        # The refused requester was told; the owner has no fault to report.
+        assert not [record for record in caplog.records if record.exc_info]
         assert (await proxy.request("goal_history", goal_id=goal.id))["history"] == history
     finally:
         await proxy.close()
