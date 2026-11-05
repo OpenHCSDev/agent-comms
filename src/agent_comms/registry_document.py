@@ -363,6 +363,9 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
         self._raw: dict[str, dict[str, JsonValue]] = {}
         self._decoded: dict[str, Thread] = {}
         self._binding: Callable[[Thread], Thread] = self.unbound
+        # The rows this copy was frozen from: a stored row decoded here is learned there too,
+        # so the next revision's reuse inherits it. Rows not frozen from anything learn alone.
+        self._source: ThreadRows = self
 
     @staticmethod
     def unbound(thread: Thread) -> Thread:
@@ -405,8 +408,18 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
 
     def __getitem__(self, name: str) -> Thread:
         if name not in self._decoded:
-            self._decoded[name] = self.decode_row(self._raw[name])
+            row = self._raw[name]
+            self._decoded[name] = self.decode_row(row)
+            self._source.learned(self, name, row)
         return self._decoded[name]
+
+    def learned(self, copy: ThreadRows, name: str, row: Mapping[str, JsonValue]) -> None:
+        """``copy`` decoded one of its stored rows. While this still stores that same row under
+        the same binding, the decode is this row's too: a reader that reads only the file holds
+        every row raw and decodes through frozen snapshots, and without this the next revision
+        carried none of their decodes and decoded every row a walker touched again."""
+        if name in self._raw and self._raw[name] is row and self._binding == copy._binding:
+            self._decoded.setdefault(name, copy._decoded[name])
 
     def decode_row(self, row: object) -> Thread:
         try:
@@ -514,6 +527,7 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
         result._raw = self._raw.copy()
         result._decoded = self._decoded.copy()
         result._binding = self._binding
+        result._source = self
         return result
 
     def reuse(self, rows: Mapping[str, object], kept: frozenset[str], earlier: ThreadRows) -> None:
