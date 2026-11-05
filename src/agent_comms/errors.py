@@ -55,6 +55,11 @@ class UnregisteredThreadError(ToolRefusedError):
     """A reference does not resolve to a registered thread."""
 
 
+class OutsideRegistrySlice(ToolRefusedError):  # noqa: N818 - a refusal, named for its case
+    """A name the registry slice was not asked for: it may well be registered, so it is never
+    an unregistered thread, and a handler for gone threads never sees it."""
+
+
 class UnknownChannelError(ToolRefusedError):
     """A target is absent from the catalog and current thread tags."""
 
