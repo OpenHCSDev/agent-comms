@@ -61,7 +61,7 @@ from .session_file import RegistrySessionLocation
 from .thread_identity import AgentThreadRole, ThreadIncarnation, ThreadRole
 from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
 from .thread_owned_state import ThreadOwnedState
-from .thread_text import ForkedParent, GivenThreadText, NoThreadText, ThreadText
+from .thread_text import ForkedParent, GivenThreadText, ThreadText
 from .thread_catalog import ThreadCatalog
 from .heartbeat_delivery import HeartbeatDelivery
 from .tool_declaration import NativeRequestTools
@@ -74,6 +74,14 @@ class RenameThreadResult(ToolResult):
     previous: str
     current: str
     changed: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ThreadTitleResult(ToolResult):
+    """A title set on its own; the thread's identity and aliases are untouched."""
+
+    name: str
+    title: str
 
 
 class TagChoice(SubclassUnion, affix="Tags"):
@@ -338,16 +346,19 @@ class ThreadManagement:
             role=role)
         return self.registry._claim_unlocked(thread)
 
-    def rename_self(self, new_name: str, *, caller: ThreadCaller) -> RenameThreadResult:
-        """Rename the bound caller's own thread, retaining its old aliases."""
+    def rename_self(self, display_name: str, *, caller: ThreadCaller) -> RenameThreadResult:
+        """Rename the bound caller's own thread to the display name it was given.
+
+        The identity is that text's slug, exactly as creation and the managed rename
+        already claim one, and the title is the text itself. A caller naming a topic and
+        a human labelling a thread therefore mean the same thing by the same input.
+        """
         with self.registry.store.editing() as edit:
-            if edit.document.require(caller.name).auto_title_pending and (
-                len(new_name) > 48 or len(re.split(r"[-_]+", new_name)) > 6
-            ):
-                raise ValueError("Choose a concise topic title: at most 6 words and 48 characters.")
+            if edit.document.require(caller.name).auto_title_pending:
+                self.require_concise_title(display_name)
             return self._rename_thread_in(
-                edit, caller.name, new_name, title=GivenThreadText(new_name.replace("-", " ").replace("_", " "))
-            )
+                edit, caller.name, RegistryNames.thread_slug(display_name),
+                title=GivenThreadText(display_name))
 
     def set_project(self, target_thread: ThreadIncarnation, path: str) -> ProjectChangeResult:
         """Move the captured thread's project, never a later occupant of its name."""
@@ -390,27 +401,75 @@ class ThreadManagement:
             new_name = edit.document.claim_name(display_name, owner=thread.name)
             return self._rename_thread_in(edit, thread.name, new_name, title=GivenThreadText(display_name))
 
-    def _rename_thread(
-        self, name: str, new_name: str, *, title: ThreadText = NoThreadText()
-    ) -> RenameThreadResult:
-        # Every rename checks and changes the same current registry declaration.
+    def set_own_title(self, title: str, *, caller: ThreadCaller) -> ThreadTitleResult:
+        """Correct the bound caller's own display title, leaving its identity alone.
+
+        A thread imported from another harness carries that session's title and no turn
+        revisits it, because import never sets ``auto_title_pending``. The party that can
+        see a stale title is the thread itself, so this takes the caller's own authority
+        exactly as ``rename_self`` does; a teammate could not correct its own label under
+        the process-owner proof the managed rename requires.
+        """
         with self.registry.store.editing() as edit:
-            return self._rename_thread_in(edit, name, new_name, title=title)
+            edit.document.status(caller.name).require_self_rename()
+            thread = edit.document.require(caller.name)
+            self.require_concise_title(title)
+            self._write_title(edit, thread.name, GivenThreadText(title))
+            edit.commit()
+            return ThreadTitleResult(thread.name, title)
+
+    def set_managed_title(
+        self, original: ThreadIncarnation, title: str, *, owner: ProcessIdentity
+    ) -> ThreadTitleResult:
+        """Correct the captured thread's display title from its UI, proving its process."""
+        with self.registry.store.editing() as edit:
+            thread = edit.document.require(original.name)
+            if thread.incarnation != original:
+                raise RelationViolationError("Thread incarnation changed before retitle")
+            if thread.process_identity != owner:
+                raise RelationViolationError(
+                    f"Process {owner.pid} does not own thread {thread.name!r}."
+                )
+            self.require_concise_title(title)
+            self._write_title(edit, thread.name, GivenThreadText(title))
+            edit.commit()
+            return ThreadTitleResult(thread.name, title)
+
+    @staticmethod
+    def require_concise_title(title: str) -> None:
+        """A title is rendered where a name is, so it carries the name's bound.
+
+        The bound is unconditional here. ``rename_self`` applies it only while
+        ``auto_title_pending``, and that flag is false for every imported thread, so
+        inheriting that condition would leave the one path this bound exists to protect
+        with no validation at all.
+
+        Words are counted in either shape the label arrives in: the spaces a display
+        name uses and the ``-``/``_`` a slug uses. Counting only the separators let a
+        seven-word spaced title through, which is the shape this now accepts.
+        """
+        if len(title) > 48 or len(re.findall(r"[^\s_-]+", title)) > 6:
+            raise ValueError("Choose a concise topic title: at most 6 words and 48 characters.")
 
     def _rename_thread_in(
-        self, edit: RegistryEdit, name: str, new_name: str, *, title: ThreadText = NoThreadText()
+        self, edit: RegistryEdit, name: str, new_name: str, *, title: ThreadText
     ) -> RenameThreadResult:
         previous, current = edit.document.rename(name, new_name)
-        thread = edit.document.require(current)
-        titled = replace(thread, auto_title_pending=False, title=title.applied(thread.title))
-        if titled != thread:
-            self.registry._commit_registration(edit, edit.document.prepare_registration(
-                titled, edit.document.status(current), new_owner=False))
+        self._write_title(edit, current, title)
         edit.commit()
         changed = previous != current
         if changed:
             edit.released.append(partial(self._rename_stores, previous, current))
         return RenameThreadResult(previous, current, changed)
+
+    def _write_title(self, edit: RegistryEdit, name: str, title: ThreadText) -> None:
+        """Write the label its operation chose, applied to whatever the thread already
+        carried, and clear the one flag that lets a turn choose it later."""
+        thread = edit.document.require(name)
+        titled = replace(thread, auto_title_pending=False, title=title.applied(thread.title))
+        if titled != thread:
+            self.registry._commit_registration(edit, edit.document.prepare_registration(
+                titled, edit.document.status(name), new_owner=False))
 
     def _rename_stores(self, previous: str, current: str) -> None:
         self.agents.activity.rename_thread(previous, current)

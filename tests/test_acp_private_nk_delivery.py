@@ -10,6 +10,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import CursorAdvancedUpdate, decode_updates
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
+from agent_comms.tool_caller import ThreadCaller
 from agent_comms.coordination.errors import PublicationActivationBlocked
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.nominal.field_codec import AcpSessionId
@@ -73,7 +74,7 @@ def test_private_owner_rename_during_active_attempt_can_complete(tmp_path, manag
     if managed:
         comms.threads.rename_managed_thread(comms.registry.require("beta").incarnation, "gamma", owner=ProcessIdentity.capture(os.getpid()))
     else:
-        comms.threads._rename_thread("beta", "gamma")
+        comms.threads.rename_self("gamma", caller=ThreadCaller("beta"))
     assert comms.registry.require("beta").name == "gamma"
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         after = store.participants.get(lookup)
@@ -93,7 +94,7 @@ def test_private_rename_preserves_independent_sql_generation(tmp_path):
     lookup = comms.registry.require("beta").incarnation.lookup
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.participants.advance_generation(lookup, expected_generation=1)
-    comms.threads._rename_thread("beta", "gamma")
+    comms.threads.rename_self("gamma", caller=ThreadCaller("beta"))
     assert comms.registry.require("beta").name == "gamma"
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         assert store.participants.get(lookup).owner_identity.generation == 2

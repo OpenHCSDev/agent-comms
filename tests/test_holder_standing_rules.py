@@ -37,6 +37,7 @@ from agent_comms.team_hud import TeamFrame
 from agent_comms.task_attachments.team_pings import TeamUpdate
 from agent_comms.task_attachments.owner_notices import ChokeholdNotice, VibeCheckNotice
 from agent_comms.comms import wire
+from agent_comms.tool_caller import ThreadCaller
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.errors import (
     CommittedMessageError, HumanSendRefusedError, RelationViolationError, TodoConflict, TodoError,
@@ -1116,7 +1117,7 @@ def test_first_pass_is_owed_from_oldest_request_and_survives_renames(held_bus, m
     passes.heartbeat_passed(observed, observed)
     completed = passes.read().teammate_completed[colleague.incarnation]
     assert HeartbeatSilent.violations(held_bus) == ()
-    held_bus.threads._rename_thread("colleague", "renamed-colleague")
+    held_bus.threads.rename_self("renamed-colleague", caller=ThreadCaller("colleague"))
     monkeypatch.setattr(time, "time", lambda: completed + HeartbeatSilent.seconds + 1)
     silent, = HeartbeatSilent.violations(held_bus)
     assert isinstance(silent, MissedHeartbeat)

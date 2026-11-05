@@ -143,7 +143,13 @@ from .threads import (
     NextTurnConfiguration,
     Thread,
 )
-from .thread_management import InheritedTags, ProjectChangeResult, RenameThreadResult, TagChoice
+from .thread_management import (
+    InheritedTags,
+    ProjectChangeResult,
+    RenameThreadResult,
+    TagChoice,
+    ThreadTitleResult,
+)
 from .input_origin import HumanInputOrigin
 from .thread_identity import ClaimedIdentity
 from .thread_presentation import ThreadPresentation
@@ -644,6 +650,23 @@ class CommsRenameManagedThreadTool(HumanToolRequest[RenameThreadResult]):
 
     def answered(self, comms: Comms) -> RenameThreadResult:
         return comms.threads.rename_managed_thread(self.thread, self.display_name, owner=self.owner)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsSetThreadTitleTool(HumanToolRequest[ThreadTitleResult]):
+    """The owner's UI corrects a managed thread's label without renaming it."""
+
+    label = "Set managed thread title"
+    description = (
+        "Correct a managed thread's display title while its name and routing aliases stay"
+        " unchanged; requires a human UI caller."
+    )
+    thread: Annotated[ThreadIncarnation, *tool_field("The thread incarnation the UI holds")]
+    title: Annotated[str, *tool_field("The new display title")]
+    owner: Annotated[ProcessIdentity, *tool_field("The process that manages the thread")]
+
+    def answered(self, comms: Comms) -> ThreadTitleResult:
+        return comms.threads.set_managed_title(self.thread, self.title, owner=self.owner)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1538,11 +1561,28 @@ class CommsCollaborationsTool(ThreadReadTool):
 @dataclass(frozen=True, kw_only=True)
 class CommsRenameSelfTool(ThreadToolRequest):
     label = "Rename Comms Thread"
-    description = "Rename your own persistent thread identity; old names remain routing aliases."
-    new_name: Annotated[str, *tool_field("Your new thread name")]
+    description = (
+        "Rename your own persistent thread to a new display name; the thread name is that"
+        " text's slug and old names remain routing aliases."
+    )
+    display_name: Annotated[str, *tool_field("Your new display name")]
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> RenameThreadResult:
-        return comms.threads.rename_self(self.new_name, caller=caller)
+        return comms.threads.rename_self(self.display_name, caller=caller)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsSetOwnThreadTitleTool(ThreadToolRequest):
+    """A thread corrects its own display title without touching its identity."""
+
+    label = "Set Comms Thread Title"
+    description = (
+        "Correct your own thread's display title; its name and routing aliases stay unchanged."
+    )
+    title: Annotated[str, *tool_field("Your new display title")]
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> ThreadTitleResult:
+        return comms.threads.set_own_title(self.title, caller=caller)
 
 
 @dataclass(frozen=True)
