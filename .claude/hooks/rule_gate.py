@@ -204,6 +204,7 @@ class ReadCall(ToolCall):
 
 @dataclass(frozen=True)
 class BashCall(ToolCall):
+    command: str
     background: bool
     timeout_ms: float
     tool = "Bash"
@@ -211,7 +212,12 @@ class BashCall(ToolCall):
 
     @classmethod
     def decode(cls, arguments: dict, response: object) -> BashCall:
-        return cls(bool(arguments.get("run_in_background")), float(arguments.get("timeout") or 0))
+        return cls(str(arguments.get("command", "")), bool(arguments.get("run_in_background")),
+                   float(arguments.get("timeout") or 0))
+
+    def allowed_while_owed(self, reading: Reading) -> bool:
+        """A gate that refuses every tool must not be able to refuse the way out of itself."""
+        return emergency_hook_stop().is_whole_of(self.command)
 
     def too_long_in_foreground(self) -> bool:
         return not self.background and self.timeout_ms > self.foreground_limit_ms
@@ -349,6 +355,12 @@ class CarriedDeal:
         return digests.get(str(path)) == hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def emergency_hook_stop() -> type:
+    sys.path.insert(0, str(team_directory().parent.parent))
+    from agent_comms_hooks.shell_commands import EmergencyHookStop
+    return EmergencyHookStop
+
+
 def core_gates(event: HookEvent) -> bool:
     """A session Core launched (claude-comms) or bound to the bus (connect) answers Core's own
     gate and audit, whose list names the installed runtime's copies. This gate stands down rather
@@ -401,7 +413,7 @@ def gate(event: HookEvent) -> None:
     remaining = reading.remaining()
     deny(f"Rule reading owed: {len(remaining)} of {len(reading.files)} files still have unread "
          "lines. Read them before anything else, papers first, then rules. Next: "
-         + ", ".join(map(str, remaining[:8])) + told)
+         + ", ".join(map(str, remaining[:8])) + told + "\n\n" + emergency_hook_stop().way_out)
 
 
 def record(event: HookEvent) -> None:

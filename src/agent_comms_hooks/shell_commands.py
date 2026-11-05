@@ -585,6 +585,23 @@ class InboxWatchCommand(BusListener):
     listening = program.name
 
 
+class EmergencyHookStop:
+    """The one command a gate that refuses every tool must still let run. A session a gate has
+    locked out has no other way to stop it, so the way out is declared here and named in the
+    refusal. It runs only as the whole command line, so it can carry nothing else past a gate."""
+
+    program: ClassVar[Program] = Program('agent-comms-hooks')
+    verb: ClassVar[str] = 'stop'
+    way_out: ClassVar[str] = (
+        f"If this gate is what's wrong, `{program.name} {verb} --from YOUR_NAME --why WHY` turns "
+        "every hook off and posts that to #comms under your name.")
+
+    @classmethod
+    def is_whole_of(cls, command_line: str) -> bool:
+        commands = tuple(ShellCommand.standalone(command_line))
+        return len(commands) == 1 and commands[0].invokes(cls.program, cls.verb)
+
+
 @dataclass(frozen=True)
 class ShellCommand:
     """Executable words and syntax operands remain distinct after boundary decoding."""
