@@ -53,6 +53,7 @@ from agent_comms.cli_bridges.hook_deferral import StopHook
 from agent_comms.cli_bridges.hook_forks import SubagentHook
 from agent_comms.rule_deal import AuditDue, OwnerWordsAnswer, ReadSpan, RuleAudit, SessionAudit
 from agent_comms.cli_bridges.hook_read_gate import GatedCall, MonitorInput
+from agent_comms_hooks.shell_commands import EmergencyHookStop
 from agent_comms_hooks.skill import (DeckReader, DeckStart, LightReader,
                                      LightPrime, Prime, SessionSource)
 from agent_comms.cli_bridges.session_watch import DeafWatch, LiveWatch, WatchClaim, WatchRecord
@@ -703,6 +704,20 @@ def dealt_session(tmp_path, team_session, team_bus, team_binding):
     return transcript, start
 
 
+def test_core_gate_lets_the_emergency_hook_stop_through_and_names_it(
+        capsys, dealt_session, team_bus, team_binding):
+    """A gate refusing every tool cannot refuse the way out of itself, and says where it is."""
+    transcript, _ = dealt_session
+    stop = "agent-comms-hooks stop --from someone --why 'the gate is wrong'"
+    assert not refused(capsys, gated(transcript, "Bash", {"command": stop},
+                                     comms=team_bus, binding=team_binding))
+    assert refused(capsys, gated(transcript, "Bash", {"command": f"{stop}; ls"},
+                                 comms=team_bus, binding=team_binding))
+    gated(transcript, "Bash", {"command": "ls"}, comms=team_bus, binding=team_binding).judge()
+    assert EmergencyHookStop.way_out in json.loads(
+        capsys.readouterr().out)["hookSpecificOutput"]["permissionDecisionReason"]
+
+
 def read_whole(transcript, source, *, comms: Comms, binding: Binding):
     gated(transcript, "Read", {"file_path": str(source)}, comms=comms, binding=binding).completed()
 
@@ -879,7 +894,7 @@ def test_the_deal_teaches_the_three_fields_by_a_real_answer_once(
     spine = next(rule for rule in DeckReader.rules() if rule.name == example.rule)
     assert example.unengaged(spine.path) == ""
     assert {"quote", "does", "why"} <= json.loads(template[template.index("{\n"):])["rules"][0].keys()
-    gated(transcript, "Bash", {}, comms=team_bus, binding=team_binding).judge()
+    gated(transcript, "Bash", {"command": "true"}, comms=team_bus, binding=team_binding).judge()
     assert "{\n" not in json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecisionReason"]
 
 
@@ -923,7 +938,7 @@ def test_refusal_counts_names_tool_and_prefills_the_owned_audit(
     start.prepare(DeckReader(), words, StartedDeal())
     reasons = []
     for attempt, tool in enumerate(("Bash", "Edit"), 1):
-        gated(transcript, tool, {"file_path": str(transcript)}, comms=team_bus, binding=team_binding).judge()
+        gated(transcript, tool, {"file_path": str(transcript), "command": "true"}, comms=team_bus, binding=team_binding).judge()
         output = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
         assert output["permissionDecision"] == "deny"
         reason = output["permissionDecisionReason"]
@@ -943,12 +958,12 @@ def test_refusal_counts_names_tool_and_prefills_the_owned_audit(
     assert due.refusal(template)  # the blank template cannot count as the completed audit
     for invalid in ("not JSON", '{"rules": [], "owner_words": []}'):
         start.audit.write_text(invalid)
-        gated(transcript, "Bash", {}, comms=team_bus, binding=team_binding).judge()
+        gated(transcript, "Bash", {"command": "true"}, comms=team_bus, binding=team_binding).judge()
         output = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
         assert output["permissionDecision"] == "deny"
         assert str(start.audit) in output["permissionDecisionReason"]
     start.prepare(DeckReader(), words, StartedDeal())
-    gated(transcript, "Bash", {}, comms=team_bus, binding=team_binding).judge()
+    gated(transcript, "Bash", {"command": "true"}, comms=team_bus, binding=team_binding).judge()
     assert "Call #1 since this deal, refused." in capsys.readouterr().out
 
 
@@ -997,7 +1012,7 @@ def test_two_agents_on_one_session_keep_separate_deals(
     main_audit = transcript.with_suffix(".audit.json")
     assert refused(capsys, gated(transcript, "Write", {"file_path": str(main_audit)},
                                  agent_id="a9", comms=team_bus, binding=team_binding))
-    sub = gated(transcript, "Bash", {}, agent_id="a9", comms=team_bus, binding=team_binding)
+    sub = gated(transcript, "Bash", {"command": "true"}, agent_id="a9", comms=team_bus, binding=team_binding)
     assert sub.audit != main_audit and sub.audit.parent == transcript.with_suffix("") / "subagents"
     assert not refused(capsys, sub)  # the subagent was dealt nothing of its own
     assert not refused(capsys, gated(transcript, "Write", {"file_path": str(sub.audit)},

@@ -45,9 +45,23 @@ def replace_link(link: Path, target: Path) -> None:
         temporary.unlink(missing_ok=True)
 
 
+def json_config(path: Path) -> dict:
+    """A harness's config file decoded once; one that isn't a JSON object is refused by name,
+    and it is left as it is, since rewriting it would lose whatever the owner has in there."""
+    if not path.exists():
+        return {}
+    try:
+        document = json.loads(path.read_text())
+    except json.JSONDecodeError as error:
+        raise ValueError(f"{path} isn't valid JSON ({error}): fix or move it; nothing changed") from error
+    if not isinstance(document, dict):
+        raise ValueError(f"{path} isn't a JSON object: fix or move it; nothing changed")
+    return document
+
+
 def merge_json(path: Path, merge) -> None:
     """Rewrite a harness's JSON config through its owner, keeping unrelated settings."""
-    document = json.loads(path.read_text()) if path.exists() else {}
+    document = json_config(path)
     merge(document)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(document, indent=2) + "\n")

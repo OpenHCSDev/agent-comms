@@ -541,6 +541,9 @@ class LiteralShellParser(ShellParser):
     def word(self, word: ShellWord) -> None:
         if set(word.spelling) & {'$', '`'}:
             raise NotStandalone('Recovery requires literal, single-line words')
+        if not self.words and word.assignment():
+            raise NotStandalone('Recovery does not admit environment assignments: '
+                                'LD_PRELOAD= or PYTHONPATH= would run other code as the command')
         super().word(word)
 
     def operator(self, operator: Operator) -> Iterator[ShellCommand]:
@@ -583,6 +586,24 @@ class InboxWatchCommand(BusListener):
 
     program: ClassVar[Program] = Program('agent-comms-inbox-watch')
     listening = program.name
+
+
+class EmergencyHookStop:
+    """The one command a gate that refuses every tool must still let run. A session a gate has
+    locked out has no other way to stop it, so the way out is declared here and named in the
+    refusal. It runs only as the whole command line, so it can carry nothing else past a gate."""
+
+    program: ClassVar[Program] = Program('agent-comms-hooks')
+    verb: ClassVar[str] = 'stop'
+    way_out: ClassVar[str] = (
+        f"If this gate is what's wrong, `{program.name} {verb} --from YOUR_NAME --why WHY` turns "
+        "every hook off and posts that to #comms under your name.")
+
+    @classmethod
+    def is_whole_of(cls, command_line: str) -> bool:
+        """By its bare name: a path could name any file, and PATH finds the real one."""
+        commands = tuple(ShellCommand.standalone(command_line))
+        return len(commands) == 1 and commands[0].words[:2] == (cls.program.name, cls.verb)
 
 
 @dataclass(frozen=True)

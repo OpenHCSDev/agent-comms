@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
-from agent_comms_hooks.shell_commands import ConnectCommand, ShellCommand
+from agent_comms_hooks.shell_commands import ConnectCommand, EmergencyHookStop, ShellCommand
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.rule_deal import DealtRuleGate, Mute, Owed, ReadSpan, RuleDeal, Voice
 from agent_comms.comms import Comms
@@ -26,7 +26,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.cli_bridges.shared import Binding, Watch
 import time
 from agent_comms.turn_phase import ToolRunningPhase
-from agent_comms_hooks import ClaudeToolHook, ClaudeTranscriptHook, HookRecord
+from agent_comms_hooks import Bash, ClaudeToolHook, ClaudeTranscriptHook, HookRecord
 from agent_comms.meant_voice import BusVoice
 from .hook_forks import SubagentActivity
 
@@ -105,6 +105,15 @@ class MonitorTool(ToolMeaning, declared_name="Monitor"):
             call.judge_tool(call.tool_name)
 
 
+class BashTool(ToolMeaning, declared_name="Bash"):
+    """The emergency hook stop always runs: a gate that refuses every tool must not be able to
+    refuse the way out of itself. Any other command waits like the rest."""
+
+    def judge(self, call: GatedCall) -> None:
+        if not EmergencyHookStop.is_whole_of(Bash.decode(call.tool_input).command):
+            call.judge_tool(call.tool_name)
+
+
 class ToolSearchTool(ToolMeaning, declared_name="ToolSearch"):
     """Loading a tool's schema runs nothing, and a session cannot call the Monitor this gate
     permits until its schema is loaded. Gating it left a session's bus watch dead through a whole
@@ -172,7 +181,8 @@ class GatedCall(ClaudeToolHook, TranscriptWords, DealtRuleGate, BusVoice):
             self.announce(call.refused(), call.number)
 
     def refuse(self, reason: str) -> None:
-        self.respond(permissionDecision="deny", permissionDecisionReason=reason)
+        self.respond(permissionDecision="deny",
+                     permissionDecisionReason=f"{EmergencyHookStop.way_out}\n\n{reason}")
 
     def voice(self) -> Voice:
         """The supplied resident bus and binding are already this call's speaking seat."""
