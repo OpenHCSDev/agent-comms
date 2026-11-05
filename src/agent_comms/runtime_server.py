@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Any, Self
 from pydantic import BaseModel
 from .coordination.errors import Refused
+from acp.exceptions import RequestError
 from acp.schema import DeniedOutcome, PermissionOption, RequestPermissionResponse, ToolCallUpdate
 from .controller import UNBOUND_CONTROLLER, Controller, SessionUpdateSink
 from .nominal.field_codec import AcpSessionId, FieldCodec
@@ -426,6 +427,12 @@ class RuntimeServer(SessionUpdateSink):
             # The reply is the whole answer: a correct refusal is not a fault.
             with suppress(SubscriberClosed):
                 await client.send(OwnerFailure.refused(error))
+        except RequestError as error:
+            # A failed turn in its protocol form crosses whole, and the client's own boundary
+            # raises it as itself. Closing without a reply would report it as an unknown outcome.
+            with suppress(SubscriberClosed):
+                await client.send(OwnerFailure.refused(Refused(error.code, str(error), error.data)))
+            raise
         except (ValueError, CoordinationError, NativeRequestFailure) as error:
             # The client gets only the text, so the fault stays loud on this side.
             with suppress(SubscriberClosed):
