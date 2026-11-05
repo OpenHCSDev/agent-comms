@@ -64,3 +64,13 @@ def test_a_name_outside_the_cut_says_so(tmp_path: Path) -> None:
     cut = registry_with_a_fork(tmp_path).snapshot().only(("alpha",))
     with pytest.raises(OutsideRegistryCut, match="not in this registry cut"):
         cut.require("beta")
+
+
+def test_a_name_asked_for_but_never_registered_is_unregistered(tmp_path: Path) -> None:
+    import pytest
+    from agent_comms.errors import OutsideRegistryCut, UnregisteredThreadError
+
+    cut = registry_with_a_fork(tmp_path).snapshot().only(("alpha", "nobody"))
+    with pytest.raises(UnregisteredThreadError, match="is not registered") as refused:
+        cut.require("nobody")
+    assert not isinstance(refused.value, OutsideRegistryCut)

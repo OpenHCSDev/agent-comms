@@ -230,7 +230,7 @@ def test_a_ui_reads_a_renamed_thread_from_a_registry_cut(tmp_path):
     """The cut a remote UI reads answers under the old name and carries no other thread."""
     from agent_comms.core_access import LocalCoreAccess
     from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.registry_document import RegistrySnapshot
+    from agent_comms.registry_document import RegistryCut
     from agent_comms.tools import CommsRegistryCutTool
 
     comms = wire(tmp_path / "wire")
@@ -239,7 +239,7 @@ def test_a_ui_reads_a_renamed_thread_from_a_registry_cut(tmp_path):
     comms.registry.rename("worker", "renamed")
     request = CommsRegistryCutTool(threads=("worker",))
     answer = LocalCoreAccess(comms).call(FieldCodec.decode(CommsRegistryCutTool, FieldCodec.encode(request)))
-    cut = FieldCodec.decode(RegistrySnapshot, FieldCodec.encode(answer))
+    cut = FieldCodec.decode(RegistryCut, FieldCodec.encode(answer))
 
     assert cut.canonical_name("worker") == "renamed"
     assert cut.require("worker").incarnation == comms.registry.snapshot().require("renamed").incarnation
