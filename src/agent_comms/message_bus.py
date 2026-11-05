@@ -123,10 +123,8 @@ class WatchPass[Observed](PreparedWatchPass[None, Observed]):
 class UnreadCut:
     """One unread page's rows in one source cut; a count of the rest must read the same cut."""
 
-    messages: MessageBus
     source: BusSnapshot
     snapshot: RegistrySnapshot
-    target: NamedTarget
     require_channel: Callable[[str], Channel]
     delivery: DeliveryScope
     seen: ReadCursor
@@ -140,15 +138,6 @@ class UnreadCut:
         return self.source.unseen_counts(
             self.snapshot, {actor: self.delivery}, {actor: self.seen}, after=self.cursor,
         )[actor]
-
-    def pending(self, counts: Mapping[str, int]) -> int:
-        return self.target.pending_count(counts, self.snapshot, self.require_channel)
-
-    def displayed(self) -> DisplayedMessagePage:
-        return self.request.displayed(
-            self.messages.reads, self.document, self.delivery.actor,
-            self.snapshot, self.snapshot, self.messages.bus,
-        )
 
 
 class MessageBus[Writes: Publisher]:
@@ -200,8 +189,9 @@ class MessageBus[Writes: Publisher]:
     ) -> InboxPage:
         with self._unread_cut(name, snapshot, target, after, bounds) as cut:
             counts = cut.counts()
-        result = cut.displayed()
-        return InboxPage(result.page, result.displayed, cut.pending(counts) - len(result.page.messages))
+        result = self._displayed(cut)
+        total = target.pending_count(counts, snapshot, cut.require_channel)
+        return InboxPage(result.page, result.displayed, total - len(result.page.messages))
 
     def untaken_at(
         self, name: str, snapshot: RegistrySnapshot, target: NamedTarget = AnyChannel.target(), *,
@@ -211,7 +201,12 @@ class MessageBus[Writes: Publisher]:
         counting it was a second full route query per empty wake per open socket."""
         with self._unread_cut(name, snapshot, target, after, bounds) as cut:
             pass
-        return cut.displayed()
+        return self._displayed(cut)
+
+    def _displayed(self, cut: UnreadCut) -> DisplayedMessagePage:
+        return cut.request.displayed(
+            self.reads, cut.document, cut.delivery.actor, cut.snapshot, cut.snapshot, self.bus,
+        )
 
     @contextmanager
     def _unread_cut(
@@ -234,7 +229,7 @@ class MessageBus[Writes: Publisher]:
                 traversal=traversal,
             )
             yield UnreadCut(
-                self, source, snapshot, target, require_channel, delivery, seen, cursor,
+                source, snapshot, require_channel, delivery, seen, cursor,
                 MessagePageRequest(
                     ListedDeliveries(selection, frozenset(row.seq for row in unread),
                                      frozenset(row.target for row in unread)),
