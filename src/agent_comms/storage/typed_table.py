@@ -944,7 +944,7 @@ class SQLiteLiteral(TypedRow):
 
     @classmethod
     def of(cls, value: object) -> str:
-        with closing(sqlite3.connect(":memory:")) as db:
+        with closing(SQLiteFile.writer(":memory:")) as db:
             [quoted] = cls.read(db.execute("SELECT quote(?) AS literal", (value,)))
             return quoted.literal
 

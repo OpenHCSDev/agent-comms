@@ -7,6 +7,7 @@ from agent_comms.cli import build_parser
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.page_traversal import (
     HistoryCursor,
+    HistorySourceKey,
     LiveCursor,
     NewerTraversal,
     OlderTraversal,
@@ -16,7 +17,7 @@ from agent_comms.page_traversal import (
 
 @pytest.mark.parametrize('cursor,wire,source', [
     (LiveCursor(12), 12, None),
-    (HistoryCursor(source='saved', sequence=12), {'source': 'saved', 'sequence': 12}, 'saved'),
+    (HistoryCursor(source=HistorySourceKey('saved'), sequence=12), {'source': 'saved', 'sequence': 12}, 'saved'),
 ])
 def test_cursor_owns_traversal_and_cli_json(cursor, wire, source):
     assert cursor.older() == OlderTraversal(cursor)
