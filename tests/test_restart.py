@@ -10,6 +10,7 @@ from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import FieldCodec, TurnId
 from agent_comms.restart_queue import PendingRestart, RestartedRestart
 from agent_comms.launch_root import LaunchRoot
+from agent_comms.lifecycle_capability import Active
 from agent_comms.pi_counts import PiCount
 from agent_comms.owner_connection import socket_path
 from agent_comms.native_arguments import GivenBinary
@@ -98,12 +99,14 @@ async def test_busy_owner_restart_queues_and_runs_at_idle(
                 assert comms.registry.require('worker').require_process() == process
 
                 comms.registry.release_turn(leased.require_turn_lease())
+                # Wait out the queue's own active states, then name where it settled: a
+                # blocked or uncertain restart reports its reason instead of a bare timeout.
                 async with asyncio.timeout(30):
-                    while not queue_store.history(incarnation)[-1].state.items_with(
-                        RestartedRestart, queued
-                    ):
+                    while queue_store.history(incarnation)[-1].state.items_with(Active, queued):
                         await asyncio.to_thread(queue_store.step, comms)
                         await asyncio.sleep(.1)
+                settled = queue_store.history(incarnation)[-1]
+                assert settled.state.items_with(RestartedRestart, settled), settled
                 assert comms.registry.require('worker').require_process() != process
             finally:
                 await asyncio.to_thread(comms.owners.stop, 'worker')
