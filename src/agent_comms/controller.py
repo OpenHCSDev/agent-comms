@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
-from .coordination_errors import IdentityConflict
+from .coordination.errors import IdentityConflict
 from .nominal.field_codec import AcpSessionId
 
 if TYPE_CHECKING:

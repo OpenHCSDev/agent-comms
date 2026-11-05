@@ -5,9 +5,9 @@ from __future__ import annotations
 import sqlite3
 from typing import Final
 
-import agent_comms.coordination_tables as coordination_tables
-from agent_comms.coordination_errors import SchemaVersionError
-from agent_comms.coordinator_vocabulary import CoordinatorVocabulary
+from agent_comms.coordination import tables
+from agent_comms.coordination.errors import SchemaVersionError
+from agent_comms.coordination.vocabulary import CoordinatorVocabulary
 from agent_comms.storage.typed_table import DurableTables, SharedFileTables, TypedTable
 
 COORDINATION_SNAPSHOT_VERSION: Final = 3
@@ -27,7 +27,7 @@ class CoordinatorTable(SharedFileTables, DurableTables):
 
     @classmethod
     def declarations(cls) -> tuple[type[TypedTable], ...]:
-        return TypedTable.discover_members(coordination_tables, cls)
+        return TypedTable.discover_members(tables, cls)
 
     @classmethod
     def configure_connection(cls, connection: sqlite3.Connection) -> None:

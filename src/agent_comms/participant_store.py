@@ -5,19 +5,19 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 
-from agent_comms.coordination_errors import (
+from agent_comms.coordination.errors import (
     IdentityConflict,
     ParticipantNotRegistered,
     StaleRevision,
 )
-from agent_comms.coordination_results import AlreadyApplied, Applied
-from agent_comms.coordination_session import CoordinationSession
-from agent_comms.coordination_tables.executions import (
+from agent_comms.coordination.results import AlreadyApplied, Applied
+from agent_comms.coordination.session import CoordinationSession
+from agent_comms.coordination.tables.executions import (
     CurrentExecutions,
     NoPointedAttempt,
     NoPointedExecution,
 )
-from agent_comms.coordination_tables.participants import (
+from agent_comms.coordination.tables.participants import (
     OwnerGenerations,
     Participants,
 )

@@ -3,22 +3,22 @@
 from dataclasses import dataclass
 
 from agent_comms.reason_codes import NoReasonCode
-from .coordination_errors import (
+from .coordination.errors import (
     IdentityConflict,
     PublicationUncertain,
     RecoveryBlocked,
     StaleFence,
     StaleRevision,
 )
-from .coordination_snapshot import RecoverySnapshot
-from .coordination_tables.attempts import AttemptRecord
+from .coordination.snapshot import RecoverySnapshot
+from .coordination.tables.attempts import AttemptRecord
 from .nominal.field_codec import ThreadLookup
 from .owner_fence import OwnerFence, _digest
 from .participant_store import ParticipantSnapshot
 
 
 from .attempt_states import PromptStartingAttempt
-from .coordination_tables.executions import CurrentExecutions, ExecutionRecord, PointedAttempt, PointedExecution
+from .coordination.tables.executions import CurrentExecutions, ExecutionRecord, PointedAttempt, PointedExecution
 from .execution_states import ActiveExecution
 
 INITIAL_LEASE_DURATION_MS = 60_000

@@ -199,7 +199,7 @@ def test_draft_is_current_state_and_finishes_atomically(tmp_path):
     t_turn_id = NativeTurnId('t')
     t2_turn_id = NativeTurnId('t2')
     from agent_comms.acp_extension import TranscriptSnapshotUpdate, encode_updates, decode_updates
-    from agent_comms.coordination_errors import StaleRevision
+    from agent_comms.coordination.errors import StaleRevision
     comms = wire(tmp_path / "wire")
     comms.registry.declare(NativeThread('codex', frozenset(), Checkout(tmp_path)))
     transcript = comms.transcripts.external("codex")

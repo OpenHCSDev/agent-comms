@@ -275,7 +275,7 @@ class JevClassifier(Classifier):
 
     @classmethod
     async def classify(cls, request, api_key: str):
-        from .coordinator import Coordination
+        from .coordination.coordinator import Coordination
 
         def send():
             external = Request(cls.endpoint, data=json.dumps(request.payload()).encode(),

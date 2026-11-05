@@ -8,7 +8,7 @@ from agent_comms.transcripts import (
 from agent_comms.repo import Checkout
 from conftest import installed_comms, transcript_records
 from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.coordination_errors import TranscriptChanged
+from agent_comms.coordination.errors import TranscriptChanged
 import json
 import time
 from datetime import UTC, datetime

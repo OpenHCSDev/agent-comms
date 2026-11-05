@@ -4,10 +4,10 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.comms import wire
-from agent_comms.coordination_database import CoordinationStore
-from agent_comms.coordination_errors import IntegrityViolationError, ParticipantNotRegistered
-from agent_comms.coordination_session import CoordinationSession
-from agent_comms.coordination_tables.participants import Participants
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.errors import IntegrityViolationError, ParticipantNotRegistered
+from agent_comms.coordination.session import CoordinationSession
+from agent_comms.coordination.tables.participants import Participants
 from agent_comms.participant_store import ParticipantStore
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
 from agent_comms.thread_text import GivenThreadText

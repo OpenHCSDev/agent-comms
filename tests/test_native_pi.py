@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.coordination_errors import IdentityConflict
+from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, InputId
 from agent_comms.native_arguments import SelectedModel

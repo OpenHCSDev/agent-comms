@@ -15,9 +15,9 @@ from dataclasses import dataclass
 
 from agent_comms.lifecycle_capability import Complete
 
-from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink, WakeAssignment
-from agent_comms.coordination_tables.executions import ExecutionRecord
-from agent_comms.coordination_tables.responses import ResponseObligation
+from agent_comms.coordination.tables.assignments import ExecutionAssignmentLink, WakeAssignment
+from agent_comms.coordination.tables.executions import ExecutionRecord
+from agent_comms.coordination.tables.responses import ResponseObligation
 
 from ..cohort_schema import (
     AwarenessClaimGenerations,

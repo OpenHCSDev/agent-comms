@@ -48,7 +48,7 @@ from . import turn_failure as failures
 from .acp_failure import UnrecordedFailureSource
 from .agent_backend import NO_INPUT_START_LISTENER, InputStartListener
 from .turn_inbox import TurnInbox, TurnInboxItem
-from .coordinator import Coordination
+from .coordination.coordinator import Coordination
 from .cursor_publication import CursorDelivery
 from .extension_ui import ExtensionUiSession
 from .nominal.field_codec import InputId, MalformedRecord, boundary_decoder

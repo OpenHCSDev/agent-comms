@@ -10,13 +10,13 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
-from .coordination_errors import (
+from .coordination.errors import (
     IdentityConflict,
     IntegrityViolationError,
     RecoveryBlocked,
     ResponseClaimBlocked,
 )
-from .coordinator_vocabulary import CoordinatorVocabulary
+from .coordination.vocabulary import CoordinatorVocabulary
 from .execution_states import (
     CompletedExecution,
     DeferredExecution,
@@ -31,7 +31,7 @@ from .obligation_states import (
 )
 
 if TYPE_CHECKING:
-    from .coordination_tables.attempts import ReplayFact
+    from .coordination.tables.attempts import ReplayFact
 
 
 @dataclass(frozen=True)
@@ -119,7 +119,7 @@ class LiveAttempt(AttemptState):
 class TerminalAttempt(Terminal, AttemptState):
     @property
     def replay_contribution(self) -> ReplayFact:
-        from .coordination_tables.attempts import ReplayFact
+        from .coordination.tables.attempts import ReplayFact
 
         return ReplayFact.NONE
 
@@ -334,6 +334,6 @@ class UnknownOutcomeAttempt(UnsuccessfulTerminal):
 
     @property
     def replay_contribution(self) -> ReplayFact:
-        from .coordination_tables.attempts import ReplayFact
+        from .coordination.tables.attempts import ReplayFact
 
         return ReplayFact.UNKNOWN_EFFECTS

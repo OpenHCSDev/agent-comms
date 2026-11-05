@@ -29,13 +29,13 @@ from agent_comms.cli_verbs.read_back import ReadBackCliCommand
 from agent_comms.cli_verbs.reconcile_stores import ReconcileStoresCliCommand
 from agent_comms.cli_bridges.codex import CodexBridge
 from agent_comms.cli_bridges.shared import BridgeDeliveryStore, BridgeStateTable
-from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination.database import CoordinationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import ClaimId, FieldCodec, MessageId
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.goal_failure_observation import FailedTurnEvidence
-from agent_comms.coordination_session import CoordinationSession
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.session import CoordinationSession
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.installer.backup import StoreBackup, bus_files
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.practice import PracticeCopy

@@ -11,13 +11,13 @@ from dataclasses import replace
 
 from agent_comms.assignment_states import AssignmentState, DeferredAssignment
 from agent_comms.message_reference import MessageReference
-from agent_comms.coordination_errors import (
+from agent_comms.coordination.errors import (
     IdentityConflict,
     StaleRevision,
 )
-from agent_comms.coordination_results import AlreadyApplied, Applied
-from agent_comms.coordination_session import CoordinationSession
-from agent_comms.coordination_tables.assignments import WakeAssignment
+from agent_comms.coordination.results import AlreadyApplied, Applied
+from agent_comms.coordination.session import CoordinationSession
+from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.storage.typed_table import sql_literal
 
 

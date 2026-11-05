@@ -18,13 +18,13 @@ from agent_comms.context_segments.wake import MessageDelivery, SelectedWakeSegme
 from agent_comms.coordinated_runtime import SelectedExecution, SessionSetupFailed
 from agent_comms.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from conftest import accept_initial
-from agent_comms.coordination_cohort import sealed_cohort_assignments
-from agent_comms.coordination_errors import (
+from agent_comms.coordination.cohort import sealed_cohort_assignments
+from agent_comms.coordination.errors import (
     IdentityConflict,
     PublicationActivationBlocked,
 )
-from agent_comms.coordinator import Coordination
-from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.notification_progress import HumanReadProgress
 from agent_comms.pi_vocabulary import HighThinkingLevel

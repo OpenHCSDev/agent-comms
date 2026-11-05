@@ -42,7 +42,7 @@ if TYPE_CHECKING:
     from agent_comms.notification_progress import AssignmentResponse, UnansweredResponse
     from .bus_publication import Delivered
     from .comms import Comms
-    from .coordination_tables.assignments import WakeAssignment
+    from .coordination.tables.assignments import WakeAssignment
     from .notification_assignment import AssignmentActivityEvidence
     from .notification_progress import AssignmentProgress, DeliveryProgress
     from .message_notification import MessageNotification

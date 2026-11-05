@@ -12,11 +12,11 @@ from typing import TYPE_CHECKING, ClassVar, NoReturn
 
 from .frozen_recipient import FrozenRecipient
 from .bus import Bus
-from .coordination_database import CoordinationStore, StoreFile
-from .coordination_tables.assignments import WakeAssignment
-from .coordination_tables.executions import CurrentExecutions
-from .coordination_tables.harness_deliveries import HarnessDelivery
-from .coordination_tables.publications import PublicationEvidence
+from .coordination.database import CoordinationStore, StoreFile
+from .coordination.tables.assignments import WakeAssignment
+from .coordination.tables.executions import CurrentExecutions
+from .coordination.tables.harness_deliveries import HarnessDelivery
+from .coordination.tables.publications import PublicationEvidence
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import FieldCodec, ThreadLookup, boundary_decoder
 from .input_disposition import InputDispositions
@@ -42,7 +42,7 @@ from .bus_publication import Delivered
 if TYPE_CHECKING:
 
     from .agent_activity import RecipientActivity
-    from .coordination_database import InvalidStore, MissingStore
+    from .coordination.database import InvalidStore, MissingStore
     from .message_notification import MessageNotification
     from .private_registry_guard import RegistryPrivacy
     from .notification_progress import DeliveryProgress

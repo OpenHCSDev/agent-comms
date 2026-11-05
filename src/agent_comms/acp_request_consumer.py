@@ -7,7 +7,7 @@ from metaclass_registry.mro_dispatch import (
     handles,
 )
 
-from .coordination_errors import Refused
+from .coordination.errors import Refused
 from acp.schema import PromptRequest, PromptResponse
 
 from . import acp_extension

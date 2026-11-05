@@ -16,7 +16,7 @@ from agent_comms.cli_bridges.codex import CodexBridge, CodexOptions
 from agent_comms.cli_bridges.codex_protocol import ItemStream, RpcNotification
 from agent_comms.cli_bridges.shared import Binding, Options, StoredBinding, Watch
 from agent_comms.comms import Comms
-from agent_comms.coordination_errors import CoordinationBeginUnavailable
+from agent_comms.coordination.errors import CoordinationBeginUnavailable
 from agent_comms.connector import ConnectorSendTool
 from agent_comms.connector_caller import DirectorCaller
 from agent_comms.standing_rules import DirectiveUnacted

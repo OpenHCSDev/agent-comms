@@ -25,7 +25,7 @@ from agent_comms.child_process import (
 from agent_comms.native_build_inputs import (
     ConfiguredChildStdio, DetachedChildStdio, GitAcquisitionCancelled, GitLaunch,
 )
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.comms import Comms
 from agent_comms.message_bus import Watch
 from agent_comms.service_passes import ServicePassStore

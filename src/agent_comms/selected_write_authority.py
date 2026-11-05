@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from .nominal.field_codec import ClaimId
 
 if TYPE_CHECKING:
-    from .coordination_tables.assignments import WakeAssignment
+    from .coordination.tables.assignments import WakeAssignment
     from .selected_actions import SelectedAction
     from .threads import Thread
 

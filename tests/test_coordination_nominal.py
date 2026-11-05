@@ -4,9 +4,9 @@ import pytest
 
 from agent_comms.assignment_states import AssignmentState, EngagedAssignment, FullPendingAssignment
 from agent_comms.attempt_states import SucceededAttempt
-from agent_comms.coordination_errors import IntegrityViolationError
-from agent_comms.coordination_tables.assignments import WakeAssignment
-from agent_comms.coordination_tables.executions import (
+from agent_comms.coordination.errors import IntegrityViolationError
+from agent_comms.coordination.tables.assignments import WakeAssignment
+from agent_comms.coordination.tables.executions import (
     ExecutionRecord,
     WireOrigin,
 )
@@ -42,7 +42,7 @@ def test_state_data_cannot_be_attached_to_wrong_variant():
 
 
 def test_execution_extension_is_stored_and_transitioned(tmp_path):
-    from agent_comms.coordinator import Coordination
+    from agent_comms.coordination.coordinator import Coordination
     from agent_comms.execution_states import UnstartedExecution
 
     class PausedExecution(UnstartedExecution):
@@ -72,9 +72,9 @@ def test_execution_extension_is_stored_and_transitioned(tmp_path):
 
 
 def test_new_response_state_roundtrips_real_store(tmp_path):
-    from agent_comms.coordinator import Coordination
-    from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink
-    from agent_comms.coordination_tables.responses import ResponseObligation
+    from agent_comms.coordination.coordinator import Coordination
+    from agent_comms.coordination.tables.assignments import ExecutionAssignmentLink
+    from agent_comms.coordination.tables.responses import ResponseObligation
     from agent_comms.execution_states import QueuedExecution
 
     class ReviewedResponse(ResponseState):
@@ -120,7 +120,7 @@ def test_new_response_state_roundtrips_real_store(tmp_path):
 
 def test_assignment_extension_derives_sql_projection_and_transitions(tmp_path):
     from agent_comms.assignment_states import FailedAssignment
-    from agent_comms.coordinator import Coordination
+    from agent_comms.coordination.coordinator import Coordination
 
     class AwaitingAssignment(FullPendingAssignment):
         pass

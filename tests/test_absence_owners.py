@@ -51,8 +51,8 @@ def test_drain_lifecycle_keeps_inbox_and_original_in_one_owner():
 
 
 def test_absent_holder_and_attempt_preserve_refusals_without_runtime_probes():
-    from agent_comms.coordination_errors import RecoveryBlocked, StaleFence
-    from agent_comms.coordination_tables.attempts import NoPreviousAttempt
+    from agent_comms.coordination.errors import RecoveryBlocked, StaleFence
+    from agent_comms.coordination.tables.attempts import NoPreviousAttempt
     from agent_comms.todos import NoTodoHolder
 
     holder = NoTodoHolder()

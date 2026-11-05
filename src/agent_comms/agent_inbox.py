@@ -16,9 +16,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from .bus_tables import MessageIdentitySource
-from .coordination_database import CoordinationStore
-from .coordination_tables.assignments import WakeAssignment
-from .coordination_tables.harness_deliveries import HarnessDelivery
+from .coordination.database import CoordinationStore
+from .coordination.tables.assignments import WakeAssignment
+from .coordination.tables.harness_deliveries import HarnessDelivery
 from .message_page import InboxPage
 from .nominal.field_codec import NullMember, RecordMember, SingleFieldValue, SubclassUnion
 from .watched import Watched

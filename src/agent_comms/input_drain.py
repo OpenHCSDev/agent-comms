@@ -32,9 +32,9 @@ from .cohort_schema import AcceptanceFrontier
 from .comms import Comms
 from .config_options import ConfigOptions
 from .controller import SessionUpdateSink
-from .coordination_cohort import next_sealed_assignment
-from .coordination_database import CoordinationStore
-from .coordinator import Coordination
+from .coordination.cohort import next_sealed_assignment
+from .coordination.database import CoordinationStore
+from .coordination.coordinator import Coordination
 from .cursor_owner import CursorOwner
 from .drain_failures import (
     DEFERRED_DRAIN_ERRORS,

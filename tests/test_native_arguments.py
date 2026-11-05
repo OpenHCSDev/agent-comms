@@ -18,7 +18,7 @@ from agent_comms.thread_model import DeclaredModel, ThreadModel, UndeclaredModel
 
 @pytest.mark.parametrize("selection", [None, "", "model", "/model", "provider/"])
 def test_selected_model_requires_a_complete_qualified_configuration(selection):
-    from agent_comms.coordination_errors import IdentityConflict
+    from agent_comms.coordination.errors import IdentityConflict
 
     with pytest.raises(IdentityConflict):
         SelectedModel.decode(selection)

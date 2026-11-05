@@ -9,7 +9,7 @@ from typing import Annotated, ClassVar, Self
 
 from agent_comms.assignment_states import AssignmentState, EngagedAssignment
 from agent_comms.frozen_recipient import FrozenRecipient
-from agent_comms.coordination_contracts import (
+from agent_comms.coordination.contracts import (
     MAX_IDENTIFIER_CHARS,
     POLICY_VERSION,
     RESOLVER_VERSION,
@@ -18,11 +18,11 @@ from agent_comms.coordination_contracts import (
     require_optional_nonempty,
     validate_execution_id,
 )
-from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.coordination_schema import CoordinatorRow
-from agent_comms.coordination_tables.executions import ExecutionRecord
-from agent_comms.coordination_tables.participants import Participants
-from agent_comms.coordination_tables.responses import ResponseObligation
+from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.coordination.schema import CoordinatorRow
+from agent_comms.coordination.tables.executions import ExecutionRecord
+from agent_comms.coordination.tables.participants import Participants
+from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.envelope_claim_transitions import AssignmentBinding
 from agent_comms.nominal.field_codec import AssignmentId, MessageId, SnapshotExclude, ThreadLookup, WireName, projected
 from agent_comms.message_reference import MessageReference
@@ -109,7 +109,7 @@ class WakeAssignment(
             or self.resolver_version != RESOLVER_VERSION
             or self.policy_version != POLICY_VERSION
         ):
-            from agent_comms.coordination_errors import IdentityConflict
+            from agent_comms.coordination.errors import IdentityConflict
 
             raise IdentityConflict("claim acceptance requires initial frozen decision")
 
@@ -122,7 +122,7 @@ class WakeAssignment(
             revision=self.revision,
         )
         if self != progress or self.lifecycle.mode != candidate.lifecycle.mode:
-            from agent_comms.coordination_errors import IdentityConflict
+            from agent_comms.coordination.errors import IdentityConflict
 
             raise IdentityConflict("accepted claim identity conflicts")
 

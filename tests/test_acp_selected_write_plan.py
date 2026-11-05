@@ -28,10 +28,10 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.comms import wire
 from agent_comms.launch_root import LaunchRoot
-from agent_comms.coordination_cohort import sealed_cohort_assignments
+from agent_comms.coordination.cohort import sealed_cohort_assignments
 from agent_comms.assignment_states import TriagePendingAssignment
 from agent_comms.envelope_claim_transitions import UnclaimedResource
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.thread_model import DeclaredModel
 from native_backend_fixture import native_backend_fixture

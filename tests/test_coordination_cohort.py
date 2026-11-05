@@ -29,14 +29,14 @@ from agent_comms.assignment_states import (
 from agent_comms.cohort_schema import AcceptanceFrontier, ClaimBatchAcknowledgements, CohortDeliveries
 from agent_comms.messages import InfoKind, Message
 from agent_comms.comms import Comms, wire
-from agent_comms.coordination_cohort import (
+from agent_comms.coordination.cohort import (
     pending_sealed_assignments,
     sealed_cohort_assignments,
 )
-from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.coordination_tables.assignments import WakeAssignment
-from agent_comms.coordinator import Coordination
-from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.coordination.tables.assignments import WakeAssignment
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.exporting import (
     ChannelScope,
@@ -274,7 +274,7 @@ def test_wrong_native_namespace_rejected_before_sql(tmp_path: Path) -> None:
 
 
 def test_keyed_response_replay_after_initial_row_and_receipt_backed_page(tmp_path: Path) -> None:
-    from agent_comms.coordination_response import prepare_fenced_response, publish_fenced_response
+    from agent_comms.coordination.response import prepare_fenced_response, publish_fenced_response
     from test_coordination_response import _ready
 
     case = _ready(tmp_path, direct=True)

@@ -79,8 +79,8 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                 assert len(requests) <= (8 if broadcast else 2 + seed_count + restart_after_reply + 2 * reject_triage), "Reply observation caused replay or ping-pong"
                 # The current original native reservation owns stage. Join its
                 # exact ID to the saved input; prompt prose is not a stage codec.
-                from agent_comms.coordination_tables.assignments import WakeAssignment
-                from agent_comms.coordinator import Coordination
+                from agent_comms.coordination.tables.assignments import WakeAssignment
+                from agent_comms.coordination.coordinator import Coordination
                 from agent_comms.native_runtime_input import NativeRuntimeInput
                 from agent_comms.native_transcript import NativeTranscript
 
@@ -297,8 +297,8 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
             "questioner", "#team", "ROUNDTRIP_QUESTION" if broadcast else "@answerer ROUNDTRIP_QUESTION"
         ).message
         if broadcast:
-            from agent_comms.coordination_tables.assignments import WakeAssignment
-            from agent_comms.coordinator import Coordination
+            from agent_comms.coordination.tables.assignments import WakeAssignment
+            from agent_comms.coordination.coordinator import Coordination
 
             await until(lambda: len(read_history(comms, "#team")) == 3,
                         "Both independent native replies published")
@@ -420,7 +420,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
         )
         if reject_triage:
             from agent_comms.assignment_states import FailedAssignment
-            from agent_comms.coordinator import Coordination
+            from agent_comms.coordination.coordinator import Coordination
             from agent_comms.historical_native_inputs import read_historical_native_inputs
 
             with Coordination(str(comms.root / "coordination.sqlite3")) as store:

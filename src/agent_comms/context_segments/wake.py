@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from agent_comms.coordination_tables.assignments import WakeAssignment
-from agent_comms.coordination_tables.responses import ResponseObligation
+from agent_comms.coordination.tables.assignments import WakeAssignment
+from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.message_notification import SentMessageOutcome
 
@@ -79,7 +79,7 @@ class SelectedWakeSegment(WireSources, InstructionSegment):
                 if obligation.exact_target == assignment.lifecycle.exact_target
             )
             if len(matching) > 1:
-                from ..coordination_errors import IdentityConflict
+                from ..coordination.errors import IdentityConflict
 
                 raise IdentityConflict("Selected source has ambiguous response obligations")
             expectation, obligation_line = assignment.lifecycle.wake_frame(

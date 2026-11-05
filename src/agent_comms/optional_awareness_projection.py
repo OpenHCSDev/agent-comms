@@ -19,11 +19,11 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import ClassVar
 
-from agent_comms.coordination_errors import CoordinationError
-from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink, WakeAssignment
-from agent_comms.coordination_tables.executions import ExecutionRecord
-from agent_comms.coordination_tables.participants import OwnerGenerations
-from agent_comms.coordination_tables.responses import ResponseObligation
+from agent_comms.coordination.errors import CoordinationError
+from agent_comms.coordination.tables.assignments import ExecutionAssignmentLink, WakeAssignment
+from agent_comms.coordination.tables.executions import ExecutionRecord
+from agent_comms.coordination.tables.participants import OwnerGenerations
+from agent_comms.coordination.tables.responses import ResponseObligation
 
 from .bus_publication import Delivered
 from .child_process import ProcessIdentity
@@ -41,7 +41,7 @@ from .context_segments.optional_awareness import (
     _OpenObligation,
     _SelectedDecision,
 )
-from .coordination_cohort import _claim_record
+from .coordination.cohort import _claim_record
 from .errors import RelationViolationError
 from .nominal.field_codec import FieldCodec, RootId, ThreadLookup
 from .message_reference import MessageReference

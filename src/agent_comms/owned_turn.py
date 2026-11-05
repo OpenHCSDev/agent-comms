@@ -24,8 +24,8 @@ from .agent_backend import InputStartListener
 from .turn_inbox import InputContent, TurnInbox
 from .channel_coding_tools import CodingToolMode
 from .channel_input_batch import InputBatch
-from .coordination_errors import CoordinationError, Refused
-from .coordinator import Coordination
+from .coordination.errors import CoordinationError, Refused
+from .coordination.coordinator import Coordination
 from .cursor_publication import CursorDelivery
 from .nominal.field_codec import AcpSessionId, FieldCodec, GoalId, TurnId
 from .goals import Goal

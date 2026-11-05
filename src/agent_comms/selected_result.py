@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from agent_comms.nominal import field_codec
 
 from .assignment_states import AssignmentState
-from .coordination_tables.publications import PublicationEvidence
+from .coordination.tables.publications import PublicationEvidence
 from .diagnostics import record_terminal_failure
 from .nominal.field_codec import AssignmentId, FieldCodec, InputId
 from .messages import AlertKind, NoticeRole

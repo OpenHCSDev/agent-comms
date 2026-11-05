@@ -63,7 +63,7 @@ from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from .errors import (
     RelationViolationError,
 )
-from .coordination_errors import CommandFailure, Refused
+from .coordination.errors import CommandFailure, Refused
 from .nominal.field_codec import (
     Argument, FieldCodec, GitCommitText, MalformedRecord, NullMember, PathText, SingleFieldValue,
     SubclassUnion, WireName, WireOmitDefault, WireTransient, RecordMember, boundary_decoder,
@@ -88,7 +88,7 @@ from .team.standing import UnownedOrderWatch
 from .team_heartbeat import TeamHeartbeat
 from .closed_pull_requests import ClosedPullRequestWatch
 from .message_bus import Watch
-from .coordinator import Coordination
+from .coordination.coordinator import Coordination
 from .service_passes import ServicePassStore
 from .tool_result import ToolResult
 from .task_sources import OwnerRequestAttachment

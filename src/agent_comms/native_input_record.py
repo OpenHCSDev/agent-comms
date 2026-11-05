@@ -11,16 +11,16 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Literal
 
-from agent_comms.coordination_tables.executions import ExecutionRecord
+from agent_comms.coordination.tables.executions import ExecutionRecord
 
-from .coordination_contracts import validate_execution_id
-from .coordination_errors import IdentityConflict, UnrecordedNativeContext
-from .coordination_tables.assignments import (
+from .coordination.contracts import validate_execution_id
+from .coordination.errors import IdentityConflict, UnrecordedNativeContext
+from .coordination.tables.assignments import (
     ExecutionAssignmentLink,
     WakeAssignment,
 )
-from .coordination_tables.participants import OwnerGenerations, OwnerRecord
-from .coordination_tables.responses import ResponseObligation
+from .coordination.tables.participants import OwnerGenerations, OwnerRecord
+from .coordination.tables.responses import ResponseObligation
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import (
     AssignmentId,
@@ -41,10 +41,10 @@ from .storage.typed_table import LOCAL_TABLE_SOURCE, SqlStorage, TableSource, Te
 if TYPE_CHECKING:
     from sqlite3 import Connection
 
-    from agent_comms.coordination_tables.executions import ExecutionRecord
+    from agent_comms.coordination.tables.executions import ExecutionRecord
 
     from .assignment_states import AssignmentState
-    from .coordination_tables.assignments import WakeAssignment
+    from .coordination.tables.assignments import WakeAssignment
     from .cursor_owner import CursorOwner
     from .historical_native_inputs import HistoricalNativeInput
     from .message_reference import MessageReference

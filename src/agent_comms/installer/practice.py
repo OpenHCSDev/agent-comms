@@ -11,9 +11,9 @@ from math import ceil
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from agent_comms.context_store import ContextManifestReference, ContextStore
-from agent_comms.coordination_database import CoordinationStore, ReadableStore
-from agent_comms.coordination_tables.annotations import ContextSpanRows
-from agent_comms.coordination_tables.participants import Participants
+from agent_comms.coordination.database import CoordinationStore, ReadableStore
+from agent_comms.coordination.tables.annotations import ContextSpanRows
+from agent_comms.coordination.tables.participants import Participants
 from agent_comms.input_disposition import InputDispositions, InputDocument, SnapshotInputDispositions
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.participant_store import ParticipantRows, ParticipantStore

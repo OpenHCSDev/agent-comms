@@ -1,8 +1,8 @@
 """A channel message reaches a running turn at its next tool call, like a DM."""
 
 from agent_comms.cohort_foreground import _accept_visible_deliveries
-from agent_comms.coordination_cohort import pending_sealed_assignments
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.cohort import pending_sealed_assignments
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.nominal.field_codec import TurnId
 from agent_comms.lifecycle_capability import Active
 from agent_comms.queued_input import DeliveredInput

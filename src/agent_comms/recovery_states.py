@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from .coordinator_vocabulary import CoordinatorVocabulary
+from .coordination.vocabulary import CoordinatorVocabulary
 from .lifecycle_capability import LifecycleCapability, Unresolved
 
 

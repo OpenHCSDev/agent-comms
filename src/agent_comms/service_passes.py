@@ -7,7 +7,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from typing import Annotated, ClassVar, Self
 
-from .coordinator import Coordination
+from .coordination.coordinator import Coordination
 from .storage.locked_store import DocumentChange, DurableFile, LockedStore
 from agent_comms_hooks import ToolRefusedError
 from .nominal.field_codec import WireExclude, WireTransient, projected

@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .coordination_errors import IdentityConflict
-from .coordination_tables.assignments import WakeAssignment
+from .coordination.errors import IdentityConflict
+from .coordination.tables.assignments import WakeAssignment
 from .envelope_claim_transitions import ExistingFileClaim
 from .nominal.field_codec import ClaimId
 from .native_tool_call import NativeToolMode

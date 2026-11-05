@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 
 from .bus import Bus, BusReader
 from .channel_targets import CommandTarget
-from .coordination_errors import DMScopeChanged
+from .coordination.errors import DMScopeChanged
 from .nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
 from .storage.locked_store import DocumentChange
 from .storage.maintenance_barrier import CarriedDocument

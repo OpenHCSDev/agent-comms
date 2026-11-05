@@ -46,15 +46,15 @@ from agent_comms.harness_delivery_states import (
     ObservedMonitor, Outcome, TakingLedger, UnconfirmedOutcome,
 )
 from agent_comms.comms import Comms, wire
-from agent_comms.coordination_errors import (
+from agent_comms.coordination.errors import (
     CoordinationBeginUnavailable, CoordinationReadUnavailable, DeferredRead,
 )
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.declared_verb import DeclaredOptions
 from agent_comms_hooks.watch import SessionCommandError
-from agent_comms.coordination_database import CoordinationStore
-from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.nominal.field_codec import FieldCodec, MessageId, PathText, SubclassUnion, ThreadLookup
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.launch_runtime import LaunchRuntime

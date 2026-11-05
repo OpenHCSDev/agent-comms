@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agent_comms.coordination_response import PublicationAppendDispatches
+from agent_comms.coordination.response import PublicationAppendDispatches
 
 
 from agent_comms.native_session_files import NativeSessionFiles
@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
 from agent_comms.reason_codes import GivenReasonCode, NoDetail
-from agent_comms.coordination_errors import (
+from agent_comms.coordination.errors import (
     IdentityConflict,
     PublicationUncertain,
     RecoveryBlocked,
@@ -30,20 +30,20 @@ from agent_comms.coordination_errors import (
     StaleRevision,
     UnrecordedNativeContext,
 )
-from agent_comms.coordination_results import Applied
-from agent_comms.coordination_snapshot import RecoverySnapshot
-from agent_comms.coordination_tables.attempts import AttemptRecord
-from agent_comms.coordination_tables.executions import CurrentExecutions
-from agent_comms.coordination_tables.recovery import (
+from agent_comms.coordination.results import Applied
+from agent_comms.coordination.snapshot import RecoverySnapshot
+from agent_comms.coordination.tables.attempts import AttemptRecord
+from agent_comms.coordination.tables.executions import CurrentExecutions
+from agent_comms.coordination.tables.recovery import (
     RecoveryAudit,
 )
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from agent_comms.recovery_states import DeferredRecovery, FailedRecovery
 
-from .coordination_database import CoordinationStore
-from .coordination_session import NativeCapture
+from .coordination.database import CoordinationStore
+from .coordination.session import NativeCapture
 from .native_input_record import FullNativeExecution, TriageNativeExecution
 from .native_prompt_binding import (
     expected_prompt_bindings,

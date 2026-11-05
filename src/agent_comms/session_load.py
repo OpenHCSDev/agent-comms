@@ -2,7 +2,7 @@
 from abc import abstractmethod
 from collections.abc import Awaitable, Callable
 from functools import partial
-from .coordination_work import CoordinationWork
+from .coordination.work import CoordinationWork
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 

@@ -21,8 +21,8 @@ from agent_comms.turn_failure import BackendFailed
 from agent_comms.attempt_recovery import RecoveryMonitorCapability
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_verbs.stop import StopCliCommand
-from agent_comms.coordination_database import CoordinationStore
-from agent_comms.coordination_errors import RecoveryBlocked
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.errors import RecoveryBlocked
 from agent_comms.nominal.field_codec import AttemptId, GoalId, MalformedRecord, RetryDecisionId
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_attempt_phase import ClaimedAttempt, FailedAttempt, SucceededAttempt

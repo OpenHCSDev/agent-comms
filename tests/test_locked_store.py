@@ -13,7 +13,7 @@ import pytest
 
 from agent_comms.storage.locked_store import DocumentBytes, DocumentChange, LockedStore
 from agent_comms.storage.private_path import FileRevision, MissingFile
-from agent_comms.coordination_errors import StaleRevision
+from agent_comms.coordination.errors import StaleRevision
 from agent_comms.pi_counts import PiCount
 from agent_comms.registry_store import RegistryStore
 from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoDocument, RuntimeInfoStore

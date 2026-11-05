@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent_comms.coordination_errors import DeferredRead, ReportedDeferredRead, Refused
+from agent_comms.coordination.errors import DeferredRead, ReportedDeferredRead, Refused
 from agent_comms.errors import GoalRefused, RouteChangedError
 from agent_comms.nominal.field_codec import ErrorRecord, FieldCodec, MalformedRecord, ReportedError
 from agent_comms.ui_model.observation import ReadRefused, UnreadableHistory
@@ -87,7 +87,7 @@ def test_every_goal_refusal_arrives_as_itself(comms) -> None:
 
 
 def test_a_changed_transcript_still_asks_the_reader_to_reload() -> None:
-    from agent_comms.coordination_errors import ReloadRequired, TranscriptChanged
+    from agent_comms.coordination.errors import ReloadRequired, TranscriptChanged
 
     received = round_trip(ReadRefused(10, TranscriptChanged(), "trace"), ReadRefused).error
     assert type(received) is TranscriptChanged and isinstance(received, ReloadRequired)

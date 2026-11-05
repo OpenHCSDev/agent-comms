@@ -44,7 +44,7 @@ from agent_comms.messages import (
     MessageRoutes,
     NoticeRole,
 )
-from agent_comms.coordination_tables.publications import PublicationIntents
+from agent_comms.coordination.tables.publications import PublicationIntents
 from agent_comms.errors import (
     CommittedMessageError,
     HumanSendRefusedError,

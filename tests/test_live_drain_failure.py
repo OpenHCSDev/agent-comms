@@ -18,7 +18,7 @@ from agent_comms.activity import (
     NativeInputDrainDiagnostic, StoppedDrainDiagnostic, UnavailableDrainDiagnostic,
 )
 from agent_comms.comms import Comms, wire
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.drain_failures import drain_failures
 from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.nominal.field_codec import AcpSessionId, TurnId

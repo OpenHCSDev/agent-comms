@@ -5,13 +5,13 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.coordination_session import NativeCommit
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.coordination.session import NativeCommit
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.nominal.field_codec import RootId, ThreadLookup
 
 from .cohort_schema import AcceptanceFrontier, CohortDeliveries, CohortTable
-from .coordination_cohort import AcceptedCohort
+from .coordination.cohort import AcceptedCohort
 from .errors import RelationViolationError
 from .message_bus import MessageBus
 

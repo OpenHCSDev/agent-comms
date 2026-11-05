@@ -5,14 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Annotated, ClassVar
 
-from agent_comms.coordination_contracts import (
+from agent_comms.coordination.contracts import (
     MAX_IDENTIFIER_CHARS,
     require_bounded,
     require_nonempty,
     validate_execution_id,
 )
-from agent_comms.coordination_schema import CoordinatorRow
-from agent_comms.coordination_tables.executions import ExecutionReference, RetryPartition, WireOrigin
+from agent_comms.coordination.schema import CoordinatorRow
+from agent_comms.coordination.tables.executions import ExecutionReference, RetryPartition, WireOrigin
 from agent_comms.nominal.field_codec import MessageId, SnapshotExclude, WireName, projected
 from agent_comms.obligation_states import ResponseState
 from agent_comms.reason_codes import ReasonCode

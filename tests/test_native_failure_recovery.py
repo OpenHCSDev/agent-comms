@@ -12,9 +12,9 @@ from typing import NamedTuple
 
 import pytest
 
-from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.coordination_tables.executions import WireOrigin
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.coordination.tables.executions import WireOrigin
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.cursor_publication import CursorDelivery
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.fresh_private_session import create_fresh_private_session

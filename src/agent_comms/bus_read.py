@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from functools import partial
 
 from .comms import Comms
-from .coordination_errors import StaleFence
-from .coordinator import Coordination
+from .coordination.errors import StaleFence
+from .coordination.coordinator import Coordination
 from .errors import RelationViolationError, UnregisteredThreadError
 from .owner_connection import (
     OwnerConnection,

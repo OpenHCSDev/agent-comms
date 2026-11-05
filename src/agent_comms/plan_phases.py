@@ -441,14 +441,14 @@ class DuplicatesPhase(MultipleInheritancePhase):
                     ("captured_owner", "owner_identity"),
                     (
                         "cohort_schema.py",
-                        "coordination_tables/attempts.py",
+                        "coordination/tables/attempts.py",
                         "native_input_record.py",
                         "participant_store.py",
                     ),
                 ),
                 (
                     ("trigger_bodies",),
-                    ("coordination_response.py", "native_prompt_binding.py", "private_sidecar.py"),
+                    ("coordination/response.py", "native_prompt_binding.py", "private_sidecar.py"),
                 ),
                 (
                     ("__init__",),
@@ -465,16 +465,16 @@ class DuplicatesPhase(MultipleInheritancePhase):
                     (
                         "cohort_schema.py",
                         "coordinated_runtime_schema.py",
-                        "coordination_response.py",
+                        "coordination/response.py",
                         "storage/typed_table.py",
                     ),
                 ),
                 (
                     ("references",),
                     (
-                        "coordination_tables/attempts.py",
-                        "coordination_tables/recovery.py",
-                        "coordination_tables/responses.py",
+                        "coordination/tables/attempts.py",
+                        "coordination/tables/recovery.py",
+                        "coordination/tables/responses.py",
                     ),
                 ),
                 (
@@ -734,7 +734,7 @@ class PlatformFactsPhase(RemainingSlopPhase):
         (
             "src/agent_comms/goal_history.py",
             "src/agent_comms/goal_attempts.py",
-            "src/agent_comms/coordination_database.py",
+            "src/agent_comms/coordination/database.py",
             "src/agent_comms/storage/maintenance_barrier.py",
         ),
     )
@@ -1074,8 +1074,15 @@ class PackageStoragePhase(PackageStructurePhase):
 
 class PackageCoordinationPhase(PackageStructurePhase):
     after = (PackageStoragePhase,)
-    evidence = PathsAbsent(("src/agent_comms/coordinator.py", "src/agent_comms/coordination_database.py",
-                            "src/agent_comms/coordination_tables"))
+    evidence = PathsAbsent((
+        "src/agent_comms/coordinator.py", "src/agent_comms/coordinator_vocabulary.py",
+        "src/agent_comms/coordination_tables", "src/agent_comms/coordination_cohort.py",
+        "src/agent_comms/coordination_contracts.py", "src/agent_comms/coordination_database.py",
+        "src/agent_comms/coordination_errors.py", "src/agent_comms/coordination_response.py",
+        "src/agent_comms/coordination_results.py", "src/agent_comms/coordination_schema.py",
+        "src/agent_comms/coordination_session.py", "src/agent_comms/coordination_snapshot.py",
+        "src/agent_comms/coordination_work.py",
+    ))
 
 
 class PackageExecutionPhase(PackageStructurePhase):

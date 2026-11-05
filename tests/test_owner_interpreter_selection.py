@@ -5,7 +5,7 @@ from functools import partial
 
 import pytest
 
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.owner_lifecycle import OwnerRestartSelection

@@ -6,8 +6,8 @@ from abc import abstractmethod
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
-from .coordination_errors import IdentityConflict, IntegrityViolationError
-from .coordinator_vocabulary import CoordinatorVocabulary
+from .coordination.errors import IdentityConflict, IntegrityViolationError
+from .coordination.vocabulary import CoordinatorVocabulary
 from .nominal.field_codec import AssignmentId, FieldCodec, ThreadLookup
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Active, Complete, Deferred, Failed, Pending, Terminal
@@ -32,8 +32,8 @@ if TYPE_CHECKING:
     from .agent_activity import RecipientActivity
     from .frozen_recipient import FrozenRecipient
     from .bus_publication import Delivered
-    from .coordination_tables.assignments import WakeAssignment
-    from .coordination_tables.responses import ResponseObligation
+    from .coordination.tables.assignments import WakeAssignment
+    from .coordination.tables.responses import ResponseObligation
     from .historical_native_inputs import FailedTriageHistoricalNativeInput, HistoricalNativeInput
     from .native_input_record import TriageNativeExecution
     from .notification_assignment import AssignmentActivity

@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .coordination_errors import IdentityConflict
-from .coordinator import Coordination
+from .coordination.errors import IdentityConflict
+from .coordination.coordinator import Coordination
 from agent_comms.native_arguments import NativeArguments, NativeInputProofArgument
 from agent_comms.native_session_files import NativeSessionFiles
 from agent_comms.fresh_private_session import create_fresh_private_session

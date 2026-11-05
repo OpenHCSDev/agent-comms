@@ -8,7 +8,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.team_heartbeat import TeamHeartbeat, TeamObservation
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.team_hud import TeamFrame
 from agent_comms_hooks import ToolRefusedError
 from agent_comms.nominal.field_codec import ToolCallId

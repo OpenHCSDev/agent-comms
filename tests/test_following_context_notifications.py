@@ -12,8 +12,8 @@ import sqlite3
 import pytest
 
 from agent_comms.turn_inbox import InputContent, InputRequest, SteerInputPolicy
-from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import InputId
 from agent_comms.lifecycle_capability import Unresolved

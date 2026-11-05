@@ -124,7 +124,7 @@ async def test_async_recovery_borrows_registry_without_blocking_event_loop(tmp_p
 
 
 async def test_concurrent_request_claims_do_not_change_each_others_permissions(tmp_path):
-    from agent_comms.coordinator import Coordination
+    from agent_comms.coordination.coordinator import Coordination
 
     barrier = MaintenanceBarrier(tmp_path / "registry.json")
     held = barrier.begin(MaintenanceOperator.current())

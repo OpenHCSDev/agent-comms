@@ -12,7 +12,7 @@ from .acp_extension import (
     decode_updates,
     encode_updates,
 )
-from .coordinator import Coordination
+from .coordination.coordinator import Coordination
 
 import asyncio
 import json
@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 
-from .coordination_errors import Refused
+from .coordination.errors import Refused
 from acp.schema import (
     PermissionOption,
     RequestPermissionResponse,

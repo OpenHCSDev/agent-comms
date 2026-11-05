@@ -20,7 +20,7 @@ from pydantic import (
 from pydantic_core import CoreSchema
 from typing_extensions import TypeForm
 
-from .coordination_errors import CoordinationReadUnavailable
+from .coordination.errors import CoordinationReadUnavailable
 from .nominal.declared_family import UnknownFamilyMember
 from .external_transcript import RequestedEarlierPage
 from .nominal.field_codec import TimestampText

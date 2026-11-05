@@ -24,7 +24,7 @@ from contextlib import closing
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from agent_comms.coordination_errors import PublicationActivationBlocked
+from agent_comms.coordination.errors import PublicationActivationBlocked
 
 from .child_process import ProcessIdentity
 from .comms import wire

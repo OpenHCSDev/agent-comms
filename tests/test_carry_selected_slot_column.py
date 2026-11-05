@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from cutover.carry_selected_slot_column import SelectedSlotColumn
 
-from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination.database import CoordinationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import (
     SlotId,

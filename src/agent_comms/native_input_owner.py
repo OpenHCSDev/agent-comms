@@ -12,9 +12,9 @@ from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.nominal.field_codec import GoalId, ThreadLookup
 from .child_process import ProcessIdentity
-from .coordination_errors import StaleFence
-from .coordination_tables.participants import OwnerGenerations
-from .coordinator import Coordination
+from .coordination.errors import StaleFence
+from .coordination.tables.participants import OwnerGenerations
+from .coordination.coordinator import Coordination
 from .errors import RelationViolationError, UnregisteredThreadError
 from .private_send_rules import (
     GoalRegistryClaimCheck,

@@ -21,7 +21,7 @@ from .errors import (
 )
 from .message_bus import MessageBus
 from .message_reference import MessageReference
-from .coordination_session import NativeCapture
+from .coordination.session import NativeCapture
 from .external_transcript import ExternalTranscript
 from .turn_item import NoSourceTurn, SourceTurn
 from .messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole, NoticeRole

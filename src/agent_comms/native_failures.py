@@ -4,7 +4,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from .coordination_errors import DrainDeferred
+from .coordination.errors import DrainDeferred
 
 if TYPE_CHECKING:
     from .send_result import SendResult

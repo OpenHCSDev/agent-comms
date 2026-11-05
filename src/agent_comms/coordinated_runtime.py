@@ -19,14 +19,14 @@ from typing import ClassVar
 
 from .agent_events import CompactionEvent
 from .comms import wire
-from .coordination_database import CoordinationStore
-from .coordination_errors import (
+from .coordination.database import CoordinationStore
+from .coordination.errors import (
     IdentityConflict,
     PublicationActivationBlocked,
     RetryScheduled,
 )
-from .coordination_snapshot import RecoverySnapshot
-from .coordinator import Coordination
+from .coordination.snapshot import RecoverySnapshot
+from .coordination.coordinator import Coordination
 from .cursor_publication import CursorDelivery
 from .following_inputs import FollowingInputs
 from .native_package import VerifiedNativePackage

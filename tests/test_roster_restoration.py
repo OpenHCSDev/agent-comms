@@ -17,7 +17,7 @@ from agent_comms.assignment_states import FullPendingAssignment, TriagePendingAs
 from agent_comms.registry_document import ThreadRows
 
 from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.coordination_tables.executions import NoPointedExecution
+from agent_comms.coordination.tables.executions import NoPointedExecution
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.display_order import LastActivityThreadSort
@@ -128,7 +128,7 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
     tmp_path, repair_existing
 ):
     from conftest import accept_initial
-    from agent_comms.coordinator import Coordination
+    from agent_comms.coordination.coordinator import Coordination
 
     old, current = wire(tmp_path / "old"), prepare_native_comms(wire(tmp_path / "current"))
     live = NativeThread('live', frozenset({'comms'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
@@ -187,7 +187,7 @@ def test_public_restoration_declares_participant_without_native_authority(tmp_pa
     old, current = wire(tmp_path / "old"), wire(tmp_path / "current")
     old.registry.declare(NativeThread('missing', frozenset({'comms'}), Checkout(tmp_path)))
     assert current.registry.restore_stopped(old.registry.snapshot(), ("missing",)) == ("missing",)
-    from agent_comms.coordinator import Coordination
+    from agent_comms.coordination.coordinator import Coordination
     with Coordination(str(current.root / "coordination.sqlite3")) as store:
         assert store.participants.get(current.registry.require("missing").incarnation.lookup).committed
     assert not current.registry.store.guard_path.exists()

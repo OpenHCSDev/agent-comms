@@ -14,7 +14,7 @@ from dataclasses import dataclass
 import pytest
 
 from agent_comms.context_segments.response import SelectedResponseSegment
-from agent_comms.coordination_errors import (
+from agent_comms.coordination.errors import (
     CoordinationReadUnavailable,
     DeferredRead,
     SchemaVersionError,

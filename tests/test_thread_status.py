@@ -254,7 +254,7 @@ def test_roster_and_controls_keep_archived_threads_dormant():
 
 
 def test_batch_source_rename_keeps_the_original_registry_fence(comms):
-    from agent_comms.coordination_errors import StaleRevision
+    from agent_comms.coordination.errors import StaleRevision
 
     comms.registry.register(
         NativeThread('alpha', frozenset(), Checkout(comms.root), process_identity=ProcessIdentity.capture(os.getpid())),

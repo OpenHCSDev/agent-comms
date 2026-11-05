@@ -17,7 +17,7 @@ from . import pi_commands as commands
 from . import pi_events as pi
 from .agent_events import AgentEvent
 from .backend import TurnSession
-from .coordinator import Coordination
+from .coordination.coordinator import Coordination
 from .errors import RelationViolationError
 from .external_transcript import DraftPublication, DraftRow
 from .nominal.field_codec import InputId, MalformedRecord

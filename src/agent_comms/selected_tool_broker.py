@@ -18,10 +18,10 @@ from pathlib import Path
 from typing import ClassVar
 
 from .comms import Comms
-from .coordination_errors import CoordinationBeginUnavailable, CoordinationReadUnavailable
-from .coordination_session import ReadNativeCoordinationSession
-from .coordination_tables.participants import OwnerGenerations
-from .coordinator import Coordination
+from .coordination.errors import CoordinationBeginUnavailable, CoordinationReadUnavailable
+from .coordination.session import ReadNativeCoordinationSession
+from .coordination.tables.participants import OwnerGenerations
+from .coordination.coordinator import Coordination
 from .envelope_claim_transitions import ExistingFileClaim, WakeClaim
 from .nominal.field_codec import (
     FieldCodec,

@@ -8,8 +8,8 @@ import sqlite3
 import pytest
 
 from agent_comms.comms import wire
-from agent_comms.coordination_errors import SchemaVersionError
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.errors import SchemaVersionError
+from agent_comms.coordination.coordinator import Coordination
 from bus_history import read_history
 from agent_comms.threads import NativeThread
 

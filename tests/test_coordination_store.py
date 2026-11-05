@@ -35,7 +35,7 @@ from agent_comms.attempt_states import (
     SettlingAttempt,
     SucceededAttempt,
 )
-from agent_comms.coordination_errors import (
+from agent_comms.coordination.errors import (
     IdentityConflict,
     IntegrityViolationError,
     PublicationUncertain,
@@ -43,12 +43,12 @@ from agent_comms.coordination_errors import (
     StaleFence,
     StaleRevision,
 )
-from agent_comms.coordination_results import AlreadyApplied, Applied
-from agent_comms.coordination_schema import CoordinatorTable
-from agent_comms.coordination_snapshot import RecoverySnapshot
-from agent_comms.coordination_tables.assignments import WakeAssignment
-from agent_comms.coordination_tables.attempts import ReplayFact
-from agent_comms.coordination_tables.executions import (
+from agent_comms.coordination.results import AlreadyApplied, Applied
+from agent_comms.coordination.schema import CoordinatorTable
+from agent_comms.coordination.snapshot import RecoverySnapshot
+from agent_comms.coordination.tables.assignments import WakeAssignment
+from agent_comms.coordination.tables.attempts import ReplayFact
+from agent_comms.coordination.tables.executions import (
     AcpOrigin,
     ExecutionProvenance,
     GoalOrigin,
@@ -57,10 +57,10 @@ from agent_comms.coordination_tables.executions import (
     ReplayAssessments,
     WireOrigin,
 )
-from agent_comms.coordination_tables.publications import (
+from agent_comms.coordination.tables.publications import (
     PublicationIntents,
 )
-from agent_comms.coordinator import StandaloneCoordination
+from agent_comms.coordination.coordinator import StandaloneCoordination
 from agent_comms.execution_states import (
     ActiveExecution,
     CompletedExecution,
@@ -499,7 +499,7 @@ def test_coordinator_family_rebuild_preserves_declared_schema_and_execution(db_p
 
 
 def test_settled_snapshot_encodes_recovery_kind_separately_from_table(db_path: Path) -> None:
-    from agent_comms.coordination_tables.recovery import RecoveryAudit
+    from agent_comms.coordination.tables.recovery import RecoveryAudit
 
     with store(db_path) as db:
         db.participants.register(SENDER_LOOKUP, committed=True)
@@ -1234,7 +1234,7 @@ def test_public_read_exception_releases_transaction_and_mutators_reuse_it(db_pat
 
 
 def test_observation_rolls_back_failed_reads_and_preserves_schema_disposition(db_path: Path) -> None:
-    from agent_comms.coordination_database import ReadableStore
+    from agent_comms.coordination.database import ReadableStore
 
     with store(db_path) as writer:
         writer.participants.register(SENDER_LOOKUP, committed=True)

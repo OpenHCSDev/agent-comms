@@ -16,7 +16,7 @@ from typing import Annotated, ClassVar, Literal
 
 from pydantic import JsonValue
 
-from .coordination_errors import IdentityConflict
+from .coordination.errors import IdentityConflict
 from .errors import RelationViolationError
 from .nominal.field_codec import (
     FieldCodec,

@@ -13,8 +13,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.lifecycle_capability import Active
 from agent_comms.native_runtime_input import NativeRuntimeTable
 
@@ -23,8 +23,8 @@ from .bus import Bus
 from .bus_publication import Delivered
 from .bus_source_page import CoveragePage
 from .cohort_schema import ClaimBatchAcknowledgements, CohortTable
-from .coordination_cohort import AcceptedCohort, _claim_record
-from .coordination_session import NativeCapture
+from .coordination.cohort import AcceptedCohort, _claim_record
+from .coordination.session import NativeCapture
 from .nominal.field_codec import FieldCodec, RootId, ThreadLookup
 from .historical_native_inputs import HistoricalNativeInput, read_historical_native_inputs
 from .message_bus import MessageBus

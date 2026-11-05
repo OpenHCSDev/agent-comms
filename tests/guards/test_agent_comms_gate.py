@@ -423,10 +423,10 @@ def test_growth_lines_end_the_merged_log(repo: Checkout) -> None:
 
 
 def test_content_cache_digest_covers_a_module_only_loaded_indirectly():
-    """The gate never imports coordination_tables.attempts by name; agent_comms loads it
+    """The gate never imports coordination.tables.attempts by name; agent_comms loads it
     through its own imports. Its source is still one of the gate's measuring code, so a
     change to it is a different cache key."""
-    indirect = Path(sys.modules["agent_comms.coordination_tables.attempts"].__file__).resolve()
+    indirect = Path(sys.modules["agent_comms.coordination.tables.attempts"].__file__).resolve()
     assert indirect in PROJECT.measuring_sources()
     assert Path(audit.findings.__file__).resolve() in PROJECT.measuring_sources()
     assert indirect.is_relative_to(Path(__file__).resolve().parents[2] / "src")

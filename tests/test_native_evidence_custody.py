@@ -9,8 +9,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from agent_comms.coordination_database import CoordinationStore
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.native_entries import NativeEntry, NativeEvidenceScope
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.native_input_proof import NativeContextJournal, NativeInputLocation

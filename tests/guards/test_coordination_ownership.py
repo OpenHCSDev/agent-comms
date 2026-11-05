@@ -5,10 +5,10 @@ from typing import Annotated
 
 import pytest
 
-from agent_comms.coordination_database import CoordinationStore
-from agent_comms.coordination_schema import CoordinatorRow
-from agent_comms.coordination_tables.executions import ExecutionReference
-from agent_comms.coordination_tables.recovery import RecoveryAudit
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.schema import CoordinatorRow
+from agent_comms.coordination.tables.executions import ExecutionReference
+from agent_comms.coordination.tables.recovery import RecoveryAudit
 from agent_comms.storage.typed_table import Column, ForeignKey
 
 pytestmark = pytest.mark.refactor_guard

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 
 from .child_process import ProcessIdentity
-from .coordination_tables.assignments import WakeAssignment
+from .coordination.tables.assignments import WakeAssignment
 from .reservation_rules import ReservationRule, RuleCheck
 from .native_input_record import NativeInputIdentity, NativeInputRecord
 from .native_runtime_input import NativeRuntimeInput

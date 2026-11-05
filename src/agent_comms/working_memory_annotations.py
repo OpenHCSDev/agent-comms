@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from .coordination_database import CoordinationStore, ReadableStore
+from .coordination.database import CoordinationStore, ReadableStore
 from .errors import RelationViolationError
-from .coordination_tables.annotations import AnnotationRequestsRow, SpanAnnotationsRow
+from .coordination.tables.annotations import AnnotationRequestsRow, SpanAnnotationsRow
 from .working_memory_labels import CalibrationReport, ClassifierVersion, HumanLabel, ModelLabel, QuestionVersion
 from .working_memory_requests import CompletedAnnotationOutcome, DisclosureRequest, SubmittedAnnotationOutcome
 

@@ -12,7 +12,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
-from agent_comms.coordination_errors import CoordinationError
+from agent_comms.coordination.errors import CoordinationError
 from agent_comms_hooks.process_claim import (
     ClaimHeldError,
     ProcessSingleton,

@@ -20,8 +20,8 @@ from .frozen_recipient import FrozenRecipient
 from .bus_publication import Delivered
 from .private_registry_guard import RegistryPrivacy
 from .channel_targets import CommandTarget
-from .coordination_errors import IdentityConflict
-from .coordination_tables.responses import ResponseObligation
+from .coordination.errors import IdentityConflict
+from .coordination.tables.responses import ResponseObligation
 from .message_reference import MessageReference
 from .messages import Message
 

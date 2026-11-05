@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .coordination_errors import SchemaVersionError
+from .coordination.errors import SchemaVersionError
 from .storage.typed_table import (
     DurableTables,
     SharedFileTables,
@@ -16,12 +16,8 @@ class PrivateCoordinatorTable(SharedFileTables, DurableTables):
 
     @classmethod
     def declarations(cls) -> tuple[type[TypedTable], ...]:
-        from . import (  # noqa: F401 - declarations register in the existing TypedTable family
-            cohort_schema,
-            coordination_response,
-            native_runtime_input,
-            triage_native_sources,
-        )
+        from . import cohort_schema, native_runtime_input, triage_native_sources  # noqa: F401 - declarations register in the existing TypedTable family
+        from .coordination import response
 
         return TypedTable.members_with(cls)
 

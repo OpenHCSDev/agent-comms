@@ -22,22 +22,22 @@ from pathlib import Path
 from typing import Annotated, Type
 
 from agent_comms.cohort_schema import ClaimBatchAcknowledgements, CohortTable
-from agent_comms.coordination_errors import (
+from agent_comms.coordination.errors import (
     IdentityConflict,
     PublicationActivationBlocked,
     PublicationUncertain,
     StaleFence,
 )
-from agent_comms.coordination_results import AlreadyApplied, Applied
-from agent_comms.coordination_snapshot import RecoverySnapshot
-from agent_comms.coordination_tables.assignments import WakeAssignment
-from agent_comms.coordination_tables.publications import (
+from agent_comms.coordination.results import AlreadyApplied, Applied
+from agent_comms.coordination.snapshot import RecoverySnapshot
+from agent_comms.coordination.tables.assignments import WakeAssignment
+from agent_comms.coordination.tables.publications import (
     PublicationEvidence,
     PublicationIntents,
 )
-from agent_comms.coordination_tables.responses import ResponseObligation
+from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.response_acknowledgement import canonical_publication_key
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.message_bus import MessageBus
 from agent_comms.messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole
 from agent_comms.native_input_owner import RegistryOwner
@@ -57,10 +57,10 @@ from agent_comms.storage.typed_table import (
     WithoutRowid,
 )
 
-from .nominal.field_codec import MessageId, RootId, ThreadLookup
-from .input_disposition import InputDispositions
-from .storage.locked_store import RegistryFile
-from .response_conversation import ResponseConversation
+from ..nominal.field_codec import MessageId, RootId, ThreadLookup
+from ..input_disposition import InputDispositions
+from ..storage.locked_store import RegistryFile
+from ..response_conversation import ResponseConversation
 
 
 class ResponseTable(ImmutableRows, PrivateCoordinatorTable):
@@ -287,7 +287,7 @@ class LiveResponseOwner(RegistryOwner):
         # The last canonical snapshot contains every original assignment.
         # Complete required dependency settlement before the acquired worker
         # can close or report cancellation; no input/goal is reconstructed.
-        from .comms import wire
+        from ..comms import wire
 
         goals = wire(bus.bus.path.parent).goals
         for assignment in published.assignments:
@@ -550,7 +550,7 @@ def _settle_fenced_response(
                     raise PublicationUncertain("no keyed bus acknowledgement; no resend authorized")
                 # This call created the durable dispatch barrier, and owns the
                 # only authorized first append while its final fence is locked.
-                from .response_conversation import ResponseConversation
+                from ..response_conversation import ResponseConversation
 
                 conversation = ResponseConversation.capture(bus, snapshot, obligation, boundary.privacy, registry_snapshot)
                 matched = bus.publisher._publish_keyed_response_unlocked(

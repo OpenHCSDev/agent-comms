@@ -28,12 +28,12 @@ from typing import TYPE_CHECKING, NoReturn
 
 from .child_process import Platform
 from .storage import store_files
-from .coordination_database import CoordinationStore
+from .coordination.database import CoordinationStore
 from .cohort_schema import AcceptanceFrontier, PrivateCoordinatorSchema
-from .coordination_errors import PublicationActivationBlocked
-from .coordination_schema import CoordinatorTable
-from .coordination_tables.participants import Participants
-from .coordinator import Coordination
+from .coordination.errors import PublicationActivationBlocked
+from .coordination.schema import CoordinatorTable
+from .coordination.tables.participants import Participants
+from .coordination.coordinator import Coordination
 from .errors import RelationViolationError
 from .nominal.field_codec import RootId, ThreadLookup
 from .storage.locked_store import RollbackRetained, WireWakeFile
@@ -281,7 +281,7 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
         ).insert_if_absent(db)
 
     def publication_connection(self, connection: sqlite3.Connection) -> sqlite3.Connection:
-        from .coordination_response import ResponseTable
+        from .coordination.response import ResponseTable
 
         NativeRuntimeTable.require_installed(connection)
         ResponseTable.require_installed(connection)

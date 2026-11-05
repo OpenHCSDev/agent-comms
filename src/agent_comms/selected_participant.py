@@ -20,13 +20,13 @@ from .cohort_schema import CohortTable
 from .comms import Comms
 from agent_comms.native_runtime_input import NativeRuntimeTable
 from .context_store import UNREAD_CONTEXT, ContextPrior
-from .coordination_cohort import _claim_record, pending_sealed_assignments
-from .coordination_errors import IdentityConflict, StaleFence
-from .coordination_response import LiveResponseOwner, ResponseTable
-from .coordination_snapshot import RecoverySnapshot
-from .coordination_tables.assignments import WakeAssignment
-from .coordination_tables.executions import WireOrigin
-from .coordinator import Coordination
+from .coordination.cohort import _claim_record, pending_sealed_assignments
+from .coordination.errors import IdentityConflict, StaleFence
+from .coordination.response import LiveResponseOwner, ResponseTable
+from .coordination.snapshot import RecoverySnapshot
+from .coordination.tables.assignments import WakeAssignment
+from .coordination.tables.executions import WireOrigin
+from .coordination.coordinator import Coordination
 from .cursor_publication import CursorDelivery
 from .errors import RelationViolationError
 from .nominal.field_codec import TurnId, RootId, ThreadLookup

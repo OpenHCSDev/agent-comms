@@ -30,7 +30,7 @@ from agent_comms.reported_turn import ReportedTurn
 from agent_comms.threads import ExternalThread, NativeThread, Thread
 from agent_comms.thread_status import ConnectedThreadStatus, RunningThreadStatus, StoppedThreadStatus, ThreadStatus
 from agent_comms.owner_connection import OwnerIdentityChangedError
-from agent_comms.coordination_errors import StaleFence, StaleRevision
+from agent_comms.coordination.errors import StaleFence, StaleRevision
 from agent_comms.tool_caller import ToolCaller
 from agent_comms.ui_model.observation import ReadOwnerOperation, ReadAnswered, ReadRefused
 from bus_record_fixture import prepare_native_comms

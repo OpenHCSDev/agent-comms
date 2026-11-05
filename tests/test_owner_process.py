@@ -23,7 +23,7 @@ from agent_comms.turn_failure import FailedTurnResolution
 from agent_comms.child_process import NoProcess, ObservedProcess, SpawnedProcess
 from agent_comms.comms import wire
 from agent_comms.config_options import ThinkingLevelConfigOption
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import AcpSessionId, GoalId, TurnId, compile_decoder
 from agent_comms.launch_root import LaunchRoot

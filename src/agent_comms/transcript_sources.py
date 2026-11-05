@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 
 from .bus import Bus
 from .bus_publication import Delivered
-from .coordination_errors import StaleRevision, TranscriptChanged
+from .coordination.errors import StaleRevision, TranscriptChanged
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import FieldCodec, MalformedRecord, NullMember
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision

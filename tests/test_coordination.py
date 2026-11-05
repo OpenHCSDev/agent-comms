@@ -19,7 +19,7 @@ from bus_record_fixture import (
 )
 from conftest import maintenance_held
 
-from agent_comms.coordination_tables.executions import NoPointedAttempt, NoPointedExecution, PointedAttempt, PointedExecution
+from agent_comms.coordination.tables.executions import NoPointedAttempt, NoPointedExecution, PointedAttempt, PointedExecution
 from agent_comms.reason_codes import NoReasonCode
 from agent_comms.assignment_states import (
     CompletedAssignment,
@@ -33,30 +33,30 @@ from agent_comms.attempt_states import (
     SettlingAttempt,
     SucceededAttempt,
 )
-from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination.database import CoordinationStore
 from agent_comms.storage.store_files import StoreBusy
-from agent_comms.coordination_errors import IntegrityViolationError, SchemaVersionError
-from agent_comms.coordination_schema import CoordinatorTable
-from agent_comms.coordination_snapshot import RecoverySnapshot
-from agent_comms.coordination_tables.assignments import (
+from agent_comms.coordination.errors import IntegrityViolationError, SchemaVersionError
+from agent_comms.coordination.schema import CoordinatorTable
+from agent_comms.coordination.snapshot import RecoverySnapshot
+from agent_comms.coordination.tables.assignments import (
     ExecutionAssignmentLink,
     MessageAudience,
     WakeAssignment,
 )
-from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayFact
-from agent_comms.coordination_tables.executions import NoReplayAssessment, ReplayAssessments
-from agent_comms.coordination_tables.executions import (
+from agent_comms.coordination.tables.attempts import AttemptRecord, ReplayFact
+from agent_comms.coordination.tables.executions import NoReplayAssessment, ReplayAssessments
+from agent_comms.coordination.tables.executions import (
     CurrentExecutions,
     ExecutionProvenance,
     WireOrigin,
     AcpOrigin,
     ExecutionRecord,
 )
-from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
-from agent_comms.coordination_tables.publications import (
+from agent_comms.coordination.tables.participants import OwnerGenerations, Participants
+from agent_comms.coordination.tables.publications import (
     PublicationIntents,
 )
-from agent_comms.coordination_tables.responses import ResponseObligation
+from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.response_acknowledgement import canonical_publication_key
 from agent_comms.execution_states import (
     ActiveExecution,
@@ -471,8 +471,8 @@ def test_current_schema_open_is_read_only_while_readers_and_writer_are_live(db):
 
 def test_concurrent_fresh_initializers_serialize_and_reopen(tmp_path):
     script = """import sys
-from agent_comms.coordination_database import CoordinationStore
-from agent_comms.coordination_schema import CoordinatorTable
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.schema import CoordinatorTable
 sys.stdin.buffer.read(1)
 with CoordinationStore(sys.argv[1]) as store:
     assert not CoordinatorTable.schema_differs(store._connection)

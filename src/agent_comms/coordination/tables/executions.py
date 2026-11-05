@@ -7,19 +7,19 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from agent_comms.coordination_contracts import (
+from agent_comms.coordination.contracts import (
     validate_execution_id,
 )
-from agent_comms.coordination_errors import (
+from agent_comms.coordination.errors import (
     IdentityConflict,
     IntegrityViolationError,
     StaleFence,
     StaleRevision,
 )
-from agent_comms.coordination_schema import CoordinatorRow
-from agent_comms.coordination_tables.participants import Participants
+from agent_comms.coordination.schema import CoordinatorRow
+from agent_comms.coordination.tables.participants import Participants
 from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.coordination_tables.attempts import (
+from agent_comms.coordination.tables.attempts import (
     APPROVED_REPLAY_FACT_MASK,
     AttemptRecord,
     ReplayFact,
@@ -62,8 +62,8 @@ from agent_comms.wake_candidate_index import ProjectionUnavailableError
 
 
 if TYPE_CHECKING:
-    from agent_comms.coordination_tables.assignments import WakeAssignment
-    from agent_comms.coordination_tables.responses import ResponseObligation
+    from agent_comms.coordination.tables.assignments import WakeAssignment
+    from agent_comms.coordination.tables.responses import ResponseObligation
     from agent_comms.selected_source_batch import SelectedSource
 
 
@@ -474,7 +474,7 @@ class ExecutionRecord(
 
     @classmethod
     def references(cls):
-        from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink
+        from agent_comms.coordination.tables.assignments import ExecutionAssignmentLink
 
         return (
             ForeignKey(columns=("owner_lookup",), target=Participants, target_columns=("participant_lookup",)),

@@ -16,9 +16,9 @@ from collections.abc import Iterator
 
 from .assignment_states import DeferredAssignment, FailedAssignment
 from agent_comms.native_runtime_input import NativeRuntimeTable
-from .coordination_errors import IdentityConflict, RetryScheduled, StaleFence
-from .coordination_tables.assignments import WakeAssignment
-from .coordinator import Coordination
+from .coordination.errors import IdentityConflict, RetryScheduled, StaleFence
+from .coordination.tables.assignments import WakeAssignment
+from .coordination.coordinator import Coordination
 from .durable_turn import DurableTurn
 from .nominal.field_codec import ThreadLookup, InputId, RootId
 from .private_send_rules import NativeClaimCheck, NativeIdentityCheck, NativeReservationCheck

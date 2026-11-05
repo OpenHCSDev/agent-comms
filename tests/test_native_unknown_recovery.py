@@ -29,9 +29,9 @@ from functools import partial
 from native_backend_fixture import native_backend_fixture
 from agent_comms.child_process import ProcessIdentity, SpawnedProcess
 from agent_comms.comms import wire
-from agent_comms.coordination_errors import RecoveryBlocked
-from agent_comms.coordination_tables.attempts import ReplayFact
-from agent_comms.coordination_tables.executions import CurrentExecutions, WireOrigin
+from agent_comms.coordination.errors import RecoveryBlocked
+from agent_comms.coordination.tables.attempts import ReplayFact
+from agent_comms.coordination.tables.executions import CurrentExecutions, WireOrigin
 from agent_comms.cursor_publication import CursorDelivery
 from agent_comms.native_input_record import FullNativeExecution, NumberNativeColumn, TextNativeColumn
 from agent_comms.selected_participant import SelectedParticipant
@@ -39,7 +39,7 @@ from agent_comms.selected_turn import SelectedAttempt
 from agent_comms.launch_runtime import ThreadLaunch
 from contextlib import closing
 from test_coordinated_runtime import _root
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution_states import FailedExecution
 from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
 from agent_comms.reason_codes import GivenReasonCode
@@ -312,7 +312,7 @@ def test_stop_of_previously_released_dead_owner_settles_without_replay(released_
 
 
 def test_unknown_settlement_is_atomic_on_existing_store(tmp_path):
-    from agent_comms.coordination_errors import StaleFence, StaleRevision
+    from agent_comms.coordination.errors import StaleFence, StaleRevision
     from test_coordination_store import ready, started
 
     with ready(tmp_path / "store.sqlite3") as store:

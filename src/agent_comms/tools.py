@@ -63,7 +63,7 @@ from agent_comms.cli_verbs.threads import ThreadsCliCommand
 from .config_options import ConfigOptions
 from .cli_command import PreparedTargetAction, TargetAction, TargetActionCommand, TargetEdit
 from .cli_result import CliResult, TargetEditResult
-from .coordination_tables.refusals import SendRefusal
+from .coordination.tables.refusals import SendRefusal
 from .display_order import ChannelSort, ThreadSort
 from .nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion, WireForm, WireName, WireOmitDefault, projected, GoalId
 from .goal_actions import (

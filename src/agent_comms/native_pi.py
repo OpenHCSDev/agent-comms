@@ -20,7 +20,7 @@ from .active_route import (
     ActiveRoute,
     resolve_comms_route,
 )
-from .coordination_errors import IdentityConflict
+from .coordination.errors import IdentityConflict
 from .nominal.field_codec import (
     InputId,
 )

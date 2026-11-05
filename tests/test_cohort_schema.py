@@ -12,9 +12,9 @@ from bus_record_fixture import OWNER_LOOKUP, RECIPIENT_LOOKUP, SENDER_LOOKUP
 
 from agent_comms.cohort_schema import CohortDeliveries, CohortTable
 from agent_comms.nominal.field_codec import AssignmentId, FieldCodec, MessageId, ThreadLookup
-from agent_comms.coordination_tables.participants import Participants
-from agent_comms.coordinator import Coordination
-from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination.tables.participants import Participants
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
 
 A, B, C = SENDER_LOOKUP, RECIPIENT_LOOKUP, OWNER_LOOKUP
 ROOT = "a" * 32

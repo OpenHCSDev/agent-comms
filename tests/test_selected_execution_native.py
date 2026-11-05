@@ -17,8 +17,8 @@ from pathlib import Path
 import pytest
 
 from agent_comms.coordinated_runtime import SelectedExecution
-from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.agent_activity import AgentActivity
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution

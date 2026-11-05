@@ -53,8 +53,8 @@ from agent_comms.connector_store import (
     CALLBACK, CODE_SECONDS, AuthorizationQuery, ConnectorGrants, ConnectorStore,
     IssuedCode, TrustedBrowser, UiAccess, UiGrantAccess, UiReadAccess, digest,
 )
-from agent_comms.coordination_errors import TranscriptChanged
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.errors import TranscriptChanged
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.storage.locked_store import DocumentChange
 from agent_comms.message_bus import WatchPass
 from agent_comms.service_passes import ServicePassStore

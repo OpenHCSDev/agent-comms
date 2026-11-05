@@ -52,8 +52,8 @@ from agent_comms.child_process import join_retirement
 from agent_comms.input_disposition import DeliveryOverview
 from agent_comms.team_hud import TeamFrame, TeamHud, TeammateDetail
 from agent_comms.comms import Comms
-from agent_comms.coordinator import Coordination
-from agent_comms.coordination_errors import (
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.errors import (
     CoordinationError,
     CoordinationReadUnavailable,
     DeferredRead,

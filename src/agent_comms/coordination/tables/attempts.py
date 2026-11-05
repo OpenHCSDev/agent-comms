@@ -8,15 +8,15 @@ from enum import IntFlag
 from typing import TYPE_CHECKING, Annotated, ClassVar, Final
 
 from agent_comms.attempt_states import AttemptState
-from agent_comms.coordination_contracts import (
+from agent_comms.coordination.contracts import (
     MAX_IDENTIFIER_CHARS,
     require_bounded,
     require_nonempty,
     validate_execution_id,
 )
-from agent_comms.coordination_errors import RecoveryBlocked, StaleFence
-from agent_comms.coordination_schema import CoordinatorRow
-from agent_comms.coordination_tables.participants import (
+from agent_comms.coordination.errors import RecoveryBlocked, StaleFence
+from agent_comms.coordination.schema import CoordinatorRow
+from agent_comms.coordination.tables.participants import (
     OwnerGenerations,
     OwnerRecord,
     Participants,
@@ -42,7 +42,7 @@ from agent_comms.storage.typed_table import (
 )
 
 if TYPE_CHECKING:
-    from agent_comms.coordination_snapshot import RecoverySnapshot
+    from agent_comms.coordination.snapshot import RecoverySnapshot
 
 
 class ReplayFact(IntFlag):
@@ -283,7 +283,7 @@ class AttemptRecord(
 
     @classmethod
     def references(cls):
-        from agent_comms.coordination_tables.executions import ExecutionRecord
+        from agent_comms.coordination.tables.executions import ExecutionRecord
 
         return (
             ForeignKey(columns=("execution_id",), target=ExecutionRecord, target_columns=("execution_id",)),

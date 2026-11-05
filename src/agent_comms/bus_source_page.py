@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Self
 
-from .coordination_errors import IdentityConflict
+from .coordination.errors import IdentityConflict
 from .nominal.field_codec import FieldCodec, ThreadLookup
 
 

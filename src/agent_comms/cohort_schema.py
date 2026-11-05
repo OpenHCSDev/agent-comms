@@ -7,14 +7,14 @@ import sqlite3
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from agent_comms.coordination_errors import IdentityConflict, SchemaVersionError
-from agent_comms.coordination_tables.assignments import WakeAssignment
-from agent_comms.coordination_tables.participants import OwnerGenerations, OwnerRecord, Participants
+from agent_comms.coordination.errors import IdentityConflict, SchemaVersionError
+from agent_comms.coordination.tables.assignments import WakeAssignment
+from agent_comms.coordination.tables.participants import OwnerGenerations, OwnerRecord, Participants
 from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 
 from .audience_manifest import MAX_AUDIENCE_BYTES
-from .coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
-from .coordination_schema import CoordinatorTable
+from .coordination.contracts import POLICY_VERSION, RESOLVER_VERSION
+from .coordination.schema import CoordinatorTable
 from .nominal.field_codec import AssignmentId, MessageId, RootId, SubclassUnion, ThreadLookup, WireName
 from .thread_text import AbsentText, GivenText, TextChoice
 from .response_acknowledgement import _canonical
@@ -43,7 +43,7 @@ from .wake_candidate_index import ProjectionUnavailableError
 
 if TYPE_CHECKING:
     from .bus_publication import Delivered
-    from .coordinator import Coordination
+    from .coordination.coordinator import Coordination
     from .private_registry_guard import RegistryPrivacy
 
 class CohortTable(PrivateCoordinatorTable):

@@ -27,7 +27,7 @@ from pydantic import JsonValue
 import agent_comms
 
 from ..child_process import Platform
-from ..coordination_errors import CoordinationBeginUnavailable, CoordinationReadUnavailable
+from ..coordination.errors import CoordinationBeginUnavailable, CoordinationReadUnavailable
 from ..nominal.declared_family import DeclaredFamily
 from ..nominal.field_codec import FieldCodec, MalformedRecord, PathText
 from ..errors import RelationViolationError

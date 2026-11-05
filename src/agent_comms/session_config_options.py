@@ -8,7 +8,7 @@ from contextlib import aclosing, asynccontextmanager
 from functools import partial
 from typing import TYPE_CHECKING
 
-from .coordination_errors import Refused
+from .coordination.errors import Refused
 from acp.schema import (ConfigOptionUpdate, SessionConfigOptionSelect,
                         SessionConfigSelectOption, SetSessionConfigOptionResponse)
 
@@ -17,7 +17,7 @@ from .bus import Bus
 from .child_process import join_retirement
 from .config_options import (CatalogConfigOption,
                              ConfigOptions, InvalidConfigChoice)
-from .coordinator import Coordination
+from .coordination.coordinator import Coordination
 from .nominal.field_codec import AcpSessionId, FieldCodec
 from .native_failures import NativePiUnavailable
 from .threads import ChosenModel, NextTurnConfiguration, Thread

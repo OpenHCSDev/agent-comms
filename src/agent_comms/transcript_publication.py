@@ -18,7 +18,7 @@ from typing import ClassVar
 from .agent_runtime import PublishesTranscript
 from .child_process import Platform
 from .comms import Comms
-from .coordination_errors import CoordinationReadUnavailable
+from .coordination.errors import CoordinationReadUnavailable
 from .runtime_updates import RuntimeUpdate, ThreadOutput
 
 

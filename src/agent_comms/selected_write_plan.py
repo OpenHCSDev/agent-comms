@@ -16,21 +16,21 @@ from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
-from .coordination_database import CoordinationStore
+from .coordination.database import CoordinationStore
 from .storage.locked_store import DurableFile, PatternFile
 from .storage.store_files import AtomicFile
 
 if TYPE_CHECKING:
     from .acp_extension import SelectedWriteAcceptedUpdate
     from .comms import Comms
-    from .coordination_tables.assignments import WakeAssignment
+    from .coordination.tables.assignments import WakeAssignment
     from .threads import Thread
 
-from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.coordination.coordinator import Coordination
 
 from .child_process import Platform
-from .coordination_cohort import sealed_cohort_assignments
+from .coordination.cohort import sealed_cohort_assignments
 from .nominal.declared_family import DeclaredFamily
 from .envelope_claim_transitions import ExistingFileClaim
 from .nominal.field_codec import AssignmentId, ClaimId, FieldCodec, MalformedRecord, MessageId, RootId

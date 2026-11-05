@@ -4,8 +4,8 @@ import pytest
 
 from agent_comms.assignment_states import AssignmentState
 from agent_comms.attempt_states import AttemptState
-from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.coordination_tables.responses import ResponseObligation
+from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.execution_states import ExecutionState
 from agent_comms.goal_generation import GenerationState
 from agent_comms.goal_states import GoalState

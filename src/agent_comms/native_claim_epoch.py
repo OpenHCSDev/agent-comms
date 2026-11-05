@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .coordination_errors import StaleFence
+from .coordination.errors import StaleFence
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .nominal.field_codec import JsonShapeFamily, JsonShapeMember

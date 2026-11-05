@@ -26,8 +26,8 @@ from agent_comms_hooks.process_claim import (
 from .cli_result import ResultShower, TargetEditResult
 from .child_process import OutlivesLauncherLifetime, Platform, ProcessIdentity, SpawnedProcess
 from .comms import Comms, wire
-from .coordination_errors import CoordinationError
-from .coordinator import Coordination
+from .coordination.errors import CoordinationError
+from .coordination.coordinator import Coordination
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .nominal.field_codec import FieldCodec, RecordMember, RestartId, WireOmitDefault

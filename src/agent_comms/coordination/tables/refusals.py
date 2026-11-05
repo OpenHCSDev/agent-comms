@@ -8,18 +8,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
-from agent_comms.coordination_database import CoordinationStore
-from agent_comms.coordination_schema import CoordinatorRow
-from agent_comms.coordination_session import CoordinationSession
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.schema import CoordinatorRow
+from agent_comms.coordination.session import CoordinationSession
 from agent_comms.errors import RelationViolationError
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
 from agent_comms.storage.typed_table import Column, Index
 from agent_comms_hooks import ToolRefusedError
 
-from ..storage.locked_store import RegistryFile
+from ...storage.locked_store import RegistryFile
 
 if TYPE_CHECKING:
-    from agent_comms.coordinator import Coordination
+    from agent_comms.coordination.coordinator import Coordination
 
 
 @dataclass(frozen=True)

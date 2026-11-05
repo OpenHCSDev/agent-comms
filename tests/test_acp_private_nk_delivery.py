@@ -10,8 +10,8 @@ from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import CursorAdvancedUpdate, decode_updates
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.coordination_errors import PublicationActivationBlocked
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.errors import PublicationActivationBlocked
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.repo import Checkout
 from agent_comms.thread_model import DeclaredModel
@@ -55,7 +55,7 @@ def cursor_envelope(metadata):
 def test_private_owner_rename_during_active_attempt_can_complete(tmp_path, managed):
     from agent_comms.attempt_start import AttemptStart
     from agent_comms.attempt_states import SucceededAttempt
-    from agent_comms.coordination_tables.executions import AcpOrigin
+    from agent_comms.coordination.tables.executions import AcpOrigin
     from agent_comms.owner_fence import prepare_fence_token
     from test_coordination_store import final_evidence
 

@@ -17,7 +17,7 @@ from pathlib import Path
 from sqlite3 import Connection
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from .coordinator import Coordination
+from .coordination.coordinator import Coordination
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import (
     FieldCodec,

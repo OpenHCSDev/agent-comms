@@ -12,16 +12,16 @@ from agent_comms.attempt_start import AttemptStart
 from agent_comms.comms import wire
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.codex import CodexBridge
-from agent_comms.coordination_database import CoordinationStore
-from agent_comms.coordination_errors import IdentityConflict, ParticipantNotRegistered
-from agent_comms.coordination_tables.assignments import WakeAssignment
-from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
-from agent_comms.coordination_tables.executions import (
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.errors import IdentityConflict, ParticipantNotRegistered
+from agent_comms.coordination.tables.assignments import WakeAssignment
+from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
+from agent_comms.coordination.tables.executions import (
     AcpOrigin, CurrentExecutions, ExecutionRecord,
 )
-from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
-from agent_comms.coordination_tables.recovery import RecoveryAudit
-from agent_comms.coordinator import StandaloneCoordination
+from agent_comms.coordination.tables.participants import OwnerGenerations, Participants
+from agent_comms.coordination.tables.recovery import RecoveryAudit
+from agent_comms.coordination.coordinator import StandaloneCoordination
 from agent_comms.harness_delivery_states import EmittedOutcome, ReceivingMonitor
 from agent_comms.message_reference import MessageReference
 from agent_comms.native_input_record import FullNativeExecution, TriageNativeExecution

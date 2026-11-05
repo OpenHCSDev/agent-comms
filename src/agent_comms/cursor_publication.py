@@ -23,8 +23,8 @@ from .acp_extension import (
     encode_updates,
 )
 from .comms import Comms
-from .coordination_errors import DeferredRead
-from .coordinator import Coordination
+from .coordination.errors import DeferredRead
+from .coordination.coordinator import Coordination
 from .cursor_owner import CommittedCursorOwner, CursorOwner, CursorState
 from .publication_measurements import PublicationMeasurements
 from .nominal.field_codec import InputId

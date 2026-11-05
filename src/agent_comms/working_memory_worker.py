@@ -9,8 +9,8 @@ from http.client import HTTPException
 from acp.schema import SessionInfoUpdate
 
 from .acp_extension import ContextAnnotatedUpdate, encode_updates
-from .coordination_database import CoordinationStore
-from .coordinator import Coordination
+from .coordination.database import CoordinationStore
+from .coordination.coordinator import Coordination
 from .working_memory_annotations import PreviouslyRequestedAnnotation, WorkingMemoryAnnotations
 from .annotation_disclosure import DisclosureWithheld
 from .working_memory_disclosure import DisclosureState
@@ -62,7 +62,7 @@ class AnnotationWorker:
         rows = await Coordination.run_worker(partial(WorkingMemoryAnnotations.labels,
             self.comms.registry.store.coordinator_reader, span, version, grant.classifier))
         if rows:
-            from .coordination_tables.annotations import SpanAnnotationsRow
+            from .coordination.tables.annotations import SpanAnnotationsRow
 
             return SpanAnnotationsRow.effective(rows)
         state = DisclosureState.capture(segment, span, question, rules)

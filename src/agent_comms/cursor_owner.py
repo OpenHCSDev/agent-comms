@@ -11,9 +11,9 @@ from agent_comms.nominal.field_codec import InputId, RootId, ThreadLookup
 from agent_comms.native_runtime_input import NativeRuntimeTable
 
 from .acp_extension import CursorObservation, EmptyCursorObservation, VerifiedCursorObservation
-from .coordination_database import CoordinationStore
-from .coordination_errors import IdentityConflict, StaleFence
-from .coordinator import Coordination
+from .coordination.database import CoordinationStore
+from .coordination.errors import IdentityConflict, StaleFence
+from .coordination.coordinator import Coordination
 from .message_bus import MessageBus
 from .native_input_owner import ParticipantOwner, RegistryOwner
 from .native_input_record import NativeInputReference
@@ -25,8 +25,8 @@ from .thread_identity import GenerationCounter
 if TYPE_CHECKING:
     from sqlite3 import Connection
 
-    from .coordination_session import NativeCapture
-    from .coordination_tables.participants import OwnerGenerations
+    from .coordination.session import NativeCapture
+    from .coordination.tables.participants import OwnerGenerations
     from .historical_native_inputs import HistoricalNativeInput
     from .native_entries import NativeEvidenceScope
     from .proven_source_coverage import CoverageInput, NoInjectedInput, ProvenSourceCoverage

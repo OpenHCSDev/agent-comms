@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from .assignment_states import AssignmentState
     from .assignment_store import AssignmentStore
     from .cli_bridges.shared import MonitorPart, MonitorReadFile, TranscriptConfirmsDelivery
-    from .coordination_tables.harness_deliveries import HarnessDelivery
+    from .coordination.tables.harness_deliveries import HarnessDelivery
     from .notification_progress import DeliveryProgress
 
 

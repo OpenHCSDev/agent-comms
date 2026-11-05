@@ -19,8 +19,8 @@ from agent_comms.bus_publication import HumanOrigin
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.comms import Comms, wire
 from conftest import accept_initial
-from agent_comms.coordination_database import CoordinationStore
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.errors import (
     CommittedMessageError,
     RelationViolationError,

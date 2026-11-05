@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 from agent_comms.nominal.field_codec import AcpSessionId, GoalId
 from .agent_event_updates import AcpEventConsumer
 from .child_process import ProcessIdentity
-from .coordinator import Coordination
+from .coordination.coordinator import Coordination
 from .errors import RelationViolationError
 from .goal_actions import (
     EditGoalAction,

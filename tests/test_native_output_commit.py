@@ -9,7 +9,7 @@ from agent_comms.acp_extension import (
     NativeOutputCommittedUpdate,
     NativeRoundCommittedUpdate,
 )
-from agent_comms.coordination_errors import TranscriptChanged
+from agent_comms.coordination.errors import TranscriptChanged
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     ToolCallId,

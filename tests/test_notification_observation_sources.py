@@ -8,7 +8,7 @@ from pathlib import Path
 
 from agent_comms.bus_publication import Delivered
 from agent_comms.comms import Comms
-from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination.database import CoordinationStore
 from agent_comms.message_reference import MessageReference
 from agent_comms.notification_progress import AnsweredResponse, UnansweredResponse
 from agent_comms.notification_evidence import RecipientLimit

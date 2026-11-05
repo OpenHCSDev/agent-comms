@@ -26,8 +26,8 @@ if sys.platform == "linux":
 from agent_comms.bus import Bus
 from agent_comms.child_process import AttachedChild, ProcessIdentity
 from agent_comms.comms import Comms
-from agent_comms.coordination_database import CoordinationStore
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.publication_measurements import PublicationMeasurements
 from agent_comms.storage.locked_store import RegistryFile

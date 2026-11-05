@@ -10,7 +10,7 @@ import signal
 import pytest
 
 from agent_comms.active_route import LocalRoute
-from agent_comms.coordination_errors import StaleRevision
+from agent_comms.coordination.errors import StaleRevision
 from agent_comms.errors import RelationViolationError
 from agent_comms.input_attempt import UnobservedInputDeliveryScope
 from agent_comms.input_disposition import InputDispositions

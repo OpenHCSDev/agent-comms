@@ -12,17 +12,17 @@ from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, ExitStack, contextmanager
 from pathlib import Path
 
-from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.coordination.coordinator import Coordination
 
 from .cohort_schema import CohortTable
 from .bus import BusReader, BusSnapshot
 from .bus_publication import Delivered
 from .comms import Comms
-from .coordination_cohort import _claim_record
-from .coordination_database import CoordinationStore
-from .coordination_errors import StaleFence
-from .coordination_tables.participants import OwnerGenerations
+from .coordination.cohort import _claim_record
+from .coordination.database import CoordinationStore
+from .coordination.errors import StaleFence
+from .coordination.tables.participants import OwnerGenerations
 from .envelope_claim_transitions import (
     ClaimOwner,
     ExistingFileClaim,

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from .nominal.field_codec import AcpSessionId, InputId
 from .acp_extension import LiveQueueScope
 from .turn_inbox import TurnInbox
-from .coordinator import Coordination
+from .coordination.coordinator import Coordination
 from .queued_input import DeliveredInput, InputHandoffRefused
 from .owned_send import OwnedSend
 from .thread_identity import ClaimedIdentity

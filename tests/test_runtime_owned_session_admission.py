@@ -9,7 +9,7 @@ import subprocess
 import sys
 from contextlib import AsyncExitStack
 
-from agent_comms.coordination_errors import Refused
+from agent_comms.coordination.errors import Refused
 import pytest
 from acp.schema import PromptRequest, TextContentBlock
 

@@ -10,8 +10,8 @@ from contextlib import suppress
 from .acp import CommsAgent
 from .active_route import ActiveRoute
 from .comms import Comms, wire
-from .coordination_database import CoordinationStore
-from .coordinator import Coordination
+from .coordination.database import CoordinationStore
+from .coordination.coordinator import Coordination
 from .launch_root import LaunchRoot
 from .root_runtime import RootRuntimeStore
 

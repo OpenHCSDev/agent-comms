@@ -3,23 +3,23 @@
 from __future__ import annotations
 
 from agent_comms.assignment_store import AssignmentStore
-from agent_comms.coordination_errors import (
+from agent_comms.coordination.errors import (
     IdentityConflict,
 )
-from agent_comms.coordination_session import CoordinationSession
-from agent_comms.coordination_snapshot import RecoverySnapshot
-from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink
-from agent_comms.coordination_tables.attempts import AttemptRecord
-from agent_comms.coordination_tables.executions import ReplayAssessments
-from agent_comms.coordination_tables.executions import (
+from agent_comms.coordination.session import CoordinationSession
+from agent_comms.coordination.snapshot import RecoverySnapshot
+from agent_comms.coordination.tables.assignments import ExecutionAssignmentLink
+from agent_comms.coordination.tables.attempts import AttemptRecord
+from agent_comms.coordination.tables.executions import ReplayAssessments
+from agent_comms.coordination.tables.executions import (
     ExecutionRecord,
 )
-from agent_comms.coordination_tables.publications import (
+from agent_comms.coordination.tables.publications import (
     PublicationIntents,
     PublicationEvidence,
 )
-from agent_comms.coordination_tables.recovery import RecoveryAudit
-from agent_comms.coordination_tables.responses import ResponseObligation
+from agent_comms.coordination.tables.recovery import RecoveryAudit
+from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.participant_store import ParticipantStore
 
 
