@@ -217,9 +217,10 @@ class RootFile:
     @staticmethod
     @cache
     def load_declarations() -> None:
-        """Import every module of the package once per process, so ``declarations_in`` walks
-        the whole family and not only the owners some caller happened to import."""
-        package = import_module(__package__)
+        """Import every module of agent_comms once per process, so ``declarations_in`` walks
+        the whole family and not only the owners some caller happened to import. The package
+        is named, not taken from ``__package__``: this module lives in a subpackage."""
+        package = import_module("agent_comms")
         for module in walk_packages(package.__path__, f"{package.__name__}."):
             if not module.name.startswith(f"{package.__name__}.skills"):
                 import_module(module.name)

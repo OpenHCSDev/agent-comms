@@ -90,19 +90,31 @@ def split_moved_names(path_parts: list[str], text: str) -> str:
     return IMPORT_LIST.sub(fix, text)
 ABSOLUTE = re.compile(rf"\bagent_comms\.({names})\b")
 SLASHED = re.compile(rf"\bsrc/agent_comms/({names})\.py\b")
+ABSENT = re.compile(r"PathsAbsent\(\((?:[^()]|\([^()]*\))*\)\)")
 QUOTED_BARE = re.compile(rf"\"({names})\.py\"")
 
-for path in sorted({*(p for d in ("src", "tests", "tools", "stack") for p in (root / d).rglob("*.py")),
+ROOTS = ("src", "tests", "tools", "stack", "benchmarks", "experiments", "scripts", "extensions")
+for module in MOVED if owns else ():
+    # A module that finds its siblings from its own position moves to a new set of siblings.
+    for number, line in enumerate((dest / f"{module}.py").read_text().splitlines(), 1):
+        if re.search(r"__package__|__file__|__name__\)", line):
+            print(f"SELF-LOCATING {dest.name}/{module}.py:{number}: {line.strip()}")
+
+for path in sorted({*(p for d in ROOTS for p in (root / d).rglob("*.py")),
                     *(p for p in (root / "pyproject.toml",) if p.exists())}):
     text = path.read_text()
     original = text
     if path.is_relative_to(src):
-        moved_now = path.parent == dest and path.stem in MOVED
+        moved_now = owns and path.parent == dest and path.stem in MOVED
         old_parts = ["agent_comms"] if moved_now else package_depth(path)
         text = rewrite_relative(path, text, old_parts)
         text = split_moved_names(package_depth(path), text)
     text = ABSOLUTE.sub(rf"agent_comms.{package}.\1", text)
+    # A PathsAbsent claim names the old paths on purpose: they are what must stay deleted.
+    claims = ABSENT.findall(text)
     text = SLASHED.sub(rf"src/agent_comms/{package}/\1.py", text)
+    for claim, rewritten in zip(claims, ABSENT.findall(text), strict=True):
+        text = text.replace(rewritten, claim, 1)
     if not path.is_relative_to(src):
         text = split_moved_names(["outside"], text)
     if path.name == "plan_phases.py":
