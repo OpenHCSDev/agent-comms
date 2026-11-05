@@ -14,6 +14,7 @@ from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.native_arguments import GivenArguments, GivenBinary
+from agent_comms.nominal.field_codec import AcpSessionId
 from delivery_owner_fixture import canonical_agent, reply_turn_finished, start_headless_owner
 from native_backend_fixture import NativeBackendFixture
 
@@ -42,10 +43,12 @@ async def main(base: Path) -> None:
             print(json.dumps({"event": "ready", "pid": os.getpid()}), flush=True)
             await wait_for(base / "dispatch")
             agent.inputs.auto_wake = True
+            # The session start_owner published: the drain types it, and its cursor scope encodes it.
+            session = AcpSessionId("beta")
             count = await agent._drain_private_nk(
-                "beta", comms.owners.require_private_launch().wire_root_id,
+                session, comms.owners.require_private_launch().wire_root_id,
             )
-            await reply_turn_finished(agent, "beta")
+            await reply_turn_finished(agent, session)
             print(json.dumps({"event": "terminal", "pid": os.getpid(), "drained": count}), flush=True)
             await stopped.wait()
         finally:
