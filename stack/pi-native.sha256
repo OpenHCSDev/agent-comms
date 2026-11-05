@@ -38,7 +38,7 @@ f571da2383ee8a7692c1754bd3fc6c3c2bfd230c27628621adf8dacc8619d2c5  node_modules/@
 971c1de6eaf7f6dc2e4f90a9afed0f7442e49c9c9671e591b469935e3762119d  node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.js
 e747c952fa4d19e9dce98f54a6f3ae0ceafcaf07facb4adba733320e74f81dc3  node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js
 5d41b9551078157d74b4104c37fb6040533575b4ce6a743528b681390fc36520  node_modules/@earendil-works/pi-ai/dist/api/pi-messages.js
-4e0184d73736b60c2e32acc12a4b4eebad1324d7f61a4c955e896b3a1239db8d  node_modules/@earendil-works/pi-ai/dist/api/simple-options.js
+ff7e1a14fcfd7f8dac4db5b52f4a316d6def16c90d46367d7c7d06bbdb28d6ff  node_modules/@earendil-works/pi-ai/dist/api/simple-options.js
 36d8bd607a5219f0b10d4e7d0e434f77333407da94c5ce94fde3cb3c8f608d75  node_modules/@earendil-works/pi-ai/dist/utils/estimate.js
 8c66bd7a05f4b5e286bc8a9b55ed7e538c4c5e4964fa8ace5f639b1fc18a24df  dist/core/turn-context.js
 335abb40be346b6c35645c2d1e89c48388540859b4b687330b7d17f36d47b500  dist/core/turn-context.d.ts
@@ -56,5 +56,5 @@ d64e8c05c7932d377034820b1db0df45612afe64885c0765f8f348a12e1bc955  dist/core/skil
 8e8276bbabcd898136d431345611928626fad6b6f03ac572f1d8506e6ece326f  dist/core/system-prompt.d.ts
 0391543cf703a93a0163b37b3ccebe53e0f12bff6f6162b86d56fb017fe49011  dist/core/system-prompt.js
 # agent-comms-native-stock-v1 @earendil-works/pi-coding-agent@0.85.1
-# agent-comms-native-tree-v1 10ce5884c3a01b7d1b1ca6c7a4026588c21be408ec971cc1ab3f6bd1e0943e20
-# agent-comms-native-inputs-v1 f726c53c4c508f374abfccf9427f4a1d0b4e676d75df4ce57784f5643303547b
+# agent-comms-native-tree-v1 f46e1a50529dcacf98300ea55ea5c0ac6003e33cd7923c8cdb7fcfd2d2432cd7
+# agent-comms-native-inputs-v1 ea88d9e737c87787c91fe76f9f8d0934307a448adb8c311a750dc924ce565ae8

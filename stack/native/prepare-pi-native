@@ -168,6 +168,9 @@ cp -- "$native_root/native-proof-schema.mjs" "$native_package/dist/core/native-p
     "$stage/node_modules/@earendil-works/pi-coding-agent"
 patch --batch --fuzz=0 --no-backup-if-mismatch -p1 \
     -d "$stage/node_modules/@earendil-works/pi-coding-agent" < "$native_root/native-request-progress-adapters.patch"
+context_budget=node_modules/@earendil-works/pi-ai/dist/api/simple-options.js
+"$python" "$native_root/patch-native-context-budget.py" \
+    "$stage/node_modules/@earendil-works/pi-coding-agent/$context_budget"
 "$python" "$native_root/patch-native-request-observation.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent"
 "$python" "$native_root/prepare-native-import-boundary.py" \
@@ -193,6 +196,7 @@ fi
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$manager"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/dist/core/settings-manager.js"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$bedrock"
+node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$context_budget"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$compaction"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$session"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$rpc"
