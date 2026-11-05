@@ -21,7 +21,7 @@ from agent_comms.team_heartbeat import TeamHeartbeat, TeamObservation
 from agent_comms.comms import Comms
 from team_heartbeat_fixture import ObservedHeartbeat, capture_frame, current_hud
 from agent_comms.team_hud import (
-    TeamFrame, TeamHud, Teammate, CodexUsage, PhasesDoneByPlanGroup, UnreadableUsage,
+    TeamFrame, TeamHud, TeamPlan, Teammate, CodexUsage, PhasesDoneByPlanGroup, UnreadableUsage,
 )
 from agent_comms.team.vibe_check import OverloadDegradation
 from agent_comms.task_attachments.team_pings import TeamDecisions, TeamUpdateNotice, TeamUpdate, TeamUpdateStore, PublishedFacts, RulePing
@@ -622,7 +622,7 @@ def test_frame_keeps_original_ping_order_and_folded_idle_records(tmp_path):
         usage=CodexUsage(UnreadableUsage(reason="not requested")),
         packets=(packet,), open_pings=pings,
     )
-    TeamFrame.replace_all(tmp_path, (hud,))
+    TeamFrame.replace_all(tmp_path, TeamPlan(hud.phases), (hud,))
     restored, = TeamFrame.read_all(tmp_path)
     assert restored == hud
     assert restored.open_pings == pings

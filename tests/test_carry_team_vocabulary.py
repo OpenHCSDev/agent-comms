@@ -22,7 +22,7 @@ from agent_comms.service_passes import ServicePassStore
 from agent_comms.storage.store_files import store_lock_path
 from agent_comms.task_attachments.team_pings import TeamUpdate, TeamUpdateNotice, TeamUpdateStore
 from agent_comms.team.vibe_check import OverloadDegradation
-from agent_comms.team_hud import CodexUsage, TeamFrame, TeamHud, UnreadableUsage
+from agent_comms.team_hud import CodexUsage, TeamFrame, TeamHud, TeamPlan, UnreadableUsage
 from agent_comms.todos import OwnerRequest, TodoStore
 from conftest import maintenance_held
 from test_reconcile_stores import reconcile
@@ -124,7 +124,7 @@ def test_retained_packets_passes_and_channel_move_to_team_names(team_bus):
         packets=(),
         open_pings=(),
     )
-    TeamFrame.replace_all(root, (hud,))
+    TeamFrame.replace_all(root, TeamPlan(hud.phases), (hud,))
     frame = TeamFrame.at(root, teammate).path
     retired_frame = root / "commander_frames" / frame.name
     retired_frame.parent.mkdir()

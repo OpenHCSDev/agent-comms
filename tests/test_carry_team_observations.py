@@ -8,7 +8,7 @@ import pytest
 
 from agent_comms.bus import Bus
 from agent_comms.team.vibe_check import OverloadDegradation
-from agent_comms.team_hud import TeamFrame, TeamHud, CodexUsage, UnreadableUsage
+from agent_comms.team_hud import TeamFrame, TeamHud, TeamPlan, CodexUsage, UnreadableUsage
 from agent_comms.comms import Comms
 from agent_comms.heartbeat_delivery import OnHeartbeatDelivery
 from agent_comms.installer.carry import CarryChain
@@ -35,7 +35,7 @@ def carry_bus(comms: Comms, tmp_path: Path) -> Comms:
     now = time.time()
     original = TeamUpdateNotice(colleague, ())
     original.send(comms, ("original quiet publication",))
-    TeamFrame.replace_all(comms.root, (TeamHud(
+    TeamFrame.replace_all(comms.root, TeamPlan(), (TeamHud(
         teammate=colleague, units=(), phases=(), forks=(),
         load=OverloadDegradation.from_orders((), 0, 0),
         usage=CodexUsage(UnreadableUsage(reason="carry fixture needs no account")),

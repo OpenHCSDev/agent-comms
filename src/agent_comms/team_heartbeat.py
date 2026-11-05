@@ -8,7 +8,7 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from agent_comms.team_hud import CodexUsage, TeamFrame, TeamHud, HudUnavailableGroup
+from agent_comms.team_hud import CodexUsage, TeamFrame, TeamHud, TeamPlan, HudUnavailableGroup
 from agent_comms.child_process import ReadWork
 from agent_comms.task_attachments.team_pings import (
     AlarmGroup, TeamUpdate, TeamUpdateStore, PublishedFacts, RulePing, TeammatePing,
@@ -106,6 +106,7 @@ class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
     def pass_body(self, comms: Comms, boards: tuple[TeamObservation, ...]) -> None:
         """Enforce the team board once, then retain and publish it per teammate."""
         huds = {}
+        plan = TeamPlan()
         completed = []
         now = time.time()
         duty = self.duty(comms.registry, comms.goals)
@@ -148,6 +149,7 @@ class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
                     continue  # No live teammate: enforced, and nobody to write a board for.
                 board = TeamHud.of(comms, observed.frame, observed.states,
                                    delivery=deliveries[0], usage=usage)
+                plan = TeamPlan(board.phases)
                 for delivery in deliveries:
                     hud = board.for_delivery(delivery)
                     recipient = delivery.packet.teammate
@@ -161,7 +163,7 @@ class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
                     completed.append(recipient)
         finally:
             # A later teammate's failure does not erase frames/passes already completed.
-            TeamFrame.replace_all(comms.root, tuple(huds.values()))
+            TeamFrame.replace_all(comms.root, plan, tuple(huds.values()))
             ServicePassStore.at(comms.root).heartbeat_passed(
                 completed,
                 (thread.incarnation for thread in comms.registry.all_threads().values()),

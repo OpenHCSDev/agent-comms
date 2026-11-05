@@ -530,13 +530,13 @@ class TeamFrame(TeamFrameFile, JsonDocument[TeamHud]):
             TeamPlanDocument.at(comms.root, health).read())
 
     @classmethod
-    def replace_all(cls, root: Path, huds: tuple[TeamHud, ...]) -> None:
-        """Write one frame per teammate and the team plan once; a teammate no longer
-        beating loses its frame."""
-        for hud in huds[:1]:
-            plan = TeamPlanDocument.at(root)
-            plan.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-            plan._publish_unlocked(TeamPlan(hud.phases))
+    def replace_all(cls, root: Path, plan: TeamPlan, huds: tuple[TeamHud, ...]) -> None:
+        """Write the pass's team plan once and one frame per teammate; a teammate no longer
+        beating loses its frame. A pass with no board writes an empty plan, never leaves the
+        last one standing."""
+        document = TeamPlanDocument.at(root)
+        document.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        document._publish_unlocked(plan)
         written = set()
         for hud in huds:
             frame = cls.at(root, hud.teammate)
