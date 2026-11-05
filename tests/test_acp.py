@@ -150,6 +150,7 @@ class TestHandlers:
     async def test_service_tier_menu_selection_and_readback(
         self, tmp_path: Path, session_project: Path, native_runtime_package,
     ):
+        from agent_comms.config_options import ServiceTierConfigOption
         from agent_comms.pi_vocabulary import ServiceTier
 
         agent = self._agent(tmp_path)
@@ -160,8 +161,9 @@ class TestHandlers:
                 client, FieldCodec.decode(AcpSessionId, response.session_id),
             )
             menu, = client.updates
-            tier = next(option for option in menu.config_options
-                        if option.category == "service_tier")
+            tier, = (option for option in menu.config_options
+                     if option.id == FieldCodec.encode(ServiceTierConfigOption))
+            assert tier.category == ServiceTierConfigOption.category
             assert tier.current_value == ServiceTier.STANDARD.value
             assert {choice.value for choice in tier.options} == {
                 member.value for member in ServiceTier

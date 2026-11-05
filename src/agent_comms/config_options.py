@@ -226,7 +226,8 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
 class ServiceTierConfigOption(CatalogConfigOption):
     title = "Service tier"
     description = "Provider request service tier, applied from this thread's next turn"
-    category = "service_tier"
+    # ACP carries only its declared categories and salvages any other to None.
+    category = "model_config"
 
     def current_value(self, thread: CatalogSelection) -> str:
         return thread.service_tier.value
