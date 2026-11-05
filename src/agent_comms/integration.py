@@ -710,7 +710,7 @@ class MainSources(TestedSources, declared_name="push"):
     def require_local_candidate(self, inputs: IntegrationInput) -> None:
         """Main owns the transition from exact open sources to exact merged ancestry."""
         source = inputs.local
-        source.require_ancestry(self.repository, self.carrier.head)
+        source.require_ancestry(self.repository, self.tested)
         for head in (head for head in source.heads if not head.same_pull_request(self.carrier)):
             rows = tuple(
                 row
