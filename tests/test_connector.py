@@ -900,7 +900,7 @@ async def test_a_revoked_token_is_refused(client, store, comms):
 @pytest.mark.parametrize("grant_type", UiGrantAccess.members_with(UiGrantAccess))
 def test_ui_profile_publication_is_private_exclusive_and_independently_revocable(
     store: ConnectorStore, comms: Comms, tmp_path: Path,
-    grant_type: type[UiGrantAccess],
+    grant_type: type[UiGrantAccess], capsys: pytest.CaptureFixture[str],
 ) -> None:
     prepare_native_comms(comms)
     destination = tmp_path / "private-ui" / "connection.json"
@@ -909,7 +909,8 @@ def test_ui_profile_publication_is_private_exclusive_and_independently_revocable
         "--endpoint", "https://core.example/mcp", "--profile", str(destination),
         "--seconds", "60", "--access", grant_type.declared_name,
     ])
-    reply = command.apply(store)
+    assert command.apply(store) == 0
+    reply = capsys.readouterr().out
     receipt = FieldCodec.decode(UiGrantSummary, FieldCodec.parse(reply))
     profile = UiConnectionProfile.read(destination)
     assert receipt.grant_id == profile.credential.grant_id

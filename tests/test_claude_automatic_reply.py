@@ -32,7 +32,7 @@ from agent_comms.registry_document import RegisteredTeamProject
 from agent_comms.runtime_updates import AllTurnsCancelled, AllTurnsEnded, RuntimeUpdate, ThreadOutput
 from agent_comms.turn_item import NamedSourceTurn, NativeTurnId
 from transcript_record_fixture import transcript_record
-from test_monitor_delivery import attached_monitor, bridge, decoded_record, notification
+from test_monitor_delivery import attached_monitor, bridge, decoded_record, event_from, notification
 
 
 def assistant_record(label: str, text: str) -> ClaudeRecord:
@@ -59,8 +59,7 @@ async def confirm_messages(
     async with attached_monitor(bridge) as reader:
         for message in messages:
             await bridge.accept(message)
-            line = (await reader.readline()).decode().rstrip('\n')
-            record = notification(line, record_id=transcript_record(str(message.seq)), prompt_id=prompt_id)
+            record = notification(await event_from(reader), record_id=transcript_record(str(message.seq)), prompt_id=prompt_id)
             observations.append(record)
             output.publish_batch([await update.observed(bridge) for update in record.updates(session)])
             delivered, = await bridge.attempts(message.message_id)

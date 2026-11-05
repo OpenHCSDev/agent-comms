@@ -31,30 +31,43 @@ def _competing_write(owner, path, started, entered):
         entered.set()
 
 
-def _read_store_guard(owner, path, done):
+def _read_store_guard(owner, path, started, done):
+    started.set()
     with owner.read_guard(path):
         done.set()
 
 
-def test_single_file_family_reads_during_writes(tmp_path):
-    owners = SingleFileStore.discover_members(agent_comms, SingleFileStore)
-    assert owners, "the single-file store family was not discovered"
-    for owner in owners:
-        path = tmp_path / owner.__name__
-        ready, release, done = event(), event(), event()
-        with process(_hold_store_write, owner, path, ready, release):
-            try:
-                assert ready.wait(5), owner
-                with process(_read_store_guard, owner, path, done):
-                    assert done.wait(5), f"{owner.__name__} read waited on its writer"
-                started, entered = event(), event()
-                with process(_competing_write, owner, path, started, entered):
-                    assert started.wait(5), owner
-                    assert not entered.wait(0.2), f"{owner.__name__} admitted another writer"
-                    release.set()
-                    assert entered.wait(5), owner
-            finally:
+SINGLE_FILE_STORES = SingleFileStore.discover_members(agent_comms, SingleFileStore)
+SPAWN_SECONDS = 60
+"""A spawned child re-imports agent_comms before it can signal; that start-up is not what a
+guard's own bound measures, so each wait for a child to start gets this, and the guard
+checks keep their tight bounds."""
+
+
+def test_single_file_store_family_is_discovered():
+    assert SINGLE_FILE_STORES, "the single-file store family was not discovered"
+
+
+@pytest.mark.parametrize("owner", SINGLE_FILE_STORES, ids=lambda owner: owner.__name__)
+def test_single_file_family_reads_during_writes(tmp_path, owner):
+    """Each member spawns three real processes, so each member is its own test: the cost of
+    one never shares a timeout with the family's size."""
+    path = tmp_path / owner.__name__
+    ready, release, reading, done = event(), event(), event(), event()
+    with process(_hold_store_write, owner, path, ready, release):
+        try:
+            assert ready.wait(SPAWN_SECONDS), owner
+            with process(_read_store_guard, owner, path, reading, done):
+                assert reading.wait(SPAWN_SECONDS), owner
+                assert done.wait(5), f"{owner.__name__} read waited on its writer"
+            started, entered = event(), event()
+            with process(_competing_write, owner, path, started, entered):
+                assert started.wait(SPAWN_SECONDS), owner
+                assert not entered.wait(0.2), f"{owner.__name__} admitted another writer"
                 release.set()
+                assert entered.wait(5), owner
+        finally:
+            release.set()
 
 
 def _hold_claim(path, ready, release):
