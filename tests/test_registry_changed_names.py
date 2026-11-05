@@ -59,11 +59,13 @@ def test_a_slice_holds_what_the_named_presentation_reads(tmp_path: Path) -> None
 
 def test_a_name_outside_the_slice_says_so(tmp_path: Path) -> None:
     import pytest
-    from agent_comms.errors import OutsideRegistrySlice
+    from agent_comms.errors import OutsideRegistrySlice, UnregisteredThreadError
 
     cut = registry_with_a_fork(tmp_path).snapshot().only(("alpha",))
-    with pytest.raises(OutsideRegistrySlice, match="not in this registry slice"):
+    with pytest.raises(OutsideRegistrySlice, match="not in this registry slice") as refused:
         cut.require("beta")
+    # beta is registered; a handler for gone threads must not read this as one.
+    assert not isinstance(refused.value, UnregisteredThreadError)
 
 
 def test_a_name_asked_for_but_never_registered_is_unregistered(tmp_path: Path) -> None:

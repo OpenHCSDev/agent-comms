@@ -14,6 +14,7 @@ from typing import Generic, TypeVar
 from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
 
 from .agent_activity import UnavailableRecipientActivity
+from agent_comms_hooks import ToolRefusedError
 from .errors import RelationViolationError, UnregisteredThreadError
 from .messages import PublicSender
 from .frozen_recipient import FrozenRecipient
@@ -187,7 +188,7 @@ class RegistryNames(Generic[Member]):
         except KeyError as error:
             raise self.unregistered(canonical) from error
 
-    def unregistered(self, name: str) -> UnregisteredThreadError:
+    def unregistered(self, name: str) -> ToolRefusedError:
         """The refusal for a name this namespace does not hold."""
         return UnregisteredThreadError(f"Thread {name!r} is not registered.")
 

@@ -1425,7 +1425,7 @@ class RegistrySlice(RegistrySnapshot):
 
     asked: Annotated[frozenset[str], SlicePolicy(WholeDocumentValue)] = frozenset()
 
-    def unregistered(self, name: str) -> UnregisteredThreadError:
+    def unregistered(self, name: str) -> ToolRefusedError:
         if name in self.asked:
             return super().unregistered(name)
         return OutsideRegistrySlice(
