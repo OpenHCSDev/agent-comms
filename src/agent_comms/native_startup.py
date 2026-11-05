@@ -69,11 +69,13 @@ class MeasuredSessionLoad(SessionLoad):
 
 @dataclass(frozen=True)
 class NativeStartupPolicy:
-    # A cold extension can initialize a local stdio server before Pi answers get_state.
-    readiness_seconds: float = 10.0
+    # A cold extension can initialize a local stdio server before Pi answers get_state, and cold
+    # starts share the CPU: 21 of 29 starting together on two busy cores ran past 10 s. This
+    # bound finds a hung Pi; it must not time the scheduler.
+    readiness_seconds: float = 30.0
     readiness_step_bytes: int = 8 * 1024 * 1024
     readiness_step_seconds: float = 2.0
-    readiness_max_seconds: float = 35.0
+    readiness_max_seconds: float = 55.0
 
     def readiness_timeout(
         self, session_load: SessionLoad, *, base_seconds: float
@@ -81,8 +83,8 @@ class NativeStartupPolicy:
         """Bound get_state wait by saved-session size, not the model/turn clock.
 
         A cold Pi parses the entire saved JSONL before responding. Allow two
-        extra seconds for each full 8 MiB beyond the first 8 MiB, up to 35s.
-        Missing/unreadable sessions retain the ten-second base bound.
+        extra seconds for each full 8 MiB beyond the first 8 MiB, up to the
+        maximum. Missing/unreadable sessions retain the base bound.
         """
         extra_steps = session_load.extra_steps(self.readiness_step_bytes)
         return min(
