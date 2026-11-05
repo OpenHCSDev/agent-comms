@@ -215,6 +215,11 @@ class DeclaredFamily(FamilyMember, ABC, metaclass=FamilyMeta):
 
     @classmethod
     def member_named(cls, name: object) -> type[Self]:
+        # Resolution acquires declarations the same way members_with does. A family whose
+        # declarations arrive from a producer package (tool_declaration imports `tools` here)
+        # would otherwise answer UnknownFamilyMember for a name that is merely not imported yet,
+        # and for_name turns that miss into an UndeclaredTool terminal.
+        cls._member_declarations()
         try:
             member = cls._named_member(name)
         except (KeyError, TypeError):
