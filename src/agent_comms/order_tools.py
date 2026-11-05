@@ -463,10 +463,11 @@ class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller], ThreadToolReque
                 resumed = ResumeClaimOrder(todo.revision, actor, generation, claim).record(
                     comms.goals, todo.id)
                 return TodoChanged(resumed, resumed.strike_count)
-        original = comms.bus.bus.lookup_message(todo.latest_message.message_id)
         claim = OrderClaim.for_order(
             todo, actor, self.pull_request, self.head, self.report.text,
-            original.reference, reviewer=self.reviewer,
+            tuple(comms.bus.bus.lookup_message(answered).reference
+                  for answered in todo.held().consent.answered(todo)),
+            reviewer=self.reviewer,
         )
         changed = ClaimOrder(
             todo.revision, actor, generation, claim

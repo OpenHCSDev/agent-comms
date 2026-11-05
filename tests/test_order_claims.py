@@ -23,7 +23,6 @@ from agent_comms.errors import (
     TodoConflict,
     TodoError,
     HumanSendRefusedError,
-    RelationViolationError,
 )
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -246,7 +245,7 @@ def test_self_assigned_claim_selects_a_reviewer_and_retains_its_choice(held_team
         problem=todo.id,
     )
     before = comms.bus.bus.revision()
-    with pytest.raises(RelationViolationError, match="cannot message itself"):
+    with pytest.raises(TodoError, match="name its reviewer"):
         ThreadCaller(todo.holder).invoke(request, comms)
     assert comms.goals.todos.get(todo.id) == todo
     assert comms.bus.bus.revision() == before
@@ -658,7 +657,7 @@ def test_two_delivery_claims_warn_without_deadlocking_other_orders(
         ).message
         claim = OrderClaim.for_order(
             todo, holder.incarnation, PullRequestLink(todo.repo, 1), head, "The source repair is published for review.",
-            sent.reference,
+            (sent.reference,),
         )
         claim = replace(claim, message=replace(claim.message, timestamp=time.time() - 3600))
         claims.append(ClaimOrder(

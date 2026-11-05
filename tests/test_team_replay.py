@@ -190,7 +190,7 @@ class Team:
             PullRequestLink(self.repository, number),
             head,
             "Delivered the repair",
-            original.reference,
+            (original.reference,),
         )
         claimed = replace(claimed, message=replace(claimed.message, timestamp=at))
         ClaimOrder(todo.revision, unit, todo.held().generation, claimed).record(
