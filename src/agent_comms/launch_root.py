@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import atexit
 import gc
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
@@ -15,11 +16,19 @@ from .nominal.field_codec import FieldCodec, PathText
 
 
 def started() -> None:
-    """A process has imported its program and is about to work: that heap lives as long as the
-    process, so freeze it. Collection never rescans it and exit skips finalizing it, which cost
-    1.3-1.5 s per connector stop and 0.57 s per agent-comms-team call. Call once per process:
-    freezing mid-run would pin per-request garbage, which is why LaunchSelection.install, also
-    run on every .selected(), never does."""
+    """A process has imported its program and is about to work. Freeze that heap now, so every
+    full collection while it runs skips the import graph (about 150-300 ms each), and freeze
+    again at exit, so shutdown's full collection skips what it built since: that scan cost
+    1.3-1.5 s per connector stop, 0.57 s per agent-comms-team call and 3.43 s in Toad's render
+    workers. The exit freeze first collects the young generations, so recently dropped cycles
+    still finalize (an unclosed writer still flushes). Call once per process:
+    LaunchSelection.install also runs on every .selected() and never does."""
+    gc.freeze()
+    atexit.register(_skip_final_collection)
+
+
+def _skip_final_collection() -> None:
+    gc.collect(1)
     gc.freeze()
 
 
