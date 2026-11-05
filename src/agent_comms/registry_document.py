@@ -25,7 +25,7 @@ from .channel_targets import TeammatesTag, ResolvedTarget, SurroundingChannel
 from .channels import Channel, ChannelMemberIndex
 from .child_process import ProcessIdentity
 from .nominal.declared_family import DeclaredFamily
-from .errors import OutsideRegistryCut, RelationViolationError, UnregisteredThreadError
+from .errors import OutsideRegistrySlice, RelationViolationError, UnregisteredThreadError
 from .nominal.field_codec import (
     TaggedUnion,
     ExternalJsonShape,
@@ -1183,13 +1183,13 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
     def lookup_names(self) -> Mapping[ThreadLookup, str]:
         return MappingProxyType(self.threads.lookup_names())
 
-    def only(self, names: Iterable[str]) -> RegistryCut:
-        """The cut a caller reading ``names`` needs: the rows each one's presentation reads,
+    def only(self, names: Iterable[str]) -> RegistrySlice:
+        """The slice a caller reading ``names`` needs: the rows each one's presentation reads,
         beside every shared field. A remote UI opening one thread
         reads this, not the whole document, almost all of which is other threads' rows."""
         kept = frozenset().union(*(self.read_by(name) for name in names))
-        return RegistryCut(*(ThreadSlice.of(plan).only(plan.current(self), kept)
-                            for plan in FieldCodec.field_plans(type(self)) if plan.declared.init))
+        return RegistrySlice(*(ThreadSlice.of(plan).only(plan.current(self), kept)
+                              for plan in FieldCodec.field_plans(type(self)) if plan.declared.init))
 
     def changed_names(self, earlier: RegistrySnapshot) -> frozenset[str]:
         """The names whose registry facts differ from ``earlier``'s, by each field's declared
@@ -1411,13 +1411,13 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
 
 
 @dataclass(frozen=True, slots=True)
-class RegistryCut(RegistrySnapshot):
+class RegistrySlice(RegistrySnapshot):
     """The rows a caller asked for, beside every shared field. A name it did not ask for is
-    outside the cut, not unregistered, so its refusal says which."""
+    outside the slice, not unregistered, so its refusal says which."""
 
     def unregistered(self, name: str) -> UnregisteredThreadError:
-        return OutsideRegistryCut(
-            f"Thread {name!r} is not in this registry cut; ask for it by name.")
+        return OutsideRegistrySlice(
+            f"Thread {name!r} is not in this registry slice; ask for it by name.")
 
 
 class UnreadRegistry:

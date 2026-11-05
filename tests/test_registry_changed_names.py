@@ -44,7 +44,7 @@ def test_a_reader_that_read_no_cut_rereads_every_thread(tmp_path: Path) -> None:
     assert UnreadRegistry().changed_names_to(snapshot) >= {"alpha", "beta", "alpha-fork"}
 
 
-def test_a_cut_holds_what_the_named_presentation_reads(tmp_path: Path) -> None:
+def test_a_slice_holds_what_the_named_presentation_reads(tmp_path: Path) -> None:
     """A remote UI opening a fork reads its row and its parent's, never the other threads'."""
     snapshot = registry_with_a_fork(tmp_path).snapshot()
 
@@ -57,10 +57,10 @@ def test_a_cut_holds_what_the_named_presentation_reads(tmp_path: Path) -> None:
     assert cut.team_project == snapshot.team_project
 
 
-def test_a_name_outside_the_cut_says_so(tmp_path: Path) -> None:
+def test_a_name_outside_the_slice_says_so(tmp_path: Path) -> None:
     import pytest
-    from agent_comms.errors import OutsideRegistryCut
+    from agent_comms.errors import OutsideRegistrySlice
 
     cut = registry_with_a_fork(tmp_path).snapshot().only(("alpha",))
-    with pytest.raises(OutsideRegistryCut, match="not in this registry cut"):
+    with pytest.raises(OutsideRegistrySlice, match="not in this registry slice"):
         cut.require("beta")

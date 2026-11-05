@@ -155,7 +155,7 @@ from .acp_extension import CoordinationChangedUpdate
 from .history_views import RetiredViews
 from .thread_identity import ThreadIncarnation
 from .display_references import ReferenceNames
-from .registry_document import ProjectThreadSelection, RegistryCut, RegistrySnapshot
+from .registry_document import ProjectThreadSelection, RegistrySlice, RegistrySnapshot
 from .transcripts import TranscriptCursor
 from .host_logs import HostLog, HostLogRead
 from .tool_result import ToolResult
@@ -1381,15 +1381,15 @@ class CommsRegistryTool(CoreRead[RegistrySnapshot]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsRegistryCutTool(CoreRead[RegistryCut]):
+class CommsRegistrySliceTool(CoreRead[RegistrySlice]):
     """A remote UI reads the registry facts of the threads it is showing, not every thread's."""
 
-    label = "Thread registry cut"
+    label = "Thread registry slice"
     description = ("The thread registry snapshot holding only the named threads: their rows, "
                    "statuses, aliases and owner generations, with the fields every thread shares.")
     threads: Annotated[tuple[str, ...], *tool_field("Thread names, current or renamed")]
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> RegistryCut:
+    def apply(self, comms: Comms, caller: ToolCaller) -> RegistrySlice:
         return comms.registry.snapshot().only(self.threads)
 
 

@@ -55,8 +55,8 @@ class UnregisteredThreadError(ToolRefusedError):
     """A reference does not resolve to a registered thread."""
 
 
-class OutsideRegistryCut(UnregisteredThreadError):  # noqa: N818 - a refusal, named for its case
-    """A name the registry cut was not asked for: it may well be registered."""
+class OutsideRegistrySlice(UnregisteredThreadError):  # noqa: N818 - a refusal, named for its case
+    """A name the registry slice was not asked for: it may well be registered."""
 
 
 class UnknownChannelError(ToolRefusedError):

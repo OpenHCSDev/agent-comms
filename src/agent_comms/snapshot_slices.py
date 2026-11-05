@@ -43,7 +43,7 @@ class ThreadSlice[Value](ABC):
 
     @classmethod
     def only(cls, value: Value, names: frozenset[str]) -> Value:
-        """This field in a cut holding only ``names``: a field every thread shares is whole."""
+        """This field in a slice holding only ``names``: a field every thread shares is whole."""
         return value
 
     @classmethod
