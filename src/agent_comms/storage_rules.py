@@ -6,7 +6,7 @@ import math
 import shutil
 import time
 from abc import abstractmethod
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
@@ -113,7 +113,27 @@ class CheckoutAllocation(DeclaredFamily, affix="CheckoutAllocation"):
 
     def editable_roots(self, rule: StorageRule, owner: Thread, store: TodoStore,
                        repository: RepositoryName) -> frozenset[Path]:
-        return frozenset()
+        roots: set[Path] = set()
+        for goal in owner.goal:
+            try:
+                roots |= set(GoalCheckoutAllocation.for_goal(rule, owner, goal.id, repository))
+            except GitCommandError:
+                # A declaration whose checkout cannot be read contributes no editable
+                # root. It is that tree's problem: this walk serves the owner's own
+                # write, and one unreadable declaration must not deny a tree that is
+                # still there. A write into the unreadable tree is still refused
+                # downstream, because it contributes no root to what is allowed.
+                continue
+        for current in store.held_by(owner.incarnation):
+            companions = current.order.source_repositories()
+            if repository in (current.repo, *companions):
+                try:
+                    roots |= rule.edit_boundaries(owner, current.id, current.repo,
+                                                   companions, current.held().generation)
+                except GitCommandError:
+                    # The same for a held order whose checkout cannot be read.
+                    continue
+        return frozenset(roots)
 
     def reserves_boundary(self) -> bool:
         return False
@@ -141,15 +161,31 @@ class EditableCheckoutAllocation(CheckoutAllocation):
 
     def editable_roots(self, rule: StorageRule, owner: Thread, store: TodoStore,
                        repository: RepositoryName) -> frozenset[Path]:
-        roots = frozenset(path for goal in owner.goal
-                          for path in GoalCheckoutAllocation.for_goal(
-                              rule, owner, goal.id, repository))
+
+        def readable(declared: Callable[[], Iterable[Path]]) -> Iterable[Path]:
+            """The roots a declaration supplies when its own checkout can be read.
+
+            This walk serves the owner's own write, so an unreadable declaration
+            contributes nothing instead of denying a tree that is still there. A write
+            INTO the unreadable tree is still refused downstream, because it adds no
+            root to what the projection allows. Selection is untouched and still
+            refuses to allocate around unreadable history.
+            """
+            try:
+                return declared()
+            except GitCommandError:
+                return frozenset()
+
+        roots: set[Path] = set()
+        for goal in owner.goal:
+            roots |= set(readable(lambda goal=goal: GoalCheckoutAllocation.for_goal(
+                rule, owner, goal.id, repository)))
         for current in store.held_by(owner.incarnation):
             companions = current.order.source_repositories()
             if repository in (current.repo, *companions):
-                roots |= rule.edit_boundaries(owner, current.id, current.repo,
-                                               companions, current.held().generation)
-        return roots
+                roots |= set(readable(lambda current=current: rule.edit_boundaries(
+                    owner, current.id, current.repo, companions, current.held().generation)))
+        return frozenset(roots)
 
     def reserves_boundary(self) -> bool:
         return True
