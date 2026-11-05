@@ -39,7 +39,7 @@ from agent_comms.active_route import (
 )
 from agent_comms.bus import Bus
 from agent_comms.cli_bridges.shared import BridgeResume, Serve, SessionBridgeResumes
-from agent_comms.cli_commands import BusReadBack
+from agent_comms.cli_commands import BusReadBack, StoreDifference
 from agent_comms.cli_command import CliCommand
 from agent_comms.cli_verbs.planned_reconcile import PlannedReconcileCliCommand
 from agent_comms.cli_verbs.read_back import ReadBackCliCommand
@@ -207,6 +207,21 @@ class StepRun:
     carry: str
     carried: Carried
 
+    def lines(self) -> tuple[str, ...]:
+        return (f"Carried {self.carry}: {self.carried.changed} changed",)
+
+
+@dataclass(frozen=True)
+class ReconciledStepRun(StepRun):
+    """The reconcile names each store it rebuilt and what differed: a rebuild of a 1.18 GB
+    bus that said only "1 changed" took a host read to explain."""
+
+    differences: tuple[StoreDifference, ...]
+
+    def lines(self) -> tuple[str, ...]:
+        return (*super().lines(), *(
+            f"  {each.path}: {each.difference}" for each in self.differences))
+
 
 @dataclass(frozen=True)
 class RehearsalFiles:
@@ -370,7 +385,7 @@ class CarriedRun(CarriedPass, StoppedOwners, RestartedServices, LiveRun):
 
     def lines(self) -> tuple[str, ...]:
         return (
-            *(f"Carried {step.carry}: {step.carried.changed} changed" for step in self.steps),
+            *(line for step in self.steps for line in step.lines()),
             *self.stopped_lines(),
             *(line for owner in self.started for line in owner.lines()),
             *self.service_lines(),
@@ -1100,8 +1115,8 @@ class PreparedMigration(Extendable):
                 self.files, self.writer_stores,
                 scratch=StorageRule.load(self.files.source_root()).scratch_base))
             reconciled = staged.cli(self.root, ReconcileStoresCliCommand, *reconcile_arguments)
-            steps.append(StepRun(ReconcileStoresCliCommand.declared_name, Carried(
-                len(reconciled.rewritten), rewritten=reconciled.rewritten)))
+            steps.append(ReconciledStepRun(ReconcileStoresCliCommand.declared_name, Carried(
+                len(reconciled.rewritten), rewritten=reconciled.rewritten), reconciled.differences))
             declared = tuple(steps)
             with AfterMigrationFileScanPhase().running(staged.commands.clock):
                 files = carried(self.files, self.before, declared,

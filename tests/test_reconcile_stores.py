@@ -197,10 +197,14 @@ def test_reconcile_names_every_store_it_carried_back_under_the_hold(private_comm
         completed = reconcile(root, holder)
         assert completed.returncode == 0, completed.stdout + completed.stderr
         assert tuple(json.loads(completed.stdout)["rewritten"]) == tuple(sorted(dropped))
+        named = {(each["path"], each["difference"]["name"])
+                 for each in json.loads(completed.stdout)["differences"]}
+        assert named >= set(dropped.items()), "each rebuild names the object that differed"
         for name, index in dropped.items():
             with closing(sqlite3.connect(root / name)) as db:
                 assert db.execute("SELECT 1 FROM sqlite_master WHERE name=?", (index,)).fetchone()
-        assert json.loads(reconcile(root, holder).stdout)["rewritten"] == []
+        again = json.loads(reconcile(root, holder).stdout)
+        assert again["rewritten"] == [] and again["differences"] == []
 
 
 def test_a_schema_change_outside_the_hold_is_refused_naming_the_store(private_comms):

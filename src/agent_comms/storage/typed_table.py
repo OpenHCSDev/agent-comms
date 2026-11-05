@@ -1549,18 +1549,19 @@ class TableSchema(ABC):
     def reconcile_schema(
         cls, db: sqlite3.Connection, change: SchemaChange,
         *, rebuild: SchemaRebuild = FULL_SCHEMA_REBUILD,
-    ) -> bool:
+    ) -> tuple[SQLiteSchemaDifference, ...]:
         """The carry of a stored schema that differs from the declaration, in a write
-        transaction of its own and only where ``change`` allows; whether it changed the
-        file."""
+        transaction of its own and only where ``change`` allows; the differences it carried,
+        none when the file already matched."""
         if not cls.schema_differs(db):
-            return False
+            return ()
+        differences = cls.schema_differences(db)
         change.require()
         with SQLiteForeignKeys.relations_suspended(db):
             with rebuild.attached(db) as attached, SQLiteFile.write_transaction(db):
                 cls.carry_schema(db, rebuild=attached)
                 cls.require_related_rows(db)
-        return True
+        return differences
 
     @classmethod
     def install_schema(cls, db: sqlite3.Connection, change: SchemaChange) -> None:
@@ -3269,8 +3270,10 @@ class ReconciledFile(SQLiteFile, StoreLockFile):
         return FULL_SCHEMA_REBUILD
 
     @classmethod
-    def reconcile_at(cls, path: Path, practice: Practice = NoPractice()) -> bool:
-        """Whether reconciling the file changed it using the decoded practice choice."""
+    def reconcile_at(
+        cls, path: Path, practice: Practice = NoPractice(),
+    ) -> tuple[SQLiteSchemaDifference, ...]:
+        """What reconciling the file changed, using the decoded practice choice."""
         schema = cls.schema_at(path)
         rebuild = practice.rebuild_for(cls, path)
         with cls.exclusive_writer(path, uri=True) as db:

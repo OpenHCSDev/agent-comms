@@ -22,14 +22,14 @@ from agent_comms.owner_protocol import OwnerFailure, OwnerLine
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (
     DeliveredProblemOrder, MergedListedPullRequest, OrderMessage, PullRequestCommit,
-    PullRequestLink, StrikeTodo, TeammateOccupied,
+    DeliveryReport, PullRequestLink, SelectedClaimReviewer, StrikeTodo, TeammateOccupied,
 )
 from agent_comms.work_branches import WorkBranches
 from agent_comms.owner_requests import NewestOpenRequest
 from agent_comms.order_runs import ApplicationOrderRun
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsChannelsTool
-from agent_comms.order_tools import CommsTodoCreateTool
+from agent_comms.order_tools import CommsOrderDeliverTool, CommsTodoCreateTool
 
 
 pytest_plugins = ("test_todos",)
@@ -216,6 +216,16 @@ def test_a_teammate_files_its_own_second_row_beside_the_one_it_holds(held_team, 
         order=replace(order(cited_source), id=OrderId.mint()))
     ThreadCaller("worker").invoke(CommsTodoCreateTool(owner="worker", order=creation), ctx.comms)
     assert {todo.id for todo in ctx.comms.goals.todos.held_by(worker.incarnation)} == {"P1", "P2"}
+
+    # Nobody sent this order, so its delivery answers no message and goes to the reviewer named.
+    reviewer = ctx.comms.registry.require(ctx.actor_name).incarnation
+    ThreadCaller("worker").invoke(CommsOrderDeliverTool(
+        problem="P2", pull_request=PullRequestLink(held.repo, 7), head="b" * 40,
+        report=DeliveryReport("The second workflow was broken by a stale decision; check the PR head."),
+        reviewer=SelectedClaimReviewer(reviewer),
+    ), ctx.comms)
+    claim, = ctx.comms.goals.todos.get("P2").order.team_claims()
+    assert (claim.message.target, claim.message.answers) == (reviewer.name, ())
 
 
 def test_an_order_waiting_on_install_frees_its_holder_for_the_next_order(

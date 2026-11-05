@@ -190,7 +190,7 @@ def claim_order(held_bus, github_cli):
             reviewable_times=(),
         ))
         claimed = OrderClaim.for_order(todo, worker, PullRequestLink(todo.repo, pull_request), head,
-                                      "Review the published repair", original.reference)
+                                      "Review the published repair", (original.reference,))
         claimed = replace(claimed, message=replace(
             claimed.message, timestamp=time.time() - AwaitingTeam.seconds - 1))
         ClaimOrder(todo.revision, worker, todo.held().generation, claimed).record(
@@ -221,7 +221,7 @@ def test_order_claim_publishes_only_to_its_retained_team_birth(
         todo.id, OrderMessage(todo.revision, colleague, original.message_id, at=RecordedEventTime(time.time())))
     claim = OrderClaim.for_order(
         todo, worker, PullRequestLink(todo.repo, 1), "a" * 40,
-        "Review this published repair with @outsider", original.reference)
+        "Review this published repair with @outsider", (original.reference,))
     if change == "rename":
         comms.registry.rename("colleague", "renamed")
     elif change == "rename_holder":

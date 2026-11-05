@@ -3223,7 +3223,7 @@ class ClaimReviewer(DeclaredFamily, affix="ClaimReviewer"):
 @dataclass(frozen=True)
 class AssignedClaimReviewer(ClaimReviewer):
     def identity(self, todo: Todo) -> ThreadIncarnation:
-        return todo.held().parent_identity
+        return todo.held().consent.assigned_reviewer(todo)
 
 
 @dataclass(frozen=True)
@@ -3262,12 +3262,12 @@ class OrderClaim:
     @classmethod
     def for_order(
         cls, todo: Todo, actor: ThreadIncarnation, pull_request: PullRequestLink, head: str,
-        report: str, answer: MessageReference, *,
+        report: str, answers: tuple[MessageReference, ...], *,
         reviewer: ClaimReviewer = AssignedClaimReviewer(),
     ) -> OrderClaim:
         return cls(
             pull_request, head,
-            Message(actor.name, reviewer.identity(todo).name, report, InfoKind, answers=(answer,)),
+            Message(actor.name, reviewer.identity(todo).name, report, InfoKind, answers=answers),
             reviewer=reviewer,
         )
 
@@ -3692,6 +3692,14 @@ class HolderConsent(ABC):
     def require(self, incoming: IncomingWork, db: sqlite3.Connection, unit: ThreadIncarnation,
                 snapshot: RegistrySnapshot) -> None: ...
 
+    @abstractmethod
+    def answered(self, todo: Todo) -> tuple[MessageId, ...]:
+        """The order message a delivery of this work answers."""
+
+    @abstractmethod
+    def assigned_reviewer(self, todo: Todo) -> ThreadIncarnation:
+        """Who reviews a delivery when the deliver call names nobody."""
+
 
 class HandedWork(HolderConsent):
     """Work a colleague hands over: a busy holder refuses it unless it belongs to held work."""
@@ -3699,6 +3707,12 @@ class HandedWork(HolderConsent):
     def require(self, incoming: IncomingWork, db: sqlite3.Connection, unit: ThreadIncarnation,
                 snapshot: RegistrySnapshot) -> None:
         incoming.require_free(db, unit, snapshot)
+
+    def answered(self, todo: Todo) -> tuple[MessageId, ...]:
+        return (todo.latest_message.message_id,)
+
+    def assigned_reviewer(self, todo: Todo) -> ThreadIncarnation:
+        return todo.held().parent_identity
 
 
 class SelfFiledWork(HolderConsent):
@@ -3708,6 +3722,15 @@ class SelfFiledWork(HolderConsent):
     def require(self, incoming: IncomingWork, db: sqlite3.Connection, unit: ThreadIncarnation,
                 snapshot: RegistrySnapshot) -> None:
         pass
+
+    def answered(self, todo: Todo) -> tuple[MessageId, ...]:
+        """Nobody sent this order, so its delivery answers no message."""
+        return ()
+
+    def assigned_reviewer(self, todo: Todo) -> ThreadIncarnation:
+        """The assigner is the holder, and nobody reviews their own delivery."""
+        raise TodoError(f"{todo.id} is self-filed: name its reviewer with `reviewer` "
+                        "(an independent teammate's name and birth).")
 
 
 @dataclass(frozen=True)

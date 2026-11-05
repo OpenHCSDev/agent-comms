@@ -197,7 +197,7 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
         PullRequestLink(todo.repo, 1),
         "a" * 40,
         "The request owner was inspected.",
-        original.reference,
+        (original.reference,),
     )
     assert claim.message.target == first.teammate.name
     assert claim.message.answers == (original.reference,)
@@ -274,7 +274,7 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
         PullRequestLink(awaiting_todo.repo, 2),
         "b" * 40,
         "The request's work is ready for review.",
-        original.reference,
+        (original.reference,),
     )
     claimed = store.apply(
         awaiting_todo.id,

@@ -51,7 +51,7 @@ def board_review(head_bus):
             todo.revision, colleague, original.message_id, at=RecordedEventTime(time.time())))
         delivery = OrderClaim.for_order(todo, worker, PullRequestLink(todo.repo, request.pr), request.head,
                                         "Review the broken duplicated decision repair",
-                                        original.reference)
+                                        (original.reference,))
         ClaimOrder(todo.revision, worker, todo.held().generation, delivery).record(comms.goals, todo.id)
         return comms.goals.todos.get(todo.id)
 
