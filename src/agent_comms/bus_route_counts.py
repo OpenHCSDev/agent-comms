@@ -108,12 +108,12 @@ class RouteCounts(ABC):
              ORDER BY route.seq LIMIT 1) AS sender_lookup
         FROM request_targets AS target,arguments,json_each(arguments.unrecorded) AS source
     ), route_keys AS MATERIALIZED (
-        SELECT DISTINCT row.target,row.sender,row.sender_lookup,sender.since
-        FROM request_targets AS target
-        CROSS JOIN "{BusRouteCounts.declared_name}" AS row ON row.target=target.target
-        JOIN sender_keys AS sender ON sender.sender=row.sender
-            AND sender.sender_lookup IS row.sender_lookup
-        WHERE row.seq>(SELECT after FROM arguments) AND row.seq<=(SELECT through FROM arguments)
+        SELECT DISTINCT target.target,sender.sender,sender.sender_lookup,sender.since
+        FROM request_targets AS target CROSS JOIN sender_keys AS sender
+        WHERE EXISTS (SELECT 1 FROM "{BusRouteCounts.declared_name}" AS row
+            WHERE row.target=target.target AND row.sender=sender.sender
+                AND row.sender_lookup IS sender.sender_lookup
+                AND row.seq>(SELECT after FROM arguments) AND row.seq<=(SELECT through FROM arguments))
         UNION ALL
         SELECT route.*,birth.since FROM unrecorded AS route
         JOIN births AS birth ON birth.name=route.sender WHERE route.sender_lookup IS NOT NULL
