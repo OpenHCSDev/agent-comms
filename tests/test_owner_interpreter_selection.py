@@ -2,8 +2,10 @@
 
 from dataclasses import replace
 from functools import partial
+import sys
 
 import pytest
+from xdist.remote import setproctitle
 
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
@@ -27,6 +29,10 @@ async def test_original_session_launches_share_host_and_refuse_changed_selection
             await start_headless_owner(agent, name, original)
             expected[name] = agent.inputs.state(name).owned().configuration.launch
         snapshot = comms.registry.snapshot()
+        # This owner is the test process, and pytest-xdist retitles its workers per test, which
+        # overwrites argv[0]. A launched owner's argv[0] is its interpreter (owner_lifecycle.py).
+        # xdist's own writer does nothing exactly where xdist could not have retitled it either.
+        setproctitle(sys.executable)
         selections = tuple(OwnerRestartSelection.capture(snapshot, name) for name in expected)
         assert len({selected.process for selected in selections}) == 1
         for selected in selections:
