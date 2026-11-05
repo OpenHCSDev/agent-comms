@@ -1,4 +1,5 @@
 """Real native Pi and owner socket: cancelled goals need an explicit fresh grant."""
+from agent_comms.coordination.errors import Refused
 from agent_comms.controller import SessionUpdateSink
 from agent_comms.input_key import AcpInputKey
 
@@ -60,9 +61,10 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(tm
             comms = owner._comms
             proxy = owner._create_runtime_proxy(comms.registry.require(session), session)
             await proxy.subscribe()
+            thread = comms.registry.require(session).name
             owner.inputs.dispositions.record(
-                UNCERTAIN_SENTINEL_KEY, seq=None, owner=session, claim_scope=1,
-                target=session, text="UNCERTAIN_INPUT_MUST_NOT_REPLAY",
+                UNCERTAIN_SENTINEL_KEY, seq=None, owner=thread, claim_scope=1,
+                target=thread, text="UNCERTAIN_INPUT_MUST_NOT_REPLAY",
             )
             sentinel_before = stored_inputs(owner.inputs.dispositions.root).rows.get(
                 UNCERTAIN_SENTINEL_KEY)
@@ -88,7 +90,7 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(tm
                 failed = GoalAttemptStore.at(store.root).snapshot(goal_id)
                 assert isinstance(paused.state, PausedGoal)
                 assert failed.lifecycle == BlockedGeneration() and failed.attempt_id == claimed.attempt_id
-                with pytest.raises(RuntimeError):
+                with pytest.raises(Refused):
                     await proxy.request(
                         "update_goal", status="active", goal_id=goal_id,
                         expected_revision=paused.revision,
