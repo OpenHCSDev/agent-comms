@@ -9,9 +9,12 @@ on:
   workflow_dispatch:
   workflow_call:
 
-# A push runs once per commit: a shared main group let each new pending run cancel the last.
+# One running suite per ref and one pending run on its newest commit. Each suite is a full
+# matrix: a group per commit ran one per merge in parallel, and on 2026-11-05 six of them held
+# every hosted runner while the merge queue sat 30 minutes without one. A merge skipped this
+# way is covered by the next run; a red is bisected between the two.
 concurrency:
-  group: ci-${{ github.event_name == 'push' && github.sha || github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: false
 
 env:
