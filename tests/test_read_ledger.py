@@ -10,7 +10,7 @@ import pytest
 from agent_comms.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.coordination.errors import DMPaintedBoundChanged, StaleRevision
+from agent_comms.coordination.errors import DMPaintedBoundChanged, ReadAgain
 from agent_comms.nominal.field_codec import FieldCodec, TurnId
 from agent_comms.message_page import MessagePageRequest, PageBounds
 from agent_comms.page_traversal import PageCursor
@@ -457,7 +457,7 @@ def test_read_property_includes_dm_rebind_stale_paints_and_abrupt_reopen(tmp_pat
                     comms.views.presentation.mark_channel_read(
                         target, viewer=viewer, mark=ReadThrough(through, proof),
                     )
-            except StaleRevision as error:
+            except ReadAgain as error:
                 # A stale incarnation is a refused paint, not permission to
                 # acknowledge a new peer using an old page.
                 stale_participant = any(
