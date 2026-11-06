@@ -223,7 +223,8 @@ def refused_publication(comms: Comms) -> Iterator[None]:
 
 
 def lead_hud(comms, states=()):
-    return current_hud(comms, "colleague", capture_frame(comms, ProgressRead()), states)
+    return current_hud(comms, "colleague", capture_frame(comms, ProgressRead()), states,
+                       CodexUsage.read())
 
 
 def assert_status_fields(message, hud):

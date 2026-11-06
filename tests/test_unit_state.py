@@ -383,9 +383,9 @@ def test_heartbeat_keeps_every_teammate_when_one_checkout_is_unreadable(
         else:
             assert not isinstance(worker, Unreadable)
         asyncio.run(ObservedHeartbeat(observed).run(lambda: nullcontext(held_bus)))
-        expected = current_hud(held_bus, colleague.name, observed.frame, cards)
         published, = TeamFrame.read_all(held_bus.root)
-        assert published == expected
+        assert published == current_hud(held_bus, colleague.name, observed.frame, cards,
+                                        published.usage)
         assert tuple(unit.unit for unit in published.units) == tuple(card.unit for card in cards)
         packets = TeamUpdate.latest(held_bus, colleague.incarnation)
         assert tuple(ping for packet in packets for ping in packet.handled

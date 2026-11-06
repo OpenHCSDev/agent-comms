@@ -32,9 +32,12 @@ def capture_frame(comms: Comms, pulls: ProgressRead,
 
 
 def current_hud(comms: Comms, reader: str, frame: HeartbeatFrame,
-                states: tuple[TeammateState, ...]) -> TeamHud:
-    """The team board as one teammate reads it; production derives its delivery."""
-    usage = CodexUsage.read()
+                states: tuple[TeammateState, ...], usage: CodexUsage) -> TeamHud:
+    """The team board as one teammate reads it; production derives its delivery.
+
+    `usage` is the Codex account reading the board shows. A test comparing with a published
+    board passes the reading that board published: the live account answers a second read
+    with whatever its reset clock says by then."""
     owner = comms.registry.require(reader).incarnation
     previous = TeamUpdate.latest(comms, owner)
     packet = next(iter(previous), TeamUpdateNotice(owner, ()))
