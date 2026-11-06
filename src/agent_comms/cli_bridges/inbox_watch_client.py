@@ -285,10 +285,44 @@ class WatchStopped(WatchEnd):
                 "someone wakes it, connect again.")
 
 
+WATCHING = "Watching your inbox; each message arrives as an event."
 RECONNECTS_ALONE = "This watch reconnects on its own after a network reset."
 WAITS_FOR_MAINTENANCE = ("The bus is under maintenance, as during an install; this watch waits for "
                          "it and reconnects on its own.")
 """Said when the connector hands over a reconnect URL; the URL itself is never shown."""
+
+
+class Announcement:
+    """What this process has told the session about its watch. Every printed line wakes the
+    session for a turn, so each fact is said once per process: a reconnect that works is the
+    watch doing its job and says nothing; one that fails ends with its own line. On 2026-11-06
+    each reset printed three lines, and teammates spent a dozen turns acknowledging them."""
+
+    def opened(self) -> Announcement:
+        return self
+
+    def reconnectable(self) -> Announcement:
+        return self
+
+
+class Unannounced(Announcement):
+    """Nothing said yet: the first socket to open says the watch is up."""
+
+    def opened(self) -> Announcement:
+        print(WATCHING, flush=True)
+        return Watching()
+
+
+class Watching(Announcement):
+    """Said to be watching: the first reconnect URL says the watch outlives a reset."""
+
+    def reconnectable(self) -> Announcement:
+        print(RECONNECTS_ALONE, flush=True)
+        return Reconnectable()
+
+
+class Reconnectable(Announcement):
+    """Both said; a re-dialled socket and its fresh reconnect URL say nothing new."""
 
 
 class Pauses(ABC):
@@ -360,7 +394,6 @@ class ReconnectWith(HeldReconnect):
                   f"{watch.redials.most} times in {watch.redials.window_seconds} s; giving the "
                   "reconnect back to you.", flush=True)
             return dropped
-        print(f"Your inbox watch {dropped.reason}; reconnecting on its own.", flush=True)
         return await (await watch.opened(self.url)).redialing(
             watch, self.url, watch.redials.pauses)
 
@@ -384,6 +417,7 @@ class Redials:
 
     held: HeldReconnect = field(default_factory=NoReconnect)
     used: list[float] = field(default_factory=list)
+    told: Announcement = field(default_factory=Unannounced)
 
     most: ClassVar[int] = 5
     window_seconds: ClassVar[int] = 600
@@ -510,7 +544,7 @@ class InboxSocket:
                 url, proxy=self.proxy, heartbeat=25.0
             ) as socket:
                 stage = Open()
-                print("Watching your inbox; each message arrives as an event.", flush=True)
+                self.redials.told = self.redials.told.opened()
                 for report in self.ledger.reports():
                     await socket.send_str(report)
                 await socket.send_str(ReconnectsAlone(printed=()).line())
@@ -539,10 +573,8 @@ class InboxSocket:
     async def received(self, frame: str, socket: ClientWebSocketResponse) -> None:
         """A message, or the connector's reconnect URL, which is kept and never shown."""
         if frame.startswith(ReconnectUrl.wire_prefix):
-            held = ReconnectWith(ReconnectUrl.model_validate_json(frame).url)
-            if held != self.redials.held:
-                print(RECONNECTS_ALONE, flush=True)
-            self.redials.held = held
+            self.redials.held = ReconnectWith(ReconnectUrl.model_validate_json(frame).url)
+            self.redials.told = self.redials.told.reconnectable()
             return
         await self.deliver(frame, socket)
 
