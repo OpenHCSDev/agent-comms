@@ -30,6 +30,7 @@ from agent_comms.cli_bridges.inbox_watch_client import (
 from agent_comms.comms import Comms
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.connector import Connector
+from agent_comms.connector_caller import GrantRefusedError
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.message_reference import MessageReference
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
@@ -576,6 +577,40 @@ async def test_a_reconnect_url_opens_once_and_a_newer_watch_ends_it(session, com
         await client.ws_connect(standing)
     await again.close()
     await rearmed.close()
+
+
+async def test_a_reconnect_url_outlives_the_connector_that_minted_it(
+    tmp_path: Path, comms: Comms,
+) -> None:
+    """Every install restarts the connector, and a reset client re-dials into the new process:
+    at 03:15 on 2026-11-06 three cloud watches were refused across one install, because their
+    tickets lived in the old process's memory. The ticket is the connector's own fact, kept in
+    its store, so the next process honours it once, and it never authorizes an MCP call."""
+    comms.registry.declare(ExternalThread("claude-ai", frozenset(), Checkout(comms.root)))
+    store = ConnectorStore.at(tmp_path / "auth")
+    port = unused_port()
+    issuer = f"http://127.0.0.1:{port}"
+    with store.granted("test") as token:
+        async with TestServer(Connector(store, issuer, comms.root).application(), port=port) as server:
+            async with TestClient(server) as client:
+                first = await client.ws_connect(await watch_path(client, token, "cloud"))
+                path = await reconnect_url(first)
+                await first.close()
+        with pytest.raises(GrantRefusedError):
+            store.read().caller_for(URL(path).name)
+        async with TestServer(Connector(store, issuer, comms.root).application(), port=port) as server:
+            async with TestClient(server) as client:
+                again = await client.ws_connect(path)
+                opened_with = await asyncio.wait_for(again.receive_str(), timeout=30)
+                assert opened_with.startswith(ReconnectUrl.wire_prefix)
+                with pytest.raises(WSServerHandshakeError):
+                    await client.ws_connect(path)
+                standing = await reconnect_url(again)
+                await again.close()
+                # Revoking the thread ends its watch's reconnect URL with its grant.
+                store.thread_revoked("cloud")
+                with pytest.raises(WSServerHandshakeError):
+                    await client.ws_connect(standing)
 
 
 def attempt_outcome(comms: Comms, message) -> str:
