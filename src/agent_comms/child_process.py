@@ -1762,6 +1762,29 @@ class ReadWork(AsyncWork):
         pending.cancel()
 
 
+class HelperStart(ABC):
+    """How a helper interpreter that runs the application's own code starts: a route
+    observer, a render worker. Each owner that starts one declares its member.
+
+    The application spawns a fresh interpreter: it leaves through normal finalisation, so its
+    atexit hooks (the exit heap freeze, launch_root.started) run. A test runner that already
+    holds the application imported declares an owner whose member forks from that warm
+    interpreter instead.
+    """
+
+    @abstractmethod
+    def context(self) -> multiprocessing.context.SpawnContext:
+        """Every member speaks spawn's protocol (a pickled process object on a pipe); a
+        member decides only what interpreter receives it."""
+
+
+class SpawnedHelper(HelperStart):
+    """A fresh interpreter per helper, importing what it runs."""
+
+    def context(self) -> multiprocessing.context.SpawnContext:
+        return multiprocessing.get_context("spawn")
+
+
 async def join_retirement[Result](task: asyncio.Future[Result]) -> Result:
     """Join owned cleanup through repeated cancellation, then propagate it."""
     interrupted = None
