@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agent_comms.bus import Bus, BusSnapshot
+from agent_comms.bus_route_counts import HeldUnseenCounts
 from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.catalog_document import CatalogAccess
 from agent_comms.channel_targets import ChannelTarget, NamedTarget
@@ -152,6 +153,7 @@ class MessageBus[Writes: Publisher]:
         self.history = HistoryArchive.at(self.bus.path.parent)
         self._registry = registry
         self._channels = ChannelCatalog.at(root)
+        self._pending = HeldUnseenCounts()
         self.publisher = publisher(self.bus, registry, self._channels, self.opened_activity)
 
     @contextmanager
@@ -296,11 +298,10 @@ class MessageBus[Writes: Publisher]:
     ) -> Mapping[str, int]:
         actor = selection.require_viewer()
         delivery = DeliveryScope.capture(actor, selection.registry, selection.catalog)
-        counts = dict.fromkeys(conversations, 0)
-        counts.update(source.unseen_counts(
-            selection.registry, {actor: delivery}, {actor: selection.seen(source)},
-        )[actor])
-        return counts
+        # Every viewer snapshot asks; between two of them only appended rows can be new.
+        self._pending = source.advanced_unseen_counts(
+            self._pending, selection.registry, {actor: delivery}, {actor: selection.seen(source)})
+        return {**dict.fromkeys(conversations, 0), **self._pending.counts[actor]}
 
     def mark_read_through(
         self, name: str, sequence: int, *, target: NamedTarget = AnyChannel.target(),

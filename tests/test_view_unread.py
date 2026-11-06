@@ -131,3 +131,28 @@ def test_crashed_sender_reopen_does_not_hide_unpainted_any_mode_dm():
         reopened.channels.set_channel_any_mode("#team", True)
         assert [message.seq for message in list(reopened.views.channel_display_page("#team").messages)] == [1, 2]
         assert reopened.views.viewer_snapshot(Checkout(root)).channel_unread["#team"].count == 2
+
+
+def test_pending_counts_between_snapshots_count_only_the_appended_rows(tmp_path):
+    """Every viewer snapshot asks for the viewer's pending counts. With the same cursor, scope
+    and registry, a row already counted cannot change (its audience is frozen at append), so
+    the second snapshot counts only what was appended since the first, and still agrees with
+    a whole count."""
+    comms = team_channel(tmp_path)
+    bus = comms.views.bus
+    for index in range(3):
+        comms.messaging.send("alice", "bob", f"waiting {index}")
+    with bus.snapshot(NamedViewer("bob")) as (basis, source):
+        first = bus.pending_counts_opened(source, basis)
+        counted_through = source.revision()
+    comms.messaging.send("alice", "bob", "new")
+    queries = []
+    with bus.snapshot(NamedViewer("bob")) as (basis, source), source.observing() as db:
+        db.set_trace_callback(queries.append)
+        second = bus.pending_counts_opened(source, basis)
+    counted = [query for query in queries if "GROUP BY actor,target,sender" in query]
+    assert len(counted) == 1 and f"{counted_through} AS after" in counted[0]
+    assert sum(second.values()) == sum(first.values()) + 1
+    fresh = wire(tmp_path).views.bus
+    with fresh.snapshot(NamedViewer("bob")) as (basis, source):
+        assert fresh.pending_counts_opened(source, basis) == second
