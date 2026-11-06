@@ -59,7 +59,8 @@ def _node_run(native_package, node, env, script, cwd, artifact):
     error = None
     try:
         with SpawnedProcess.launch(tuple(command), cwd=cwd, env=env,
-                                   stdio=DetachedChildStdio(stdout=subprocess.PIPE)) as child:
+                                   stdio=DetachedChildStdio(stdout=subprocess.PIPE,
+                                                            stderr=subprocess.PIPE)) as child:
             try:
                 stdout, stderr = child.process.communicate(timeout=15)
                 outcome = child.reap()
