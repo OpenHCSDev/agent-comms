@@ -34,19 +34,12 @@ from agent_comms.bus import Bus
 from agent_comms.comms import Comms, wire
 from agent_comms.exporting import WireExportObserver
 from agent_comms.connector import (
-    ApprovalLink,
-    InitializeResult,
-    SESSION_HEADER,
-    AuthorizationCodeGrant,
-    Connector,
-    ConnectorSendTool,
-    ConnectorVerb,
-    GrantUiVerb,
-    ServeVerb,
-    RevokeVerb,
-    ToolsCallMessage,
-    ToolsCallReply,
-    ToolsCallResult,
+    ApprovalLink, AuthorizationCodeGrant, Connector, ConnectorSendTool, ConnectorVerb, GrantUiVerb,
+    ServeVerb, RevokeVerb,
+)
+from agent_comms.transport.mcp import (
+    SESSION_HEADER, CancelledMessage, InitializeResult, NoProgress, ProgressToken, StreamedLine,
+    ToolCallMeta, ToolsCallMessage, ToolsCallReply, ToolsCallResult,
 )
 from agent_comms.connector_caller import CALLER, GrantRefusedError, ScopedUiCaller, UiCaller, UiReadCaller
 from agent_comms.connector_profile import HttpsMcpEndpoint, UiConnectionProfile, UiGrantId, UiGrantSummary
@@ -1107,7 +1100,6 @@ def test_a_cloud_session_on_the_claude_ai_grant_acts_under_its_own_name(comms):
 
 async def remote_answer(client: TestClient, token: str, request):
     """One request through the real HTTP tools/call, decoded the way RemoteCoreAccess does."""
-    from agent_comms.connector import ToolsCallMessage, ToolsCallReply
 
     envelope = ToolsCallMessage(jsonrpc="2.0", id=3, params=request.called())
     reply = FieldCodec.decode(ToolsCallReply, await (await client.post(
@@ -1214,7 +1206,6 @@ async def test_connector_reports_the_root_its_core_serves(client, comms):
 async def test_a_call_that_asks_for_progress_streams_it_then_its_reply(client, store, comms, tmp_path):
     """MCP progress: a tools/call carrying a progress token is answered as server-sent events,
     the export's progress notices first and its reply last."""
-    from agent_comms.connector import ProgressNotice, StreamedLine, ToolsCallReply
     from agent_comms.exporting import EverythingScope, FullLimit, JsonlFormat
     from agent_comms.tools import CommsExportWireTool
 
@@ -1254,7 +1245,6 @@ async def test_a_call_that_asks_for_progress_streams_it_then_its_reply(client, s
 def test_a_call_meta_reads_its_declared_key_from_an_open_object(meta, streamed):
     """Installing cb375c3c turned every Claude Code call into a 500: its `_meta` carries a numeric
     progressToken and its own claudecode/toolUseId, both of which MCP allows."""
-    from agent_comms.connector import NoProgress, ProgressToken, ToolCallMeta
 
     progress = ToolCallMeta.of(meta).progress
     assert progress == (ProgressToken(meta["progressToken"]) if streamed else NoProgress())
@@ -1262,7 +1252,6 @@ def test_a_call_meta_reads_its_declared_key_from_an_open_object(meta, streamed):
 
 async def test_a_cancel_reaches_the_running_call_it_names(connector):
     """notifications/cancelled stops the observed call with that request id and no other."""
-    from agent_comms.connector import CancelledMessage
     from agent_comms.exporting import CancellableWireExport
 
     named, other = CancellableWireExport(), CancellableWireExport()

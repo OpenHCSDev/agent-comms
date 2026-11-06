@@ -17,7 +17,7 @@ from multiprocessing.connection import Connection
 
 from yarl import URL
 
-from .connector import CancelledMessage, JsonRpcId, StreamedLine, ToolsCallMessage, ToolsCallReply
+from .transport.mcp import CancelledMessage, JsonRpcId, StreamedLine, ToolsCallMessage, ToolsCallReply
 from .connector_profile import HttpsMcpEndpoint, UiConnectionProfile, UiCredential
 from .core_access import CoreAccess
 from .exporting import WireExportCancelled

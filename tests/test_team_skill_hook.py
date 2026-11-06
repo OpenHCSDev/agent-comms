@@ -1,6 +1,7 @@
 """The real SessionStart command works before a teammate connects to the bus."""
 
 
+from agent_comms.transport.mcp import AnsweredCall
 from agent_comms.repo import Checkout, Repo
 import inspect
 import io
@@ -456,7 +457,6 @@ def test_a_verb_reply_carries_the_new_rows_naming_its_caller(notification_bus):
     """P1213: a cloud session acting through ``fork`` has no hook that knows its name, so its
     own verbs carry its rows, beside the reply and never inside it: the structured reply stays
     the declared result remote cores decode. A row prints once; a read carries no board."""
-    from agent_comms.connector import AnsweredCall
     from agent_comms.order_tools import CommsTodoListTool
     from agent_comms.task_attachments.team_pings import TeamUpdateStore
     from agent_comms.tool_caller import ThreadCaller
@@ -496,7 +496,6 @@ def test_a_busy_core_writer_never_fails_a_verb_that_landed(notification_bus):
     never comes back as a failure, and the rows stay unstamped for the next call."""
     import sqlite3
 
-    from agent_comms.connector import AnsweredCall
     from agent_comms.coordination.database import CoordinationStore
     from agent_comms.task_attachments.team_pings import TeamUpdateStore
     from agent_comms.tool_caller import ThreadCaller

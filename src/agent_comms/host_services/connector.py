@@ -20,14 +20,13 @@ from ..connector import (
     ConnectorOptions,
     ConnectorVerb,
     ServeVerb,
-    ToolsCallMessage,
-    ToolsCallReply,
 )
 from ..connector_store import ConnectorStore
 from ..errors import RelationViolationError
 from ..nominal.field_codec import Argument, FieldCodec, MalformedRecord, PathText
 from ..launch_root import LaunchRoot
 from ..recorded_bus import RecordedBusIdentity
+from ..transport.mcp import ToolsCallMessage, ToolsCallReply
 from ..tools import CommsChannelsTool
 from . import ServiceNotServingError, SystemdUserService
 
