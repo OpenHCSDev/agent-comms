@@ -410,8 +410,12 @@ class TestedSources(DeclaredFamily, affix="Sources"):
         mains = self.main_commits(inputs)
         for source in inputs.pinned_sources(self.repository.github):
             repository = Repo.selected(repositories, source.repository.to_wire())
-            if IntegrationSource.main_head(repository) != mains[source.repository]:
+            if not self.main_is_current(repository, mains[source.repository]):
                 raise IntegrationFailed(f"{source.repository.to_wire()} main moved; recapture")
+
+    def main_is_current(self, repository: Repo, captured: str) -> bool:
+        """Whether the repository's live main is still the main these inputs captured."""
+        return IntegrationSource.main_head(repository) == captured
 
     def require_merge_review(self, repositories: tuple[Repo, ...]) -> IntegrationInput:
         """Source computation precedes promotion; its exact combined proof is still required."""
@@ -584,6 +588,19 @@ class PullRequestSources(TestedSources, declared_name="pull_request"):
 
 
 class MergeGroupSources(TestedSources, declared_name="merge_group"):
+    def main_is_current(self, repository: Repo, captured: str) -> bool:
+        """A stacked group is built on the group ahead of it, not on main: its base_sha (resolve
+        proved it is this graph's baseline) is that group's queue commit, which GitHub lands on
+        main first. So this repository's live main need only lie under the base; a main that
+        moved anywhere else is still refused. Another repository's main is the captured one.
+        Every stacked entry failed here once max_entries_to_build went to 5 (2026-11-06, queue
+        runs 1694, 1695 and 1699: "main moved; recapture")."""
+        live = IntegrationSource.main_head(repository)
+        return live == captured or (
+            repository.github == self.repository.github
+            and Repo.descends(repository.checkout, live, captured)
+        )
+
     def require_merge_review(self, repositories: tuple[Repo, ...]) -> IntegrationInput:
         return MergeHeadReview.require_merge(self.carrier, repositories)
 
