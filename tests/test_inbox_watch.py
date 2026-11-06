@@ -704,15 +704,22 @@ async def test_a_watch_frozen_past_its_heartbeat_reconnects_alone_and_shows_the_
     finally:
         os.kill(watch.pid, signal.SIGCONT)
     printed: list[str] = []
+
+    async def next_line() -> None:
+        """An exited client reads as EOF at once, which must fail rather than spin."""
+        line = await watch.stdout.readline()
+        assert line, f"the client exited instead of reconnecting: {printed}"
+        printed.append(line.decode().rstrip("\n"))
+
     try:
         async with asyncio.timeout(60):
             while printed.count("Watching your inbox; each message arrives as an event.") < 2 \
                     or not any(message.body in line for line in printed):
-                printed.append((await watch.stdout.readline()).decode().rstrip("\n"))
+                await next_line()
         with pytest.raises(TimeoutError):
             async with asyncio.timeout(3):
                 while True:
-                    printed.append((await watch.stdout.readline()).decode().rstrip("\n"))
+                    await next_line()
     finally:
         watch.terminate()
         await watch.wait()
