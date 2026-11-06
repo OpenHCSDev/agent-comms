@@ -225,7 +225,9 @@ class BoundSession(HookSession):
             with peer.makefile("rb") as stream:
                 raw = stream.readline()
         if not raw:
-            raise HookBridgeUnavailable("The bound session bridge closed without answering the hook")
+            # A bridge that accepted the connection and closed it is the install's socket gap, not
+            # a dead endpoint: the swap wait retries this, a real outage ends in program.absent.
+            raise ConnectionResetError("the bound session bridge closed without answering")
         return HookAnswer.replied(json.loads(raw))
 
     def invoke(self, program: type[ClaudeHookProgram], record: Mapping[str, object]) -> None:
@@ -260,16 +262,15 @@ class SwappingSession(AbsentSession, HeldSocketWatch):
         while time.monotonic() < deadline:
             try:
                 answer = bound.answer(program, record, timeout=max(.001, deadline - time.monotonic()))
-            except (FileNotFoundError, ConnectionRefusedError) as absent:
+            except OSError as absent:
+                # Every way an install's socket gap looks: missing, refused, timed out, reset. The
+                # wait exists for exactly this, so it keeps asking until the deadline and then lets
+                # the program answer alone; a gap is never reported as a failed tool call.
                 try:
                     self.endpoint.absent().await_socket(self.endpoint, absent)
                 except NoSessionBridge as lapsed:
                     program.absent(record, lapsed)
                     return
-            except OSError as error:
-                raise HookBridgeUnavailable(
-                    f"Bound session {self.endpoint.thread} cannot answer its hook: {error}"
-                ) from error
             else:
                 answer.print(program)
                 return
