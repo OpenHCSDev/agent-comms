@@ -25,8 +25,8 @@ never here. This file holds only facts about this host and this setup.
 - Every worktree, uncommitted source, saved session and handoff lives under `/home/ts/wt`.
   Never `/tmp`, `/dev/shm` or another volatile filesystem: the 2026-09-27 reboot erased
   four `/dev/shm` worktrees.
-- The stack follows the latest mains of Toad, Textual and ui-theme; ship-and-install.md
-  has the relock and sync steps.
+- The stack follows the latest mains of Toad, Textual and ui-theme; every install and CI sync
+  refreshes them itself (ship-and-install.md), so nobody commits a relock.
 
 ## Host resources
 

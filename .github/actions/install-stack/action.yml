@@ -2,11 +2,6 @@ name: Install the stack
 description: >-
   Sync the stack the installer runs under (Core with Toad, Textual and ui-theme), add the dev
   extra, and put its interpreter first on PATH, so later steps run Core as an install would.
-inputs:
-  upgrade:
-    description: Relock to the latest Toad, Textual and ui-theme mains before syncing
-    required: false
-    default: "false"
 runs:
   using: composite
   steps:
@@ -15,13 +10,14 @@ runs:
       run: |
         python -m pip install packaging
         python -m pip install "$(python -I src/agent_comms/installer/declared_uv.py pyproject.toml)"
-    - name: Relock the stack at the latest mains
-      if: inputs.upgrade == 'true'
-      shell: bash
-      run: uv lock --project stack --upgrade --python "$(command -v python)"
-    - name: Sync the stack and the dev extra
+    # The installer's resolve step: every branch-tracking sibling moves to its branch head,
+    # release and revision pins stay. The committed lock only bootstraps the reader.
+    - name: Sync the stack and the dev extra, siblings at their latest mains
       shell: bash
       run: |
+        uv sync --project stack --locked --no-editable --python "$(command -v python)"
+        uv lock --project stack --python "$(command -v python)" \
+          $(stack/.venv/bin/python -I -m agent_comms.installer.refresh_arguments stack/uv.lock)
         uv sync --project stack --locked --no-editable --python "$(command -v python)"
         uv pip install --python stack/.venv/bin/python -r pyproject.toml --extra dev
         echo "$PWD/stack/.venv/bin" >> "$GITHUB_PATH"
