@@ -7,6 +7,7 @@ import time
 import sys
 import json
 import re
+from dataclasses import dataclass, field
 from pathlib import Path
 from uuid import uuid4
 
@@ -24,7 +25,7 @@ from agent_comms.cli_bridges.claude_transcript import (
 )
 from agent_comms.harness_delivery_states import PrintLedgerId
 from agent_comms.cli_bridges.inbox_watch_client import (
-    RECONNECTS_ALONE, WAITS_FOR_MAINTENANCE, FollowedTranscript, InboxSocket, Pause, Pauses,
+    RECONNECTS_ALONE, WAITS_FOR_MAINTENANCE, WATCHING, FollowedTranscript, InboxSocket, Pause, Pauses,
     Redials, WatchDeferred, WatchDropped, WatchEnd, WatchReplaced, WatchStopped,
 )
 from agent_comms.storage.locked_store import RegistryFile
@@ -658,6 +659,21 @@ class QuickRedials(Redials):
     restarting = Pause(0.01, pauses)
 
 
+@dataclass(frozen=True)
+class CountedPause(Pause):
+    """A pause that counts the re-dials it makes, which a re-dial no longer prints."""
+
+    dials: list[str] = field(default_factory=list)
+
+    async def retried(self, watch: InboxSocket, url: str, ended: WatchDropped) -> WatchEnd:
+        self.dials.append(url)
+        return await super().retried(watch, url, ended)
+
+
+class CountedMaintenanceRedials(QuickRedials):
+    still_held = CountedPause(0.01, QuickRedials.pauses)
+
+
 async def test_a_watch_waits_out_maintenance_however_long_it_holds(
     session, comms: Comms, tmp_path: Path, capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -671,13 +687,15 @@ async def test_a_watch_waits_out_maintenance_however_long_it_holds(
     barrier = MaintenanceBarrier(RegistryFile.path_in(comms.root))
     held = barrier.begin(MaintenanceOperator.current())
     watch = InboxSocket(str(client.make_url(path)), tmp_path / "exports" / "messages",
-                        redials=QuickRedials())
+                        redials=CountedMaintenanceRedials())
+    dials = CountedMaintenanceRedials.still_held.dials
+    before = len(dials)
     running = asyncio.create_task(watch.carried())
     printed = ""
     try:
         try:
             async with asyncio.timeout(20):
-                while printed.count("Watching your inbox") < 12:
+                while len(dials) - before < 12:
                     if running.done():
                         pytest.fail(f"The watch gave up during maintenance: {printed}")
                     await asyncio.sleep(0.05)
@@ -690,6 +708,7 @@ async def test_a_watch_waits_out_maintenance_however_long_it_holds(
                 await asyncio.sleep(0.05)
                 printed += capsys.readouterr().out
         assert printed.count(WAITS_FOR_MAINTENANCE) == 1, printed
+        assert printed.count(WATCHING) == 1, printed
     finally:
         running.cancel()
 
@@ -949,9 +968,7 @@ async def test_a_watch_frozen_past_its_heartbeat_reconnects_alone_and_shows_the_
 
     try:
         async with asyncio.timeout(60):
-            # The first socket's line was read before the freeze; this is the reconnected one.
-            while "Watching your inbox; each message arrives as an event." not in printed \
-                    or not any(message.body in line for line in printed):
+            while not any(message.body in line for line in printed):
                 await next_line()
         with pytest.raises(TimeoutError):
             async with asyncio.timeout(3):
@@ -960,11 +977,9 @@ async def test_a_watch_frozen_past_its_heartbeat_reconnects_alone_and_shows_the_
     finally:
         watch.terminate()
         await watch.wait()
-    assert any("reconnecting on its own" in line for line in printed), printed
-    assert sum(line == message.body for line in printed) == 1, printed
-    # The re-dialled socket is sent its URL first and again when asked; one line, not two.
-    assert sum(line == RECONNECTS_ALONE for line in printed) == 1, printed
-    assert not any("/watch/" in line for line in printed), printed
+    # The message is the only thing the reconnect prints: the session was told before the freeze
+    # that the watch is up and reconnects alone, and each printed line costs it a turn.
+    assert printed == [message.body], printed
 
 
 def read_records(path: str, text: str) -> tuple[str, str]:
