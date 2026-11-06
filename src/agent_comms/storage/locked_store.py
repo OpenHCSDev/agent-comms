@@ -224,8 +224,7 @@ class RootFile:
         is imported, not taken from ``__package__``: this module lives in a subpackage."""
         prefix = f"{agent_comms.__name__}."
         for module in walk_packages(agent_comms.__path__, prefix):
-            if not module.name.startswith(f"{prefix}skills"):
-                import_module(module.name)
+            import_module(module.name)
 
     @classmethod
     def declarations_in(cls, root: Path) -> Iterator[tuple[type[Self], Path]]:
