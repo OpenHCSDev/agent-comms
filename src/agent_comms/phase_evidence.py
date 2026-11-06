@@ -1357,9 +1357,16 @@ class DeclarationEvidence(MainEvidence, DeclaredFamily, affix="Declared"):
         roots = tuple(dict.fromkeys(PurePosixPath(path).parts[0] for path in self.paths))
         return any(
             qualified.name == self.name and declared.under(self.paths)
-            for bindings in main.module_bindings(self.paths, roots)
+            for bindings in main.module_bindings(self.candidates(main), roots)
             for qualified, declared in self.declarations(bindings).items()
         )
+
+    def candidates(self, main: MainTree) -> tuple[str, ...]:
+        """The modules under ``paths`` whose text holds ``name`` as a word: a module that
+        declares it must spell it, so one ``git grep`` at main's commit spares parsing the
+        rest (589 test modules, to find one test function)."""
+        return tuple(row.split(":", 1)[1] for row in main.grep(
+            "-l", "-w", pattern=re.escape(self.name), paths=self.paths))
 
     @abstractmethod
     def declarations(self, scopes: ClassDeclarations) -> Mapping[QualifiedName, Declaration]: ...

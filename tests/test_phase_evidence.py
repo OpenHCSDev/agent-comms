@@ -207,7 +207,10 @@ def test_following_reading_reuses_only_unchanged_blob_facts(tmp_path: Path) -> N
         "src/deleted.py": "class Deleted:\n    pass\n",
     })
     assert not ClassDeclared("Missing").read(reading.main)
+    assert reading.main.bindings == {}  # no module spells it, so none was parsed
+    assert all(ClassDeclared(name).read(reading.main) for name in ("Kept", "Before", "Deleted"))
     held = dict(reading.main.bindings)
+    assert set(held) == {(("src",), f"src/{name}.py") for name in ("kept", "changed", "deleted")}
     (tmp_path / "src/changed.py").write_text("class After:\n    pass\n")
     (tmp_path / "src/deleted.py").unlink()
     git(tmp_path, "add", "src")
