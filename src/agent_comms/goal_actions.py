@@ -62,7 +62,7 @@ from .reported_turn import ReportedTurnState
 from .registry_store import RegistryEdit
 from .attempt_resolution import ComplianceDecision, OrderDecision, RetryDecision
 from .owner_connection import CapturedOwner
-from .runtime_server import AttachedRuntimeRequest
+from .runtime_request import AttachedRuntimeRequest
 from pydantic import JsonValue
 
 if TYPE_CHECKING:
