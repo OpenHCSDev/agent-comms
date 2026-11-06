@@ -126,6 +126,10 @@ class SidebarObservation(ABC):
     def bus_unread(self, target: str) -> UnreadPresentation:
         return UnobservedUnread()
 
+    def peer_unread(self, peer: ThreadIncarnation) -> UnreadPresentation:
+        """A DM peer's unread, named by its birth: before a read there is no count to show."""
+        return UnobservedUnread()
+
     def unavailable(self) -> NoReturn:
         raise RuntimeError("Sidebar source has not been observed")
 
@@ -197,6 +201,11 @@ class ObservedSidebar(SidebarObservation):
 
     def bus_unread(self, target: str) -> UnreadPresentation:
         return UnreadPresentation.for_bus(self.snapshot, target)
+
+    def peer_unread(self, peer: ThreadIncarnation) -> UnreadPresentation:
+        """The peer's current name and its unread count come from this one snapshot. A name the
+        caller resolved from an earlier cut can be one a rename has since replaced."""
+        return self.bus_unread(self.snapshot.references.thread(peer).name)
 
     def references_for(self, root):
         return self.snapshot.references.at(root)
