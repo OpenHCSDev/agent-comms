@@ -1016,8 +1016,9 @@ class RepositoryReads:
         self._remote_cuts: dict[Path, dict[str, dict[str, str]]] = {}
 
     def remote_cuts(self, checkout: Checkout) -> dict[str, dict[str, str]]:
-        """Each remote's published refs: worktrees of one repository share their remotes."""
-        return self._remote_cuts.setdefault(checkout.resolved().common_dir, {})
+        """Each remote's published refs: worktrees of one repository share their remotes. The
+        common directory is the one this pass's cut resolved, never asked of Git again."""
+        return self._remote_cuts.setdefault(self.history_for(checkout).checkout.common_dir, {})
 
     def repository(self, path: Path) -> Repo:
         """The common directory's identity, acquired once within this pass."""

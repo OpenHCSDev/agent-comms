@@ -6544,7 +6544,8 @@ class TodoStore(OwnerRequestStore, TodoHistory):
             return self
         snapshot = self.registry_cut()
         held = self.held_orders(state=OpenTodoState)
-        workplaces = EditWorkplaces.for_assignment(self.root, snapshot, held, proposed)
+        workplaces = EditWorkplaces.for_assignment(self.root, snapshot, held, proposed,
+                                                   AssignedBoundaryRead(RepositoryReads()))
         return PreparedTodoStore(self.root, workplaces)
 
     def prepared_edits(self) -> EditWorkplaces:
@@ -6869,8 +6870,14 @@ class TodoStore(OwnerRequestStore, TodoHistory):
             for expected in problems))
 
 
+@dataclass(frozen=True)
 class BoundaryRead(ABC):
-    """How one held order's edit boundaries are read, and what an unreadable checkout means."""
+    """How one held order's edit boundaries are read, and what an unreadable checkout means.
+
+    `reads` is the operation's one cut of every checkout it reads: the heartbeat's frame
+    passes its own, so each order's boundaries never re-list a worktree the pass listed."""
+
+    reads: RepositoryReads
 
     @abstractmethod
     def boundaries(self, rule: StorageRule, owner: Thread, todo: Todo,
@@ -6884,7 +6891,7 @@ class AssignedBoundaryRead(BoundaryRead):
     def boundaries(self, rule: StorageRule, owner: Thread, todo: Todo,
                    generation: GoalId) -> frozenset[Path]:
         return rule.edit_boundaries(owner, todo.id, todo.repo,
-                                    todo.order.source_repositories(), generation)
+                                    todo.order.source_repositories(), generation, self.reads)
 
 
 class ObservedBoundaryRead(AssignedBoundaryRead):
@@ -6920,8 +6927,7 @@ class EditWorkplaces:
 
     @classmethod
     def for_assignment(cls, root: Path, snapshot: RegistrySnapshot, held: tuple[Todo, ...],
-                       proposed: tuple[Todo, ...],
-                       reading: BoundaryRead = AssignedBoundaryRead()) -> Self:
+                       proposed: tuple[Todo, ...], reading: BoundaryRead) -> Self:
         """Capture declared physical boundaries without forge reads or a Todo write lock."""
         rule = StorageRule.load(root)
         orders = {todo.id: todo for todo in (*held, *proposed)}
@@ -6964,7 +6970,7 @@ class EditWorkplaces:
         if not holds:
             return {}
         prepared = cls.for_assignment(comms.root, snapshot, tuple(hold.todo for hold in holds), (),
-                                      ObservedBoundaryRead())
+                                      ObservedBoundaryRead(pulls))
         repositories = snapshot.team_project.require().repos
         registered = frozenset(repo.github for repo in repositories)
         rule = prepared.rule
