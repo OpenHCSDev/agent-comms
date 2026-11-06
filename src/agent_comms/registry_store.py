@@ -22,6 +22,7 @@ from .nominal.field_codec import FieldCodec, NullMember, TurnId
 from .storage.locked_store import DocumentBytes, LockedStore, PublishedProperty, RegistryFile
 from .storage.maintenance_barrier import CarriedDocument
 from .native_input_owner import RegistryOwner
+from .presence import PresenceStore
 from .storage.private_path import FileObservation, FileRevision, MissingFile
 from .private_registry_guard import PrivateRegistryGuard, PublicRegistry, RegistryPrivacy
 from .private_runtime_schema import PrivateCoordinatorTable
@@ -81,6 +82,23 @@ class RegistryRevision(CachedRegistry):
     source: DocumentBytes
     document: RegistryDocument
     raw: dict
+    presence: FileObservation
+    """The presence.json revision laid over ``document``; presence moves without the registry."""
+
+    @classmethod
+    def presented(cls, store: RegistryStore, source: DocumentBytes, document: RegistryDocument,
+                  raw: dict) -> RegistryRevision:
+        observed = FileRevision.capture(store.presence.path)
+        return cls(source, document.presented(store.presence.read().seen), raw, observed)
+
+    def current(self, store: RegistryStore) -> RegistryRevision:
+        """This registry revision with the presence stored now: re-laid, and cached in this
+        revision's place, only when presence.json changed since it was laid."""
+        if FileRevision.capture(store.presence.path) == self.presence:
+            return self
+        revision = RegistryRevision.presented(store, self.source, self.document, self.raw)
+        store.cache.entry = revision
+        return revision
 
     def at[Answer](
         self, revision: FileObservation, reuse: Callable[[RegistryRevision], Answer],
@@ -282,6 +300,9 @@ class RegistryEdit:
         return leased, self.document.owners.generations[current.name]
 
     def commit(self) -> None:
+        # Presence first, so a reader that sees a newly declared thread sees its presence row.
+        if self.document.last_seen != self.original.document.last_seen:
+            self.store.presence.record(self.document.last_seen, self.original.document.last_seen)
         if self.document != self.original.document:
             self.store.save_unlocked(self.document)
             self.original = self.store.read_revision_unlocked()
@@ -294,6 +315,7 @@ class RegistryEdit:
 class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocument]):
     json_indent = 2
     cache: RegistryCache = field(init=False, compare=False, repr=False)
+    presence: PresenceStore = field(init=False, compare=False, repr=False)
 
     def __reduce__(self) -> tuple[type[Self], tuple[Path]]:
         """Row bindings travel by their store path, never by a process's locks."""
@@ -303,6 +325,7 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         # Guard-loss checks must know every private declaration before taking this store's lock.
         PrivateCoordinatorTable.declarations()
         object.__setattr__(self, "cache", RegistryCache.for_path(self.path))
+        object.__setattr__(self, "presence", PresenceStore.at(self.path.parent))
 
     record_type = RegistryDocument
 
@@ -343,12 +366,12 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
             return self.cache.entry.at(
                 source.revision, lambda current: current,
                 lambda stale: self._cache_revision(stale, source),
-            )
+            ).current(self)
 
     def _cache_revision(self, stale: CachedRegistry, source: DocumentBytes) -> RegistryRevision:
         raw = source.revision.either(
             lambda present: FieldCodec.parse(source.content), lambda: self._encode(self.empty()))
-        entry = RegistryRevision(source, stale.decoded(self, raw), raw)
+        entry = RegistryRevision.presented(self, source, stale.decoded(self, raw), raw)
         self.cache.entry = entry
         with self.cache.measurement:
             self.cache.counts.decodes += 1
@@ -551,7 +574,7 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         # Still under the exclusive lock: the written file is this document.
         source = DocumentBytes.capture(self.path)
         source.revision.require(FileNotFoundError(self.path))
-        self.cache.entry = RegistryRevision(source, document.copy(), raw)
+        self.cache.entry = RegistryRevision.presented(self, source, document.copy(), raw)
 
     def carry_text(self, text: str) -> None:
         """A carry's rewrite of the stored registry, before the current decoder can read its old
