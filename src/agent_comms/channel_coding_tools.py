@@ -43,6 +43,7 @@ from .tool_denial import StorageDenied
 from .storage_projection import StorageProjection
 from .storage_room import NoRoomNeeded, RoomReservation
 from .threads import Thread
+from .thread_identity import OfferedTools
 from .tool_denial import SelectedToolDenied
 from .turn_goal_permission import TurnGoalPermission
 
@@ -115,6 +116,12 @@ class CodingToolOwner(ABC):
     @property
     def owner_name(self) -> str:
         return self.thread.name
+
+    @property
+    def offered(self) -> OfferedTools:
+        """The tools this thread's runtime reported for its turn, read now: the turn's context
+        arrives after this owner captured its thread."""
+        return self.comms.registry.require(self.thread.name).offered
 
     @property
     @abstractmethod
@@ -228,10 +235,10 @@ class CodingToolRequest:
     name: str
     arguments: object
 
-    def authenticate(self, expected_token: str) -> CodingCall:
+    def authenticate(self, expected_token: str, offered: OfferedTools) -> CodingCall:
         if self.token != expected_token:
             raise SelectedToolDenied("Coding request is not authenticated")
-        return CodingCall.decode(self.call_id, self.name, self.arguments)
+        return CodingCall.decode(self.call_id, self.name, self.arguments, offered)
 
 
 class CodingToolSocket(GatedToolTransport[CodingCall]):
@@ -244,7 +251,7 @@ class CodingToolSocket(GatedToolTransport[CodingCall]):
         self.completions = set()
 
     def decode_call(self, call_id: object, name: object, arguments: object) -> CodingCall:
-        return CodingCall.decode(call_id, name, arguments)
+        return CodingCall.decode(call_id, name, arguments, self.owner.offered)
 
     def decode_request(self, raw: bytes) -> CodingCall:
         if not raw.endswith(b"\n") or len(raw) > self.max_request:
@@ -253,7 +260,7 @@ class CodingToolSocket(GatedToolTransport[CodingCall]):
             request = FieldCodec.decode(CodingToolRequest, FieldCodec.parse(raw))
         except MalformedRecord as error:
             raise SelectedToolDenied("Coding request is not authenticated") from error
-        return request.authenticate(self.listener.token)
+        return request.authenticate(self.listener.token, self.owner.offered)
 
     async def allow(self, round_number: int, call: CodingCall) -> None:
         # The owner rechecks authority after its unlocked room wait. The

@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
+from .nominal.declared_family import UnknownFamilyMember
+from .thread_identity import OfferedTools
 from .nominal.field_codec import (
     FieldCodec,
     NullMember,
@@ -80,9 +82,16 @@ class NativeToolDeclaration(ToolDeclaration):
         return tuple(argument for extension in extensions for argument in ("-e", str(extension)))
 
     @classmethod
-    def from_call(cls, name: str, arguments: object, *, call_id: ToolCallId) -> CodingCall:
+    def from_call(cls, name: str, arguments: object, *, call_id: ToolCallId,
+                  offered: OfferedTools) -> CodingCall:
+        """A declared member's call, or else a tool this turn was offered by name."""
         decoded = FieldCodec.decode(dict[str, object], arguments)
-        return cls.member_named(name).create_call(call_id, decoded)
+        try:
+            member = cls.member_named(name)
+        except UnknownFamilyMember:
+            return McpToolCall(call_id=call_id, declared_name=offered.admitted(name).value,
+                               arguments=decoded)
+        return member.create_call(call_id, decoded)
 
 
 @dataclass(frozen=True)
@@ -121,6 +130,23 @@ class CommunicationCall(CoordinationCall, declared_name=None):
 
     def judge_under(self, gate: PiRuleGate) -> None:
         return
+
+
+@dataclass(frozen=True, kw_only=True)
+class McpToolCall(NativeExecutableTool, declared_name=None):
+    """A tool pi-mcp-client registered for this turn from a connected MCP server. Its name is
+    data the thread's offered catalogue admits; the extension runs it behind its own human
+    confirmation, so the owner grants no file claim."""
+
+    declared_name: str
+    arguments: dict[str, object]
+
+    @classmethod
+    def native_extension(cls, package: Path) -> Path:
+        return package / "agent-comms-extensions/pi-mcp-client/index.mjs"
+
+    def reads(self) -> str:
+        return json.dumps(self.arguments)
 
 
 @dataclass(frozen=True, kw_only=True)

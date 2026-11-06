@@ -9,6 +9,7 @@ from agent_comms_project import AgentCommsProject
 from nominal_refactor_advisor import audit
 
 from agent_comms.channel_coding_tools import CodingToolRequest
+from agent_comms.thread_identity import UnobservedTools
 from agent_comms.input_key import BusInputKey
 from agent_comms.cli_bridges.claude_protocol import ClaudeHeader
 from agent_comms.nominal.field_codec import FieldCodec
@@ -26,9 +27,9 @@ def test_coding_socket_record_keeps_object_arguments_and_strict_fields():
                'arguments': {'path': 'source.py'}}
     request = FieldCodec.decode(CodingToolRequest, payload)
     assert request.arguments == {'path': 'source.py'}
-    assert request.authenticate('secret').call_id == 'call-1'
+    assert request.authenticate('secret', UnobservedTools()).call_id == 'call-1'
     with pytest.raises(SelectedToolDenied):
-        request.authenticate('wrong')
+        request.authenticate('wrong', UnobservedTools())
     with pytest.raises(ValueError):
         FieldCodec.decode(CodingToolRequest, {**payload, 'unexpected': True})
 
