@@ -6,6 +6,7 @@ from agent_comms.channel_targets import CommandTarget, DeclaredTag
 import pytest
 
 from agent_comms.registration import Registration
+from agent_comms.registry_store import UncachedRegistry
 from agent_comms.channels import AllChannel, BuiltinChannelView
 from agent_comms.comms import wire
 from conftest import installed_comms
@@ -112,6 +113,58 @@ class TestPresence:
         time.sleep(0.01)
         registry.heartbeat("a")
         assert registry.last_seen("a") > before
+
+    def test_a_heartbeat_leaves_the_registry_file_alone(self, tmp_path):
+        """P1270: being seen is presence, not a declaration change. The heartbeat moves only
+        presence.json, so registry.json (5.7 MB on the live bus) is not rewritten for it, and
+        a reader that opened the registry earlier still sees the new time."""
+        path = tmp_path / "registry.json"
+        registry = Registration(path)
+        registry.register(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
+        reader = Registration(path)
+        before, stored = reader.last_seen("a"), path.read_bytes()
+        stat = path.stat()
+        import time
+
+        time.sleep(0.01)
+        registry.heartbeat("a")
+        assert path.read_bytes() == stored and path.stat().st_mtime_ns == stat.st_mtime_ns
+        assert reader.last_seen("a") > before
+        assert reader.store.snapshot().seen_at("a") == reader.last_seen("a")
+
+    def test_a_reader_holding_an_older_revision_still_finds_its_threads_presence(self, tmp_path):
+        """#4190 send-back (f-ci): a reader captures the registry, a rename commits, then the
+        reader lays presence over what it captured. Rows are never dropped, so the old
+        revision's thread still has one, and the renamed thread reads under its new name."""
+        path = tmp_path / "registry.json"
+        registry = Registration(path)
+        registry.register(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
+        reader = Registration(path).store
+        captured, = reader._copy_sources(reader)
+        registry.rename("a", "b")
+        reader.cache.entry = UncachedRegistry()  # decode the old bytes as a fresh process would
+        assert reader._decode_revision(captured).document.seen_at("a") > 0
+        assert Registration(path).last_seen("b") > 0
+
+    def test_a_removed_thread_keeps_its_row_and_a_redeclared_name_gets_a_fresh_one(self, tmp_path):
+        """f-ci's two cases: a plain removal (its own edit path) leaves a reader's earlier
+        capture decodable, and declaring the old name again writes a new time over its row."""
+        import time
+
+        from agent_comms.presence import PresenceStore
+
+        path = tmp_path / "registry.json"
+        registry = Registration(path)
+        registry.register(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
+        reader = Registration(path).store
+        captured, = reader._copy_sources(reader)
+        registry.remove("a")
+        reader.cache.entry = UncachedRegistry()
+        stale = reader._decode_revision(captured).document.seen_at("a")
+        assert PresenceStore.at(tmp_path).read().seen["a"] == stale
+        time.sleep(0.01)
+        registry.register(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
+        assert Registration(path).last_seen("a") > stale
 
     def test_last_seen_fail_closed(self, tmp_path):
         registry = Registration(tmp_path / "r.json")

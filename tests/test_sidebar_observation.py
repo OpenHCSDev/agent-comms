@@ -190,3 +190,18 @@ def test_current_reference_source_projection_keeps_historical_identity(comms, de
     assert isinstance(reference, HistoricalDisplayReference)
     assert reference.source == source.key
     assert reference.incarnation == original.incarnation
+
+
+def test_a_dm_peer_unread_is_read_by_birth_from_the_sidebars_own_cut(comms, declare_reference):
+    """A DM tab keeps the peer's name from when it opened. After a rename the sidebar's unread
+    map is keyed by the new name, so a lookup by the tab's name raised KeyError (b-ui, renamed_dm).
+    By birth, the sidebar resolves the name through its own snapshot."""
+    peer = declare_reference("peer", RunningThreadStatus()).incarnation
+    model = SidebarModel(lambda flush: None)
+    assert model.observation.peer_unread(peer) == UnobservedUnread()
+    comms.registry.rename(peer.name, "renamed-peer")
+    snapshot = comms.views.viewer_snapshot(Checkout(comms.root.parent))
+    model.apply(snapshot, SidebarModel.derive(snapshot))
+    with pytest.raises(KeyError):
+        model.observation.bus_unread(peer.name)
+    assert model.observation.peer_unread(peer) == model.observation.bus_unread("renamed-peer")
