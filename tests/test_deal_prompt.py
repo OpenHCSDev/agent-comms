@@ -13,7 +13,7 @@ from agent_comms.native_package import OWNER_INSTRUCTIONS
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.rule_deal import (
     DealtRead, DealtRuleGate, OpenedReads, PromptReads, SessionRuleDeal,
-    StartedDeal, SystemPromptDelivery, Unengaged, Unread,
+    StartedDeal, SystemPromptDelivery, Unaudited, Unread,
 )
 from agent_comms_hooks import LaunchedPrompt
 from agent_comms_hooks.skill import DeckReader, DeckStart
@@ -47,7 +47,7 @@ def test_a_deal_in_the_system_prompt_owes_the_audit_not_the_reads(tmp_path):
     record = deal.current()
     assert record.read_by(deal) == record.paths
     assert not tuple(Unread.owed_by(deal, record, OpenedReads()))
-    assert tuple(Unengaged.owed_by(deal, record, OpenedReads()))
+    assert tuple(Unaudited.owed_by(deal, record, OpenedReads()))
 
 
 def test_a_file_changed_after_the_prompt_was_prepared_is_read_like_any_other(tmp_path):

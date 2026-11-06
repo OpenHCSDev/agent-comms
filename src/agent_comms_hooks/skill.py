@@ -129,11 +129,6 @@ class DeckReader(DealtSources):
         )
 
     @classmethod
-    def answered(cls) -> frozenset[str]:
-        """The shared skill is read and answered under the same audit contract."""
-        return super().answered() | {TeamPackage.skill().stem}
-
-    @classmethod
     def paragraphs(cls, text: str) -> tuple[str, ...]:
         """Blank-line paragraphs; a heading stays with the paragraph it introduces, and a
         paragraph longer than one slice splits at its line breaks."""

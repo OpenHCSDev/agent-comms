@@ -10,9 +10,9 @@ import pytest
 
 from agent_comms.rule_deal import (
     Asked, AuditDue, CompactionDealMode, FullDealMode, MeantAnswer, MeantRecord, OffDealMode,
-    OwnerWordsAnswer, RuleAudit, SessionAudit, StartedDeal, StartupDealMode, Unaudited, Unengaged,
-    Unmeant,
+    OwnerWordsAnswer, SessionAudit, StartedDeal, StartupDealMode, Unaudited, Unmeant, Unread,
 )
+from agent_comms.rule_probes import Probe
 from agent_comms.nominal.field_codec import FieldCodec, MessageId
 
 from agent_comms import agent_events as events
@@ -31,7 +31,7 @@ from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.cli_bridges.hook_read_gate import ReadInput
 from agent_comms_hooks.skill import DeckReader
-from conftest import answer_deal, engaged, fresh_confession, probe_answers
+from conftest import answer_deal, fresh_confession, probe_answers
 
 
 def call(name: str, arguments: dict[str, object]) -> CodingCall:
@@ -116,9 +116,7 @@ def test_a_compacted_pi_thread_reads_every_dealt_rule_then_writes_its_audit(
         call("read", {"path": str(source)}).completed_under(peer_deal)
     with pytest.raises(RulesUnread):
         bash.judge_under(peer_deal)  # reading without answering still keeps the gate closed
-    answered = [engaged(source.stem, source) for source in peer_deal.current().dealt
-                if source.stem in peer_deal.current().due.rules]
-    peer_deal.audit.write_text(json.dumps({"rules": answered, "owner_words": []}))
+    peer_deal.audit.write_text(json.dumps({"owner_words": []}))
     with pytest.raises(RulesUnread, match="then fix the gate"):
         bash.judge_under(peer_deal)  # the audit answers the owner's words too
     peer_deal.audit.unlink()
@@ -128,8 +126,6 @@ def test_a_compacted_pi_thread_reads_every_dealt_rule_then_writes_its_audit(
     peer_deal.audit.write_text(
         json.dumps(
             {
-                "rules": [engaged(source.stem, source) for source in peer_deal.current().dealt
-                          if source.stem in peer_deal.current().due.rules],
                 "owner_words": [{"words": text, "doing": "reading the gate"} for text in words],
             }
         )
@@ -153,30 +149,23 @@ def refused(deal: PiRedeal) -> bool:
     return False
 
 
-def test_a_refresh_deal_interleaves_like_any_other_and_pi_may_edit_the_audit(peer_deal):
-    """A refresh deals no papers, and a batch of its rules is answered before the next opens;
-    the audit is edited in place by Pi's edit tool, which waits like a write elsewhere."""
+def test_a_refresh_deal_opens_in_order_and_pi_may_edit_the_audit(peer_deal):
+    """A refresh deals no papers and its files open in the dealt order as they are read; the
+    audit is edited in place by Pi's edit tool, which waits like a write elsewhere."""
     events.CompactionEnd().deal_rules(peer_deal)
     answer_deal(peer_deal)
     peer_deal.observe_context(ContextUsage(35, 100))
-    peer_deal.audit.write_text(json.dumps({"rules": [], "owner_words": []}))
     dealt = peer_deal.current().dealt
-    rules = [source for source in dealt if source.stem in peer_deal.current().due.rules]
-    batch, following = rules[:Unengaged.batch], rules[Unengaged.batch]
-    for source in dealt[:dealt.index(following)]:
+    with pytest.raises(RulesUnread, match="Next batch"):
+        call("read", {"path": str(dealt[2 * Unread.batch])}).judge_under(peer_deal)
+    for source in dealt[:Unread.batch]:
         call("read", {"path": str(source)}).judge_under(peer_deal)
         peer_deal.record_read(source, ReadInput(source).span())
-    with pytest.raises(RulesUnread, match="does not answer it"):
-        call("read", {"path": str(following)}).judge_under(peer_deal)
-    first = batch[0]
-    call("read", {"path": str(first)}).judge_under(peer_deal)
+    call("read", {"path": str(dealt[Unread.batch])}).judge_under(peer_deal)
     edit = {"edits": [{"oldText": "a", "newText": "b"}]}
     call("edit", {"path": str(peer_deal.audit), **edit}).judge_under(peer_deal)
     with pytest.raises(RulesUnread):
         call("edit", {"path": "notes.md", **edit}).judge_under(peer_deal)
-    peer_deal.audit.write_text(json.dumps(
-        {"rules": [engaged(source.stem, source) for source in batch], "owner_words": []}))
-    call("read", {"path": str(following)}).judge_under(peer_deal)
 
 
 def test_the_rules_come_back_once_at_each_declared_share_of_context_left(peer_deal):
@@ -285,31 +274,6 @@ def test_every_refusal_opens_with_why_its_deal_was_dealt(peer_deal):
         bash.judge_under(peer_deal)
 
 
-def test_the_dealt_team_skill_owes_an_answer_like_a_rule(team_bus):
-    """The team skill is dealt and read, so it fills the unanswered window like a rule:
-    on 2026-10-30 claude-nra read it owing nothing and broke its rotation within the hour."""
-    import sys
-
-    from agent_comms.rule_deal import ReadSpan, StartedDeal
-
-    deal = PiRedeal.of(team_bus, team_bus.registry.require("claude-code"))
-    deal.redeal(StartedDeal())
-    record = deal.current()
-    skill = TeamPackage.skill().resolve()
-    assert skill.stem in record.due.rules
-    order = list(record.dealt)
-    before = [source for source in order[:order.index(skill)] if source.stem in record.due.rules]
-    unanswered = {*before[-(Unengaged.batch - 1):], skill}
-    answered = []
-    for source in order[:order.index(skill) + 1]:
-        deal.record_read(source, ReadSpan(1, sys.maxsize, sys.maxsize))
-        if source.stem in record.due.rules and source not in unanswered:
-            answered.append(engaged(source.stem, source))
-        deal.audit.write_text(json.dumps({"rules": answered, "owner_words": []}))
-    with pytest.raises(RulesUnread, match=f"audit's entry for {skill.stem} does not answer it"):
-        deal.judge_read("read", order[order.index(skill) + 1])
-
-
 def pi_line(message: dict[str, object]) -> str:
     return json.dumps({"type": "message", "timestamp": "2026-10-31T23:00:00.000Z",
                        "message": message}) + "\n"
@@ -348,10 +312,9 @@ def test_pi_question_settles_only_on_its_exact_successful_audit_write(
     """
     session, deal = compacted_pi_session(tmp_path, team_bus, "pi-p")
     record = deal.current()
-    first = next(source for source in record.dealt if source.stem in record.due.rules)
     # The native package fixture compiles the real prompt and its matching reads.
     assert record.read_by(deal) == record.paths
-    deal.audit.write_text(json.dumps({"rules": [engaged(first.stem, first)], "owner_words": []}))
+    deal.audit.write_text(json.dumps({"owner_words": [], "probes": probe_answers()}))
     write = call("write", {"path": str(deal.audit), "content": deal.audit.read_text()})
     write.judge_under(deal)
     write.completed_under(deal)
@@ -365,7 +328,7 @@ def test_pi_question_settles_only_on_its_exact_successful_audit_write(
         transcript.write(pi_line({"role": "user", "content": [
             {"type": "text", "text": f"User follow-up:\n{line}"}]}))
         transcript.write(assistant(
-            "Yes, I meant it: I am reading the next batch of rules now and answering each one."))
+            "Yes, I meant it: I am checking the line I cited and fixing its owner now."))
     with pytest.raises(RulesUnread, match="Tristan asks:"):
         call("bash", {"command": "ls"}).judge_under(deal)
     assert deal.meant.read() == pending
@@ -401,7 +364,7 @@ def test_pi_question_settles_only_on_its_exact_successful_audit_write(
     write.completed_under(deal)
     lines = owner_lines(team_bus, "pi-p")
     assert len(lines) == 3
-    assert audit.rules[-1].does.strip().splitlines()[0][:200] in lines[-1]
+    assert audit.probes[-1].text().strip().splitlines()[0][:200] in lines[-1]
     assert len(deal.meant.read().open) == 3
 
     answered = replace(audit, meant=(MeantAnswer(question, answer),))
@@ -419,29 +382,28 @@ def test_pi_question_settles_only_on_its_exact_successful_audit_write(
 
 @pytest.mark.usefixtures("native_runtime_package")
 def test_an_open_question_keeps_its_id_until_the_answer_naming_it(tmp_path, team_bus):
-    """Answering more rules while a question is open asks nothing new, so the answer the
+    """Answering more probes while a question is open asks nothing new, so the answer the
     session writes for the question it read still settles it."""
     _, deal = compacted_pi_session(tmp_path, team_bus, "pi-q")
-    record = deal.current()
-    first, second = [source for source in record.dealt if source.stem in record.due.rules][:2]
+    hunt, flinch = probe_answers()
     write = call("write", {"path": str(deal.audit), "content": ""})
-    deal.audit.write_text(json.dumps({"rules": [engaged(first.stem, first)], "owner_words": []}))
+    deal.audit.write_text(json.dumps({"owner_words": [], "probes": [hunt]}))
     write.completed_under(deal)
     [line] = owner_lines(team_bus, "pi-q")
     question = deal.meant.read().open[0].message_id
 
-    both = {"rules": [engaged(first.stem, first), engaged(second.stem, second)], "owner_words": []}
+    both = {"owner_words": [], "probes": [hunt, flinch]}
     deal.audit.write_text(json.dumps(both))
     write.completed_under(deal)
     assert owner_lines(team_bus, "pi-q") == [line]
     assert deal.meant.read().open[0].message_id == question
 
-    answer = "Yes, I meant both answers, and I am reading the next batch of rules now."
+    answer = "Yes, I meant both answers, and I am fixing the owner the hunt named now."
     answered = replace(SessionAudit.read(deal.audit), meant=(MeantAnswer(question, answer),))
     deal.audit.write_text(FieldCodec.compact(FieldCodec.encode(answered)))
     write.completed_under(deal)
     assert not deal.meant.read().open
-    assert {first.stem, second.stem} <= deal.meant.read().asked
+    assert {"hunt", "flinch"} <= deal.meant.read().asked
 
 
 @pytest.mark.parametrize("opening", ("Yes", "No"))
@@ -450,8 +412,8 @@ def test_audit_answers_keep_the_declared_explanatory_word_bar(opening):
     meant = MeantRecord(open=(Asked(question),))
     short = " ".join((opening, *("explanation" for _ in range(MeantRecord.answer_words - 2))))
     complete = short + " action"
-    assert not meant.answered_by(SessionAudit((), (), meant=(MeantAnswer(question, short),)))
-    assert meant.answered_by(SessionAudit((), (), meant=(MeantAnswer(question, complete),)))
+    assert not meant.answered_by(SessionAudit((), meant=(MeantAnswer(question, short),)))
+    assert meant.answered_by(SessionAudit((), meant=(MeantAnswer(question, complete),)))
 
 
 def test_a_settled_meant_answer_replies_to_the_owner_on_the_real_bus(tmp_path, peer_deal, team_bus):
@@ -469,23 +431,13 @@ def test_a_settled_meant_answer_replies_to_the_owner_on_the_real_bus(tmp_path, p
 
 # The four refusals that cost three teammates their turn after compaction (bus 57071-57076).
 
-def test_a_quote_may_drop_the_greentext_marker_but_not_a_line(tmp_path):
-    source = tmp_path / "rule.md"
-    source.write_text("> be agent\n> read the rule\n\n- a bullet\n")
-    assert RuleAudit("rule", quote="be agent\nread the rule", does="d", why="w").unengaged(source) == ""
-    assert RuleAudit("rule", quote="> be agent\nread the rule", does="d", why="w").unengaged(source) == ""
-    for partial in ("be ag", "read the rule\nbe agent", "a bullet"):
-        assert "whole consecutive greentext lines" in RuleAudit(
-            "rule", quote=partial, does="d", why="w").unengaged(source)
-
-
 def test_the_owners_words_are_shown_exactly_as_the_audit_must_hold_them(team_bus):
     deal = PiRedeal.of(team_bus, team_bus.registry.require("unit-x"))
-    due = AuditDue(frozenset({"voice"}), ("fix the gate",))
-    refusal = due.refusal(SessionAudit((RuleAudit("voice"),), ()))
+    due = AuditDue(("fix the gate",))
+    refusal = due.refusal(SessionAudit(()))
     reason = Unaudited(deal.current(), deal.audit, refusal).reason
     assert '"fix the gate".' in reason and "fix the gate." not in reason.replace('"fix the gate".', "")
-    idle = SessionAudit((RuleAudit("voice"),), (OwnerWordsAnswer("fix the gate", " "),))
+    idle = SessionAudit((OwnerWordsAnswer("fix the gate", " "),))
     assert due.refusal(idle) == 'the audit names no action for: "fix the gate"'
 
 
@@ -505,8 +457,8 @@ def test_a_meant_refusal_repeats_the_words_its_id_asked_not_the_audits_newest(te
     deal.redeal(StartedDeal())
     asked = Asked(MessageId.mint("own-words"), "> the row this id asked about\n\ndid you mean it?")
     deal.meant.replace(MeantRecord(open=(asked,)))
-    deal.audit.write_text(json.dumps(FieldCodec.encode(SessionAudit(
-        (RuleAudit("spine", quote="q", does="a newer row written since", why="w"),), ()))))
+    newer = FieldCodec.decode(Probe, {"probe": "flinch", "answer": "a newer row written since"})
+    deal.audit.write_text(json.dumps(FieldCodec.encode(SessionAudit((), probes=(newer,)))))
     reason = deal.state().cause.reason
     assert "the row this id asked about" in reason
     assert "a newer row written since" not in reason
@@ -520,7 +472,7 @@ def test_an_audit_that_does_not_parse_is_refused_out_loud_before_anything_else(t
     question = MessageId.mint("broken-audit")
     deal.meant.replace(MeantRecord(open=(Asked(question),)))
     good = deal.audit.read_text()
-    deal.audit.write_text(good.replace('"rules"', '}, "rules"', 1))
+    deal.audit.write_text(good.replace('"owner_words"', '}, "owner_words"', 1))
 
     blocked = deal.state().cause
     assert "does not decode" in blocked.reason and "line 2" in blocked.reason
@@ -543,4 +495,3 @@ def test_a_deal_writes_the_blank_audit_its_session_fills(team_bus):
     deal.redeal(StartedDeal())
     audit = SessionAudit.read(deal.audit)
     assert audit == deal.current().due.skeleton() and not audit.fault()
-    assert {entry.rule for entry in audit.rules} == deal.current().due.rules
