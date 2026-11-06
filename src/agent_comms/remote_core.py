@@ -4,12 +4,15 @@ from __future__ import annotations
 
 
 import asyncio
+import http.client
+import io
 import json
 import socket
 import ssl
 import threading
-import urllib.request
+import urllib.error
 from dataclasses import dataclass, replace
+from functools import cached_property
 
 import aiohttp
 from pydantic import JsonValue
@@ -23,7 +26,7 @@ from .core_access import CoreAccess
 from .exporting import WireExportCancelled
 from .nominal.field_codec import FieldCodec, RpcCallId
 from .tool_caller import ToolCaller
-from .tool_request import ObservedToolRequest, RequestPoster, ToolRequest
+from .tool_request import ConnectionDropped, ObservedToolRequest, RequestPoster, ToolRequest
 from .tool_result import ToolResult
 from .ui_model.observation import (
     ObservationPeer, ObservationSource, ObserverDied, RelayConnection, RelayEnding, ViewerEnd, relay_frames,
@@ -107,7 +110,7 @@ class ConnectorObservationPeer(ObservationPeer):
         try:
             async with aiohttp.ClientSession() as session, session.ws_connect(
                 self.url, headers={"Authorization": f"Bearer {access.credential.token}"},
-                ssl=access.tls(),
+                ssl=access.tls,
             ) as remote:
                 self.ending = await relay_frames(local, remote)
         except (OSError, aiohttp.ClientError) as error:
@@ -145,6 +148,7 @@ class ConnectorClient(ObservationSource):
     endpoint: HttpsMcpEndpoint
     credential: UiCredential
 
+    @cached_property
     def tls(self) -> ssl.SSLContext:
         """One context for every connection to this connector, built when connecting, so the
         trust the owner configures (``SSL_CERT_FILE`` included) applies to calls and
@@ -153,6 +157,15 @@ class ConnectorClient(ObservationSource):
 
     def observation_peer(self) -> ConnectorObservationPeer:
         return ConnectorObservationPeer(self)
+
+
+class ThreadConnection(threading.local):
+    """This thread's HTTPS connection to one connector, kept open between its calls; a closed one
+    reopens on its next request."""
+
+    def __init__(self, endpoint: HttpsMcpEndpoint, context: ssl.SSLContext, timeout: float) -> None:
+        self.connection = http.client.HTTPSConnection(
+            endpoint.url.host, endpoint.url.port, context=context, timeout=timeout)
 
 
 class RemoteCoreAccess(UiConnectionProfile, CoreAccess, ConnectorClient, RequestPoster):
@@ -169,15 +182,33 @@ class RemoteCoreAccess(UiConnectionProfile, CoreAccess, ConnectorClient, Request
     def headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.credential.token}", "Content-Type": "application/json"}
 
+    @cached_property
+    def connections(self) -> ThreadConnection:
+        return ThreadConnection(self.endpoint, self.tls, self.timeout_seconds)
+
     def post[C: ToolCaller, R: ToolResult](self, request: ToolRequest[C, R]) -> dict[str, JsonValue]:
-        """One posted tools/call and its reply."""
+        """One posted tools/call and its reply; a dropped connection is the request's to answer."""
+        try:
+            return self.exchange(request)
+        except ConnectionDropped as dropped:
+            return request.dropped(self, dropped)
+
+    def exchange[C: ToolCaller, R: ToolResult](self, request: ToolRequest[C, R]) -> dict[str, JsonValue]:
+        """One round trip on this thread's kept connection, so a call pays no new handshake."""
         envelope = ToolsCallMessage(jsonrpc="2.0", id=1, params=request.called())
-        posted = urllib.request.Request(
-            str(self.endpoint.url), data=FieldCodec.compact(FieldCodec.encode(envelope)).encode(),
-            headers=self.headers,
-        )
-        with urllib.request.urlopen(posted, timeout=self.timeout_seconds, context=self.tls()) as response:
-            return FieldCodec.decode(ToolsCallReply, json.load(response)).structured()
+        body = FieldCodec.compact(FieldCodec.encode(envelope)).encode()
+        connection = self.connections.connection
+        try:
+            connection.request("POST", self.endpoint.url.raw_path_qs, body, self.headers)
+            response = connection.getresponse()
+            payload = response.read()
+        except (OSError, http.client.HTTPException) as error:
+            connection.close()
+            raise ConnectionDropped(f"The connection to {self.endpoint.url.host} dropped: {error}") from error
+        if response.status >= 400:
+            raise urllib.error.HTTPError(
+                str(self.endpoint.url), response.status, response.reason, response.headers, io.BytesIO(payload))
+        return FieldCodec.decode(ToolsCallReply, json.loads(payload)).structured()
 
     def post_observed[C: ToolCaller, R: ToolResult](self, request: ObservedToolRequest[C, R]) -> dict[str, JsonValue]:
         """A call the client asked progress for: its events reach the request's observer, and a
@@ -191,7 +222,7 @@ class RemoteCoreAccess(UiConnectionProfile, CoreAccess, ConnectorClient, Request
         called = request.called()
         envelope = ToolsCallMessage(jsonrpc="2.0", id=call_id, params=replace(
             called, meta={**called.meta, "progressToken": call_id}))
-        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=self.tls())) as session:
+        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=self.tls)) as session:
             cancelled = asyncio.Event()
             watcher = asyncio.create_task(self.cancel_when_stopped(session, request, call_id, cancelled))
             try:

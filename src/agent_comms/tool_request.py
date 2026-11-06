@@ -226,6 +226,11 @@ class ToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResu
         """How a remote access sends this request: one posted call and its reply."""
         return remote.post(self)
 
+    def dropped(self, remote: RequestPoster, dropped: ConnectionDropped) -> dict[str, JsonValue]:
+        """A call that may change the bus is never sent twice: Core may already have run it, so
+        the caller hears the connection failed."""
+        raise dropped
+
     def replied(self, comms: Comms, caller: ToolCaller) -> dict[str, JsonValue]:
         # A request decoded from the wire meets whichever caller arrived; the caller's own
         # invoke checks at runtime that it may apply this request (thread-only refusals).
@@ -282,12 +287,20 @@ class ObservedToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = 
         return remote.post_observed(self)
 
 
+class ConnectionDropped(ConnectionError):
+    """The connection to Core dropped during a call: whether Core ran it is unknown."""
+
+
 class RequestPoster(ABC):
     """Who sends a request to a Core across the connector; each request picks which way it is
     sent, plainly or with its progress and cancel streamed."""
 
     @abstractmethod
     def post[C: ToolCaller, R: ToolResult](self, request: ToolRequest[C, R]) -> dict[str, JsonValue]: ...
+
+    @abstractmethod
+    def exchange[C: ToolCaller, R: ToolResult](self, request: ToolRequest[C, R]) -> dict[str, JsonValue]:
+        """One round trip on the kept connection; a drop raises ConnectionDropped."""
 
     @abstractmethod
     def post_observed[C: ToolCaller, R: ToolResult](
@@ -358,6 +371,10 @@ class ReadTool(ReadWork, FreshIngress):
     __slots__ = ()
     bus_effect: ClassVar[str] = "Reads only; changes nothing on the bus."
     read_only_hint: ClassVar[bool] = True
+
+    def dropped(self, remote: RequestPoster, dropped: ConnectionDropped) -> dict[str, JsonValue]:
+        """A read changes nothing, so it is asked once more on a fresh connection."""
+        return remote.exchange(cast(ToolRequest, self))
 
     def require_read_only(self) -> None:
         """The declared read capability controls access, independently of MCP hints."""
