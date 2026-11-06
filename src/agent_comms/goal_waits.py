@@ -228,10 +228,7 @@ class ExcludedInput(UnresolvedInput):
 
     @classmethod
     def excluded(cls, row: StoredInput, reason: type[InputExclusion]) -> ExcludedInput:
-        return ExcludedInput(
-            sequence=row.sequence, target=row.target, text=row.source_text,
-            input_id=row.key, status=row.public_status,
-            reviewed_for_goals=tuple(sorted(row.goal_reviews)), reason=reason)
+        return cls.of(row, reason=reason)
 
 
 @dataclass(frozen=True)
