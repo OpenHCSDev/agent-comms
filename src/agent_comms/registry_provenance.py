@@ -199,11 +199,23 @@ class RegistryNames(Generic[Member]):
 
 @dataclass(frozen=True, slots=True)
 class SenderBindings:
-    """The namespace's SQL inputs, built together from its original members."""
+    """The namespace's SQL inputs, built together from its original members once per snapshot,
+    each sender's part encoded on its own so a read binds only the senders it can meet."""
 
-    senders: str
-    unrecorded: str
-    births: str
+    senders: Mapping[str, str]
+    births: Mapping[str, str]
+    unrecorded: tuple[str, ...]
+
+    def bound(self, routed: Iterable[str]) -> tuple[str, str, str]:
+        """The senders, unrecorded names and births of the senders whose routes reach a read's
+        targets: the only ones its route keys can join."""
+        named = [name for name in dict.fromkeys(routed) if name in self.senders]
+        born = [name for name in dict.fromkeys((*named, *self.unrecorded)) if name in self.births]
+        return (
+            "{" + ",".join(f"{json.dumps(name)}:{self.senders[name]}" for name in named) + "}",
+            json.dumps(self.unrecorded),
+            "{" + ",".join(f"{json.dumps(name)}:{self.births[name]}" for name in born) + "}",
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -232,22 +244,17 @@ class RegistryProvenance(RegistryNames[ThreadProvenance]):
 
     @cached_property
     def sender_bindings(self) -> SenderBindings:
-        """Current sender identities and births for one SQL read, including aliases."""
+        """Current sender identities and births for SQL reads, including aliases."""
         senders = {}
         births = {}
         unrecorded: list[str] = []
         for name, incarnation in self.named_incarnations():
-            births[name] = incarnation.wire_birth
-            senders[name] = tuple(DeliveryScope.sender_lookups(
-                incarnation, partial(unrecorded.append, name)
+            births[name] = json.dumps(incarnation.wire_birth)
+            senders[name] = FieldCodec.compact(FieldCodec.encode(
+                tuple(DeliveryScope.sender_lookups(incarnation, partial(unrecorded.append, name))),
+                tuple[ThreadLookup | PublicSender, ...],
             ))
-        return SenderBindings(
-            senders=FieldCodec.compact(FieldCodec.encode(
-                senders, dict[str, tuple[ThreadLookup | PublicSender, ...]]
-            )),
-            unrecorded=json.dumps(unrecorded),
-            births=json.dumps(births),
-        )
+        return SenderBindings(senders=senders, births=births, unrecorded=tuple(unrecorded))
 
     def retired(self, name: str) -> bool:
         """A recorded namespace keeps no removal ledger. A name its own bus
