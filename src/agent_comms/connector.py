@@ -54,7 +54,7 @@ from .declared_verb import DeclaredVerb
 from .cli_protocol import CoreError
 from .command import Command
 from .launch_root import started
-from .child_process import GitChildren, HelperStart, OwnedGitOpening, join_retirement
+from .child_process import GitChildren, HelperStart, OwnedGitOpening, SpawnedHelper, join_retirement
 from .active_route import CommsRoute, resolve_comms_route
 from .comms import Comms, client_wire, wire
 from .ui_model.observation import RelayConnection, relay_frames, serve_encoded
@@ -796,6 +796,8 @@ class Connector(ConnectorService):
     """The MCP endpoint and the OAuth authorization server in front of it."""
 
     heartbeat_seconds: ClassVar[float] = 25.0
+    # How a remote viewer's observation process starts.
+    helper_start: ClassVar[HelperStart] = SpawnedHelper()
     """How often a watch socket is pinged; a client that misses the pong is dropped."""
 
     store: ConnectorStore
@@ -1189,7 +1191,7 @@ class Connector(ConnectorService):
             raise web.HTTPForbidden(text=str(error))
         viewer = web.WebSocketResponse()
         await viewer.prepare(request)
-        await ObservationRelay(resolve_comms_route(self.root)).carry(viewer)
+        await ObservationRelay(resolve_comms_route(self.root), self.helper_start).carry(viewer)
         return viewer
 
     async def mcp(self, request: web.Request) -> web.StreamResponse:
@@ -1214,10 +1216,10 @@ class ObservationRelay:
     """One remote viewer's observation process. Its frames pass through unopened: the
     service end decodes each one as a declared record and refuses anything else."""
 
-    def __init__(self, route: CommsRoute) -> None:
+    def __init__(self, route: CommsRoute, start: HelperStart) -> None:
         relay, service = socket.socketpair()
         with service:
-            self.process = HelperStart.current.context().Process(
+            self.process = start.context().Process(
                 target=serve_encoded, args=(route, service), daemon=False,
                 name="agent-comms-remote-observation")
             self.process.start()

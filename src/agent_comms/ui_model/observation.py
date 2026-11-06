@@ -47,7 +47,7 @@ from agent_comms.acp_extension import (
 from agent_comms.active_route import CommsRoute
 from agent_comms.activity import ObservedActivity
 from agent_comms.bus_read import OwnerScopedRead, UiRead
-from agent_comms.child_process import HelperStart, join_retirement
+from agent_comms.child_process import HelperStart, SpawnedHelper, join_retirement
 from agent_comms.input_disposition import DeliveryOverview
 from agent_comms.team_hud import TeamFrame, TeamHud, TeammateDetail
 from agent_comms.comms import Comms
@@ -1766,12 +1766,13 @@ class ObservationSource(ABC):
 
 @dataclass(frozen=True)
 class LocalRouteObservation(ObservationSource):
-    """A route observed in a local process on its root."""
+    """A route observed in a local process on its root, started the way ``start`` says."""
 
     route: CommsRoute
+    start: HelperStart = field(default_factory=SpawnedHelper)
 
     def observation_peer(self) -> LocalObservationPeer:
-        return LocalObservationPeer(self.route)
+        return LocalObservationPeer(self.route, self.start)
 
 
 class ObserverEnd(ABC):
@@ -1845,8 +1846,8 @@ class ObservationPeer(ABC):
 class LocalObservationPeer(ObservationPeer):
     """The service in a spawned process of this machine, over a pipe."""
 
-    def __init__(self, route: CommsRoute) -> None:
-        context = HelperStart.current.context()
+    def __init__(self, route: CommsRoute, start: HelperStart) -> None:
+        context = start.context()
         self.connection, child = context.Pipe()
         with ExitStack() as acquisition:
             acquisition.enter_context(self.connection)
