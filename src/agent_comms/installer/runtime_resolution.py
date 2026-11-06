@@ -697,6 +697,8 @@ class CorePackage(RuntimePackage, ConsoleScriptPackage):
 class ToadPackage(RuntimePackage, ConsoleScriptPackage):
     distribution = "batrachian-toad"
     repository = RepositoryName("OpenHCSDev", "toad")
+    # The module tree the distribution installs, which the client import probe walks.
+    import_root = "toad"
 
     @classmethod
     def preparations(cls) -> tuple[RuntimeProbe[None], ...]:
