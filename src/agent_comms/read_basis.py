@@ -1091,6 +1091,17 @@ class ListedDeliveries(MessageDisplayScope):
     def includes(self, message: Message) -> bool:
         return message.seq in self.sequences and self.scope.includes(message)
 
+    def records(
+        self, source: BusReader, *, lower: int = 0, upper: int | None = None,
+        descending: bool = False, limit: int = 100, kinds: tuple[type[MessageKind], ...] = (),
+    ) -> tuple[Message, ...]:
+        """A listing of no sequences names no message. Asking the bus to prove that ran two
+        scoped scans per empty watch wake, 12 of its 35 ms."""
+        if not self.sequences:
+            return ()
+        return MessageDisplayScope.records(self, source, lower=lower, upper=upper,
+                                           descending=descending, limit=limit, kinds=kinds)
+
 
 @dataclass(frozen=True, slots=True)
 class ChannelDisplayScope(MessageDisplayScope):
