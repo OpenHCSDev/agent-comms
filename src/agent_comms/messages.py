@@ -701,10 +701,28 @@ class MessageRoleWire(RoleActivitySource):
         role = self.change.conversation_role()
         return role.as_notice() if self.notice else role
 
+    @classmethod
+    def notice_key(cls) -> str:
+        """The stored key of the notice flag, read from the field that declares it."""
+        declared, = (field for field in fields(cls) if field.name == "notice")
+        return WireName.read(declared.type, declared.name)
+
 
 class MessageRole(InlineRecord, RoleActivitySource):
 
     category: ClassVar[type[MessageCategory]]
+
+    @classmethod
+    def stored_conversations(cls) -> str:
+        """Selects stored rows whose role counts as a conversation, over a `{role}` selector.
+
+        A role is stored as the wire object `MessageRoleWire` writes, so the notice flag it
+        records is what separates a conversation from a notice; a membership change keeps
+        counting as one. A reader that wants only conversations asks for this instead of
+        decoding every row to call `counts_as_conversation`.
+        """
+        return (f"COALESCE(json_extract({{role}}, "
+                f"'$.{MessageRoleWire.notice_key()}'), 0) = 0")
 
     @abstractmethod
     def response_policy(self, message: MessageInput) -> ResponsePolicy: ...

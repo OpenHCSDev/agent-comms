@@ -314,6 +314,24 @@ class BusReader(RouteCounts, ABC):
             headers = (BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in rows)
             return BusCapability.at_sequences(db, tuple(header.seq for header in headers))
 
+    def newest_per_conversation(
+        self, predicate: str, parameters: tuple[object, ...], *, after: int, through: int,
+    ) -> tuple[BusRecord, ...]:
+        """The newest matching record of each addressed conversation inside one sequence window,
+        oldest first: one row per conversation is read, never the window."""
+        with self.observing() as db:
+            positions = sorted(
+                row.seq for row in AddressedRow.matching(
+                    db,
+                    f'{{seq}} IN (SELECT MAX(seq) FROM '
+                    f'"{Addressed.table.declared_name}" '
+                    f'JOIN "{MessageInput.table.declared_name}" USING(seq) '
+                    f'WHERE ({predicate}) AND seq > ? AND seq <= ? GROUP BY sender, target)',
+                    (*parameters, after, through),
+                )
+            )
+            return BusCapability.at_sequences(db, tuple(positions))
+
     def latest_conversations(
         self, predicate: str, parameters: tuple[object, ...], through: int,
     ) -> list[AddressedRow]:
