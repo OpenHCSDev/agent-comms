@@ -112,17 +112,23 @@ class NativeExecutableTool(NativeToolDeclaration, CodingCall):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CoordinationCall(GlobalCommsExtension, NativeExecutableTool, declared_name=None):
-    """Core's CLI owns argument decoding; this call owns identity and live events."""
+class NamedArgumentsCall(NativeExecutableTool, declared_name=None):
+    """A call whose name is data rather than a declared member, carrying its arguments whole
+    for whatever executes it to decode."""
 
     declared_name: str
     arguments: dict[str, object]
 
-    def published_goal(self, result: PiToolResult, permission: TurnGoalPermission) -> None:
-        result.published_goal(permission)
-
     def reads(self) -> str:
         return json.dumps(self.arguments)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CoordinationCall(GlobalCommsExtension, NamedArgumentsCall, declared_name=None):
+    """Core's CLI owns argument decoding; this call owns identity and live events."""
+
+    def published_goal(self, result: PiToolResult, permission: TurnGoalPermission) -> None:
+        result.published_goal(permission)
 
 
 class CommunicationCall(CoordinationCall, declared_name=None):
@@ -133,20 +139,14 @@ class CommunicationCall(CoordinationCall, declared_name=None):
 
 
 @dataclass(frozen=True, kw_only=True)
-class McpToolCall(NativeExecutableTool, declared_name=None):
-    """A tool pi-mcp-client registered for this turn from a connected MCP server. Its name is
-    data the thread's offered catalogue admits; the extension runs it behind its own human
-    confirmation, so the owner grants no file claim."""
-
-    declared_name: str
-    arguments: dict[str, object]
+class McpToolCall(NamedArgumentsCall, declared_name=None):
+    """A tool pi-mcp-client registered for this turn: one per connected MCP server's tool,
+    plus its catalogue, resource and prompt tools. The thread's offered catalogue admits the
+    name. These tools touch no worktree path, so the owner grants no file claim."""
 
     @classmethod
     def native_extension(cls, package: Path) -> Path:
         return package / "agent-comms-extensions/pi-mcp-client/index.mjs"
-
-    def reads(self) -> str:
-        return json.dumps(self.arguments)
 
 
 @dataclass(frozen=True, kw_only=True)
