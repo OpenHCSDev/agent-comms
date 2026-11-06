@@ -99,6 +99,10 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
         """A running turn keeps its authority only while the state it was granted stands."""
         return self == captured
 
+    def held_stop(self, text: str) -> tuple[str, ...]:
+        """Why the owner's session may not end its turn yet: only an active goal holds it."""
+        return ()
+
     def transition_refusal(self) -> str:
         return "This goal cannot make that transition."
 
@@ -146,6 +150,11 @@ class ActiveGoal(Active, OpenGoal, FromOpenGoal):
     def continues_turn_from(self, captured: GoalState) -> bool:
         """An order or retry that makes the goal active never ends a running turn."""
         return True
+
+    def held_stop(self, text: str) -> tuple[str, ...]:
+        return (f"Your goal is still active: {text}\n"
+                "Keep working on it, and report progress or completion with comms_goal. "
+                "A background job still running is no reason to end the turn: do the next step.",)
 
 
 @dataclass(frozen=True)
