@@ -4,9 +4,9 @@ from __future__ import annotations
 import json
 import sqlite3
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from contextlib import AbstractContextManager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from .bus_tables import ReceivedSource
@@ -108,6 +108,29 @@ class RouteOldest(TypedRow):
     oldest: float
 
 
+@dataclass(frozen=True)
+class RouteInputs:
+    """Every value a route count binds besides its sequence interval, around the interval's
+    place in the query's arguments. Two counts with equal inputs count the same rows the same
+    way."""
+
+    leading: tuple = ()
+    trailing: tuple = ()
+
+    def bindings(self, through: int, after: int) -> tuple:
+        return (*self.leading, through, after, *self.trailing)
+
+
+@dataclass(frozen=True)
+class HeldUnseenCounts:
+    """Unseen counts per actor and conversation through one bus revision, with the inputs they
+    were counted under. The empty inputs match no real count, so the first count is whole."""
+
+    inputs: RouteInputs = RouteInputs()
+    through: int = 0
+    counts: Mapping[str, Mapping[str, int]] = field(default_factory=dict)
+
+
 class RouteCounts(ABC):
     """Bus readers share delivery queries and their existing observing lifetime."""
 
@@ -204,46 +227,77 @@ class RouteCounts(ABC):
                 WHERE addressed.lookup=route.recipient_lookup AND addressed.seq=row.seq)
     )'''
 
+    @staticmethod
+    def _route_inputs(db: sqlite3.Connection, registry, deliveries, seen, through: int) -> RouteInputs:
+        targets = sorted({target for delivery in deliveries.values()
+                          for target in delivery.index_targets})
+        senders, unrecorded, births = registry.sender_bindings.bound(
+            BusRouteKeys.senders_reaching(db, targets, through))
+        return RouteInputs((
+            *ReadCursor.sql_bindings(registry,
+                {actor: seen[actor].counted(delivery, registry)
+                 for actor, delivery in deliveries.items()}).values(),
+            json.dumps({actor: sorted(delivery.index_targets)
+                        for actor, delivery in deliveries.items()}),
+            json.dumps({actor: registry.require(actor).incarnation.require_recorded().lookup
+                        for actor in deliveries}),
+            senders, unrecorded,
+        ), (
+            births, json.dumps(dict(registry.aliases)),
+            json.dumps({actor: registry.unread_since(
+                actor, registry.require(actor).incarnation.wire_birth, False,
+            ) for actor in deliveries}),
+            json.dumps({actor: registry.unread_since(
+                actor, registry.require(actor).incarnation.wire_birth, True,
+            ) for actor in deliveries}),
+        ))
+
+    def _route_query[Row: TypedRow](self, db: sqlite3.Connection, row_type: type[Row],
+                                    inputs: RouteInputs, through: int, after: int, query: str,
+                                    parameters=()) -> list[Row]:
+        return row_type.read(db.execute(
+            f'''WITH {ReadCursor.sql("?")}, {ReadCursor.floor_sql},
+            {self._requests}, {ReadCursor.joined_sql} {query}''',
+            (*inputs.bindings(through, after), *parameters)))
+
     def _route_rows[Row: TypedRow](self, row_type: type[Row], registry, deliveries, seen,
                                   after: int, query: str, parameters=()) -> list[Row]:
         with self.observing() as db:
             through = BusRow.last_seq(db)
-            targets = sorted({target for delivery in deliveries.values()
-                              for target in delivery.index_targets})
-            senders, unrecorded, births = registry.sender_bindings.bound(
-                BusRouteKeys.senders_reaching(db, targets, through))
-            bindings = (
-                *ReadCursor.sql_bindings(registry,
-                    {actor: seen[actor].counted(delivery, registry)
-                     for actor, delivery in deliveries.items()}).values(),
-                json.dumps({actor: sorted(delivery.index_targets)
-                            for actor, delivery in deliveries.items()}),
-                json.dumps({actor: registry.require(actor).incarnation.require_recorded().lookup
-                            for actor in deliveries}),
-                senders, unrecorded, through, after,
-                births, json.dumps(dict(registry.aliases)),
-                json.dumps({actor: registry.unread_since(
-                    actor, registry.require(actor).incarnation.wire_birth, False,
-                ) for actor in deliveries}),
-                json.dumps({actor: registry.unread_since(
-                    actor, registry.require(actor).incarnation.wire_birth, True,
-                ) for actor in deliveries}),
-                *parameters,
-            )
-            return row_type.read(db.execute(
-                f'''WITH {ReadCursor.sql("?")}, {ReadCursor.floor_sql},
-                {self._requests}, {ReadCursor.joined_sql} {query}''',
-                bindings))
+            inputs = self._route_inputs(db, registry, deliveries, seen, through)
+            return self._route_query(db, row_type, inputs, through, after, query, parameters)
 
-    def unseen_counts(self, registry, deliveries, seen, *, after: int = 0):
-        counts = {actor: {} for actor in deliveries}
-        rows = self._route_rows(RouteUnread, registry, deliveries, seen, after,
-            f'''SELECT actor,target,sender,count(*) AS count FROM cursors AS request
+    @staticmethod
+    def _unseen_query(seen) -> str:
+        return (f'''SELECT actor,target,sender,count(*) AS count FROM cursors AS request
             WHERE {ReadCursor.rule_of(seen.values())} GROUP BY actor,target,sender''')
+
+    @staticmethod
+    def _grouped(deliveries, rows: Iterable[RouteUnread],
+                 counted: Mapping[str, Mapping[str, int]]) -> dict:
+        counts = {actor: dict(counted.get(actor, {})) for actor in deliveries}
         for row in rows:
             conversation = deliveries[row.actor].conversation(row.sender, row.target)
             counts[row.actor][conversation] = counts[row.actor].get(conversation, 0) + row.count
         return counts
+
+    def unseen_counts(self, registry, deliveries, seen, *, after: int = 0):
+        rows = self._route_rows(RouteUnread, registry, deliveries, seen, after,
+                                self._unseen_query(seen))
+        return self._grouped(deliveries, rows, {})
+
+    def advanced_unseen_counts(self, held: HeldUnseenCounts, registry, deliveries, seen
+                               ) -> HeldUnseenCounts:
+        """The unseen counts through this reader's revision, counting only the rows appended
+        since ``held`` when every value the count reads is unchanged. A delivered row's
+        audience is frozen at append, so an older row's count cannot change under equal inputs."""
+        with self.observing() as db:
+            through = BusRow.last_seq(db)
+            inputs = self._route_inputs(db, registry, deliveries, seen, through)
+            start = held if inputs == held.inputs else HeldUnseenCounts(inputs)
+            rows = self._route_query(db, RouteUnread, inputs, through, start.through,
+                                     self._unseen_query(seen))
+            return HeldUnseenCounts(inputs, through, self._grouped(deliveries, rows, start.counts))
 
     def unseen_oldest(self, registry, deliveries: Mapping[str, DeliveryScope],
                       seen: Mapping[str, ReadCursor]) -> dict[str, float]:
