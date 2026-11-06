@@ -87,6 +87,10 @@ async def test_busy_source_keeps_original_waiter_and_other_reads_move(tmp_path):
 async def test_cancelled_busy_read_is_removed_without_resubmission(tmp_path):
     comms, _session = saved_history(tmp_path)
     async with ObservationProcess.awaited(comms.route) as process:
+        # The observer is a spawned process that imports Comms cold. Let it answer once before
+        # the source is held, so the cancelled read reaches a running service and the 5 s below
+        # times a read, not the child's start-up (on loaded CI runners it took longer than that).
+        await process.read(ReadNotifications(str(comms.root), LiveNotificationRead(())))
         with held_source(comms):
             waiting = asyncio.create_task(process.read(ReadTranscript(str(comms.root), TranscriptPageRead(thread="saved"))))
             await asyncio.sleep(0.15)

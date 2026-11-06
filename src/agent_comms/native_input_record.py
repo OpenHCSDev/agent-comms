@@ -172,9 +172,9 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
     def matches_execution(self, execution: ExecutionRecord, owner_lookup: ThreadLookup) -> bool:
         return False
 
-    def retried_in(self, db: sqlite3.Connection) -> bool:
-        """TRIAGE has no attempts, so a later attempt never replaces it."""
-        return False
+    @abstractmethod
+    def retried_in(self, db: sqlite3.Connection, input_id: InputId) -> bool:
+        """Whether a later attempt replaced this input, so it no longer proves its source."""
 
     def proves_full_source(self, proof: HistoricalNativeInput) -> bool:
         return False
@@ -245,6 +245,16 @@ class TriageNativeExecution(NativeInputExecution):
     ) -> list[TranscriptEvent]:
         return [event.as_context() for event in
                 super().transcript_events(entry, projection, user)]
+
+    def retried_in(self, db: sqlite3.Connection, input_id: InputId) -> bool:
+        """An unreadable decision's replacement (a later attempt of the same claim) supersedes it."""
+        from .triage_native_sources import TriageNativeSource
+
+        table = TriageNativeSource.qualified_table(LOCAL_TABLE_SOURCE)
+        return db.execute(
+            f"SELECT 1 FROM {table} s JOIN {table} later ON later.assignment_id=s.assignment_id "
+            "AND later.attempt>s.attempt WHERE s.input_id=? LIMIT 1", (input_id,),
+        ).fetchone() is not None
 
     @classmethod
     def source_membership_sql(
@@ -345,7 +355,7 @@ class FullNativeExecution(NativeInputExecution):
     def _execution(self, db: sqlite3.Connection) -> ExecutionRecord:
         return ExecutionRecord.require(db, execution_id=self.execution_id)
 
-    def retried_in(self, db: sqlite3.Connection) -> bool:
+    def retried_in(self, db: sqlite3.Connection, input_id: InputId) -> bool:
         """A transient provider failure leaves this input behind a later attempt."""
         return self._execution(db).lifecycle.current_attempt_ordinal != self.attempt_ordinal
 

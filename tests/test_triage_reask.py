@@ -50,3 +50,21 @@ async def test_one_claim_takes_an_original_ask_and_one_replacement(tmp_path: Pat
             with pytest.raises(Exception):
                 stage.refreshed(store).reserve(store, claim.participant,
                                                claim.token_digest, attempt=1)
+
+
+async def test_the_replacement_alone_proves_the_source(tmp_path: Path):
+    from agent_comms.native_input_record import TriageNativeExecution
+
+    async with prepared_native_triage(tmp_path) as claim:
+        context = await recorded_input_context(claim)
+        await acknowledge_context(claim, context)
+        with Coordination(claim.store_path) as store:
+            claim.stage.burn_turn(store, claim.participant, claim.input_id,
+                                  claim.token_digest, context)
+            replacement = claim.stage.refreshed(store).reserve(
+                store, claim.participant, claim.token_digest, attempt=1)
+            db = store.session._connection
+            # Historical evidence keeps one triage input per source: the burned original is
+            # superseded, as a FULL attempt behind a later one is.
+            assert TriageNativeExecution().retried_in(db, claim.input_id)
+            assert not TriageNativeExecution().retried_in(db, replacement)
