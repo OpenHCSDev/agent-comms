@@ -446,13 +446,22 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, native_runtime_
                     AGENT_COMMS_NATIVE_CONFIG_DIR=str(agent),
                 )
 
+                owner_turn_ended = asyncio.Event()
+
                 class Audit(SessionUpdateSink):
+                    """The owner's passive log; it outlives any attachment, so it also sees
+                    the turn end after the controlling attachment is gone."""
+
                     async def publish_update(self, session_id, update):
                         row = {
                             "sessionId": session_id,
                             "update": update.model_dump(mode="json", by_alias=True, exclude_none=True),
                         }
                         updates.append(row)
+                        for fact in decode_updates(row["update"].get("_meta")):
+                            if isinstance(fact, TurnChangedUpdate) and receipt_seen.is_set() \
+                                    and not fact.state.active.phase.busy:
+                                owner_turn_ended.set()
                         return True
 
                 class Attachment(SessionUpdateSink):
@@ -585,13 +594,19 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, native_runtime_
                             )
                         )
                         release_final.set()
-                result = await asyncio.wait_for(task, TIMEOUT)
-                if case != "disconnect":
+                if case == "disconnect":
+                    # Closing the attachment cancels its own in-flight request
+                    # (OwnerConnection.close); the owner's turn runs on to its end.
+                    with pytest.raises(asyncio.CancelledError):
+                        await task
+                    await asyncio.wait_for(owner_turn_ended.wait(), TIMEOUT)
+                else:
+                    result = await asyncio.wait_for(task, TIMEOUT)
                     await asyncio.wait_for(attachment_settled.wait(), 5)
-                stop_reason = (
-                    result.get("stopReason") if isinstance(result, dict) else result.stop_reason
-                )
-                assert stop_reason == "end_turn", updates
+                    stop_reason = (
+                        result.get("stopReason") if isinstance(result, dict) else result.stop_reason
+                    )
+                    assert stop_reason == "end_turn", updates
                 assert not errors, errors
                 assert len(requests) == 2
                 assert len(permissions) == (0 if case == "no_controller" else 1)
