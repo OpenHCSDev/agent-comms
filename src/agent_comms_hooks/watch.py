@@ -29,14 +29,11 @@ from . import (
     ClaudeHookProgram,
     HookRecord,
     LaunchedPrompt,
+    SessionFailure,
 )
 from .board import SessionWire
 from .process_claim import ProcessSingleton
 from .shell_commands import ConnectCommand
-
-
-class SessionFailure(Exception):
-    """A session command failed; it does not declare the serving process dead."""
 
 
 class SessionCommandError(RuntimeError, SessionFailure):
@@ -287,6 +284,10 @@ class SessionHookProgram(ClaudeHookProgram, ABC):
             hook = ClaudeHook.decode(record)
             SessionEndpoint(hook.session_id).session().invoke(cls, record)
         except SessionFailure as error:
+            cls.refused(error)
+        except Exception as error:
+            # Nobody wrote this one a report, and a notification program's own
+            # failure status is lost if it reaches Python's default handler.
             cls.failed(error)
 
 

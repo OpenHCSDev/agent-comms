@@ -11,7 +11,11 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms_hooks.watch import SessionEndpoint, SwappingSession, WatchRecord
+from agent_comms_hooks import ClaudeHookProgram
+from agent_comms_hooks.shell_commands import ConnectCommand
+from agent_comms_hooks.watch import (
+    NoSessionBridge, SessionEndpoint, SwappingSession, WatchRecord,
+)
 
 RECORD = WatchRecord("colleague", "/bus", ("agent-comms-claude-bridge", "watch"), Path("/bus"))
 
@@ -69,3 +73,37 @@ def test_a_swapping_socket_that_never_answers_lets_the_program_answer_alone(
         holder.close()
 
     assert len(RecordingProgram.absent_calls) == 1, "the hook must end in the program's own answer"
+
+
+class ReportingProgram(ClaudeHookProgram):
+    """A real hook program: its answers are the ones a session failure reaches."""
+
+    events = ("Stop",)
+
+    @classmethod
+    def run(cls, record) -> None:
+        """Nothing to do: these tests exercise how its failures are reported."""
+
+
+def test_a_written_failure_prints_its_own_report_without_a_traceback(capsys):
+    """A failure that names its recovery is read for those words; stack frames around them
+    teach the reader to skim the whole line, which is how a dead bridge went unnoticed."""
+    with pytest.raises(SystemExit) as refused:
+        ReportingProgram.refused(NoSessionBridge("session-under-test"))
+    reported = capsys.readouterr().err
+    assert refused.value.code == ReportingProgram.failure_status()
+    assert "Traceback" not in reported
+    assert reported.startswith("No session bridge is running for session session-under-test")
+    assert ConnectCommand.program.name in reported, "the report keeps the recovery it names"
+
+
+def test_an_unreported_error_still_shows_its_traceback(capsys):
+    """Nobody wrote this one a report, so the frames it was raised from are its only account."""
+    try:
+        raise ValueError("no report was written for this")
+    except ValueError as error:
+        with pytest.raises(SystemExit):
+            ReportingProgram.failed(error)
+    reported = capsys.readouterr().err
+    assert "Traceback" in reported
+    assert "no report was written for this" in reported
