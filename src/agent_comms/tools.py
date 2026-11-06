@@ -429,7 +429,7 @@ class SearchToolLookup(ToolLookup, declared_name="search"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsDiscoverTool(ReadTool, NativeToolRequest[ToolCaller, ToolsSelected]):
+class CommsDiscoverTool(ReadTool, NativeToolRequest):
     """The native adapter activates these declarations through Pi's existing tool loader."""
 
     label = "Find and load Comms tools"
@@ -943,7 +943,7 @@ class CommsModelTool(NextTurnConfiguration, NativeOwnerCommand, NativeToolReques
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsSortChannelsTool(NativeToolRequest[ToolCaller, ChannelOrderSet]):
+class CommsSortChannelsTool(NativeToolRequest):
     label = "Sort Channels"
     description = (
         "Persist channel-list ordering independently of member ordering. Pinned "
@@ -1117,7 +1117,7 @@ class CommsDeleteViewTool(NativeToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsSortChannelTool(NativeToolRequest[ToolCaller, Channel]):
+class CommsSortChannelTool(NativeToolRequest):
     label = "Sort channel members"
     description = "Persist one channel's member ordering, shared by all attached views."
     name: Annotated[str, *tool_field("Channel name")]
@@ -1848,7 +1848,7 @@ class CommsHistoryTool(ReadTool, NativeToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsInboxTool(NativeToolRequest[ToolCaller, InboxPageRead]):
+class CommsInboxTool(NativeToolRequest):
     label = "Comms Inbox"
     description = (
         "Fetch one oldest-first page of messages no harness attempted and no native input took, "
