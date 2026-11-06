@@ -22,7 +22,7 @@ from metaclass_registry.mro_dispatch import (
     handles,
 )
 
-from agent_comms.class_fact import Declarations
+from agent_comms.class_fact import ClassFact, Declarations
 
 
 def declared_words(stem: str) -> str:
@@ -275,13 +275,27 @@ class DeclaredFamily(FamilyMember, ABC, metaclass=FamilyMeta):
             if not module.ispkg:
                 import_module_preserving_root_logging(module.name)
 
+    @ClassFact
+    @staticmethod
+    def _members(cls: type[DeclaredFamily]) -> tuple[type[DeclaredFamily], ...]:
+        """This class's members in declaration order, derived once per set of declarations:
+        acquiring them (a discovery import, an entry point) declares more, which re-derives it."""
+        return tuple(member for member in cls._member_declarations() if issubclass(member, cls))
+
+    @ClassFact
+    @staticmethod
+    def _capability_members(cls: type[DeclaredFamily]) -> dict[type, tuple[type[DeclaredFamily], ...]]:
+        """Each capability's members of this class, filled as capabilities are asked for and
+        dropped with the declarations they were derived from."""
+        return {}
+
     @classmethod
     def members_with(cls, capability: type) -> tuple[type[Self], ...]:
-        return tuple(
-            cast(type[Self], member)
-            for member in cls._member_declarations()
-            if issubclass(member, cls) and issubclass(member, capability)
-        )
+        views = cls._capability_members
+        if capability not in views:
+            views[capability] = tuple(
+                member for member in cls._members if issubclass(member, capability))
+        return cast(tuple[type[Self], ...], views[capability])
 
 
     @classmethod
