@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from abc import abstractmethod
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Annotated, ClassVar, Self
 
@@ -109,6 +109,15 @@ class PlainContextRows(ContextRows):
 class ToolDeclaration(DeclaredFamily, affix="Tool"):
     family_discriminator: ClassVar[str] = "tool"
     label: ClassVar[str]
+
+    @classmethod
+    def serving(cls, request: ToolDeclaration) -> Self:
+        """This capability's member for the request's wire name, carrying the request's
+        fields: what the wire round trip decodes, without the wire. Looking the name up
+        acquires the family's members, so a process meets the served module only when it
+        first serves a request itself."""
+        member = cls.member_named(request.declared_name)
+        return member(**{field.name: getattr(request, field.name) for field in fields(request) if field.init})
 
     @classmethod
     def declared_action(cls) -> type[ToolAction]:

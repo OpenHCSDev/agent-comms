@@ -5,16 +5,19 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from annotationlib import Format, ForwardRef, get_annotations
-from collections.abc import Mapping
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Self, ClassVar, NoReturn, cast
 
 from agent_comms_hooks import ToolRefusedError
+from metaclass_registry.core import REPLACES_REGISTERED_ATTRIBUTE
+from metaclass_registry.mro_dispatch import MroDispatch, handles
 from pydantic import JsonValue
 
 from .child_process import AsyncWork, ReadWork
 from .comms import Comms
+from .nominal.declared_family import FamilyMeta
 from .transport.progress import WireExportObserver
 from .nominal.field_codec import (
     FieldCodec,
@@ -52,17 +55,86 @@ class NoConnectorService(ConnectorService):
         raise ToolRefusedError("Only a connector call can open an inbox watch.")
 
 
+class ServesDeclaration(FamilyMeta):
+    """A served class built on a wire declaration takes that declaration's name and its slot in
+    the family, so a wire name decodes into the served class wherever the served module is
+    imported, and into the declaration everywhere else. Nothing is restated per member."""
+
+    def __new__(
+        mcs, name: str, bases: tuple[type, ...], namespace: dict[str, object], **options: object,
+    ) -> ServesDeclaration:
+        declarations = DeclarationBases.of(bases)
+        if len(declarations) > 1:
+            raise TypeError(f"{name} serves two declarations: {declarations!r}")
+        for declaration in declarations:
+            namespace.setdefault(REPLACES_REGISTERED_ATTRIBUTE, declaration)
+            options.setdefault("declared_name", declaration.declared_name)
+            namespace.setdefault("__eq__", DeclaredValue(declaration).equal)
+            namespace.setdefault("__hash__", declaration.__hash__)
+        return cast(ServesDeclaration, super().__new__(mcs, name, bases, namespace, **options))
+
+
+@dataclass(frozen=True)
+class DeclaredValue:
+    """A served request is the value its declaration carries: once a process has served a
+    request, the requests it decodes are served members while the ones it builds are
+    declarations, and a reply must still find the request that asked for it."""
+
+    declaration: type
+
+    @property
+    def equal(self) -> Callable[[object, object], bool]:
+        declaration = self.declaration
+        compared = tuple(field.name for field in fields(declaration) if field.compare)
+
+        def equal(served: object, other: object) -> bool:
+            if not isinstance(other, declaration):
+                return NotImplemented
+            return all(getattr(served, name) == getattr(other, name) for name in compared)
+
+        return equal
+
+
+class DeclarationBases(MroDispatch):
+    """Which bases are wire declarations a served class takes over, by the base's metaclass."""
+
+    @handles(ServesDeclaration)
+    @staticmethod
+    def served(base: ServesDeclaration) -> tuple[FamilyMeta, ...]:
+        return ()
+
+    @handles(FamilyMeta)
+    @staticmethod
+    def declared(base: FamilyMeta) -> tuple[FamilyMeta, ...]:
+        """A family member registered under its own name; an intermediate has no name."""
+        return (base,) if dict.get(base.__registry__, base.declared_name) is base else ()
+
+    @handles(type)
+    @staticmethod
+    def plain(base: type) -> tuple[FamilyMeta, ...]:
+        return ()
+
+    @classmethod
+    def of(cls, bases: tuple[type, ...]) -> tuple[FamilyMeta, ...]:
+        return tuple(found for base in bases for found in cls.handler_for(type(base))(base))
+
+
 class ServedRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResult](
-    AsyncWork, ThreadCommandAvailability, ToolRequest[Result], declared_name=None,
+    AsyncWork, ThreadCommandAvailability, ToolRequest[Result],
+    metaclass=ServesDeclaration, declared_name=None,
 ):
     """A tool request as the Core that runs it sees it: the declaration plus decoding a call,
     applying it under a caller and replying. Only the server imports this."""
 
     @classmethod
     def result_type(cls) -> type[Result]:
-        """What this request's apply returns, while a member still declares its result there.
-        A generic apply names its owner's own type parameter (OwnerScopedRead's Result, not
-        necessarily ToolRequest's), so that parameter is the one followed through the headers."""
+        """The result the declaration binds in its header; while a member still declares it
+        only on apply, what apply returns. A generic apply names its owner's own type parameter
+        (OwnerScopedRead's Result, not necessarily ToolRequest's), so that parameter is the one
+        followed through the headers."""
+        declared = super().result_type()
+        if declared is not ToolRequest.__type_params__[0].__default__:
+            return declared
         apply = cls.apply
         owner = next(declaration for declaration in cls.__mro__ if "apply" in vars(declaration))
         annotation = get_annotations(apply, format=Format.STRING)["return"]

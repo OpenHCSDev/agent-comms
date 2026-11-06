@@ -39,7 +39,8 @@ from .goal_history import RecordedGoalHistory
 from .goal_scope import AllGoals, OneGoal
 from .goals import Goal
 from .manual_compaction_bridge import compact_context
-from .order_tools import OwnerGoalRead
+from .bus_read import OwnerScopedRead
+from .transport.tools.reads import OwnerGoalRead
 from agent_comms.runtime_server import (
     AttachedResultRuntimeRequest, AttachedRuntimeRequest, AttachedRuntimeRequestContext,
     SubscriberClosed,
@@ -338,7 +339,7 @@ class GoalSnapshotResultRuntimeRequest(AttachedResultRuntimeRequest):
 
     async def result(self, ctx: AttachedRuntimeRequestContext) -> GoalSnapshotReply:
         await self.change(ctx)
-        return await OwnerGoalRead().owned(ctx)
+        return await OwnerScopedRead.serving(OwnerGoalRead()).owned(ctx)
 
 
 @dataclass(frozen=True, kw_only=True)

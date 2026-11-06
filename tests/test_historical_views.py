@@ -36,7 +36,7 @@ from agent_comms.threads import NativeThread
 
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.transcripts import RecordedTranscriptReadIdentity, TranscriptReadIdentity
-from agent_comms.order_tools import TranscriptPageRead
+from agent_comms.transport.tools.reads import TranscriptPageRead
 from test_transcript_pages import shared_page
 from dataclasses import fields
 from agent_comms.registry_provenance import RegistryProvenance

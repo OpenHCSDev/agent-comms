@@ -46,7 +46,8 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.active_route import CommsRoute
 from agent_comms.activity import ObservedActivity
-from agent_comms.bus_read import OwnerScopedRead, UiRead
+from agent_comms.bus_read import CapturesTranscriptPage, OwnerScopedRead, UiRead
+from agent_comms.transport.request import ToolRequest
 from agent_comms.child_process import HelperStart, SpawnedHelper, join_retirement
 from agent_comms.input_disposition import DeliveryOverview
 from agent_comms.team_hud import TeamFrame, TeamHud, TeammateDetail
@@ -89,7 +90,7 @@ from agent_comms.revision_views import (
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.transcripts import AcquiredThreadPresentation
 from agent_comms.thread_presentation import ThreadPresentation
-from agent_comms.order_tools import TranscriptPageRead
+from agent_comms.transport.tools.reads import TranscriptPageRead
 from agent_comms.transcripts import TranscriptReadIdentity
 from agent_comms.ui_model.sidebar import (
     ChannelRowModel,
@@ -486,14 +487,14 @@ class ReadRequest(AwaitedRead, declared_name=None):
 class ReadOperation(ReadRequest):
     """The UI's root and request witness around one root-free shared read."""
 
-    operation: UiRead
+    operation: ToolRequest
 
     @property
     def refusal_errors(self) -> tuple[type[Exception], ...]:
         return (*super().refusal_errors, ToolRefusedError, WorkBranchError)
 
     def read(self, comms: Comms) -> object:
-        return self.operation.read(comms)
+        return UiRead.serving(self.operation).read(comms)
 
 
 @dataclass(frozen=True)
@@ -558,7 +559,7 @@ class TranscriptRequest[ResultT](ReadRequest):
         return UnreadableHistory.outcome(lambda: self.result(self.page_read(comms))).raised()
 
     def page_read(self, comms: Comms) -> TranscriptRead:
-        return self.operation.capture_as(comms, NoDisplaySelection())
+        return CapturesTranscriptPage.serving(self.operation).capture_as(comms, NoDisplaySelection())
 
     @abstractmethod
     def result(self, read: TranscriptRead) -> ResultT: ...
@@ -635,7 +636,7 @@ class RefreshTranscript(ReadRequest):
             thread=identity.requested_name, position=identity.position, limit=identity.limit,
             page_source=identity.page_source,
         )
-        return UnreadableHistory.outcome(lambda: operation.read(comms)).raised()
+        return UnreadableHistory.outcome(lambda: UiRead.serving(operation).read(comms)).raised()
 
 
 @dataclass(frozen=True)
@@ -669,11 +670,11 @@ class ReadNotifications(ReadRequest):
 class ReadOwnerOperation(OwnerRead):
     """The UI's root/recipient witnesses around the shared owner-scoped operation."""
 
-    operation: OwnerScopedRead
+    operation: ToolRequest
 
     async def ask(self, comms: Comms) -> ToolResult:
         cut = await Coordination.run_worker(comms.registry.store.snapshot_with_authority)
-        return await self.operation.answer(comms, self.owner, cut)
+        return await OwnerScopedRead.serving(self.operation).answer(comms, self.owner, cut)
 
 
 @dataclass(frozen=True)
