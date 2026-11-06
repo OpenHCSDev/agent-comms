@@ -339,7 +339,7 @@ class GoalSnapshotResultRuntimeRequest(AttachedResultRuntimeRequest):
 
     async def result(self, ctx: AttachedRuntimeRequestContext) -> GoalSnapshotReply:
         await self.change(ctx)
-        return await OwnerScopedRead.serving(OwnerGoalRead()).owned(ctx)
+        return await OwnerScopedRead[GoalSnapshotReply].serving(OwnerGoalRead()).owned(ctx)
 
 
 @dataclass(frozen=True, kw_only=True)

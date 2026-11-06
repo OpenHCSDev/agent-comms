@@ -17,7 +17,7 @@ from pydantic import JsonValue
 
 from .child_process import AsyncWork, ReadWork
 from .comms import Comms
-from .nominal.declared_family import FamilyMeta
+from .nominal.declared_family import DeclaredFamily, FamilyMeta
 from .transport.progress import WireExportObserver
 from .nominal.field_codec import (
     FieldCodec,
@@ -61,17 +61,21 @@ class ServesDeclaration(FamilyMeta):
     imported, and into the declaration everywhere else. Nothing is restated per member."""
 
     def __new__(
-        mcs, name: str, bases: tuple[type, ...], namespace: dict[str, object], **options: object,
+        mcs, name: str, bases: tuple[type, ...], namespace: dict[str, object], *,
+        affix: str | None = None, discovery_package: str | None = None, **class_options: object,
     ) -> ServesDeclaration:
         declarations = DeclarationBases.of(bases)
         if len(declarations) > 1:
             raise TypeError(f"{name} serves two declarations: {declarations!r}")
         for declaration in declarations:
             namespace.setdefault(REPLACES_REGISTERED_ATTRIBUTE, declaration)
-            options.setdefault("declared_name", declaration.declared_name)
+            class_options.setdefault("declared_name", declaration.declared_name)
             namespace.setdefault("__eq__", DeclaredValue(declaration).equal)
             namespace.setdefault("__hash__", declaration.__hash__)
-        return cast(ServesDeclaration, super().__new__(mcs, name, bases, namespace, **options))
+        return cast(ServesDeclaration, super().__new__(
+            mcs, name, bases, namespace,
+            affix=affix, discovery_package=discovery_package, **class_options,
+        ))
 
 
 @dataclass(frozen=True)
@@ -88,9 +92,9 @@ class DeclaredValue:
         compared = tuple(field.name for field in fields(declaration) if field.compare)
 
         def equal(served: object, other: object) -> bool:
-            if not isinstance(other, declaration):
-                return NotImplemented
-            return all(getattr(served, name) == getattr(other, name) for name in compared)
+            return isinstance(other, declaration) and all(
+                bool(getattr(served, name) == getattr(other, name)) for name in compared
+            )
 
         return equal
 
@@ -100,22 +104,22 @@ class DeclarationBases(MroDispatch):
 
     @handles(ServesDeclaration)
     @staticmethod
-    def served(base: ServesDeclaration) -> tuple[FamilyMeta, ...]:
+    def served(base: type[DeclaredFamily]) -> tuple[type[DeclaredFamily], ...]:
         return ()
 
     @handles(FamilyMeta)
     @staticmethod
-    def declared(base: FamilyMeta) -> tuple[FamilyMeta, ...]:
+    def declared(base: type[DeclaredFamily]) -> tuple[type[DeclaredFamily], ...]:
         """A family member registered under its own name; an intermediate has no name."""
         return (base,) if dict.get(base.__registry__, base.declared_name) is base else ()
 
     @handles(type)
     @staticmethod
-    def plain(base: type) -> tuple[FamilyMeta, ...]:
+    def plain(base: type) -> tuple[type[DeclaredFamily], ...]:
         return ()
 
     @classmethod
-    def of(cls, bases: tuple[type, ...]) -> tuple[FamilyMeta, ...]:
+    def of(cls, bases: tuple[type, ...]) -> tuple[type[DeclaredFamily], ...]:
         return tuple(found for base in bases for found in cls.handler_for(type(base))(base))
 
 
