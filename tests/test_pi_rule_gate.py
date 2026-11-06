@@ -96,7 +96,7 @@ def test_a_compacted_pi_thread_reads_every_dealt_rule_then_writes_its_audit(
     bash.judge_under(peer_deal)  # an aborted compaction kept the context
     events.CompactionEnd().deal_rules(peer_deal)
     assert peer_deal.current().due.owner_words == words
-    with pytest.raises(RulesUnread, match="You just tried bash before reading. Call #1"):
+    with pytest.raises(RulesUnread, match="bash waits on reading"):
         bash.judge_under(peer_deal)
     with pytest.raises(RulesUnread):  # a file nobody dealt is not a way through
         call("read", {"path": "notes.md"}).judge_under(peer_deal)
@@ -137,7 +137,7 @@ def test_a_compacted_pi_thread_reads_every_dealt_rule_then_writes_its_audit(
     bash.judge_under(peer_deal)
     call("read", {"path": "notes.md"}).judge_under(peer_deal)
     events.CompactionEnd().deal_rules(peer_deal)  # the next compaction
-    with pytest.raises(RulesUnread, match="Call #1 since this deal"):
+    with pytest.raises(RulesUnread, match="Tristan: hey, your tools are locked"):
         bash.judge_under(peer_deal)
 
 

@@ -33,7 +33,7 @@ from agent_comms.plan_phases import BusWriterPhase
 from agent_comms.repository_name import RepositoryName
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import FieldCodec, OrderId
-from agent_comms.pattern_sources import PostmortemFailure, ReadThenRepeatedFailure
+from agent_comms.pattern_sources import PostmortemFailure
 from agent_comms.registry_document import RegisteredTeamProject
 from agent_comms.slop import Slop
 from agent_comms.team.spinning import SpinningTeammate
@@ -52,7 +52,7 @@ from agent_comms_hooks.board import (
 from agent_comms.cli_bridges.hook_reread import BoardReminder, DeafReminder, SliceReminder
 from agent_comms.cli_bridges.hook_deferral import StopHook
 from agent_comms.cli_bridges.hook_forks import SubagentHook
-from agent_comms.rule_deal import AuditDue, OwnerWordsAnswer, ReadSpan, RuleAudit, SessionAudit
+from agent_comms.rule_deal import AuditDue, Owed, OwnerWordsAnswer, ReadSpan, RuleAudit, SessionAudit
 from agent_comms.cli_bridges.hook_read_gate import GatedCall, MonitorInput
 from agent_comms_hooks.shell_commands import EmergencyHookStop
 from agent_comms_hooks.skill import (DeckReader, DeckStart, LightReader,
@@ -983,13 +983,13 @@ def test_refusal_counts_names_tool_and_prefills_the_owned_audit(
         output = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
         assert output["permissionDecision"] == "deny"
         reason = output["permissionDecisionReason"]
-        assert f"You just tried {tool} before reading. Call #{attempt} since this deal, refused." in reason
-        assert f"Tristan told you, verbatim:\n{words[0]}\nYou did not." in reason
-        assert ReadThenRepeatedFailure().cite() in reason
-        assert ReadThenRepeatedFailure.title in reason
+        assert reason.startswith(f"Tristan: {Owed.nudges[attempt - 1]}")
+        assert f"{tool} waits on reading." in reason
         reasons.append(reason)
-    assert "{\n" not in reasons[1]  # the template prints once per deal, the words every time
-    template = FieldCodec.decode(SessionAudit, json.loads(reasons[0][reasons[0].index("{\n"):]))
+    assert f"Tristan told you, verbatim:\n{words[0]}\nYou did not." in reasons[0]
+    assert StartedDeal().reason() in reasons[0] and StartedDeal().reason() not in reasons[1]
+    assert "{\n" not in reasons[1]  # the template and his words print once per deal
+    template = FieldCodec.decode(SessionAudit, json.JSONDecoder().raw_decode(reasons[0][reasons[0].index("{\n"):])[0])
     for source in DeckReader.sources():
         gated(transcript, "Read", {"file_path": str(source)}, comms=team_bus, binding=team_binding).completed()
     due = start.current().due
@@ -1005,7 +1005,7 @@ def test_refusal_counts_names_tool_and_prefills_the_owned_audit(
         assert str(start.audit) in output["permissionDecisionReason"]
     start.prepare(DeckReader(), words, StartedDeal())
     gated(transcript, "Bash", {"command": "true"}, comms=team_bus, binding=team_binding).judge()
-    assert "Call #1 since this deal, refused." in capsys.readouterr().out
+    assert json.dumps(f"Tristan: {Owed.nudges[0]}")[1:-1] in capsys.readouterr().out
 
 
 def test_the_audit_answers_each_shown_prompt_by_its_own_words_with_an_action():
