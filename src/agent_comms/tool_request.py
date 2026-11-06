@@ -8,7 +8,7 @@ from annotationlib import Format, ForwardRef, get_annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Self, Annotated, ClassVar, NoReturn, cast
+from typing import Self, ClassVar, NoReturn, cast
 
 from agent_comms_hooks import ToolRefusedError
 from pydantic import JsonValue
@@ -21,19 +21,17 @@ from .nominal.field_codec import (
     MalformedRecord,
     ToolCallId,
 )
-from .storage.maintenance_barrier import FreshIngress
 from .native_tools import CoordinationCall, NativeToolDeclaration
 from .threads import ThreadCommandAvailability
 from .tool_caller import NoThreadCaller, ThreadCaller, ToolCaller
 from .tool_declaration import NativeRequestTools
 from .tool_result import ToolResult
 from .transport.request import (
-    ConnectionDropped,
     ObservedRequest,
-    RequestPoster,
+    ReadRequest,
+    ThreadReadRequest,
     declared_result,
     ToolRequest,
-    tool_field,
 )
 
 
@@ -200,16 +198,10 @@ class LiveOwnerTool:
     __slots__ = ()
 
 
-class ReadTool(ReadWork, FreshIngress):
-    """A tool whose apply changes nothing on the bus."""
+class ReadTool(ReadWork, ReadRequest, declared_name=None):
+    """Serving a read: its apply changes nothing, so it needs no board and no entry gate."""
 
     __slots__ = ()
-    bus_effect: ClassVar[str] = "Reads only; changes nothing on the bus."
-    read_only_hint: ClassVar[bool] = True
-
-    def dropped(self, remote: RequestPoster, dropped: ConnectionDropped) -> dict[str, JsonValue]:
-        """A read changes nothing, so it is asked once more on a fresh connection."""
-        return remote.exchange(cast(ToolRequest, self))
 
     def require_read_only(self) -> None:
         """The declared read capability controls access, independently of MCP hints."""
@@ -227,11 +219,8 @@ class CoreRead[Result: ToolResult = ToolResult](ReadTool, ServedRequest[ToolCall
     """A read any caller may ask of Core, answering its declared result and changing nothing."""
 
 
-@dataclass(frozen=True, kw_only=True)
-class ThreadReadTool(ReadTool, NativeToolRequest):
-    thread: Annotated[str, *tool_field("Thread to read; omit to read your own")] = (
-        ""
-    )
+class ThreadReadTool(ReadTool, ThreadReadRequest, NativeToolRequest, declared_name=None):
+    """Serving a read about one thread."""
 
 
 class ThreadToolRequest(NativeToolRequest[ThreadCaller]):
