@@ -159,3 +159,51 @@ retain concise source/results in the PR and preserve input evidence.
 > 393 files in one directory
 > folders are not the missing authority
 > move the owners and all their consumers, delete the old addresses
+
+## Tool declarations live in transport; implementations compose by multiple inheritance
+
+Every `ToolRequest` member fuses two providers: its **wire declaration** (fields,
+`declared_name`, description, result) and its **implementation** (`apply()` and every
+module `apply()` imports). The client needs the first; the server needs both. That is a
+crossing (paper1 §1, Fig. 2), so one parent per class leaves the client importing the
+server: `import toad.app` (3.18 s) loads `agent_comms.todos`, `cli_commands`, both CLI
+bridge wire protocols and `team_hud`, about 370 ms of import work, because Toad
+constructs `TranscriptPageRead`, `TeammateRead`, `InputDeliveryRead`, `OwnerGoalRead` and
+the `agent_comms.tools` requests its sidebar sends. The edges, measured on main
+`e5e90ee1` with `python -X importtime -c "import toad.app"`:
+
+- `toad.acp.status -> agent_event_updates -> transcript_updates -> order_tools`
+  (`TranscriptPageRead`), then `order_tools -> team_hud -> cli_bridges.codex_*`.
+- `transcripts -> turn_digests -> held_orders -> todos` (`HeldOrders`, `LiveHold`).
+- `toad.widgets.comms_sidebar -> agent_comms.tools -> cli_verbs.{archive,delete_view,fork}
+  -> cli_commands`, and `tools -> team.standing -> cli_bridges.claude_*`.
+
+Multiple parents take that outside pair to zero (Proposition 4.2):
+
+- **Declaration** (`transport/tools/…`): the `ToolRequest` member with its fields, name,
+  description and its result bound in its class header. It imports nominal, identity and
+  message types only, never planning, CLI or bridge modules.
+- **Implementation**: a mixin carrying `apply()`, in the package of the behaviour it
+  implements (registry, execution, planning, messaging).
+- **Served tool**: `class ServedX(XImplementation, X)`. It inherits the declaration's
+  fields and wire name; nothing is restated. The connector decodes a wire name into its
+  served member, which registers itself at `__init_subclass__` from its MRO. No roster.
+
+A client constructs and posts the declaration; only the server imports the served
+module. Shared behaviour across implementations stays on its existing parents
+(`PublishingTool`, `ReadTool`, `HumanToolRequest`); a declaration family's shared fields
+stay on the declaration parents.
+
+### Phases
+
+1. **UI reads.** The `UiRead` members Toad and `ui_model` construct
+   (`TranscriptPageRead`, `TeammateRead`, `InputDeliveryRead`, `OwnerGoalRead`) and the
+   served mechanism itself. Done when `import toad.app` loads no `agent_comms.order_tools`.
+2. **The sidebar's requests.** Every request `agent_comms.tools` exposes to Toad. Done when
+   `import toad.app` loads no `cli_commands`, `cli_verbs` or `cli_bridges` module.
+3. **Every remaining tool**, by codemod from one retained scan. Done when no declaration
+   module imports an implementation module, and `tools.py` and `order_tools.py` hold no
+   `apply()`.
+
+Each phase ships its import measurement before and after, and the remote connector run
+(a tool decoded by wire name reaches its served `apply`) as proof.
