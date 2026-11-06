@@ -1249,36 +1249,19 @@ class NextContextTurn(ContextTurn):
 class DispatchRequest(SubclassUnion, affix="DispatchRequest"):
     """The original request a captured context answered, or its unobserved dispatch.
 
-    It permits neither new input nor replay.
+    It permits neither new input nor replay. A recorded context is selected by its member as
+    stored, so a capture whose dispatch was never observed is read like any other.
     """
-
-    @abstractmethod
-    def names(self, request_id: PiRequestKey) -> bool: ...
-
-    @abstractmethod
-    def require_id(self) -> PiRequestKey: ...
 
 
 @dataclass(frozen=True)
 class UnobservedDispatchRequest(NullMember, DispatchRequest):
-    """Previews and captures that never observed dispatch."""
-
-    def names(self, request_id: PiRequestKey) -> bool:
-        return False
-
-    def require_id(self) -> PiRequestKey:
-        raise ValueError("Original request ID was not captured by this historical context")
+    """Previews and captures that never observed dispatch: Pi omits requestId."""
 
 
 @dataclass(frozen=True)
 class ObservedDispatchRequest(SingleFieldValue, DispatchRequest):
     request_id: PiRequestKey
-
-    def names(self, request_id: PiRequestKey) -> bool:
-        return self.request_id == request_id
-
-    def require_id(self) -> PiRequestKey:
-        return self.request_id
 
 
 @dataclass(frozen=True)
@@ -1308,12 +1291,12 @@ class ContextManifest:
 
     @classmethod
     def for_request(
-        cls, history, turn: RecordedContextTurn, request_id: PiRequestKey
+        cls, history, turn: RecordedContextTurn, request: DispatchRequest
     ) -> ContextManifest:
         """Select the original indexed publication, never today's preview."""
         selected = tuple(record for record in history
-                         if record.turn == turn and record.request_id.names(request_id))
-        if not request_id or len(selected) != 1:
+                         if record.turn == turn and record.request_id == request)
+        if len(selected) != 1:
             raise ValueError("Original context request is absent or ambiguous")
         return selected[0]
 

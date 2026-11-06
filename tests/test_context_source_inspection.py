@@ -192,7 +192,7 @@ async def test_recorded_child_reads_exact_value_not_root_or_other_request(tmp_pa
     comms.contexts.record_after(UNREAD_CONTEXT, original)
     page = comms.contexts.page(owner.name, comms.registry)
     request = ContextRecordedSegmentRuntimeRequest(thread=owner.name, turn=original.turn,
-                request_id=original.request_id.require_id(), record=page.reference(page.resources[0].value),
+                request_id=original.request_id, record=page.reference(page.resources[0].value),
                 segment=0, contributors=(0,))
     assert FieldCodec.decode(RuntimeRequest, FieldCodec.encode(request)) == request
     selected = original.selected_segment(request.segment, request.contributors)
