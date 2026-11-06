@@ -831,7 +831,9 @@ class Connector(ConnectorService):
         for held in replaced:
             await held.viewer.close(code=WATCH_REPLACED, message=b"replaced by a newer watch")
         try:
-            await InboxWatch(thread, self.root).carried(viewer)
+            await InboxWatch(
+                thread, self.root, self.watch_tickets, URL(self.issuer),
+            ).carried(viewer)
         finally:
             self.open_watches.remove(watch)
             # The access log says only that the socket ended; this says which side ended it.
