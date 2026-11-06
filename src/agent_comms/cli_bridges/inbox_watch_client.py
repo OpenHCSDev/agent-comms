@@ -40,7 +40,7 @@ from agent_comms.watched import FileSource
 
 from .claude_protocol import ClaudeMonitorFrame
 from .claude_transcript import (
-    WATCH_STOPPED, WINDOW_ENDED, PrintedLedger, PrintedNow, ReconnectsAlone, ReconnectUrl,
+    WATCH_REPLACED, WATCH_STOPPED, WINDOW_ENDED, PrintedLedger, PrintedNow, ReconnectsAlone, ReconnectUrl,
     RecentClaudeWindow, RunningClaude,
 )
 from .session_watch import WatchClaim
@@ -173,7 +173,9 @@ class WatchEnd(ABC):
     @classmethod
     def closed(cls, code: int | None) -> WatchEnd:
         """The close code is decided once, here, where it arrives."""
-        return WatchStopped() if code == WATCH_STOPPED else WatchDropped(f"closed with code {code}")
+        reason = f"closed with code {code}"
+        return {WATCH_STOPPED: WatchStopped(), WATCH_REPLACED: WatchReplaced(reason)}.get(
+            code, WatchDropped(reason))
 
     async def settled(self, watch: InboxSocket) -> WatchEnd:
         """What is left for the model once this process has done what it can."""
@@ -218,6 +220,15 @@ class WatchUnopened(WatchDropped):
             return self
         await asyncio.sleep(delay)
         return await (await watch.opened(url)).redialing(watch, url, delays)
+
+
+@dataclass(frozen=True)
+class WatchReplaced(WatchDropped):
+    """A newer watch of this thread took the socket's place. Reconnecting would take it back
+    and the two would replace each other for ever, so this one goes back to the model."""
+
+    async def settled(self, watch: InboxSocket) -> WatchEnd:
+        return self
 
 
 @dataclass(frozen=True)
