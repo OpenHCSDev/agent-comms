@@ -490,6 +490,43 @@ def test_a_verb_reply_carries_the_new_rows_naming_its_caller(notification_bus):
     assert answered(CommsTodoListTool, {"thread": "colleague"}).board == ()
 
 
+def test_a_busy_core_writer_never_fails_a_verb_that_landed(notification_bus):
+    """#4088 send-back: the board runs after the verb's own write. When another writer holds
+    coordination.sqlite3, that call carries no rows instead of raising, so a send that landed
+    never comes back as a failure, and the rows stay unstamped for the next call."""
+    import sqlite3
+
+    from agent_comms.connector import AnsweredCall
+    from agent_comms.coordination.database import CoordinationStore
+    from agent_comms.task_attachments.team_pings import TeamUpdateStore
+    from agent_comms.tool_caller import ThreadCaller
+    from agent_comms.tools import CommsSendTool
+
+    comms = notification_bus
+    colleague = comms.registry.require("colleague").incarnation
+    worker = comms.registry.require("worker").incarnation
+    row = RulePing(ReviewTimerUp, TextDigest.of("busy"), text="Review worker P4",
+                   subjects=(TeammateSubject(worker),), since=RecordedEventTime(time.time()),
+                   threads=("colleague",))
+    TeamUpdateStore.record(comms.root, TeamDecisions(colleague, (row,), (row,), ()))
+    caller = ThreadCaller("colleague")
+    send = {"to": "outsider", "body": "landing while Core is busy"}
+
+    def answered() -> AnsweredCall:
+        request = CommsSendTool.decoded(comms, send)
+        return AnsweredCall(request.replied(comms, caller), request.board(comms, caller))
+
+    holder = sqlite3.connect(CoordinationStore.path_in(comms.root), timeout=0)
+    holder.execute("BEGIN IMMEDIATE")
+    try:
+        busy = answered()
+    finally:
+        holder.execute("ROLLBACK")
+        holder.close()
+    assert busy.board == () and busy.reply
+    assert answered().board == ("BOARD: Review worker P4 (0 min)",)
+
+
 def test_the_deck_carries_the_voice_every_fourth_slice_every_rule_reminder_and_every_failure():
     slices = DeckReader.slices()
     voice = DeckReader.paragraphs(TeamPackage.voice().read_text())
