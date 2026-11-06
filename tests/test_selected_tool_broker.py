@@ -397,6 +397,6 @@ async def test_a_dealt_rule_gate_refuses_the_selected_write_before_its_owner_act
         ToolCallContent(id="call_1", name=name, arguments=arguments),
     ))))
     server.tool_started(ToolExecutionStart(tool_call_id="call_1", tool_name=name, args=arguments))
-    with pytest.raises(RulesUnread, match="before reading"):
+    with pytest.raises(RulesUnread, match="waits on reading"):
         await server.handle_request(_wire(token))
     assert acted == []
