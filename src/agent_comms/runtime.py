@@ -43,11 +43,10 @@ from .owner_protocol import (
     UnannouncedOwner,
 )
 from .owner_connection import CapturedOwner, NoControllerToken, OwnerConnection, OwnerIdentityChangedError
-from agent_comms.runtime_request import RuntimeRequest
 from .runtime_requests import SubscribeRuntimeRequest
 from .thread_identity import ThreadIncarnation
 
-from .runtime_server import ClientPermissionResponse
+from .runtime_server import ClientPermissionResponse, RuntimeRequest
 
 if TYPE_CHECKING:
     from .acp import CommsAgent

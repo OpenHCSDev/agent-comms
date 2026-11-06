@@ -23,7 +23,7 @@ from agent_comms.native_arguments import (
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.pi_vocabulary import ServiceTier
 from agent_comms.repo import Checkout, Repo
-from agent_comms.runtime_request import RuntimeRequest
+from agent_comms.runtime_server import RuntimeRequest
 from agent_comms.runtime_requests import PromptRuntimeRequest
 from agent_comms.threads import NativeThread
 
