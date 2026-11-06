@@ -65,7 +65,7 @@ from .working_memory_labels import ModelLabel
 if TYPE_CHECKING:
     from acp.schema import AgentMessageChunk
 
-    from .input_drain import InputDrain
+    from .execution.input_drain import InputDrain
 
 
 class AgentCommsUpdate(DeclaredFamily, affix="Update"):

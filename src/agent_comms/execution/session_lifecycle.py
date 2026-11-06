@@ -10,8 +10,8 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from .controller import NO_CONTROLLER, NoController
-from .coordination.errors import Refused
+from ..controller import NO_CONTROLLER, NoController
+from ..coordination.errors import Refused
 from acp.schema import (
     AgentCapabilities,
     ClientCapabilities,
@@ -30,42 +30,42 @@ from acp.schema import (
 )
 from pydantic import JsonValue
 
-from . import agent_events as events
-from .acp_extension import (
+from .. import agent_events as events
+from ..acp_extension import (
     CoordinationChangedUpdate,
     GoalChangedUpdate,
     encode_updates,
 )
-from .child_process import ProcessIdentity, join_retirement
-from .comms import Comms
-from .config_options import ConfigOptions
-from .input_key import InputKey, InputKeyText
-from .launch_runtime import ThreadLaunch
-from .owner_launch import RetainedOwnerLaunch
-from .turn_input_source import NoTurnAcceptance
-from .session_config_options import SessionConfigOptions
-from .coordination.coordinator import Coordination
-from .errors import RelationViolationError
-from .nominal.field_codec import AcpSessionId, FieldCodec, MalformedRecord, boundary_decoder
-from .owner_protocol import IncompatibleOwner, IncompatibleOwnerError
-from .pi_rule_gate import PiRedeal
-from .registry_document import RegistryEntry
-from .runtime_server import RuntimeServer
-from .runtime import RuntimeProxy
-from .runtime_requests import FreshSubscribeRuntimeRequest, SubscribeRuntimeRequest
-from .session_effects import SessionEffects
-from .session_load import ExistingSessionLoadPlan, FailedSessionLoadPlan, SessionLoadPlan
-from .thread_identity import AcpThreadRole, ClaimedIdentity, OwnerIdentity, ThreadIncarnation
-from .thread_model import ThreadModel
-from .thread_status import ActiveThreadPresence
-from .thread_text import NoThreadText, ThreadText
-from .repo import Checkout
-from .threads import NativeThread, Thread
-from .transcript_updates import TranscriptReplay
+from ..child_process import ProcessIdentity, join_retirement
+from ..comms import Comms
+from ..config_options import ConfigOptions
+from ..input_key import InputKey, InputKeyText
+from ..launch_runtime import ThreadLaunch
+from ..owner_launch import RetainedOwnerLaunch
+from ..turn_input_source import NoTurnAcceptance
+from ..session_config_options import SessionConfigOptions
+from ..coordination.coordinator import Coordination
+from ..errors import RelationViolationError
+from ..nominal.field_codec import AcpSessionId, FieldCodec, MalformedRecord, boundary_decoder
+from ..owner_protocol import IncompatibleOwner, IncompatibleOwnerError
+from ..pi_rule_gate import PiRedeal
+from ..registry_document import RegistryEntry
+from ..runtime_server import RuntimeServer
+from ..runtime import RuntimeProxy
+from ..runtime_requests import FreshSubscribeRuntimeRequest, SubscribeRuntimeRequest
+from ..session_effects import SessionEffects
+from ..session_load import ExistingSessionLoadPlan, FailedSessionLoadPlan, SessionLoadPlan
+from ..thread_identity import AcpThreadRole, ClaimedIdentity, OwnerIdentity, ThreadIncarnation
+from ..thread_model import ThreadModel
+from ..thread_status import ActiveThreadPresence
+from ..thread_text import NoThreadText, ThreadText
+from ..repo import Checkout
+from ..threads import NativeThread, Thread
+from ..transcript_updates import TranscriptReplay
 
 
 if TYPE_CHECKING:
-    from .acp import SdkSessionConnection
+    from ..acp import SdkSessionConnection
     from .input_drain import OwnerSession
 
 

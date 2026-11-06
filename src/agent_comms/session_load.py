@@ -13,7 +13,7 @@ import agent_comms.thread_presentation as thread_presentation
 from .native_arguments import GivenArguments
 
 if TYPE_CHECKING:
-    from .session_lifecycle import AttachedSessionLifecycle
+    from .execution.session_lifecycle import AttachedSessionLifecycle
     from .threads import Thread
 
 

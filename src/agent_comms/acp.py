@@ -78,7 +78,7 @@ from .cursor_owner import CursorOwner
 from .cursor_publication import CursorPublication
 from .nominal.field_codec import AcpSessionId, AcpSessionIdText, ClaimId, FieldCodec, RootId
 from .image_inputs import prompt_images
-from .input_drain import InputDrain
+from .execution.input_drain import InputDrain
 from .config_options import ConfigOptions
 from .owner_launch import RetainedOwnerLaunch
 from .input_effects import InputEffects
@@ -91,7 +91,7 @@ from .owner_connection import socket_path
 from .runtime import RuntimeProxy
 from .selected_write_plan import SelectedWritePlans
 from .session_effects import SessionEffects
-from .session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
+from .execution.session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
 from .threads import Thread
 from .turn_effects import TurnEffects
 from .turn_runner import TurnRunner
@@ -102,7 +102,7 @@ from .working_memory_worker import AnnotationWorker
 from dataclasses import dataclass
 from .drain_failures import drain_failures
 from .activity import FailedWakeDiagnostic
-from agent_comms.input_drain import SchedulesWake, WakeDue, WakeHeld, WakeOutcome
+from agent_comms.execution.input_drain import SchedulesWake, WakeDue, WakeHeld, WakeOutcome
 from .thread_identity import OwnerIdentity
 
 from agent_comms.selected_write_authority import BoundSelectedWriteAuthority

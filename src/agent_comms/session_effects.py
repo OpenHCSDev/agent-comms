@@ -11,7 +11,7 @@ from .threads import Thread
 
 if TYPE_CHECKING:
     from .cursor_publication import CursorPublication
-    from .input_drain import InputDrain
+    from .execution.input_drain import InputDrain
     from .turn_runner import TurnRunner
 
 

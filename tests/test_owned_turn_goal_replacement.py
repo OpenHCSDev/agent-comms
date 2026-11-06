@@ -23,7 +23,7 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.goal_states import ActiveGoal
 from agent_comms.owned_send import OwnedSend
-from agent_comms.owned_turn import OwnedTurn
+from agent_comms.execution.owned_turn import OwnedTurn
 from agent_comms.queued_input import InitialInput, QueuedInput
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Checkout

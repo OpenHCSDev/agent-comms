@@ -36,7 +36,7 @@ if TYPE_CHECKING:
     from .goal_waits import GoalWait
     from .goals import GoalDeclaration
     from .input_disposition import InputDispositions
-    from .input_drain import DrainedSession, InputDrain
+    from .execution.input_drain import DrainedSession, InputDrain
     from .owned_send import OwnedSend
     from .runtime_server import RuntimeServer
     from .thread_identity import RecordedThreadIncarnation

@@ -29,7 +29,7 @@ from .native_input_proof import NativeContextProof
 from .publication_measurements import PublicationMeasurements
 
 if TYPE_CHECKING:
-    from .input_drain import InputDrain
+    from .execution.input_drain import InputDrain
     from .owned_send import OwnedSend
     from .tracked_turn import TrackedTurnSession
 

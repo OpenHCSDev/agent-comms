@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from agent_comms.pi_wire import PiUsage
     from agent_comms.threads import Thread
     from agent_comms.turn_context import TurnContext
-    from agent_comms.owned_turn import TurnGoalAccount
+    from agent_comms.execution.owned_turn import TurnGoalAccount
     from agent_comms.turn_goal_account import VerifiedGoalSettlement
     from agent_comms.turn_terminal import TurnTerminal
 

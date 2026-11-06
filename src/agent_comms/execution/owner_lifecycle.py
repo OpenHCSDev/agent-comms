@@ -20,55 +20,55 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 
-from .active_route import resolve_comms_route
+from ..active_route import resolve_comms_route
 from agent_comms.attempt_recovery import RecoveryMonitorCapability
-from .child_process import (
+from ..child_process import (
     Platform,
     ProcessIdentity,
 )
-from .cli_result import TargetEditResult
-from .owner_connection import OwnerConnection
-from .owner_launch import RetainedOwnerLaunch, StartOwnerRuntimeRequest, StopOwnerRuntimeRequest
-from .owner_release import OwnerReleaseStore
-from .root_runtime import RootRuntimeStore
-from .channel_targets import ThreadTarget
-from .task_attachments.owner_notices import RestartNotice
-from .diagnostics import OwnerProcessOutput
-from .errors import RelationViolationError
-from .launch_root import LaunchRoot
-from .input_key import AcpInputKey, InputKey
-from .nominal.field_codec import InputId, RecordMember
-from .input_disposition import InputDispositions
-from .launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime, RestartEnvironment, SetVariable, ThreadLaunch
-from .storage.maintenance_barrier import MaintenanceBarrier
-from .message_bus import MessageBus
-from .native_arguments import (
+from ..cli_result import TargetEditResult
+from ..owner_connection import OwnerConnection
+from ..owner_launch import RetainedOwnerLaunch, StartOwnerRuntimeRequest, StopOwnerRuntimeRequest
+from ..owner_release import OwnerReleaseStore
+from ..root_runtime import RootRuntimeStore
+from ..channel_targets import ThreadTarget
+from ..task_attachments.owner_notices import RestartNotice
+from ..diagnostics import OwnerProcessOutput
+from ..errors import RelationViolationError
+from ..launch_root import LaunchRoot
+from ..input_key import AcpInputKey, InputKey
+from ..nominal.field_codec import InputId, RecordMember
+from ..input_disposition import InputDispositions
+from ..launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime, RestartEnvironment, SetVariable, ThreadLaunch
+from ..storage.maintenance_barrier import MaintenanceBarrier
+from ..message_bus import MessageBus
+from ..native_arguments import (
     ConfiguredBinary,
     InheritedArguments,
     LaunchArguments,
     LaunchBinary,
     NativeArguments,
 )
-from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
-from .registration import Registration
-from .registry_document import RegistrySnapshot
-from .registry_store import RegistryEdit
-from .restart_refusals import (
+from ..private_nk_entrypoint import PrivateNkLaunch, RootLaunch
+from ..registration import Registration
+from ..registry_document import RegistrySnapshot
+from ..registry_store import RegistryEdit
+from ..restart_refusals import (
     OwnerBusyRefusal,
     OwnerGenerationChangedRefusal,
     OwnerSelectionChangedRefusal,
 )
-from .restart_scope import AllOwners, RestartScope
-from .thread_identity import (
+from ..restart_scope import AllOwners, RestartScope
+from ..thread_identity import (
     ClaimedIdentity,
     OwnerIdentity,
 )
-from .thread_text import GivenThreadText, NoThreadText, ThreadText
-from .threads import NativeThread, Thread
+from ..thread_text import GivenThreadText, NoThreadText, ThreadText
+from ..threads import NativeThread, Thread
 
 if TYPE_CHECKING:
-    from .goal_management import Goals
-    from .messaging import Messaging
+    from ..goal_management import Goals
+    from ..messaging import Messaging
 
 _LOG = logging.getLogger(__name__)
 
@@ -163,7 +163,7 @@ class OwnerStartResult(RecordMember, TargetEditResult):
         return (self.thread,)
 
 
-from .owner_cutover import OwnerCutover, PreserveOwnerRuntime
+from ..owner_cutover import OwnerCutover, PreserveOwnerRuntime
 
 
 class OwnerLifecycle:
@@ -300,7 +300,7 @@ class OwnerLifecycle:
         replacement launches. It owns its writer
         proof and operation; failure leaves the fenced batch stopped for review.
         """
-        from .owner_restart import OwnerRestartRequest
+        from ..owner_restart import OwnerRestartRequest
 
         request = OwnerRestartRequest(scope, agent_bin, agent_args, expected, runtime)
         return cutover.restart(self, request)

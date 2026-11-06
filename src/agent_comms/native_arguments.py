@@ -18,7 +18,7 @@ from .nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, Subcl
 from .launch_runtime import LaunchRuntime
 
 if TYPE_CHECKING:
-    from .owner_lifecycle import OwnerLifecycle
+    from .execution.owner_lifecycle import OwnerLifecycle
     from .thread_model import ThreadModel
 from .pi_vocabulary import (
     NoThinkingOverride,

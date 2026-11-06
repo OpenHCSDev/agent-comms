@@ -36,14 +36,14 @@ from .goals import Goal, GoalDeclaration, GoalRevision
 from .registry_document import RegistryDocument, RegistrySnapshot
 from .reservation_rules import ReservationViolationError
 from .routing import ScheduledTurn
-from agent_comms.input_drain import WakeScheduleCheck
+from agent_comms.execution.input_drain import WakeScheduleCheck
 
 from .threads import NativeThread
 
 if TYPE_CHECKING:
     from .comms import Comms
-    from .input_drain import InputDrain, OwnerSession
-    from .session_lifecycle import SessionLifecycle
+    from .execution.input_drain import InputDrain, OwnerSession
+    from .execution.session_lifecycle import SessionLifecycle
     from .turn_effects import TurnEffects
 
 GOAL_CONTINUE_PROMPT = "Continue working toward the active goal."
