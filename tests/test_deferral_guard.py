@@ -19,6 +19,7 @@ from agent_comms.cli_bridges.hook_requests import HookReply, StopRequest
 from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms_hooks.watch import WatchRecord
 from agent_comms.comms import Comms
+from agent_comms.goal_actions import SetGoalAction
 from agent_comms.repo import Checkout
 from agent_comms.threads import ExternalThread
 from agent_comms.transcript_events import AssistantTranscript
@@ -111,6 +112,16 @@ def test_transcript_members_and_unknowns_keep_their_reply_behavior(
     answer = TranscriptRecord.of(record)
     assert answer.said() == said
     assert answer.ends_reply is ends_reply
+
+
+def test_an_active_bus_goal_holds_the_stop_with_its_own_text(stop_binding, tmp_path):
+    stop_binding.comms.goals.update_goal("claude-code", SetGoalAction(text="Land the scoped relayout"))
+    finished = [RESULT, assistant(text("Tests are running in the background."))]
+    decision = json.loads(stop(stop_binding, tmp_path, finished).stdout)
+    assert decision["decision"] == "block"
+    assert "Land the scoped relayout" in decision["reason"]
+    # The stop the goal sent back goes through: it holds once per stop, never loops.
+    assert stop(stop_binding, tmp_path, finished, active=True).stdout == ""
 
 
 def test_a_stop_already_sent_back_passes(stop_binding, tmp_path):

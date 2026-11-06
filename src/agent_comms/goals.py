@@ -781,6 +781,9 @@ class Goal(RecordMember, GoalDeclaration):
     def reported_id(self) -> GoalId:
         return self.id
 
+    def held_stop(self) -> tuple[str, ...]:
+        return self.state.held_stop(self.order.goal_text(self))
+
     def clear_wait(self, waits: GoalWaits) -> bool:
         return waits.clear(self.id)
 
