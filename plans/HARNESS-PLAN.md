@@ -61,7 +61,7 @@ Found 2026-10-22: a store writer reconciles any schema difference on open (`coor
 
 ### 1d. Main's own tests pass
 
-On 2026-10-22 the full CI workflow on main showed 197 failures, 127 of them in `tests/guards/test_debt_ratchet.py`, and the merge queue's install rehearsal would have failed every PR queued after #2595. A red on main makes every later run ask whether a red is real (rules/tests-and-commands.md). Every red is fixed at its owner or handed to a named open PR, one cause per change.
+On 2026-10-22 the full CI workflow on main showed 197 failures, 127 of them in `tests/guards/test_debt_ratchet.py`, and the merge queue's install rehearsal would have failed every PR queued after #2595. A red on main makes every later run ask whether a red is real (rules/evidence.md). Every red is fixed at its owner or handed to a named open PR, one cause per change.
 
 - Declared evidence paths: a path a plan phase names that main never held reads as absent and passes (`phase_evidence.py` `present_modules`); a guard proves every declared path exists in git history.
 

@@ -851,7 +851,7 @@ class ForkStalled(IndependentStandingRule, DatedStandingRule):
 @dataclass(frozen=True)
 class SlowInstallPhase(IndependentStandingRule, UndatedStandingRule):
     """A phase of the install that built the running runtime took longer than the healthy
-    line (rules/ship-and-install.md). The install's own result record holds every phase's
+    line (rules/no-waiting.md). The install's own result record holds every phase's
     exclusive seconds; its stderr and bus summary are renderings of the same clock."""
 
     install: Id128

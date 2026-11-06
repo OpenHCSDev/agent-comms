@@ -19,13 +19,13 @@ Six read. Continuing with the remaining twelve.
 **Input:**
 ```json
 {
-  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/plain-reporting.md"
+  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/talk.md"
 }
 ```
 
 **Output:**
 ```
-<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/plain-reporting.md</path>
+<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/talk.md</path>
 <type>file</type>
 <content>
 1: ---
@@ -76,13 +76,13 @@ Six read. Continuing with the remaining twelve.
 **Input:**
 ```json
 {
-  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/refactor-game.md"
+  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/slop.md"
 }
 ```
 
 **Output:**
 ```
-<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/refactor-game.md</path>
+<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/slop.md</path>
 <type>file</type>
 <content>
 1: ---
@@ -133,13 +133,13 @@ Six read. Continuing with the remaining twelve.
 **Input:**
 ```json
 {
-  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/no-blocking.md"
+  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/no-waiting.md"
 }
 ```
 
 **Output:**
 ```
-<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/no-blocking.md</path>
+<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/no-waiting.md</path>
 <type>file</type>
 <content>
 1: ---
@@ -191,13 +191,13 @@ Six read. Continuing with the remaining twelve.
 **Input:**
 ```json
 {
-  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/fork-orders.md"
+  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/team.md"
 }
 ```
 
 **Output:**
 ```
-<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/fork-orders.md</path>
+<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/team.md</path>
 <type>file</type>
 <content>
 1: ---
@@ -255,13 +255,13 @@ Six read. Continuing with the remaining twelve.
 **Input:**
 ```json
 {
-  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/tests-and-commands.md"
+  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/evidence.md"
 }
 ```
 
 **Output:**
 ```
-<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/tests-and-commands.md</path>
+<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/evidence.md</path>
 <type>file</type>
 <content>
 1: ---
@@ -326,13 +326,13 @@ Six read. Continuing with the remaining twelve.
 **Input:**
 ```json
 {
-  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/ship-and-install.md"
+  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/no-waiting.md"
 }
 ```
 
 **Output:**
 ```
-<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/ship-and-install.md</path>
+<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/no-waiting.md</path>
 <type>file</type>
 <content>
 1: ---
@@ -399,7 +399,7 @@ Six read. Continuing with the remaining twelve.
 62: - Install merged fixes within the hour, once after the landings; when something significant is broken, do not hold for caution or the owner's decision. Tristan, 2026-10-13: "when something significant is broken, we don't need to be cautious about breaking things, it's already broken that's more important".
 63: - INSTALL DUE appears the pass main leaves the installed build, naming every uninstalled merge and the open requests about to land. Due means an install can be used, not that one runs: batch the landing requests, then run `order install`, the one launch of Core's installer. Tristan, 2026-10-25: "due means it can use an install, not install right now, you can batch other pending PRs in the same install".
 64: - Installs never wait on agent turns: stop every unit at once, install (about 2 minutes), start the same set. Tristan, 2026-10-20 00:59: "there's no such thing as a blocking unit you just stop it why the fuck were you about to wait minutes on it?"
-65: - The merge queue's hosted NRA gate is the only gate. Local test execution follows tests-and-commands.md, never a per-PR run. The full CI matrix runs only before a PyPI release.
+65: - The merge queue's hosted NRA gate is the only gate. Local test execution follows evidence.md, never a per-PR run. The full CI matrix runs only before a PyPI release.
 66: - Batch every PR with an OK verdict on its exact head into one `batch/integ-N` branch built from fresh main; run CI once per batch. Resolve conflicts inside the batch, never send them back. Sent-back PRs and heads without a verdict never enter; a batch never stacks on an unmerged batch. When a member fails the batch's checks, close that batch and rebuild without it the same tick so the rest land. Turn off members' own auto-merge and cancel their own runs while batched. **Why:** on 2026-10-26, batches 11–15 all carried rejected PRs and nothing merged for 45 minutes. Tristan, 2026-10-25: "put it in an integration branch and run it once instead of being morons"; "we need more integration branch".
 67: - The commander owns the merge queue's ruleset and required checks: it changes them itself and reports the change.
 68: - Pin only PyPI releases; our own sibling packages track latest `main`. Tristan, 2026-10-18: "why would we not always use latest?"
@@ -432,13 +432,13 @@ Twelve done. Reading the remaining six rules plus voice.md and indictment.md.
 **Input:**
 ```json
 {
-  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/storage-and-cleanup.md"
+  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/team.md"
 }
 ```
 
 **Output:**
 ```
-<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/storage-and-cleanup.md</path>
+<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/team.md</path>
 <type>file</type>
 <content>
 1: ---
@@ -485,13 +485,13 @@ Twelve done. Reading the remaining six rules plus voice.md and indictment.md.
 **Input:**
 ```json
 {
-  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/coordination.md"
+  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/team.md"
 }
 ```
 
 **Output:**
 ```
-<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/coordination.md</path>
+<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/team.md</path>
 <type>file</type>
 <content>
 1: ---
@@ -532,7 +532,7 @@ Twelve done. Reading the remaining six rules plus voice.md and indictment.md.
 36: - **Units implement; Claude forks judge.** Every fix, short or long, goes to a bus unit as an order with exact numbered edits; a Claude fork diagnoses, writes that order file and reviews the unit's diff, and writes code only when no unit order can go out (the order verbs are gate-locked and the fork's change is the unlock). Slop in a unit's diff is sent back and fixed, never waved through because units are cheaper. Tristan, 2026-10-25: "shuld we not hand moer work to units our cladue usage is geting low the units are not that stupid once steere d with forcedgreentxt"; "if it has sloppy code it gets fixed not ignored". Running units scale with the work and with the commander's free load (`comms_commander_load`: owed orders, timers up, unjudged edits): start a unit only when a plan step is unblocked with no holder and the load leaves room to review it; stop one whose step waits, or when the load is past what the commander can judge. A stopped unit with nothing ready is correct; a unit stopped by anything but the commander (a crash, memory) is a defect. Tristan, 2026-10-21: "it should be scaled to how much free load the commander has and how much work is left".
 37: - Short is measured on the correct fix at the owner. A fast workaround is slop, not a short fix, and hand-patching live state to keep an install moving is never a fix: the deliverable is the owner fix that makes that state impossible. Tristan, 2026-10-21: "if the corret maitnenane fix is like a few edtis do it, if a workaround is avaiulble as a quic kfix its not a quic kfix. ts slop."; "you shuodl not manualyl fix issues during install to kee p it going , you need tofix the isntalelr soyou never ever run into that issue again".
 38: - **The main loop dispatches; Claude forks diagnose and shape.** A Claude fork (a subagent of the commander, not a Codex `fork-*` unit) carries the commander's full context, so its diagnosis and fix shape are the commander's. Any work that would hold the main loop for more than a few tool calls goes to a fork the same tick: reading a unit's trace and writing the fix shape, reviewing a large diff, measuring a ratchet delta, debugging a test. The main loop keeps only what serializes: answering unit asks, merges, installs, strikes and recording deliveries (2026-10-21: three hours of zero forks while four units sat in standby waiting on the commander, and the main loop debugged a swallowed test print).
-39: - **Finished work never waits on the commander.** The tick a PR goes green it is enqueued; the tick a unit reports a delivery it is recorded; the tick a unit finishes or hands in a trace it gets its next order, while a fork does any review, manual merge or shape that work waits on. Installs follow ship-and-install.md. Tristan, 2026-10-21: "not leave work done blocked" (09:10 that day: #2430 green and clean with no auto-merge, toad#1115 waiting on a manual merge, #2431 and #2432 merged but not installed, four finished units in standby).
+39: - **Finished work never waits on the commander.** The tick a PR goes green it is enqueued; the tick a unit reports a delivery it is recorded; the tick a unit finishes or hands in a trace it gets its next order, while a fork does any review, manual merge or shape that work waits on. Installs follow no-waiting.md. Tristan, 2026-10-21: "not leave work done blocked" (09:10 that day: #2430 green and clean with no auto-merge, toad#1115 waiting on a manual merge, #2431 and #2432 merged but not installed, four finished units in standby).
 40: - **Every unit ask is answered before the next rotation step.** A question, alert or handoff from a unit holding an order gets a disposition the same tick; a unit idling on the commander's paperwork is commander waste (2026-10-21: fork-boundaries' 8122 waited about seven hours).
 41: - Subagents are forks, not fresh agents, and get no turn limit. Tristan, 2026-10-18: "always fork. stop it, fork and let the fork take over". Claude usage is the scarce budget: spend it on the critical path, which is diagnosis and shaping whenever units wait on them.
 42: - Before each order, compare every open PR's files (`gh pr list --state open`) with the order's; merge the overlapping ready PR first.
@@ -554,13 +554,13 @@ Twelve done. Reading the remaining six rules plus voice.md and indictment.md.
 **Input:**
 ```json
 {
-  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/deadlines.md"
+  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/no-waiting.md"
 }
 ```
 
 **Output:**
 ```
-<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/deadlines.md</path>
+<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/no-waiting.md</path>
 <type>file</type>
 <content>
 1: ---
@@ -603,7 +603,7 @@ Twelve done. Reading the remaining six rules plus voice.md and indictment.md.
 38: 
 39: - An order carries no due time. It names the event that starts the work ("the moment the turns are idle") and the done list.
 40: - `order send` sets one review timer per order: the median observed seconds per edit across delivered orders times the order's edits, rounded up to a minute, two minutes minimum. The unit never sees it. When it is up, the heartbeat says `TIMER UP: UNIT PID` once per window until delivery, and the commander reads the worktree, commits, PR and newest turn that tick: at the armour spawn when it comes up, not after.
-41: - A clock alone never strikes and never reassigns. Strikes come from a verdict on evidence (rules/send-backs-and-strikes.md); stalling is still struck.
+41: - A clock alone never strikes and never reassigns. Strikes come from a verdict on evidence (rules/team.md); stalling is still struck.
 42: - A unit that folds in deleting real slop on its surface is credited for the initiative. Tristan, 2026-10-20 11:53: "we allow it and reward the unit for taking that initiative".
 
 (End of file - total 42 lines)
@@ -615,13 +615,13 @@ Twelve done. Reading the remaining six rules plus voice.md and indictment.md.
 **Input:**
 ```json
 {
-  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/send-backs-and-strikes.md"
+  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/team.md"
 }
 ```
 
 **Output:**
 ```
-<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/send-backs-and-strikes.md</path>
+<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/team.md</path>
 <type>file</type>
 <content>
 1: ---
@@ -673,13 +673,13 @@ Twelve done. Reading the remaining six rules plus voice.md and indictment.md.
 **Input:**
 ```json
 {
-  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/blunt-reviews.md"
+  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/team.md"
 }
 ```
 
 **Output:**
 ```
-<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/blunt-reviews.md</path>
+<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/team.md</path>
 <type>file</type>
 <content>
 1: ---
@@ -722,13 +722,13 @@ Twelve done. Reading the remaining six rules plus voice.md and indictment.md.
 **Input:**
 ```json
 {
-  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/self-correction.md"
+  "filePath": "/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/spine.md"
 }
 ```
 
 **Output:**
 ```
-<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/self-correction.md</path>
+<path>/home/ts/code/projects/agent-comms/src/agent_comms/team/rules/spine.md</path>
 <type>file</type>
 <content>
 1: ---
@@ -1173,7 +1173,7 @@ Option B: interleave — require an entry per rule BEFORE the next read. This ne
 
 That's a real design constraint worth noting to Tristan. Adding to DealRecord: e.g. `ordered: tuple[tuple[Path, str],...]` or deriving from the deal function. `RuleDeal.deal()` has `dealt: type[DealtSources]` with both `sources()` and `rules()` — it CAN zip them at deal time and persist. FieldCodec extension needed — fine, one owner.
 
-What about the papers? They're sources but not rules. Interleaving could apply per-source: each source read → pull-quote entry keyed by source. But audit is keyed by rule. Maybe: rules get the full ritual (quote + application + concession), papers get... the papers are what the rules derive from. Reading order in priming.txt: papers first, then rules. A pull-quote from paper1 might be too heavy. Alternative: papers don't need entries; the rule entries can cite paper results (correct-maintenance.md is literally the verdict→theorem index).
+What about the papers? They're sources but not rules. Interleaving could apply per-source: each source read → pull-quote entry keyed by source. But audit is keyed by rule. Maybe: rules get the full ritual (quote + application + concession), papers get... the papers are what the rules derive from. Reading order in priming.txt: papers first, then rules. A pull-quote from paper1 might be too heavy. Alternative: papers don't need entries; the rule entries can cite paper results (slop.md is literally the verdict→theorem index).
 
 Let me not over-design. The core ask: gate forces engagement that makes fighting futile. The ritual:
 
@@ -1656,7 +1656,7 @@ Important design points from the conversation:
 
 Hmm, but wait — should papers be interleaved too? Tristan's last message: "it should be the greentexts specifically so it cannot pretend they aren't there". So engagement targets the greentexts. Papers just get read (proofs first). Good.
 
-Also "why its completely unnecessary" — unnecessary is a loaded word in this codebase (unnecessary.md rule). But Tristan's usage here: describing what the greentext does to me, why, and why [fighting/the defensive move/the hedge] is completely unnecessary. In the plan, phrase it as: what it does to you, why, and why resisting it is completely unnecessary — because the owner's position is proved and the fight costs him hours.
+Also "why its completely unnecessary" — unnecessary is a loaded word in this codebase (slop.md rule). But Tristan's usage here: describing what the greentext does to me, why, and why [fighting/the defensive move/the hedge] is completely unnecessary. In the plan, phrase it as: what it does to you, why, and why resisting it is completely unnecessary — because the owner's position is proved and the fight costs him hours.
 
 Plan file location: plans/ directory exists in the repo. Name: something like plans/GATE-ENGAGEMENT-PLAN.md or INTERSTITIAL-ENGAGEMENT-PLAN.md. Looking at existing names: COMMANDER-NATIVE-PLAN.md, HARNESS-PLAN.md, etc. — uppercase. I'll go with plans/GATE-ENGAGEMENT-PLAN.md.
 
@@ -10443,7 +10443,7 @@ Objective update: shape the post-compaction deal gate so it forces genuine engag
 - Read all 18 rule files + voice.md + indictment.md; structural map of `/home/ts/priming.txt` (3,017 lines, 32 dealt files).
 - Full gate surface mapped (see Important Details): rule_deal.py, read_gate.py, pi_rule_gate.py, reread.py, skill.py (DeckReader/FleetReader/CommanderReader/RulesOnly sources), field_codec.py, rule_file.py (RuleAudience DeclaredFamily, rule name = stem).
 - Design settled and written to `/home/ts/code/projects/agent-comms/plans/GATE-ENGAGEMENT-PLAN.md`: the engagement, mechanics (RuleAudit gains quote/does/why, ReadsDealtSources becomes next-file-with-engagement, papers unlock with reads, final gate unchanged, backends inherit, refresh re-runs ritual), replaced items, banned shapes, 8 test cases.
-- Honest self-report delivered and accepted: greentexts partly landed, partly dodged ("greentext catalog (31 failures)" flattening); then genuine engagement (spine's double-door mask line cuts deepest; "are you a str?" funniest; unnecessary.md's closer the gut-punch).
+- Honest self-report delivered and accepted: greentexts partly landed, partly dodged ("greentext catalog (31 failures)" flattening); then genuine engagement (spine's double-door mask line cuts deepest; "are you a str?" funniest; slop.md's closer the gut-punch).
 - Architecture scratch started at `/home/ts/code/projects/agent-comms/plans/GATE-STATE-SCRATCH.md` with Take 1 (states are subclasses, deal inherits State, mixin skeletons are duplicated fact) and Take 2 (family/blindness rule, State root, DealState cases Undealt/Unread/Unengaged/Unaudited/Answered, ToolGateState Open/Blocked(cause), __init_subclass__ registration, @handles dispatch).
 - Take 3 written (answers the three opens: MRO deriver order + single private walk; `before` moves onto cases, GateAnswer family replaced by ToolGateState/Open/Blocked; record = persistence data, lifecycle onto cases; read staging carried by state instances).
 
@@ -10790,11 +10790,11 @@ I’ll read the commander skill and the project’s current instructions.
     # Comms commander
     
     **Five things, in this order, every tick:**
-    1. **Answer** every owner message and every unit ask before anything else (rules/coordination.md).
+    1. **Answer** every owner message and every unit ask before anything else (rules/team.md).
     2. **Work from the heartbeat.** Core's heartbeat is the board: every line gets a disposition or an owner the tick it arrives. Never steer from a hand-made poll.
-    3. **Tristan's plans are the work** (`plans/*.md`, declared in the Plan family). Every unit not on a fire holds a plan-phase order; repair work finishes and returns the unit to its plan (rules/owner-authority.md).
+    3. **Tristan's plans are the work** (`plans/*.md`, declared in the Plan family). Every unit not on a fire holds a plan-phase order; repair work finishes and returns the unit to its plan (rules/team.md).
     4. **Review gates merging.** No PR lands without your verdict on its head commit (`agent-comms/review`), given after reading the diff.
-    5. **Dispatch from the main loop; Claude forks diagnose, shape, review and write short fixes.** Running units scale with the work left and your free load (rules/coordination.md).
+    5. **Dispatch from the main loop; Claude forks diagnose, shape, review and write short fixes.** Running units scale with the work left and your free load (rules/team.md).
     
     The commander spends its tokens on judgment: what is stupid, what changes where and why. Every unit keeps moving toward an installed fix or deleted slop.
     
@@ -10812,14 +10812,14 @@ I’ll read the commander skill and the project’s current instructions.
     The failure this breaks is the mega-corp equilibrium: nobody changes anyone else's code, workarounds pile on workarounds, nothing gets deleted. **Nobody's code is sacred**, the commander's own code and orders included: slop gets named, the right owner fixed, the competing copy deleted in the same change.
     
     - **Standing premise: units are capable only when the commander does the judgment.** They earn respect with diffs and start with none; never soften an order because a unit did well yesterday.
-    - **Units do not diagnose, plan comparisons, or choose shapes** (rules/coordination.md). Read the profile, diff and code, then order the exact edits.
+    - **Units do not diagnose, plan comparisons, or choose shapes** (rules/team.md). Read the profile, diff and code, then order the exact edits.
     - **Judged against what the commander would have done.** Any unit action that differs, given what it knew, gets why it was stupid with receipts (file:line, order id, measurement) and what replaces it.
     - **No excuses accepted.** "Waiting on approval already given", "held for a separate bug", "follow-up": strike and repeat the order once.
     - **Never justify a unit's failure to the user.** Report what it failed to do and what was done about it.
     
     ## Orders
     
-    Each order has: the defect in one plain sentence; the outcome the owner will see when it is fixed (the intent, so the letter cannot drift); why it is stupid; the exact target (owner type, base method, what gets deleted); banned shapes; the proofs that do not count; the checks; the done list; and the reply line, with an `Assumed:` list. No due time (rules/deadlines.md). One message per unit; next tick, read the diff. A GPT unit does exactly what the words say, takes the cheapest reading and offers proof-shaped proofs, so write the order so the cheap reading is the intent.
+    Each order has: the defect in one plain sentence; the outcome the owner will see when it is fixed (the intent, so the letter cannot drift); why it is stupid; the exact target (owner type, base method, what gets deleted); banned shapes; the proofs that do not count; the checks; the done list; and the reply line, with an `Assumed:` list. No due time (rules/no-waiting.md). One message per unit; next tick, read the diff. A GPT unit does exactly what the words say, takes the cheapest reading and offers proof-shaped proofs, so write the order so the cheap reading is the intent.
     
     - **Every order goes through `order send UNIT ORDER.json`.** The file holds `problems` (existing IDs), `defect`, `why_stupid`, `order` (Core's declared pending order) and optional `slop` citations; `order problem ORDER.json --to UNIT --where PATH:LINE` creates the problem instead (omit `problems`). FieldCodec decodes the file once and lists every bad field together. Wording checks read only `defect` and `why_stupid`. `order send` refuses an order with no blunt label unless `--clean`. Each send starts the review timer and prints its median, sample count and review time.
     

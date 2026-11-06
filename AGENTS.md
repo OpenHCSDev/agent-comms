@@ -25,14 +25,14 @@ never here. This file holds only facts about this host and this setup.
 - Every worktree, uncommitted source, saved session and handoff lives under `/home/ts/wt`.
   Never `/tmp`, `/dev/shm` or another volatile filesystem: the 2026-09-27 reboot erased
   four `/dev/shm` worktrees.
-- The stack follows the latest mains of Toad, Textual and ui-theme; ship-and-install.md
+- The stack follows the latest mains of Toad, Textual and ui-theme; no-waiting.md
   has the relock and sync steps.
 
 ## Host resources
 
 - Large disposable output goes in a named directory under `/home/ts/.cache/agent-scratch/`.
 - Runtime builds and migration copies keep `/home` above 10 GB free. There is no 3 GB
-  scratch cap. (When to start cleaning is behaviour: storage-and-cleanup.md.)
+  scratch cap. (When to start cleaning is behaviour: team.md.)
 - The headroom helper is `tools/agent_resource_check.py` in the main checkout; there is no
   copy at `/home/ts/bin/agent-resource-check`. It runs with the caller's permissions.
   `free -m` and `df -h /home` read the same numbers directly.

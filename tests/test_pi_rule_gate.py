@@ -263,7 +263,7 @@ def test_a_bus_without_a_storage_lead_still_deals_the_shared_sources(comms, tmp_
 
 def test_every_refusal_opens_with_why_its_deal_was_dealt(peer_deal):
     """Start, compaction and refresh each say their own cause first, so a fresh context reads
-    why it was dealt instead of diagnosing the gate (rules/after-compaction.md)."""
+    why it was dealt instead of diagnosing the gate (rules/spine.md)."""
     import re
 
     from agent_comms.rule_deal import RefreshDeal, StartedDeal
