@@ -380,8 +380,6 @@ class TurnRunner:
             return pi.CancelledUiChoice()
         try:
             outcome = await controller.request_ui_permission(self, session_id, permission)
-            if outcome is None:
-                return pi.CancelledUiChoice()
         except (TimeoutError, SubscriberClosed, RequestError):
             # A timed-out, departed or explicitly refusing controller grants no permission.
             # Unexpected decoder and transport defects propagate.
