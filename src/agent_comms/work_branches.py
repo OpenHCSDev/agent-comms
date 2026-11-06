@@ -373,21 +373,20 @@ query($owner: String!, $name: String!, $after: String) {
 
         A submodule is pinned package data, never a unit's edit, so its git state is not read:
         one checkout with a broken submodule link must not fail every reader of every unit.
+        One ``status`` answers both halves: every heartbeat pass asks it of every checkout.
+        A renamed or copied entry also names its source, which is listed too.
         """
-        listed = (
-            *self._git(
-                "--no-optional-locks",
-                "diff",
-                "--name-only",
-                "-z",
-                "--ignore-submodules=all",
-                "HEAD",
-            ).split("\0"),
-            *self._git(
-                "--no-optional-locks", "ls-files", "--others", "--exclude-standard", "-z"
-            ).split("\0"),
-        )
-        return tuple(self.checkout / name for name in listed if name)
+        fields = iter(self._git(
+            "--no-optional-locks", "status", "--porcelain=v1", "-z",
+            "--untracked-files=all", "--ignore-submodules=all",
+        ).split("\0"))
+        listed: list[str] = []
+        for entry in fields:
+            if entry:
+                listed.append(entry[3:])
+                if {"R", "C"} & set(entry[:2]):
+                    listed.append(next(fields))
+        return tuple(self.checkout / name for name in listed)
 
     @property
     def local_work(self) -> bool:
