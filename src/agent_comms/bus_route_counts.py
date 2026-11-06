@@ -228,7 +228,8 @@ class RouteCounts(ABC):
     )'''
 
     @staticmethod
-    def _route_inputs(db: sqlite3.Connection, registry, deliveries, seen, through: int) -> RouteInputs:
+    def _route_inputs(db: sqlite3.Connection, registry, deliveries: Mapping[str, DeliveryScope],
+                      seen: Mapping[str, ReadCursor], through: int) -> RouteInputs:
         targets = sorted({target for delivery in deliveries.values()
                           for target in delivery.index_targets})
         senders, unrecorded, births = registry.sender_bindings.bound(
@@ -254,40 +255,43 @@ class RouteCounts(ABC):
 
     def _route_query[Row: TypedRow](self, db: sqlite3.Connection, row_type: type[Row],
                                     inputs: RouteInputs, through: int, after: int, query: str,
-                                    parameters=()) -> list[Row]:
+                                    parameters: tuple[object, ...] = ()) -> list[Row]:
         return row_type.read(db.execute(
             f'''WITH {ReadCursor.sql("?")}, {ReadCursor.floor_sql},
             {self._requests}, {ReadCursor.joined_sql} {query}''',
             (*inputs.bindings(through, after), *parameters)))
 
-    def _route_rows[Row: TypedRow](self, row_type: type[Row], registry, deliveries, seen,
-                                  after: int, query: str, parameters=()) -> list[Row]:
+    def _route_rows[Row: TypedRow](self, row_type: type[Row], registry,
+                                  deliveries: Mapping[str, DeliveryScope], seen: Mapping[str, ReadCursor],
+                                  after: int, query: str,
+                                  parameters: tuple[object, ...] = ()) -> list[Row]:
         with self.observing() as db:
             through = BusRow.last_seq(db)
             inputs = self._route_inputs(db, registry, deliveries, seen, through)
             return self._route_query(db, row_type, inputs, through, after, query, parameters)
 
     @staticmethod
-    def _unseen_query(seen) -> str:
+    def _unseen_query(seen: Mapping[str, ReadCursor]) -> str:
         return (f'''SELECT actor,target,sender,count(*) AS count FROM cursors AS request
             WHERE {ReadCursor.rule_of(seen.values())} GROUP BY actor,target,sender''')
 
     @staticmethod
-    def _grouped(deliveries, rows: Iterable[RouteUnread],
-                 counted: Mapping[str, Mapping[str, int]]) -> dict:
+    def _grouped(deliveries: Mapping[str, DeliveryScope], rows: Iterable[RouteUnread],
+                 counted: Mapping[str, Mapping[str, int]]) -> dict[str, dict[str, int]]:
         counts = {actor: dict(counted.get(actor, {})) for actor in deliveries}
         for row in rows:
             conversation = deliveries[row.actor].conversation(row.sender, row.target)
             counts[row.actor][conversation] = counts[row.actor].get(conversation, 0) + row.count
         return counts
 
-    def unseen_counts(self, registry, deliveries, seen, *, after: int = 0):
+    def unseen_counts(self, registry, deliveries: Mapping[str, DeliveryScope], seen: Mapping[str, ReadCursor], *,
+                      after: int = 0) -> dict[str, dict[str, int]]:
         rows = self._route_rows(RouteUnread, registry, deliveries, seen, after,
                                 self._unseen_query(seen))
         return self._grouped(deliveries, rows, {})
 
-    def advanced_unseen_counts(self, held: HeldUnseenCounts, registry, deliveries, seen
-                               ) -> HeldUnseenCounts:
+    def advanced_unseen_counts(self, held: HeldUnseenCounts, registry,
+                               deliveries: Mapping[str, DeliveryScope], seen: Mapping[str, ReadCursor]) -> HeldUnseenCounts:
         """The unseen counts through this reader's revision, counting only the rows appended
         since ``held`` when every value the count reads is unchanged. A delivered row's
         audience is frozen at append, so an older row's count cannot change under equal inputs."""
