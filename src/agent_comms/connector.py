@@ -782,6 +782,9 @@ class StreamedLine:
 class Connector(ConnectorService):
     """The MCP endpoint and the OAuth authorization server in front of it."""
 
+    heartbeat_seconds: ClassVar[float] = 25.0
+    """How often a watch socket is pinged; a client that misses the pong is dropped."""
+
     store: ConnectorStore
     issuer: str
     root: Path
@@ -826,7 +829,7 @@ class Connector(ConnectorService):
         offer = self.watch_tickets.reconnect(thread, URL(self.issuer))
         logging.info("Watch for %s opened on %s", thread, ticket.opened_on)
         # A transcript line holds whatever a tool returned, far past aiohttp's 4 MiB default.
-        viewer = web.WebSocketResponse(heartbeat=25.0, max_msg_size=64 * 1024 * 1024)
+        viewer = web.WebSocketResponse(heartbeat=self.heartbeat_seconds, max_msg_size=64 * 1024 * 1024)
         await viewer.prepare(request)
         watch = OpenWatch(thread, viewer)
         replaced = tuple(held for held in self.open_watches if held.thread == thread)
