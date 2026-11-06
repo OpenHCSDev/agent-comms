@@ -154,6 +154,10 @@ class RunningRuntime(LaunchRuntime):
         return RunningSource.current().environment(environment)
 
 
+class RuntimeReplacedError(OSError):
+    """An install made another runtime current while this process ran the old one."""
+
+
 @dataclass(frozen=True)
 class RunningSource(ABC):
     """Where this process imported agent_comms from.
@@ -177,6 +181,14 @@ class RunningSource(ABC):
     def replaced_by_install(self) -> bool:
         """Whether an install has since made another runtime current, so this process runs
         code the host no longer serves."""
+
+    def require_current(self) -> None:
+        """Refuse to read on from a runtime an install replaced: only a process started anew
+        runs the code the host now serves."""
+        if self.replaced_by_install():
+            raise RuntimeReplacedError(
+                "Core was reinstalled, and this process was running the old runtime, so it has "
+                "stopped. Start it again to run the new one.")
 
 
 class InstalledSource(RunningSource):

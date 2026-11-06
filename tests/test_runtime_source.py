@@ -11,7 +11,7 @@ from agent_comms.installer.refusals import OwnersNotRestarted, UpgradeRefused
 from agent_comms.installer.upgrade import OwnersStopped, Stack
 from agent_comms.launch_runtime import (
     CheckoutSource, InstalledSource, LaunchRuntime, NoImportPath, RecordedRuntime, RestartEnvironment,
-    RestoredRuntime, RunningRuntime, RunningSource,
+    RestoredRuntime, RunningRuntime, RunningSource, RuntimeReplacedError,
 )
 from agent_comms.storage.maintenance_barrier import TargetRuntime
 
@@ -115,3 +115,17 @@ def test_an_install_replaces_the_runtime_of_an_installed_source_but_never_a_chec
     pointer.symlink_to(newer, target_is_directory=True)
     assert installed.replaced_by_install()
     assert not checkout.replaced_by_install(), "a checkout runs its tree, whatever is installed"
+
+
+def test_a_replaced_runtime_refuses_to_read_on(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    installed = InstalledSource(tmp_path / "site")
+    installed.require_current()  # nothing installed: nothing replaced
+    pointer = LaunchRuntime.current_pointer()
+    pointer.parent.mkdir(parents=True)
+    newer = tmp_path / "runtimes/core-newer"
+    newer.mkdir(parents=True)
+    pointer.symlink_to(newer, target_is_directory=True)
+    with pytest.raises(RuntimeReplacedError):
+        installed.require_current()
+    CheckoutSource(tmp_path / "tree").require_current()
