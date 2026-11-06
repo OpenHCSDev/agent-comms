@@ -181,8 +181,11 @@ class RuntimeProxy(RuntimeConnection):
                         ),
                         timeout=ACP_PERMISSION_TIMEOUT_SECONDS,
                     )
-                    response = ClientPermissionResponse.of(
-                        request.id, RequestPermissionResponse.model_validate(reply)
+                    response = ClientPermissionResponse(
+                        id=request.id,
+                        outcome=RequestPermissionResponse.model_validate(reply).outcome.model_dump(
+                            by_alias=True, exclude_none=True
+                        ),
                     )
             finally:
                 try:

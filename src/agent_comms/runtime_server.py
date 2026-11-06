@@ -28,20 +28,22 @@ from .errors import RelationViolationError
 from .native_failures import NativeRequestFailure
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import AcpSessionId, FieldCodec, WireOmitDefault
-from .owner_connection import AnyOwner, NoControllerToken, OwnerConnection, RequestedOwner, socket_path
+from .owner_connection import (
+    AnyOwner, NoControllerToken, OwnerConnection, RequestedOwner, socket_path,
+)
 from .owner_protocol import (
     ClientLine, OwnerFailure, OwnerLine, OwnerPermissionRequest, OwnerResult, OwnerUpdate,
 )
 from .storage.maintenance_barrier import MaintenanceHolder, NoMaintenanceHolder
 from .storage.private_path import PrivateSocketRole
+from .registry_document import RegistryEntry
 from .thread_identity import ThreadIncarnation
+from .threads import Thread
 from .tool_result import DeclaredReply
 
 if TYPE_CHECKING:
-    from acp.schema import PermissionOption, RequestPermissionResponse, ToolCallUpdate
+    from acp.schema import PermissionOption, ToolCallUpdate
     from .acp import AcpSelectedWriteAuthority, CommsAgent
-    from .registry_document import RegistryEntry
-    from .threads import Thread
     from .turn_runner import TurnRunner
 
 
@@ -71,11 +73,6 @@ class ClientPermissionResponse(ClientLine):
     def cancelled(cls, request_id: str) -> Self:
         return cls(id=request_id, outcome=dict(CANCELLED_OUTCOME))
 
-    @classmethod
-    def of(cls, request_id: str, response: RequestPermissionResponse) -> Self:
-        outcome = response.outcome.model_dump(by_alias=True, exclude_none=True)
-        return cls(id=request_id, outcome=outcome)
-
     def answer(self, client: SocketClient) -> None:
         pending = client.pending.get(self.id)
         if pending is not None and not pending.done():
@@ -102,7 +99,7 @@ class SocketClient(Controller, SessionUpdateSink):
     async def request_ui_permission(
         self, runner: TurnRunner, session_id: AcpSessionId,
         request: tuple[ToolCallUpdate, list[PermissionOption]],
-    ) -> dict[str, object] | None:
+    ) -> dict[str, object]:
         tool_call, options = request
         return await runner.runtime.request_permission(
             session_id,
@@ -139,10 +136,11 @@ class SocketClient(Controller, SessionUpdateSink):
 
     async def permission(
         self, tool_call: dict[str, object], options: list[dict[str, object]]
-    ) -> dict[str, object] | None:
-        """The controller's outcome as it sent it; turn_runner reads only what it needs."""
+    ) -> dict[str, object]:
+        """The controller's outcome as it sent it; turn_runner reads only what it needs.
+        A request it never answers is cancelled."""
         if len(self.pending) >= 4:
-            return None
+            return dict(CANCELLED_OUTCOME)
         request_id = secrets.token_hex(16)
         future: asyncio.Future[dict[str, object]] = (
             asyncio.get_running_loop().create_future()
@@ -164,7 +162,7 @@ class SocketClient(Controller, SessionUpdateSink):
         except (OSError, ConnectionError, TimeoutError):
             if task is not None and task.cancelling():
                 raise asyncio.CancelledError from None
-            return None
+            return dict(CANCELLED_OUTCOME)
         finally:
             self.pending.pop(request_id, None)
             if not future.done():
@@ -317,11 +315,11 @@ class RuntimeServer(SessionUpdateSink):
         controller: SocketClient,
         tool_call: dict[str, object],
         options: list[dict[str, object]],
-    ) -> dict[str, object] | None:
+    ) -> dict[str, object]:
         if not self.is_controller(session_id, controller):
-            return None
+            return dict(CANCELLED_OUTCOME)
         reply = await controller.permission(tool_call, options)
-        return reply if self.is_controller(session_id, controller) else None
+        return reply if self.is_controller(session_id, controller) else dict(CANCELLED_OUTCOME)
 
     async def handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         client = SocketClient(writer)

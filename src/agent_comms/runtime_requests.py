@@ -41,7 +41,8 @@ from .goals import Goal
 from .manual_compaction_bridge import compact_context
 from .order_tools import OwnerGoalRead
 from agent_comms.runtime_server import (
-    AttachedResultRuntimeRequest, AttachedRuntimeRequest, AttachedRuntimeRequestContext, SubscriberClosed,
+    AttachedResultRuntimeRequest, AttachedRuntimeRequest, AttachedRuntimeRequestContext,
+    SubscriberClosed,
 )
 from .coordination.errors import Refused
 from .owner_connection import NoControllerToken, OwnerConnection, socket_path
@@ -246,7 +247,7 @@ class PromptRuntimeRequest(AttachedResultRuntimeRequest):
         return PromptReply(result)
 
     async def apply(self, ctx: AttachedRuntimeRequestContext) -> None:
-        """Only a prompt runs through CommsAgent's ACP methods, so only it can fail in protocol form.
+        """Only a prompt runs through CommsAgent's ACP methods, so only it fails in protocol form.
 
         The failed turn crosses whole, and the client's own boundary raises it as itself.
         Closing without a reply would report it as an unknown outcome.
