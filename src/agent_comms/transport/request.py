@@ -24,7 +24,6 @@ from ..nominal.field_codec import (
     FieldDirective,
     NullMember,
     SingleFieldValue,
-    WireChoices,
     WireName,
     WireTransient,
 )
@@ -36,45 +35,32 @@ from ..tool_result import ToolResult
 class ArgumentTool:
     """One declared execution record supplies validation and native serialization."""
 
+    family_discriminator: ClassVar[str]
+    """The host family's record tag, which the native argument object leaves out."""
+
     @property
     def arguments(self) -> dict[str, object]:
         # The native argument object has no family envelope. Its contents come
         # entirely from the record codec, never a retained raw dictionary.
-        encoded = FieldCodec.project(self, ArgumentsExclude)
-        del encoded[self.family_discriminator]
-        return encoded
+        match FieldCodec.project(self, ArgumentsExclude):
+            case dict() as encoded:
+                return {key: value for key, value in encoded.items() if key != self.family_discriminator}
+            case encoded:
+                raise TypeError(f"{type(self).__name__} projects to {encoded!r}, not a record")
 
 
 class ContextBinding(DeclaredFamily, affix="Binding"):
-    @classmethod
-    @abstractmethod
-    def resolve(cls, subject: str, actor: str | None) -> str: ...
+    """A field the UI fills from its selected context; the schema publishes the binding's name."""
 
 
 class SubjectBinding(ContextBinding):
-    @classmethod
-    def resolve(cls, subject: str, actor: str | None) -> str:
-        return subject
+    """The field is the selected subject thread."""
 
 
-def tool_field(
-    description: str,
-    *,
-    wire_name=None,
-    binding: type[ContextBinding] | None = None,
-    choices=None,
-) -> tuple[FieldDirective, ...]:
-    directives: list[FieldDirective] = [
-        Description(description),
-        DefaultNonNull(),
-    ]
-    if wire_name is not None:
-        directives.append(WireName(wire_name))
-    if binding is not None:
-        directives.append(ContextSource(binding))
-    if choices is not None:
-        directives.append(WireChoices(choices))
-    return tuple(directives)
+def tool_field(description: str, *directives: FieldDirective) -> tuple[FieldDirective, ...]:
+    """A tool argument's directives: its description, a non-null default, and whatever else the
+    field declares (WireName, ContextSource, WireChoices)."""
+    return (Description(description), DefaultNonNull(), *directives)
 
 
 @dataclass(frozen=True)
@@ -127,13 +113,12 @@ class ToolRequest[Result: ToolResult = ToolResult](
 
     @classmethod
     def schema(cls) -> dict[str, object]:
-        result = {
+        return {
             "name": cls.declared_name,
             "label": cls.label,
             "description": cls.description,
             "parameters": FieldCodec.record_schema(cls),
         }
-        return result
 
     def posted(self, remote: RequestPoster) -> dict[str, JsonValue]:
         """How a remote access sends this request: one posted call and its reply."""
