@@ -1,5 +1,7 @@
 # agent-comms: each store owns its guard
 
+> **Done.** All 6 phases of this plan hold their evidence on main (read by Core's PlanReading, 2026-11-06). Kept as the record of what was decided; it is not work.
+
 Audited head: `389d0b22a` (main, 2026-10-24), recounted at `8bc8f8fef`. Every count below is `git grep -cE PATTERN -- src ':!src/agent_comms/skills/'`; line numbers are at `8bc8f8fef`.
 
 ## The thesis

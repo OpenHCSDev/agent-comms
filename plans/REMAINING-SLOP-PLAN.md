@@ -1,5 +1,7 @@
 # agent-comms: remaining slop, its owners, and how to remove it
 
+> **Done.** All 24 phases of this plan hold their evidence on main (read by Core's PlanReading, 2026-11-06). Kept as the record of what was decided; it is not work.
+
 Audited head: `39082ce7c` (main, 2026-10-20 15:34 UTC). Measured with the refactor-audit census and overlay under Python 3.14, every finding below checked in the code.
 
 ## Where the codebase stands

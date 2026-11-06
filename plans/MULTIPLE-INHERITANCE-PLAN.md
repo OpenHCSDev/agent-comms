@@ -1,5 +1,7 @@
 # agent-comms: eliminate restated facts through multiple inheritance
 
+> **Done.** All 8 phases of this plan hold their evidence on main (read by Core's PlanReading, 2026-11-06). Kept as the record of what was decided; it is not work.
+
 Consolidated 2026-10-22 against `main` at `48c877809`. This is the current plan; the earlier audits remain evidence about their pinned heads, not additional versions of the instructions. Current phase dependencies and completion evidence belong to the `MultipleInheritancePhase` members in `src/agent_comms/plan_phases.py`. Read those declarations and the affected source before assigning work; a historical candidate list is not a current backlog.
 
 ## Outcome and ownership

@@ -1,5 +1,7 @@
 # agent-comms: ids are nominal types
 
+> **Done.** All 9 phases of this plan hold their evidence on main (read by Core's PlanReading, 2026-11-06). Kept as the record of what was decided; it is not work.
+
 Audited head: `dfc7d8976` (main, 2026-10-23). Every count below is `git grep -cE` over `src/` at that commit; every FieldCodec claim was run against that tree's `field_codec.py` in a scratch interpreter.
 
 ## The thesis

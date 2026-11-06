@@ -1,5 +1,7 @@
 # The virtual bus: every bus semantic, no bus file
 
+> **Done.** All 8 phases of this plan hold their evidence on main (read by Core's PlanReading, 2026-11-06). Kept as the record of what was decided; it is not work.
+
 Decision (Tristan, 2026-10-20): the bus stops being a physical file. It keeps every semantic a bus has (one ordered sequence per root, append-only history, addressed messages, claims, keyed publication, pages, live delivery), and each of those semantics is declared once, as a capability class, over SQLite tables. This replaces the earlier plan to copy `bus.jsonl` into a table: that plan kept a file-shaped log with a JSON blob beside extracted columns, which is two copies of every addressed field. Audited against `origin/main` at `53f74dba4` (2026-10-20, 19:30 EDT).
 
 ## Why
