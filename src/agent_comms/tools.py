@@ -943,7 +943,7 @@ class CommsModelTool(NextTurnConfiguration, NativeOwnerCommand, NativeToolReques
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsSortChannelsTool(NativeToolRequest):
+class CommsSortChannelsTool(NativeToolRequest[ToolCaller, ChannelOrderSet]):
     label = "Sort Channels"
     description = (
         "Persist channel-list ordering independently of member ordering. Pinned "
@@ -1117,7 +1117,7 @@ class CommsDeleteViewTool(NativeToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsSortChannelTool(NativeToolRequest):
+class CommsSortChannelTool(NativeToolRequest[ToolCaller, Channel]):
     label = "Sort channel members"
     description = "Persist one channel's member ordering, shared by all attached views."
     name: Annotated[str, *tool_field("Channel name")]
@@ -1611,7 +1611,7 @@ class CommsSendRefusalsTool(ReadTool, NativeToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class SendTool(PublishingTool[ThreadCaller]):
+class SendTool(PublishingTool[ThreadCaller, MessagePublished]):
     label = "Comms Send"
     description = (
         "Send a message to another thread or channel. Address specific threads with "
@@ -1667,7 +1667,7 @@ class CommsSendTool(SendTool, ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsUserSendTool(PublishingToolRequest):
+class CommsUserSendTool(PublishingToolRequest[ToolCaller, MessagePublished]):
     """Local and connector UI input use the existing durable human publication."""
 
     label = "Send human input"
@@ -1707,7 +1707,7 @@ class CommsMarkThreadViewReadTool(HumanToolRequest[ThreadViewMarked]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsAuthoredTaskTool(ThreadToolRequest, PublishingToolRequest[ThreadCaller]):
+class CommsAuthoredTaskTool(ThreadToolRequest, PublishingToolRequest[ThreadCaller, TaskPublished]):
     """One original authorized publication path for authored task declarations."""
 
     target: Annotated[
