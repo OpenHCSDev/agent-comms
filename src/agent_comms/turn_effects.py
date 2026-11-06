@@ -9,7 +9,7 @@ from acp.schema import PromptRequest
 
 if TYPE_CHECKING:
     from .runtime_server import RuntimeServer
-    from .session_lifecycle import SessionLifecycle
+    from .execution.session_lifecycle import SessionLifecycle
     from .turn_runner import TurnRunner
 
 

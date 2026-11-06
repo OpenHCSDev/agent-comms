@@ -28,10 +28,10 @@ from .tool_result import ToolResult
 from .registry_store import RegistryReadCounts
 
 if TYPE_CHECKING:
-    from .owner_lifecycle import OwnerRestartSelection
+    from .execution.owner_lifecycle import OwnerRestartSelection
     from .threads import Thread
-    from .session_lifecycle import SessionLifecycle
-    from .input_drain import OwnerSession
+    from .execution.session_lifecycle import SessionLifecycle
+    from .execution.input_drain import OwnerSession
 
 
 @dataclass(frozen=True, slots=True)

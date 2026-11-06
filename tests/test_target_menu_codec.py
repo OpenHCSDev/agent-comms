@@ -59,7 +59,7 @@ def test_every_action_result_crosses_by_shape_and_keeps_its_cli_form():
     )
     from agent_comms.cli_command import TargetBatchResult
     from agent_comms.cli_result import TargetEditResult
-    from agent_comms.owner_lifecycle import OwnerStartResult
+    from agent_comms.execution.owner_lifecycle import OwnerStartResult
 
     answer = TargetEditResult | Channel
     for result in (ThreadStoppedResult("w"), ThreadArchivedResult("w"),

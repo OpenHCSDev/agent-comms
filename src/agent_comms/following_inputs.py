@@ -15,7 +15,7 @@ from .owned_send import OwnedSend
 from .thread_identity import ClaimedIdentity
 from .turn_input_source import AcceptedFollowingInput
 from .threads import Thread
-from .input_drain import InputDrain
+from .execution.input_drain import InputDrain
 
 if TYPE_CHECKING:
     from .agent_events import InputRefused

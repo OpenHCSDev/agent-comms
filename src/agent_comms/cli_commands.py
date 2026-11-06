@@ -32,7 +32,7 @@ from .lifecycle_capability import Complete
 from .importing import ThreadImported
 from .input_origin import InputProvenance
 from .message_reference import MessageReference
-from .owner_lifecycle import OwnerRestartResult
+from .execution.owner_lifecycle import OwnerRestartResult
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
 from .presentation import ThreadRecord, ThreadView
 from .repo import Checkout, CheckoutStart, LocalRepositorySource, Repo, RepositorySource

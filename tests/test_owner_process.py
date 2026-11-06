@@ -117,7 +117,7 @@ async def test_team_memory_stays_under_its_cap(tmp_path, native_workers, owner_c
     from acp.schema import TextContentBlock
     from agent_comms.acp import CommsClient
     from agent_comms.owner_launch import RetainedOwnerLaunch
-    from agent_comms.owner_lifecycle import OwnerRestartSelection
+    from agent_comms.execution.owner_lifecycle import OwnerRestartSelection
     from native_backend_fixture import NativeBackendFixture
     from delivery_owner_fixture import FakeClient
     from agent_comms.tools import CommsResourcesTool
@@ -408,7 +408,7 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
         for index, (acknowledgement, (_, arguments, credential)) in enumerate(zip(replacements, settings, strict=True)):
             current = comms.registry.require(acknowledgement.thread)
             await ready(current)
-            from agent_comms.owner_lifecycle import OwnerRestartSelection
+            from agent_comms.execution.owner_lifecycle import OwnerRestartSelection
 
             launch = RetainedOwnerLaunch.capture(
                 OwnerRestartSelection.capture(comms.registry.snapshot(), current.name),

@@ -83,7 +83,7 @@ from .page_traversal import LatestSequence, LiveCursor
 from .historical_views import ConversationObservation, ConversationRevision, UnobservedConversation
 from .message_reference import MessageReference
 from .messages import InfoKind, Message, MessageKind, NoticeRole, SendableMessageKind
-from .owner_lifecycle import OwnerStartResult
+from .execution.owner_lifecycle import OwnerStartResult
 from .owner_launch import HostResources
 from .page_traversal import NewestCursor, PageCursor
 from .pi_payloads import PublishedGoalToolDetails

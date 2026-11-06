@@ -64,7 +64,7 @@ if TYPE_CHECKING:
     from .comms import Comms
     from .goal_presentation import GoalPublicationSnapshot
     from .input_disposition import InputDocument
-    from .input_drain import InputDrain
+    from .execution.input_drain import InputDrain
     from .rule_deal import Redeals
     from .runtime_info import AgentRuntimeInfo
     from .started_input import StartedInput

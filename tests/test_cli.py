@@ -43,7 +43,7 @@ from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.comms import wire
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.messages import SendableRole, NoticeRole
-from agent_comms.owner_lifecycle import OwnerStartResult
+from agent_comms.execution.owner_lifecycle import OwnerStartResult
 from agent_comms.pi_vocabulary import ServiceTier
 from agent_comms.restart_scope import OneOwner
 from agent_comms.thread_identity import TurnIdentity, UserThreadRole
