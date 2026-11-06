@@ -113,6 +113,36 @@ class TestPresence:
         registry.heartbeat("a")
         assert registry.last_seen("a") > before
 
+    def test_a_heartbeat_leaves_the_registry_file_alone(self, tmp_path):
+        """P1270: being seen is presence, not a declaration change. The heartbeat moves only
+        presence.json, so registry.json (5.7 MB on the live bus) is not rewritten for it, and
+        a reader that opened the registry earlier still sees the new time."""
+        path = tmp_path / "registry.json"
+        registry = Registration(path)
+        registry.register(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
+        reader = Registration(path)
+        before, stored = reader.last_seen("a"), path.read_bytes()
+        stat = path.stat()
+        import time
+
+        time.sleep(0.01)
+        registry.heartbeat("a")
+        assert path.read_bytes() == stored and path.stat().st_mtime_ns == stat.st_mtime_ns
+        assert reader.last_seen("a") > before
+        assert reader.store.snapshot().seen_at("a") == reader.last_seen("a")
+
+    def test_a_renamed_or_removed_thread_keeps_presence_only_while_declared(self, tmp_path):
+        """Presence rows are set before the registry and dropped after it, so whichever
+        revision a reader sees names no thread without a presence row."""
+        from agent_comms.presence import PresenceStore
+
+        path = tmp_path / "registry.json"
+        registry = Registration(path)
+        registry.register(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
+        registry.rename("a", "b")
+        assert set(PresenceStore.at(tmp_path).read().seen) == {"b"}
+        assert Registration(path).last_seen("b") > 0
+
     def test_last_seen_fail_closed(self, tmp_path):
         registry = Registration(tmp_path / "r.json")
         with pytest.raises(UnregisteredThreadError):

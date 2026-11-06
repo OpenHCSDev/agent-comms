@@ -199,7 +199,7 @@ def test_a_reused_revision_still_finds_its_user_thread(tmp_path):
 
     # Only the worker's row changes; the user's declaration is reused, not decoded again.
     raw = json.loads(path.read_text())
-    raw["last_seen"]["worker"] = raw["last_seen"]["worker"] + 1
+    raw["threads"]["worker"]["title"] = "retitled"
     AtomicFile(path).write_text(json.dumps(raw, indent=2))
 
     assert [thread.name for thread in reader.store.read().user_thread().existing()] == ["user"]
