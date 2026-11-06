@@ -2285,7 +2285,7 @@ class AcpSessionSelection:
 
     bound: ClassVar[bool] = False
 
-    def admits(self, session: AcpSessionId) -> bool:
+    def accepts(self, session: AcpSessionId) -> bool:
         """An unbound attachment takes whichever session answers first."""
         return True
 
@@ -2299,7 +2299,7 @@ class AcpSessionId(NominalText, AcpSessionSelection):
 
     bound = True
 
-    def admits(self, session: AcpSessionId) -> bool:
+    def accepts(self, session: AcpSessionId) -> bool:
         return self == session
 
     def selected[T](self, unbound: T, bound: Callable[[AcpSessionId], T]) -> T:
