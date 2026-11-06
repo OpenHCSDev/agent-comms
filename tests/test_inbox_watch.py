@@ -12,7 +12,7 @@ from uuid import uuid4
 import pytest
 from aiohttp import WSServerHandshakeError
 from pydantic import ValidationError
-from aiohttp.test_utils import TestClient, TestServer
+from aiohttp.test_utils import TestClient, TestServer, unused_port
 from yarl import URL
 
 from agent_comms.activity import ActivityState, ObservedActivity
@@ -46,8 +46,11 @@ async def session(tmp_path: Path, comms: Comms):
     comms.registry.declare(ExternalThread("claude-ai", frozenset(), Checkout(comms.root)))
     comms.registry.declare(NativeThread("sender", frozenset(), Checkout(comms.root)))
     store = ConnectorStore.at(tmp_path / "auth")
-    connector = Connector(store, "http://127.0.0.1:18767", comms.root)
-    async with TestServer(connector.application()) as server:
+    # The connector names its own address in every URL it issues, and a reconnecting client
+    # dials that URL whole, so the server listens where the connector says it does.
+    port = unused_port()
+    connector = Connector(store, f"http://127.0.0.1:{port}", comms.root)
+    async with TestServer(connector.application(), port=port) as server:
         async with TestClient(server) as client:
             with store.granted("test") as token:
                 yield client, token
