@@ -9,11 +9,12 @@ from dataclasses import fields, replace
 
 import pytest
 
+from agent_comms.channel_targets import IncarnationThreadTarget, ThreadTarget
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import MalformedRecord
 from agent_comms.display_references import (
     ChannelDisplayReference, CurrentDisplayReferences, DisplayReference, DisplayReferences,
-    HistoricalDisplayReference, ThreadDisplayReference,
+    HistoricalDisplayReference, RetiredThreadReference, ThreadDisplayReference,
 )
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.historical_views import HistorySource
@@ -113,10 +114,12 @@ def test_recreated_thread_reference_resolves_new_birth_not_same_name(comms, decl
     assert recreated.incarnation != original.incarnation
     assert references.thread(recreated.incarnation).incarnation == recreated.incarnation
     assert before.thread(original.incarnation).incarnation == original.incarnation
-    with pytest.raises(KeyError):
-        references.thread(original.incarnation)
-    assert references.holds(recreated.incarnation)
-    assert not references.holds(original.incarnation)
+    retired = references.thread(original.incarnation)
+    assert not retired.current_in(references)
+    assert references.thread(recreated.incarnation).current_in(references)
+    # The old birth never answers with the name its successor now carries.
+    assert retired.target() == IncarnationThreadTarget(original.incarnation)
+    assert references.thread(recreated.incarnation).target() == ThreadTarget(recreated.name)
 
 
 def test_retired_dm_peer_has_no_unread_to_paint(comms, declare_reference):
@@ -184,8 +187,10 @@ def test_current_targets_answer_as_the_eager_map_did(comms, declare_reference):
     assert references.name_end(text, 1) == plain.name_end(text, 1)
     assert all(references.contains(reference) for reference in eager.values())
     assert references.thread(references.members["thread-3"]).incarnation == references.members["thread-3"]
-    with pytest.raises(KeyError):
-        references.thread(RecordedThreadIncarnation("thread-3", 9000.0))
+    # Another birth under a current name is that birth, retired, never the current thread.
+    other_birth = RecordedThreadIncarnation("thread-3", 9000.0)
+    assert references.thread(other_birth) == RetiredThreadReference("/root", other_birth)
+    assert not references.thread(other_birth).current_in(references)
 
     declare_reference()
     current = comms.views.viewer_snapshot(Checkout(comms.root.parent)).references

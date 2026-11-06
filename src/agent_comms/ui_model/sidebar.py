@@ -26,8 +26,9 @@ from agent_comms.ui_model.unread import UnreadPresentation, UnobservedUnread
 
 from ..display_references import (
     PendingReferences,
-    ThreadDisplayReference,
     ThreadNames,
+    ThreadReference,
+    ThreadUnreadSource,
     UnavailableReferences,
 )
 
@@ -104,9 +105,13 @@ class ChannelRowModel:
         )
 
 
-class SidebarObservation(ABC):
+class SidebarObservation(ThreadUnreadSource[UnreadPresentation]):
     @abstractmethod
     def status_text(self) -> str: ...
+
+    def retired_unread(self) -> UnreadPresentation:
+        """A retired birth's tab can paint once before retirement closes it: nothing unread."""
+        return UnobservedUnread()
 
     def shows_status(self) -> bool:
         return True
@@ -147,7 +152,7 @@ class UnobservedThreadNames(ThreadNames):
 
     observation: SidebarObservation
 
-    def thread(self, incarnation: ThreadIncarnation) -> ThreadDisplayReference:
+    def thread(self, incarnation: ThreadIncarnation) -> ThreadReference:
         self.observation.unavailable()
 
 
@@ -204,13 +209,9 @@ class ObservedSidebar(SidebarObservation):
 
     def peer_unread(self, peer: ThreadIncarnation) -> UnreadPresentation:
         """The peer's current name and its unread count come from this one snapshot. A name the
-        caller resolved from an earlier cut can be one a rename has since replaced. A retired
-        incarnation (its peer deleted or redeclared) has no unread left to show; its tab may
-        still paint once before retirement closes it."""
-        references = self.snapshot.references
-        if not references.holds(peer):
-            return UnobservedUnread()
-        return self.bus_unread(references.thread(peer).name)
+        caller resolved from an earlier cut can be one a rename has since replaced, and a
+        retired birth answers for itself."""
+        return self.snapshot.references.thread(peer).unread_from(self)
 
     def references_for(self, root):
         return self.snapshot.references.at(root)
