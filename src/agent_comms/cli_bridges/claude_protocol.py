@@ -642,6 +642,11 @@ class ClaudeRecord(TaggedWire, ABC, affix=""):
 
 class AssistantBlock(TaggedWire, ABC, affix="", declared_name=None):
 
+    @classmethod
+    def undeclared_tag(cls, tag: str) -> str:
+        """Claude Code adds content-block tags; an unread one keeps its record readable."""
+        return UnreadableBlock.tag()
+
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return ()
 
@@ -658,6 +663,15 @@ class AssistantBlock(TaggedWire, ABC, affix="", declared_name=None):
     def subagent_progress(self, record: TimedRecord) -> tuple[SubagentProgress, ...]:
         """Reasoning decides nothing: the text or call it precedes does."""
         return ()
+
+
+class UnreadableBlock(AssistantBlock, declared_name='__undeclared__'):
+    """A content block whose tag this version does not declare.
+
+    Claude Code writes one when the harness replaces a response, and adds new
+    tags over time. The block shows the reader nothing and moves no lifecycle,
+    so the records around it still reach the bus.
+    """
 
 
 class TextContent(WireModel):

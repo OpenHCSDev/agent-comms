@@ -65,6 +65,20 @@ class TaggedWire(DeclaredWireFamily, WireModel, ABC, affix="", declared_name=Non
     def tag(cls) -> str:
         return cls.declared_name
 
+    @classmethod
+    def declared_tags(cls) -> frozenset[str]:
+        return frozenset(member.tag() for member in cls.members_with(cls))
+
+    @classmethod
+    def undeclared_tag(cls, tag: str) -> str:
+        """The tag to decode a record by when this family declares no member for its own.
+
+        A family whose tags are exactly its declared members keeps the tag, and
+        the union refuses the record. A family an external CLI extends names one
+        of its members instead, so a tag written by a newer CLI stays readable.
+        """
+        return tag
+
     @computed_field
     @property
     def type(self) -> str:
@@ -72,9 +86,8 @@ class TaggedWire(DeclaredWireFamily, WireModel, ABC, affix="", declared_name=Non
 
     @classmethod
     def tag_of(cls, value: Mapping[str, object] | TaggedWire) -> str:
-        if isinstance(value, Mapping):
-            return cls.header.model_validate(value).type
-        return value.type
+        tag = cls.header.model_validate(value).type if isinstance(value, Mapping) else value.type
+        return tag if tag in cls.declared_tags() else cls.undeclared_tag(tag)
 
     @classmethod
     def declared_union(cls) -> TypeForm[Self]:
