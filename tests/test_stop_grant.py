@@ -25,7 +25,7 @@ async def live_input(
 ) -> AsyncIterator[PrivateSendClaim]:
     async with prepared_native_input(private_directory, max_attempts=2) as claim:
         comms = claim.selected.comms
-        agent = CommsAgent(comms, runtime_enabled=True)
+        agent = CommsAgent(comms, auto_wake=True)
         try:
             # Bind the actual session/socket, but do not start its input drain:
             # the control owns the unsent/GRANT boundary, never a model prompt.

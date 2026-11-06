@@ -83,7 +83,7 @@ async def test_owned_native_edit_of_a_missing_file_returns_the_refusal(
 
     async with native_backend_fixture(tmp_path, package=native_runtime_package) as saved:
         await saved.author_history()
-        async with saved.open_owner(native_options=()) as (agent, session_id):
+        async with saved.open_owner(native_options=(), auto_wake=False) as (agent, session_id):
             worker = agent.sessions.require(session_id)
             registry = agent._comms.registry
             owner = registry.require(worker)

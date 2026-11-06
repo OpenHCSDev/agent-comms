@@ -27,7 +27,7 @@ def block_current_goal(comms, worker):
 async def test_verified_turn_clears_a_backend_failed_goal(tmp_path, native_runtime_package):
     async with native_backend_fixture(tmp_path, package=native_runtime_package) as saved:
         await saved.author_history()
-        async with saved.open_owner(native_options=()) as (agent, session_id):
+        async with saved.open_owner(native_options=(), auto_wake=False) as (agent, session_id):
             comms = agent._comms
             worker = agent.sessions.require(session_id)
             store, goal = block_current_goal(comms, worker)
@@ -43,7 +43,7 @@ async def test_verified_turn_clears_a_backend_failed_goal(tmp_path, native_runti
 async def test_verified_bus_turn_clears_a_backend_failed_goal(tmp_path, native_runtime_package):
     async with native_backend_fixture(tmp_path, package=native_runtime_package) as native:
         await native.author_history()
-        async with native.open_owner(runtime_enabled=True, auto_wake=True) as (agent, session):
+        async with native.open_owner(auto_wake=True) as (agent, session):
             comms = agent._comms
             store, goal = block_current_goal(comms, agent.sessions.require(session))
             comms.threads.claim_thread('sender', tags=frozenset(), worktree=Checkout(native.project))

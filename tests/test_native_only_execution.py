@@ -72,7 +72,7 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(
             registered = comms.registry.require("headless")
             assert registered.require_process().pid == started.pid
             assert registered.worktree == Checkout(project)
-            client = CommsClient(comms)
+            client = CommsClient(comms, auto_wake=False)
             try:
                 initialized = await client.initialize(protocol_version=1)
                 assert initialized.agent_capabilities.prompt_capabilities.image

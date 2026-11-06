@@ -234,14 +234,12 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         comms: Comms,
         agent_bin: LaunchBinary = ConfiguredBinary(),
         agent_args: LaunchArguments = InheritedArguments(),
-        runtime_enabled: bool = False,
+        *,
+        auto_wake: bool,
         use_unstable_protocol: bool = False,
-        auto_wake: bool = True,
     ):
         self._comms = comms
         self.use_unstable_protocol = use_unstable_protocol
-        # Enabled for verified native owners by default. Explicit construction
-        # may disable it; model/tool content cannot change this owner policy.
         self._runtime = RuntimeServer(self)
 
         self.annotations = AnnotationWorker(comms, self._runtime, self, AnnotationPolicy.configured())
@@ -251,9 +249,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             self._runtime,
             self,
         )
-        self.sessions = self.session_lifecycle_class(
-            comms, self._runtime, runtime_enabled, self
-        )
+        self.sessions = self.session_lifecycle_class(comms, self._runtime, self)
         self.inputs = InputDrain(
             comms, self.sessions, self._runtime, self, auto_wake,
             ConfigOptions(RetainedOwnerLaunch.configured(agent_bin, agent_args), comms.route),
@@ -666,11 +662,7 @@ def main() -> int:
                             debug_log.write(f"  {task.get_name()}: {' <- '.join(innermost)}\n")
 
             asyncio.create_task(watchdog())
-        agent = CommsClient(
-            comms,
-            runtime_enabled=True,
-            use_unstable_protocol=True,
-        )
+        agent = CommsClient(comms, auto_wake=True, use_unstable_protocol=True)
 
         def observe(event: StreamEvent) -> None:
             agent._debug_log(

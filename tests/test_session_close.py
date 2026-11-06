@@ -44,7 +44,7 @@ async def test_close_retires_one_real_subscription_and_permission(tmp_path, monk
     # This declared model catalogue avoids SDK/model discovery; no model runs.
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/one")
     comms = installed_comms(tmp_path / "w")
-    owner = CommsAgent(comms, runtime_enabled=True, auto_wake=False)
+    owner = CommsAgent(comms, auto_wake=False)
     client = CommsClient(comms, auto_wake=False, use_unstable_protocol=True)
     other = CommsClient(comms, auto_wake=False, use_unstable_protocol=True)
     callbacks = AttachmentClient()

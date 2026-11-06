@@ -27,7 +27,7 @@ pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
 
 async def test_subscription_busy_read_retains_original_traceback(tmp_path, caplog):
     comms = wire(tmp_path / "wire")
-    owner = CommsAgent(comms, runtime_enabled=True, auto_wake=False)
+    owner = CommsAgent(comms, auto_wake=False)
     client = CommsAgent(comms, auto_wake=False)
     session_file = tmp_path / "owner.jsonl"
     session_file.write_text(json.dumps({

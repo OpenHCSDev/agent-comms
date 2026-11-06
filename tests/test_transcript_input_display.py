@@ -110,7 +110,7 @@ async def test_acp_saved_transcript_replay_hides_only_owned_internal_input(tmp_p
     comms.registry.declare(NativeThread('worker', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(session), comms.root)))
     comms.transcripts.routes.record_input_display(FIRST_INPUT_ID, NoDisplayText())
     comms.transcripts.routes.record_input_display(SECOND_INPUT_ID, DisplayText("test2"))
-    agent = CommsAgent(wire(comms.root))
+    agent = CommsAgent(wire(comms.root), auto_wake=False)
     updates = []
     destinations = []
     destination = AcpSessionId("input-display-destination")

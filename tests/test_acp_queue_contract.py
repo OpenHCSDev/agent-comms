@@ -46,7 +46,7 @@ def _owner(tmp_path: Path) -> tuple[Comms, CommsAgent, RecordedThreadIncarnation
     comms = prepare_native_comms(wire(tmp_path / "wire"))
     thread = NativeThread('beta', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(thread)
-    agent = CommsAgent(comms)
+    agent = CommsAgent(comms, auto_wake=False)
     agent.sessions.publish(AcpSessionId("beta"), thread)
     owner, claimed_generation = comms.registry.live_owner_with_claim("beta")
     return comms, agent, owner.incarnation.require_recorded(), claimed_generation

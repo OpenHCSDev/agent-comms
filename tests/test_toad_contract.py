@@ -27,7 +27,7 @@ async def test_toad_public_types_and_acp_agent_comms_metadata(tmp_path, consumer
     turn_id = TurnId.mint()
     comms = wire(tmp_path / "wire")
     comms.registry.declare(NativeThread('worker', frozenset(), Checkout(tmp_path)))
-    agent = CommsAgent(comms, agent_bin=GivenBinary("nonexistent-pi"), runtime_enabled=False, auto_wake=False)
+    agent = CommsAgent(comms, agent_bin=GivenBinary("nonexistent-pi"), auto_wake=False)
 
     session_id = AcpSessionId("worker")
     session = NewSessionResponse(

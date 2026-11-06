@@ -87,11 +87,10 @@ class SessionLifecycle:
         self,
         comms: Comms,
         runtime: RuntimeServer,
-        runtime_enabled: bool,
         effects: SessionEffects,
     ):
         self.comms = comms
-        self.runtime, self.runtime_enabled, self.effects = runtime, runtime_enabled, effects
+        self.runtime, self.effects = runtime, effects
         self.published: dict[AcpSessionId, PublishedSession] = {}
         self.client: SdkSessionConnection | NoController = NO_CONTROLLER
         self.proxies: dict[AcpSessionId, RuntimeProxy | IncompatibleOwner] = {}
@@ -243,8 +242,7 @@ class SessionLifecycle:
         # in the same loop turn, before any await can let that producer read it.
         state = self.effects.inputs.acquire_owner(session_id, configuration, owner)
         self.publish(session_id, thread)
-        if self.runtime_enabled:
-            await self.runtime.start()
+        await self.runtime.start()
         return state
 
     async def new_session(self, request: NewSessionRequest) -> NewSessionResponse:

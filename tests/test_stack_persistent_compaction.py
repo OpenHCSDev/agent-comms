@@ -195,7 +195,7 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch, n
             comms,
             agent_bin=GivenBinary(native),
             agent_args=GivenArguments(("--provider", "openrouter", "--model", "z-ai/glm-5.3-flash", "--thinking", "off",)),
-            runtime_enabled=True,
+            
             auto_wake=False,
         )
         updates = []

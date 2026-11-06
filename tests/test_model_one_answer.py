@@ -42,7 +42,7 @@ async def test_menu_reports_the_model_the_runtime_runs(tmp_path, monkeypatch):
     # This declared model catalogue avoids SDK/model discovery; no model runs.
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/one,test/two")
     comms = installed_comms(tmp_path / "w")
-    owner = CommsAgent(comms, runtime_enabled=False, auto_wake=False)
+    owner = CommsAgent(comms, auto_wake=False)
     try:
         project = tmp_path / "alpha"
         project.mkdir()

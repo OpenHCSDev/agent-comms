@@ -7,7 +7,7 @@ from acp.schema import AuthCapabilities, ClientCapabilities
 
 
 async def test_terminal_auth_is_only_advertised_when_supported(tmp_path):
-    agent = CommsAgent(wire(tmp_path), agent_bin=GivenBinary("pi"))
+    agent = CommsAgent(wire(tmp_path), agent_bin=GivenBinary("pi"), auto_wake=False)
     assert not (await agent.initialize(1, ClientCapabilities())).auth_methods
     methods = (await agent.initialize(
         1, ClientCapabilities(auth=AuthCapabilities(terminal=True))

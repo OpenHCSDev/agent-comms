@@ -114,17 +114,16 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
                 "--no-prompt-templates", *options)
 
     @asynccontextmanager
-    async def open_owner(self, *, runtime_enabled=False, auto_wake=False,
+    async def open_owner(self, *, auto_wake: bool,
                          native_options=("--no-tools",),
                          client: SdkSessionConnection | NoController = NO_CONTROLLER):
         """Acquire the real saved ACP owner and attested idle native child."""
         agent = canonical_agent(
-            wire(self.root), auto_wake=auto_wake, runtime_enabled=runtime_enabled, agent_bin=GivenBinary("pi"),
+            wire(self.root), auto_wake=auto_wake, agent_bin=GivenBinary("pi"),
             agent_args=GivenArguments(tuple(self.native_arguments(native_options))),
         )
         agent.on_connect(client)
         try:
-            await agent._runtime.start()
             session_id = await self.bind_saved_owner(agent, project=self.project, session=self.session)
             yield agent, session_id
         finally:

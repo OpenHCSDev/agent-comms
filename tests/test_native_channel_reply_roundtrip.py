@@ -186,7 +186,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
     root_id = comms.registry.store.prepare_native_root().namespace
     attachment = CommsClient(
         comms,
-        runtime_enabled=True,
+        auto_wake=True
     )
     facts = []
 
@@ -425,7 +425,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                 assert Path(current.runtime.read_key).read_bytes() == saved[name]
             assert len(requests) == seed_count + 2, "Restart replayed saved input"
             attachment = CommsClient(
-                comms, runtime_enabled=True,
+                comms, auto_wake=True
             )
             attachment.on_connect(Client())
             await attachment.load_session(cwd=str(projects["questioner"]), session_id="questioner")

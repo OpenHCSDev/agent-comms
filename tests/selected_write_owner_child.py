@@ -35,7 +35,7 @@ async def main(base: Path) -> None:
         loop.add_signal_handler(sig, stopped.set)
     async with Coordination.worker(CoordinationStore.path_in(comms.root)):
         agent = canonical_agent(
-            comms, auto_wake=False, runtime_enabled=True,
+            comms, auto_wake=False,
             agent_bin=GivenBinary("pi"), agent_args=GivenArguments(NativeBackendFixture.native_arguments()),
         )
         try:

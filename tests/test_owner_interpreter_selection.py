@@ -17,7 +17,7 @@ from delivery_owner_fixture import canonical_agent, start_headless_owner
 
 
 async def test_original_session_launches_share_host_and_refuse_changed_selection(comms, tmp_path, native_runtime_package):
-    agent = canonical_agent(comms, runtime_enabled=True, auto_wake=False)
+    agent = canonical_agent(comms, auto_wake=False)
     try:
         expected = {}
         for name in ("older", "current"):

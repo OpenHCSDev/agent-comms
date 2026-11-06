@@ -57,7 +57,7 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(tm
         provider.text = "CANCELLED_RESPONSE"
         provider.completion_gate = release
         requests = provider.requests
-        async with native.open_owner(runtime_enabled=True, auto_wake=True, client=Client()) as (owner, session):
+        async with native.open_owner(auto_wake=True, client=Client()) as (owner, session):
             comms = owner._comms
             proxy = owner._create_runtime_proxy(comms.registry.require(session), session)
             await proxy.subscribe()

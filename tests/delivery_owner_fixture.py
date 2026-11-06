@@ -37,7 +37,7 @@ async def canonical_delivery_owner(root, *, direct=False):
     _path, root_id, comms, initial, people = _root(root, direct=direct)
     owner = CommsAgent(
         comms,
-        runtime_enabled=True,
+        auto_wake=True
     )
     for person in people[1:]:
         owner.sessions.publish(AcpSessionId(person.name), person)

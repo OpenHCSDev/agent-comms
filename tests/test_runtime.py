@@ -210,7 +210,7 @@ async def test_subscription_replay_uses_requested_alias(
 
     comms = private_comms
     LaunchRoot.from_path(comms.root).install()
-    owner = canonical_agent(comms, runtime_enabled=True, auto_wake=False)
+    owner = canonical_agent(comms, auto_wake=False)
     client = canonical_agent(comms, auto_wake=False)
     updates = []
 
@@ -279,7 +279,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
     old, new = (child.identity for child in runtime_processes)
     old_pid, new_pid = old.pid, new.pid
     comms.registry.declare(NativeThread('worker', frozenset(), Checkout(tmp_path), process_identity=old))
-    client = canonical_agent(comms)
+    client = canonical_agent(comms, auto_wake=False)
     updates = []
 
     class Client(SessionUpdateSink):
@@ -414,7 +414,7 @@ async def test_new_session_metadata_has_a_display_title_before_first_switch(
     tmp_path, native_runtime_package
 ):
     comms = wire(tmp_path / "wire")
-    agent = canonical_agent(comms, agent_bin=GivenBinary("/bin/echo"))
+    agent = canonical_agent(comms, agent_bin=GivenBinary("/bin/echo"), auto_wake=False)
     try:
         response = await agent.new_session(str(tmp_path / "project"))
         assert (

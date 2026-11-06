@@ -40,7 +40,7 @@ def _private_comms(tmp_path):
 
 def _session(tmp_path):
     comms, root_id = _private_comms(tmp_path)
-    agent = CommsAgent(comms, runtime_enabled=True)
+    agent = CommsAgent(comms, auto_wake=True)
     session_id = AcpSessionId("beta")
     agent.sessions.publish(session_id, comms.registry.require("beta"))
     return comms, agent, root_id, session_id
