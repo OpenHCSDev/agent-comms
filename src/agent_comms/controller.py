@@ -10,6 +10,9 @@ from pydantic import BaseModel
 from .coordination.errors import IdentityConflict
 from .nominal.field_codec import AcpSessionId
 
+CANCELLED_OUTCOME: dict[str, object] = {"outcome": "cancelled"}
+"""ACP's denied permission outcome: what every answer without a choosing controller carries."""
+
 if TYPE_CHECKING:
     from acp.schema import PermissionOption, ToolCallUpdate
 
@@ -56,7 +59,7 @@ class UncontrolledController(Controller):
         self, runner: TurnRunner, session_id: AcpSessionId,
         request: tuple[ToolCallUpdate, list[PermissionOption]],
     ) -> dict[str, object]:
-        return {"outcome": "cancelled"}
+        return dict(CANCELLED_OUTCOME)
 
 
 class UnboundController(UncontrolledController):
@@ -91,7 +94,7 @@ class NoController(UncontrolledController, SessionUpdateSink):
 
     async def request_permission(self, **request: object) -> dict[str, object]:
         """With no client, every permission request is cancelled."""
-        return {"outcome": {"outcome": "cancelled"}}
+        return {"outcome": dict(CANCELLED_OUTCOME)}
 
 
 UNBOUND_CONTROLLER = UnboundController()

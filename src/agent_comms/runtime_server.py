@@ -1,4 +1,6 @@
-"""The runtime socket server: it decodes each runtime request, binds it and applies it."""
+"""The runtime socket: each request's family, the context it binds to, and the server that
+decodes, binds and applies it. Nothing here loads ACP, so declaring or sending a request
+stays light; the ACP agent reaches the server only as its owner."""
 
 from __future__ import annotations
 
@@ -8,28 +10,39 @@ import logging
 import os
 import secrets
 import socket
-from collections.abc import Coroutine
+from abc import abstractmethod
+from collections.abc import Awaitable, Coroutine, Sequence
 from contextlib import ExitStack, suppress
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Any, Self
+from functools import partial
+from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Self
+
 from pydantic import BaseModel
-from .coordination.errors import Refused
-from acp.exceptions import RequestError
-from acp.schema import DeniedOutcome, PermissionOption, RequestPermissionResponse, ToolCallUpdate
-from .controller import UNBOUND_CONTROLLER, Controller, SessionUpdateSink
-from .nominal.field_codec import AcpSessionId, FieldCodec
-from .owner_protocol import ClientLine, OwnerFailure, OwnerLine, OwnerPermissionRequest, OwnerUpdate
-from .owner_connection import socket_path
-from .coordination.errors import CoordinationError, IdentityConflict
+
+from .command import Command
+from .controller import CANCELLED_OUTCOME, UNBOUND_CONTROLLER, Controller, SessionUpdateSink
+from .coordination.coordinator import Coordination
+from .coordination.errors import CoordinationError, IdentityConflict, Refused
+from .errors import RelationViolationError
 from .native_failures import NativeRequestFailure
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import AcpSessionId, FieldCodec, WireOmitDefault
+from .owner_connection import (
+    AnyOwner, NoControllerToken, OwnerConnection, RequestedOwner, socket_path,
+)
+from .owner_protocol import (
+    ClientLine, OwnerFailure, OwnerLine, OwnerPermissionRequest, OwnerResult, OwnerUpdate,
+)
+from .storage.maintenance_barrier import MaintenanceHolder, NoMaintenanceHolder
 from .storage.private_path import PrivateSocketRole
-from .runtime_request import RuntimeRequest
-from typing import TYPE_CHECKING
+from .registry_document import RegistryEntry
+from .thread_identity import ThreadIncarnation
+from .threads import Thread
+from .tool_result import DeclaredReply
 
 if TYPE_CHECKING:
-    from .acp import CommsAgent
-    from agent_comms.acp import AcpSelectedWriteAuthority
+    from .acp import AcpSelectedWriteAuthority, CommsAgent
     from .turn_runner import TurnRunner
 
 
@@ -55,26 +68,14 @@ class ClientPermissionResponse(ClientLine):
     id: str
     outcome: dict[str, object]
 
-    def __post_init__(self) -> None:
-        self.response()
-
     @classmethod
     def cancelled(cls, request_id: str) -> Self:
-        denied = RequestPermissionResponse(outcome=DeniedOutcome(outcome="cancelled"))
-        return cls.of(request_id, denied)
-
-    @classmethod
-    def of(cls, request_id: str, response: RequestPermissionResponse) -> Self:
-        outcome = response.outcome.model_dump(by_alias=True, exclude_none=True)
-        return cls(id=request_id, outcome=outcome)
-
-    def response(self) -> RequestPermissionResponse:
-        return RequestPermissionResponse.model_validate({"outcome": self.outcome})
+        return cls(id=request_id, outcome=dict(CANCELLED_OUTCOME))
 
     def answer(self, client: SocketClient) -> None:
         pending = client.pending.get(self.id)
         if pending is not None and not pending.done():
-            pending.set_result(self.response())
+            pending.set_result(self.outcome)
 
 
 class SocketClient(Controller, SessionUpdateSink):
@@ -88,7 +89,7 @@ class SocketClient(Controller, SessionUpdateSink):
         send_bytes = writer.get_extra_info("socket").getsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF)
         transport.set_write_buffer_limits(high=max(high_water, send_bytes), low=low_water)
         self.token = secrets.token_hex(32)
-        self.pending: dict[str, asyncio.Future[RequestPermissionResponse]] = {}
+        self.pending: dict[str, asyncio.Future[dict[str, object]]] = {}
 
     def require_current(self, authority: AcpSelectedWriteAuthority, session_id: AcpSessionId) -> None:
         if not authority.agent._runtime.is_controller(session_id, self):
@@ -96,18 +97,16 @@ class SocketClient(Controller, SessionUpdateSink):
 
     async def request_ui_permission(
         self, runner: TurnRunner, session_id: AcpSessionId,
-        request: tuple[ToolCallUpdate, list[PermissionOption]],
-    ) -> dict[str, object] | None:
+        request: tuple[BaseModel, Sequence[BaseModel]],
+    ) -> dict[str, object]:
+        """The socket forwards the request's wire form and reads nothing else of ACP's models."""
         tool_call, options = request
-        reply = await runner.runtime.request_permission(
+        return await runner.runtime.request_permission(
             session_id,
             self,
             tool_call.model_dump(by_alias=True, exclude_none=True),
             [option.model_dump(by_alias=True, exclude_none=True) for option in options],
         )
-        if reply is None:
-            return None
-        return reply.outcome.model_dump(by_alias=True, exclude_none=True)
 
     def departed(self, runtime: RuntimeServer, session_id: AcpSessionId) -> bool:
         return not runtime.is_controller(session_id, self)
@@ -137,11 +136,13 @@ class SocketClient(Controller, SessionUpdateSink):
 
     async def permission(
         self, tool_call: dict[str, object], options: list[dict[str, object]]
-    ) -> RequestPermissionResponse | None:
+    ) -> dict[str, object]:
+        """The controller's outcome as it sent it; turn_runner reads only what it needs.
+        A request it never answers is cancelled."""
         if len(self.pending) >= 4:
-            return None
+            return dict(CANCELLED_OUTCOME)
         request_id = secrets.token_hex(16)
-        future: asyncio.Future[RequestPermissionResponse] = (
+        future: asyncio.Future[dict[str, object]] = (
             asyncio.get_running_loop().create_future()
         )
         self.pending[request_id] = future
@@ -161,7 +162,7 @@ class SocketClient(Controller, SessionUpdateSink):
         except (OSError, ConnectionError, TimeoutError):
             if task is not None and task.cancelling():
                 raise asyncio.CancelledError from None
-            return None
+            return dict(CANCELLED_OUTCOME)
         finally:
             self.pending.pop(request_id, None)
             if not future.done():
@@ -172,9 +173,7 @@ class SocketClient(Controller, SessionUpdateSink):
             if not future.done():
                 # Connection loss is denial, not cancellation of the *owner*
                 # turn task. Explicit ACP cancellation must still propagate.
-                future.set_result(
-                    RequestPermissionResponse(outcome=DeniedOutcome(outcome="cancelled"))
-                )
+                future.set_result(dict(CANCELLED_OUTCOME))
         self.pending.clear()
 
     async def publish_update(self, *, session_id: AcpSessionId, update: BaseModel) -> bool:
@@ -316,11 +315,11 @@ class RuntimeServer(SessionUpdateSink):
         controller: SocketClient,
         tool_call: dict[str, object],
         options: list[dict[str, object]],
-    ) -> RequestPermissionResponse | None:
+    ) -> dict[str, object]:
         if not self.is_controller(session_id, controller):
-            return None
+            return dict(CANCELLED_OUTCOME)
         reply = await controller.permission(tool_call, options)
-        return reply if self.is_controller(session_id, controller) else None
+        return reply if self.is_controller(session_id, controller) else dict(CANCELLED_OUTCOME)
 
     async def handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         client = SocketClient(writer)
@@ -340,12 +339,6 @@ class RuntimeServer(SessionUpdateSink):
             # The reply is the whole answer: a correct refusal is not a fault.
             with suppress(SubscriberClosed):
                 await client.send(OwnerFailure.refused(error))
-        except RequestError as error:
-            # A failed turn in its protocol form crosses whole, and the client's own boundary
-            # raises it as itself. Closing without a reply would report it as an unknown outcome.
-            with suppress(SubscriberClosed):
-                await client.send(OwnerFailure.refused(Refused(error.code, str(error), error.data)))
-            raise
         except (ValueError, CoordinationError, NativeRequestFailure) as error:
             # The client gets only the text, so the fault stays loud on this side.
             with suppress(SubscriberClosed):
@@ -373,3 +366,74 @@ class RuntimeServer(SessionUpdateSink):
             client.disconnected()
             client.writer.close()
             self.clients.disconnect(client)
+
+@dataclass(frozen=True)
+class RuntimeRequestContext:
+    server: RuntimeServer
+    reader: asyncio.StreamReader
+    client: SocketClient
+    name: str
+
+    async def send(self, line: OwnerLine) -> None:
+        await self.client.send(line)
+
+
+@dataclass(frozen=True)
+class AttachedRuntimeRequestContext(RuntimeRequestContext):
+    session: AcpSessionId
+
+
+@dataclass(frozen=True, kw_only=True)
+class RuntimeRequest[Ctx: RuntimeRequestContext](
+    DeclaredFamily, Command[Ctx, Awaitable[None]], affix="RuntimeRequest"
+):
+    family_discriminator: ClassVar[str] = "action"
+    thread: str
+    holder: Annotated[MaintenanceHolder, WireOmitDefault()] = NoMaintenanceHolder()
+    captured: Annotated[RequestedOwner, WireOmitDefault()] = AnyOwner()
+
+    @classmethod
+    def proxy_payload(
+        cls, owner: ThreadIncarnation, controller_token: str | NoControllerToken,
+        parameters: dict[str, object],
+    ) -> dict[str, object]:
+        return OwnerConnection.wire_request(cls.declared_name, owner, parameters)
+
+    @abstractmethod
+    async def bind(
+        self, server: RuntimeServer, reader: asyncio.StreamReader, client: SocketClient,
+    ) -> Ctx: ...
+
+
+class AttachedRuntimeRequest(RuntimeRequest[AttachedRuntimeRequestContext]):
+    def require_owner(self, entry: RegistryEntry) -> Thread:
+        owner = entry.thread
+        if not owner.process_identity.runs_here() or not entry.status.running:
+            raise RelationViolationError("This process no longer owns the thread.")
+        self.captured.require(owner)
+        return owner
+
+    async def bind(
+        self, server: RuntimeServer, reader: asyncio.StreamReader, client: SocketClient,
+    ) -> AttachedRuntimeRequestContext:
+        entry = (await Coordination.run_worker(partial(
+            server.agent._comms.registry.entry, self.thread,
+        ))).entry
+        owner = self.require_owner(entry)
+        session_id = server.agent.sessions.require_owned_session(entry)
+        return AttachedRuntimeRequestContext(server, reader, client, owner.name, session_id)
+
+
+class ResultRuntimeRequest[Ctx: RuntimeRequestContext](RuntimeRequest[Ctx]):
+    async def apply(self, ctx: Ctx) -> None:
+        reply = await self.result(ctx)
+        await ctx.send(OwnerResult(result=FieldCodec.encode(reply)))
+
+    @abstractmethod
+    async def result(self, ctx: Ctx) -> DeclaredReply: ...
+
+
+class AttachedResultRuntimeRequest(
+    ResultRuntimeRequest[AttachedRuntimeRequestContext], AttachedRuntimeRequest
+):
+    pass
