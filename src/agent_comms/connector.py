@@ -821,7 +821,10 @@ class Connector(ConnectorService):
         """The ticket in the path is the only credential; log_route logs the route's template.
         A newer socket for a thread replaces the older one, as a re-armed watch does."""
         route = FieldCodec.decode(WatchRoute, dict(request.match_info))
-        thread = self.watch_tickets.taken(route.ticket).thread
+        ticket = self.watch_tickets.taken(route.ticket)
+        thread = ticket.thread
+        offer = self.watch_tickets.reconnect(thread, URL(self.issuer))
+        logging.info("Watch for %s opened on %s", thread, ticket.opened_on)
         # A transcript line holds whatever a tool returned, far past aiohttp's 4 MiB default.
         viewer = web.WebSocketResponse(heartbeat=25.0, max_msg_size=64 * 1024 * 1024)
         await viewer.prepare(request)
@@ -831,9 +834,8 @@ class Connector(ConnectorService):
         for held in replaced:
             await held.viewer.close(code=WATCH_REPLACED, message=b"replaced by a newer watch")
         try:
-            await InboxWatch(
-                thread, self.root, self.watch_tickets, URL(self.issuer),
-            ).carried(viewer)
+            await ticket.opened(offer, viewer)
+            await InboxWatch(thread, self.root, offer).carried(viewer)
         finally:
             self.open_watches.remove(watch)
             # The access log says only that the socket ended; this says which side ended it.

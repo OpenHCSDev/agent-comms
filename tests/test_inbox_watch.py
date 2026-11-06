@@ -520,6 +520,28 @@ async def test_only_a_client_that_says_it_reconnects_is_handed_a_reconnect_url(
     await newer.close()
 
 
+async def test_a_redialled_socket_holds_its_next_url_before_anything_else(
+    session, comms: Comms,
+) -> None:
+    """Resets come in bursts: on 2026-11-05 at 21:51 a re-dialled socket dropped 8 s after it
+    opened, while its next URL still waited on the transcript reader. A socket opened with a
+    reconnect ticket is sent that URL first, unasked, ahead of a message already waiting."""
+    client, token = session
+    first = await client.ws_connect(await watch_path(client, token, "cloud"))
+    path = await reconnect_url(first)
+    await first.close()
+    comms.messaging.send("sender", "cloud", "waiting at the re-dial")
+    again = await client.ws_connect(path)
+    line = await asyncio.wait_for(again.receive_str(), timeout=30)
+    assert line.startswith(ReconnectUrl.wire_prefix)
+    following = URL(ReconnectUrl.model_validate_json(line).url).path
+    assert (await frame(again))["text"] == "waiting at the re-dial"
+    await again.close()
+    # The URL it was handed first is the socket's own: re-dialling it opens.
+    third = await client.ws_connect(following)
+    await third.close()
+
+
 async def test_a_reconnect_url_opens_once_and_a_newer_watch_ends_it(session, comms: Comms) -> None:
     """It has no clock, so only redemption or a newer watch of its thread ends it."""
     client, token = session
@@ -527,12 +549,16 @@ async def test_a_reconnect_url_opens_once_and_a_newer_watch_ends_it(session, com
     path = await reconnect_url(first)
     await first.close()
     again = await client.ws_connect(path)
+    opened_with = await asyncio.wait_for(again.receive_str(), timeout=30)
+    assert opened_with.startswith(ReconnectUrl.wire_prefix)
     with pytest.raises(WSServerHandshakeError):
         await client.ws_connect(path)
     comms.messaging.send("sender", "cloud", "after the reconnect")
     assert (await frame(again))["text"] == "after the reconnect"
 
+    # Asked again, the socket answers with the URL it opened with, never a second mint.
     standing = await reconnect_url(again)
+    assert standing == URL(ReconnectUrl.model_validate_json(opened_with).url).path
     rearmed = await client.ws_connect(await watch_path(client, token, "cloud"))
     with pytest.raises(WSServerHandshakeError):
         await client.ws_connect(standing)
