@@ -31,6 +31,9 @@ class TeamProjectLead(Carry):
     opened_files: ClassVar[tuple[type[RootFile], ...]] = (RegistryFile,)
     retired_key: ClassVar[str] = "commander_project"
     retired_field: ClassVar[str] = "commander"
+    stamped_version: ClassVar[int] = 2
+    """The registry version this step writes. Later steps raise it further, so a registry at
+    this version or above is already carried."""
 
     def carry(self, *, apply: bool) -> Carried:
         path = RegistryFile.path_in(self.root)
@@ -41,13 +44,13 @@ class TeamProjectLead(Carry):
             dict[str, JsonValue], FieldCodec.parse(path.read_text(encoding="utf-8"))
         )
         version = FieldCodec.record_key(RegistryDocument, "version")
-        if document[version] == RegistryDocument.version:
+        if document[version] >= self.stamped_version:
             return Carried(0)
         if self.retired_key in document:  # a bus without a team stored no project
             project = FieldCodec.decode(dict[str, JsonValue], document.pop(self.retired_key))
             project.pop(self.retired_field)
             document[FieldCodec.record_key(RegistryDocument, "team_project")] = project
-        document[version] = RegistryDocument.version
+        document[version] = self.stamped_version
         rows = FieldCodec.record_key(RegistryDocument, "threads")
         native: dict[str, JsonValue] = {Thread.family_discriminator: NativeThread.declared_name}
         stamped: dict[str, JsonValue] = {
