@@ -378,16 +378,21 @@ class InboxSocket:
                     async for frame in socket:
                         if frame.type is WSMsgType.TEXT:
                             await self.received(frame.data, socket)
+                except (ClientError, OSError) as reset:
+                    # It opened, so this is a drop: a write after the path reset reads like
+                    # a failed connect, and must re-dial like any other drop.
+                    return self.failed(reset, WatchDropped)
                 finally:
                     publishing.cancel()
                 return WatchEnd.closed(socket.close_code)
         except WSServerHandshakeError as refused:
-            return self.unopened(refused, WatchRefused if refused.status == 403 else WatchUnopened)
+            return self.failed(refused, WatchRefused if refused.status == 403 else WatchUnopened)
         except (ClientError, OSError) as failure:
-            return self.unopened(failure, WatchUnopened)
+            return self.failed(failure, WatchUnopened)
 
     @staticmethod
-    def unopened(failure: Exception, ending: type[WatchDropped]) -> WatchDropped:
+    def failed(failure: Exception, ending: type[WatchDropped]) -> WatchDropped:
+        """How a failure reads, URL hidden, as the end it is."""
         return ending(f"failed: {type(failure).__name__}: {FollowedTranscript.hidden(str(failure))}")
 
     async def received(self, frame: str, socket: ClientWebSocketResponse) -> None:
