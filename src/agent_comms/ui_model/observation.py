@@ -19,7 +19,6 @@ from agent_comms.repo import Checkout
 
 import asyncio
 import itertools
-import multiprocessing
 import os
 import socket
 import struct
@@ -48,7 +47,7 @@ from agent_comms.acp_extension import (
 from agent_comms.active_route import CommsRoute
 from agent_comms.activity import ObservedActivity
 from agent_comms.bus_read import OwnerScopedRead, UiRead
-from agent_comms.child_process import join_retirement
+from agent_comms.child_process import HelperStart, join_retirement
 from agent_comms.input_disposition import DeliveryOverview
 from agent_comms.team_hud import TeamFrame, TeamHud, TeammateDetail
 from agent_comms.comms import Comms
@@ -1847,7 +1846,7 @@ class LocalObservationPeer(ObservationPeer):
     """The service in a spawned process of this machine, over a pipe."""
 
     def __init__(self, route: CommsRoute) -> None:
-        context = multiprocessing.get_context("spawn")
+        context = HelperStart.current.context()
         self.connection, child = context.Pipe()
         with ExitStack() as acquisition:
             acquisition.enter_context(self.connection)

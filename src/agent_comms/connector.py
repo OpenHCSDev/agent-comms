@@ -27,7 +27,6 @@ import hashlib
 import html
 import json
 import logging
-import multiprocessing
 import os
 import secrets
 import signal
@@ -55,7 +54,7 @@ from .declared_verb import DeclaredVerb
 from .cli_protocol import CoreError
 from .command import Command
 from .launch_root import started
-from .child_process import GitChildren, OwnedGitOpening, join_retirement
+from .child_process import GitChildren, HelperStart, OwnedGitOpening, join_retirement
 from .active_route import CommsRoute, resolve_comms_route
 from .comms import Comms, client_wire, wire
 from .ui_model.observation import RelayConnection, relay_frames, serve_encoded
@@ -1218,7 +1217,7 @@ class ObservationRelay:
     def __init__(self, route: CommsRoute) -> None:
         relay, service = socket.socketpair()
         with service:
-            self.process = multiprocessing.get_context("spawn").Process(
+            self.process = HelperStart.current.context().Process(
                 target=serve_encoded, args=(route, service), daemon=False,
                 name="agent-comms-remote-observation")
             self.process.start()
