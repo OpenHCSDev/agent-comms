@@ -12,7 +12,6 @@ from agent_comms.cli_bridges.session_watch import (
 from agent_comms.repo import Checkout
 import json
 import os
-import select
 import signal
 import socket
 import sqlite3
@@ -33,6 +32,7 @@ from agent_comms.activity import ActivityStore
 from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.turn_digests import LastTurns
 from agent_comms.comms import wire
+from agent_comms.fd_readiness import ready
 from agent_comms.cli_bridges.monitor import (
     ClaimedReplacement, InspectSession, PauseSession, SessionInformation,
 )
@@ -109,7 +109,7 @@ def stop(child):
 
 
 def frame(child):
-    assert select.select((child.stdout,), (), (), 15)[0], 'Monitor wrote nothing'
+    assert ready(child.stdout, 15), 'Monitor wrote nothing'
     line = child.stdout.readline()
     assert line, child.stderr.read().decode()
     return MONITOR_FRAME.validate_json(line)
@@ -211,7 +211,7 @@ def confirm(transcript, line, record):
 def relayed(child):
     """A delivered message reaches the Monitor as text, not a protocol frame: its sender's
     header line, then the one-line body these tests send."""
-    assert select.select((child.stdout,), (), (), 15)[0], 'Monitor wrote nothing'
+    assert ready(child.stdout, 15), 'Monitor wrote nothing'
     assert child.stdout.readline().decode().startswith(ClaudeMonitorFrame.HEADER_PREFIX)
     return child.stdout.readline().decode()
 

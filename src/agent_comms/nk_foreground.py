@@ -16,7 +16,6 @@ import argparse
 import asyncio
 import os
 import re
-import select
 import sys
 import time
 from collections.abc import Sequence
@@ -31,6 +30,7 @@ from .comms import wire
 from .coordinated_runtime import SelectedExecution
 from .cursor_publication import CursorDelivery
 from .errors import RelationViolationError
+from .fd_readiness import ready
 from .nominal.field_codec import FieldCodec, MalformedRecord, RootId
 from agent_comms.native_session_files import NativeSessionFiles
 from .native_package import VerifiedNativePackage
@@ -127,7 +127,7 @@ def _read_go_command(timeout: int) -> str:
     frame = bytearray()
     while len(frame) < 64:
         remaining = deadline - time.monotonic()
-        if remaining <= 0 or not select.select([descriptor], [], [], remaining)[0]:
+        if remaining <= 0 or not ready(descriptor, remaining):
             raise TimeoutError("Explicit GO did not complete before the foreground deadline")
         byte = os.read(descriptor, 1)
         if not byte:

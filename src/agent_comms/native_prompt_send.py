@@ -20,6 +20,7 @@ from contextlib import AbstractContextManager, ExitStack
 from typing import TYPE_CHECKING
 
 from agent_comms.errors import RelationViolationError
+from agent_comms.fd_readiness import ready
 
 from .coordination.errors import CoordinationError
 from .nominal.field_codec import AcpSessionId
@@ -126,7 +127,7 @@ def _write_fenced(
                             count = os.write(fd, remaining)
                     except BlockingIOError:
                         # Bounded readiness wait, not input replay or provider retry.
-                        select.select([], [fd], [], min(budget, 0.05))
+                        ready(fd, min(budget, 0.05), write=True)
                         continue
                     except OSError as error:
                         raise PromptSendUnknown("Native prompt write is UNKNOWN; no retry") from error
