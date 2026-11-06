@@ -1,6 +1,7 @@
 """The claude.ai connector: OAuth in front of an MCP transport over the ToolRequest family."""
 
 
+from agent_comms.bus_read import UiRead
 from agent_comms.transcripts import EarlierThan
 from agent_comms.repo import Checkout
 import asyncio
@@ -59,7 +60,8 @@ from agent_comms.host_services.connector import ConnectorService
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.native_transcript import NativeTranscript
-from agent_comms.order_tools import MessagePublished, TranscriptPageRead
+from agent_comms.order_tools import MessagePublished
+from agent_comms.transport.tools.reads import TranscriptPageRead
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.storage.maintenance_barrier import (
     InstallingPhase, MaintenanceBarrier, MaintenanceHeldError, MaintenanceOperator, PausedPhase,
@@ -332,7 +334,7 @@ async def test_a_stale_transcript_cursor_is_a_failed_call_with_its_coordination_
     bind_worker_session(comms, saved_session(tmp_path / "other.jsonl"))
     stale = TranscriptPageRead(thread="worker", position=EarlierThan(page.before))
     with pytest.raises(TranscriptChanged) as changed:
-        stale.read(comms)
+        UiRead.serving(stale).read(comms)
     token = await approved_token(client, comms)
     status, reply = await tool_call(
         client, token, 43, stale.declared_name, FieldCodec.encode_fields(stale))

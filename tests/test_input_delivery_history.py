@@ -1,5 +1,7 @@
 """Current owner queues scope notices without altering durable input evidence."""
 
+from agent_comms.bus_read import OwnerScopedRead
+from agent_comms.order_tools import ServedInputDeliveryRead, ServedOwnerGoalRead
 from agent_comms.repo import Checkout
 import asyncio
 from dataclasses import replace
@@ -25,7 +27,7 @@ from agent_comms.input_attempt import (
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import NoGoal
-from agent_comms.order_tools import InputDeliveryRead, OwnerGoalRead
+from agent_comms.transport.tools.reads import InputDeliveryRead, OwnerGoalRead
 from agent_comms.reported_turn import ReportedTurn
 from agent_comms.threads import ExternalThread, NativeThread, Thread
 from agent_comms.thread_status import ConnectedThreadStatus, StoppedThreadStatus, ThreadStatus
@@ -144,7 +146,7 @@ async def test_mcp_and_the_ui_read_input_delivery_from_the_live_owner_queue(tmp_
             owned = comms.goals.input_delivery("alpha", include_history=include_history, scope=scope)
             async with asyncio.timeout(30):
                 mcp = await asyncio.to_thread(
-                    InputDeliveryRead.invoke, comms,
+                    ServedInputDeliveryRead.invoke, comms,
                     {"thread": "alpha", "include_history": include_history},
                     caller=ToolCaller.from_actor("sender"))
                 ui = await ReadOwnerOperation(
@@ -163,7 +165,7 @@ async def test_mcp_and_the_ui_read_input_delivery_from_the_live_owner_queue(tmp_
         for include_history in (False, True):
             retained = comms.goals.input_delivery("alpha", include_history=include_history)
             mcp = await asyncio.to_thread(
-                InputDeliveryRead.invoke, comms,
+                ServedInputDeliveryRead.invoke, comms,
                 {"thread": "alpha", "include_history": include_history},
                 caller=ToolCaller.from_actor("sender"))
             ui = await ReadOwnerOperation(
@@ -196,7 +198,7 @@ async def test_mcp_and_the_ui_read_the_owner_goal_from_the_live_owner(tmp_path, 
                 UpdateMetadata.of(TurnChangedUpdate(agent.turns.turn_state("alpha"))))
             async with asyncio.timeout(30):
                 mcp = await asyncio.to_thread(
-                    OwnerGoalRead.invoke, comms, {"thread": "alpha"},
+                    ServedOwnerGoalRead.invoke, comms, {"thread": "alpha"},
                     caller=ToolCaller.from_actor("sender"))
                 ui = await ReadOwnerOperation(
                     str(comms.root), owner.incarnation, OwnerGoalRead()).answer(comms)
@@ -209,7 +211,7 @@ async def test_mcp_and_the_ui_read_the_owner_goal_from_the_live_owner(tmp_path, 
         comms.registry.register(replace(owner, process_identity=NoProcess()), StoppedThreadStatus())
         with pytest.raises(RelationViolationError):
             async with asyncio.timeout(30):
-                await asyncio.to_thread(OwnerGoalRead.invoke, comms, {"thread": "alpha"},
+                await asyncio.to_thread(ServedOwnerGoalRead.invoke, comms, {"thread": "alpha"},
                                         caller=ToolCaller.from_actor("sender"))
 
 
@@ -234,7 +236,7 @@ async def test_unavailable_native_queue_reads_retained_evidence_without_a_socket
     for include_history in (False, True):
         expected = comms.goals.input_delivery("owner", include_history=include_history)
         actual = await asyncio.to_thread(
-            InputDeliveryRead.invoke, comms,
+            ServedInputDeliveryRead.invoke, comms,
             {"thread": "owner", "include_history": include_history},
             caller=ToolCaller.from_actor("peer"),
         )
@@ -247,7 +249,7 @@ async def test_unavailable_native_queue_reads_retained_evidence_without_a_socket
         assert expected.current_scope is UnobservedInputDeliveryScope
         assert expected.dismissed_historical_count == 2
     assert await asyncio.to_thread(
-        InputDeliveryRead.invoke, comms, {"thread": "owner"},
+        ServedInputDeliveryRead.invoke, comms, {"thread": "owner"},
         caller=ToolCaller.from_actor("peer"),
     ) == FieldCodec.encode(comms.goals.input_delivery("owner", include_history=True))
     comms.goals.dismiss_historical_inputs("owner")
@@ -271,7 +273,7 @@ async def test_retained_read_refuses_a_changed_recipient(tmp_path: Path, recreat
     else:
         comms.registry.rename("owner", "renamed")
     with pytest.raises((OwnerIdentityChangedError, StaleFence)):
-        await operation.answer(comms, owner.incarnation, cut)
+        await OwnerScopedRead.serving(operation).answer(comms, owner.incarnation, cut)
     ui = await ReadOwnerOperation(str(comms.root), owner.incarnation, operation).answer(comms)
     assert isinstance(ui, ReadRefused)
     assert isinstance(ui.error, OwnerIdentityChangedError)
@@ -289,7 +291,7 @@ async def test_captured_owner_read_refuses_an_absent_root_before_its_first_witne
     cut = comms.registry.store.snapshot_with_authority()
     root.rename(tmp_path / "retained-original")
     with pytest.raises(OwnerIdentityChangedError):
-        await operation.answer(comms, owner.incarnation, cut)
+        await OwnerScopedRead.serving(operation).answer(comms, owner.incarnation, cut)
     ui = await ReadOwnerOperation(str(root), owner.incarnation, operation).answer(comms)
     assert isinstance(ui, ReadRefused)
 
@@ -307,7 +309,7 @@ async def test_retained_read_refuses_replaced_root_and_foreign_ui_root(tmp_path:
     replacement = prepare_native_comms(wire(root))
     replacement.registry.declare(owner)
     with pytest.raises(StaleFence):
-        await operation.answer(comms, owner.incarnation, cut)
+        await OwnerScopedRead.serving(operation).answer(comms, owner.incarnation, cut)
 
 
 def test_no_owner_queue_observation_never_dismisses_inputs(tmp_path):

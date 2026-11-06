@@ -12,7 +12,7 @@ import pytest
 from agent_comms.acp_extension import TranscriptSnapshotUpdate
 from agent_comms.comms import wire
 from agent_comms.notification_reads import LiveNotificationRead
-from agent_comms.order_tools import TranscriptPageRead
+from agent_comms.transport.tools.reads import TranscriptPageRead
 from agent_comms.ui_model.observation import (
     LocalRouteObservation, ObservationProcess, ReadBusy, ReadNotifications, ReadTranscript,
 )
@@ -193,7 +193,7 @@ async def test_peer_write_failure_retires_once_and_cancels_owner_reads(comms):
 async def test_owner_reply_uses_the_same_peer_retirement(comms):
     import multiprocessing
 
-    from agent_comms.order_tools import OwnerGoalRead
+    from agent_comms.transport.tools.reads import OwnerGoalRead
     from agent_comms.ui_model.observation import ObservationService, ReadOwnerOperation
 
     connection, viewer = multiprocessing.get_context("spawn").Pipe()

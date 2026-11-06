@@ -19,9 +19,7 @@ from agent_comms.notification_read import NotificationsRead, UnreadableNotificat
 from agent_comms.notification_reads import (
     LiveNotificationRead, NotificationRead, RecordedNotificationRead,
 )
-from agent_comms.order_tools import (
-    TeammateRead, InputDeliveryRead, OwnerGoalRead, TranscriptPageRead,
-)
+from agent_comms.transport.tools.reads import TeammateRead, InputDeliveryRead, OwnerGoalRead, TranscriptPageRead
 from agent_comms.storage.private_path import FileRevision, MissingFile
 from agent_comms.registry_provenance import DeletedThread
 from agent_comms.repo import Checkout
@@ -367,9 +365,11 @@ def test_the_three_public_reads_are_cataloged_once_with_their_original_results()
     results = {TeammateRead: TeammateDetail, OwnerGoalRead: GoalSnapshotReply,
                TranscriptPageRead: TranscriptSnapshotUpdate}
     for operation, result in results.items():
-        assert tools.count(operation) == 1 and native.count(operation) == 1
-        assert operation.result_type() is result
-    assert set(ToolRequest.members_with(UiRead)) == {TeammateRead, TranscriptPageRead}
+        served = ToolRequest.member_named(operation.declared_name)
+        assert issubclass(served, operation) and served.result_type() is result
+        assert tools.count(served) == 1 and native.count(served) == 1
+    assert {read.declared_name for read in ToolRequest.members_with(UiRead)} == {
+        TeammateRead.declared_name, TranscriptPageRead.declared_name}
     assert ToolRequest.members_with(OwnerScopedRead) == NativeRequestTools.members_with(OwnerScopedRead)
     lifecycle = (ReadOperation, ReadOwnerOperation, ReadNotifications, ReadTranscript,
                  SubscribeTranscript, ReadTranscriptUpdate, RefreshTranscript)
