@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Awaitable, Callable
 from abc import abstractmethod
 from dataclasses import dataclass
 from functools import partial
@@ -155,6 +156,16 @@ class SelectedTriageOutcome(DeclaredFamily, affix="TriageOutcome"):
     @abstractmethod
     def settle(self, participant: SelectedParticipant, stage: TriageNativeSend, claim_scope: PrivateSendClaim, context: NativeContextProof) -> tuple[WakeAssignment, ...]: ...
 
+    def close_ask(self, participant: SelectedParticipant, stage: TriageNativeSend, claim_scope: PrivateSendClaim, context: NativeContextProof) -> tuple[WakeAssignment, ...]:
+        """End the first ask inside its own failure boundary; a readable decision settles."""
+        return self.settle(participant, stage, claim_scope, context)
+
+    async def asked_again[AnswerT](
+        self, answer: AnswerT, reask: Callable[[RejectedTriageOutcome], Awaitable[AnswerT]],
+    ) -> AnswerT:
+        """Only an unreadable decision earns a second ask; every other answer stands."""
+        return answer
+
     @abstractmethod
     async def continue_turn(
         self, participant: SelectedParticipant, session: SelectedSession, input_id: InputId,
@@ -197,6 +208,18 @@ class RejectedTriageOutcome(SelectedTriageOutcome):
     def settle(self, participant: SelectedParticipant, stage: TriageNativeSend, claim_scope: PrivateSendClaim, context: NativeContextProof) -> tuple[WakeAssignment, ...]:
         return stage.fail_decision(participant.store, participant.identity,
                                    claim_scope.input_id, claim_scope.token_digest, context)
+
+    def close_ask(self, participant: SelectedParticipant, stage: TriageNativeSend, claim_scope: PrivateSendClaim, context: NativeContextProof) -> tuple[WakeAssignment, ...]:
+        """An unreadable decision costs the turn, not the claim: close the answer and return
+        the claim to triage-pending, so one replacement may be asked."""
+        stage.burn_turn(participant.store, participant.identity, claim_scope.input_id,
+                        claim_scope.token_digest, context)
+        return ()
+
+    async def asked_again[AnswerT](
+        self, answer: AnswerT, reask: Callable[[RejectedTriageOutcome], Awaitable[AnswerT]],
+    ) -> AnswerT:
+        return await reask(self)
 
     async def continue_turn(
         self, participant: SelectedParticipant, session: SelectedSession, input_id: InputId,
