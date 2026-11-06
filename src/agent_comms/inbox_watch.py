@@ -24,7 +24,7 @@ from typing import ClassVar
 from aiohttp import WSCloseCode, WSMsgType, web
 from yarl import URL
 
-from .agent_inbox import SecondsWait, TakenInputPosition, TakenInputStart
+from .agent_inbox import NoWait, TakenInputPosition, TakenInputStart
 from .child_process import ProcessIdentity
 from .cli_bridges.claude_transcript import (
     WATCH_REPORT, WATCH_STOPPED, WINDOW_ENDED, ClaudeJsonLines, ReceivesWatchReports,
@@ -47,6 +47,8 @@ from .nominal.field_codec import FieldCodec, ThreadLookup
 from .runtime_updates import RuntimeUpdate
 from .tool_result import ToolResult
 from .tools import CommsInboxTool
+from .storage.locked_store import RegistryFile
+from .watched import ChangeSignal, FileSource
 
 
 @dataclass(frozen=True)
@@ -259,7 +261,9 @@ class InboxWatch:
     offer: ReconnectUrl
     """The socket's one standing reconnect URL, minted when it opened."""
 
-    wait_seconds: ClassVar[int] = 5
+    recheck_seconds: ClassVar[float] = 5
+    """With no registry write to wake it, how often an open socket asks again whether this
+    watch still holds its thread."""
 
     @contextmanager
     def wire(self) -> Iterator[Comms]:
@@ -271,7 +275,7 @@ class InboxWatch:
         older untaken one, so its next read starts past it instead of at the thread's birth."""
         with self.wire() as comms:
             request = CommsInboxTool(
-                thread=self.thread, after=after, wait=SecondsWait(self.wait_seconds))
+                thread=self.thread, after=after, wait=NoWait())
             return request.messages(comms)
 
     def taken(self, message: Message, ledger: TakingLedger) -> None:
@@ -336,30 +340,72 @@ class InboxWatch:
         for message in await asyncio.to_thread(self.unshown, before, reported.current):
             await socket.send_str(FieldCodec.compact(FieldCodec.encode(message)))
 
+    def commit_sources(self) -> tuple[FileSource, ...]:
+        """The bus's commit signal, read in a thread so no Comms is built or held on the loop."""
+        with self.wire() as comms:
+            return comms.bus.bus.commit_sources()
+
+    def registry_sources(self) -> tuple[FileSource, ...]:
+        """The registry file a stop on the bus writes."""
+        return tuple(FileSource(path) for path in RegistryFile.source_paths(self.root))
+
     async def pushed(self, socket: web.WebSocketResponse, here: ProcessIdentity) -> None:
         """Frames until it closes, or until the thread is stopped on the bus; a reader must run
         for the socket to notice closing. What earlier sockets took unconfirmed is read before
         this one sends anything, so a message this socket sends is never replayed by it. Nothing
-        waits on the client's ledger: a message taken before it lands is taken under none."""
+        waits on the client's ledger: a message taken before it lands is taken under none.
+        Whichever of sending, holding and reading ends first ends the socket, and its result is
+        read, so a failed change signal is raised instead of dying in its task."""
         reported = ReportedLedger()
         taken = await asyncio.to_thread(self.unconfirmed)
         before = frozenset(attempt.reference for attempt in taken)
-        reader = asyncio.create_task(self.read_until_closed(socket, reported))
+        commits = await asyncio.to_thread(self.commit_sources)
         replay = asyncio.create_task(self.replayed(socket, before, reported))
-        after: TakenInputPosition = TakenInputStart()
+        running = {
+            asyncio.create_task(self.read_until_closed(socket, reported)),
+            asyncio.create_task(self.sending(socket, commits, reported)),
+            asyncio.create_task(self.holding(socket, here)),
+        }
         try:
-            while not socket.closed:
+            finished, _ = await asyncio.wait(running, return_when=asyncio.FIRST_COMPLETED)
+            for task in finished:
+                task.result()
+        except ConnectionResetError:
+            return
+        finally:
+            for task in (*running, replay):
+                task.cancel()
+
+    async def sending(
+        self, socket: web.WebSocketResponse, commits: tuple[FileSource, ...],
+        reported: ReportedLedger,
+    ) -> None:
+        """Send what no harness took, woken by each bus commit; nothing blocks a thread between
+        commits, so a closed socket ends its handler at once."""
+        after: TakenInputPosition = TakenInputStart()
+        async with ChangeSignal.opened(*commits) as changes:
+            while True:
+                # Drained before the read, so a commit landing during it wakes the wait.
+                changes.prepare()
                 for message in await asyncio.to_thread(self.untaken, after):
                     await asyncio.to_thread(self.taken, message, reported.current)
                     await socket.send_str(FieldCodec.compact(FieldCodec.encode(message)))
                     after = after.advanced(message.reference)
+                await changes.wait()
+
+    async def holding(self, socket: web.WebSocketResponse, here: ProcessIdentity) -> None:
+        """Close the socket once this watch no longer holds its thread. A stop is a registry
+        write, which wakes this at once; the recheck covers what no file announces."""
+        async with ChangeSignal.opened(*self.registry_sources()) as writes:
+            while True:
+                writes.prepare()
                 if not await asyncio.to_thread(self.holds, here):
                     await socket.close(code=WATCH_STOPPED, message=b"stopped on the bus")
-        except ConnectionResetError:
-            return
-        finally:
-            reader.cancel()
-            replay.cancel()
+                    return
+                try:
+                    await asyncio.wait_for(writes.wait(), self.recheck_seconds)
+                except TimeoutError:
+                    continue
 
     async def read_until_closed(
         self, socket: web.WebSocketResponse, reported: ReportedLedger,

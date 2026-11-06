@@ -41,8 +41,19 @@ from agent_comms.cli_bridges.shared import MonitorReadFile
 from agent_comms.tools import CommsInboxTool
 
 
+class QuickHeartbeatConnector(Connector):
+    """Pings every second, so a frozen client is dropped in about one instead of 25."""
+
+    heartbeat_seconds = 1.0
+
+
 @pytest.fixture
-async def session(tmp_path: Path, comms: Comms):
+def connector_type() -> type[Connector]:
+    return Connector
+
+
+@pytest.fixture
+async def session(tmp_path: Path, comms: Comms, connector_type: type[Connector]):
     """A live connector over a real store, holding the Director login a claude.ai session has."""
     comms.registry.declare(ExternalThread("claude-ai", frozenset(), Checkout(comms.root)))
     comms.registry.declare(NativeThread("sender", frozenset(), Checkout(comms.root)))
@@ -50,7 +61,7 @@ async def session(tmp_path: Path, comms: Comms):
     # The connector names its own address in every URL it issues, and a reconnecting client
     # dials that URL whole, so the server listens where the connector says it does.
     port = unused_port()
-    connector = Connector(store, f"http://127.0.0.1:{port}", comms.root)
+    connector = connector_type(store, f"http://127.0.0.1:{port}", comms.root)
     async with TestServer(connector.application(), port=port) as server:
         async with TestClient(server) as client:
             with store.granted("test") as token:
@@ -703,6 +714,7 @@ async def test_no_ledger_is_no_proof_so_nothing_is_replayed(session, comms: Comm
     await again.close()
 
 
+@pytest.mark.parametrize("connector_type", [QuickHeartbeatConnector])
 async def test_a_watch_frozen_past_its_heartbeat_reconnects_alone_and_shows_the_message_once(
     session, comms: Comms, tmp_path: Path,
 ) -> None:
