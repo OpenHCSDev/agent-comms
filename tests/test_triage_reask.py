@@ -61,9 +61,12 @@ async def test_the_replacement_alone_proves_the_source(tmp_path: Path):
         with Coordination(claim.store_path) as store:
             claim.stage.burn_turn(store, claim.participant, claim.input_id,
                                   claim.token_digest, context)
+            db = store.session._connection
+            # Between the burn and the replacement's reservation the claim is triage-pending
+            # again; an inbox read in that window must not take the burned input as proof.
+            assert TriageNativeExecution().retried_in(db, claim.input_id)
             replacement = claim.stage.refreshed(store).reserve(
                 store, claim.participant, claim.token_digest, attempt=1)
-            db = store.session._connection
             # Historical evidence keeps one triage input per source: the burned original is
             # superseded, as a FULL attempt behind a later one is.
             assert TriageNativeExecution().retried_in(db, claim.input_id)

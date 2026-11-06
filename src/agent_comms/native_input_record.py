@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Literal
 
 from agent_comms.coordination.tables.executions import ExecutionRecord
 
+from .assignment_states import TriagePendingAssignment
 from .coordination.contracts import validate_execution_id
 from .coordination.errors import IdentityConflict, UnrecordedNativeContext
 from .coordination.tables.assignments import (
@@ -247,14 +248,18 @@ class TriageNativeExecution(NativeInputExecution):
                 super().transcript_events(entry, projection, user)]
 
     def retried_in(self, db: sqlite3.Connection, input_id: InputId) -> bool:
-        """An unreadable decision's replacement (a later attempt of the same claim) supersedes it."""
-        from .triage_native_sources import TriageNativeSource
-
-        table = TriageNativeSource.qualified_table(LOCAL_TABLE_SOURCE)
-        return db.execute(
-            f"SELECT 1 FROM {table} s JOIN {table} later ON later.assignment_id=s.assignment_id "
-            "AND later.attempt>s.attempt WHERE s.input_id=? LIMIT 1", (input_id,),
-        ).fetchone() is not None
+        """A burned attempt no longer proves its source: its claim went back to
+        triage-pending (the replacement is owed) or a later attempt already holds it."""
+        members = f"({self.source_membership_sql()})"
+        claims = WakeAssignment.qualified_table(LOCAL_TABLE_SOURCE)
+        superseded, = db.execute(
+            f"SELECT EXISTS (SELECT 1 FROM {members} s WHERE s.input_id=? AND ("
+            f"EXISTS (SELECT 1 FROM {members} later WHERE later.assignment_id=s.assignment_id "
+            "AND later.attempt>s.attempt) OR "
+            f"EXISTS (SELECT 1 FROM {claims} c WHERE c.assignment_id=s.assignment_id "
+            f"AND c.disposition={sql_literal(TriagePendingAssignment)})))", (input_id,),
+        ).fetchone()
+        return bool(superseded)
 
     @classmethod
     def source_membership_sql(
