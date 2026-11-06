@@ -11,7 +11,7 @@ import os
 import secrets
 import socket
 from abc import abstractmethod
-from collections.abc import Awaitable, Coroutine
+from collections.abc import Awaitable, Coroutine, Sequence
 from contextlib import ExitStack, suppress
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -97,7 +97,7 @@ class SocketClient(Controller, SessionUpdateSink):
 
     async def request_ui_permission(
         self, runner: TurnRunner, session_id: AcpSessionId,
-        request: tuple[BaseModel, list[BaseModel]],
+        request: tuple[BaseModel, Sequence[BaseModel]],
     ) -> dict[str, object]:
         """The socket forwards the request's wire form and reads nothing else of ACP's models."""
         tool_call, options = request
