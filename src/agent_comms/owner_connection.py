@@ -116,7 +116,13 @@ class OwnerConnection:
             with socket.socket(socket.AF_UNIX) as connection:
                 if not process.alive():
                     raise ConnectionError("Worker host exited before request dispatch")
-                connection.connect(str(address))
+                try:
+                    connection.connect(str(address))
+                except FileNotFoundError as error:
+                    # A live process with no runtime socket hosts no owner, such as the bridge
+                    # behind an external CLI thread: the owner is unreachable, not a server fault.
+                    raise ConnectionError(
+                        f"Process {process.pid} serves no owner runtime socket") from error
                 if not process.alive():
                     raise ConnectionError("Worker host exited before request dispatch")
                 dispatched = replace(request, holder=MaintenanceHolder.current())
