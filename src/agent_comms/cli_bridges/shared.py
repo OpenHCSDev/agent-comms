@@ -1545,6 +1545,10 @@ class MonitorFrame(TaggedWire, ABC, affix=""):
     ) -> tuple[MessageReference, ...]:
         return ()
 
+    def delivered(self) -> tuple[MessageReference, ...]:
+        """The bus messages this frame put in front of the model; only a message carries one."""
+        return ()
+
     def continued(
         self, line: str, decode: Callable[[str], MonitorFrame],
     ) -> tuple[MonitorFrame, ...]:
@@ -1634,6 +1638,9 @@ class MonitorReadFile(MonitorProtocolFrame, declared_name='read-file'):
         """A consumed body's export is evidence nobody reads again."""
         with self.directory() as directory, suppress(FileNotFoundError):
             os.unlink(Path(self.path).name, dir_fd=directory)
+
+    def delivered(self) -> tuple[MessageReference, ...]:
+        return (self.reference,)
 
     async def confirm(self, bridge: TranscriptConfirmsDelivery, record: ObservedMonitor) -> tuple[MessageReference, ...]:
         """The notice frees only its own reservation; it confirms no body."""

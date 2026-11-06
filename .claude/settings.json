@@ -42,7 +42,7 @@
     "Stop": [
       {
         "hooks": [
-          { "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/rule_gate.py\" idle", "timeout": 5 }
+          { "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/rule_gate.py\" idle", "timeout": 15 }
         ]
       }
     ]

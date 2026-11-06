@@ -117,9 +117,11 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
 
     @property
     def header(self) -> str:
-        """Who sent it, as the reader sees them, then the reference a reply cites and
-        decode_header reads back."""
-        return f'{self.HEADER_PREFIX}{self.message.sender_label} · {self.message.reference.name}\n'
+        """Where it was posted (a channel, or the thread a direct message went to), who sent
+        it as the reader sees them, then the reference a reply cites and decode_header reads
+        back. Tristan, 2026-11-06: "theres chcannel messags and dm messages"."""
+        return (f'{self.HEADER_PREFIX}{self.message.target} · {self.message.sender_label} · '
+                f'{self.message.reference.name}\n')
 
     @cached_property
     def inline(self) -> str:
@@ -276,6 +278,9 @@ class MonitorShown(MonitorFrame, declared_name='shown'):
 
     reference: WireReference
     lines: tuple[str, ...]
+
+    def delivered(self) -> tuple[MessageReference, ...]:
+        return (self.reference,)
 
     def continued(
         self, line: str, decode: Callable[[str], MonitorFrame],
@@ -619,6 +624,10 @@ class ClaudeRecord(TaggedWire, ABC, affix=""):
         """What the person typed in this record; most records carry none."""
         return ()
 
+    def delivered(self) -> tuple[MessageReference, ...]:
+        """The bus messages this record put in front of the model; most records carry none."""
+        return ()
+
     def said(self) -> tuple[str, ...]:
         """What the model said to its reader in this record; most records carry none."""
         return ()
@@ -816,6 +825,10 @@ class PromptOrigin(TaggedWire, ABC, affix=""):
         """The words the person typed; only a person's prompt carries any."""
         return ()
 
+    def delivered(self, text: str) -> tuple[MessageReference, ...]:
+        """The bus messages this prompt carried; only a watch's task notification carries any."""
+        return ()
+
 
 class Prompting(PromptOrigin, ABC, declared_name=None):
     """An origin whose text is a request to the model."""
@@ -861,6 +874,9 @@ class TaskNotification(PromptOrigin, declared_name='task-notification'):
                  session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return TaskEnvelope.from_text(text).updates(record, session.turn.source)
 
+    def delivered(self, text: str) -> tuple[MessageReference, ...]:
+        return TaskEnvelope.from_text(text).delivered()
+
 
 class PeerMessage(AgentPrompt, declared_name='peer'):
     pass
@@ -880,8 +896,18 @@ class ToolSupplied(Prompting, declared_name=None):
 
 
 class Originated(WireModel):
-    """Who wrote a prompt, whether it opened a user record or was queued into a running turn."""
+    """Who wrote a prompt, whether it opened a user record or was queued into a running turn.
+    Its origin answers what the prompt's text means, so each member says only where the text is."""
     origin: Declared[PromptOrigin] = Field(default_factory=ToolSupplied)
+
+    @abstractmethod
+    def prompt_text(self) -> str: ...
+
+    def owner_words(self) -> tuple[str, ...]:
+        return self.origin.owner_words(self.prompt_text())
+
+    def delivered(self) -> tuple[MessageReference, ...]:
+        return self.origin.delivered(self.prompt_text())
 
 
 class UserBlock(TaggedWire, ABC, affix=""):
@@ -955,6 +981,10 @@ class TaskEnvelope(WireModel, ABC):
     @abstractmethod
     def updates(self, record: TimedRecord, source_turn: SourceTurn) -> tuple[RuntimeUpdate, ...]: ...
 
+    def delivered(self) -> tuple[MessageReference, ...]:
+        """The bus messages this notification put in front of the model."""
+        return ()
+
 
 class ForeignTaskNotification(TaskEnvelope):
     text: str
@@ -1000,6 +1030,9 @@ class FailedReadObserved(ReadResultObserved):
 class MonitorTaskNotification(TaskEnvelope):
     frames: tuple[MonitorFrame, ...]
 
+    def delivered(self) -> tuple[MessageReference, ...]:
+        return tuple(reference for frame in self.frames for reference in frame.delivered())
+
     def updates(self, record: TimedRecord, source_turn: SourceTurn) -> tuple[RuntimeUpdate, ...]:
         return tuple(MonitorObservation(frame, ObservedMonitor(record.uuid, record.timestamp),
                                         source_turn=source_turn)
@@ -1018,6 +1051,9 @@ class TaskContent(WireModel):
     def updates(self, record: TimedRecord, source_turn: SourceTurn) -> tuple[RuntimeUpdate, ...]:
         return self.text.updates(record, source_turn)
 
+    def delivered(self) -> tuple[MessageReference, ...]:
+        return self.text.delivered()
+
 
 class TaskText(TaskContent):
     type: Literal['text'] = 'text'
@@ -1028,6 +1064,9 @@ class TaskMessage(ContentBlocks):
 
     def updates(self, record: TimedRecord, source_turn: SourceTurn) -> tuple[RuntimeUpdate, ...]:
         return tuple(update for block in self.content for update in block.updates(record, source_turn))
+
+    def delivered(self) -> tuple[MessageReference, ...]:
+        return tuple(reference for block in self.content for reference in block.delivered())
 
 
 class ToolResult(UserBlock, ContentBlocks, declared_name='tool_result'):
@@ -1067,7 +1106,7 @@ class PromptRecord(ClaudeRecord, TimedRecord, ABC, declared_name=None):
     def opened_updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]: ...
 
 
-class UserRecord(PromptRecord, Originated, declared_name='user'):
+class UserRecord(Originated, PromptRecord, declared_name='user'):
     message: UserMessage
 
     def ends_turn(self) -> bool:
@@ -1079,8 +1118,8 @@ class UserRecord(PromptRecord, Originated, declared_name='user'):
     def request(self) -> str:
         return self.origin.request(self.message.text())
 
-    def owner_words(self) -> tuple[str, ...]:
-        return self.origin.owner_words(self.message.text())
+    def prompt_text(self) -> str:
+        return self.message.text()
 
     def tally(self, receipts: SessionReceipts) -> None:
         for block in self.message.content:
@@ -1107,6 +1146,9 @@ class TaskUserRecord(PromptRecord, declared_name='task-user'):
 
     def opened_updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return self.message.updates(self, session.turn.source)
+
+    def delivered(self) -> tuple[MessageReference, ...]:
+        return self.message.delivered()
 
 
 class SubtypeHeader(WireHeader):
@@ -1235,6 +1277,10 @@ class AttachmentPayload(OpenWire, ABC, affix=""):
         """What the person typed in this attachment; only a queued prompt carries any."""
         return ()
 
+    def delivered(self) -> tuple[MessageReference, ...]:
+        """The bus messages this attachment carried; only a queued prompt carries any."""
+        return ()
+
 
 class QueuedCommand(Originated, AttachmentPayload, declared_name='queued_command'):
     """A prompt sent while a turn runs: its origin decides what the folded-in text is."""
@@ -1249,8 +1295,8 @@ class QueuedCommand(Originated, AttachmentPayload, declared_name='queued_command
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return self.origin.absorbed(record, self.prompt.text(), session)
 
-    def owner_words(self) -> tuple[str, ...]:
-        return self.origin.owner_words(self.prompt.text())
+    def prompt_text(self) -> str:
+        return self.prompt.text()
 
 
 class ForeignAttachment(AttachmentPayload, declared_name='foreign'):
@@ -1267,6 +1313,9 @@ class Attachment(ClaudeRecord, TimedRecord, declared_name='attachment'):
 
     def owner_words(self) -> tuple[str, ...]:
         return self.attachment.owner_words()
+
+    def delivered(self) -> tuple[MessageReference, ...]:
+        return self.attachment.delivered()
 
 
 class QueueOperation(MetadataRecord, declared_name='queue-operation'):
