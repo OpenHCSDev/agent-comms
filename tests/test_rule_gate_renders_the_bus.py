@@ -4,6 +4,7 @@ claude-i-notices in the Claude app, did not see his own message 64189 that the s
 shown."""
 
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -21,8 +22,10 @@ TIME = "2026-11-06T02:06:00.000Z"
 
 
 def record(kind: str, number: int, **fields: object) -> str:
+    """A cloud session's record by default: Claude Code stamps each with its entrypoint."""
     return json.dumps({"type": kind, "uuid": f"00000000-0000-4000-8000-{number:012d}",
-                       "parentUuid": None, "timestamp": TIME, "sessionId": SESSION, **fields})
+                       "parentUuid": None, "timestamp": TIME, "sessionId": SESSION,
+                       "entrypoint": "remote", **fields})
 
 
 def queued(number: int) -> str:
@@ -50,11 +53,14 @@ def ended() -> str:
                        "uuid": "00000000-0000-4000-8000-999999999999", "timestamp": TIME})
 
 
-def stop(tmp_path: Path, *lines: str, **event: object) -> str:
+SYSTEM_PYTHON = shutil.which("python3", path="/usr/bin:/usr/local/bin:/bin")
+
+
+def stop(tmp_path: Path, *lines: str, interpreter: str = sys.executable, **event: object) -> str:
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("".join(line + "\n" for line in lines))
     done = subprocess.run(
-        [sys.executable, str(GATE), "idle"],
+        [interpreter, str(GATE), "idle"],
         input=json.dumps({"session_id": SESSION, "transcript_path": str(transcript), **event}),
         capture_output=True, text=True, check=True, timeout=60, env={"HOME": str(tmp_path)})
     return done.stdout
@@ -74,6 +80,22 @@ def test_a_bus_message_named_in_the_text_lets_the_stop_through(tmp_path: Path, a
 
 def test_a_message_an_ended_turn_already_answered_for_holds_nothing(tmp_path: Path):
     assert stop(tmp_path, queued(1), said(2, "skipped it"), ended(), said(3, "next turn")) == ""
+
+
+@pytest.mark.skipif(SYSTEM_PYTHON is None, reason="no system python3 on this machine")
+def test_settings_system_python_still_decodes_under_the_checkout_venv(tmp_path: Path):
+    """settings.json runs `python3 rule_gate.py idle`; main re-execs it under the checkout's
+    venv, which alone has the decoder's dependencies (claude-f-ci on #4174, 2026-11-06)."""
+    refused = json.loads(stop(tmp_path, queued(1), said(2, "skipped"), interpreter=SYSTEM_PYTHON))
+    assert "64189-2165ab5d3be9" in refused["reason"]
+
+
+def test_a_host_session_read_in_toad_stops_freely(tmp_path: Path):
+    """On the host Tristan reads the bus in Toad, so the bridge's Monitor events owe no copy
+    (claude-a-toad on #4174, 2026-11-06)."""
+    host = json.loads(queued(1))
+    host["entrypoint"] = "cli"
+    assert stop(tmp_path, json.dumps(host), said(2, "Nothing for me there.")) == ""
 
 
 def test_the_refusal_lets_the_next_stop_through(tmp_path: Path):

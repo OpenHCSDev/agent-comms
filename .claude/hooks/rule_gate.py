@@ -485,16 +485,44 @@ def jobs_among(rows: list[list[str]], pid: int) -> int:
                and int(row[1]) in ancestors and int(row[0]) not in ancestors)
 
 
-def unrendered(event: HookEvent) -> tuple[str, ...]:
-    """Bus messages this turn's watch delivered that the session's text has not shown: in a
-    cloud session the person reads nothing else (plain-reporting.md). A turn with no shown bus
-    message never loads the decoder."""
-    turn = event.this_turn()
-    if not any(b"Comms in" in line for line in turn):
-        return ()
-    sys.path.insert(0, str(team_directory().parent.parent))
-    from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
-    return tuple(reference.name for reference in ClaudeJsonLines().unrendered(turn))
+class BusReader:
+    """Where Tristan reads this session's bus messages. On the host he reads them in Toad, so the
+    session owes no copy of them in its text."""
+
+    def reasons(self, turn: list[bytes]) -> list[str]:
+        return []
+
+    @staticmethod
+    def of(turn: list[bytes]) -> BusReader:
+        """Claude Code stamps every transcript record with its entrypoint; only a cloud session's
+        says "remote". Decoded once here, from the first record that names one."""
+        for line in turn:
+            # The word can also sit inside a message's text; only a record's own key decides.
+            if b'"entrypoint"' in line and "entrypoint" in (record := json.loads(line)):
+                return {"remote": AppReader()}.get(record["entrypoint"], BusReader())
+        return BusReader()
+
+
+class AppReader(BusReader):
+    """A cloud session, read in the Claude app, which shows nothing of the bus but this text
+    (plain-reporting.md). A turn with no shown bus message never loads the decoder, which needs
+    the checkout's venv: main re-execs every hook under it (under_checkout_python), and without
+    it the check says so instead of crashing the stop."""
+
+    def reasons(self, turn: list[bytes]) -> list[str]:
+        if not any(b"Comms in" in line for line in turn):
+            return []
+        if Path(sys.executable) != checkout_python():
+            return ["This turn delivered bus messages, but the checkout has no venv to decode "
+                    "them, so nothing checked that Tristan was shown them: run "
+                    f"`python3 {Path(__file__).resolve()} install`."]
+        sys.path.insert(0, str(team_directory().parent.parent))
+        from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
+        if names := [reference.name for reference in ClaudeJsonLines().unrendered(turn)]:
+            return ["Tristan reads only your closing text: before you stop, quote each of these "
+                    "bus messages there with its bus number, where it was posted (channel or DM), "
+                    "sender, time and body (plain-reporting.md): " + ", ".join(names)]
+        return []
 
 
 def idle(event: HookEvent) -> None:
@@ -508,11 +536,8 @@ def idle(event: HookEvent) -> None:
             "A background job of this session is still running. Waiting time is tracing time "
             "(tests-and-commands.md): trace the paths it will exercise and act on what you find; "
             "its notification resumes you.")
-    if names := unrendered(event):
-        reasons.append(
-            "Tristan reads only your closing text: before you stop, quote each of these bus "
-            "messages there with its bus number, where it was posted (channel or DM), sender, "
-            "time and body (plain-reporting.md): " + ", ".join(names))
+    turn = event.this_turn()
+    reasons.extend(BusReader.of(turn).reasons(turn))
     if reasons:
         print(json.dumps({"decision": "block", "reason": "\n".join(reasons)}))
 
