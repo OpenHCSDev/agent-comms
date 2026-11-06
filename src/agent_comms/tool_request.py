@@ -61,21 +61,18 @@ class ServesDeclaration(FamilyMeta):
     imported, and into the declaration everywhere else. Nothing is restated per member."""
 
     def __new__(
-        mcs, name: str, bases: tuple[type, ...], namespace: dict[str, object], *,
-        affix: str | None = None, discovery_package: str | None = None, **class_options: object,
+        mcs: type[ServesDeclaration], name: str, bases: tuple[type, ...],
+        namespace: dict[str, object], **options: object,
     ) -> ServesDeclaration:
         declarations = DeclarationBases.of(bases)
         if len(declarations) > 1:
             raise TypeError(f"{name} serves two declarations: {declarations!r}")
         for declaration in declarations:
             namespace.setdefault(REPLACES_REGISTERED_ATTRIBUTE, declaration)
-            class_options.setdefault("declared_name", declaration.declared_name)
+            options.setdefault("declared_name", declaration.declared_name)
             namespace.setdefault("__eq__", DeclaredValue(declaration).equal)
             namespace.setdefault("__hash__", declaration.__hash__)
-        return cast(ServesDeclaration, super().__new__(
-            mcs, name, bases, namespace,
-            affix=affix, discovery_package=discovery_package, **class_options,
-        ))
+        return cast(ServesDeclaration, super().__new__(mcs, name, bases, namespace, **options))
 
 
 @dataclass(frozen=True)
@@ -274,7 +271,7 @@ class LiveOwnerTool:
     __slots__ = ()
 
 
-class ReadTool(ReadWork, ReadRequest, declared_name=None):
+class ReadTool[Result: ToolResult = ToolResult](ReadWork, ReadRequest[Result], declared_name=None):
     """Serving a read: its apply changes nothing, so it needs no board and no entry gate."""
 
     __slots__ = ()
@@ -291,11 +288,15 @@ class ReadTool(ReadWork, ReadRequest, declared_name=None):
         """Declared reads remain available to the installer's readiness checks."""
 
 
-class CoreRead[Result: ToolResult = ToolResult](ReadTool, ServedRequest[ToolCaller, Result], declared_name=None):
+class CoreRead[Result: ToolResult = ToolResult](
+    ReadTool[Result], ServedRequest[ToolCaller, Result], declared_name=None,
+):
     """A read any caller may ask of Core, answering its declared result and changing nothing."""
 
 
-class ThreadReadTool(ReadTool, ThreadReadRequest, NativeToolRequest, declared_name=None):
+class ThreadReadTool[Result: ToolResult = ToolResult](
+    ReadTool[Result], ThreadReadRequest[Result], NativeToolRequest, declared_name=None,
+):
     """Serving a read about one thread."""
 
 

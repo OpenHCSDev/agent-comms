@@ -559,7 +559,8 @@ class TranscriptRequest[ResultT](ReadRequest):
         return UnreadableHistory.outcome(lambda: self.result(self.page_read(comms))).raised()
 
     def page_read(self, comms: Comms) -> TranscriptRead:
-        return CapturesTranscriptPage.serving(self.operation).capture_as(comms, NoDisplaySelection())
+        page = CapturesTranscriptPage.serving(self.operation)
+        return page.capture_as(comms, NoDisplaySelection())
 
     @abstractmethod
     def result(self, read: TranscriptRead) -> ResultT: ...

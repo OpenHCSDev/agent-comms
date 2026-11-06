@@ -56,7 +56,9 @@ class CapturesTranscriptPage(UiRead, ABC):
         return TranscriptSnapshotUpdate.from_read(self.capture_as(comms, caller))
 
 
-class OwnerScopedRead[Result: ToolResult = ToolResult](BusRead[Result], ThreadReadTool, ABC):
+class OwnerScopedRead[Result: ToolResult = ToolResult](
+    BusRead[Result], ThreadReadTool[Result], ABC,
+):
     """The captured registration selects live evidence or the declared unavailable answer."""
 
     def apply(self, comms: Comms, caller: ReadAuthority) -> Result:

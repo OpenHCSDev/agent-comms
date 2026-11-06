@@ -11,7 +11,9 @@ from ...input_disposition import DeliveryOverview
 from ...nominal.field_codec import OrderId
 from ...team_hud import TeammateDetail
 from ...thread_identity import ThreadIncarnation
-from ...transcripts import AtFrontier, LatestPage, LivePageSource, PageLimit, PagePosition, PageSource
+from ...transcripts import (
+    AtFrontier, LatestPage, LivePageSource, PageLimit, PagePosition, PageSource,
+)
 from ..request import ReadRequest, ThreadReadRequest, tool_field
 
 
