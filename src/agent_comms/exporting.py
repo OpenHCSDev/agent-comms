@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import math
 import os
-import sqlite3
 from abc import abstractmethod
 from collections import deque
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import asdict, dataclass, replace
-from contextlib import contextmanager
-from threading import Event
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import BinaryIO, ClassVar
@@ -20,7 +16,7 @@ from typing import BinaryIO, ClassVar
 from .channels import Channel
 from .errors import ExportDestinationExists
 from .cli_result import CliResult
-from .transport.progress import CancellableWireExport, WireExportCancelled, WireExportObserver, WireExportProgress
+from .transport.progress import WireExportObserver, WireExportProgress
 from .tool_result import ToolResult
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion

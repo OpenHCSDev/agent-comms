@@ -222,7 +222,7 @@ class RequestPoster(ABC):
 
     @abstractmethod
     def post_observed[R: ToolResult](
-        self, request: ObservedToolRequest[R],
+        self, request: ObservedRequest[R],
     ) -> dict[str, JsonValue]: ...
 
 

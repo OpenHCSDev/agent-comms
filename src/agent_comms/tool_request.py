@@ -6,47 +6,31 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from annotationlib import Format, ForwardRef, get_annotations
 from collections.abc import Mapping
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass
 from pathlib import Path
-from types import get_original_bases
-from typing import Self, Annotated, ClassVar, NoReturn, TypeVar, cast, get_args, get_origin
+from typing import Self, Annotated, ClassVar, NoReturn, cast
 
 from agent_comms_hooks import ToolRefusedError
 from pydantic import JsonValue
 
 from .child_process import AsyncWork, ReadWork
 from .comms import Comms
-from .nominal.declared_family import DeclaredFamily
 from .transport.progress import WireExportObserver
 from .nominal.field_codec import (
-    WireTransient,
-    ContextSource,
-    DefaultNonNull,
-    Description,
     FieldCodec,
-    FieldDirective,
     MalformedRecord,
-    NullMember,
-    SingleFieldValue,
     ToolCallId,
-    WireChoices,
-    WireName,
 )
 from .storage.maintenance_barrier import FreshIngress
 from .native_tools import CoordinationCall, NativeToolDeclaration
 from .threads import ThreadCommandAvailability
 from .tool_caller import NoThreadCaller, ThreadCaller, ToolCaller
-from .tool_declaration import NativeRequestTools, ToolDeclaration
+from .tool_declaration import NativeRequestTools
 from .tool_result import ToolResult
 from .transport.request import (
     ConnectionDropped,
-    ContextBinding,
-    ListedNames,
     ObservedRequest,
-    OmittedNames,
     RequestPoster,
-    SubjectBinding,
-    ToolCall,
     declared_result,
     ToolRequest,
     tool_field,

@@ -101,7 +101,7 @@ from .transport.mcp import (
     declared,
 )
 from .tool_request import ConnectorService, NoConnectorService, ServedRequest
-from .transport.request import ToolRequest, tool_field
+from .transport.request import tool_field
 
 """A JSON-RPC request id, as the client chose it."""
 

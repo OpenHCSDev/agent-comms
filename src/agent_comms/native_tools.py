@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.nominal.field_codec import ArgumentsExclude
 
 import json
 from abc import abstractmethod
