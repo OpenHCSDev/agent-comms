@@ -40,8 +40,8 @@ from agent_comms.watched import FileSource
 
 from .claude_protocol import ClaudeMonitorFrame
 from .claude_transcript import (
-    WATCH_REPLACED, WATCH_STOPPED, WINDOW_ENDED, PrintedLedger, PrintedNow, ReconnectsAlone, ReconnectUrl,
-    RecentClaudeWindow, RunningClaude,
+    WATCH_REPLACED, WATCH_STOPPED, WINDOW_ENDED, PrintedLedger, PrintedNow, ReconnectsAlone,
+    ReconnectUrl, RecentClaudeWindow, RunningClaude,
 )
 from .session_watch import WatchClaim
 
@@ -393,7 +393,8 @@ class InboxSocket:
     @staticmethod
     def failed(failure: Exception, ending: type[WatchDropped]) -> WatchDropped:
         """How a failure reads, URL hidden, as the end it is."""
-        return ending(f"failed: {type(failure).__name__}: {FollowedTranscript.hidden(str(failure))}")
+        hidden = FollowedTranscript.hidden(str(failure))
+        return ending(f"failed: {type(failure).__name__}: {hidden}")
 
     async def received(self, frame: str, socket: ClientWebSocketResponse) -> None:
         """A message, or the connector's reconnect URL, which is kept and never shown."""
