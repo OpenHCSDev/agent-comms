@@ -164,8 +164,7 @@ class ThreadConnection(threading.local):
     reopens on its next request."""
 
     def __init__(self, endpoint: HttpsMcpEndpoint, context: ssl.SSLContext, timeout: float) -> None:
-        self.connection = http.client.HTTPSConnection(
-            endpoint.url.host, endpoint.url.port, context=context, timeout=timeout)
+        self.connection = endpoint.connection(context, timeout)
 
 
 class RemoteCoreAccess(UiConnectionProfile, CoreAccess, ConnectorClient, RequestPoster):
@@ -193,7 +192,9 @@ class RemoteCoreAccess(UiConnectionProfile, CoreAccess, ConnectorClient, Request
         except ConnectionDropped as dropped:
             return request.dropped(self, dropped)
 
-    def exchange[C: ToolCaller, R: ToolResult](self, request: ToolRequest[C, R]) -> dict[str, JsonValue]:
+    def exchange[C: ToolCaller, R: ToolResult](
+        self, request: ToolRequest[C, R],
+    ) -> dict[str, JsonValue]:
         """One round trip on this thread's kept connection, so a call pays no new handshake."""
         envelope = ToolsCallMessage(jsonrpc="2.0", id=1, params=request.called())
         body = FieldCodec.compact(FieldCodec.encode(envelope)).encode()
@@ -204,10 +205,12 @@ class RemoteCoreAccess(UiConnectionProfile, CoreAccess, ConnectorClient, Request
             payload = response.read()
         except (OSError, http.client.HTTPException) as error:
             connection.close()
-            raise ConnectionDropped(f"The connection to {self.endpoint.url.host} dropped: {error}") from error
+            raise ConnectionDropped(
+                f"The connection to {self.endpoint.url.host} dropped: {error}") from error
         if response.status >= 400:
             raise urllib.error.HTTPError(
-                str(self.endpoint.url), response.status, response.reason, response.headers, io.BytesIO(payload))
+                str(self.endpoint.url), response.status, response.reason, response.headers,
+                io.BytesIO(payload))
         return FieldCodec.decode(ToolsCallReply, json.loads(payload)).structured()
 
     def post_observed[C: ToolCaller, R: ToolResult](self, request: ObservedToolRequest[C, R]) -> dict[str, JsonValue]:

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import http.client
 import os
 import re
+import ssl
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Self
@@ -58,6 +60,14 @@ class HttpsMcpEndpoint(SingleFieldValue):
             )
         if self.url != permitted:
             raise MalformedRecord(refusal)
+
+    def connection(self, context: ssl.SSLContext, timeout: float) -> http.client.HTTPSConnection:
+        """A connection to this endpoint's origin, which its validation made absolute."""
+        match self.url.host:
+            case str() as host:
+                return http.client.HTTPSConnection(
+                    host, self.url.port, context=context, timeout=timeout)
+        raise MalformedRecord(f"The remote MCP endpoint {self.url} names no host.")
 
 
 @dataclass(frozen=True)

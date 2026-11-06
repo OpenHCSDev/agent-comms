@@ -299,7 +299,9 @@ class RequestPoster(ABC):
     def post[C: ToolCaller, R: ToolResult](self, request: ToolRequest[C, R]) -> dict[str, JsonValue]: ...
 
     @abstractmethod
-    def exchange[C: ToolCaller, R: ToolResult](self, request: ToolRequest[C, R]) -> dict[str, JsonValue]:
+    def exchange[C: ToolCaller, R: ToolResult](
+        self, request: ToolRequest[C, R],
+    ) -> dict[str, JsonValue]:
         """One round trip on the kept connection; a drop raises ConnectionDropped."""
 
     @abstractmethod
