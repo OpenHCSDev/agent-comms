@@ -312,7 +312,7 @@ class ReconnectWith(HeldReconnect):
 
     async def redialed(self, watch: InboxSocket, dropped: WatchDropped) -> WatchEnd:
         watch.redials.held = NoReconnect()
-        if not watch.redials.admits(time.monotonic()):
+        if not watch.redials.has_room(time.monotonic()):
             print(f"Your inbox watch {dropped.reason}, and it has reset "
                   f"{watch.redials.most} times in {watch.redials.window_seconds} s; giving the "
                   "reconnect back to you.", flush=True)
@@ -335,8 +335,8 @@ class Redials:
     window_seconds: ClassVar[int] = 600
     pauses: ClassVar[Pauses] = Pauses.of((1.0, 2.0, 4.0, 8.0))
 
-    def admits(self, now: float) -> bool:
-        """Whether the window has room for one more reconnect; one it admits is recorded."""
+    def has_room(self, now: float) -> bool:
+        """Whether the window has room for one more reconnect, which is then recorded."""
         self.used = [at for at in self.used if now - at < self.window_seconds]
         if len(self.used) >= self.most:
             return False
@@ -344,32 +344,43 @@ class Redials:
         return True
 
 
+@dataclass(frozen=True)
+class SocketFailure:
+    """A network failure on the watch socket, decoded once where it was caught."""
+
+    error: ClientError | OSError
+
+    @property
+    def reason(self) -> str:
+        return f"failed: {type(self.error).__name__}: {FollowedTranscript.hidden(str(self.error))}"
+
+    @property
+    def refused(self) -> bool:
+        """The connector refused the URL itself: spent, superseded, or forgotten by a restart."""
+        return isinstance(self.error, WSServerHandshakeError) and self.error.status == 403
+
+
 class SocketStage(ABC):
     """Where a socket's life was when a network failure struck it."""
 
     @abstractmethod
-    def ended(self, failure: ClientError | OSError) -> WatchDropped: ...
-
-    @staticmethod
-    def reason(failure: ClientError | OSError) -> str:
-        return f"failed: {type(failure).__name__}: {FollowedTranscript.hidden(str(failure))}"
+    def ended(self, failure: SocketFailure) -> WatchDropped: ...
 
 
 class Dialing(SocketStage):
     """Before the socket opened: a refusal of the URL is final; anything else struck the path
     before the connector saw the ticket, so the same URL may still open."""
 
-    def ended(self, failure: ClientError | OSError) -> WatchDropped:
-        refused = isinstance(failure, WSServerHandshakeError) and failure.status == 403
-        return (WatchRefused if refused else WatchUnopened)(self.reason(failure))
+    def ended(self, failure: SocketFailure) -> WatchDropped:
+        return (WatchRefused if failure.refused else WatchUnopened)(failure.reason)
 
 
 class Open(SocketStage):
     """After it opened: a write after the path reset ('Cannot write to closing transport', the
     line the connector logs for these drops) is a drop like any other, and re-dials."""
 
-    def ended(self, failure: ClientError | OSError) -> WatchDropped:
-        return WatchDropped(self.reason(failure))
+    def ended(self, failure: SocketFailure) -> WatchDropped:
+        return WatchDropped(failure.reason)
 
 
 @dataclass(frozen=True)
@@ -443,7 +454,7 @@ class InboxSocket:
                     publishing.cancel()
                 return WatchEnd.closed(socket.close_code)
         except (ClientError, OSError) as failure:
-            return stage.ended(failure)
+            return stage.ended(SocketFailure(failure))
 
     async def received(self, frame: str, socket: ClientWebSocketResponse) -> None:
         """A message, or the connector's reconnect URL, which is kept and never shown."""
