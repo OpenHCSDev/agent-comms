@@ -3,6 +3,7 @@
 import asyncio
 import os
 import signal
+import time
 import sys
 import json
 import re
@@ -12,16 +13,19 @@ from uuid import uuid4
 import pytest
 from aiohttp import WSServerHandshakeError
 from pydantic import ValidationError
-from aiohttp.test_utils import TestClient, TestServer
+from aiohttp.test_utils import TestClient, TestServer, unused_port
 from yarl import URL
 
 from agent_comms.activity import ActivityState, ObservedActivity
 from agent_comms.cli_bridges.claude_protocol import ClaudeMonitorFrame
 from agent_comms.cli_bridges.claude_protocol import MonitorTaskNotification, TaskEnvelope
-from agent_comms.cli_bridges.claude_transcript import WATCH_REPLACED, PrintedLedger
+from agent_comms.cli_bridges.claude_transcript import (
+    WATCH_REPLACED, PrintedLedger, ReconnectsAlone, ReconnectUrl,
+)
 from agent_comms.harness_delivery_states import PrintLedgerId
 from agent_comms.cli_bridges.inbox_watch_client import (
-    FollowedTranscript, InboxSocket, WatchDropped, WatchEnd, WatchStopped,
+    RECONNECTS_ALONE, FollowedTranscript, InboxSocket, WatchDropped, WatchEnd, WatchReplaced,
+    WatchStopped,
 )
 from agent_comms.comms import Comms
 from agent_comms.channel_targets import CommandTarget
@@ -43,8 +47,11 @@ async def session(tmp_path: Path, comms: Comms):
     comms.registry.declare(ExternalThread("claude-ai", frozenset(), Checkout(comms.root)))
     comms.registry.declare(NativeThread("sender", frozenset(), Checkout(comms.root)))
     store = ConnectorStore.at(tmp_path / "auth")
-    connector = Connector(store, "http://127.0.0.1:18767", comms.root)
-    async with TestServer(connector.application()) as server:
+    # The connector names its own address in every URL it issues, and a reconnecting client
+    # dials that URL whole, so the server listens where the connector says it does.
+    port = unused_port()
+    connector = Connector(store, f"http://127.0.0.1:{port}", comms.root)
+    async with TestServer(connector.application(), port=port) as server:
         async with TestClient(server) as client:
             with store.granted("test") as token:
                 yield client, token
@@ -479,8 +486,58 @@ def test_an_install_or_a_newer_watch_still_says_rearm() -> None:
     assert WatchEnd.closed(1006) == WatchDropped("closed with code 1006")
     assert WatchEnd.closed(1000) == WatchDropped("closed with code 1000")
     assert WatchEnd.closed(None).exit_code == 1
-    assert WatchEnd.closed(WATCH_REPLACED) == WatchDropped(f"closed with code {WATCH_REPLACED}")
+    assert WatchEnd.closed(WATCH_REPLACED) == WatchReplaced(f"closed with code {WATCH_REPLACED}")
     assert "start this again" in WatchEnd.closed(1006).line()
+    assert "start this again" in WatchEnd.closed(WATCH_REPLACED).line()
+
+
+async def test_a_replaced_watch_never_reconnects_to_take_its_place_back(tmp_path: Path) -> None:
+    """Two clients reconnecting over each other would replace each other for ever."""
+    replaced = WatchEnd.closed(WATCH_REPLACED)
+    assert await replaced.settled(InboxSocket("ws://unused/watch/x", tmp_path)) == replaced
+
+
+async def reconnect_url(socket) -> str:
+    """What a client that says it reconnects alone is handed; the path this test client opens."""
+    await socket.send_str(ReconnectsAlone(printed=()).line())
+    line = await asyncio.wait_for(socket.receive_str(), timeout=30)
+    assert line.startswith(ReconnectUrl.wire_prefix)
+    return URL(ReconnectUrl.model_validate_json(line).url).path
+
+
+async def test_only_a_client_that_says_it_reconnects_is_handed_a_reconnect_url(
+    session, comms: Comms,
+) -> None:
+    """An older client decodes every frame as a message, so it must never get anything else."""
+    client, token = session
+    older = await client.ws_connect(await watch_path(client, token, "cloud"))
+    comms.messaging.send("sender", "cloud", "only messages")
+    assert (await frame(older))["text"] == "only messages"
+    await older.close()
+
+    newer = await client.ws_connect(await watch_path(client, token, "cloud"))
+    assert URL(await reconnect_url(newer)).parent.name == "watch"
+    await newer.close()
+
+
+async def test_a_reconnect_url_opens_once_and_a_newer_watch_ends_it(session, comms: Comms) -> None:
+    """It has no clock, so only redemption or a newer watch of its thread ends it."""
+    client, token = session
+    first = await client.ws_connect(await watch_path(client, token, "cloud"))
+    path = await reconnect_url(first)
+    await first.close()
+    again = await client.ws_connect(path)
+    with pytest.raises(WSServerHandshakeError):
+        await client.ws_connect(path)
+    comms.messaging.send("sender", "cloud", "after the reconnect")
+    assert (await frame(again))["text"] == "after the reconnect"
+
+    standing = await reconnect_url(again)
+    rearmed = await client.ws_connect(await watch_path(client, token, "cloud"))
+    with pytest.raises(WSServerHandshakeError):
+        await client.ws_connect(standing)
+    await again.close()
+    await rearmed.close()
 
 
 def attempt_outcome(comms: Comms, message) -> str:
@@ -619,12 +676,13 @@ async def test_no_ledger_is_no_proof_so_nothing_is_replayed(session, comms: Comm
     await again.close()
 
 
-async def test_a_watch_frozen_past_its_heartbeat_loses_nothing_and_shows_nothing_twice(
+async def test_a_watch_frozen_past_its_heartbeat_reconnects_alone_and_shows_the_message_once(
     session, comms: Comms, tmp_path: Path,
 ) -> None:
     """The 62380 freeze with a real client process and a real SIGSTOP: the connector drops the
-    stopped socket at its heartbeat while the message it took sits unshown. Whatever the client
-    prints after SIGCONT is in its ledger, and the next watch sends exactly what it did not."""
+    stopped socket at its heartbeat while the message it took sits unshown. After SIGCONT the
+    client re-dials with its reconnect URL, with no comms_watch from the model, and its ledger
+    report makes the new socket send exactly what it did not print."""
     client, token = session
     url = str(client.make_url(await watch_path(client, token, "cloud")))
     (tmp_path / ".claude" / "projects" / "p").mkdir(parents=True)
@@ -638,6 +696,8 @@ async def test_a_watch_frozen_past_its_heartbeat_loses_nothing_and_shows_nothing
     assert watch.stdout is not None
     async with asyncio.timeout(30):
         assert b"Watching your inbox" in await watch.stdout.readline()
+        # Frozen before the reconnect URL arrives, it would hold nothing to re-dial with.
+        assert RECONNECTS_ALONE.encode() in await watch.stdout.readline()
     os.kill(watch.pid, signal.SIGSTOP)
     try:
         message = comms.messaging.send("sender", "cloud", "sent into the freeze").message
@@ -647,23 +707,30 @@ async def test_a_watch_frozen_past_its_heartbeat_loses_nothing_and_shows_nothing
                 await asyncio.sleep(0.5)
     finally:
         os.kill(watch.pid, signal.SIGCONT)
-    async with asyncio.timeout(30):
-        printed = (await watch.stdout.read()).decode()
-    await watch.wait()
-    ledger = tmp_path / ".local" / "state" / "claude-comms-inbox" / "cloud" / "printed" / "frozen-session"
-    names = ledger.read_text().split() if ledger.exists() else []
-    assert (message.body in printed) == (message.reference.name in names)
+    printed: list[str] = []
 
-    again = await client.ws_connect(await watch_path(client, token, "cloud"))
-    identity = PrintLedgerId(ledger.with_suffix(".id").read_text())
-    await again.send_str(PrintedLedger(
-        ledger=identity, printed=tuple(MessageReference.named(n) for n in names)).line())
-    if message.reference.name in names:
+    async def next_line() -> None:
+        """An exited client reads as EOF at once, which must fail rather than spin."""
+        line = await watch.stdout.readline()
+        assert line, f"the client exited instead of reconnecting: {printed}"
+        printed.append(line.decode().rstrip("\n"))
+
+    try:
+        async with asyncio.timeout(60):
+            # The first socket's line was read before the freeze; this is the reconnected one.
+            while "Watching your inbox; each message arrives as an event." not in printed \
+                    or not any(message.body in line for line in printed):
+                await next_line()
         with pytest.raises(TimeoutError):
-            await asyncio.wait_for(again.receive_str(), timeout=2)
-    else:
-        assert (await frame(again))["text"] == message.body
-    await again.close()
+            async with asyncio.timeout(3):
+                while True:
+                    await next_line()
+    finally:
+        watch.terminate()
+        await watch.wait()
+    assert any("reconnecting on its own" in line for line in printed), printed
+    assert sum(line == message.body for line in printed) == 1, printed
+    assert not any("/watch/" in line for line in printed), printed
 
 
 def read_records(path: str, text: str) -> tuple[str, str]:

@@ -125,6 +125,24 @@ class ReceivesWatchReports(ABC):
     async def emitted(self, printed: frozenset[MessageReference]) -> None:
         """The client printed these, or was about to: their attempts are never sent again."""
 
+    @abstractmethod
+    async def reconnectable(self) -> None:
+        """The client can reconnect on its own: hand it this watch's standing reconnect URL."""
+
+
+class ReconnectUrl(WireModel):
+    """The connector's one frame that is not a message: where this watch's client reconnects
+    after a network reset, without its model. It stands until it is redeemed or a newer watch
+    of the thread opens. The client keeps it in memory only; it is a bearer credential, so it
+    is never printed, logged or written to the ledger."""
+
+    protocol: Literal['agent-comms-watch-reconnect'] = 'agent-comms-watch-reconnect'
+    wire_prefix: ClassVar[str] = '{"protocol":' + json.dumps(protocol) + ','
+    url: str
+
+    def line(self) -> str:
+        return self.model_dump_json()
+
 
 class WatchReportFields(WireModel):
     """The fields every watch report carries, protocol first so its lines start with the
@@ -166,6 +184,15 @@ class PrintedLedger(LedgerFields, WatchReport, declared_name='ledger'):
     async def received(self, pushed: ReceivesWatchReports) -> None:
         await super().received(pushed)
         pushed.reported.arrived(self.ledger)
+
+
+class ReconnectsAlone(WatchReport, declared_name='reconnects'):
+    """This client re-dials a reset socket itself, so it can take a ReconnectUrl frame. A client
+    that never says so gets only messages, which is all an older client can decode."""
+
+    async def received(self, pushed: ReceivesWatchReports) -> None:
+        await super().received(pushed)
+        await pushed.reconnectable()
 
 
 WATCH_REPORT = WireModel.adapter(WatchReport.declared_union())

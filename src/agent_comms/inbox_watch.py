@@ -13,7 +13,8 @@ import logging
 import os
 import secrets
 import time
-from collections.abc import AsyncIterator, Iterator
+from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
@@ -27,7 +28,7 @@ from .agent_inbox import SecondsWait, TakenInputPosition, TakenInputStart
 from .child_process import ProcessIdentity
 from .cli_bridges.claude_transcript import (
     WATCH_REPORT, WATCH_STOPPED, WINDOW_ENDED, ClaudeJsonLines, ReceivesWatchReports,
-    ReportedLedger, WatchReport,
+    ReconnectUrl, ReportedLedger, WatchReport,
 )
 from .cli_bridges.claude_protocol import ClaudeMonitorFrame
 from .cli_bridges.history import RemoteWatchHistory
@@ -57,11 +58,24 @@ class InboxWatchUrl(ToolResult):
 
 
 @dataclass(frozen=True)
-class WatchTicket:
+class WatchTicket(ABC):
     """One thread's right to open one socket. It lives in the connector's memory, so a restart
     forgets it and the session asks again, as it does whenever its watch ends."""
 
     thread: str
+
+    @abstractmethod
+    def live(self, now: float) -> bool: ...
+
+    def superseded_by(self, opened: WatchTicket) -> bool:
+        """Whether a watch opened with ``opened`` ends this ticket's use."""
+        return False
+
+
+@dataclass(frozen=True)
+class ArmedTicket(WatchTicket):
+    """What comms_watch hands the model: good for one minute."""
+
     expires_at: float
 
     seconds: ClassVar[int] = 60
@@ -70,10 +84,23 @@ class WatchTicket:
         return self.expires_at > now
 
 
+@dataclass(frozen=True)
+class ReconnectTicket(WatchTicket):
+    """What a reset socket's client re-dials with, minted only when a watch's client asks for
+    it. A network reset can strike at any point in a watch's life, so it has no clock: it
+    stands until it is redeemed or any newer watch of its thread opens."""
+
+    def live(self, now: float) -> bool:
+        return True
+
+    def superseded_by(self, opened: WatchTicket) -> bool:
+        return opened.thread == self.thread
+
+
 DAMAGED_RECORD = "A record from the session's transcript was not valid JSON and was left out."
 """What a transcript line that is not JSON leaves behind."""
 
-UNISSUED_TICKET = WatchTicket("", 0.0)
+UNISSUED_TICKET = ArmedTicket("", 0.0)
 """An unknown or spent ticket is simply one that has already expired."""
 
 
@@ -97,19 +124,32 @@ class WatchTickets:
     held: dict[str, WatchTicket] = field(default_factory=dict)
 
     def issued(self, thread: str, issuer: URL) -> InboxWatchUrl:
+        ticket = ArmedTicket(thread, time.time() + ArmedTicket.seconds)
+        return InboxWatchUrl(self.minted(ticket, issuer), ticket.expires_at)
+
+    def reconnect(self, thread: str, issuer: URL) -> ReconnectUrl:
+        """One standing reconnect ticket per thread: minting it ends any older one."""
+        ticket = ReconnectTicket(thread)
+        self.held = {key: held for key, held in self.held.items()
+                     if not held.superseded_by(ticket)}
+        return ReconnectUrl(url=self.minted(ticket, issuer))
+
+    def minted(self, ticket: WatchTicket, issuer: URL) -> str:
         now = time.time()
-        self.held = {key: ticket for key, ticket in self.held.items() if ticket.live(now)}
+        self.held = {key: held for key, held in self.held.items() if held.live(now)}
         token = BearerSecret(secrets.token_urlsafe(32))
-        ticket = WatchTicket(thread, now + WatchTicket.seconds)
         self.held[digest(token)] = ticket
         scheme = {"http": "ws", "https": "wss"}[issuer.scheme]
-        return InboxWatchUrl(str(issuer.with_scheme(scheme) / "watch" / token), ticket.expires_at)
+        return str(issuer.with_scheme(scheme) / "watch" / token)
 
     def taken(self, token: BearerSecret) -> WatchTicket:
-        """The ticket is spent here, whatever happens to the socket it opens."""
+        """The ticket is spent here, whatever happens to the socket it opens, and so is every
+        reconnect ticket an older watch of its thread still held."""
         ticket = self.held.pop(digest(token), UNISSUED_TICKET)
         if not ticket.live(time.time()):
             raise web.HTTPForbidden(text="Unknown, used or expired URL; call comms_watch again.")
+        self.held = {key: held for key, held in self.held.items()
+                     if not held.superseded_by(ticket)}
         return ticket
 
 
@@ -122,6 +162,7 @@ class PushedTranscript(ReceivesWatchReports, TranscriptConfirmsDelivery, ClaudeJ
     comms: Comms
     transcript_thread: str
     socket: web.WebSocketResponse
+    reconnect: Callable[[], ReconnectUrl]
     reported: ReportedLedger = field(default_factory=lambda: ReportedLedger())
 
     delivery_kind: ClassVar[type[RemoteWatchHistory]] = RemoteWatchHistory
@@ -148,6 +189,9 @@ class PushedTranscript(ReceivesWatchReports, TranscriptConfirmsDelivery, ClaudeJ
         for delivery in unconfirmed:
             if delivery.reference in printed:
                 await self.finish(delivery, partial(replace, outcome=EmittedOutcome))
+
+    async def reconnectable(self) -> None:
+        await self.socket.send_str(self.reconnect().line())
 
     async def transcript(self) -> AsyncIterator[RuntimeUpdate]:
         state, offset = self.start_state(), 0
@@ -191,8 +235,13 @@ class InboxWatch:
 
     thread: str
     root: Path
+    tickets: WatchTickets
+    issuer: URL
 
     wait_seconds: ClassVar[int] = 5
+
+    def reconnect(self) -> ReconnectUrl:
+        return self.tickets.reconnect(self.thread, self.issuer)
 
     @contextmanager
     def wire(self) -> Iterator[Comms]:
@@ -303,7 +352,9 @@ class InboxWatch:
         host_commit = await asyncio.to_thread(STAMP.commit)
         with self.wire() as comms:
             try:
-                await PushedTranscript(comms, self.thread, socket, reported).publish_transcript()
+                await PushedTranscript(
+                    comms, self.thread, socket, self.reconnect, reported,
+                ).publish_transcript()
             except* Exception as failures:
                 logging.exception("Transcript from %s stopped", self.thread)
                 comms.messaging.send(self.thread, "#comms", TranscriptStopped(self.thread, failures, host_commit).text())
