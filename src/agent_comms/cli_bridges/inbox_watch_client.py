@@ -19,9 +19,9 @@ import re
 import sys
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
 from contextlib import aclosing
 from dataclasses import dataclass, field
+from functools import reduce
 from pathlib import Path
 from typing import BinaryIO, ClassVar
 
@@ -174,15 +174,19 @@ class WatchEnd(ABC):
     def closed(cls, code: int | None) -> WatchEnd:
         """The close code is decided once, here, where it arrives."""
         reason = f"closed with code {code}"
-        ends: dict[int | None, WatchEnd] = {
-            WATCH_STOPPED: WatchStopped(), WATCH_REPLACED: WatchReplaced(reason)}
-        return ends.get(code, WatchDropped(reason))
+        match code:
+            case int(stopped) if stopped == WATCH_STOPPED:
+                return WatchStopped()
+            case int(replaced) if replaced == WATCH_REPLACED:
+                return WatchReplaced(reason)
+            case _:
+                return WatchDropped(reason)
 
     async def settled(self, watch: InboxSocket) -> WatchEnd:
         """What is left for the model once this process has done what it can."""
         return self
 
-    async def redialing(self, watch: InboxSocket, url: str, delays: Iterator[float]) -> WatchEnd:
+    async def redialing(self, watch: InboxSocket, url: str, pauses: Pauses) -> WatchEnd:
         """How a reconnect attempt that ended this way goes on: by default it is over."""
         return self
 
@@ -202,7 +206,7 @@ class WatchDropped(WatchEnd):
         """A socket that opened and then dropped re-dials with the reconnect URL it was given."""
         return await watch.redials.held.redialed(watch, self)
 
-    async def redialing(self, watch: InboxSocket, url: str, delays: Iterator[float]) -> WatchEnd:
+    async def redialing(self, watch: InboxSocket, url: str, pauses: Pauses) -> WatchEnd:
         """The reconnect opened and later dropped too: it re-dials with the newer URL it holds."""
         return await self.settled(watch)
 
@@ -215,12 +219,8 @@ class WatchUnopened(WatchDropped):
     async def settled(self, watch: InboxSocket) -> WatchEnd:
         return self
 
-    async def redialing(self, watch: InboxSocket, url: str, delays: Iterator[float]) -> WatchEnd:
-        delay = next(delays, None)
-        if delay is None:
-            return self
-        await asyncio.sleep(delay)
-        return await (await watch.opened(url)).redialing(watch, url, delays)
+    async def redialing(self, watch: InboxSocket, url: str, pauses: Pauses) -> WatchEnd:
+        return await pauses.retried(watch, url, self)
 
 
 @dataclass(frozen=True)
@@ -258,6 +258,36 @@ RECONNECTS_ALONE = "This watch reconnects on its own after a network reset."
 """Said when the connector hands over a reconnect URL; the URL itself is never shown."""
 
 
+class Pauses(ABC):
+    """The pauses left before the same unopened URL is tried again."""
+
+    @abstractmethod
+    async def retried(self, watch: InboxSocket, url: str, unopened: WatchUnopened) -> WatchEnd: ...
+
+    @classmethod
+    def of(cls, delays: tuple[float, ...]) -> Pauses:
+        return reduce(lambda rest, delay: Pause(delay, rest), reversed(delays), NoPauses())
+
+
+class NoPauses(Pauses):
+    """None left: the URL never opened, and that is what the model hears."""
+
+    async def retried(self, watch: InboxSocket, url: str, unopened: WatchUnopened) -> WatchEnd:
+        return unopened
+
+
+@dataclass(frozen=True)
+class Pause(Pauses):
+    """Wait, then dial the same URL; whatever that ends as goes on with the pauses after it."""
+
+    delay: float
+    rest: Pauses
+
+    async def retried(self, watch: InboxSocket, url: str, unopened: WatchUnopened) -> WatchEnd:
+        await asyncio.sleep(self.delay)
+        return await (await watch.opened(url)).redialing(watch, url, self.rest)
+
+
 class HeldReconnect(ABC):
     """What this process re-dials with after a reset. It is a bearer credential, so it lives in
     this process's memory only: never printed, never in the ledger, never in a failure line."""
@@ -287,8 +317,8 @@ class ReconnectWith(HeldReconnect):
                   "reconnect back to you.", flush=True)
             return dropped
         print(f"Your inbox watch {dropped.reason}; reconnecting on its own.", flush=True)
-        delays = iter(watch.redials.delays)
-        return await (await watch.opened(self.url)).redialing(watch, self.url, delays)
+        return await (await watch.opened(self.url)).redialing(
+            watch, self.url, watch.redials.pauses)
 
 
 @dataclass
@@ -302,7 +332,7 @@ class Redials:
 
     most: ClassVar[int] = 5
     window_seconds: ClassVar[int] = 600
-    delays: ClassVar[tuple[float, ...]] = (1.0, 2.0, 4.0, 8.0)
+    pauses: ClassVar[Pauses] = Pauses.of((1.0, 2.0, 4.0, 8.0))
 
     def admits(self, now: float) -> bool:
         """Whether the window has room for one more reconnect; one it admits is recorded."""
@@ -311,6 +341,34 @@ class Redials:
             return False
         self.used.append(now)
         return True
+
+
+class SocketStage(ABC):
+    """Where a socket's life was when a network failure struck it."""
+
+    @abstractmethod
+    def ended(self, failure: ClientError | OSError) -> WatchDropped: ...
+
+    @staticmethod
+    def reason(failure: ClientError | OSError) -> str:
+        return f"failed: {type(failure).__name__}: {FollowedTranscript.hidden(str(failure))}"
+
+
+class Dialing(SocketStage):
+    """Before the socket opened: a refusal of the URL is final; anything else struck the path
+    before the connector saw the ticket, so the same URL may still open."""
+
+    def ended(self, failure: ClientError | OSError) -> WatchDropped:
+        refused = isinstance(failure, WSServerHandshakeError) and failure.status == 403
+        return (WatchRefused if refused else WatchUnopened)(self.reason(failure))
+
+
+class Open(SocketStage):
+    """After it opened: a write after the path reset ('Cannot write to closing transport', the
+    line the connector logs for these drops) is a drop like any other, and re-dials."""
+
+    def ended(self, failure: ClientError | OSError) -> WatchDropped:
+        return WatchDropped(self.reason(failure))
 
 
 @dataclass(frozen=True)
@@ -364,11 +422,13 @@ class InboxSocket:
         return await (await self.opened(self.url)).settled(self)
 
     async def opened(self, url: str) -> WatchEnd:
-        """One socket's life: how it ended."""
+        """One socket's life: how it ended. A failure means what the stage it struck says."""
+        stage: SocketStage = Dialing()
         try:
             async with ClientSession() as session, session.ws_connect(
                 url, proxy=self.proxy, heartbeat=25.0
             ) as socket:
+                stage = Open()
                 print("Watching your inbox; each message arrives as an event.", flush=True)
                 for report in self.ledger.reports():
                     await socket.send_str(report)
@@ -378,23 +438,11 @@ class InboxSocket:
                     async for frame in socket:
                         if frame.type is WSMsgType.TEXT:
                             await self.received(frame.data, socket)
-                except (ClientError, OSError) as reset:
-                    # It opened, so this is a drop: a write after the path reset reads like
-                    # a failed connect, and must re-dial like any other drop.
-                    return self.failed(reset, WatchDropped)
                 finally:
                     publishing.cancel()
                 return WatchEnd.closed(socket.close_code)
-        except WSServerHandshakeError as refused:
-            return self.failed(refused, WatchRefused if refused.status == 403 else WatchUnopened)
         except (ClientError, OSError) as failure:
-            return self.failed(failure, WatchUnopened)
-
-    @staticmethod
-    def failed(failure: Exception, ending: type[WatchDropped]) -> WatchDropped:
-        """How a failure reads, URL hidden, as the end it is."""
-        hidden = FollowedTranscript.hidden(str(failure))
-        return ending(f"failed: {type(failure).__name__}: {hidden}")
+            return stage.ended(failure)
 
     async def received(self, frame: str, socket: ClientWebSocketResponse) -> None:
         """A message, or the connector's reconnect URL, which is kept and never shown."""
