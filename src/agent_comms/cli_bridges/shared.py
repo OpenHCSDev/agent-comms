@@ -80,7 +80,6 @@ from agent_comms.thread_status import ThreadStatus
 from agent_comms.thread_text import AbsentText, GivenText, TextChoice
 from agent_comms.repo import Checkout
 from agent_comms.storage.typed_table import (
-    Column,
     DurableTables,
     TableSchema,
     DerivedColumn,
@@ -92,7 +91,6 @@ from agent_comms.storage.typed_table import (
     WriterOwnedStore,
 )
 from agent_comms.wire_models import WireModel
-from agent_comms_hooks.board import BoardEntry, SessionBoard
 
 from .session_watch import (
     HeldClaim,
@@ -291,36 +289,7 @@ class BridgeStateTable(DurableTables):
 
     __slots__ = ()
     filename = 'delivery.sqlite3'
-    retired_tables: ClassVar[tuple[str, ...]] = ('board_line', 'delivery', 'observed_part')
-
-
-@dataclass(frozen=True)
-class DeliveredBoardContent(BridgeStateTable, TypedTable, declared_name="board_delivery"):
-    """This bridge's delivery evidence, not a copy of Core's board."""
-
-    content: Annotated[str, Column(primary_key=True)]
-    since: float
-    delivered_at: float
-
-    def alarm_due(self, entry: BoardEntry, now: float) -> bool:
-        return self.delivered_at < entry.alarm_at <= now
-
-    @classmethod
-    def deliver(cls, db: sqlite3.Connection, entries: tuple[BoardEntry, ...], now: float) -> SessionBoard:
-        """Select and stamp together: concurrent hooks cannot deliver the same change."""
-        due: list[BoardEntry] = []
-        with db:
-            db.execute("BEGIN IMMEDIATE")
-            current = {entry.content for entry in entries}
-            for delivered in cls.select(db):
-                if delivered.content not in current:
-                    cls.delete(db, content=delivered.content)
-            for entry in entries:
-                prior = cls.select(db, content=entry.content, since=entry.since)
-                if all(delivered.alarm_due(entry, now) for delivered in prior):
-                    cls(entry.content, entry.since, now).upsert(db)
-                    due.append(entry)
-        return SessionBoard.presented(due, now)
+    retired_tables: ClassVar[tuple[str, ...]] = ('board_line', 'board_delivery', 'delivery', 'observed_part')
 
 
 class BindingRequest(ABC):
@@ -1861,12 +1830,6 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
     async def declare_reader(self, status: ThreadStatus) -> None:
         await self.comms.bus.when_open(lambda: self.comms.registry.register(
             self.comms.registry.require(self.binding.bus), status))
-
-    async def board(self) -> tuple[str, ...]:
-        """The team board this session's tool calls print, derived from Core when asked."""
-        entries = await self.comms.bus.when_open(partial(
-            TeamUpdate.current_board, self.comms, self.binding.bus))
-        return DeliveredBoardContent.deliver(self.db, entries, time.time()).lines
 
     def watch_record(self, binding: SessionBinding) -> WatchRecord:
         command = (str(Path(sys.argv[0]).absolute()), Watch.command_name(),

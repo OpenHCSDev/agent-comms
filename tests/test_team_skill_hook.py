@@ -6,11 +6,9 @@ import inspect
 import io
 import json
 from datetime import UTC, datetime
-import socket
 import subprocess
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 
@@ -19,8 +17,10 @@ import pytest
 from agent_comms.rule_deal import (CompactedDeal, OffDealMode, StartupDealMode, StartedDeal, Unengaged,
                                    UnstampedCompactionDeal)
 
-from agent_comms.cli_bridges.monitor import BoardReply, ReadBoard, SessionRefused, SessionRequest
-from agent_comms.cli_bridges.shared import Binding, DeliveredBoardContent, GivenBinding
+from agent_comms.cli_bridges.shared import Binding, GivenBinding
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.session import CoordinationSession
+from agent_comms.coordination.tables.board_delivery import ReaderBoardDelivery
 from agent_comms.heartbeat_subjects import TeammateSubject
 from agent_comms.channel_targets import TeammatesTag
 from agent_comms.team.package import TeamPackage
@@ -46,7 +46,7 @@ from agent_comms.threads import ForkThread, NativeThread
 from agent_comms.ui_model.teammate_state import AwaitingTeam
 from agent_comms.todos import ProgressRead, ReviewedHeadVerdict
 from agent_comms_hooks.board import (
-    AbsentSessionSocket, BoardEntry, SessionBoard, UnexpectedBoardReply,
+    BoardEntry,
 )
 from agent_comms.cli_bridges.hook_reread import BoardReminder, DeafReminder, SliceReminder
 from agent_comms.cli_bridges.hook_deferral import StopHook
@@ -56,7 +56,7 @@ from agent_comms.cli_bridges.hook_read_gate import GatedCall, MonitorInput
 from agent_comms_hooks.shell_commands import EmergencyHookStop
 from agent_comms_hooks.skill import (DeckReader, DeckStart, LightReader,
                                      LightPrime, Prime, SessionSource)
-from agent_comms.cli_bridges.session_watch import DeafWatch, LiveWatch, WatchClaim, WatchRecord
+from agent_comms.cli_bridges.session_watch import DeafWatch, WatchClaim, WatchRecord
 from conftest import engaged, fresh_confession
 from test_team_notifications import beat
 from test_head_review import ACCEPTED, invoke
@@ -278,19 +278,23 @@ def test_loading_the_monitors_schema_may_cross_an_unfinished_deal(
                                  comms=team_session, binding=team_binding))
 
 
-def tool_call(hook, server, comms, db, now):
-    """One tool call's board lines: the hook asks over the session socket while this thread
-    answers as the bridge does, deriving the board from Core at the moment of asking. The
-    teammate's deck slices ride the same call and are not the board."""
-    with ThreadPoolExecutor(1) as pool:
-        taken = pool.submit(hook.take, comms, admitted_binding(comms, "colleague"), hook.count_call())
-        peer, _ = server.accept()
-        with peer, peer.makefile("rwb") as stream:
-            assert FieldCodec.decode(SessionRequest, FieldCodec.parse(stream.readline())) == ReadBoard()
-            entries = TeamUpdate.current_board(comms, "colleague")
-            reply = BoardReply(DeliveredBoardContent.deliver(db, entries, now).lines)
-            stream.write(FieldCodec.compact(FieldCodec.encode(reply)).encode() + b"\n")
-        return tuple(line for line in taken.result(timeout=5) if line.startswith("BOARD"))
+def tool_call(hook, comms):
+    """One tool call's board lines, as the resident answers its hook: the deck slices ride the
+    same call and are not the board."""
+    taken = hook.take(comms, admitted_binding(comms, "colleague"), hook.count_call())
+    return tuple(line for line in taken if line.startswith("BOARD"))
+
+
+def delivered(comms):
+    """How many of the colleague's rows Core holds as delivered."""
+    lookup = ReaderBoardDelivery.column(comms.registry.require("colleague").incarnation.require_recorded())
+    with CoordinationSession(str(CoordinationStore.path_in(comms.root))) as store, store.writing() as db:
+        return len(ReaderBoardDelivery.select(db, reader=lookup))
+
+
+def board_at(comms, now):
+    """The colleague's tool-call rows at ``now``, through the one delivery owner."""
+    return ReaderBoardDelivery.lines(comms, comms.registry.require("colleague").incarnation, now)
 
 
 def test_a_recorded_verdict_drops_its_board_line_on_the_next_tool_call(
@@ -319,46 +323,17 @@ def test_a_recorded_verdict_drops_its_board_line_on_the_next_tool_call(
     def shared_board() -> tuple[str, ...]:
         return tuple(entry.text for packet in TeamUpdate.latest(comms, colleague)
                      for entry in packet.board(comms))
-    with (claim.held(record), claim.reader_held(), Binding.open(tmp_path / "delivery") as db,
-          socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server):
-        server.bind(str(claim.socket_path))
-        server.listen()
-        server.settimeout(5)
+    with claim.held(record), claim.reader_held():
         assert DeckStart.decode(hook_record(tmp_path / "session.jsonl", "SessionStart")).take(comms, admitted_binding(comms, "colleague"))
         # Only the row naming this session rides its tool call; the unowned head and the
         # worker's row stay on the shared board.
-        board = tool_call(hook, server, comms, db, time.time())
+        board = tool_call(hook, comms)
         assert len(board) == 1 and "P1" in board[0]
         assert len(shared_board()) == len(rules)
         assert any(head_line in line for line in shared_board())
         invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
         assert not any(head_line in line for line in shared_board())
-        assert tool_call(hook, server, comms, db, time.time()) == ()
-
-
-def test_board_decoder_names_a_refusal_instead_of_a_constructor_error():
-    refused = SessionRefused(error="The bridge cannot serve this request")
-    reply = json.loads(FieldCodec.compact(FieldCodec.encode(refused)))
-    with pytest.raises(UnexpectedBoardReply) as caught:
-        SessionBoard.replied(**reply)
-    assert refused.error in str(caught.value)
-
-
-def test_board_read_failure_is_a_typed_hook_failure(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    with pytest.raises(AbsentSessionSocket) as caught:
-        SessionBoard.asked(Path("missing.socket"))
-    assert caught.value.__cause__ is not None
-
-
-def test_a_held_claims_absent_socket_is_one_board_line_not_a_traceback(tmp_path, monkeypatch):
-    """2026-10-30: during an install every Read hook printed a traceback to the owner and
-    dropped its deck slice, while LiveWatch already declared that gap an install's swap."""
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("HOME", "home")
-    record = WatchRecord("colleague", str(tmp_path), ("watch",), tmp_path / "inbox")
-    (line,) = LiveWatch(WatchClaim("swapping"), record).board()
-    assert line.startswith("BOARD:") and "swapping the session bridge" in line
+        assert tool_call(hook, comms) == ()
 
 
 def test_board_start_line_disappears_when_its_phase_order_is_sent(notification_bus, tmp_path, monkeypatch):
@@ -375,18 +350,14 @@ def test_board_start_line_disappears_when_its_phase_order_is_sent(notification_b
     colleague = comms.registry.require("colleague").incarnation
     request = comms.goals.todos.add_request(colleague, "Start the ready bus writer phase").id
     original = comms.goals.todos.get("P1").order.checked()
-    with (claim.held(record), claim.reader_held(), Binding.open(tmp_path / "delivery") as db,
-          socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server):
-        server.bind(str(claim.socket_path))
-        server.listen()
-        server.settimeout(5)
+    with claim.held(record), claim.reader_held():
         assert DeckStart.decode(hook_record(tmp_path / "session.jsonl", "SessionStart")).take(comms, admitted_binding(comms, "colleague"))
         def shared_board() -> tuple[str, ...]:
             return tuple(entry.text for packet in TeamUpdate.latest(comms, colleague)
                          for entry in packet.board(comms))
 
         # A ready phase names nobody: it stays on the shared board, off every tool call.
-        assert tool_call(hook, server, comms, db, time.time()) == ()
+        assert tool_call(hook, comms) == ()
         assert sum(phase_name in line for line in shared_board()) == 1
         # The worker holds P1 and P2 already; the idle outsider takes the phase order.
         comms.goals.update_goal("outsider", CreateProblemGoalAction(
@@ -397,7 +368,7 @@ def test_board_start_line_disappears_when_its_phase_order_is_sent(notification_b
                           at=RecordedEventTime(time.time())),
         ))
         assert sum(phase_name in line for line in shared_board()) == 0
-        assert tool_call(hook, server, comms, db, time.time()) == ()
+        assert tool_call(hook, comms) == ()
 
 
 def test_a_board_row_rides_a_tool_call_as_one_short_line():
@@ -431,7 +402,7 @@ def test_rules_carrying_his_words_flag_their_board_lines():
 
 def test_a_tool_call_prints_only_new_rows_naming_its_session(
         notification_bus, tmp_path, monkeypatch):
-    """Retained observations, bridge delivery journal and socket; publication stays muted."""
+    """Retained observations and the one Core delivery owner; publication stays muted."""
     from agent_comms.heartbeat_delivery import OffHeartbeatDelivery
     from agent_comms.task_attachments.team_pings import TeamUpdateStore
 
@@ -458,31 +429,102 @@ def test_a_tool_call_prints_only_new_rows_naming_its_session(
                          threads=("worker",))
     TeamUpdateStore.record(comms.root, TeamDecisions(
         colleague, (first, second, elsewhere), (first, second, elsewhere), ()))
-    with (claim.held(record), claim.reader_held(), Binding.open(tmp_path / "delivery") as db,
-          socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server):
-        server.bind(str(claim.socket_path))
-        server.listen()
-        server.settimeout(5)
+    with claim.held(record), claim.reader_held():
         assert DeckStart.decode(hook_record(tmp_path / "session.jsonl", "SessionStart")).take(comms, admitted_binding(comms, "colleague"))
-        assert tool_call(hook, server, comms, db, began + 90) == (
+        assert board_at(comms, began + 90) == (
             "BOARD: Read worker P1 (1 min)",
             "BOARD: Review worker P2 (1 min)",
         )
-        assert tool_call(hook, server, comms, db, began + 91) == ()
+        assert board_at(comms, began + 91) == ()
         changed = replace(first, observation=TextDigest.of("changed"), since=RecordedEventTime(began + 90))
         TeamUpdateStore.record(comms.root, TeamDecisions(
             colleague, (changed, second), (changed,), ()))
-        assert tool_call(hook, server, comms, db, began + 92) == ("BOARD: Read worker P1 (0 min)",)
+        assert board_at(comms, began + 92) == ("BOARD: Read worker P1 (0 min)",)
         # A fresh packet does not reset delivery, and the answer window rings only once.
         TeamUpdateStore.record(comms.root, TeamDecisions(
             colleague, (changed, second), (), ()))
         alarm = began + AwaitingTeam.seconds
-        assert tool_call(hook, server, comms, db, alarm + 1) == ("BOARD: Review worker P2 (5 min)",)
-        assert tool_call(hook, server, comms, db, alarm + 2) == ()
-        assert DeliveredBoardContent.count(db) == 2
+        assert board_at(comms, alarm + 1) == ("BOARD: Review worker P2 (5 min)",)
+        assert board_at(comms, alarm + 2) == ()
+        assert delivered(comms) == 2
         TeamUpdateStore.record(comms.root, TeamDecisions(colleague, (), (), ()))
-        assert tool_call(hook, server, comms, db, alarm + 3) == ()
-        assert DeliveredBoardContent.count(db) == 0
+        assert board_at(comms, alarm + 3) == ()
+        assert delivered(comms) == 0
+
+
+def test_a_verb_reply_carries_the_new_rows_naming_its_caller(notification_bus):
+    """P1213: a cloud session acting through ``fork`` has no hook that knows its name, so its
+    own verbs carry its rows, beside the reply and never inside it: the structured reply stays
+    the declared result remote cores decode. A row prints once; a read carries no board."""
+    from agent_comms.connector import AnsweredCall
+    from agent_comms.order_tools import CommsTodoListTool
+    from agent_comms.task_attachments.team_pings import TeamUpdateStore
+    from agent_comms.tool_caller import ThreadCaller
+    from agent_comms.tools import CommsSendTool
+
+    comms = notification_bus
+    colleague = comms.registry.require("colleague").incarnation
+    worker = comms.registry.require("worker").incarnation
+    began = time.time()
+    mine = RulePing(ReviewTimerUp, TextDigest.of("mine"), text="Review worker P2",
+                    subjects=(TeammateSubject(worker),), since=RecordedEventTime(began),
+                    threads=("colleague",))
+    theirs = RulePing(ReviewTimerUp, TextDigest.of("theirs"), text="Review worker P3",
+                      subjects=(TeammateSubject(worker),), since=RecordedEventTime(began),
+                      threads=("worker",))
+    TeamUpdateStore.record(comms.root, TeamDecisions(colleague, (mine, theirs), (mine, theirs), ()))
+    caller = ThreadCaller("colleague")
+
+    def answered(tool, arguments) -> AnsweredCall:
+        request = tool.decoded(comms, arguments)
+        return AnsweredCall(request.replied(comms, caller), request.board(comms, caller))
+
+    # A send to the row's own subject is the action that disposes it, so speak to someone else.
+    send = {"to": "outsider", "body": "Reading P2 now"}
+    first = answered(CommsSendTool, send)
+    assert first.board == ("BOARD: Review worker P2 (0 min)",) and "board" not in first.reply
+    result = first.result()
+    assert [content.text for content in result.content[1:]] == list(first.board)
+    assert result.structured_content == first.reply
+    assert answered(CommsSendTool, send).board == ()
+    assert answered(CommsTodoListTool, {"thread": "colleague"}).board == ()
+
+
+def test_a_busy_core_writer_never_fails_a_verb_that_landed(notification_bus):
+    """#4088 send-back: the board runs after the verb's own write. When another writer holds
+    coordination.sqlite3, that call carries no rows instead of raising, so a send that landed
+    never comes back as a failure, and the rows stay unstamped for the next call."""
+    import sqlite3
+
+    from agent_comms.connector import AnsweredCall
+    from agent_comms.coordination.database import CoordinationStore
+    from agent_comms.task_attachments.team_pings import TeamUpdateStore
+    from agent_comms.tool_caller import ThreadCaller
+    from agent_comms.tools import CommsSendTool
+
+    comms = notification_bus
+    colleague = comms.registry.require("colleague").incarnation
+    worker = comms.registry.require("worker").incarnation
+    row = RulePing(ReviewTimerUp, TextDigest.of("busy"), text="Review worker P4",
+                   subjects=(TeammateSubject(worker),), since=RecordedEventTime(time.time()),
+                   threads=("colleague",))
+    TeamUpdateStore.record(comms.root, TeamDecisions(colleague, (row,), (row,), ()))
+    caller = ThreadCaller("colleague")
+    send = {"to": "outsider", "body": "landing while Core is busy"}
+
+    def answered() -> AnsweredCall:
+        request = CommsSendTool.decoded(comms, send)
+        return AnsweredCall(request.replied(comms, caller), request.board(comms, caller))
+
+    holder = sqlite3.connect(CoordinationStore.path_in(comms.root), timeout=0)
+    holder.execute("BEGIN IMMEDIATE")
+    try:
+        busy = answered()
+    finally:
+        holder.execute("ROLLBACK")
+        holder.close()
+    assert busy.board == () and busy.reply
+    assert answered().board == ("BOARD: Review worker P4 (0 min)",)
 
 
 def test_the_deck_carries_the_voice_every_fourth_slice_every_rule_reminder_and_every_failure():

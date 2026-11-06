@@ -21,7 +21,6 @@ from typing import (
     TextIO,
 )
 
-from agent_comms_hooks.board import AbsentSessionSocket, SessionBoard
 from agent_comms_hooks.process_claim import ProcessSingleton
 from agent_comms_hooks.watch import HeldSocketWatch, SessionCommandError, SessionEndpoint, SessionFailure, SocketWatch
 
@@ -193,10 +192,6 @@ class WatchState(SocketWatch, ABC):
         a binding can point at it."""
         return False
 
-    def board(self) -> tuple[str, ...]:
-        """Only a running bridge can derive a board."""
-        return ()
-
     def announce_absence(self, announce: Callable[[], None]) -> bool:
         """No bridge holds the claim: the reader says delivery is down, once per outage."""
         announce()
@@ -258,14 +253,6 @@ class LiveWatch(RecordedWatch, HeldSocketWatch):
     def rearm(self, launch: Callable[[], None]) -> bool:
         """The kernel-held bridge is already serving; do not launch another."""
         return False
-
-    def board(self) -> tuple[str, ...]:
-        """Preserve main's install-gap answer; other board failures remain loud."""
-        try:
-            return SessionBoard.asked(self.claim.socket_path).lines
-        except AbsentSessionSocket:
-            return ("BOARD: not read this call: an install is swapping the session bridge, "
-                    "so no bridge listens yet; the board returns when the new one does",)
 
     def reconnect(self, serve: agent_comms.cli_bridges.shared.Serve, request: agent_comms.cli_bridges.monitor.SessionRequest) -> None:
         raise SessionCommandError(

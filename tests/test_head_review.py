@@ -1348,7 +1348,7 @@ def test_retained_head_verdict_precedes_the_published_lost_packet(
     assert isinstance(original.task, TeamDecisions)
     assert original.task == packet
     history = TeamHistory.read(comms, frozenset(('colleague',)))
-    assert (TeamUpdate.current_board(comms, 'colleague') == ()) is cleared
+    assert (TeamUpdate.current_board(comms, comms.registry.require('colleague').incarnation) == ()) is cleared
     assert (packet.open_pings(history) == ()) is cleared
     if cleared:
         subject, = ping.subjects
@@ -1370,7 +1370,7 @@ def test_retained_head_verdict_precedes_the_published_lost_packet(
     TeamUpdateStore.record(comms.root, delivery.packet)
     delivery.packet.send(comms, ())
     assert TeamUpdate.latest(comms, owner) == (delivery.packet,)
-    assert (TeamUpdate.current_board(comms, 'colleague') == ()) is cleared
+    assert (TeamUpdate.current_board(comms, comms.registry.require('colleague').incarnation) == ()) is cleared
     assert original.task.handled == (ping,)
 
 

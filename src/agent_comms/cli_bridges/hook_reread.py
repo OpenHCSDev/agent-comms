@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass
 from collections.abc import Mapping
 from typing import ClassVar
@@ -13,6 +14,8 @@ from agent_comms_hooks.skill import DeckStart
 from ..comms import Comms
 from agent_comms_hooks.skill import DeckReader
 from ..registry_document import RegistrySnapshot
+from ..coordination.tables.board_delivery import ReaderBoardDelivery
+from .shared import Binding
 
 
 @dataclass(frozen=True)
@@ -46,12 +49,13 @@ class DeafReminder(SliceReminder):
 class BoardReminder(DeafReminder):
     """Each new or changed line addressing this session, once; an unchanged line says nothing.
 
-    The bridge derives current lines from Core and owns their delivery evidence.
+    The resident already holds Core open and the bound reader's birth, so it reads the board
+    directly; the rows it prints are the rows it stamps delivered, in one call.
     """
 
-    def taken(self, reader: DeckReader, number: int, comms: Comms,
-              snapshot: RegistrySnapshot) -> tuple[str, ...]:
-        return super().taken(reader, number, comms, snapshot) + reader.board(self.session_id)
+    def take(self, comms: Comms, binding: Binding, number: int = 0) -> tuple[str, ...]:
+        return (*super().take(comms, binding, number),
+                *ReaderBoardDelivery.lines(comms, binding.owner, time.time()))
 
 
 @dataclass(frozen=True)

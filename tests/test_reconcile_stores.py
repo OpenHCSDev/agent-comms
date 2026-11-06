@@ -389,9 +389,9 @@ def test_planned_reconcile_refuses_a_bridge_delivery_store_its_declaration_canno
             db.execute("INSERT INTO observed_part VALUES ('m', 'first', 'a', 'b', 'r', 0)")
     else:
         with closing(sqlite3.connect(stored)) as db:
-            db.execute('CREATE TABLE board_delivery (content TEXT NOT NULL, since TEXT, '
-                       'delivered_at REAL NOT NULL, PRIMARY KEY (content))')
-            db.execute("INSERT INTO board_delivery VALUES ('line', 'not-a-time', 0)")
+            db.execute('CREATE TABLE binding (thread TEXT NOT NULL, owner TEXT, '
+                       'PRIMARY KEY (thread))')
+            db.execute("INSERT INTO binding VALUES ('session', 'not-an-identity')")
             db.commit()
     sibling = stored.parent.with_name("unit-second") / BridgeStateTable.filename
     sibling.parent.mkdir()

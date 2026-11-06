@@ -1,6 +1,7 @@
 """The caller bound at tool entry owns caller-relative tool behavior."""
 from __future__ import annotations
 
+import time
 from abc import abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated
@@ -10,6 +11,7 @@ from agent_comms.cli_bridges.session_watch import WatchClaim
 
 from .bus_publication import AgentOrigin
 from .cli_result import ThreadToolCatalogResult, ToolCatalogResult
+from .coordination.tables.board_delivery import ReaderBoardDelivery
 from .nominal.field_codec import FieldCodec, WireForm
 from .launch_root import LaunchRoot
 from .read_basis import DisplayViewer, OperatorOutcomes, ReadAuthority
@@ -44,6 +46,11 @@ class ToolCaller(ReadAuthority):
 
     @abstractmethod
     def invoke(self, request: ToolRequest, comms: Comms) -> ToolResult: ...
+
+    def board(self, comms: Comms) -> tuple[str, ...]:
+        """The board rows a verb's reply carries for this caller; a caller acting as no thread
+        is named by no row."""
+        return ()
 
     @abstractmethod
     def listing(self, comms: Comms, threads: tuple[ThreadRecord, ...]) -> ThreadListing: ...
@@ -148,6 +155,11 @@ class ThreadCaller(ToolCaller):
 
     def invoke(self, request: ToolRequest[ThreadCaller], comms: Comms) -> ToolResult:
         return request.apply(comms, self)
+
+    def board(self, comms: Comms) -> tuple[str, ...]:
+        """The new rows naming this thread, stamped delivered in the call that returns them, so
+        the session's hook and its verb replies print a row once between them."""
+        return ReaderBoardDelivery.lines(comms, self.authority(comms).incarnation, time.time())
 
     def listing(self, comms: Comms, threads: tuple[ThreadRecord, ...]) -> ThreadListing:
         presentation = comms.views.thread_presentations((self.name,)).require(self.name)

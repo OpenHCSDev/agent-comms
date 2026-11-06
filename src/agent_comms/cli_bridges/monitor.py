@@ -25,7 +25,7 @@ from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.installer.runtime_wire import CrossesRuntimes
 from agent_comms.nominal.field_codec import FieldCodec, PathText
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms_hooks.board import SessionBoard, SessionWire
+from agent_comms_hooks.board import SessionWire
 
 from .session_watch import (
     HeldClaim,
@@ -205,11 +205,6 @@ class RequestFailure:
 
 
 @dataclass(frozen=True)
-class BoardReply(SessionBoard, SessionReply, declared_name=SessionBoard.request):
-    """The hook decodes this with the standard library, through the fields it declares."""
-
-
-@dataclass(frozen=True)
 class PeerGone(SessionReply, declared_name='gone'):
 
     async def publish(self, peer: MonitorPeer) -> None:
@@ -307,14 +302,6 @@ class AttachMonitor(CrossesRuntimes, SessionRequest[SessionReady], declared_name
 
     async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
         return await service.bridge.reader.attach(service, peer)
-
-
-@dataclass(frozen=True)
-class ReadBoard(SessionRequest[BoardReply], declared_name=SessionBoard.request):
-    """The teammate's tool-call hook asking for its board at the moment of the call."""
-
-    async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
-        return BoardReply(await service.bridge.board())
 
 
 @dataclass(frozen=True)

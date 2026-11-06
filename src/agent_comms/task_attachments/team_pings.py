@@ -314,10 +314,10 @@ class TeamUpdate(OwnerNotice, declared_name=None):
                      for packet in message.task.team_update(lookup))
 
     @classmethod
-    def current_board(cls, comms: Comms, recipient: str) -> tuple[BoardEntry, ...]:
-        """The retained observation's rows for ``recipient``'s tool calls, derived when asked."""
-        return tuple(entry for latest in cls.latest(comms, comms.registry.require(recipient).incarnation)
-                     for entry in latest.reader_board(comms, recipient))
+    def current_board(cls, comms: Comms, reader: ThreadIncarnation) -> tuple[BoardEntry, ...]:
+        """The retained observation's rows for ``reader``'s tool calls, derived when asked."""
+        return tuple(entry for latest in cls.latest(comms, reader)
+                     for entry in latest.reader_board(comms, reader.name))
 
     @classmethod
     def derive(cls, recipient: ThreadIncarnation, states: tuple[TeammateState, ...],
