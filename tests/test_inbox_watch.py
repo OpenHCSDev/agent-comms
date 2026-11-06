@@ -757,6 +757,8 @@ async def test_a_watch_frozen_past_its_heartbeat_reconnects_alone_and_shows_the_
         await watch.wait()
     assert any("reconnecting on its own" in line for line in printed), printed
     assert sum(line == message.body for line in printed) == 1, printed
+    # The re-dialled socket is sent its URL first and again when asked; one line, not two.
+    assert sum(line == RECONNECTS_ALONE for line in printed) == 1, printed
     assert not any("/watch/" in line for line in printed), printed
 
 
