@@ -11,7 +11,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from aiohttp import WSMsgType, WSServerHandshakeError
+from aiohttp import WSMsgType, WSServerHandshakeError, web
 from pydantic import ValidationError
 from aiohttp.test_utils import TestClient, TestServer, unused_port
 from yarl import URL
@@ -654,6 +654,7 @@ class QuickRedials(Redials):
     pauses = Pauses.of((0.01,))
     first_wait = Pause(0.01, pauses)
     still_held = Pause(0.01, pauses)
+    restarting = Pause(0.01, pauses)
 
 
 async def test_a_watch_waits_out_maintenance_however_long_it_holds(
@@ -690,6 +691,60 @@ async def test_a_watch_waits_out_maintenance_however_long_it_holds(
         assert printed.count(WAITS_FOR_MAINTENANCE) == 1, printed
     finally:
         running.cancel()
+
+
+async def test_a_watch_waits_out_a_restarting_connector(
+    tmp_path: Path, comms: Comms, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Every install restarts the connector, and a reset client re-dials while the proxy in front
+    of it answers 502: on 2026-11-06 claude-f-ci's watch met 502s past the 15 s unopened run and
+    gave up. Nothing listening is not a refusal, so the unspent URL is dialled again until the
+    connector is back, and the watch carries on."""
+    comms.registry.declare(ExternalThread("claude-ai", frozenset(), Checkout(comms.root)))
+    comms.registry.declare(NativeThread("sender", frozenset(), Checkout(comms.root)))
+    store = ConnectorStore.at(tmp_path / "auth")
+    port = unused_port()
+    connector = Connector(store, f"http://127.0.0.1:{port}", comms.root)
+    restarting = asyncio.Event()
+    unreachable: list[str] = []
+
+    @web.middleware
+    async def proxy(request: web.Request, handler):
+        """What the proxy answers while nothing listens behind it."""
+        if restarting.is_set() and request.path.startswith("/watch/"):
+            unreachable.append(request.path)
+            raise web.HTTPBadGateway()
+        return await handler(request)
+
+    application = connector.application()
+    application.middlewares.append(proxy)
+    async with TestServer(application, port=port) as server, TestClient(server) as client:
+        with store.granted("test") as token:
+            watch = InboxSocket(str(client.make_url(await watch_path(client, token, "cloud"))),
+                                tmp_path / "exports" / "messages", redials=QuickRedials())
+            running = asyncio.create_task(watch.carried())
+            printed = ""
+            try:
+                async with asyncio.timeout(20):
+                    while RECONNECTS_ALONE not in printed:
+                        await asyncio.sleep(0.05)
+                        printed += capsys.readouterr().out
+                restarting.set()
+                await connector.open_watches[0].viewer.close()
+                async with asyncio.timeout(20):
+                    while len(unreachable) < 8:
+                        if running.done():
+                            pytest.fail(f"The watch gave up while the connector restarted: {printed}")
+                        await asyncio.sleep(0.05)
+                        printed += capsys.readouterr().out
+                restarting.clear()
+                comms.messaging.send("sender", "cloud", "after the restart")
+                async with asyncio.timeout(20):
+                    while "after the restart" not in printed:
+                        await asyncio.sleep(0.05)
+                        printed += capsys.readouterr().out
+            finally:
+                running.cancel()
 
 
 def attempt_outcome(comms: Comms, message) -> str:

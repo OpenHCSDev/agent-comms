@@ -227,6 +227,17 @@ class WatchUnopened(WatchDropped):
 
 
 @dataclass(frozen=True)
+class WatchUnreachable(WatchUnopened):
+    """Nothing answered behind the proxy (502 to 504), as while the connector restarts. Every
+    install restarts it, and on 2026-11-06 a re-dial after the restart's close met 502s past the
+    unopened run's 15 s and gave up. The URL never reached the connector, so it is still good,
+    and it is dialled again every few seconds for as long as nothing is listening."""
+
+    async def redialing(self, watch: InboxSocket, url: str, pauses: Pauses) -> WatchEnd:
+        return await watch.redials.restarting.retried(watch, url, self)
+
+
+@dataclass(frozen=True)
 class WatchReplaced(WatchDropped):
     """A newer watch of this thread took the socket's place. Reconnecting would take it back
     and the two would replace each other for ever, so this one goes back to the model."""
@@ -381,6 +392,8 @@ class Redials:
     still_held: ClassVar[Pauses] = Pause(30.0, pauses)
     """Before each re-dial into a maintenance that still holds. A dial that does not open at all
     has the ordinary pauses after it, then the model."""
+    restarting: ClassVar[Pauses] = Pause(5.0, pauses)
+    """Before each re-dial while nothing is listening behind the proxy."""
 
     def has_room(self, now: float) -> bool:
         """Whether the window has room for one more reconnect, which is then recorded."""
@@ -402,9 +415,18 @@ class SocketFailure:
         return f"failed: {type(self.error).__name__}: {FollowedTranscript.hidden(str(self.error))}"
 
     @property
-    def refused(self) -> bool:
-        """The connector refused the URL itself: spent, superseded, or forgotten by a restart."""
-        return isinstance(self.error, WSServerHandshakeError) and self.error.status == 403
+    def dialled(self) -> type[WatchDropped]:
+        """What a failure before the socket opened means, decided once from the handshake: the
+        connector refused the URL itself (403: spent, superseded or forgotten); nothing was
+        listening behind the proxy (502 to 504, as while it restarts); or the path failed some
+        other way before the connector saw the ticket."""
+        match self.error:
+            case WSServerHandshakeError(status=403):
+                return WatchRefused
+            case WSServerHandshakeError(status=502 | 503 | 504):
+                return WatchUnreachable
+            case _:
+                return WatchUnopened
 
 
 class SocketStage(ABC):
@@ -419,7 +441,7 @@ class Dialing(SocketStage):
     before the connector saw the ticket, so the same URL may still open."""
 
     def ended(self, failure: SocketFailure) -> WatchDropped:
-        return (WatchRefused if failure.refused else WatchUnopened)(failure.reason)
+        return failure.dialled(failure.reason)
 
 
 class Open(SocketStage):
