@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
 from dataclasses import dataclass
 
 
@@ -15,13 +14,9 @@ class BoundSet[Member: (str, int)]:
 
     members: frozenset[Member]
 
-    @classmethod
-    def of(cls, members: Iterable[Member]) -> BoundSet[Member]:
-        return cls(frozenset(members))
-
-    @property
-    def marks(self) -> str:
-        return ",".join("?" for _ in self.members)
+    def within(self, column: str) -> str:
+        """The membership test of ``column`` in this set, one placeholder per member."""
+        return f"{column} IN ({','.join('?' for _ in self.members)})"
 
     @property
     def parameters(self) -> tuple[Member, ...]:
