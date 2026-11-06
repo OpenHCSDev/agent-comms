@@ -13,7 +13,7 @@ from agent_comms.page_traversal import LiveCursor
 from agent_comms.read_basis import ConversationCursor, NamedViewer, ReadCursor
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.routing import DeliveryScope
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 @pytest.fixture

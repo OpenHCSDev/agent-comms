@@ -39,7 +39,7 @@ from agent_comms.thread_text import (
 )
 
 if TYPE_CHECKING:
-    from agent_comms.threads import Thread
+    from agent_comms.registry.threads import Thread
 
 
 class CallingThreadUnavailable(RelationViolationError):

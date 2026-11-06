@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .tool_result import ToolResult
+from ..tool_result import ToolResult
 
 import time
 from abc import ABC, abstractmethod
@@ -19,16 +19,16 @@ from typing import TYPE_CHECKING, Annotated, Literal, Self
 from pydantic import JsonValue
 from agent_comms_hooks import ToolRefusedError
 
-from .activity import ActivityCapture, ObservedActivity
-from .agent_activity import AgentActivity
-from .catalog_document import CatalogAccess
-from .change_report import CitationProject
-from .channel_targets import TeammatesTag, ResolvedTarget, SurroundingChannel
-from .channels import Channel, ChannelMemberIndex
-from .child_process import ProcessIdentity
-from .nominal.declared_family import DeclaredFamily
-from .errors import OutsideRegistrySlice, RelationViolationError, UnregisteredThreadError
-from .nominal.field_codec import (
+from ..activity import ActivityCapture, ObservedActivity
+from ..agent_activity import AgentActivity
+from ..catalog_document import CatalogAccess
+from ..change_report import CitationProject
+from ..channel_targets import TeammatesTag, ResolvedTarget, SurroundingChannel
+from ..channels import Channel, ChannelMemberIndex
+from ..child_process import ProcessIdentity
+from ..nominal.declared_family import DeclaredFamily
+from ..errors import OutsideRegistrySlice, RelationViolationError, UnregisteredThreadError
+from ..nominal.field_codec import (
     TaggedUnion,
     ExternalJsonShape,
     FieldCodec,
@@ -42,23 +42,23 @@ from .nominal.field_codec import (
     WireTransient,
     WireValue,
 )
-from .frozen_recipient import FrozenRecipient
-from .registration_change import (
+from ..frozen_recipient import FrozenRecipient
+from ..registration_change import (
     InitialRegistration,
     RegistrationChange,
     UpdatedRegistration,
 )
-from .registry_provenance import (
+from ..registry_provenance import (
     DeletedThread,
     RegisteredRecipient,
     RegistryNames,
     RegistryProvenance,
     RetiredRecipient,
 )
-from .repo import Checkout, Repo, RepositoryReads, RepositorySelection
-from .repository_name import RepositoryName
-from .storage_rules import StorageRule
-from .snapshot_slices import (
+from ..repo import Checkout, Repo, RepositoryReads, RepositorySelection
+from ..repository_name import RepositoryName
+from ..storage_rules import StorageRule
+from ..snapshot_slices import (
     MappingRowsSlice,
     OwnRow,
     SnapshotRestored,
@@ -66,13 +66,13 @@ from .snapshot_slices import (
     ThreadSlice,
     WholeDocumentValue,
 )
-from .restart_refusals import (
+from ..restart_refusals import (
     OwnerBusyRefusal,
     OwnerChangedBeforeFenceRefusal,
     OwnerGenerationChangedRefusal,
 )
-from .thread_creation import CreationTime
-from .thread_identity import (
+from ..thread_creation import CreationTime
+from ..thread_identity import (
     ClaimedIdentity,
     GenerationCounter,
     OfferedTools,
@@ -83,17 +83,17 @@ from .thread_identity import (
     ThreadIncarnationRecord,
     TurnIdentity,
 )
-from .thread_presentation import ThreadOwnerBinding
-from .thread_status import (
+from ..thread_presentation import ThreadOwnerBinding
+from ..thread_status import (
     ActiveThreadPresence,
     ArchivedThreadStatus,
     StoppedThreadStatus,
     StoppingThreadStatus,
     ThreadStatus,
 )
-from .thread_text import ForkedParent, NoParent
+from ..thread_text import ForkedParent, NoParent
 from .threads import Thread, ThreadWorkState
-from .turn_lease import (
+from ..turn_lease import (
     FinishedTurn,
     FinishedTurnFence,
     NoFinishedTurn,
@@ -104,9 +104,9 @@ from .turn_lease import (
 )
 
 if TYPE_CHECKING:
-    from .bus_publication import Delivered
-    from .cli_command import CliCommand
-    from .comms import Comms
+    from ..bus_publication import Delivered
+    from ..cli_command import CliCommand
+    from ..comms import Comms
 
 
 @dataclass(frozen=True, slots=True)

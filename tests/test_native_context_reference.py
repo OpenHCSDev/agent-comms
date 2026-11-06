@@ -46,7 +46,7 @@ from agent_comms.selected_triage import (
     FullSelectedTriage,
     IgnoreSelectedTriage,
 )
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.native_session_reopen import PiSessionId
 
 

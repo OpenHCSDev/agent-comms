@@ -6,10 +6,10 @@ import json
 import pytest
 
 from agent_comms.nominal.field_codec import MalformedRecord
-from agent_comms.registration import Registration
+from agent_comms.registry.registration import Registration
 from agent_comms.storage.store_files import AtomicFile
 from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.threads import Thread, NativeThread
+from agent_comms.registry.threads import Thread, NativeThread
 
 
 @pytest.mark.parametrize("select", [
@@ -58,7 +58,7 @@ def test_an_entry_fence_ignores_other_threads_writes_but_not_its_own(tmp_path):
 def test_missing_registry_version_is_rejected_without_rewriting_the_file(tmp_path):
     from agent_comms.errors import RelationViolationError
     from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.registry_document import RegistryDocument
+    from agent_comms.registry.registry_document import RegistryDocument
 
     path = tmp_path / "registry.json"
     raw = FieldCodec.encode(RegistryDocument())
@@ -85,7 +85,7 @@ def test_malformed_replacement_never_serves_stale_success(tmp_path):
 
 
 def test_a_new_revision_decodes_only_the_threads_that_changed(tmp_path):
-    from agent_comms.registry_document import RegistryDocument
+    from agent_comms.registry.registry_document import RegistryDocument
 
     path = tmp_path / "registry.json"
     writer = Registration(path)
@@ -136,7 +136,7 @@ def thread_rows_wire(tmp_path):
 
 @pytest.mark.parametrize("view", [lambda rows: rows, lambda rows: rows.copy(), lambda rows: rows.freeze()])
 def test_reading_thread_rows_reuses_their_existing_wire_values(thread_rows_wire, view):
-    from agent_comms.registry_document import ThreadRows
+    from agent_comms.registry.registry_document import ThreadRows
 
     wire = thread_rows_wire
     rows = view(ThreadRows.from_wire(wire))
@@ -150,7 +150,7 @@ def test_reading_thread_rows_reuses_their_existing_wire_values(thread_rows_wire,
 def test_assigning_and_removing_thread_rows_changes_only_the_written_rows(thread_rows_wire):
     from dataclasses import replace
     from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.registry_document import ThreadRows
+    from agent_comms.registry.registry_document import ThreadRows
     from agent_comms.thread_text import GivenThreadText
 
     wire = thread_rows_wire

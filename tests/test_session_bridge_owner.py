@@ -24,7 +24,7 @@ from agent_comms.cli_bridges.monitor import InspectSession, VerifySession
 from agent_comms.cli_bridges.shared import Binding, Serve
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.root_runtime import RootRuntime
-from agent_comms.threads import ExternalThread
+from agent_comms.registry.threads import ExternalThread
 from agent_comms.cli_bridges import hook_session
 from agent_comms.cli_bridges.hook_requests import SkillRequest
 from agent_comms.cli_bridges.session_watch import SessionRefusedError

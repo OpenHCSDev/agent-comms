@@ -13,7 +13,7 @@ from agent_comms.coordination.cohort import sealed_cohort_assignments
 from agent_comms.coordination.tables.participants import Participants
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 @pytest.mark.asyncio
 async def test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_cohort(tmp_path):

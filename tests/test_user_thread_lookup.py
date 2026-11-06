@@ -8,11 +8,11 @@ from dataclasses import replace
 
 from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.registry_document import NoUserThread, RegistryDocument
+from agent_comms.registry.registry_document import NoUserThread, RegistryDocument
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.thread_text import GivenThreadText
 from conftest import installed_comms
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def test_user_answer_follows_revisions_and_stays_out_of_wire_fields(tmp_path):

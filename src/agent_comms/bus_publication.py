@@ -38,8 +38,8 @@ if TYPE_CHECKING:
     from agent_comms.bus import Bus, BusReader, RecordBuilder
 
     from .goal_management import Goals
-    from .registry_document import RegistrySnapshot
-    from .threads import Thread
+    from .registry.registry_document import RegistrySnapshot
+    from .registry.threads import Thread
 
 
 class Delivered(BusRecord, AudiencedMessage, declared_name=None):

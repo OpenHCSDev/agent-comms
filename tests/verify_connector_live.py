@@ -21,7 +21,7 @@ from pathlib import Path
 from connector_readiness import ConnectorReadiness
 from agent_comms.comms import wire
 from agent_comms.connector_store import ConnectorStore
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def curl_call(port, token, body, *, arguments=None):

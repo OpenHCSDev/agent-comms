@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from .nominal.field_codec import AcpSessionId
 from .runtime import RuntimeProxy
-from .threads import Thread
+from .registry.threads import Thread
 
 if TYPE_CHECKING:
     from .cursor_publication import CursorPublication

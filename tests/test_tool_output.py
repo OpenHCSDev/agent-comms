@@ -13,13 +13,13 @@ from agent_comms.input_key import AcpInputKey, BusInputKey
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.nominal.field_codec import FieldCodec, InputId, TurnId
 from agent_comms.goal_actions import SetGoalAction
-from agent_comms.goal_waits import RecordedGoalWait
+from agent_comms.planning.goal_waits import RecordedGoalWait
 from agent_comms.input_attempt import BoundUnknownInput
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.message_page import PageBounds
 from agent_comms.reported_turn import ReportedTurn
 from agent_comms.text_digest import TextDigest
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.tools import invoke_tool
 from stored_inputs import insert_inputs, stored_inputs

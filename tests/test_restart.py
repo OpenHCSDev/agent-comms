@@ -19,7 +19,7 @@ from agent_comms.routing import NoTurnRouting
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.session_file import RegistrySessionLocation
 from native_backend_fixture import native_backend_fixture
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 async def test_real_idle_owner_is_replaced_without_losing_session(

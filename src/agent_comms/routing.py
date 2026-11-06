@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from .thread_identity import ThreadIncarnation
     from .input_disposition import InputDispositions
     from .messages import Message
-    from .threads import Thread
+    from .registry.threads import Thread
     from .transcript_routes import NoSentInputText, SentInputText
 
 

@@ -37,7 +37,7 @@ from agent_comms.read_basis import ReadCursor
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
 from agent_comms.wake_policy import FullWake
-from agent_comms.threads import ExternalThread, NativeThread
+from agent_comms.registry.threads import ExternalThread, NativeThread
 
 SENDER = "sender"  # the notification carries its sender's lookup; these tests read progress only
 

@@ -22,7 +22,7 @@ from .storage.maintenance_barrier import MaintenanceBarrier
 from .owner_connection import socket_path
 from .storage.private_path import FileIdentity, PrivateSocketRole
 from .recorded_bus import RecordedBus, RecordedBusIdentity
-from .registry_store import RegistryStore
+from .registry.registry_store import RegistryStore
 from .storage.store_files import DependentStateTier, SingleFileStore
 
 

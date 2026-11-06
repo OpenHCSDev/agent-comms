@@ -18,7 +18,7 @@ from agent_comms.ui_model.observation import (
 )
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.thread_identity import UnrecordedThreadIncarnation
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def saved_history(tmp_path):

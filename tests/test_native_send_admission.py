@@ -41,7 +41,7 @@ from agent_comms.native_prompt_send import (
 from agent_comms.storage.store_files import StoreBusy, store_lock_path
 from conftest import installed_comms
 from test_coordinated_runtime import tmp_path as private_root_fixture
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 tmp_path = private_root_fixture
 

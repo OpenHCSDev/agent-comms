@@ -13,7 +13,7 @@ from agent_comms.task_attachments.team_pings import TeamDecisions, TeamUpdate, R
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.text_digest import TextDigest
 from agent_comms.todos import DirectiveText
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def test_plain_messages_need_no_order_labels():

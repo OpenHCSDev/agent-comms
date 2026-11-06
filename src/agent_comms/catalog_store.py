@@ -15,7 +15,7 @@ from .thread_owned_state import ThreadOwnedState
 
 if TYPE_CHECKING:
     from .activity_clocks import ActivityClocks
-    from .threads import Thread
+    from .registry.threads import Thread
 
 
 @dataclass(frozen=True, slots=True)

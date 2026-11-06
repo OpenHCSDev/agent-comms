@@ -14,7 +14,7 @@ from .native_arguments import GivenArguments
 
 if TYPE_CHECKING:
     from .execution.session_lifecycle import AttachedSessionLifecycle
-    from .threads import Thread
+    from .registry.threads import Thread
 
 
 class SessionLoadPlan(CoordinationWork, DeclaredFamily, affix='SessionLoadPlan'):

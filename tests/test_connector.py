@@ -73,7 +73,7 @@ from agent_comms.tool_caller import HumanCaller, NoThreadCaller, ThreadCaller
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.tool_request import ReadTool
 from agent_comms.transport.request import ToolCall, ToolRequest
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 import subprocess
 from agent_comms.repo import FailedGitCommand
 import site

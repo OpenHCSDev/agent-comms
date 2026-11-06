@@ -39,7 +39,7 @@ from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import AssistantMessage, ReportedParts, ToolCallContent
 from agent_comms.repo import Checkout
 from agent_comms.storage_room import NoRoomNeeded
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_denial import SelectedToolDenied
 
 

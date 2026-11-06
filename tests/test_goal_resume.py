@@ -29,7 +29,7 @@ from agent_comms.goals import Goal, NoGoal
 from agent_comms.goal_states import ActiveGoal, BlockedGoal, CompletedGoal
 from agent_comms.lifecycle_capability import Active
 from agent_comms.reported_turn import ReportedTurn
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.goal_scope import OneGoal
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import invoke_tool

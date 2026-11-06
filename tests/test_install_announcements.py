@@ -11,7 +11,7 @@ from agent_comms.cli import build_parser
 from agent_comms.cli_commands import BusReadBack
 from agent_comms.cli_verbs.history import HistoryCliCommand
 from agent_comms.installer.probes.harnesses import InstallResult
-from agent_comms.registry_document import NoTeamProject
+from agent_comms.registry.registry_document import NoTeamProject
 from agent_comms.repo import Checkout, GitCommandError
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.host_services import RestartedService
@@ -33,7 +33,7 @@ from agent_comms.installer.owner_starts import RefusedOwner, StartedOwner
 from agent_comms.install_choices import LiveMode, RehearsalMode
 from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime
 from agent_comms.root_runtime import RootRuntimeStore
-from agent_comms.threads import ExternalThread, ServiceThread, NativeThread
+from agent_comms.registry.threads import ExternalThread, ServiceThread, NativeThread
 from agent_comms.thread_identity import ServiceThreadRole, UserThreadRole
 from agent_comms.errors import RelationViolationError, ThreadNotStoppedError
 from cli_command import core

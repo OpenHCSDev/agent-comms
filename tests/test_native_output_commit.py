@@ -19,7 +19,7 @@ from agent_comms.pi_events import NativeOutputCommitted, PiEvent
 from agent_comms.repo import Checkout
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.transcripts import Through
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from conftest import installed_comms
 
 

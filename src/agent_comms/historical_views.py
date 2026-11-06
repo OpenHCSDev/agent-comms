@@ -60,14 +60,14 @@ from .read_basis import (
 )
 from .read_ledger import ReadLedger
 from .recorded_bus import RecordedBusIdentity
-from .registration import Registration
-from .registry_document import RegistrySnapshot
+from .registry.registration import Registration
+from .registry.registry_document import RegistrySnapshot
 from .registry_provenance import RegistryProvenance
 from .revision_views import BusSourceView
 from .storage.store_files import SingleFileStore, SourceTier, StoreOwner
 from .thread_identity import UnrecordedThreadIncarnation
 from .display_references import ReferenceContext
-from .threads import Thread, ThreadProvenance
+from .registry.threads import Thread, ThreadProvenance
 from .transcript_routes import TranscriptRoutes
 
 from collections.abc import Collection

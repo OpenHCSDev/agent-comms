@@ -9,11 +9,11 @@ from pathlib import Path
 
 from .comms import Comms
 from .native_tool_call import CodingCall
-from .registry_document import RegistrySnapshot
+from .registry.registry_document import RegistrySnapshot
 from .repo import Checkout, RepositoryReads
 from .shell_effects import StorageEffect
 from .storage_rules import CheckoutAllocation, StorageRule, UnitStorage
-from .threads import Thread
+from .registry.threads import Thread
 
 
 @dataclass

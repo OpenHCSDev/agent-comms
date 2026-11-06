@@ -8,7 +8,7 @@ from agent_comms.repo import LocalRepositorySource, RepositorySource
 from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import RepositoryCheckoutAllocation
 from agent_comms.storage_rules import StorageRule
-from agent_comms.threads import Thread
+from agent_comms.registry.threads import Thread
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated

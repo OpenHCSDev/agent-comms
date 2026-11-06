@@ -763,7 +763,7 @@ class RegistryFile(RollbackRetained, GoalWakeFile):
     def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
         """The copy names no live process: a signal, stop or wake aimed through it would reach
         the source root's units."""
-        from ..registry_store import RegistryStore
+        from ..registry.registry_store import RegistryStore
 
         registry = RegistryStore(source)
         with registry.guarded_read():

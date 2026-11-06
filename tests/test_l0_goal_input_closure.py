@@ -22,11 +22,11 @@ from agent_comms.goal_attempts import GoalWorkDecision
 from agent_comms.goal_generation import ReadyGeneration
 from agent_comms.goal_history import GoalHistoryEntry
 from agent_comms.goal_states import BlockedGoal, GoalState, UnrecordedBlockGoal
-from agent_comms.goal_waits import GoalWait, GoalWaits
+from agent_comms.planning.goal_waits import GoalWait, GoalWaits
 from agent_comms.goals import Goal
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_key import BusInputKey
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.turn_failure import BackendFailed
 from stored_inputs import stored_inputs
 from agent_comms.goal_scope import OneGoal

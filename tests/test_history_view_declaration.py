@@ -5,7 +5,7 @@ from agent_comms.nominal.field_codec import TurnId
 from agent_comms.historical_views import HistoryView
 from agent_comms.message_page import PageBounds
 from agent_comms.read_basis import ChannelDisplayScope, NoDisplaySelection
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from conftest import installed_comms
 
 

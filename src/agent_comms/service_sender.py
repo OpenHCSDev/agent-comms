@@ -7,10 +7,10 @@ from typing import TYPE_CHECKING, ClassVar
 from .bus_publication import ServiceOrigin
 from .repo import Checkout
 from .thread_identity import ServiceThreadRole
-from .threads import ServiceThread
+from .registry.threads import ServiceThread
 
 if TYPE_CHECKING:
-    from .registration import Registration
+    from .registry.registration import Registration
 
 
 class ServiceSender:

@@ -33,7 +33,7 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import FieldCodec, OrderId
 from agent_comms.pattern_sources import PostmortemFailure
-from agent_comms.registry_document import RegisteredTeamProject
+from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.team.spinning import SpinningTeammate
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import DirectiveUnacted, OrderlessUnreviewedHead, RetiredStandingRule, ReviewTimerUp
@@ -41,7 +41,7 @@ from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.task_attachments.team_pings import TeamDecisions, TeamUpdate, RulePing
 from agent_comms.thread_model import DeclaredModel
-from agent_comms.threads import ForkThread, NativeThread
+from agent_comms.registry.threads import ForkThread, NativeThread
 from agent_comms.ui_model.teammate_state import AwaitingTeam
 from agent_comms.todos import ProgressRead, ReviewedHeadVerdict
 from agent_comms_hooks.board import (

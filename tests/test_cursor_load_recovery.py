@@ -15,7 +15,7 @@ from agent_comms.acp_extension import CursorAdvancedUpdate, decode_updates
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.owner_protocol import OwnerLine, OwnerUpdate
 from agent_comms.runtime_server import SocketClient
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 @pytest.fixture

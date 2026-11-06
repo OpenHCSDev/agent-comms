@@ -9,7 +9,7 @@ from agent_comms.messages import NO_HISTORY_SOURCE
 from agent_comms.messages import InfoKind, Message, PublicRecord
 from agent_comms.repo import Checkout
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def spans(text: str) -> list[str]:

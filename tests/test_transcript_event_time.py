@@ -12,7 +12,7 @@ from agent_comms.native_entries import NativeEntry, TranscriptProjection
 from agent_comms.routing import TurnRouting
 from agent_comms.transcript_events import AssistantTranscript
 from conftest import installed_comms
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 @pytest.mark.parametrize("stamp", ["2026-09-28T23:12:33.123Z", "2026-09-28T19:12:33.123-04:00"])

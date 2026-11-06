@@ -25,7 +25,7 @@ from .input_attempt import InputAlreadyCleared
 from .execution.input_drain import InputDrain
 from .native_input_proof import NativeContextProof
 from .reservation_rules import ReservationRule, ReservationViolationError
-from .threads import Thread
+from .registry.threads import Thread
 from .tool_denial import SelectedToolDenied
 from .turn_input_source import (
     OriginalTurnInput,
@@ -33,10 +33,10 @@ from .turn_input_source import (
 )
 
 from .reservation_rules import RuleCheck
-from .goal_waits import GoalWait
+from .planning.goal_waits import GoalWait
 from agent_comms.channel_coding_tools import OrdinaryContextCheck
 if TYPE_CHECKING:
-    from .registry_document import RegistrySnapshot
+    from .registry.registry_document import RegistrySnapshot
     from .turn_goal_permission import TurnGoalPermission
 
 _LOG = logging.getLogger(__name__)

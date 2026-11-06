@@ -17,7 +17,7 @@ from agent_comms.messages import AlertKind, InfoKind, Message, NoticeRole
 from agent_comms.execution.owned_turn import OwnedTurn
 from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.storage.private_path import FileRevision
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.turn_input_source import NoTurnAcceptance
 from bus_history import read_history
 from conftest import publish_initial

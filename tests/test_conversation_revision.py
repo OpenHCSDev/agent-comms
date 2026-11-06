@@ -13,7 +13,7 @@ from agent_comms.historical_views import (
 )
 from agent_comms.storage.private_path import FileRevision
 from bus_record_fixture import prepare_native_comms
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def declared_wire(root):

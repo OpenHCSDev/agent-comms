@@ -357,10 +357,10 @@ if TYPE_CHECKING:
     from .presentation import BusPresentation
     from .private_registry_guard import RegistryPrivacy
     from .read_ledger import ReadDocument, ReadLedger
-    from .registration import Registration
-    from .registry_document import RegistrySnapshot, UserThreadLookup
+    from .registry.registration import Registration
+    from .registry.registry_document import RegistrySnapshot, UserThreadLookup
     from .registry_provenance import RegistryProvenance
-    from .threads import Thread
+    from .registry.threads import Thread
 
 
 @dataclass(frozen=True, slots=True)

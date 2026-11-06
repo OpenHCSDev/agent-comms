@@ -28,7 +28,7 @@ from agent_comms.goal_states import (
 )
 from agent_comms.root_runtime import RootRuntime
 from conftest import installed_comms
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 @pytest.fixture

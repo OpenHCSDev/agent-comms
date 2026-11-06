@@ -26,7 +26,7 @@ from agent_comms.input_disposition import InputDispositions, InputDocument
 from agent_comms.lifecycle_capability import Unresolved
 from agent_comms.reported_turn import ReportedTurn
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from stored_inputs import insert_inputs, stored_inputs
 
 
@@ -194,7 +194,7 @@ def test_original_native_user_receipts_include_group_and_corrected_final_only(tm
     import os
 
     from agent_comms.child_process import ProcessIdentity
-    from agent_comms.registration import Registration
+    from agent_comms.registry.registration import Registration
 
     registry = Registration(tmp_path / "registry.json")
     registry.register(NativeThread('worker', frozenset(), Checkout(tmp_path), created_at=123.0, process_identity=ProcessIdentity.capture(os.getpid())))

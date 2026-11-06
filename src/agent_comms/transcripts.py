@@ -37,11 +37,11 @@ from .thread_presentation import ThreadPresentation
 from .storage.private_path import FileIdentity, FileObservation, FileRevision, MissingFile
 from .private_registry_guard import RegistryPrivacy
 from .recorded_bus import RecordedBusIdentity
-from .registration import Registration
-from .registry_store import RegistryStore
+from .registry.registration import Registration
+from .registry.registry_store import RegistryStore
 from .routing import TurnRouting
 from .sent_message import AssignedSourceIdentity
-from .threads import Thread, ThreadProvenance
+from .registry.threads import Thread, ThreadProvenance
 from .transcript_events import ForkOriginTranscript, ForkTaskTranscript, TranscriptEvent
 from .transcript_routes import TranscriptRoutes
 from .transcript_sources import (
@@ -63,7 +63,7 @@ if TYPE_CHECKING:
     from sqlite3 import Connection
 
     from .coordination.database import InvalidStore, MissingStore
-    from .registry_document import RegistrySnapshot
+    from .registry.registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
     from .thread_identity import ThreadIncarnation
     from .thread_text import ThreadParent, ThreadText

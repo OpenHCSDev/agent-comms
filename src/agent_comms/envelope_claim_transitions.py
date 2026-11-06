@@ -40,7 +40,7 @@ from .thread_identity import GenerationCounter, RecordedThreadIncarnation
 
 if TYPE_CHECKING:
     from .coordination.tables.attempts import AttemptRecord
-    from .registry_document import RegistrySnapshot
+    from .registry.registry_document import RegistrySnapshot
 
 if TYPE_CHECKING:
     pass

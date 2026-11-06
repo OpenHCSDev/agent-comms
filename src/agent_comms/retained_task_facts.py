@@ -22,9 +22,9 @@ from .text_digest import TextDigest
 if TYPE_CHECKING:
     from .bus import BusReader
     from .input_disposition import InputDispositions
-    from .registry_document import RegistrySnapshot
+    from .registry.registry_document import RegistrySnapshot
     from .thread_identity import ThreadIncarnation
-    from .threads import Thread
+    from .registry.threads import Thread
 
 
 class ExactTaskFact(DeclaredFamily, affix="TaskFact"):

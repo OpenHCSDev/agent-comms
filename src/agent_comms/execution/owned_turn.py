@@ -66,7 +66,7 @@ from dataclasses import field
 from ..turn_item import UsageChargeId
 from ..tools import CommsSetGoalTool
 from ..turn_lease import TurnLeaseFence
-from ..threads import NativeThread, Thread
+from ..registry.threads import NativeThread, Thread
 from agent_comms.pi_wire import PiUsage
 from ..comms import Comms
 if TYPE_CHECKING:

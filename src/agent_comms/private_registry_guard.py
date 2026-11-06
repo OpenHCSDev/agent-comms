@@ -55,7 +55,7 @@ if TYPE_CHECKING:
     from .historical_native_inputs import HistoricalNativeAnswers
     from .messages import MessageReference
     from .private_nk_entrypoint import RootLaunch
-    from .registry_document import RegistrySnapshot
+    from .registry.registry_document import RegistrySnapshot
     from .storage.typed_table import TableSchema
 
 _MAGIC = b"ACRG"

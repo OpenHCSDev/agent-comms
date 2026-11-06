@@ -55,7 +55,7 @@ from agent_comms.messages import ConversationRole, InfoKind, Message
 from agent_comms.transcript_events import IncomingTranscript
 from agent_comms.ui_model.message_category import HeartbeatCategory, InboundCategory, all_categories
 from agent_comms.repo import Checkout, UnpushedHead
-from agent_comms.threads import Thread, ForkThread, NativeThread
+from agent_comms.registry.threads import Thread, ForkThread, NativeThread
 from test_holder_standing_rules import state_cards
 from test_unit_state import recorded_turn
 

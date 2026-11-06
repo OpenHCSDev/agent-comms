@@ -34,7 +34,7 @@ from agent_comms.storage.store_files import ExclusiveLock
 from agent_comms.goal_states import ActiveGoal, PausedGoal
 from agent_comms.tools import CommsGoalHistoryTool
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def _wire(tmp_path) -> Comms:

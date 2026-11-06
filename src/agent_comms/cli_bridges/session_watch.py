@@ -23,7 +23,7 @@ from agent_comms_hooks.watch import (
     HeldSocketWatch, SessionCommandError, SessionEndpoint, SessionFailure, SocketWatch, WatchRecord,
 )
 
-from ..registry_store import RegistryStore
+from ..registry.registry_store import RegistryStore
 from ..storage.store_files import AtomicFile
 
 import agent_comms.cli_bridges

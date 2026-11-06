@@ -25,7 +25,7 @@ from agent_comms.peer_relevance import (
 )
 from agent_comms.relationships import RelationshipEdit
 from agent_comms.thread_text import ForkedParent
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.turn_context import CoordinationSegment, NextContextTurn, TurnContext
 from agent_comms.goal_scope import OneGoal
 

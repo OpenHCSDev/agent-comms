@@ -71,7 +71,7 @@ if TYPE_CHECKING:
     from .input_disposition import InputDispositions
     from .display_references import ReferenceContext
     from .retained_task_facts import ExactTaskFact
-    from .threads import Thread
+    from .registry.threads import Thread
 
 
 class BusTables(TypedTable, AppendOnlyTables, SharedFileTables, DurableTables, declared_name=None):

@@ -24,12 +24,12 @@ from .private_send_rules import (
 )
 from .reservation_rules import ReservationViolationError
 from .turn_goal_permission import GoalPermission, OwnerGoalPermission
-from .threads import NativeThread, Thread
+from .registry.threads import NativeThread, Thread
 
 if TYPE_CHECKING:
     from .goals import Goal
-    from .registration import Registration
-    from .registry_document import RegistrySnapshot
+    from .registry.registration import Registration
+    from .registry.registry_document import RegistrySnapshot
     from .turn_lease import TurnLeaseFence
 
 

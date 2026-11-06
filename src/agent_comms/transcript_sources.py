@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from .native_entries import TranscriptProjection
     from .native_output import NativeRecordLocation
     from .native_transcript import NativeRecord, NativeTranscript, SessionCut
-    from .threads import Thread, ThreadProvenance
+    from .registry.threads import Thread, ThreadProvenance
     from .transcript_events import TextTranscript, TranscriptEvent
     from .transcript_routes import TranscriptRoutes, _SessionRoutes
     from .transcripts import NativeTranscriptCursor, TranscriptCursor

@@ -26,7 +26,7 @@ from agent_comms.team.rule_file import RuleFile
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.held_orders import HeldOrders
 from agent_comms.pattern_sources import PostmortemFailure
-from agent_comms.registry_document import RegistrySnapshot
+from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.comms import Comms
 from agent_comms.cli_bridges.shared import Binding
 from agent_comms.rule_deal import (

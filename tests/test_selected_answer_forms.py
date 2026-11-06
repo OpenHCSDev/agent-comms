@@ -28,7 +28,7 @@ from agent_comms.coordination.coordinator import Coordination
 from agent_comms.messages import InfoKind
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.selected_source_batch import SelectedSource, SelectedSourceBatch
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux", reason="private cohort claim_scope requires real /var/tmp"

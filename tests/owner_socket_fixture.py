@@ -20,7 +20,7 @@ from agent_comms.comms import Comms
 from agent_comms.storage.private_path import PrivateSocketRole
 from agent_comms.repo import Checkout
 from agent_comms.owner_connection import socket_path
-from agent_comms.threads import NativeThread, Thread
+from agent_comms.registry.threads import NativeThread, Thread
 
 
 @pytest.fixture

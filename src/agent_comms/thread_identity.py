@@ -42,7 +42,7 @@ if TYPE_CHECKING:
     from .messages import Message
     from .read_ledger import ReadDocument, ReadLedger
     from .registry_provenance import RegistryProvenance
-    from .threads import Thread
+    from .registry.threads import Thread
     from .todos import Todo
 
 T = TypeVar("T")

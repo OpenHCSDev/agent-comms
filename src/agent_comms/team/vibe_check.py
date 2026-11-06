@@ -30,8 +30,8 @@ from agent_comms.goal_actions import (
 from agent_comms.errors import BirthChangedError
 from agent_comms.messages import Message
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.registry_document import RegistrySnapshot
-from agent_comms.threads import Thread
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.threads import Thread
 from agent_comms.task_attachments.owner_notices import ChokeholdNotice, EscalationNotice, VibeCheckNotice
 from agent_comms.standing_rules import (
     BlocksRelease,

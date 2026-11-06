@@ -68,12 +68,12 @@ from agent_comms.message_reference import (
     InboxStart,
     MessageReference,
 )
-from agent_comms.registration import Registration
+from agent_comms.registry.registration import Registration
 from agent_comms.runtime_updates import HiddenItem, ReplyingThreadOutput, RuntimeUpdate, ThreadOutput
 from agent_comms.transcript_publication import PublishesToBus, WaitsOnBusyStore
 from agent_comms.turn_item import NoSourceTurn, SourceTurn
 from agent_comms.send_result import SendResult
-from agent_comms.threads import ExternalThread
+from agent_comms.registry.threads import ExternalThread
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.task_attachments.team_pings import TeamUpdate
 from agent_comms.thread_status import ThreadStatus

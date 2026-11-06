@@ -6,7 +6,7 @@ from dataclasses import replace
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 from conftest import installed_comms
 from agent_comms.nominal.field_codec import TurnId
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def test_channel_assignments_are_visible_from_agent_view(tmp_path):  # noqa: F811

@@ -12,7 +12,7 @@ from .reservation_rules import ReservationRule, RuleCheck
 from .native_input_record import NativeInputIdentity, NativeInputRecord
 from .native_runtime_input import NativeRuntimeInput
 from .turn_goal_permission import GoalPermission
-from .threads import Thread
+from .registry.threads import Thread
 
 if TYPE_CHECKING:
     pass

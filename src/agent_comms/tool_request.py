@@ -25,7 +25,7 @@ from .nominal.field_codec import (
     ToolCallId,
 )
 from .native_tools import CoordinationCall, NativeToolDeclaration
-from .threads import ThreadCommandAvailability
+from .registry.threads import ThreadCommandAvailability
 from .tool_caller import NoThreadCaller, ThreadCaller, ToolCaller
 from .tool_declaration import NativeRequestTools
 from .tool_result import ToolResult

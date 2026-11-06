@@ -9,7 +9,7 @@ from agent_comms.channels import AnyChannel
 from agent_comms.connector_caller import DirectorCaller
 from agent_comms.message_notification import MessageNotification
 from agent_comms.presentation import SentMessageSummary
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.tool_declaration import NativeRequestTools
 from agent_comms.tools import invoke_tool
@@ -22,7 +22,7 @@ class TestToolCatalog:
         from agent_comms.native_arguments import NativeArguments
         from agent_comms.pi_vocabulary import ServiceTier
         from agent_comms.thread_catalog import ThreadCatalog
-        from agent_comms.threads import ChosenServiceTier, NextTurnConfiguration
+        from agent_comms.registry.threads import ChosenServiceTier, NextTurnConfiguration
 
         monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(tmp_path / "config"))
 

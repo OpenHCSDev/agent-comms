@@ -11,7 +11,7 @@ from ..thread_text import ThreadText
 
 if TYPE_CHECKING:
     from ..goal_management import Goals
-    from ..threads import Thread
+    from ..registry.threads import Thread
 
 
 class WakeGoalValue(SubclassUnion):

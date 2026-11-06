@@ -43,13 +43,13 @@ from agent_comms.installer.upgrade import (
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
 from agent_comms.messages import TeamUpdatePosition, Message
-from agent_comms.registry_store import RegistryStore
+from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.repo import ScratchCheckout
 from agent_comms.root_runtime import RootRuntime
 from agent_comms.storage_rules import StorageRule
 from agent_comms.storage.typed_table import ReconciledFile
 from conftest import declare_test_bus, publish_initial
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 

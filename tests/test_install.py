@@ -12,7 +12,7 @@ from pathlib import Path
 
 from agent_comms.storage.locked_store import LiveFilesRequest
 from agent_comms.nominal.field_codec import TurnId
-from agent_comms.threads import ParkedThreadWorkState, NativeThread
+from agent_comms.registry.threads import ParkedThreadWorkState, NativeThread
 
 from agent_comms.active_route import ActiveRoute, read_active_route, route_new_bus
 from agent_comms.child_process import NoProcess, ProcessIdentity
@@ -21,7 +21,7 @@ from agent_comms.recorded_bus import RecordedBusIdentity
 from bus_record_fixture import prepare_native_comms
 from agent_comms.comms import wire
 from agent_comms.team.config import GivenRepos
-from agent_comms.registry_document import NoTeamProject, RegisteredTeamProject
+from agent_comms.registry.registry_document import NoTeamProject, RegisteredTeamProject
 from agent_comms.installer.backup import bus_files
 from agent_comms.installer.carry import CarryChain
 from agent_comms.installer.practice import PracticeCopy

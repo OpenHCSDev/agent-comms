@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from .acp_extension import SelectedWriteAcceptedUpdate
     from .comms import Comms
     from .coordination.tables.assignments import WakeAssignment
-    from .threads import Thread
+    from .registry.threads import Thread
 
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.coordination.coordinator import Coordination

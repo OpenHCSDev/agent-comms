@@ -12,7 +12,7 @@ from agent_comms.nominal.field_codec import Normalize
 from agent_comms.nominal.field_codec import PathText
 from agent_comms.repo import RepositorySource, RepositoryReads
 from agent_comms.storage_rules import StorageRule
-from agent_comms.threads import Thread
+from agent_comms.registry.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
 from dataclasses import dataclass
 from pathlib import Path

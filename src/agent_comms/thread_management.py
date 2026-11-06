@@ -21,18 +21,18 @@ from agent_comms_hooks.process_claim import (
 from .channel_targets import DeclaredTag
 from .child_process import NO_PROCESS, ProcessIdentity, ProcessState
 from .cli_result import CliResult
-from .goal_waits import GoalWaits
+from .planning.goal_waits import GoalWaits
 from .native_entries import ImportedSessionWriter
 from .storage.locked_store import PatternFile, RuntimeFile
-from .registration import Registration
+from .registry.registration import Registration
 from .relationships import RelationshipStore
 from .repo import Checkout, LaunchCheckout
-from .threads import ExternalThread, NativeThread, KeptModel, ModelChoice, NextTurnConfiguration, Thread
+from .registry.threads import ExternalThread, NativeThread, KeptModel, ModelChoice, NextTurnConfiguration, Thread
 from .thread_status import StoppedThreadStatus
 from .view_unread import transcript_read_state
 
 if TYPE_CHECKING:
-    from .registry_store import RegistryEdit
+    from .registry.registry_store import RegistryEdit
     from .cli_bridges.history import History
     from .tool_caller import ThreadCaller
 from .agent_activity import AgentActivity

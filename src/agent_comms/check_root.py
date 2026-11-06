@@ -25,11 +25,11 @@ from .launch_runtime import ThreadLaunch
 from .native_entries import ImportedSessionWriter, NativeEntry
 from .native_session_files import CheckSession
 from .read_basis import MemberActivityDisplayScope
-from .registry_document import RosterVisibility
+from .registry.registry_document import RosterVisibility
 from .session_file import RegistrySessionLocation
 from .thread_text import NoThreadText
 from .repo import Checkout
-from .threads import Thread
+from .registry.threads import Thread
 from .transcript_routes import TranscriptRoutes
 from .turn_lease import NoTurnRecord
 

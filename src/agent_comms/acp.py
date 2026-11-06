@@ -92,7 +92,7 @@ from .runtime import RuntimeProxy
 from .selected_write_plan import SelectedWritePlans
 from .session_effects import SessionEffects
 from .execution.session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
-from .threads import Thread
+from .registry.threads import Thread
 from .turn_effects import TurnEffects
 from .turn_runner import TurnRunner
 from .working_memory_policy import AnnotationPolicy

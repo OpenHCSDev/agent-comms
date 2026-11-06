@@ -27,7 +27,7 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import invoke_tool
 from agent_comms.transcripts import EarlierThan, TranscriptRead
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.notification_assignment import AssignmentActivityEvidence
 from agent_comms.assignment_states import DeferredAssignment
@@ -40,7 +40,7 @@ from agent_comms.routing import MessageRoute, TurnRouting
 from agent_comms.transcript_sources import AssignedTranscriptSource
 from conftest import accept_initial, publish_initial
 from agent_comms.native_runtime_input import NativeRuntimeTable
-from agent_comms.registry_store import RegistryStore
+from agent_comms.registry.registry_store import RegistryStore
 
 
 def test_original_read_contention_is_unavailable_then_same_receipts_return(tmp_path):  # noqa: F811

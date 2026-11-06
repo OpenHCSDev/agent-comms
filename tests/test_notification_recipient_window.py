@@ -19,7 +19,7 @@ from agent_comms.notification_evidence import AfterRecipient, AllOutcomes, Owner
 from agent_comms.message_notification import MessageNotification
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.repo import Checkout
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.notification_reads import LiveNotificationRead
 from agent_comms.ui_model.observation import ReadNotifications
 from conftest import accept_initial, publish_initial

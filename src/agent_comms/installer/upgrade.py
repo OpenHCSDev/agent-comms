@@ -146,7 +146,7 @@ from agent_comms.storage.maintenance_barrier import (
     MaintenanceState,
 )
 from agent_comms.recorded_bus import RecordedBusIdentity
-from agent_comms.registry_store import RegistryStore
+from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.repo import Checkout, Repo
 from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
 from agent_comms.runtime_processes import RuntimeProcesses

@@ -79,7 +79,7 @@ def goal_refusals(comms) -> tuple[Exception, ...]:
     """Every goal refusal member, built the way Core builds it."""
     from agent_comms.goals import GoalChangedError, GoalConsentRequired, UnobservedGoalCheckpoint
     from agent_comms.repo import Checkout
-    from agent_comms.threads import Thread
+    from agent_comms.registry.threads import Thread
 
     comms.registry.declare(Thread("worker", frozenset(), Checkout(comms.root)))
     worker = comms.registry.require("worker")

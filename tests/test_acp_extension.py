@@ -46,7 +46,7 @@ from agent_comms.goal_presentation import IdleGoalExecution
 from agent_comms.goals import NoGoal
 from agent_comms.pi_wire import McpLiveAcknowledgement
 from agent_comms.thread_identity import ClaimedIdentity, RecordedThreadIncarnation
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.transcripts import NativeTranscriptCursor
 from agent_comms.storage.private_path import MissingFile
 from agent_comms.turn_context import ContextManifest, NextContextTurn

@@ -43,7 +43,7 @@ from ...nominal.declared_family import DeclaredFamily
 from ...nominal.field_codec import ThreadLookup, WireName
 from ...page_traversal import LatestSequence
 from ...presentation import WireRevision
-from ...registry_document import (
+from ...registry.registry_document import (
     ProjectThreadSelection,
     RegistryEntry,
     RegistrySlice,
@@ -58,10 +58,10 @@ from ...thread_identity import ClaimedIdentity, ThreadIncarnation
 from ...thread_management import ImportDirectory, ProjectChangeResult, RenameThreadResult
 from ...thread_presentation import ThreadPresentation
 from ...thread_text import ExpectedSession
-from ...threads import Thread
+from ...registry.threads import Thread
 from ...tool_result import ToolResult
 from ...transcripts import TranscriptCursor
-from ...transport.request import tool_field
+from ..request import tool_field
 from ...turn_context import CodexRolloutProvenance, ContextSourceText, Provenance, SegmentManifest
 from ...working_memory_labels import ModelLabel
 from ..request import ObservedRequest, ReadRequest, ToolRequest

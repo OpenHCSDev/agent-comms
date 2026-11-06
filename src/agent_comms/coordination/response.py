@@ -47,7 +47,7 @@ from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from agent_comms.private_registry_guard import RegistryPrivacy
 from agent_comms.private_send_rules import RunningTurnRegistryCheck
 from agent_comms.publisher import ResponseWrites
-from agent_comms.registry_document import RegistrySnapshot
+from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.storage.typed_table import (
     Column,
     ForeignKey,

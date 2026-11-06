@@ -17,7 +17,7 @@ from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.nominal.field_codec import RecordProblems
 from agent_comms.storage.locked_store import SQLiteFile
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 @pytest.mark.parametrize('error,expected', [

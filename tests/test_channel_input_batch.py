@@ -11,7 +11,7 @@ from agent_comms.input_key import AcpInputKey
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.messages import Message, InfoKind
 from stored_inputs import stored_inputs
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def test_channel_batch_exact_identity_and_no_false_multi_input_proof(tmp_path, *, thread_registration):

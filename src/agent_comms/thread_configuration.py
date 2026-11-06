@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .acp_extension import CoordinationChangedUpdate
 from .child_process import ProcessIdentity
-from .registration import Registration
+from .registry.registration import Registration
 from .thread_management import ThreadManagement
 from .agent_activity import AgentActivity
 

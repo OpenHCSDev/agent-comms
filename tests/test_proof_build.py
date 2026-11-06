@@ -55,7 +55,7 @@ from github_fixture import GitHubFixture
 import fixture_git
 from order_scope_fixture import FIX_SCOPE
 from source_revision_fixture import SourceRepository
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.work_branches import WorkBranches
 
 pytest_plugins = ("github_fixture",)

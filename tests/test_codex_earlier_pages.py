@@ -17,7 +17,7 @@ from agent_comms.comms import wire
 from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.external_transcript import ExternalItemRow
 from agent_comms.runtime_updates import ThreadOutput
-from agent_comms.threads import ExternalThread, NativeThread
+from agent_comms.registry.threads import ExternalThread, NativeThread
 from conftest import installed_comms
 
 

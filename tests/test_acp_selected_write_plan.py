@@ -35,7 +35,7 @@ from agent_comms.coordination.coordinator import Coordination
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.thread_model import DeclaredModel
 from native_backend_fixture import native_backend_fixture
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux" or Path("/var").is_symlink() or Path("/var/tmp").is_symlink(),

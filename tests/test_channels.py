@@ -34,13 +34,13 @@ from agent_comms.display_order import (
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import FieldCodec, TurnId
 from agent_comms.pi_vocabulary import HighThinkingLevel
-from agent_comms.registry_document import RosterVisibility
+from agent_comms.registry.registry_document import RosterVisibility
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.thread_management import ForkSpec, GivenTags
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_status import ArchivedThreadStatus, RunningThreadStatus, StoppedThreadStatus
 from agent_comms.thread_text import GivenThreadText
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.tools import invoke_tool
 from conftest import installed_comms

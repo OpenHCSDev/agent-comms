@@ -45,7 +45,7 @@ if TYPE_CHECKING:
     from .input_attempt import StoredInput
     from .presentation import ThreadView
     from .relationships import PeerRelation
-    from .threads import Thread
+    from .registry.threads import Thread
 
 
 @dataclass(frozen=True)

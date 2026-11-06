@@ -8,20 +8,20 @@ from pathlib import Path
 from agent_comms.nominal.field_codec import GoalId
 from .agent_activity import AgentActivity
 from .goal_attempts import GoalAttemptFile, GoalAttemptStore
-from .goal_waits import (
+from .planning.goal_waits import (
     GoalInputReview,
     GoalWaitRecovery,
     GoalWaitReview,
     GoalWaits,
 )
-from .registration import Registration
+from .registry.registration import Registration
 from .goal_presentation import GoalWaitTarget
 from .input_attempt import (
     ReservedInput,
 )
 from .input_disposition import InputDispositions
 from .message_bus import MessageBus
-from .threads import Thread
+from .registry.threads import Thread
 from .todos import TodoStore
 from typing import TYPE_CHECKING
 

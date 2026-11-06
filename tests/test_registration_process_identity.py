@@ -11,9 +11,9 @@ from agent_comms.child_process import NoProcess, ProcessIdentity, SpawnedProcess
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import TurnId
-from agent_comms.registry_document import RegistryDocument
+from agent_comms.registry.registry_document import RegistryDocument
 from agent_comms.runtime_requests import ProjectRuntimeRequest
-from agent_comms.threads import ExternalThread, ForkThread, NativeThread
+from agent_comms.registry.threads import ExternalThread, ForkThread, NativeThread
 from agent_comms.storage.maintenance_barrier import (
     InstallingPhase, MaintenanceHeldError, MaintenanceOperator, PausedPhase,
 )

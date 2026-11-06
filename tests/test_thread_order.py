@@ -7,7 +7,7 @@ from agent_comms.activity import Activity, ActivityState
 from agent_comms.comms import wire
 from conftest import installed_comms
 from agent_comms.messages import Message, InfoKind
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_caller import ThreadCaller
 
 

@@ -11,7 +11,7 @@ from agent_comms.nominal.field_codec import RestartId
 from agent_comms.launch_runtime import RestartEnvironment
 from agent_comms.execution.owner_lifecycle import OwnerRestartSelection
 from agent_comms.repo import Checkout
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 @pytest.fixture
 def dead_owner_restart(private_comms):

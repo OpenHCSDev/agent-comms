@@ -19,7 +19,7 @@ from .nominal.field_codec import (
     ContextStoreId, FieldCodec, MalformedRecord, NullMember, TaggedRecordMember,
 )
 from .native_session_reopen import NativeSessionIdentity
-from .registration import Registration
+from .registry.registration import Registration
 from .thread_identity import ThreadIncarnation
 from .turn_context import (
     ContextEntryManifest,

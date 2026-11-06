@@ -52,7 +52,7 @@ from agent_comms.turn_context import RecordedContextManifest
 from agent_comms_hooks import ToolRefusedError
 from observed_queue import ObservedQueue
 from test_turn_context_wire import corrupt_context_kind, manifest
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 @dataclass(frozen=True)

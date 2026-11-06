@@ -9,14 +9,14 @@ from .activity_clocks import ActivityClocks
 from typing import TYPE_CHECKING
 
 from .registry_provenance import RegistryProvenance
-from .registry_document import RegistrySnapshot
+from .registry.registry_document import RegistrySnapshot
 from .read_ledger import ReadDocument, ReadLedger
 from .catalog_document import CatalogDocument
 if TYPE_CHECKING:
     from .bus import BusSnapshot
     from .catalog_store import ChannelCatalog
     from .channels import Channels
-    from .registration import Registration
+    from .registry.registration import Registration
 
 
 @dataclass(frozen=True, slots=True)

@@ -6,7 +6,7 @@ from agent_comms.cli_commands import ThreadConfiguredResult
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import Comms
 from agent_comms.config_options import ConfigOptions
-from agent_comms.threads import NextTurnConfiguration
+from agent_comms.registry.threads import NextTurnConfiguration
 from dataclasses import dataclass
 import asyncio
 

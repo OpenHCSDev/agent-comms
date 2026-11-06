@@ -14,7 +14,7 @@ from agent_comms.agent_backend import NoInputStartListener
 from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.selected_actions import NoSelectedTools
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 async def one_turn_events(agent_bin, agent_args, task, cwd, env_extra=None,

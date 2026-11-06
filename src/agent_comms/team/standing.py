@@ -47,7 +47,7 @@ from agent_comms.owner_requests import OwnerRequestId
 from agent_comms.plan_reading import PlanReading
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.registry_document import DEFAULT_ROSTER, RegistrySnapshot
+from agent_comms.registry.registry_document import DEFAULT_ROSTER, RegistrySnapshot
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.service_passes import ServicePassStore, TeamPass
@@ -63,7 +63,7 @@ from agent_comms.standing_rules import (
     UndatedStandingRule,
 )
 from agent_comms.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
-from agent_comms.threads import Thread
+from agent_comms.registry.threads import Thread
 from agent_comms.todos import (
     Assignment,
     OwnerRequest,

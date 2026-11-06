@@ -35,7 +35,7 @@ if TYPE_CHECKING:
     from agent_comms.goal_management import GoalExecutionSource
     from .goal_presentation import GoalExecution
     from .goals import Goal
-    from .threads import NativeThread
+    from .registry.threads import NativeThread
 
 
 @dataclass(frozen=True)

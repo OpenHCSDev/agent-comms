@@ -2,7 +2,7 @@
 
 from agent_comms.repo import Checkout
 from agent_comms.channel_targets import CommandTarget
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def test_rename_alias_and_real_thread_named_broadcast_match_existing_scope(wired):

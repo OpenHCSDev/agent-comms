@@ -12,7 +12,7 @@ from agent_comms.messages import Message, MessageInput, MessageKind, NeedsAnswer
 from agent_comms.read_basis import RepliesDisplayScope
 
 if TYPE_CHECKING:
-    from agent_comms.registry_document import RegistrySnapshot
+    from agent_comms.registry.registry_document import RegistrySnapshot
     from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.todos import Todo
 

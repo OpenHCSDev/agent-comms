@@ -15,8 +15,8 @@ if TYPE_CHECKING:
     from .storage.maintenance_barrier import MaintenanceState
     from .execution.owner_lifecycle import OwnerLifecycle, OwnerRestartResult, OwnerRestartSelection
     from .owner_restart import OwnerRestartRequest, StoppedOwnerBatch, StoppedOwnerFailure
-    from .registry_document import RegistrySnapshot
-    from .threads import Thread
+    from .registry.registry_document import RegistrySnapshot
+    from .registry.threads import Thread
 
 
 class OwnerCutover(ABC):

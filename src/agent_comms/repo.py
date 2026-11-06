@@ -29,7 +29,7 @@ from .repository_name import RepositoryName
 
 if TYPE_CHECKING:
     from .storage_rules import StorageRule
-    from .threads import Thread
+    from .registry.threads import Thread
 
 
 class RepositorySelection(ABC):

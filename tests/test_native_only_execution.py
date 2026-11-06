@@ -13,7 +13,7 @@ from acp.schema import TextContentBlock
 import agent_comms.agent_events as events
 from agent_comms.acp_extension import CoordinationChangedUpdate, decode_updates
 from agent_comms.launch_root import LaunchRoot
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from bus_history import read_history
 from bus_record_fixture import prepare_native_comms
 from pi_session_turn import one_turn_events

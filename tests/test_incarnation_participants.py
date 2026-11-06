@@ -11,7 +11,7 @@ from agent_comms.coordination.tables.participants import Participants
 from agent_comms.participant_store import ParticipantStore
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
 from agent_comms.thread_text import GivenThreadText
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from bus_record_fixture import UNRELATED_LOOKUP
 
 

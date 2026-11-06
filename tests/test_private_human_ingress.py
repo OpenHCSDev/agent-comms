@@ -34,7 +34,7 @@ from agent_comms.read_basis import NamedViewer
 from agent_comms.task_sources import TaskAttachment
 from agent_comms.thread_identity import RecordedThreadIncarnation, UserThreadRole
 from bus_record_fixture import prepare_native_comms
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 pytestmark = pytest.mark.skipif(
     os.name != "posix", reason="private bus requires POSIX owner/directory durability"

@@ -27,13 +27,13 @@ from .started_input import StartedInput
 from .transcript_routes import DisplayText, NoDisplayText, SentInputText
 
 from .reservation_rules import ReservationRule, RuleCheck
-from .registry_document import RegistrySnapshot
-from .threads import Thread
+from .registry.registry_document import RegistrySnapshot
+from .registry.threads import Thread
 if TYPE_CHECKING:
     from .acp_extension import QueueScope
     from .comms import Comms
     from .controller import Controller
-    from .goal_waits import GoalWait
+    from .planning.goal_waits import GoalWait
     from .goals import GoalDeclaration
     from .input_disposition import InputDispositions
     from .execution.input_drain import DrainedSession, InputDrain

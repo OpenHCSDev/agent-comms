@@ -13,7 +13,7 @@ from .hook_read_gate import GatedCall
 from agent_comms_hooks.skill import DeckStart
 from ..comms import Comms
 from agent_comms_hooks.skill import DeckReader
-from ..registry_document import RegistrySnapshot
+from ..registry.registry_document import RegistrySnapshot
 from ..coordination.tables.board_delivery import ReaderBoardDelivery
 from .shared import Binding
 

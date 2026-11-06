@@ -27,7 +27,7 @@ from agent_comms.channel_targets import ChannelTarget, NamedTarget
 from agent_comms.child_process import AsyncWork
 from agent_comms.native_build_inputs import GitLaunch
 from agent_comms.channels import AnyChannel, Channel
-from agent_comms.registry_document import RegistrySnapshot
+from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.context_segments.awareness import AwarenessSegment
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -54,9 +54,9 @@ from .watched import FileSource
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
-    from agent_comms.registration import Registration
+    from agent_comms.registry.registration import Registration
     from agent_comms.relationships import PeerRelation
-    from agent_comms.threads import Thread
+    from agent_comms.registry.threads import Thread
 
 
 class Watch(AsyncWork, FreshIngress, DeclaredFamily, ABC):

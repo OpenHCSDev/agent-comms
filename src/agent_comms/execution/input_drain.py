@@ -58,14 +58,14 @@ from ..storage.locked_store import GoalWakeFile
 from ..native_input_owner import RegistryOwner
 from ..proven_source_coverage import SourcePrefix
 from ..queued_input import DeliveredInput, InputHandoffRefused, QueuedInput
-from ..registry_document import RegistryDocument, RegistryEntry
-from ..registry_store import RegistryEntryRevision
+from ..registry.registry_document import RegistryDocument, RegistryEntry
+from ..registry.registry_store import RegistryEntryRevision
 from ..routing import ScheduledTurn
 from ..runtime_server import RuntimeServer
 from ..owner_launch import OwnerRetiredReply, StopOwnerRuntimeRequest
 from .session_lifecycle import SessionLifecycle
 from ..thread_identity import ClaimedIdentity, OwnerIdentity
-from ..threads import NativeThread, Thread
+from ..registry.threads import NativeThread, Thread
 from ..turn_context import TurnContext, UserFollowupSegment
 from ..turn_input_source import AcceptedFollowingInput, OriginalTurnInput
 from ..turn_terminal import OwnerStop

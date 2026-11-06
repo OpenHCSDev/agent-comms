@@ -41,7 +41,7 @@ from agent_comms.message_reference import MessageReference
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
 from agent_comms.repo import Checkout
 from agent_comms.thread_status import ConnectedThreadStatus, NoBridgeThreadStatus
-from agent_comms.threads import ExternalThread, NativeThread
+from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.cli_bridges.shared import MonitorReadFile
 from agent_comms.tools import CommsInboxTool

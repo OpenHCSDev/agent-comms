@@ -66,7 +66,7 @@ from agent_comms.watched import Watched
 
 if TYPE_CHECKING:
     from .read_selection import DisplayUnreadSelection
-    from agent_comms.registry_document import RegistrySnapshot
+    from agent_comms.registry.registry_document import RegistrySnapshot
 
 
 class ClaimRecord(PublicRecord, ClaimMessage):

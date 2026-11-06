@@ -21,8 +21,8 @@ from .goals import (
     NonExecutableMentionBinding,
     ResolvedMentionBinding,
 )
-from .registry_document import RegistrySnapshot
-from .threads import Thread
+from .registry.registry_document import RegistrySnapshot
+from .registry.threads import Thread
 
 # Unlike message mentions, a dotted/path/email suffix must not yield a partial
 # thread name. Aliases are diagnostics at authoring, not new peer identities.

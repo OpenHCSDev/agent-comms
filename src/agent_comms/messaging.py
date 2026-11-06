@@ -25,7 +25,7 @@ from .coordination.session import NativeCapture
 from .external_transcript import ExternalTranscript
 from .turn_item import NoSourceTurn, SourceTurn
 from .messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole, NoticeRole
-from .registration import Registration
+from .registry.registration import Registration
 from .send_result import CorrectionComplete, CorrectionFailed, CorrectionResult, SendResult
 from .task_sources import (
     CurrentTaskScopeSelection,
@@ -38,7 +38,7 @@ from .task_sources import (
     TaskScopeSelection,
 )
 from .repo import Checkout
-from .threads import Thread
+from .registry.threads import Thread
 from .working_memory_policy import AnnotationDisclosureGrant
 from .turn_context import ContextSegment
 

@@ -33,7 +33,7 @@ from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript,
 from agent_comms.read_basis import NamedViewer
 from agent_comms.thread_management import ForkSpec
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.threads import ChosenModel, NextTurnConfiguration, NativeThread
+from agent_comms.registry.threads import ChosenModel, NextTurnConfiguration, NativeThread
 from agent_comms.thread_text import ForkedParent, GivenThreadText
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_status import ArchivedThreadStatus, HeartbeatThreadStatus, RunningThreadStatus, StoppedThreadStatus

@@ -10,7 +10,7 @@ from agent_comms.goal_states import ModelPause, PausedGoal
 from agent_comms.goals import NoGoal
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.repo import Checkout
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import invoke_tool
 

@@ -5,11 +5,11 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
-from agent_comms.registration import Registration
-from agent_comms.registry_document import UnreadRegistry
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.registry_document import UnreadRegistry
 from agent_comms.repo import Checkout
 from agent_comms.thread_text import ForkedParent, GivenThreadText
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def registry_with_a_fork(root: Path) -> Registration:
@@ -92,7 +92,7 @@ WRITE_TITLE = """
 import sys
 from dataclasses import replace
 from pathlib import Path
-from agent_comms.registration import Registration
+from agent_comms.registry.registration import Registration
 from agent_comms.thread_text import GivenThreadText
 registry = Registration(Path(sys.argv[1]))
 registry.register(replace(registry.require(sys.argv[2]), title=GivenThreadText(sys.argv[3])))

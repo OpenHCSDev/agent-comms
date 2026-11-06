@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from .errors import UnregisteredThreadError
-from .registration import Registration
+from .registry.registration import Registration
 from .shared_ledger import SharedLedger
 
 

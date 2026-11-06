@@ -55,9 +55,9 @@ from .ui_model.goal import GoalDisplay
 if TYPE_CHECKING:
     from .goal_actions import GoalAction, GoalActionContext
     from .goal_presentation import GoalExecution
-    from .goal_waits import GoalWaits
+    from .planning.goal_waits import GoalWaits
     from .task_sources import TaskScope
-    from .threads import Thread
+    from .registry.threads import Thread
     from .turn_context import TurnContext
 
 if TYPE_CHECKING:

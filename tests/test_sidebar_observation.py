@@ -18,11 +18,11 @@ from agent_comms.display_references import (
 )
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.historical_views import HistorySource
-from agent_comms.registry_document import HistoricalRootPurpose, ThreadRows
+from agent_comms.registry.registry_document import HistoricalRootPurpose, ThreadRows
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.ui_model.sidebar import SidebarModel
 from agent_comms.ui_model.unread import ExactUnread, UnobservedUnread
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def test_sidebar_apply_and_failure_publish_their_original_answers(comms):

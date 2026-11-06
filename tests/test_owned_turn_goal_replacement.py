@@ -29,7 +29,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Checkout
 from agent_comms.repository_name import RepositoryName
 from agent_comms.reservation_rules import ReservationViolationError
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.turn_input_source import NoTurnAcceptance
 from compaction_loopback import LoopbackProvider
 from conftest import answer_rules, declare_team, installed_comms

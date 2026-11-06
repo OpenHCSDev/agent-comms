@@ -33,7 +33,7 @@ from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.restart_scope import OwnersNamed
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.turn_lease import NoTurnRecord
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from bus_history import read_history
 from bus_record_fixture import configure_local_native, prepare_native_comms, start_source_owner
 

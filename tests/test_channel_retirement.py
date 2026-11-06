@@ -18,7 +18,7 @@ from agent_comms.messages import InfoKind, Membership, Message
 from agent_comms.page_traversal import LiveCursor
 from bus_history import read_history
 from test_private_human_ingress import _root
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def saved_catalog(root):

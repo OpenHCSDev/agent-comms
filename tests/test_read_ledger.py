@@ -32,7 +32,7 @@ from agent_comms.read_ledger import (
 )
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from bus_record_fixture import prepare_native_comms
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def prepared(root):

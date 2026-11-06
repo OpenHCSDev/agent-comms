@@ -19,10 +19,10 @@ from .nominal.declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
 from .message_bus import MessageBus
 from .messages import InfoKind, MembershipConversationRole, Message
-from .registration import Registration
+from .registry.registration import Registration
 from .thread_identity import ThreadIncarnation
 from .thread_management import ChangedTags, GivenTags
-from .threads import Thread
+from .registry.threads import Thread
 
 if TYPE_CHECKING:
     from .catalog_document import CatalogDocument

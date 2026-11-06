@@ -13,7 +13,7 @@ from agent_comms.shell_effects import WriteStorageEffect
 from agent_comms.tool_denial import StorageDenied
 from agent_comms.storage_rules import CheckoutAllocation, EditableCheckoutAllocation, StorageRule
 from agent_comms.storage_projection import StorageProjection
-from agent_comms.threads import ExternalThread
+from agent_comms.registry.threads import ExternalThread
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.todos import Assignment, IncomingWork, SharedWorktreeRefusal
 from agent_comms.tool_caller import ThreadCaller

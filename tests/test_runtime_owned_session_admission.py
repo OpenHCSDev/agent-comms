@@ -22,7 +22,7 @@ from agent_comms.owner_protocol import OwnerFailure, OwnerLine
 from agent_comms.storage.private_path import PrivateSocketRole
 from agent_comms.owner_connection import socket_path
 from agent_comms.runtime_requests import GoalHistoryRuntimeRequest
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 @pytest.mark.skipif(os.name == "nt", reason="original Unix owner socket")

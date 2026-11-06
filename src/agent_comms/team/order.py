@@ -79,7 +79,7 @@ from agent_comms.plan_phases import OrderPhase, PlanPhase
 from agent_comms.notification_evidence import AllOutcomes
 from agent_comms.message_notification import MessageNotification
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.registry_document import RegisteredTeamProject
+from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.repo import Repo, RepositoryReads
 from agent_comms.repository_name import RepositoryName
 from agent_comms.team_hud import TeamPlanDocument

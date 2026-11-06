@@ -9,10 +9,10 @@ from shutil import copytree
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import TurnId
-from agent_comms.registry_store import RegistryStore
+from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def test_copied_registry_resolves_turn_from_its_new_location(tmp_path):

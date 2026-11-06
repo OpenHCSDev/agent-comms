@@ -10,7 +10,7 @@ from agent_comms.nominal.field_codec import GoalId
 from .goal_authority import GoalTurnAuthority
 
 if TYPE_CHECKING:
-    from .goal_waits import GoalWait
+    from .planning.goal_waits import GoalWait
     from .goals import GoalDeclaration
     from .turn_input_source import InputDependency
 

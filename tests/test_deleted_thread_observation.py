@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 from agent_comms import activity
 from agent_comms.activity import ActivityState, ObservedActivity
-from agent_comms.registry_document import DEFAULT_ROSTER
+from agent_comms.registry.registry_document import DEFAULT_ROSTER
 from agent_comms.registry_provenance import DeletedThread
 from agent_comms.thread_presentation import ThreadRetired
 from agent_comms.thread_presentation import NoThreadPresentation
@@ -19,7 +19,7 @@ from agent_comms.ui_model.observation import (
 )
 from agent_comms.ui_model.status import OpenThreadStatus
 from observed_queue import ObservedQueue
-from agent_comms.threads import ExternalThread, NativeThread
+from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.thread_text import GivenThreadText
 
 

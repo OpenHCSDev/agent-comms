@@ -42,7 +42,7 @@ from .selected_tool_broker import (
 from .tool_denial import StorageDenied
 from .storage_projection import StorageProjection
 from .storage_room import NoRoomNeeded, RoomReservation
-from .threads import Thread
+from .registry.threads import Thread
 from .thread_identity import OfferedTools
 from .tool_denial import SelectedToolDenied
 from .turn_goal_permission import TurnGoalPermission
@@ -51,7 +51,7 @@ from .reservation_rules import ReservationRule, ReservationViolationError
 from .turn_input_source import TurnInputSource
 from .reservation_rules import RuleCheck
 from .goals import GoalDeclaration
-from .goal_waits import GoalWait
+from .planning.goal_waits import GoalWait
 if TYPE_CHECKING:
     from .backend import TurnSession
     from .coordination.tables.assignments import WakeAssignment

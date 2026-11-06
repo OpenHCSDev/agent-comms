@@ -4,7 +4,7 @@ from agent_comms.active_route import CommsRoute
 from agent_comms.cli_command import CliCommand
 from agent_comms.cli_commands import BusReadBack
 from agent_comms.comms import Comms
-from agent_comms.registry_store import RegistryStore
+from agent_comms.registry.registry_store import RegistryStore
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO

@@ -39,7 +39,7 @@ from .text_digest import TextDigest
 from .thread_identity import GenerationCounter, ThreadIncarnation
 
 if TYPE_CHECKING:
-    from .registry_document import RegistrySnapshot
+    from .registry.registry_document import RegistrySnapshot
     from .turn_lease import TurnLeaseFence
 
 

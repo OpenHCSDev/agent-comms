@@ -49,7 +49,7 @@ from .goal_states import (
     PauseSource,
     RuntimePause,
 )
-from .goal_waits import GoalInputReview, GoalWaits, RecordedGoalWait
+from .planning.goal_waits import GoalInputReview, GoalWaits, RecordedGoalWait
 from .lifecycle_capability import Settled
 from .owner_requests import OwnerRequestId
 from .progress_claims import ProgressClaim
@@ -57,9 +57,9 @@ from .recorded_time import EventTime
 from .change_report import CitationProject
 from .repository_name import RepositoryName
 from .thread_identity import CoreWatcherIncarnation, ThreadIncarnation
-from .threads import Thread
+from .registry.threads import Thread
 from .reported_turn import ReportedTurnState
-from .registry_store import RegistryEdit
+from .registry.registry_store import RegistryEdit
 from .attempt_resolution import ComplianceDecision, OrderDecision, RetryDecision
 from .owner_connection import CapturedOwner
 from .runtime_server import AttachedRuntimeRequest
@@ -67,7 +67,7 @@ from pydantic import JsonValue
 
 if TYPE_CHECKING:
     from .goal_management import Goals
-    from .registry_document import TeamProject
+    from .registry.registry_document import TeamProject
     from .goal_presentation import GoalSnapshot
 
 

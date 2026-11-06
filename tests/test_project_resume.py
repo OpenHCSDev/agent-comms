@@ -17,7 +17,7 @@ from agent_comms.nominal.field_codec import FieldCodec, TurnId
 from agent_comms.messages import Message, InfoKind
 from agent_comms.turn_phase import CancellingPhase
 from native_backend_fixture import native_backend_fixture
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def declared_owner(tmp_path):

@@ -18,7 +18,7 @@ from agent_comms.storage_projection import StorageProjection
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import StorageRule
-from agent_comms.threads import ExternalThread, NativeThread, Thread
+from agent_comms.registry.threads import ExternalThread, NativeThread, Thread
 from cli_command import core_process
 from source_revision_fixture import SourceRepository
 

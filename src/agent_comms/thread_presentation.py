@@ -20,7 +20,7 @@ import agent_comms.session_load as session_load
 if TYPE_CHECKING:
     from .presentation import MessageNotification
     from .transcripts import AcquiredThreadPresentation, TranscriptReadIdentity
-    from agent_comms.registry_document import RegistrySnapshot
+    from agent_comms.registry.registry_document import RegistrySnapshot
     from agent_comms.transcripts import Transcripts
 
 

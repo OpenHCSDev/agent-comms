@@ -11,7 +11,7 @@ from .nominal.field_codec import ClaimId
 if TYPE_CHECKING:
     from .coordination.tables.assignments import WakeAssignment
     from .selected_actions import SelectedAction
-    from .threads import Thread
+    from .registry.threads import Thread
 
 
 class SelectedWriteAuthority(ABC):

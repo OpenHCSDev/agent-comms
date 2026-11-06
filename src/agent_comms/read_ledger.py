@@ -41,9 +41,9 @@ if TYPE_CHECKING:
     from .bus_publication import Delivered
     from .messages import Message
     from .read_basis import MessageDisplayScope
-    from .registry_document import RegistrySnapshot
+    from .registry.registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
-    from .threads import Thread
+    from .registry.threads import Thread
 
 
 class ReadNotice(SubclassUnion, affix="ReadNotice"):

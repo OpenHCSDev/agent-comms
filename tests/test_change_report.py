@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.channel_targets import CommandTarget
-from agent_comms.registry_document import NoTeamProject
+from agent_comms.registry.registry_document import NoTeamProject
 from agent_comms.change_report import OrderRoots
 from agent_comms.change_report import ChangedFact, ChangeReport, FileLine
 from agent_comms.errors import MissingSourceLine
@@ -20,7 +20,7 @@ from agent_comms.messages import (
     AckKind, AlertKind, ChangeReportKind, HandoffKind, InfoKind, Message,
     MessageKind, QuestionKind,
 )
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def git(worktree, *arguments):

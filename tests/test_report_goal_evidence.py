@@ -13,7 +13,7 @@ from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import ProblemGoalOrder
 from agent_comms.progress_claims import ProgressClaim, ReportClaim
 from agent_comms.repo import Checkout
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsGoalTool
 from agent_comms.turn_context import FileProvenance

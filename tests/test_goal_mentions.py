@@ -28,7 +28,7 @@ from agent_comms.goals import (
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.tools import invoke_tool
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.goal_scope import OneGoal
 
 

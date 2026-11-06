@@ -39,7 +39,7 @@ from .repo import Checkout, CheckoutStart, LocalRepositorySource, Repo, Reposito
 from .storage_projection import StorageProjection
 from .shell_effects import AcquireRepositoryStorageEffect, CreateCheckoutStorageEffect, RemoveCheckoutStorageEffect
 from .thread_model import ThreadModel
-from .threads import Thread
+from .registry.threads import Thread
 from .todos import Todo
 from .head_review import PullRequestHead
 from .turn_context import CodexRolloutProvenance, ContextManifest, ContextSegment, ContributionCoordinates, Provenance, TurnContext

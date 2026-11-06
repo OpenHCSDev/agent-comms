@@ -23,9 +23,9 @@ from .read_basis import AllChannelDisplayScope, ChannelDisplayScope, MemberActiv
 from .tool_result import ToolResult
 
 if TYPE_CHECKING:
-    from .registry_document import RosterVisibility
+    from .registry.registry_document import RosterVisibility
     from .registry_provenance import RegistryProvenance
-    from .threads import Thread
+    from .registry.threads import Thread
 
 
 class ChannelMemberIndex(dict[str, tuple["Thread", ...]]):

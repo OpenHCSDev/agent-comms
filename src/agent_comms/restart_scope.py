@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING
 from agent_comms.nominal.field_codec import NullMember, SingleFieldValue, SubclassUnion
 
 if TYPE_CHECKING:
-    from agent_comms.registry_document import RegistrySnapshot
-    from agent_comms.threads import Thread
+    from agent_comms.registry.registry_document import RegistrySnapshot
+    from agent_comms.registry.threads import Thread
 
 
 class RestartScope(ABC):

@@ -5,10 +5,10 @@ from pathlib import Path
 import pytest
 
 from agent_comms.display_references import CurrentDisplayReferences
-from agent_comms.registration import Registration
+from agent_comms.registry.registration import Registration
 from agent_comms.repo import Checkout
-from agent_comms.registry_document import ThreadRows
-from agent_comms.threads import ExternalThread
+from agent_comms.registry.registry_document import ThreadRows
+from agent_comms.registry.threads import ExternalThread
 
 
 def test_references_name_every_identity_without_decoding_a_row(

@@ -43,7 +43,7 @@ from agent_comms.child_process import ProcessIdentity, ResidentMemory
 from agent_comms.root_runtime import RootRuntimeStore
 from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.threads import Thread
+from agent_comms.registry.threads import Thread
 from agent_comms.todos import (
     HeadVerdict,
     MergeBlock,
@@ -64,7 +64,7 @@ if TYPE_CHECKING:
     from agent_comms.comms import Comms
     from agent_comms.goal_management import Goals
     from agent_comms.heartbeat_frame import HeartbeatFrame
-    from agent_comms.registry_document import RegistrySnapshot
+    from agent_comms.registry.registry_document import RegistrySnapshot
     from agent_comms.todos import (
         OrderClaim,
         OwnerRequest,

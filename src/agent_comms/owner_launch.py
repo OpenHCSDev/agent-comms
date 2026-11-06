@@ -15,7 +15,7 @@ from .coordination.coordinator import Coordination
 from .errors import RelationViolationError
 from . import launch_runtime
 from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary, NativeArguments
-from .registry_document import RegistryEntry, RegistrySnapshot
+from .registry.registry_document import RegistryEntry, RegistrySnapshot
 from .nominal.field_codec import AcpSessionId, FieldCodec
 from agent_comms.runtime_server import (
     AttachedResultRuntimeRequest, AttachedRuntimeRequestContext, ResultRuntimeRequest,
@@ -25,11 +25,11 @@ from .owner_connection import OwnerConnection
 from .thread_identity import ClaimedIdentity, OwnerIdentity
 from .tool_result import DeclaredReply
 from .tool_result import ToolResult
-from .registry_store import RegistryReadCounts
+from .registry.registry_store import RegistryReadCounts
 
 if TYPE_CHECKING:
     from .execution.owner_lifecycle import OwnerRestartSelection
-    from .threads import Thread
+    from .registry.threads import Thread
     from .execution.session_lifecycle import SessionLifecycle
     from .execution.input_drain import OwnerSession
 

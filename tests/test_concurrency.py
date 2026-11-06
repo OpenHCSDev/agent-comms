@@ -22,7 +22,7 @@ from agent_comms.pi_counts import PiCount
 from bus_history import read_history
 from conftest import installed_comms
 from agent_comms.thread_model import DeclaredModel
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def _send_messages(root: str, sender: str, count: int, start: Event) -> None:

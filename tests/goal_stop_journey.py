@@ -20,7 +20,7 @@ from agent_comms.native_arguments import GivenArguments
 from native_backend_fixture import native_backend_fixture, wait_for
 from source_programs import SourcePrograms
 from agent_comms.thread_identity import NoObservedTurn
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 async def stopped_goal_journey(

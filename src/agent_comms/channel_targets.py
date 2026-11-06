@@ -39,10 +39,10 @@ if TYPE_CHECKING:
         DMDisplayScope,
         MessageDisplayScope,
     )
-    from .registry_document import RegistrySnapshot, ResolvedChannel, ResolvedThread
+    from .registry.registry_document import RegistrySnapshot, ResolvedChannel, ResolvedThread
     from .registry_provenance import RegistryProvenance
     from .response_policy import ResponsePolicy
-    from .threads import Thread
+    from .registry.threads import Thread
 
 
 class ChannelSelection(SubclassUnion, affix="Channel"):

@@ -31,12 +31,12 @@ from .owner_release import OwnerCompletion
 from .restart_refusals import OwnerSelectionChangedRefusal
 from .restart_scope import AllOwners, RestartScope
 from .thread_identity import ThreadAuthority
-from .threads import Thread
+from .registry.threads import Thread
 
 if TYPE_CHECKING:
     from .owner_cutover import OwnerCutover
-    from .registry_document import RegistrySnapshot
-    from .registry_store import RegistryEdit
+    from .registry.registry_document import RegistrySnapshot
+    from .registry.registry_store import RegistryEdit
 
 
 @dataclass(frozen=True)

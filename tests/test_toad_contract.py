@@ -14,7 +14,7 @@ from agent_comms.acp_extension import CoordinationChangedUpdate, TextRouteUpdate
 from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import AcpSessionId, TurnId
 from agent_comms.routing import MessageRoute
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.native_arguments import GivenBinary
 
 

@@ -12,7 +12,7 @@ from bus_record_fixture import FIRST_INPUT_ID, SECOND_INPUT_ID
 from conftest import installed_comms
 from agent_comms.coordination.errors import StaleRevision
 from agent_comms.thread_text import ForkedParent, GivenThreadText
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.transcript_routes import NoDisplayText
 
 

@@ -22,13 +22,13 @@ from .storage.maintenance_barrier import MaintenanceHolder
 from .owner_protocol import OwnerLine
 from .storage.private_path import PrivateSocketRole
 from .thread_identity import OwnerIdentity, ThreadIncarnation
-from .threads import NativeThread, Thread
+from .registry.threads import NativeThread, Thread
 
 if TYPE_CHECKING:
     from agent_comms.runtime_server import RuntimeRequest
     from .child_process import ProcessIdentity
     from .comms import Comms
-    from .registry_document import RegistryEntry
+    from .registry.registry_document import RegistryEntry
 
 
 def socket_path(root: Path, pid: int) -> Path:

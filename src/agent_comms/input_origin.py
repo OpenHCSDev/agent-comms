@@ -24,8 +24,8 @@ from .turn_context import Provenance
 if TYPE_CHECKING:
     from .comms import Comms
     from .input_attempt import StoredInput
-    from .registry_document import RegistrySnapshot
-    from .threads import Thread
+    from .registry.registry_document import RegistrySnapshot
+    from .registry.threads import Thread
 
 
 class InputDelivery:

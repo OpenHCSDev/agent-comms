@@ -10,7 +10,7 @@ import pytest
 from agent_comms.comms import wire
 from conftest import installed_comms
 from agent_comms.routing import ScheduledTurn, TurnRouting
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.native_entries import TranscriptProjection
 from agent_comms.native_transcript import NativeTranscript
 from agent_comms.transcript_events import UserTranscript

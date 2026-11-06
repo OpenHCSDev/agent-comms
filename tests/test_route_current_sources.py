@@ -6,7 +6,7 @@ from agent_comms.page_traversal import OlderTraversal
 import pytest
 
 from agent_comms.routing import DeliveryScope
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 @pytest.mark.parametrize('rebound', [False, True])

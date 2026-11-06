@@ -24,7 +24,7 @@ from .native_entries import NativeEntry
 from .native_transcript import SessionCut, record_end, reverse_records
 from .storage.private_path import FileObservation, FileRevision, MissingFile
 from .read_ledger import ReadDocument, ReadLedger
-from .registry_document import RosterVisibility
+from .registry.registry_document import RosterVisibility
 from .thread_identity import ThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 from .storage.typed_table import (
@@ -40,8 +40,8 @@ from .ui_model.unread import CappedReplyUnread, IndexingUnread, ReplyUnread, Unr
 from .watched import FileSource
 
 if TYPE_CHECKING:
-    from .registry_document import RegistrySnapshot
-    from .threads import Thread
+    from .registry.registry_document import RegistrySnapshot
+    from .registry.threads import Thread
 
 _INDEX_VERSION = 8
 

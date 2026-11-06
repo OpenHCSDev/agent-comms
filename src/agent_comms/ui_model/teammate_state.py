@@ -33,7 +33,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import FamilyScan, UndatedStandingRule
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.thread_status import ThreadStatus
-from agent_comms.threads import Thread
+from agent_comms.registry.threads import Thread
 from agent_comms.todos import (
     MergedProgress,
     NoCommitProgress,

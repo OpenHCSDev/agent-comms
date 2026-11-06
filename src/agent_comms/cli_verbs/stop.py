@@ -5,7 +5,7 @@ from agent_comms.cli_command import AppliedTogether
 from agent_comms.cli_commands import ThreadStoppedResult
 from agent_comms.cli_support.thread_lifecycle import ThreadLifecycleCliCommand
 from agent_comms.comms import Comms
-from agent_comms.threads import NativeOwnerCommand, OwnerLifecycleControl
+from agent_comms.registry.threads import NativeOwnerCommand, OwnerLifecycleControl
 from dataclasses import dataclass
 from typing import Self
 

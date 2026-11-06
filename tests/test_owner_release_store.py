@@ -9,7 +9,7 @@ from dataclasses import replace
 
 from agent_comms.comms import wire
 from agent_comms.thread_text import GivenThreadText
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def test_release_survives_metadata_changes_and_reads_only_its_row(tmp_path):

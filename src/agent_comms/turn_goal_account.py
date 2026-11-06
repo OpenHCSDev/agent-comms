@@ -25,7 +25,7 @@ from .attempt_resolution import VerifiedTurnDecision
 from .goal_attempts import GoalAttemptStore, LaunchPermit
 if TYPE_CHECKING:
     from .comms import Comms
-    from .threads import Thread
+    from .registry.threads import Thread
 
 
 @dataclass

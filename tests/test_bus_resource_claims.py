@@ -42,9 +42,9 @@ from agent_comms.messages import (
     ReplayedHolders,
     StoredHolders,
 )
-from agent_comms.registration import Registration
+from agent_comms.registry.registration import Registration
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.typed_table import ProjectionProducer, TypedTable
 from bus_record_fixture import publication_processes, record_from
 

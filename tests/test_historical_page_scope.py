@@ -13,7 +13,7 @@ from agent_comms.message_page import PageBounds
 from agent_comms.messages import InfoKind, Message
 from agent_comms.page_traversal import HistoryCursor
 from agent_comms.read_basis import NamedViewer
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 @pytest.fixture

@@ -15,7 +15,7 @@ from agent_comms.storage.locked_store import (
     UndeclaredFile,
 )
 from agent_comms.storage.store_files import store_lock_path
-from agent_comms.threads import ThreadCatalogFile
+from agent_comms.registry.threads import ThreadCatalogFile
 
 
 type Selection = Callable[

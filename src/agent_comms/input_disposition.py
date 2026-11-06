@@ -55,8 +55,8 @@ if TYPE_CHECKING:
     from .bus import BusReader
     from .channel_input_batch import SingleInputBatch
     from .private_registry_guard import RegistryPrivacy
-    from .registry_document import RegistryEntry, RegistrySnapshot
-    from .threads import Thread
+    from .registry.registry_document import RegistryEntry, RegistrySnapshot
+    from .registry.threads import Thread
     from .turn_lease import TurnLeaseFence
 
 

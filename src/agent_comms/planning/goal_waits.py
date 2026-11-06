@@ -9,34 +9,34 @@ from pathlib import Path
 from sqlite3 import Connection
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from .bus import BusReader
-from .bus_publication import Delivered
-from .nominal.declared_family import DeclaredFamily
-from .errors import UnregisteredThreadError
-from .nominal.field_codec import GoalId, GoalWaitId, NullMember, ThreadLookup, TurnId
-from .goal_presentation import GoalExecution, GoalWaitTarget, StandbyExecution
-from .goals import Goal, GoalDeclaration
-from .input_key import InputKey, InputKeyText
-from .input_attempt import StoredInput, UnresolvedInput
-from .storage.locked_store import GoalWakeFile
-from .thread_identity import RecordedThreadIncarnation
-from .thread_owned_state import ThreadOwnedState
-from .registry_document import RegistrySnapshot
-from .threads import Thread
-from .turn_lease import TurnCompletion, TurnLease
-from .storage.typed_table import (
+from ..bus import BusReader
+from ..bus_publication import Delivered
+from ..nominal.declared_family import DeclaredFamily
+from ..errors import UnregisteredThreadError
+from ..nominal.field_codec import GoalId, GoalWaitId, NullMember, ThreadLookup, TurnId
+from ..goal_presentation import GoalExecution, GoalWaitTarget, StandbyExecution
+from ..goals import Goal, GoalDeclaration
+from ..input_key import InputKey, InputKeyText
+from ..input_attempt import StoredInput, UnresolvedInput
+from ..storage.locked_store import GoalWakeFile
+from ..thread_identity import RecordedThreadIncarnation
+from ..thread_owned_state import ThreadOwnedState
+from ..registry.registry_document import RegistrySnapshot
+from ..registry.threads import Thread
+from ..turn_lease import TurnCompletion, TurnLease
+from ..storage.typed_table import (
     Column, DurableStore, ForeignKey, FULL_SCHEMA_REBUILD, Index, SchemaRebuild,
     StoreRows, TypedTable,
 )
 
 if TYPE_CHECKING:
     from agent_comms.goal_management import GoalExecutionSource
-    from .agent_activity import AgentActivity
-    from .registration import Registration
-    from .message_bus import MessageBus
-    from .message_reference import MessageReference
-    from .native_input_owner import RegistryOwner
-    from .registry_store import RegistryEdit
+    from ..agent_activity import AgentActivity
+    from ..registry.registration import Registration
+    from ..message_bus import MessageBus
+    from ..message_reference import MessageReference
+    from ..native_input_owner import RegistryOwner
+    from ..registry.registry_store import RegistryEdit
 
 
 class GoalWait(ABC):

@@ -33,7 +33,7 @@ from .turn_lease import TurnLeaseFence
 if TYPE_CHECKING:
     from .activity import DrainDiagnostic
     from .pi_events import Response
-    from .threads import Thread
+    from .registry.threads import Thread
 
 
 class OwnerProcessOutput(RuntimeFile, PatternFile):

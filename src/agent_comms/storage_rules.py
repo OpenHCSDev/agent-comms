@@ -34,12 +34,12 @@ from .thread_storage import (
     StoragePath,
     StorageRoots,
 )
-from .threads import Thread
+from .registry.threads import Thread
 from .storage.store_files import ExclusiveAtomicFile
 from .storage.private_path import PrivateDirectoryRole
 
 if TYPE_CHECKING:
-    from agent_comms.registration import Registration
+    from agent_comms.registry.registration import Registration
     from agent_comms.todos import Todo, TodoStore
 
 

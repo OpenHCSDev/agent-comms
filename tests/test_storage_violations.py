@@ -26,7 +26,7 @@ from agent_comms.storage_rules import StorageRule, UnitStorage
 from agent_comms.todos import PendingProblemOrder, PresentCheckout, ProgressRead
 from agent_comms.ui_model.teammate_state import TeammateState
 from order_scope_fixture import FIX_SCOPE
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 @pytest.mark.parametrize(

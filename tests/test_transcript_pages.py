@@ -19,7 +19,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.threads import ExternalThread, NativeThread
+from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.thread_identity import RecordedThreadIncarnation

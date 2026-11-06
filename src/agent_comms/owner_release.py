@@ -22,14 +22,14 @@ from typing import Annotated
 from .child_process import ProcessState
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .registry_document import RegistrySnapshot
+from .registry.registry_document import RegistrySnapshot
 from .thread_identity import (
     ClaimedIdentity,
     OwnerIdentity,
     ThreadIncarnationRecord,
 )
 from .thread_owned_state import ThreadOwnedState
-from .threads import Thread
+from .registry.threads import Thread
 from .storage.typed_table import (
     Column,
     DurableStore,

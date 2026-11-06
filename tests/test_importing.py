@@ -4,7 +4,7 @@ from agent_comms.core_access import LocalCoreAccess
 from agent_comms.tools import CommsImportedSourceTool
 from agent_comms.repo import Checkout
 from agent_comms.comms import Comms
-from agent_comms.registration import Registration
+from agent_comms.registry.registration import Registration
 from agent_comms.thread_text import GivenThreadText, NoThreadText, ThreadText
 import asyncio
 import json
@@ -58,7 +58,7 @@ from agent_comms.cli_bridges.opencode_parts import SavedMessage
 from agent_comms.cli_bridges.opencode_protocol import Session
 from agent_comms.nominal.field_codec import FieldCodec, MessageId
 from agent_comms.native_entries import NativeEntry, ImportedMetadataEntry
-from agent_comms.threads import ThreadProvenance, ExternalThread, NativeThread
+from agent_comms.registry.threads import ThreadProvenance, ExternalThread, NativeThread
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.runtime_updates import FinishedItem, TurnEnded
 from agent_comms.ui_model.message_category import AgentCategory, ThinkingCategory, UserCategory

@@ -49,7 +49,7 @@ from agent_comms.native_package import pinned_location, pinned_native_package
 from agent_comms.native_tool_transport import ToolListener
 from agent_comms.pi_durable_backend import PiDurableBackend
 from agent_comms.publisher import InitialWrites, ParticipantPublisher
-from agent_comms.registration import Registration
+from agent_comms.registry.registration import Registration
 from agent_comms.thread_text import ForkedParent, GivenThreadText
 from agent_comms.storage.typed_table import TypedTable
 from agent_comms.native_entries import NativeEvidenceScope
@@ -62,9 +62,9 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.installer.probes.interpreter import InterpreterBuildProbe, RecordedInterpreterBuild
 from source_programs import SourcePrograms
 from source_revision_fixture import SourceRepository
-from agent_comms.threads import Thread, NativeThread
+from agent_comms.registry.threads import Thread, NativeThread
 from agent_comms.thread_model import DeclaredModel
-from agent_comms.registry_document import RegisteredTeamProject
+from agent_comms.registry.registry_document import RegisteredTeamProject
 
 pytest_plugins = (goal_owner_fixture.__name__, "github_fixture", "owner_socket_fixture", "pytest_session")
 
@@ -563,7 +563,7 @@ def bus(tmp_path: Path) -> Bus:
 
 @pytest.fixture
 def thread_registration(tmp_path_factory: pytest.TempPathFactory) -> Registration:
-    from agent_comms.registration import Registration
+    from agent_comms.registry.registration import Registration
     return Registration(tmp_path_factory.mktemp('thread-registration') / 'registry.json')
 
 

@@ -13,9 +13,9 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.goal_states import BlockedGoal, GoalState
 from agent_comms.goals import Goal
-from agent_comms.registration import Registration
+from agent_comms.registry.registration import Registration
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def test_goal_family_survives_registry_and_history_reopen(tmp_path):

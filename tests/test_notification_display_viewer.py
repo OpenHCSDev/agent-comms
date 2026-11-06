@@ -15,13 +15,13 @@ from agent_comms.message_notification import CapturedNotificationEvidence, Notif
 from agent_comms.notification_progress import DeliveryProgress
 from agent_comms.notification_evidence import AllOutcomes, OutcomeViewer, OwnerOutcomes
 from agent_comms.message_notification import MessageNotification
-from agent_comms.registration import Registration
+from agent_comms.registry.registration import Registration
 from agent_comms.historical_views import HistoricalDisplay, HistoricalSelection
 from agent_comms.read_basis import NamedViewer
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.repo import Checkout
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from bus_record_fixture import prepare_native_comms
 from conftest import publish_initial
 

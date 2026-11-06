@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from .channel_management import ChannelManagement
     from .history_views import HistoryViews
     from .presentation import ChannelView
-    from .registry_document import RegistrySnapshot
+    from .registry.registry_document import RegistrySnapshot
 
 
 class DisplayOrder(TitledChoice, DeclaredChoice, ABC):

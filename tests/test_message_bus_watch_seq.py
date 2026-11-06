@@ -8,9 +8,9 @@ import pytest
 
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.comms import wire
-from agent_comms.registration import Registration
+from agent_comms.registry.registration import Registration
 from bus_record_fixture import append_reply
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 @pytest.mark.asyncio

@@ -19,7 +19,7 @@ from agent_comms.thread_management import GivenDirectory
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.thread_storage import StorageRoots
 from agent_comms.thread_text import GivenThreadText
-from agent_comms.threads import Thread, NativeThread
+from agent_comms.registry.threads import Thread, NativeThread
 from agent_comms.ui_model.observation import ObserveSidebar, SidebarObserved, SidebarUnreadable
 
 

@@ -6,7 +6,7 @@ from agent_comms.repo import Checkout
 import pytest
 
 from agent_comms.errors import RelationViolationError
-from agent_comms.threads import Thread, NativeThread
+from agent_comms.registry.threads import Thread, NativeThread
 
 
 def test_thread_service_tier_defaults_standard_and_preserves_explicit_priority(*, thread_registration):

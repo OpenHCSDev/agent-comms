@@ -25,7 +25,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import ReviewTimerUp
 from agent_comms.repo import Checkout, GitCommandError, Repo
 from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.threads import ExternalThread, ForkThread
+from agent_comms.registry.threads import ExternalThread, ForkThread
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.thread_text import ForkedParent
 from agent_comms.task_attachments.team_pings import TeamUpdate, TeammatePing

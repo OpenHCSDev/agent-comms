@@ -17,11 +17,11 @@ from .coordination.session import CoordinationSession
 from .goals import GoalDeclaration, NoGoal
 from .participant_store import ParticipantStore
 from .thread_status import ThreadStatus
-from .threads import Thread
+from .registry.threads import Thread
 
 if TYPE_CHECKING:
-    from .registry_document import RegistryDocument
-    from .registry_store import RegistryStore
+    from .registry.registry_document import RegistryDocument
+    from .registry.registry_store import RegistryStore
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

@@ -40,7 +40,7 @@ from agent_comms.storage.locked_store import (
 )
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator, MaintenanceState
 from agent_comms.storage.private_path import FileObservation, FileRevision, MissingFile, PrivateDirectoryRole
-from agent_comms.registry_store import RegistryStore
+from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.storage.store_files import AtomicFile, DirectoryAtomicFile
 from agent_comms.storage.typed_table import ExternalStore
 

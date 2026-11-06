@@ -17,10 +17,10 @@ from agent_comms.goal_actions import (
     StandbyGoalAction,
 )
 from agent_comms.goal_presentation import RunnableExecution, StandbyExecution, GoalWaitTarget
-from agent_comms.goal_waits import GoalWaits
+from agent_comms.planning.goal_waits import GoalWaits
 from goal_owner_fixture import canonical_goal_wire
-from agent_comms.goal_waits import RecordedGoalWait, NoGoalWait
-from agent_comms.threads import NativeThread
+from agent_comms.planning.goal_waits import RecordedGoalWait, NoGoalWait
+from agent_comms.registry.threads import NativeThread
 from agent_comms.goal_scope import OneGoal
 
 

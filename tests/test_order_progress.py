@@ -23,7 +23,7 @@ from agent_comms.order_tools import CommsTodoCreateTool
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import CommitsNaming, EveryCommit, GitCommandError
 from agent_comms.repository_name import RepositoryName
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.todos import (
     EditingProgress,
     NoCommitProgress,

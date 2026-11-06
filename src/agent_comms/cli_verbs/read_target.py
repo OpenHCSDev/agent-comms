@@ -6,15 +6,15 @@ from agent_comms.repo import Checkout
 from agent_comms.channel_targets import SurroundingChannel
 
 from agent_comms.catalog_document import CatalogAccess
-from agent_comms.registry_document import ResolvedChannel
+from agent_comms.registry.registry_document import ResolvedChannel
 from agent_comms.cli_command import MultipleTargets
 from agent_comms.cli_commands import TargetReadResult
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument
 from agent_comms.nominal.field_codec import TargetBound
-from agent_comms.registry_document import RegistrySnapshot
+from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.thread_status import ThreadStatus
-from agent_comms.threads import Thread
+from agent_comms.registry.threads import Thread
 from dataclasses import dataclass
 from dataclasses import replace
 from typing import Annotated

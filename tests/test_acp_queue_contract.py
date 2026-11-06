@@ -35,7 +35,7 @@ from agent_comms.input_attempt import ReservedInput
 from agent_comms.queued_input import QueuedInput, QueuedInputContext
 from agent_comms.runtime import present_session
 from agent_comms.thread_identity import ClaimedIdentity, RecordedThreadIncarnation
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.transcript_routes import NoDisplayText
 from bus_record_fixture import prepare_native_comms
 from stored_inputs import stored_inputs

@@ -16,7 +16,7 @@ from .projection_source import ProducedRow, ProjectionSource
 
 if TYPE_CHECKING:
     from .messages import Message, MessageInput
-    from .threads import Thread
+    from .registry.threads import Thread
 
 
 NO_ALIASES: Mapping[str, str] = MappingProxyType({})

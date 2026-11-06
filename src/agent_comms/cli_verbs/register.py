@@ -13,7 +13,7 @@ from agent_comms.nominal.field_codec import Argument
 from agent_comms.nominal.field_codec import Editor
 from agent_comms.nominal.field_codec import Normalize
 from agent_comms.target_fields import ChoiceTargetField
-from agent_comms.threads import ExternalThread, Thread
+from agent_comms.registry.threads import ExternalThread, Thread
 from agent_comms.thread_text import NoParent
 from agent_comms.thread_text import NoThreadText
 from agent_comms.thread_text import ThreadParent

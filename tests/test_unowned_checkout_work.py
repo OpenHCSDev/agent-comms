@@ -39,7 +39,7 @@ from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import (
     RepeatedTodoChange, ServicePassFailing, StaleTodoDecision, StandingRule,
 )
-from agent_comms.threads import ExternalThread, NativeThread
+from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.errors import TodoConflict, TodoError
 from agent_comms.todos import (
     Assignment, ExpectedProblem, PendingProblemOrder, ProgressRead, ReleaseTodo, StrikeReason,

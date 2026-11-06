@@ -47,9 +47,9 @@ if TYPE_CHECKING:
     from agent_comms.goal_management import GoalExecutionSource
     from .goal_presentation import GoalExecution
     from .messaging import Messaging
-    from .registry_document import RegistrySnapshot
-    from .registry_store import RegistryStore
-    from .threads import Thread
+    from .registry.registry_document import RegistrySnapshot
+    from .registry.registry_store import RegistryStore
+    from .registry.threads import Thread
 
 
 class TurnDeclaration(LifecycleCapability, SubclassUnion, affix=""):
@@ -679,7 +679,7 @@ class StoredTurnRecord(Executing, TurnFile, StoredTurnReference,
     @property
     def registry(self) -> RegistryStore:
         """The registry owner this stored reference is bound to."""
-        from .registry_store import RegistryStore
+        from .registry.registry_store import RegistryStore
 
         return RegistryStore(self.registry_path)
 

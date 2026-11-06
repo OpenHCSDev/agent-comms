@@ -11,7 +11,7 @@ from agent_comms.goal_actions import ChokeholdPausedGoalAction, OwnerInvocable, 
 from agent_comms.task_attachments.owner_notices import ChokeholdNotice
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import invoke_tool
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def _teammate(comms, monkeypatch, name):

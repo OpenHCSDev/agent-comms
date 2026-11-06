@@ -34,7 +34,7 @@ from agent_comms.turn_context import TurnContext
 from bus_history import read_history
 from bus_record_fixture import prepare_native_comms
 from conftest import publish_initial
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 @pytest.fixture

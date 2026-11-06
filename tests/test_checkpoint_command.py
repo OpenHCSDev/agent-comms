@@ -9,7 +9,7 @@ import pytest
 from agent_comms.cli_verbs.checkpoint import CheckpointCliCommand
 from agent_comms.cli_commands import CleanCheckpoint, PushUnknownCheckpoint, PushedCheckpoint, RefusedCheckpoint
 from bus_record_fixture import context_comms
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from fixture_git import ENVIRONMENT
 
 

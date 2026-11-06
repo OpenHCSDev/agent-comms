@@ -20,7 +20,7 @@ from .thread_owned_state import ThreadOwnedState
 
 if TYPE_CHECKING:
     from .agent_events import RuntimeInfoObservation
-    from .threads import Thread
+    from .registry.threads import Thread
 
 
 class RuntimeInfo(DeclaredFamily, affix="RuntimeInfo"):

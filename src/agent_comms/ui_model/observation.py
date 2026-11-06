@@ -77,7 +77,7 @@ from agent_comms.notification_reads import NotificationRead
 from agent_comms.read_basis import DisplayCut, NoDisplaySelection
 from agent_comms.message_notification import MessageNotification
 from agent_comms.presentation import CoordinationSnapshot, NoRevision, ReadState, WireRevision
-from agent_comms.registry_document import RegistrySnapshot, RosterVisibility, UnreadRegistry
+from agent_comms.registry.registry_document import RegistrySnapshot, RosterVisibility, UnreadRegistry
 from agent_comms.registry_provenance import DeletedThread
 from agent_comms.revision_views import (
     TeamFramesView,
