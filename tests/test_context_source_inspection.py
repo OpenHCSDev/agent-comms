@@ -196,7 +196,7 @@ async def test_recorded_child_reads_exact_value_not_root_or_other_request(tmp_pa
     comms.contexts.record_after(UNREAD_CONTEXT, original)
     page = comms.contexts.page(owner.name, comms.registry)
     request = ContextRecordedSegmentRuntimeRequest(thread=owner.name, turn=original.turn,
-                request_id=original.request_id.require_id(), record=page.reference(page.resources[0].value),
+                request_id=original.request_id, record=page.reference(page.resources[0].value),
                 segment=0, contributors=(0,))
     assert FieldCodec.decode(RuntimeRequest, FieldCodec.encode(request)) == request
     selected = original.selected_segment(request.segment, request.contributors)
@@ -218,9 +218,17 @@ async def test_recorded_child_reads_exact_value_not_root_or_other_request(tmp_pa
     with pytest.raises(ValueError):
         original.selected_segment(0, (2,))
     with pytest.raises(ValueError):
-        ContextManifest.for_request((original,), original.turn, "request-other")
+        ContextManifest.for_request(
+            (original,), original.turn, ObservedDispatchRequest(PiRequestKey("request-other")))
+    # Pi omits requestId when it never observed dispatch, and that capture is recorded as it is:
+    # it is selected by its own member, and its segments are read like any other's.
+    unobserved = replace(original, request_id=UnobservedDispatchRequest())
+    assert ContextManifest.for_request(
+        (unobserved,), unobserved.turn, UnobservedDispatchRequest()) is unobserved
     with pytest.raises(ValueError):
-        replace(original, request_id=UnobservedDispatchRequest()).request_id.require_id()
+        ContextManifest.for_request((unobserved,), unobserved.turn, original.request_id)
+    unobserved_read = replace(request, request_id=UnobservedDispatchRequest())
+    assert FieldCodec.decode(RuntimeRequest, FieldCodec.encode(unobserved_read)) == unobserved_read
 
 
 @pytest.mark.asyncio

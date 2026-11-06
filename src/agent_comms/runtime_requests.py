@@ -55,6 +55,7 @@ from .tool_result import DeclaredReply
 from .turn_context import (
     ContextManifest,
     ContextSourceText,
+    DispatchRequest,
     PreviewProvenance,
     Provenance,
     RecordedContextTurn,
@@ -64,7 +65,6 @@ from .turn_context import (
 from .working_memory_annotations import WorkingMemoryAnnotations
 from .working_memory_labels import ClassifierVersion, ModelLabel
 from .working_memory_questions import SpanAnswer
-from .turn_item import PiRequestKey
 
 if TYPE_CHECKING:
     from .agent_backend import CompactionOutcome
@@ -456,7 +456,7 @@ class ContextCoreSourceRuntimeRequest(ContextCoreRuntimeRequest):
 @dataclass(frozen=True, kw_only=True)
 class RecordedContextRuntimeRequest(AttachedResultRuntimeRequest):
     turn: RecordedContextTurn
-    request_id: PiRequestKey
+    request_id: DispatchRequest
     record: ContextManifestReference
     segment: int
 
