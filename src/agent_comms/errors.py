@@ -86,8 +86,10 @@ class ThreadNotVisibleError(RelationViolationError, RejectedEnforcementError):
         return str(self)
 
 
-class GoalRefused(Refused, RelationViolationError):
-    """A goal relation refused the action; preserve that refusal across owner RPC."""
+class GoalRefused(Refused, ToolRefusedError, RelationViolationError):
+    """A goal relation refused the action; preserve that refusal across owner RPC. It is an
+    intentional refusal like every ToolRefusedError, which the bare Refused carrier is not:
+    Core also builds Refused(INTERNAL_ERROR, ...) for real failures."""
 
     def __init__(self, message: str) -> None:
         super().__init__(self.INVALID_PARAMS, message)

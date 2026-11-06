@@ -4,6 +4,7 @@ import pytest
 
 from agent_comms.coordination.errors import DeferredRead, ReportedDeferredRead, Refused
 from agent_comms.errors import GoalRefused, RouteChangedError
+from agent_comms_hooks import ToolRefusedError
 from agent_comms.nominal.field_codec import ErrorRecord, FieldCodec, MalformedRecord, ReportedError
 from agent_comms.ui_model.observation import ReadRefused, UnreadableHistory
 from agent_comms.ui_model.unread import (
@@ -55,6 +56,14 @@ def test_a_narrowed_refusal_arrives_as_itself() -> None:
     received = round_trip(ReadRefused(7, GoalRefused("no"), "trace"), ReadRefused)
     assert type(received.error) is GoalRefused
     assert (received.error.code, received.error.message) == (Refused.INVALID_PARAMS, "no")
+
+
+def test_a_goal_refusal_arrives_as_an_intentional_refusal_and_the_bare_carrier_does_not() -> None:
+    """A UI tells a refusal from a crash by ToolRefusedError alone. A goal refusal is one even
+    after the wire; Refused itself also carries real failures (INTERNAL_ERROR), so it is not."""
+    received = round_trip(ReadRefused(7, GoalRefused("no"), "trace"), ReadRefused)
+    assert isinstance(received.error, ToolRefusedError)
+    assert not isinstance(Refused(Refused.INTERNAL_ERROR, "compaction failed"), ToolRefusedError)
 
 
 @pytest.mark.parametrize("unread", [
