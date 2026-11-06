@@ -19,8 +19,8 @@ import pytest
 
 from agent_comms.team.publication_rules import EmptyPullRequest, UnpushedBranch
 from agent_comms.team.spinning import SpinningTeammate, StaleUncommittedEdits
-from agent_comms.team_heartbeat import TeamHeartbeat, TeamObservation
-from team_heartbeat_fixture import current_hud, observe_team
+from agent_comms.team_heartbeat import TeamObservation
+from team_heartbeat_fixture import LIVE_PLAN_READINGS, current_hud, observe_team
 from agent_comms.team_hud import CodexUsage
 from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalTranscript
@@ -540,7 +540,7 @@ def test_held_branch_rules_consume_the_complete_cut_after_worktree_mutation(
     todo = built.comms.goals.todos.get(built.problems['unpushed'])
     storage = built.comms.registry.storage_rule
     path = storage.order_checkout(storage.roots_of(built.thread('unpushed')), todo.id)
-    plans = TeamHeartbeat()
+    plans = LIVE_PLAN_READINGS
     with LaunchRoot.from_path(built.comms.root).selected():
         pulls = ProgressRead()
         with pytest.raises(WorkBranchError) as unprepared:
@@ -618,7 +618,7 @@ def test_allocated_clone_owns_its_custom_upstream_not_the_primary(fleet, configu
     assert storage.owns_present_checkout(built.thread('unpushed'), path, RepositoryReads())
     assert built.git(path, 'rev-parse', '--path-format=absolute', '--git-common-dir') != (
         built.git(built.source.checkout, 'rev-parse', '--path-format=absolute', '--git-common-dir'))
-    plans = TeamHeartbeat()
+    plans = LIVE_PLAN_READINGS
     with LaunchRoot.from_path(built.comms.root).selected():
         pulls = ProgressRead()
         primary = pulls.checkout(todo.order.checked().check.directory).branches

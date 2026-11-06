@@ -18,7 +18,6 @@ from agent_comms.comms import Comms
 from agent_comms.connector_caller import DirectorCaller
 from agent_comms.closed_pull_requests import ClosedPullRequestWatch
 from agent_comms.team.publication_rules import ClosedUnmergedPullRequest
-from agent_comms.team_heartbeat import TeamHeartbeat
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.build_identity import RepositoryCommit
 from agent_comms.head_review import (
@@ -1327,7 +1326,7 @@ def test_retained_head_verdict_precedes_the_published_lost_packet(
         request.pr, 'feature', request.head, closed_at=stamp, updated=stamp,
         base='main', reviewable_times=(stamp,)))
     asyncio.run(ClosedPullRequestWatch().run(lambda: nullcontext(comms)))
-    frame = capture_frame(comms, ProgressRead(()), TeamHeartbeat())
+    frame = capture_frame(comms, ProgressRead(()))
     lost, = ClosedUnmergedPullRequest.scan_observed(comms, (), frame)
     assert lost.request == request
 
