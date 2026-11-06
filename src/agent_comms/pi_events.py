@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 from . import agent_events as events
 from . import turn_phase as phases
 from .acp_failure import UnrecordedFailureSource
-from .controller import ChoiceRequest
+from .controller import ChoiceRequest, PermissionOptionId
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import (
     DeclaredWireType,
@@ -549,7 +549,7 @@ class DialogUiRequest(ExtensionUiRequest, ChoiceRequest[ExtensionUiChoice]):
     def permission(self, turn_id: TurnId):
         return None
 
-    def choice(self, option_id: str) -> ExtensionUiChoice:
+    def choice(self, option_id: PermissionOptionId) -> ExtensionUiChoice:
         return CancelledUiChoice()
 
     def cancelled(self) -> ExtensionUiChoice:
@@ -561,6 +561,8 @@ class DialogUiRequest(ExtensionUiRequest, ChoiceRequest[ExtensionUiChoice]):
 
 
 class PermissionUiRequest(DialogUiRequest):
+    deny: ClassVar[PermissionOptionId] = PermissionOptionId("deny")
+
     @abstractmethod
     def permission_body(self) -> str: ...
 
@@ -592,6 +594,7 @@ class PermissionUiRequest(DialogUiRequest):
 @dataclass(frozen=True, kw_only=True)
 class ConfirmUiRequest(PermissionUiRequest):
     method: ClassVar[str] = "confirm"
+    allow: ClassVar[PermissionOptionId] = PermissionOptionId("allow-once")
     message: str | None = None
 
     def confirm(self, value: bool) -> ExtensionUiResponse:
@@ -606,12 +609,12 @@ class ConfirmUiRequest(PermissionUiRequest):
         from acp.schema import PermissionOption
 
         return [
-            PermissionOption(option_id="allow-once", name="Allow once", kind="allow_once"),
-            PermissionOption(option_id="deny", name="Deny", kind="reject_once"),
+            PermissionOption(option_id=self.allow, name="Allow once", kind="allow_once"),
+            PermissionOption(option_id=self.deny, name="Deny", kind="reject_once"),
         ]
 
-    def choice(self, option_id: str) -> ExtensionUiChoice:
-        return ConfirmedUiChoice(option_id == "allow-once")
+    def choice(self, option_id: PermissionOptionId) -> ExtensionUiChoice:
+        return ConfirmedUiChoice(option_id == self.allow)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -640,9 +643,9 @@ class SelectUiRequest(PermissionUiRequest):
         return [
             PermissionOption(option_id=key, name=f"Choose {value}", kind="allow_once")
             for key, value in self.choices().items()
-        ] + [PermissionOption(option_id="deny", name="Cancel", kind="reject_once")]
+        ] + [PermissionOption(option_id=self.deny, name="Cancel", kind="reject_once")]
 
-    def choice(self, option_id: str) -> ExtensionUiChoice:
+    def choice(self, option_id: PermissionOptionId) -> ExtensionUiChoice:
         value = self.choices().get(option_id)
         return CancelledUiChoice() if value is None else ValueUiChoice(value)
 

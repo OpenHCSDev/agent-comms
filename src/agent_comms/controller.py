@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, ClassVar
@@ -10,7 +11,15 @@ from pydantic import BaseModel
 
 from .coordination.errors import IdentityConflict
 from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import AcpSessionId, FieldCodec, WireName
+from .nominal.field_codec import AcpSessionId, FieldCodec, NominalSpelling, NominalText, WireName
+
+
+class PermissionOptionId(NominalText):
+    """ACP's identity for one option of a permission request, spelled as the request offered it."""
+
+
+class PermissionOptionIdText(NominalSpelling[PermissionOptionId]):
+    spelling = re.compile(r"\S{1,256}")
 
 
 class ChoiceRequest[Choice](ABC):
@@ -18,7 +27,7 @@ class ChoiceRequest[Choice](ABC):
     cancellation. The outcome picks which, so its reader never inspects it."""
 
     @abstractmethod
-    def choice(self, option_id: str) -> Choice: ...
+    def choice(self, option_id: PermissionOptionId) -> Choice: ...
 
     @abstractmethod
     def cancelled(self) -> Choice: ...
@@ -51,7 +60,7 @@ class CancelledOutcome(PermissionOutcome):
 
 @dataclass(frozen=True)
 class SelectedOutcome(PermissionOutcome):
-    option_id: Annotated[str, WireName("optionId")]
+    option_id: Annotated[PermissionOptionId, WireName("optionId")]
 
     def answer[Choice](self, request: ChoiceRequest[Choice]) -> Choice:
         return request.choice(self.option_id)
