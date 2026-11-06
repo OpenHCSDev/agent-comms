@@ -24,7 +24,7 @@ from typing import ClassVar
 from aiohttp import WSCloseCode, WSMsgType, web
 from yarl import URL
 
-from .agent_inbox import SecondsWait, TakenInputPosition, TakenInputStart
+from .agent_inbox import NoWait, TakenInputPosition, TakenInputStart
 from .child_process import ProcessIdentity
 from .cli_bridges.claude_transcript import (
     WATCH_REPORT, WATCH_STOPPED, WINDOW_ENDED, ClaudeJsonLines, ReceivesWatchReports,
@@ -47,6 +47,7 @@ from .nominal.field_codec import FieldCodec, ThreadLookup
 from .runtime_updates import RuntimeUpdate
 from .tool_result import ToolResult
 from .tools import CommsInboxTool
+from .watched import ChangeSignal
 
 
 @dataclass(frozen=True)
@@ -259,7 +260,9 @@ class InboxWatch:
     offer: ReconnectUrl
     """The socket's one standing reconnect URL, minted when it opened."""
 
-    wait_seconds: ClassVar[int] = 5
+    recheck_seconds: ClassVar[float] = 5
+    """With no commit to wake it, how often an open socket asks again whether this watch still
+    holds its thread: a stop on the bus is a registry write, not a bus commit."""
 
     @contextmanager
     def wire(self) -> Iterator[Comms]:
@@ -271,7 +274,7 @@ class InboxWatch:
         older untaken one, so its next read starts past it instead of at the thread's birth."""
         with self.wire() as comms:
             request = CommsInboxTool(
-                thread=self.thread, after=after, wait=SecondsWait(self.wait_seconds))
+                thread=self.thread, after=after, wait=NoWait())
             return request.messages(comms)
 
     def taken(self, message: Message, ledger: TakingLedger) -> None:
@@ -348,18 +351,34 @@ class InboxWatch:
         replay = asyncio.create_task(self.replayed(socket, before, reported))
         after: TakenInputPosition = TakenInputStart()
         try:
-            while not socket.closed:
-                for message in await asyncio.to_thread(self.untaken, after):
-                    await asyncio.to_thread(self.taken, message, reported.current)
-                    await socket.send_str(FieldCodec.compact(FieldCodec.encode(message)))
-                    after = after.advanced(message.reference)
-                if not await asyncio.to_thread(self.holds, here):
-                    await socket.close(code=WATCH_STOPPED, message=b"stopped on the bus")
+            with self.wire() as comms:
+                async with ChangeSignal.opened(*comms.bus.bus.commit_sources()) as commits:
+                    while not socket.closed and not reader.done():
+                        # Drained before the read, so a commit landing during it wakes the wait.
+                        commits.prepare()
+                        for message in await asyncio.to_thread(self.untaken, after):
+                            await asyncio.to_thread(self.taken, message, reported.current)
+                            await socket.send_str(FieldCodec.compact(FieldCodec.encode(message)))
+                            after = after.advanced(message.reference)
+                        if not await asyncio.to_thread(self.holds, here):
+                            await socket.close(code=WATCH_STOPPED, message=b"stopped on the bus")
+                        await self.until_woken(commits, reader)
         except ConnectionResetError:
             return
         finally:
             reader.cancel()
             replay.cancel()
+
+    async def until_woken(self, commits: ChangeSignal, reader: asyncio.Task[None]) -> None:
+        """Wait for a bus commit, the socket closing (its reader ends) or the recheck interval,
+        whichever comes first. Nothing blocks a thread, so a closed socket ends its handler at
+        once instead of after a sleeping inbox read wakes."""
+        commit = asyncio.ensure_future(commits.wait())
+        try:
+            await asyncio.wait({commit, reader}, timeout=self.recheck_seconds,
+                               return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            commit.cancel()
 
     async def read_until_closed(
         self, socket: web.WebSocketResponse, reported: ReportedLedger,
