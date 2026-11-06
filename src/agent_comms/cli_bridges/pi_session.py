@@ -12,6 +12,7 @@ from agent_comms.native_entries import (
     SessionEntry,
     TranscriptProjection,
 )
+from agent_comms.nominal.field_codec import StoredSessionId
 from agent_comms.runtime_updates import HiddenItem, RuntimeUpdate, SessionFacts
 
 
@@ -24,7 +25,7 @@ class PiSession(PiHistory, OfflineHistory):
         with NativeEvidenceRead.open(self.source) as evidence:
             header, entries = evidence.observe()
         header.require_reopen()
-        if not self.session.holds(header.require_entry_id()):
+        if not self.session.holds(StoredSessionId(header.require_entry_id())):
             raise ValueError(
                 f"{self.source} holds Pi session {header.require_entry_id()}, not the one named"
             )

@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from pydantic import Field
 
+from agent_comms.nominal.field_codec import StoredSessionId
 from agent_comms.storage.locked_store import SQLiteFile
 from agent_comms.runtime_updates import RuntimeUpdate
 from agent_comms.storage.typed_table import SQLiteSchemaObject, TypedRow
@@ -42,7 +43,7 @@ class OpenCodeExport(OpenCodeStore):
 
     def load(self) -> tuple[Session, Iterator[SavedMessage]]:
         export = ExportFile.model_validate_json(self.source.read_bytes())
-        if not self.session.holds(export.info.id):
+        if not self.session.holds(StoredSessionId(export.info.id)):
             raise ValueError('The export belongs to a different OpenCode session.')
         return export.info, iter(export.messages)
 

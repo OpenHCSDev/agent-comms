@@ -277,7 +277,7 @@ class QueueActionRuntimeRequest(AttachedResultRuntimeRequest, declared_name=None
 
     serves: ClassVar[dict[type[QueueAction], type[QueueActionRuntimeRequest]]] = {}
 
-    def __init_subclass__(cls, *, action: type[QueueAction], **kwargs) -> None:
+    def __init_subclass__(cls, *, action: type[QueueAction], **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
         QueueActionRuntimeRequest.serves[action] = cls
 

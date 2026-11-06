@@ -6,7 +6,7 @@ from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from functools import partial
-from typing import Annotated, Literal
+from typing import Annotated
 
 from agent_comms_hooks import ToolRefusedError
 from pydantic import JsonValue
@@ -48,7 +48,7 @@ from .bus_read import CapturesTranscriptPage, OwnerLiveRead, OwnerScopedRead, Ui
 from .team_hud import TeamFrame, TeamHud, TeamLoad, TeammateDetail
 from .comms import Comms
 from .coordination.coordinator import Coordination
-from .nominal.field_codec import FieldCodec, MessageId, OrderId, RecordProblems, ToolCallId, WireName
+from .nominal.field_codec import FieldCodec, MessageId, OrderId, RecordProblems, ToolCallId
 from .channel_targets import CommsTag
 from .goal_actions import CompliedGoalAction, CreateProblemGoalAction, OrderGoalAction, OwnerInvocable
 from .goals import Goal, OrderCheck
@@ -63,7 +63,7 @@ from .plan_phases import OrderPhase
 from .problem_number import ProblemNumber
 from .progress_claims import ProgressClaim
 from .read_basis import ReadAuthority
-from .send_result import CorrectionResult, MessagePublished, SendResult
+from .send_result import MessagePublished
 from .service_passes import ServicePassStore
 from .thread_identity import ThreadIncarnation
 from .tool_caller import ThreadCaller, ToolCaller
@@ -72,7 +72,6 @@ from .tool_request import PublishingToolRequest, ReadTool, ThreadReadTool, Threa
 from .transport.request import tool_field
 from .transport.tools.reads import InputDeliveryRead, OwnerGoalRead, TeammateRead, TranscriptPageRead
 from .tool_result import ToolResult
-from .transcript_events import SentTranscript
 from .transcripts import (
     TranscriptRead,
 )

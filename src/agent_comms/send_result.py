@@ -74,4 +74,5 @@ class MessagePublished(ToolResult):
 
     @classmethod
     def from_send(cls, result: SendResult) -> MessagePublished:
-        return cls(result.message.message_id, SentTranscript.from_message(result.message), result.correction)
+        return cls(result.message.message_id, SentTranscript.from_message(result.message),
+                   result.correction)

@@ -79,7 +79,7 @@ from agent_comms.lifecycle_capability import Active
 
 from .change_report import NoChangeReport, ReportEvidence
 from .channel_management import ListTagEdit, TagEdit
-from agent_comms.channel_targets import ChannelSelection, ChannelTarget, CommandTarget, NamedTarget, NoChannel
+from agent_comms.channel_targets import ChannelTarget, CommandTarget, NamedTarget
 from .channels import AnyChannel, Channel, SavedView, ViewMatch, ViewPredicate
 from agent_comms.cli_verbs.archive import ArchiveCliCommand
 from agent_comms.cli_verbs.delete_view import DeleteViewCliCommand
@@ -93,10 +93,10 @@ from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.cli_commands import ThreadArchivedResult, ThreadCreatedResult, ThreadStoppedResult
 from agent_comms.cli_verbs.threads import ThreadsCliCommand
 from .config_options import ConfigOptions
-from .cli_command import PreparedTargetAction, TargetAction, TargetActionCommand, TargetEdit
+from .cli_command import PreparedTargetAction, TargetActionCommand
 from .cli_result import CliResult, TargetEditResult
 from .coordination.tables.refusals import SendRefusal
-from .display_order import ChannelSort, ThreadSort
+from .display_order import ChannelSort
 from .nominal.field_codec import ContextSource, FieldCodec, NullMember, WireChoices, SingleFieldValue, SubclassUnion, WireForm, WireName, WireOmitDefault, projected, GoalId
 from .goal_actions import (
     ActiveGoalAction, ClearGoalAction, EditGoalAction, GoalAction, GoalActor, GoalPrecondition,
@@ -110,9 +110,9 @@ from .goal_waits import NoStandbyReview, StandbyReview
 from .goals import GoalDeclaration
 from .history_result import HistoryPageResult
 from .input_attempt import UnresolvedInputReference
-from .message_page import NEWEST_PAGE, DisplayedMessagePage, InboxPage, MessagePage, PageBounds
+from .message_page import DisplayedMessagePage, InboxPage, MessagePage, PageBounds
 from .page_traversal import LatestSequence, LiveCursor
-from .historical_views import ConversationObservation, ConversationRevision, UnobservedConversation
+from .historical_views import ConversationRevision
 from .message_reference import MessageReference
 from .messages import InfoKind, Message, MessageKind, NoticeRole, SendableMessageKind
 from .execution.owner_lifecycle import OwnerStartResult
@@ -124,25 +124,14 @@ from .notification_evidence import AfterRecipient, FirstRecipient, RecipientCurs
 from .message_notification import MessageNotification
 from .presentation import ChannelView, WireRevision
 from .runtime_requests import QueueActionRuntimeRequest
-from .runtime_server import RuntimeRequest
 from .owner_connection import OwnerConnection
-from .context_store import (
-    LATEST_CONTEXT, CapturedContext, ContextManifestCursor, ContextManifestPage, ContextManifestReference,
-)
 from .turn_context import ContextManifest
 from .importing import ImportedSessionMetadata, ThreadImported
-from .exporting import WireExportFormat, WireExportLimit, WireExportProvenance, WireExportScope
-from .historical_views import AllHistoricalSenders, HistoricalSenders, HistoricalThread
+from .exporting import WireExportProvenance
 from .cli_bridges.history import OfflineHistory
-from .thread_text import ExpectedSession
-from .harness_install import Harness
-from .thread_management import ImportDirectory
-from .registry_document import RegistryEntry
-from .session_revision import SessionObservation
-from .turn_context import CodexRolloutProvenance, ContextSourceText, Provenance, SegmentManifest
+from .turn_context import ContextSourceText, SegmentManifest
 from .working_memory_annotations import WorkingMemoryAnnotations
-from .working_memory_labels import JevClassifier, ModelLabel
-from .nominal.field_codec import ThreadLookup
+from .working_memory_labels import JevClassifier
 from .notification_evidence import RecipientLimit
 from .progress_claims import ProgressClaim
 from .relationships import (
@@ -150,7 +139,6 @@ from .relationships import (
     GoalDerivedContact,
     GoalMentionDiagnostic,
     RelationshipEdit,
-    SortableRelationshipGroup,
     ThreadCommsSnapshot,
 )
 from .restart_queue import QueuedRestart, RestartQueued, RestartQueue
@@ -174,7 +162,6 @@ from .threads import (
     OwnerLifecycleControl,
     StartOwnerControl,
     NextTurnConfiguration,
-    Thread,
 )
 from .thread_management import (
     InheritedTags,
@@ -184,7 +171,6 @@ from .thread_management import (
     ThreadTitleResult,
 )
 from .input_origin import HumanInputOrigin
-from .thread_identity import ClaimedIdentity
 from .thread_presentation import ThreadPresentation
 from .child_process import ProcessIdentity
 from .thread_identity import ToolName
@@ -195,7 +181,6 @@ from .history_views import RetiredViews
 from .thread_identity import ThreadIncarnation
 from .display_references import ReferenceNames
 from .registry_document import ProjectThreadSelection, RegistrySlice, RegistrySnapshot
-from .transcripts import TranscriptCursor
 from .host_logs import HostLog, HostLogRead
 from .tool_result import ToolResult
 from .notification_reads import LiveNotificationRead
@@ -496,7 +481,11 @@ class ServedCommsHistoricalThreadsTool(CoreRead[HistoricalThreadsRead], CommsHis
 
 
 @dataclass(frozen=True, kw_only=True)
-class ServedCommsExportWireTool(ObservedToolRequest[ToolCaller, WireExportProvenance], HumanToolRequest[WireExportProvenance], CommsExportWireTool):
+class ServedCommsExportWireTool(
+    ObservedToolRequest[ToolCaller, WireExportProvenance],
+    HumanToolRequest[WireExportProvenance],
+    CommsExportWireTool,
+):
     """Serving CommsExportWireTool. ObservedToolRequest is itself a dataclass, so this member
     is one too: otherwise its fields would hide the declaration's."""
 

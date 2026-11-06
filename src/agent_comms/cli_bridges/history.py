@@ -29,7 +29,8 @@ from agent_comms.harness_install import (
 from agent_comms.importing import ImportLimits, ImportSnapshot, ImportedConversation
 
 from agent_comms.runtime_updates import EarlierRequest, HistoryNotice, RuntimeUpdate, SessionFacts
-from agent_comms.thread_text import AnySession, ExpectedSession, AbsentText, GivenText, TextChoice, ThreadText
+from agent_comms.thread_text import (AbsentText, AnySession, ExpectedSession, GivenText, TextChoice,
+                                     ThreadText)
 
 if TYPE_CHECKING:
     from .opencode_parts import SavedMessage
