@@ -495,8 +495,10 @@ class ServedCommsHistoricalThreadsTool(CoreRead[HistoricalThreadsRead], CommsHis
         return HistoricalThreadsRead(comms.bus.history.threads(self.senders))
 
 
+@dataclass(frozen=True, kw_only=True)
 class ServedCommsExportWireTool(ObservedToolRequest[ToolCaller, WireExportProvenance], HumanToolRequest[WireExportProvenance], CommsExportWireTool):
-    """Serving CommsExportWireTool."""
+    """Serving CommsExportWireTool. ObservedToolRequest is itself a dataclass, so this member
+    is one too: otherwise its fields would hide the declaration's."""
 
     def answered(self, comms: Comms) -> WireExportProvenance:
         return comms.views.export_wire(self.destination, format=self.format, scope=self.scope,

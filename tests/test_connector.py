@@ -68,7 +68,7 @@ from agent_comms.storage.maintenance_barrier import (
     ReadyPhase,
 )
 from agent_comms.storage.store_files import ExclusiveLock, StoreGuard, _store_lock
-from agent_comms.tools import ChannelListing, CommsChannelsTool, CommsPinChannelTool, CommsSendTool, CommsUserSendTool, invoke_tool
+from agent_comms.tools import ChannelListing, CommsChannelsTool, CommsPinChannelTool, CommsSendTool, CommsUserSendTool, ServedCommsUserSendTool, invoke_tool
 from agent_comms.tool_caller import HumanCaller, NoThreadCaller, ThreadCaller
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.tool_request import ReadTool
@@ -1047,7 +1047,7 @@ def test_human_publication_refuses_other_principals_before_changing_state(comms:
     prepare_native_comms(comms)
     namespace = comms.registry.store.privacy().namespace
     before = comms.bus.bus.revision(), comms.registry.snapshot()
-    request = CommsUserSendTool(target="recipient", body="not human input")
+    request = ServedCommsUserSendTool(target="recipient", body="not human input")
     for caller in (NoThreadCaller(), ThreadCaller("recipient"), CALLER,
                    UiReadCaller(namespace), UiCaller(RootId.mint())):
         with pytest.raises(ToolRefusedError):
@@ -1063,7 +1063,7 @@ async def test_ui_mcp_publishes_with_the_durable_human_identity(
     comms.registry.declare(NativeThread("recipient", frozenset(), Checkout(comms.root)))
     before = comms.registry.snapshot()
     local = FieldCodec.decode(MessagePublished, FieldCodec.encode(HumanCaller().invoke(
-        CommsUserSendTool(target="recipient", body="local human input"), comms).to_wire()))
+        ServedCommsUserSendTool(target="recipient", body="local human input"), comms).to_wire()))
     assert local.message.matches(comms.bus.inbox("recipient").page.messages[-1])
     namespace = comms.registry.store.privacy().namespace
     credential = store.update(lambda grants: grants.ui_issued(namespace, 60, UiAccess))
