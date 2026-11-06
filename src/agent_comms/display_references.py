@@ -10,8 +10,9 @@ from dataclasses import dataclass, field
 from functools import cached_property
 import re
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Annotated, Self
+from typing import TYPE_CHECKING, Annotated, Generic, Self, TypeVar
 
+from agent_comms.channel_targets import IncarnationThreadTarget, ThreadTarget
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import SlicePolicy
 from agent_comms.snapshot_slices import MappingRowsSlice, SnapshotRestored, WholeDocumentValue
@@ -48,9 +49,61 @@ class ThreadReferenceIdentity:
         return self.incarnation.name
 
 
+ReadT = TypeVar("ReadT")
+
+
+class ThreadReferenceReader(ABC, Generic[ReadT]):
+    """A question whose answer differs between a current and a retired birth. The reference
+    calls the hook for what it is, so no reader tests which member it holds."""
+
+    @abstractmethod
+    def current(self, reference: ThreadDisplayReference) -> ReadT:
+        """The answer for a birth the cut holds, whose name is current."""
+
+    @abstractmethod
+    def retired(self, reference: RetiredThreadReference) -> ReadT:
+        """The answer for a birth the cut no longer holds; its name may belong to a successor."""
+
+
 @dataclass(frozen=True)
-class ThreadDisplayReference(ThreadReferenceIdentity, DisplayReference):
-    pass
+class ThreadReference(ThreadReferenceIdentity, DisplayReference, declared_name=None):
+    """A thread birth as one cut resolved it; it answers each question for its birth,
+    so callers never act on a name a redeclared peer may have taken over."""
+
+    @abstractmethod
+    def target(self) -> ThreadTarget:
+        """Where a send to this birth goes."""
+
+    @abstractmethod
+    def read(self, reader: ThreadReferenceReader[ReadT]) -> ReadT:
+        """The reader's answer for this birth."""
+
+
+@dataclass(frozen=True)
+class ThreadDisplayReference(ThreadReference):
+    """A birth the cut holds: its name is current."""
+
+    def target(self) -> ThreadTarget:
+        return ThreadTarget(self.name)
+
+    def read(self, reader: ThreadReferenceReader[ReadT]) -> ReadT:
+        return reader.current(self)
+
+
+@dataclass(frozen=True)
+class RetiredThreadReference(ThreadReference):
+    """A birth the cut no longer holds: its peer was deleted or redeclared. Its recorded
+    name is only a label; a new peer may already carry it."""
+
+    def current_in(self, references: DisplayReferences) -> bool:
+        return False
+
+    def target(self) -> ThreadTarget:
+        # Addresses the original birth, which refuses once it is unregistered.
+        return IncarnationThreadTarget(self.incarnation)
+
+    def read(self, reader: ThreadReferenceReader[ReadT]) -> ReadT:
+        return reader.retired(self)
 
 
 @dataclass(frozen=True)
@@ -264,8 +317,8 @@ class ThreadNames(ABC):
     """What resolves a thread's exact birth to the name it currently goes by."""
 
     @abstractmethod
-    def thread(self, incarnation: ThreadIncarnation) -> ThreadDisplayReference:
-        """The incarnation's current name, or this source's refusal to say."""
+    def thread(self, incarnation: ThreadIncarnation) -> ThreadReference:
+        """The incarnation as this source resolves it, or this source's refusal to say."""
 
 
 @dataclass(frozen=True)
@@ -297,9 +350,12 @@ class CurrentDisplayReferences(SnapshotRestored, DisplayReferences, ThreadNames)
         return MappingProxyType({
             incarnation.require_recorded().wire_birth: incarnation for incarnation in self.members.values()})
 
-    def thread(self, incarnation: ThreadIncarnation) -> ThreadDisplayReference:
-        """Resolve an exact birth to its current name; a missing birth fails."""
-        return ThreadDisplayReference(self.root, self.current[incarnation.require_recorded().wire_birth])
+    def thread(self, incarnation: ThreadIncarnation) -> ThreadReference:
+        """Resolve an exact birth to its current name; a birth this cut no longer holds is retired."""
+        birth = incarnation.require_recorded().wire_birth
+        if birth in self.current:
+            return ThreadDisplayReference(self.root, self.current[birth])
+        return RetiredThreadReference(self.root, incarnation)
 
 
 @dataclass(frozen=True)
