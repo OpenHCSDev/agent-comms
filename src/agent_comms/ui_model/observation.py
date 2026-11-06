@@ -33,7 +33,7 @@ from contextlib import AbstractAsyncContextManager, AsyncExitStack, ExitStack, a
 from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Self, final
+from typing import TYPE_CHECKING, ClassVar, Self, cast, final
 
 
 from agent_comms_hooks import ToolRefusedError
@@ -482,6 +482,12 @@ class ReadRequest(AwaitedRead, declared_name=None):
         except self.refusal_errors as error:
             return self.refused(error)
 
+    async def answered(self, comms: Comms) -> object:
+        """This process answers the read from ``comms`` itself; the outcome settles it the
+        way the UI's waiter would, a busy source by asking again."""
+        outcome = await Coordination.run_worker(partial(self.answer, comms))
+        return await outcome.settled(self, comms)
+
 
 @dataclass(frozen=True)
 class ReadOperation(ReadRequest):
@@ -557,6 +563,11 @@ class TranscriptRequest[ResultT](ReadRequest):
 
     def read(self, comms: Comms) -> ResultT:
         return UnreadableHistory.outcome(lambda: self.result(self.page_read(comms))).raised()
+
+    async def answered(self, comms: Comms) -> ResultT:
+        # answer() wraps exactly the value this request's read returned, so the
+        # settled answer is this request's result.
+        return cast(ResultT, await super().answered(comms))
 
     def page_read(self, comms: Comms) -> TranscriptRead:
         page = CapturesTranscriptPage.serving(self.operation)
@@ -1065,6 +1076,10 @@ class ServiceResult(TaggedUnion, affix=""):
 class ReadOutcome(TaggedRecordMember, ServiceResult, declared_name=None):
     """The service's answer to a read, including a read that remains busy."""
 
+    @abstractmethod
+    async def settled(self, request: ReadRequest, comms: Comms) -> object:
+        """The read's result for a caller that answered ``request`` from ``comms`` itself."""
+
 
 @dataclass(frozen=True)
 class Observed(TaggedRecordMember, ObservationStep, ServiceResult, declared_name=None):
@@ -1104,6 +1119,9 @@ class ReadAnswered(ReadOutcome, declared_name=None):
     async def received(self, process: ObservationProcess, observed: Callable[[Observed], None]) -> None:
         if (waiter := process.reads.pop(self.request_id, None)) is not None and not waiter.done():
             waiter.set_result(self.value)
+
+    async def settled(self, request: ReadRequest, comms: Comms) -> object:
+        return self.value
 
 
 @dataclass(frozen=True)
@@ -1161,6 +1179,10 @@ class ReadBusy(ReadOutcome):
         # answers this request when its next observation can acquire a read.
         pass
 
+    async def settled(self, request: ReadRequest, comms: Comms) -> object:
+        await asyncio.sleep(self.retry_seconds)
+        return await request.answered(comms)
+
 
 @dataclass(frozen=True)
 class ReadRefused(ReadOutcome):
@@ -1174,6 +1196,9 @@ class ReadRefused(ReadOutcome):
         if (waiter := process.reads.pop(self.request_id, None)) is not None and not waiter.done():
             self.error.add_note(f"Raised in the comms observation service:\n{self.trace}")
             waiter.set_exception(self.error)
+
+    async def settled(self, request: ReadRequest, comms: Comms) -> object:
+        raise self.error
 
 
 @dataclass(frozen=True)

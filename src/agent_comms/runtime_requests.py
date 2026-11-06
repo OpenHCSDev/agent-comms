@@ -41,6 +41,7 @@ from .goals import Goal
 from .manual_compaction_bridge import compact_context
 from .bus_read import OwnerScopedRead
 from .transport.tools.reads import OwnerGoalRead
+from .ui_model.observation import SubscribeTranscript
 from agent_comms.runtime_server import (
     AttachedResultRuntimeRequest, AttachedRuntimeRequest, AttachedRuntimeRequestContext,
     SubscriberClosed,
@@ -174,14 +175,14 @@ class SubscribeRuntimeRequest(AttachedRuntimeRequest):
         agent = ctx.server.agent
         ctx.server.clients.setdefault(ctx.session, set()).add(ctx.client)
         await agent.emit_session_identity(ctx.session, ctx.name, client=ctx.client)
-        async with agent.sessions.transcript.subscribe(
-            ctx.name, session_id=ctx.session, client=ctx.client,
-        ):
-            await agent.turns.publish_turn_state(
-                AcpEventConsumer(agent, ctx.session, ctx.client)
-            )
-            await agent.inputs.emit_input_delivery_changed(ctx.session, client=ctx.client)
-            yield
+        await agent.sessions.transcript.replay(
+            ctx.name, session_id=ctx.session, client=ctx.client, read=SubscribeTranscript,
+        )
+        await agent.turns.publish_turn_state(
+            AcpEventConsumer(agent, ctx.session, ctx.client)
+        )
+        await agent.inputs.emit_input_delivery_changed(ctx.session, client=ctx.client)
+        yield
 
     async def ready(self, ctx: AttachedRuntimeRequestContext) -> None:
         await ctx.send(OwnerReady(

@@ -53,37 +53,22 @@ async def test_headless_bind_has_no_observation_process(headless_owner, tmp_path
     assert observation_children() == ()
 
 
-async def test_subscriptions_share_process_and_last_close_joins_it(headless_owner):
+async def test_subscriptions_read_history_without_an_observation_process(headless_owner):
+    """The owner reads its own stores: attached clients never cost it an interpreter."""
     owner = headless_owner
     session, = owner.sessions.published
     thread = owner._comms.registry.require(owner.sessions.require(session))
     frontend = canonical_agent(owner._comms, auto_wake=False)
     first = frontend._create_runtime_proxy(thread, session)
     second = frontend._create_runtime_proxy(thread, session)
-    reopened = frontend._create_runtime_proxy(thread, session)
     try:
-        assert observation_children() == ()
         await first.subscribe()
-        process, = observation_children()
         await second.subscribe()
-        assert observation_children() == (process,)
-        await first.close()
-        await until(lambda: len(owner._runtime.clients.get(session, ())) == 1)
-        assert process.is_alive()
-        await second.close()
-        await until(lambda: not process.is_alive())
-        assert process.exitcode == 0
+        await until(lambda: len(owner._runtime.clients.get(session, ())) == 2)
         assert observation_children() == ()
-        await reopened.subscribe()
-        replacement, = observation_children()
-        assert replacement.pid != process.pid
-        await reopened.close()
-        await until(lambda: not replacement.is_alive())
-        assert replacement.exitcode == 0
     finally:
         await first.close()
         await second.close()
-        await reopened.close()
         await frontend.shutdown()
 
 

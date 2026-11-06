@@ -40,6 +40,7 @@ from agent_comms.pi_counts import PiCount
 from agent_comms.read_basis import NamedViewer
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.threads import NativeThread
+from agent_comms.ui_model.observation import ReadTranscript, SubscribeTranscript
 from conftest import installed_comms
 from delivery_owner_fixture import canonical_agent
 
@@ -189,9 +190,9 @@ class TestHandlers:
             await agent.shutdown()
 
     @pytest.mark.parametrize("renamed", [False, True])
-    @pytest.mark.parametrize("subscribed", [False, True])
+    @pytest.mark.parametrize("read", [ReadTranscript, SubscribeTranscript])
     async def test_snapshot_capability_replays_one_bounded_update(
-        self, tmp_path, renamed, subscribed, native_runtime_package
+        self, tmp_path, renamed, read, native_runtime_package
     ):
         agent = self._agent(tmp_path)
         await agent.initialize(1)
@@ -221,15 +222,9 @@ class TestHandlers:
         destination = AcpSessionId("snapshot-destination")
         thread = agent._comms.registry.require("proj")
         try:
-            if subscribed:
-                async with agent.sessions.transcript.subscribe(
-                    thread.name, session_id=destination, client=client,
-                ):
-                    assert len(sent) == 1
-            else:
-                await agent.sessions.transcript.replay(
-                    thread.name, session_id=destination, client=client,
-                )
+            await agent.sessions.transcript.replay(
+                thread.name, session_id=destination, client=client, read=read,
+            )
             assert client.destinations == [destination]
             assert len(sent) == 1
             update = facts(sent[0].field_meta, TranscriptSnapshotUpdate)[0]
