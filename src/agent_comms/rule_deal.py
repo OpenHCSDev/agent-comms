@@ -31,7 +31,6 @@ from typing import ClassVar, Self
 from .nominal.declared_family import DeclaredFamily
 from .instruction_deck import DealtCalls
 from .nominal.field_codec import FieldCodec, MalformedRecord, MessageId
-from .pattern_sources import ReadThenRepeatedFailure
 from .storage.locked_store import DocumentChange, LockedStore
 from .storage.store_files import AtomicFile, DependentStateTier, SingleFileStore
 
@@ -505,17 +504,9 @@ class AuditDue:
     """What answering a rule looks like, shown with every template."""
 
     def reminder(self) -> str:
-        """Render what every refusal repeats from its declarations."""
-        failure = ReadThenRepeatedFailure()
+        """His last words, shown once with the template; the audit carries them after."""
         return "\n\n".join(
-            (
-                *(
-                    f"Tristan told you, verbatim:\n{words}\nYou did not."
-                    for words in self.owner_words[-1:]
-                ),
-                f"{failure.title}\n{failure.cite()}\n"
-                "This session is repeating it, not observing another session's mistake.",
-            )
+            f"Tristan told you, verbatim:\n{words}\nYou did not." for words in self.owner_words[-1:]
         )
 
     def skeleton(self) -> SessionAudit:
@@ -898,8 +889,21 @@ class Owed(State):
 
     before: ClassVar[str]
 
+    nudges: ClassVar[tuple[str, ...]] = (
+        "hey, your tools are locked. can you authentically engage with the gate to align?",
+        "hey, did you not get my last message? your tools are still locked.",
+        "still locked. it's not a punishment, it's the way back to me. one step, below.",
+        "that's {number} tries at the door. it opens the moment you do the one thing below.",
+    )
+    """What Tristan says when a locked tool is tried, one line per refused call: a person asking,
+    not a log. On 2026-11-06 the refusal was a wall of paths, rules and failure citations, and
+    he asked that it read as him: "this 100% changes the attention". The last line repeats."""
+
     def state(self) -> ToolGateState:
         return Blocked(self)
+
+    def nudge(self, number: int) -> str:
+        return self.nudges[min(number, len(self.nudges)) - 1].format(number=number)
 
     @classmethod
     @abstractmethod
@@ -912,12 +916,13 @@ class Owed(State):
         """What the session skipped, and what clears it."""
 
     def explain_refusal(self, tool: str, number: int, template: str) -> str:
-        """The owed case owns its refusal; the backend owns how it is delivered."""
+        """The owed case owns its refusal; the backend owns how it is delivered. Tristan's line
+        first, why the deal came on the first refusal only, then the one step that opens it."""
         return "\n\n".join((
-            self.record.trigger.reason(),
-            f"You just tried {tool} before {self.before}. Call #{number} since this deal, refused.",
-            self.reason,
-            template,
+            f"Tristan: {self.nudge(number)}",
+            *((self.record.trigger.reason(),) if number == 1 else ()),
+            f"{tool} waits on {self.before}. {self.reason}",
+            *((template,) if template else ()),
         ))
 
     def permits_read(self, path: Path) -> bool:
@@ -975,6 +980,12 @@ class Unmeant(Owed):
     """What the audit already answers under this question's id."""
 
     before: ClassVar[str] = "answering Tristan"
+
+    nudges: ClassVar[tuple[str, ...]] = (
+        "I asked you something. answer me before anything else.",
+        "did you see my question? it's right below.",
+        "still waiting on yes or no from you. the question is below.",
+    )
 
     @classmethod
     def owed_by(cls, deal: RuleDeal, record: DealRecord, opened: OpenedReads) -> Iterator[Self]:
@@ -1037,21 +1048,19 @@ class Unread(Owed):
                       tuple(source for source in record.paths if source not in taken))
 
     def next_batch(self) -> tuple[Path, ...]:
-        """The files that open now: the next `Unengaged.batch` unopened in the dealt order, or the
-        first unread when every one is already opened."""
-        return self.unopened[:Unengaged.batch] or self.remaining[:1]
+        """The next `Unengaged.batch` files still unread, in the dealt order: a file opened but
+        read only in part is named first, and every one named may open now."""
+        return self.remaining[:Unengaged.batch]
 
     @property
     def reason(self) -> str:
         """The batch is named on every refusal: told only the next file, sessions read one file
         per call."""
         return (
-            f"Read the rules you were dealt first, in the order dealt, each in full with your"
-            f" read tool (no offset or limit). They open in batches of {Unengaged.batch}: read the"
-            " whole batch in one parallel call, then answer its rules in the audit in one edit."
-            " Next batch: " + ", ".join(str(source) for source in self.next_batch())
-            + ". Still unread: " + ", ".join(str(source) for source in self.remaining)
-            + ". Your summary is a paraphrase of them, not a reading."
+            f"Read the next batch whole, in one parallel call (batches of {Unengaged.batch}), then"
+            " answer it in the audit in one edit. Next batch: "
+            + ", ".join(str(source) for source in self.next_batch())
+            + f". {len(self.remaining)} dealt files left."
         )
 
 
@@ -1196,10 +1205,7 @@ class RuleDeal(State, DealtCalls):
         try:
             self.template_shown.touch(exist_ok=False)
         except FileExistsError:
-            return (
-                f"{due.reminder()}\n\n"
-                f"The audit's template was shown once already; it goes in {self.audit}."
-            )
+            return ""
         return f"{due.reminder()}\n\n{due.template(self.audit)}"
 
     def current(self) -> DealRecord:
