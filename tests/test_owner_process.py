@@ -152,12 +152,16 @@ async def test_team_memory_stays_under_its_cap(tmp_path, native_workers, owner_c
         for name in names:
             await client.load_session(cwd=str(tmp_path), session_id=name)
         gate = native_workers.provider.response_gate = asyncio.Event()
+        # The provider holds every answer until all owners have posted. Its hold must last
+        # as long as this wait: a shorter hold dropped the earliest requests under load, so
+        # Pi re-sent one (30 posts for 29 owners) or failed the prompt with "Internal error".
+        native_workers.provider.response_timeout = 60
         async with asyncio.TaskGroup() as replies:
             pending = tuple(replies.create_task(client.prompt(
                 session_id=name, prompt=[TextContentBlock(type="text", text=fresh_inputs[name])],
             )) for name in names)
             try:
-                async with asyncio.timeout(60):
+                async with asyncio.timeout(native_workers.provider.response_timeout):
                     while native_workers.provider.posts < len(names):
                         await asyncio.sleep(.01)
                 assert native_workers.provider.posts == len(names)

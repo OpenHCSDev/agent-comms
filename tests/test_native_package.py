@@ -26,6 +26,11 @@ from agent_comms.package_stamp import STAMP
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX native package filesystem")
 
 
+# A hang bound for one prepare-pi-native run, not a stopwatch: a cold agent-comms import
+# on a loaded CI runner took over 15 s (2026-11-05, runs 42129231617 and 42129739868).
+PREPARE_HANG_SECONDS = 300
+
+
 def test_unbuilt_pin_is_native_pi_unavailable_and_names_its_preparation(tmp_path, monkeypatch):
     manifest = tmp_path / "stack/pi-native.sha256"
     manifest.parent.mkdir()
@@ -276,7 +281,7 @@ def test_publication_installs_declared_source_with_one_link(launcher, tmp_path):
     stamp_prepared(stack, env)
 
     def run():
-        result = subprocess.run(launch, capture_output=True, text=True, timeout=15, env=env)
+        result = subprocess.run(launch, capture_output=True, text=True, timeout=PREPARE_HANG_SECONDS, env=env)
         assert result.returncode == 0, result.stderr
 
     run()
@@ -308,7 +313,7 @@ def test_prepare_imports_agent_comms_with_the_stack_interpreter_not_path_python3
     assert subprocess.run(["python3", "-c", "import metaclass_registry"], env=env,
                           capture_output=True).returncode
     result = subprocess.run([str(stack / "native/prepare-pi-native")], env=env,
-                            capture_output=True, text=True, timeout=15)
+                            capture_output=True, text=True, timeout=PREPARE_HANG_SECONDS)
     assert result.returncode == 0, result.stderr
     assert result.stdout == f"PI_NATIVE_BIN={stack}/bin/pi-native\n"
     # Dropping old checkout links never deletes artifacts another runtime can still use.
@@ -326,7 +331,7 @@ def test_publication_refuses_unlisted_dependency_drift(launcher, tmp_path):
     deployments = tmp_path / "deployments"
     result = subprocess.run(
         [str(stack / "native/prepare-pi-native"), "--publish", str(deployments)],
-        capture_output=True, timeout=300,
+        capture_output=True, timeout=PREPARE_HANG_SECONDS,
     )
     assert deployments.is_dir()
     assert not any(deployments.iterdir())

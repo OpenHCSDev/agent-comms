@@ -225,7 +225,7 @@ def test_retained_native_group_uses_original_membership_and_children(
         assert tuple(NativeRuntimeInput.select(db)) == (selected,)
         assert tuple(WakeAssignment.select(db)) == expected_claims
         assert tuple(TriageNativeSource.select(db)) == tuple(
-            TriageNativeSource(selected.input_id, ordinal, claim.assignment_id)
+            TriageNativeSource(selected.input_id, ordinal, claim.assignment_id, 0)
             for ordinal, claim in enumerate(expected_claims)
         )
         assert tuple(row.execution_id for row in ExecutionRecord.select(db)) == execution_ids
