@@ -79,8 +79,8 @@ class ClaimedReplacement(BridgeReplacement):
         self.peer.setblocking(True)
         try:
             with self.peer, self.peer.makefile("rwb", buffering=0) as stream:
-                ready = FieldCodec.compact(FieldCodec.encode(SessionReady()))
-                stream.write((ready + "\n").encode())
+                announcement = FieldCodec.compact(FieldCodec.encode(SessionReady()))
+                stream.write((announcement + "\n").encode())
                 while operation.owner.alive():
                     if ready(self.peer, 1):
                         break
