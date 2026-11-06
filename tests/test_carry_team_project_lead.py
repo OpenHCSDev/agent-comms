@@ -3,9 +3,11 @@
 import json
 
 import pytest
+from cutover.carry_registry_presence import RegistryPresence
 from cutover.carry_team_project_lead import TeamProjectLead
 
 from agent_comms.comms import wire
+from agent_comms.presence import PresenceStore
 from agent_comms.storage.locked_store import LiveFilesRequest, RegistryFile
 from agent_comms.private_registry_guard import PrivateRegistryGuard
 from agent_comms.registry_document import NoTeamProject, RegisteredTeamProject
@@ -21,6 +23,8 @@ def version_one(root, *, lead: bool) -> None:
     path = RegistryFile.path_in(root)
     document = json.loads(path.read_text())
     document["version"] = 1
+    # Versions 1 and 2 stored each thread's presence inline.
+    document["last_seen"] = PresenceStore.at(root).read().seen
     for row in document["threads"].values():  # version 1 omitted the native default
         if row.pop("execution") != "native":
             raise AssertionError("the fixture declares only native threads")
@@ -51,6 +55,8 @@ def test_carry_stamps_version_two_and_the_project_stays_the_teams(private_direct
         assert step.carry(apply=True).rewritten == tuple(
             written.relative_to(tmp_path)
             for written in (path, PrivateRegistryGuard.path_in(tmp_path)))
+    with maintenance_held(tmp_path):
+        assert RegistryPresence(LiveFilesRequest(tmp_path), tmp_path / "spill").carry(apply=True).changed == 1
     assert wire(tmp_path).registry.snapshot().team_project == project
     assert type(wire(tmp_path).registry.require("worker")) is NativeThread
     assert step.carry(apply=False).changed == 0

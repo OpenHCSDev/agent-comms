@@ -39,6 +39,7 @@ from .nominal.field_codec import (
     ThreadLookup,
     WireOmitDefault,
     WireRequired,
+    WireTransient,
     WireValue,
 )
 from .frozen_recipient import FrozenRecipient
@@ -742,8 +743,8 @@ class RegisteredTeamProject(TeamProject):
 @dataclass
 class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
     version: Annotated[
-        Literal[2], SlicePolicy(WholeDocumentValue), WireRequired()
-    ] = 2
+        Literal[3], SlicePolicy(WholeDocumentValue), WireRequired()
+    ] = 3
     purpose: Annotated[RootPurpose, SlicePolicy(WholeDocumentValue)] = field(
         default_factory=WorkingRootPurpose
     )
@@ -756,9 +757,12 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
     statuses: Annotated[dict[str, ThreadStatus], SlicePolicy(MappingRowsSlice)] = field(
         default_factory=dict
     )
-    last_seen: Annotated[dict[str, float], SlicePolicy(MappingRowsSlice)] = field(
-        default_factory=dict
+    last_seen: Annotated[dict[str, float], WireTransient()] = field(
+        default_factory=dict, compare=False
     )
+    """Presence, stored by PresenceStore and laid over each revision as it is read: a
+    heartbeat that changes only this leaves the document equal, so registry.json is not
+    rewritten for it."""
     aliases: Annotated[dict[str, str], SlicePolicy(MappingRowsSlice)] = field(
         default_factory=dict
     )
@@ -772,12 +776,20 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
     def copy(self) -> RegistryDocument:
         return replace(
             self,
+            last_seen=dict(self.last_seen),
             **{
                 plan.name: ThreadSlice.of(plan).copy(plan.current(self))
                 for plan in FieldCodec.field_plans(type(self))
                 if plan.declared.init and plan.records
             },
         )
+
+    def presented(self, seen: Mapping[str, float]) -> RegistryDocument:
+        """This revision with the stored presence laid over it. Every declared thread has a
+        presence row: the edit that declared it wrote its row before the registry."""
+        if not self.threads.keys() <= seen.keys():
+            raise InvalidRegistryDocument(MalformedRecord("a declared thread has no presence row"))
+        return replace(self, last_seen={name: seen[name] for name in self.threads})
 
     def install_thread(self, thread: Thread) -> None:
         """Retire a withdrawn reference inside this registry transaction."""
@@ -843,8 +855,8 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
                     section.reuse(raw, same, decoded, changed)
                 document = changed
             names = set(document.threads)
-            if names != set(document.statuses) or names != set(document.last_seen):
-                raise MalformedRecord("thread presence does not match declarations")
+            if names != set(document.statuses):
+                raise MalformedRecord("thread statuses do not match declarations")
             if not names <= document.owners.generations.keys():
                 raise MalformedRecord("missing owner generation")
             if not names <= document.claims.generations.keys():
