@@ -26,6 +26,18 @@ class ToolRefusedError(ValueError):
     """An intentional refusal safe to return as a tool answer, not a transport failure."""
 
 
+class SessionFailure(Exception):
+    """A session command failed; it does not declare the serving process dead.
+
+    A member writes the words its reader acts on, so the boundary prints those
+    words instead of a traceback.
+    """
+
+    def reported(self) -> str:
+        """What this failure tells the reader, including any recovery it names."""
+        return str(self)
+
+
 @dataclass(frozen=True)
 class HookRecord:
     """A JSON object Claude Code writes to a hook, decoded once by its declared fields."""
@@ -213,7 +225,15 @@ class ClaudeHookProgram(ABC):
 
     @classmethod
     def failed(cls, error: BaseException) -> NoReturn:
+        """An error nobody wrote a report for: its traceback is the only account of it."""
         traceback.print_exception(error, file=sys.stderr)
+        raise SystemExit(cls.failure_status())
+
+    @classmethod
+    def refused(cls, error: SessionFailure) -> NoReturn:
+        """A failure that wrote its own report prints it. A traceback around those words buries
+        the recovery they name, and a reader who sees stack frames reads the whole line as noise."""
+        print(error.reported(), file=sys.stderr)
         raise SystemExit(cls.failure_status())
 
     @classmethod
@@ -221,9 +241,9 @@ class ClaudeHookProgram(ABC):
         """A session with no bus has no teammate or fleet behavior to run."""
 
     @classmethod
-    def absent(cls, record: Mapping[str, object], error: BaseException) -> None:
+    def absent(cls, record: Mapping[str, object], error: SessionFailure) -> None:
         """An enrolled session does not silently become an unbound one."""
-        cls.failed(error)
+        cls.refused(error)
 
     @classmethod
     def owns_entry(cls, entry: Mapping[str, object], installed_hooks: tuple[dict[str, str], ...]) -> bool:
