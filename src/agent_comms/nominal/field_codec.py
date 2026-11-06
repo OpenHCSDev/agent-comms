@@ -1523,7 +1523,8 @@ class StructuralRepresentation(FieldRepresentation):
 
     @classmethod
     def for_value(cls, value: object) -> type[FieldRepresentation]:
-        return FieldCodec.representation(type(value))[1]
+        declared: object = type(value)
+        return FieldCodec.representation(declared)[1]
 
     @classmethod
     def project_view(cls, value: object, view: type[ViewExclusion], annotation: object) -> JsonValue:
