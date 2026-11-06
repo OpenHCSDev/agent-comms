@@ -370,7 +370,7 @@ class HistorySource(MessageHistory):
         catalog_revision = FileRevision.capture(catalog_path)
         archived = Bus(Bus.path_in(destination))
         Bus(Bus.path_in(root)).backup(archived.path)
-        for path in (RegistryFile.path_in(root), catalog_path):
+        for path in (*Registration(RegistryFile.path_in(root)).store.stored_files(), catalog_path):
             if path.exists():
                 target = destination / path.name
                 shutil.copy2(path, target)
