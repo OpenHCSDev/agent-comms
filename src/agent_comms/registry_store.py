@@ -300,12 +300,17 @@ class RegistryEdit:
         return leased, self.document.owners.generations[current.name]
 
     def commit(self) -> None:
-        # Presence first, so a reader that sees a newly declared thread sees its presence row.
-        if self.document.last_seen != self.original.document.last_seen:
-            self.store.presence.record(self.document.last_seen, self.original.document.last_seen)
+        # Rows set before the registry and dropped after it, so whichever revision a reader
+        # sees, the old or the new, has a presence row for every thread it names.
+        after, before = self.document.last_seen, self.original.document.last_seen
+        dropped = frozenset(before.keys() - after.keys())
+        if after != before:
+            self.store.presence.set_rows(after, before)
         if self.document != self.original.document:
             self.store.save_unlocked(self.document)
             self.original = self.store.read_revision_unlocked()
+        if dropped:
+            self.store.presence.drop_rows(dropped)
         for record in self.superseded:
             record.retire()
         self.superseded.clear()

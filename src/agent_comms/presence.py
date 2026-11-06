@@ -25,13 +25,13 @@ class PresenceDocument(SingleFieldValue):
 
     seen: dict[str, float] = field(default_factory=dict)
 
-    def changed(self, after: Mapping[str, float], before: Mapping[str, float]) -> PresenceDocument:
-        """This document with one registry edit's presence applied: the rows it set, without
-        the rows it dropped (a removed, unregistered or renamed-away name)."""
-        kept = {name: when for name, when in self.seen.items()
-                if name not in before or name in after}
-        return PresenceDocument({**kept, **{
+    def setting(self, after: Mapping[str, float], before: Mapping[str, float]) -> PresenceDocument:
+        """This document with the rows one registry edit set or changed."""
+        return PresenceDocument({**self.seen, **{
             name: when for name, when in after.items() if before.get(name) != when}})
+
+    def without(self, names: frozenset[str]) -> PresenceDocument:
+        return PresenceDocument({name: when for name, when in self.seen.items() if name not in names})
 
 
 class PresenceStore(SingleFileStore, CarriedDocument[PresenceDocument], DependentStateTier):
@@ -44,6 +44,11 @@ class PresenceStore(SingleFileStore, CarriedDocument[PresenceDocument], Dependen
     def empty(self) -> PresenceDocument:
         return PresenceDocument()
 
-    def record(self, after: Mapping[str, float], before: Mapping[str, float]) -> None:
-        """Apply one registry edit's presence; the caller holds the registry's writer."""
-        self.update(lambda document: DocumentChange.to(document.changed(after, before)))
+    def set_rows(self, after: Mapping[str, float], before: Mapping[str, float]) -> None:
+        """Before the registry is saved: every revision a reader can see, the old one and the
+        new one, has a presence row for each thread it names."""
+        self.update(lambda document: DocumentChange.to(document.setting(after, before)))
+
+    def drop_rows(self, names: frozenset[str]) -> None:
+        """After the registry is saved: rows of names it no longer declares."""
+        self.update(lambda document: DocumentChange.to(document.without(names)))
