@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Never
 
+from .nominal.declared_family import UnknownFamilyMember
 from .nominal.field_codec import (
     FieldCodec,
     InputId,
@@ -334,7 +335,9 @@ class CodingCall(NativeToolCall):
 
         try:
             return NativeToolDeclaration.from_call(name, arguments, call_id=call_id)
-        except MalformedRecord as error:
+        # A name no member declares is refused data too: answering "no" here keeps the
+        # call from dying with the socket, which Pi can only report as outcome UNKNOWN.
+        except (MalformedRecord, UnknownFamilyMember) as error:
             return RefusedCodingCall(call_id, name, arguments, str(error))
 
 

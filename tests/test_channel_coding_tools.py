@@ -153,6 +153,8 @@ def test_coding_names_and_argument_types_come_from_declarations():
     ("edit", {"path": "x", "edits": [{"oldText": False, "newText": "new"}]}),
     ("edit", {"path": "x", "edits": [{"oldText": "old", "newText": "new", "newText_should_not_exist": "extra"}]}),
     ("write", {"path": "x", "content": 3}),
+    # A name no member declares is refused, not left to kill the owner's socket.
+    ("mcp_fixture_echo_092c79e8f8", {"message": "ACCEPTANCE_ECHO"}),
 ])
 def test_pi_argument_records_reject_bad_shapes_without_claiming(name, arguments):
     from agent_comms.tool_denial import SelectedToolDenied
