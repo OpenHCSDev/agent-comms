@@ -3,7 +3,6 @@
 
 from agent_comms.transport.mcp import AnsweredCall
 from agent_comms.repo import Checkout, Repo
-import inspect
 import io
 import json
 from datetime import UTC, datetime
@@ -35,7 +34,6 @@ from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import FieldCodec, OrderId
 from agent_comms.pattern_sources import PostmortemFailure
 from agent_comms.registry_document import RegisteredTeamProject
-from agent_comms.slop import Slop
 from agent_comms.team.spinning import SpinningTeammate
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import DirectiveUnacted, OrderlessUnreviewedHead, RetiredStandingRule, ReviewTimerUp
@@ -52,6 +50,7 @@ from agent_comms_hooks.board import (
 from agent_comms.cli_bridges.hook_reread import BoardReminder, DeafReminder, SliceReminder
 from agent_comms.cli_bridges.hook_deferral import StopHook
 from agent_comms.cli_bridges.hook_forks import SubagentHook
+from agent_comms.rule_probes import Probe
 from agent_comms.rule_deal import AuditDue, Owed, OwnerWordsAnswer, ReadSpan, RuleAudit, SessionAudit
 from agent_comms.cli_bridges.hook_read_gate import GatedCall, MonitorInput
 from agent_comms_hooks.shell_commands import EmergencyHookStop
@@ -59,7 +58,7 @@ from agent_comms_hooks.skill import (DeckReader, DeckStart, LightReader,
                                      LightPrime, Prime, SessionSource)
 from agent_comms.cli_bridges.session_watch import DeafWatch, WatchClaim
 from agent_comms_hooks.watch import WatchRecord
-from conftest import engaged, fresh_confession
+from conftest import engaged, fresh_confession, probe_answers
 from test_team_notifications import beat
 from test_head_review import ACCEPTED, invoke
 
@@ -164,15 +163,7 @@ def test_the_team_session_start_reads_all_package_files(tmp_path, source, team_s
     assert ("FUCK YOUR COMPACTION" in context) == (source == "compact")
     dealt = dealt_sources(transcript)
     assert all(str(path) in context for path in dealt)
-    expected = (
-        *TeamPackage.paper(),
-        TeamPackage.voice(),
-        TeamPackage.patterns(),
-        Path(inspect.getfile(PostmortemFailure)),
-        TeamPackage.skill(),
-        *(rule.path for rule in RuleFile.packaged()),
-        Slop.catalog() / "README.md",
-    )
+    expected = DeckReader.sources()
     assert len(dealt) == len(expected) and set(dealt) == {path.resolve() for path in expected}
 
 
@@ -733,7 +724,8 @@ def answered_audit(reader, read=None, owner_words=()):
     owed = reader.answered() if read is None else {rule.name for rule in read}
     return json.dumps({"rules": [engaged(source.stem, source.resolve())
                                  for source in reader.sources() if source.stem in owed],
-                       "owner_words": list(owner_words)})
+                       "owner_words": list(owner_words),
+                       "probes": probe_answers(tuple(entry["words"] for entry in owner_words))})
 
 
 @pytest.fixture
@@ -1017,8 +1009,11 @@ def test_the_audit_answers_each_shown_prompt_by_its_own_words_with_an_action():
     idle = SessionAudit(audited, (OwnerWordsAnswer("fix the gate", "editing read_gate"),
                                   OwnerWordsAnswer("land the queue", "  ")))
     assert "no action" in due.refusal(idle)
-    answered = SessionAudit(audited, (OwnerWordsAnswer("fix the gate", "editing read_gate"),
-                                      OwnerWordsAnswer("land the queue", "merging #3572")))
+    words = (OwnerWordsAnswer("fix the gate", "editing read_gate"),
+             OwnerWordsAnswer("land the queue", "merging #3572"))
+    assert "probe" in due.refusal(SessionAudit(audited, words))  # the probes are owed too
+    probes = tuple(FieldCodec.decode(Probe, answer) for answer in probe_answers(due.owner_words))
+    answered = SessionAudit(audited, words, probes=probes)
     assert due.refusal(answered) == ""
     assert "voice" in due.refusal(SessionAudit((), answered.owner_words))
 
