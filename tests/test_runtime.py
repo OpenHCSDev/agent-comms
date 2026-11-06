@@ -1,4 +1,5 @@
 """Single-owner attachment and idle wakeup through real processes and sockets."""
+from agent_comms.order_tools import ServedInputDeliveryRead
 from agent_comms.repo import Checkout
 from agent_comms.runtime_requests import QueueActionRuntimeRequest
 from agent_comms.owner_connection import (
@@ -28,7 +29,7 @@ from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDispositions, InputDocument
 from agent_comms.input_key import BusInputKey
 from agent_comms.bus_read import OwnerReadRuntimeRequest
-from agent_comms.order_tools import InputDeliveryRead
+from agent_comms.transport.tools.reads import InputDeliveryRead
 from agent_comms.runtime_server import RuntimeRequest
 from agent_comms.threads import ExternalThread, NativeThread
 from agent_comms.tool_caller import ToolCaller
@@ -72,7 +73,7 @@ def recorded_input(comms) -> InputDocument:
 async def mcp_input_delivery(comms, include_history: bool = True):
     async with asyncio.timeout(30):
         return await asyncio.to_thread(
-            InputDeliveryRead.invoke, comms, {"thread": "held", "include_history": include_history},
+            ServedInputDeliveryRead.invoke, comms, {"thread": "held", "include_history": include_history},
             caller=ToolCaller.from_actor(None),
         )
 

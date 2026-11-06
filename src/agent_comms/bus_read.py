@@ -6,11 +6,13 @@ import asyncio
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from functools import partial
+from typing import cast
 
 from .comms import Comms
 from .coordination.errors import StaleFence
 from .coordination.coordinator import Coordination
 from .errors import RelationViolationError, UnregisteredThreadError
+from .nominal.field_codec import FieldCodec
 from .owner_connection import (
     OwnerConnection,
     OwnerIdentityChangedError,
@@ -27,6 +29,8 @@ from .threads import Thread
 from .tool_declaration import ToolDeclaration
 from .tool_request import ThreadReadTool
 from .tool_result import ToolResult
+from .acp_extension import TranscriptSnapshotUpdate
+from .transcripts import TranscriptRead
 
 
 class BusRead[Result](ToolDeclaration, ABC):
@@ -41,7 +45,20 @@ class UiRead[Result](BusRead[Result], ABC):
         return self.apply(comms, NoDisplaySelection())
 
 
-class OwnerScopedRead[Result: ToolResult = ToolResult](BusRead[Result], ThreadReadTool, ABC):
+class CapturesTranscriptPage(UiRead, ABC):
+    """A read whose answer is one captured transcript page: the page is the serving work,
+    and the snapshot the wire carries is derived from it."""
+
+    @abstractmethod
+    def capture_as(self, comms: Comms, reader: ReadAuthority) -> TranscriptRead: ...
+
+    def apply(self, comms: Comms, caller: ReadAuthority) -> TranscriptSnapshotUpdate:
+        return TranscriptSnapshotUpdate.from_read(self.capture_as(comms, caller))
+
+
+class OwnerScopedRead[Result: ToolResult = ToolResult](
+    BusRead[Result], ThreadReadTool[Result], ABC,
+):
     """The captured registration selects live evidence or the declared unavailable answer."""
 
     def apply(self, comms: Comms, caller: ReadAuthority) -> Result:
@@ -100,8 +117,9 @@ class OwnerScopedRead[Result: ToolResult = ToolResult](BusRead[Result], ThreadRe
     @abstractmethod
     async def owned(self, ctx: AttachedRuntimeRequestContext) -> Result: ...
 
-    @abstractmethod
-    def decode_reply(self, raw: object) -> Result: ...
+    def decode_reply(self, raw: object) -> Result:
+        """The owner's reply, decoded into the result the declaration binds."""
+        return cast(Result, FieldCodec.decode(self.result_type(), raw))
 
 
 class OwnerLiveRead[Result: ToolResult = ToolResult](OwnerScopedRead[Result], ABC):

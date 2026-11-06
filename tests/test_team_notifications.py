@@ -13,6 +13,7 @@ from multiprocessing import Pipe
 import pytest
 
 
+from agent_comms.bus_read import UiRead
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.cli_verbs.fork import ForkCliCommand
 from agent_comms.heartbeat_delivery import OffHeartbeatDelivery, OnHeartbeatDelivery
@@ -36,7 +37,7 @@ from agent_comms.todos import ProgressRead, TeammateOccupied
 from agent_comms.ui_model import observation
 from agent_comms.ui_model.observation import TeamHudObserved, ObservationService, ObserveTeamHud
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.order_tools import TeammateRead
+from agent_comms.transport.tools.reads import TeammateRead
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import invoke_tool
 from agent_comms.work_branches import WorkBranchError
@@ -257,7 +258,7 @@ def test_expanded_unit_reads_original_orders_and_bounded_activity_then_refuses_s
     operation = TeammateRead(frame_owner=hud.teammate, unit=card.unit,
                                   orders=tuple(dict.fromkeys(order.order for order in card.orders)))
     request = ReadOperation(str(comms.root), operation)
-    direct = operation.read(comms)
+    direct = UiRead.serving(operation).read(comms)
     detail = pickle.loads(pickle.dumps(request.read(comms)))
     # The shared operation, the UI's root-bound envelope and the MCP boundary answer the same
     # selected card with the same bounded records.

@@ -41,11 +41,10 @@ from agent_comms.todos import (
 
 from .acp_extension import (
     GoalSnapshotReply,
-    TranscriptSnapshotUpdate,
     TurnChangedUpdate,
     UpdateMetadata,
 )
-from .bus_read import OwnerLiveRead, OwnerScopedRead, UiRead
+from .bus_read import CapturesTranscriptPage, OwnerLiveRead, OwnerScopedRead, UiRead
 from .team_hud import TeamFrame, TeamHud, TeamLoad, TeammateDetail
 from .comms import Comms
 from .coordination.coordinator import Coordination
@@ -71,15 +70,10 @@ from .tool_caller import ThreadCaller, ToolCaller
 from .tool_declaration import EditCall
 from .tool_request import PublishingToolRequest, ReadTool, ThreadReadTool, ThreadToolRequest, NativeToolRequest
 from .transport.request import tool_field
+from .transport.tools.reads import InputDeliveryRead, OwnerGoalRead, TeammateRead, TranscriptPageRead
 from .tool_result import ToolResult
 from .transcript_events import SentTranscript
 from .transcripts import (
-    AtFrontier,
-    LatestPage,
-    LivePageSource,
-    PageLimit,
-    PagePosition,
-    PageSource,
     TranscriptRead,
 )
 from .turn_digests import (
@@ -579,19 +573,8 @@ class CommsTurnsTool(ThreadReadTool):
                        detail=self.detail)
 
 
-@dataclass(frozen=True, kw_only=True)
-class InputDeliveryRead(
-    OwnerScopedRead[DeliveryOverview],
-    declared_name="comms_input_delivery",
-):
-    """One delivery projection, refined by the actual owner's queue when observed."""
-
-    label = "Input delivery"
-    description = ("Read a teammate's inputs that failed or are UNKNOWN, and its earlier delivery "
-                   "notices, each with its bus sequence and input id; none is ever replayed.")
-    include_history: Annotated[
-        bool, *tool_field("Include earlier delivery notices; current inputs are always read")
-    ] = True
+class ServedInputDeliveryRead(OwnerScopedRead, InputDeliveryRead):
+    """Serving the delivery projection: the owner's queue when observed, else the stored one."""
 
     def unavailable(self, comms: Comms, owner: ThreadIncarnation) -> DeliveryOverview:
         return comms.goals.input_delivery(
@@ -609,20 +592,9 @@ class InputDeliveryRead(
             )
         )
 
-    def decode_reply(self, raw: object) -> DeliveryOverview:
-        return FieldCodec.decode(DeliveryOverview, raw)
 
-
-@dataclass(frozen=True, kw_only=True)
-class OwnerGoalRead(OwnerLiveRead[GoalSnapshotReply], declared_name="comms_owner_goal"):
-    """A unit's goal snapshot and the turn it was read with, answered by its live native owner
-    under the owner's own registration and session; the thread selector only finds the owner."""
-
-    label = "Owner goal"
-    description = (
-        "Read a teammate's current goal snapshot and the turn state its live native "
-        "owner read with it."
-    )
+class ServedOwnerGoalRead(OwnerLiveRead, OwnerGoalRead):
+    """Serving the goal snapshot from the live native owner, with the turn it read."""
 
     async def owned(self, ctx: AttachedRuntimeRequestContext) -> GoalSnapshotReply:
         snapshot = await Coordination.run_worker(
@@ -639,35 +611,9 @@ class OwnerGoalRead(OwnerLiveRead[GoalSnapshotReply], declared_name="comms_owner
         )
         return GoalSnapshotReply.from_snapshot(snapshot, UpdateMetadata.of(TurnChangedUpdate(turn)))
 
-    def decode_reply(self, raw: object) -> GoalSnapshotReply:
-        return FieldCodec.decode(GoalSnapshotReply, raw)
 
-
-@dataclass(frozen=True, kw_only=True)
-class TranscriptPageRead(
-    UiRead[TranscriptSnapshotUpdate],
-    ThreadReadTool,
-    declared_name="comms_transcript_page",
-):
-    """One bounded transcript page with its current draft and the source witness that read it.
-    The cursors and historical source select the page; they never choose whose authority the
-    read runs under."""
-
-    label = "Transcript page"
-    description = (
-        "Read one bounded page of a thread's transcript with its current draft. "
-        "Send a returned cursor as an earlier_than or later_than position for the "
-        "next page; page_source selects live history or an archive."
-    )
-    position: Annotated[
-        PagePosition, *tool_field("latest_page, or earlier_than/later_than a returned cursor")
-    ] = LatestPage()
-    limit: Annotated[PageLimit, *tool_field("at_frontier, or through a cursor already shown")] = (
-        AtFrontier()
-    )
-    page_source: Annotated[
-        PageSource, *tool_field("Live history or a recorded archive identity")
-    ] = LivePageSource()
+class ServedTranscriptPageRead(CapturesTranscriptPage, ThreadReadTool, TranscriptPageRead):
+    """Serving one transcript page under the reader's authority."""
 
     def capture_as(self, comms: Comms, reader: ReadAuthority) -> TranscriptRead:
         return comms.transcripts.capture_page_read(
@@ -677,32 +623,9 @@ class TranscriptPageRead(
             page_source=self.page_source,
         )
 
-    def apply(self, comms: Comms, reader: ReadAuthority) -> TranscriptSnapshotUpdate:
-        return TranscriptSnapshotUpdate.from_read(self.capture_as(comms, reader))
 
-
-@dataclass(frozen=True, kw_only=True)
-class TeammateRead(
-    UiRead[TeammateDetail],
-    ReadTool,
-    NativeToolRequest,
-    declared_name="comms_team_unit",
-):
-    """One unit's card on a teammate's published frame, expanded with its orders' bounded
-    instructions, stories, commits and activity. The held incarnations and orders select the
-    exact card and witness it; they are never whose authority the read runs under."""
-
-    label = "Team teammate"
-    description = (
-        "Expand one teammate's card on a teammate's published frame: its orders' "
-        "bounded instructions, stories and commits, and its recent activity. "
-        "Refuses when either incarnation or the teammate's assignment changed."
-    )
-    frame_owner: Annotated[
-        ThreadIncarnation, *tool_field("Teammate incarnation whose published frame shows the card")
-    ]
-    unit: Annotated[ThreadIncarnation, *tool_field("Teammate incarnation on that card")]
-    orders: Annotated[tuple[OrderId, ...], *tool_field("The card's orders, exactly as published")]
+class ServedTeammateRead(UiRead, ReadTool, NativeToolRequest, TeammateRead):
+    """Serving one teammate card, refused when the frame or the card moved on."""
 
     def apply(self, comms: Comms, reader: ReadAuthority) -> TeammateDetail:
         snapshot = comms.registry.snapshot()

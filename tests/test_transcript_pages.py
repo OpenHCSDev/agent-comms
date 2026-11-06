@@ -5,6 +5,7 @@ from agent_comms.transcripts import (
     Through,
     WireTranscriptCursor,
 )
+from agent_comms.bus_read import UiRead
 from agent_comms.repo import Checkout
 from conftest import installed_comms, transcript_records
 from agent_comms.session_file import RegistrySessionLocation
@@ -25,7 +26,7 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_text import ForkedParent, GivenThreadText
 from agent_comms.acp_extension import TranscriptSnapshotUpdate
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.order_tools import TranscriptPageRead
+from agent_comms.transport.tools.reads import TranscriptPageRead
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import invoke_tool
 from agent_comms.ui_model.observation import ReadTranscript
@@ -80,7 +81,7 @@ def shared_page(comms, operation: TranscriptPageRead) -> TranscriptSnapshotUpdat
     expected = TranscriptSnapshotUpdate.from_read(comms.transcripts.capture_page_read(
         operation.thread, position=operation.position, limit=operation.limit,
         page_source=operation.page_source))
-    direct = operation.read(comms)
+    direct = UiRead.serving(operation).read(comms)
     assert ReadTranscript(str(comms.root), operation).read(comms) == direct == expected
     assert invoke_tool(comms, operation.declared_name, FieldCodec.encode_fields(operation),
                        caller=ThreadCaller(operation.thread)) == FieldCodec.encode(direct)
