@@ -14,7 +14,7 @@ import os
 import secrets
 import time
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Iterator
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
@@ -67,9 +67,16 @@ class WatchTicket(ABC):
     @abstractmethod
     def live(self, now: float) -> bool: ...
 
+    opened_on: ClassVar[str]
+    """How the connector's log names a socket opened with this kind of ticket."""
+
     def superseded_by(self, opened: WatchTicket) -> bool:
         """Whether a watch opened with ``opened`` ends this ticket's use."""
         return False
+
+    async def opened(self, offer: ReconnectUrl, viewer: web.WebSocketResponse) -> None:
+        """What the new socket is sent before anything else: by default nothing, since only a
+        client that says it reconnects can read a ReconnectUrl frame."""
 
 
 @dataclass(frozen=True)
@@ -79,6 +86,7 @@ class ArmedTicket(WatchTicket):
     expires_at: float
 
     seconds: ClassVar[int] = 60
+    opened_on = "an armed ticket"
 
     def live(self, now: float) -> bool:
         return self.expires_at > now
@@ -90,11 +98,21 @@ class ReconnectTicket(WatchTicket):
     it. A network reset can strike at any point in a watch's life, so it has no clock: it
     stands until it is redeemed or any newer watch of its thread opens."""
 
+    opened_on = "a reconnect ticket"
+
     def live(self, now: float) -> bool:
         return True
 
     def superseded_by(self, opened: WatchTicket) -> bool:
         return opened.thread == self.thread
+
+    async def opened(self, offer: ReconnectUrl, viewer: web.WebSocketResponse) -> None:
+        """Only a client that reconnects alone redeems this ticket, so its next URL goes first,
+        before any message: resets come in bursts, and a socket hit again within seconds must
+        already hold it (2026-11-05 21:51: a re-dialled socket dropped 8 s after opening, while
+        its URL still waited on the transcript reader)."""
+        await viewer.send_str(offer.line())
+        logging.info("Watch for %s sent its reconnect URL on opening", self.thread)
 
 
 DAMAGED_RECORD = "A record from the session's transcript was not valid JSON and was left out."
@@ -162,7 +180,7 @@ class PushedTranscript(ReceivesWatchReports, TranscriptConfirmsDelivery, ClaudeJ
     comms: Comms
     transcript_thread: str
     socket: web.WebSocketResponse
-    reconnect: Callable[[], ReconnectUrl]
+    offer: ReconnectUrl
     reported: ReportedLedger = field(default_factory=lambda: ReportedLedger())
 
     delivery_kind: ClassVar[type[RemoteWatchHistory]] = RemoteWatchHistory
@@ -191,7 +209,10 @@ class PushedTranscript(ReceivesWatchReports, TranscriptConfirmsDelivery, ClaudeJ
                 await self.finish(delivery, partial(replace, outcome=EmittedOutcome))
 
     async def reconnectable(self) -> None:
-        await self.socket.send_str(self.reconnect().line())
+        """The socket's own standing URL, the one minted when it opened: a second mint would
+        end the first while its frame might still be lost in a reset."""
+        await self.socket.send_str(self.offer.line())
+        logging.info("Watch for %s sent its reconnect URL on request", self.transcript_thread)
 
     async def transcript(self) -> AsyncIterator[RuntimeUpdate]:
         state, offset = self.start_state(), 0
@@ -235,13 +256,10 @@ class InboxWatch:
 
     thread: str
     root: Path
-    tickets: WatchTickets
-    issuer: URL
+    offer: ReconnectUrl
+    """The socket's one standing reconnect URL, minted when it opened."""
 
     wait_seconds: ClassVar[int] = 5
-
-    def reconnect(self) -> ReconnectUrl:
-        return self.tickets.reconnect(self.thread, self.issuer)
 
     @contextmanager
     def wire(self) -> Iterator[Comms]:
@@ -353,7 +371,7 @@ class InboxWatch:
         with self.wire() as comms:
             try:
                 await PushedTranscript(
-                    comms, self.thread, socket, self.reconnect, reported,
+                    comms, self.thread, socket, self.offer, reported,
                 ).publish_transcript()
             except* Exception as failures:
                 logging.exception("Transcript from %s stopped", self.thread)

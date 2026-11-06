@@ -15,6 +15,7 @@ import pytest
 from agent_comms.activity import ActivityState, ReadyDrainReadiness, StalledDeliveryReadiness
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import InboxActivity, wire
+from agent_comms.cli_bridges.claude_transcript import ReconnectUrl
 from agent_comms.inbox_watch import InboxWatch
 from agent_comms.team.standing import UnitDeaf
 from agent_comms.harness_delivery_states import TakingLedger
@@ -48,17 +49,21 @@ def readiness(tmp_path):
     return comms.agents.activity_of("bridge", snapshot=comms.registry.snapshot()).readiness
 
 
+NO_RECONNECT_ASKED = ReconnectUrl(url="ws://127.0.0.1/watch/unused")
+"""These tests take and read the inbox only; no client here re-dials, so its URL is never sent."""
+
+
 def sent_to_bridge(comms, text):
     return comms.messaging.send("sender", "bridge", text)
 
 
 def take(tmp_path, message) -> None:
     """The harness delivery a reader records when it takes a message: the connector's own."""
-    InboxWatch("bridge", tmp_path).taken(message, TakingLedger())
+    InboxWatch("bridge", tmp_path, NO_RECONNECT_ASKED).taken(message, TakingLedger())
 
 
 def untaken(tmp_path):
-    return InboxWatch("bridge", tmp_path).untaken()
+    return InboxWatch("bridge", tmp_path, NO_RECONNECT_ASKED).untaken()
 
 
 @pytest.fixture
