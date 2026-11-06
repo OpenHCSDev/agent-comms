@@ -788,7 +788,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         """This revision with the stored presence laid over it. Every declared thread has a
         presence row: the edit that declared it wrote its row before the registry."""
         if not self.threads.keys() <= seen.keys():
-            raise InvalidRegistryDocument(MalformedRecord("thread presence does not match declarations"))
+            raise InvalidRegistryDocument(MalformedRecord("a declared thread has no presence row"))
         return replace(self, last_seen={name: seen[name] for name in self.threads})
 
     def install_thread(self, thread: Thread) -> None:
