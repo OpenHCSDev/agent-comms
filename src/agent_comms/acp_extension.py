@@ -115,8 +115,8 @@ class TranscriptChangedUpdate(AgentCommsUpdate):
 
 
 class ClaimBlockedFailure(BackendDeliveryFailure):
-    def present(self, receiver, body: str) -> None:
-        receiver.delivery_blocked(self.description, body)
+    """A human claim held the input; presented as every delivery failure is, a refusal that
+    restores the draft. Toad's 62e938ce deleted delivery_blocked: a lock no state leaves."""
 
 
 @dataclass(frozen=True)
