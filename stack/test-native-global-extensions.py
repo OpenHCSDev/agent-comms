@@ -64,7 +64,7 @@ def main(fixture: Path):
     }
     environment.update(RestartEnvironment(native_config=agent, agent_directory=agent).encode_native())
     from agent_comms.child_process import ProcessIdentity
-    from agent_comms.threads import Thread
+    from agent_comms.registry.threads import Thread
 
     comms = wire(root / "wire")
     thread = Thread("native-startup-fixture", frozenset(), Checkout(project),
