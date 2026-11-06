@@ -22,7 +22,7 @@ from metaclass_registry.mro_dispatch import (
     handles,
 )
 
-from agent_comms.class_fact import Declarations
+from agent_comms.class_fact import ClassFact, Declarations
 
 
 def declared_words(stem: str) -> str:
@@ -33,6 +33,22 @@ def declared_words(stem: str) -> str:
 
 
 class FamilyMeta(AutoRegisterMeta, ABCMeta):
+    """A family takes its members by declaration, so membership is the member's MRO.
+
+    ABCMeta answers a negative check by asking every subclass in the tree, looking for
+    virtual members ``register`` added outside a class body; a family has none, and its
+    tree is thousands of classes deep. Abstract methods stay enforced by ABCMeta.
+    """
+
+    __instancecheck__ = type.__instancecheck__
+    __subclasscheck__ = type.__subclasscheck__
+
+    def register[S](cls, subclass: type[S]) -> type[S]:
+        raise TypeError(
+            f"{cls.__name__} takes members only by declaration; {subclass.__name__} must "
+            f"inherit it to belong."
+        )
+
     def __new__(
         mcs,
         name: str,
@@ -275,13 +291,27 @@ class DeclaredFamily(FamilyMember, ABC, metaclass=FamilyMeta):
             if not module.ispkg:
                 import_module_preserving_root_logging(module.name)
 
+    @ClassFact
+    @staticmethod
+    def _members(cls: type[DeclaredFamily]) -> tuple[type[DeclaredFamily], ...]:
+        """This class's members in declaration order, derived once per set of declarations:
+        acquiring them (a discovery import, an entry point) declares more, which re-derives it."""
+        return tuple(member for member in cls._member_declarations() if issubclass(member, cls))
+
+    @ClassFact
+    @staticmethod
+    def _capability_members(cls: type[DeclaredFamily]) -> dict[type, tuple[type[DeclaredFamily], ...]]:
+        """Each capability's members of this class, filled as capabilities are asked for and
+        dropped with the declarations they were derived from."""
+        return {}
+
     @classmethod
     def members_with(cls, capability: type) -> tuple[type[Self], ...]:
-        return tuple(
-            cast(type[Self], member)
-            for member in cls._member_declarations()
-            if issubclass(member, cls) and issubclass(member, capability)
-        )
+        views = cls._capability_members
+        if capability not in views:
+            views[capability] = tuple(
+                member for member in cls._members if issubclass(member, capability))
+        return cast(tuple[type[Self], ...], views[capability])
 
 
     @classmethod

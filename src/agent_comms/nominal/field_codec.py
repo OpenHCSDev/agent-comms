@@ -1523,7 +1523,8 @@ class StructuralRepresentation(FieldRepresentation):
 
     @classmethod
     def for_value(cls, value: object) -> type[FieldRepresentation]:
-        return FieldCodec.representation(type(value))[1]
+        declared: object = type(value)
+        return FieldCodec.representation(declared)[1]
 
     @classmethod
     def project_view(cls, value: object, view: type[ViewExclusion], annotation: object) -> JsonValue:
@@ -2612,10 +2613,13 @@ class FieldCodec(MroDispatch, Sealed):
         return target.decode_external
 
     @classmethod
+    @cache
     def representation(
         cls, annotation: object,
     ) -> tuple[object, type[FieldRepresentation]]:
-        """The value type and its declared representation, structural when unencoded."""
+        """The value type and its declared representation, structural when unencoded.
+
+        A declaration's annotation is decoded once, never per value it carries."""
         if annotation is None:
             return None, StructuralRepresentation
         if annotation is object:
@@ -4004,10 +4008,8 @@ def _structural_decoder(annotation: object) -> ValueDecoder[object]:
     else:
         return decoder.from_annotation(annotation, get_args(annotation))
     if isinstance(annotation, type) and issubclass(annotation, DeclaredFamily):
-        members = annotation._member_declarations()
-        leaf_document = annotation.decodes_tagged_records() and annotation in members and not any(
-            other is not annotation and issubclass(other, annotation) for other in members
-        )
+        # A leaf document is its own only declared member.
+        leaf_document = annotation.decodes_tagged_records() and annotation._members == (annotation,)
         plan = _LeafDocumentDecoder if leaf_document else _FamilyRecordDecoder
         return cast(ValueDecoder[object], plan(annotation))
     return _member_decoders[annotation]
