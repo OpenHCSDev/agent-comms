@@ -56,6 +56,15 @@ class TextWire:
     """The text tag shared by external CLI content families."""
 
 
+class UnknownTag:
+    """Marks the one member a family decodes an undeclared tag into.
+
+    An external CLI writes tags this version does not declare, and a record
+    carrying one must not stop the session's remaining records. A family that
+    must admit exactly its declared tags marks no member and still refuses.
+    """
+
+
 class TaggedWire(DeclaredWireFamily, WireModel, ABC, affix="", declared_name=None):
     """A JSON type tag supplied by its declared class, not caller policy."""
 
@@ -65,6 +74,15 @@ class TaggedWire(DeclaredWireFamily, WireModel, ABC, affix="", declared_name=Non
     def tag(cls) -> str:
         return cls.declared_name
 
+    @classmethod
+    def declared_tags(cls) -> frozenset[str]:
+        return frozenset(member.tag() for member in cls.members_with(cls))
+
+    @classmethod
+    def unknown_member(cls) -> builtins.type[Self] | None:
+        """This family's member for an undeclared tag, when it declares one."""
+        return next(iter(cls.members_with(UnknownTag)), None)
+
     @computed_field
     @property
     def type(self) -> str:
@@ -72,9 +90,11 @@ class TaggedWire(DeclaredWireFamily, WireModel, ABC, affix="", declared_name=Non
 
     @classmethod
     def tag_of(cls, value: Mapping[str, object] | TaggedWire) -> str:
-        if isinstance(value, Mapping):
-            return cls.header.model_validate(value).type
-        return value.type
+        tag = cls.header.model_validate(value).type if isinstance(value, Mapping) else value.type
+        unknown = cls.unknown_member()
+        if unknown is not None and tag not in cls.declared_tags():
+            return unknown.tag()
+        return tag
 
     @classmethod
     def declared_union(cls) -> TypeForm[Self]:
