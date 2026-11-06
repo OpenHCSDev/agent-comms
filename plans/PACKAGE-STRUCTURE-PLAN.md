@@ -217,12 +217,30 @@ stay on the declaration parents.
 
 1. **UI reads.** The `UiRead` members Toad and `ui_model` construct
    (`TranscriptPageRead`, `TeammateRead`, `InputDeliveryRead`, `OwnerGoalRead`) and the
-   served mechanism itself. Done when `import toad.app` loads no `agent_comms.order_tools`.
+   served mechanism itself. Done when Toad's acp/status side (`toad.core.events`,
+   `toad.acp.*`, `toad.session_scope`, `toad.screens.{team,historical_sessions}`) reaches
+   `order_tools` only through `agent_comms.tools`. (The earlier criterion, `toad.app` loads no
+   `order_tools`, cannot hold until phase 2: `comms_sidebar` and `session_agent` import
+   `agent_comms.tools`, which imports `order_tools`. Measured in #4220: `toad.core.events`
+   3,027 → 2,406 ms, `toad.app` unchanged at about 3.16 s.)
 2. **The sidebar's requests.** Every request `agent_comms.tools` exposes to Toad. Done when
-   `import toad.app` loads no `cli_commands`, `cli_verbs` or `cli_bridges` module.
+   `import toad.app` loads no `order_tools`, `cli_commands`, `cli_verbs` or `cli_bridges`
+   module.
 3. **Every remaining tool**, by codemod from one retained scan. Done when no declaration
    module imports an implementation module, and `tools.py` and `order_tools.py` hold no
-   `apply()`.
+   `apply()`. `ServedRequest.result_type`'s fallback to `apply`'s annotation is deleted: every
+   result is bound in a declaration header.
+4. **Result records move with their declarations.** A declaration binds its result in its
+   header, so the result record is part of the wire contract and must be as light as the
+   declaration. Today `TranscriptSnapshotUpdate` and `GoalSnapshotReply` live in
+   `acp_extension` (2,559 ms alone, beside `order_tools`' 2,704 ms) and `TeammateDetail` in
+   `team_hud` (514 ms, reached through `transport.tools.reads`). Done when no module under
+   `transport/` imports `acp_extension`, `team_hud`, `todos` or `transcripts`.
+
+A served class is its declaration's value: it compares and hashes as the declaration, because
+a process that has served once decodes `ServedX` while it still constructs `X`, and a reply
+must find the request that asked (#4220). `ToolDeclaration.serving(request)` is the one way a
+process turns a declaration it holds into the member that serves it.
 
 Each phase ships its import measurement before and after, and the remote connector run
 (a tool decoded by wire name reaches its served `apply`) as proof.
