@@ -114,6 +114,13 @@ class ProjectMetadata:
             frozenset(extra_values),
         )
 
+    kept: ClassVar[Path] = Path.home() / ".cache/agent-comms/wheel-metadata"
+    """Each commit's built metadata, kept as a one-entry wheel under its wheel's own name. A clean
+    checkout's commit fixes what the backend writes, as uv's own build cache assumes
+    (pyproject.toml cache-keys), so a commit is built once: the merge queue built the same twelve
+    wheels twice per debt job, once for the checker environment and again in the gate, and again
+    in the next queue entry, whose base was this one's head (2026-11-06, 10-20 s per pass)."""
+
     @classmethod
     def acquire(
         cls, checkout: Path, *, uv: Path, python: Path, commands: InstallCommands, output: Path
@@ -126,6 +133,9 @@ class ProjectMetadata:
         before = Repo.git(checkout, "rev-parse", "HEAD").strip()
         if Repo.git(checkout, "status", "--porcelain"):
             raise ValueError(f"Preserve dirty metadata source: {checkout}")
+        built = tuple((cls.kept / before).glob("*.whl"))
+        if built:
+            return cls.from_wheel(*built)
         output.mkdir(parents=True, exist_ok=True)
         with TemporaryDirectory(prefix="metadata-", dir=output) as temporary:
             try:
@@ -138,12 +148,27 @@ class ProjectMetadata:
                         f"Backend produced {len(wheels)} wheels for {checkout}, expected one"
                     )
                 (wheel,) = wheels
-                return cls.from_wheel(wheel)
+                metadata = cls.from_wheel(wheel)
+                cls.keep(wheel, cls.kept / before)
+                return metadata
             finally:
                 if Repo.git(checkout, "rev-parse", "HEAD").strip() != before or Repo.git(
                     checkout, "status", "--porcelain"
                 ):
                     raise ValueError(f"Backend moved or dirtied captured source: {checkout}")
+
+    @staticmethod
+    def keep(wheel: Path, directory: Path) -> None:
+        """Keep the wheel's one METADATA entry under the wheel's name, published by rename so a
+        concurrent reader sees no wheel or the whole one."""
+        directory.mkdir(parents=True, exist_ok=True)
+        with ZipFile(wheel) as source, TemporaryDirectory(dir=directory) as staging:
+            (entry,) = (entry for entry in source.infolist()
+                        if entry.filename.endswith(".dist-info/METADATA"))
+            staged = Path(staging) / wheel.name
+            with ZipFile(staged, "w") as kept:
+                kept.writestr(entry, source.read(entry))
+            staged.replace(directory / wheel.name)
 
     def with_all_extras(self, requirement: str) -> str:
         """Enrich only this package's existing root, preserving its complete requirement."""

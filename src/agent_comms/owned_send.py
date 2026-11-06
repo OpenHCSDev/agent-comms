@@ -22,7 +22,7 @@ from .nominal.field_codec import AcpSessionId, ClaimId, InputId, TurnId
 from .goal_attempts import GoalAttemptStore
 from .goal_turn_permit import GoalTurnPermit
 from .input_attempt import InputAlreadyCleared
-from .input_drain import InputDrain
+from .execution.input_drain import InputDrain
 from .native_input_proof import NativeContextProof
 from .reservation_rules import ReservationRule, ReservationViolationError
 from .threads import Thread

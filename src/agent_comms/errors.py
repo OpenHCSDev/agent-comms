@@ -64,6 +64,11 @@ class UnknownChannelError(ToolRefusedError):
     """A target is absent from the catalog and current thread tags."""
 
 
+class ExportDestinationExists(ToolRefusedError, FileExistsError):
+    """A wire export was pointed at a path that already exists and was not told to replace it:
+    the caller's choice to refuse, and still the file-exists condition it is."""
+
+
 class RouteChangedError(ValueError):
     """The selected Comms route was replaced; reopen against the current one."""
 

@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import BinaryIO, ClassVar
 
 from .channels import Channel
+from .errors import ExportDestinationExists
 from .cli_result import CliResult
 from .tool_result import ToolResult
 from .nominal.declared_family import DeclaredFamily
@@ -592,7 +593,7 @@ class WireTranscriptExporter:
         destination = Path(destination)
         destination.parent.mkdir(parents=True, exist_ok=True)
         if not overwrite and os.path.lexists(destination):
-            raise FileExistsError(f"Wire-export destination {str(destination)!r} already exists.")
+            raise ExportDestinationExists(f"Wire-export destination {str(destination)!r} already exists.")
 
         artifact = AtomicFile(destination) if overwrite else ExclusiveAtomicFile(destination)
         stats = ExportSelectionStats()

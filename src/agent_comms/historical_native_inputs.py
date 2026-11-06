@@ -184,7 +184,7 @@ def read_historical_native_inputs(
                     )
                 # A retried FULL attempt saw the input, but its execution moved
                 # on; only the execution's current attempt can prove the source.
-                if not row.execution.retried_in(db):
+                if not row.execution.retried_in(db, row.input_id):
                     rows.append((source, row))
         if len(rows) > 2 or len({type(row.execution) for _source, row in rows}) != len(rows):
             raise IdentityConflict("historical source has ambiguous native input evidence")

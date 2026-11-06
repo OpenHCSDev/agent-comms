@@ -41,7 +41,7 @@ from .image_input import ImageInput
 from .input_origin import InputOrigin, UnattributedInputOrigin
 from .messages import Message
 from .native_input_owner import RegistryOwner
-from .owned_turn import OwnedTurn
+from .execution.owned_turn import OwnedTurn
 from .pi_commands import (
     NativeQuery,
     AgentCommsInspectContext,
@@ -64,14 +64,14 @@ from .goal_scope import OneGoal
 from dataclasses import dataclass
 from .reservation_rules import ReservationRule, ReservationViolationError
 from .routing import ScheduledTurn
-from agent_comms.input_drain import BackgroundWake, SessionScheduleCheck, WakeScheduleCheck
+from agent_comms.execution.input_drain import BackgroundWake, SessionScheduleCheck, WakeScheduleCheck
 if TYPE_CHECKING:
     from . import pi_events as pi
     from .comms import Comms
     from .context_reading import ContextUsage
     from .coordinated_runtime import SelectedExecution
-    from .input_drain import DrainTurn, InputDrain, OwnerSession
-    from .session_lifecycle import SessionLifecycle
+    from .execution.input_drain import DrainTurn, InputDrain, OwnerSession
+    from .execution.session_lifecycle import SessionLifecycle
 
 
 AGENT_PREFIX = "!agent "
@@ -380,8 +380,6 @@ class TurnRunner:
             return pi.CancelledUiChoice()
         try:
             outcome = await controller.request_ui_permission(self, session_id, permission)
-            if outcome is None:
-                return pi.CancelledUiChoice()
         except (TimeoutError, SubscriberClosed, RequestError):
             # A timed-out, departed or explicitly refusing controller grants no permission.
             # Unexpected decoder and transport defects propagate.
@@ -487,9 +485,7 @@ class TurnRunner:
                 )
                 try:
                     result = await execution.run(
-                        on_compaction=AcpEventConsumer(
-                            self.effects, session_id, self.runtime,
-                        ).dispatch,
+                        publication=AcpEventConsumer(self.effects, session_id, self.runtime),
                         pi_session=self.backend_for(session_id, owner),
                         following=following,
                     )

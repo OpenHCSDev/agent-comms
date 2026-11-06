@@ -236,13 +236,30 @@ class HookEvent:
     source: str
     call: ToolCall
     already_stopped_once: bool
+    transcript: Path
 
     @classmethod
     def decode(cls, record: dict) -> HookEvent:
         kind = ToolCall.by_tool.get(str(record.get("tool_name")), OtherCall)
         call = kind.decode(record.get("tool_input") or {}, record.get("tool_response"))
         return cls(str(record.get("session_id", "session")), "agent_id" in record,
-                   str(record.get("source", "start")), call, bool(record.get("stop_hook_active")))
+                   str(record.get("source", "start")), call, bool(record.get("stop_hook_active")),
+                   Path(str(record.get("transcript_path", ""))))
+
+    def this_turn(self) -> list[bytes]:
+        """Transcript lines since the last stop that ended a turn: a stop writes its summary
+        after its hooks run, and a summary with output was a refused stop the turn went on
+        from (StopHookSummary.ends_turn). A missing transcript has no turn."""
+        if not self.transcript.is_file():
+            return []
+        with self.transcript.open("rb") as stream:
+            start = max(0, stream.seek(0, 2) - 6_000_000)
+            stream.seek(start)
+            lines = stream.read().splitlines()[1 if start else 0:]
+        last = max((index for index, line in enumerate(lines)
+                    if b'"stop_hook_summary"' in line and b'"hasOutput":false' in line),
+                   default=-1)
+        return lines[last + 1:]
 
     @staticmethod
     def state() -> Path:
@@ -468,16 +485,61 @@ def jobs_among(rows: list[list[str]], pid: int) -> int:
                and int(row[1]) in ancestors and int(row[0]) not in ancestors)
 
 
+class BusReader:
+    """Where Tristan reads this session's bus messages. On the host he reads them in Toad, so the
+    session owes no copy of them in its text."""
+
+    def reasons(self, turn: list[bytes]) -> list[str]:
+        return []
+
+    @staticmethod
+    def of(turn: list[bytes]) -> BusReader:
+        """Claude Code stamps every transcript record with its entrypoint; only a cloud session's
+        says "remote". Decoded once here, from the first record that names one."""
+        for line in turn:
+            # The word can also sit inside a message's text; only a record's own key decides.
+            if b'"entrypoint"' in line and "entrypoint" in (record := json.loads(line)):
+                return {"remote": AppReader()}.get(record["entrypoint"], BusReader())
+        return BusReader()
+
+
+class AppReader(BusReader):
+    """A cloud session, read in the Claude app, which shows nothing of the bus but this text
+    (plain-reporting.md). A turn with no shown bus message never loads the decoder, which needs
+    the checkout's venv: main re-execs every hook under it (under_checkout_python), and without
+    it the check says so instead of crashing the stop."""
+
+    def reasons(self, turn: list[bytes]) -> list[str]:
+        if not any(b"Comms in" in line for line in turn):
+            return []
+        if Path(sys.executable) != checkout_python():
+            return ["This turn delivered bus messages, but the checkout has no venv to decode "
+                    "them, so nothing checked that Tristan was shown them: run "
+                    f"`python3 {Path(__file__).resolve()} install`."]
+        sys.path.insert(0, str(team_directory().parent.parent))
+        from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
+        if names := [reference.name for reference in ClaudeJsonLines().unrendered(turn)]:
+            return ["Tristan reads only your closing text: before you stop, quote each of these "
+                    "bus messages there with its bus number, where it was posted (channel or DM), "
+                    "sender, time and body (plain-reporting.md): " + ", ".join(names)]
+        return []
+
+
 def idle(event: HookEvent) -> None:
-    """One nudge per wait: a stop this hook already refused goes through, and the job's
+    """One nudge per stop: a stop this hook already refused goes through, and a job's
     notification resumes the session."""
     if event.subagent or event.already_stopped_once:
         return
+    reasons = []
     if own_background_jobs():
-        print(json.dumps({"decision": "block", "reason": (
+        reasons.append(
             "A background job of this session is still running. Waiting time is tracing time "
             "(tests-and-commands.md): trace the paths it will exercise and act on what you find; "
-            "its notification resumes you.")}))
+            "its notification resumes you.")
+    turn = event.this_turn()
+    reasons.extend(BusReader.of(turn).reasons(turn))
+    if reasons:
+        print(json.dumps({"decision": "block", "reason": "\n".join(reasons)}))
 
 
 VERBS = {"deal": deal, "gate": gate, "record": record, "remind": remind, "fg": foreground, "idle": idle}

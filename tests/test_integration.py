@@ -127,6 +127,26 @@ def test_actual_ci_cli_uses_verified_carrier_not_synthetic_message_and_revalidat
     assert not any(call[:2] == ("pr", "merge") or "state=success" in call for call in github_cli.calls())
 
 
+def test_a_stacked_merge_group_is_current_while_main_lies_under_its_base(tmp_path: Path) -> None:
+    """With more than one queue entry building, a group's base is the queue commit of the group
+    ahead of it, which GitHub lands on main first: runs 1694, 1695 and 1699 failed "main moved;
+    recapture" on exactly that. Main under the base is current; a main that moved sideways, past
+    the queue, is not."""
+    source = SourceRepository.create(tmp_path / "source")
+    source.git(source.checkout, "switch", "-c", "queue-ahead")
+    ahead = source.commit_change("The group ahead", *source.write_files({Path("ahead.py"): "x = 1\n"}))
+    group = integration.MergeGroupSources(
+        source, ahead, PullRequestHead(source.github, source.number, source.branch_commit),
+        runner=integration.CiRunner(root=tmp_path))
+    assert group.main_is_current(source, ahead)
+    # Exact equality, which every other repository's main and every other event still owes.
+    assert not integration.TestedSources.main_is_current(group, source, ahead)
+    source.git(source.checkout, "switch", "main")
+    source.commit_change("A hotfix past the queue", *source.write_files({Path("hotfix.py"): "y = 1\n"}))
+    source.git(source.checkout, "push", "origin", "main")
+    assert not group.main_is_current(source, ahead)
+
+
 def test_actual_ordinary_ci_cli_captures_main_once_and_never_steals_an_unlinked_overlay(
     mutual_sources: MutualSources, github_cli: GitHubFixture, tmp_path: Path,
     materialized_clients: Callable[[Path, IntegrationInput], MaterializedClients],

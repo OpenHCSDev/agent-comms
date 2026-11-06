@@ -10,7 +10,7 @@ from agent_comms.nominal.field_codec import GoalId, GoalWaitId
 from agent_comms.bus import BusRecord, PublicRecord
 from agent_comms.goal_presentation import GoalWaitTarget
 from agent_comms.goal_waits import RecordedGoalWait
-from agent_comms.input_drain import NoPrivateObservation, PrivateObservation
+from agent_comms.execution.input_drain import NoPrivateObservation, PrivateObservation
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.messages import InfoKind, Message, NoticeRole
 from agent_comms.notification_assignment import NotificationAssignment

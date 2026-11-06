@@ -4,11 +4,12 @@ from __future__ import annotations
 
 
 from abc import ABC, abstractmethod
+from annotationlib import Format, ForwardRef, get_annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import get_original_bases
-from typing import Self, Annotated, ClassVar, NoReturn, cast, get_args, get_origin
+from typing import Self, Annotated, ClassVar, NoReturn, TypeVar, cast, get_args, get_origin
 
 from agent_comms_hooks import ToolRefusedError
 from pydantic import JsonValue
@@ -150,18 +151,48 @@ class ToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResu
 
     @classmethod
     def result_type(cls) -> type[Result]:
-        """The result this request declares once, as the family's second type argument in its
-        own or an inherited class header, followed through every intermediate generic parent;
-        a remote reply decodes into it."""
-        bindings: dict[object, object] = {}
-        requests = cls.__mro__[:cls.__mro__.index(ToolRequest) + 1]
+        """What this request's apply returns; a remote reply decodes into it.
+
+        The resolved apply's return annotation is the declaration. When that apply is a
+        family member's generic one (its annotation names the owner's own type parameter),
+        the parameter is followed through the class headers to the argument bound for it:
+        every path's binding is collected and the most derived wins, so a result declared on
+        one parent refines the default another parent inherited. Unrelated bindings conflict."""
+        apply = cls.apply
+        owner = next(declaration for declaration in cls.__mro__ if "apply" in vars(declaration))
+        annotation = get_annotations(apply, format=Format.STRING)["return"]
+        parameters = {parameter.__name__: parameter for parameter in owner.__type_params__}
+        if annotation not in parameters:
+            return cast(type[Result], ForwardRef(annotation, module=apply.__module__).evaluate())
+        bindings: dict[object, list[object]] = {}
         for declaration in cls.__mro__:
-            generic = (base for base in get_original_bases(declaration) if get_origin(base) in requests)
-            for base in generic:
-                for parameter, argument in zip(get_origin(base).__type_params__, get_args(base)):
-                    bindings.setdefault(parameter, bindings.get(argument, argument))
-        declared = ToolRequest.__type_params__[1]
-        return cast(type[Result], bindings.get(declared, declared))
+            for base in get_original_bases(declaration):
+                origin = get_origin(base)
+                for parameter, argument in zip(getattr(origin, "__type_params__", ()), get_args(base)):
+                    bindings.setdefault(parameter, []).append(argument)
+
+        def declared_by(parameter: object, seen: frozenset[object]) -> list[type]:
+            found: list[type] = []
+            for argument in bindings.get(parameter, ()):
+                if isinstance(argument, TypeVar):
+                    if argument not in seen:
+                        found.extend(declared_by(argument, seen | {argument}))
+                else:
+                    found.append(argument)
+            return found
+
+        declared = parameters[annotation]
+        default = declared.__default__
+        candidates = list(dict.fromkeys(
+            found for found in declared_by(declared, frozenset({declared})) if found is not default
+        )) or [default]
+        if len(candidates) == 1:
+            return cast(type[Result], candidates[0])
+        for result in candidates:
+            if isinstance(result, type) and all(
+                    isinstance(other, type) and issubclass(result, other) for other in candidates):
+                return cast(type[Result], result)
+        raise TypeError(f"{cls.__name__} declares unrelated results: {candidates}")
 
     @classmethod
     def invoke(
@@ -194,6 +225,11 @@ class ToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResu
     def posted(self, remote: RequestPoster) -> dict[str, JsonValue]:
         """How a remote access sends this request: one posted call and its reply."""
         return remote.post(self)
+
+    def dropped(self, remote: RequestPoster, dropped: ConnectionDropped) -> dict[str, JsonValue]:
+        """A call that may change the bus is never sent twice: Core may already have run it, so
+        the caller hears the connection failed."""
+        raise dropped
 
     def replied(self, comms: Comms, caller: ToolCaller) -> dict[str, JsonValue]:
         # A request decoded from the wire meets whichever caller arrived; the caller's own
@@ -251,12 +287,22 @@ class ObservedToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = 
         return remote.post_observed(self)
 
 
+class ConnectionDropped(ConnectionError):
+    """The connection to Core dropped during a call: whether Core ran it is unknown."""
+
+
 class RequestPoster(ABC):
     """Who sends a request to a Core across the connector; each request picks which way it is
     sent, plainly or with its progress and cancel streamed."""
 
     @abstractmethod
     def post[C: ToolCaller, R: ToolResult](self, request: ToolRequest[C, R]) -> dict[str, JsonValue]: ...
+
+    @abstractmethod
+    def exchange[C: ToolCaller, R: ToolResult](
+        self, request: ToolRequest[C, R],
+    ) -> dict[str, JsonValue]:
+        """One round trip on the kept connection; a drop raises ConnectionDropped."""
 
     @abstractmethod
     def post_observed[C: ToolCaller, R: ToolResult](
@@ -297,21 +343,22 @@ class NativeToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = To
             call_id=call_id, declared_name=cls.declared_name, arguments=arguments)
 
 
-class PublishingTool[Caller: ToolCaller = ToolCaller]:
+class PublishingTool[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResult]:
     """A publication refuses at its store's write guard during maintenance; waiting here
     would hold the connector's stop."""
 
-    def apply(self, comms: Comms, caller: Caller) -> ToolResult:
+    def apply(self, comms: Comms, caller: Caller) -> Result:
         return self.publish(comms, caller)
 
     @abstractmethod
-    def publish(self, comms: Comms, caller: Caller) -> ToolResult: ...
+    def publish(self, comms: Comms, caller: Caller) -> Result: ...
 
 
-class PublishingToolRequest[Caller: ToolCaller = ToolCaller](
-    PublishingTool[Caller], ToolRequest[Caller], declared_name=None,
+class PublishingToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResult](
+    PublishingTool[Caller, Result], ToolRequest[Caller, Result], declared_name=None,
 ):
-    """Requests using the shared publication capability."""
+    """Requests using the shared publication capability. Each binds the result its publication
+    returns once, here in its base list; a remote caller decodes the reply into it."""
 
 
 class LiveOwnerTool:
@@ -326,6 +373,10 @@ class ReadTool(ReadWork, FreshIngress):
     __slots__ = ()
     bus_effect: ClassVar[str] = "Reads only; changes nothing on the bus."
     read_only_hint: ClassVar[bool] = True
+
+    def dropped(self, remote: RequestPoster, dropped: ConnectionDropped) -> dict[str, JsonValue]:
+        """A read changes nothing, so it is asked once more on a fresh connection."""
+        return remote.exchange(cast(ToolRequest, self))
 
     def require_read_only(self) -> None:
         """The declared read capability controls access, independently of MCP hints."""

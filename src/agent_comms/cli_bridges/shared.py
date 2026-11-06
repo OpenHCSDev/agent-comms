@@ -57,7 +57,7 @@ from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery, 
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.nominal.field_codec import FieldCodec, MessageId, PathText, SubclassUnion, ThreadLookup
 from agent_comms.installer.refusals import UpgradeRefused
-from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.launch_runtime import LaunchRuntime, RunningSource
 from agent_comms.storage.maintenance_barrier import MaintenanceHeldError
 from agent_comms.storage.private_path import PrivateDirectoryRole, PrivateFileRole, TrustedAncestorRole
 from agent_comms.storage.store_files import ExclusiveDirectoryAtomicFile
@@ -1236,6 +1236,8 @@ class CliBridge(HarnessDeliveryRecords, ExternalRuntime, DeliversInput, HarnessS
     db: sqlite3.Connection
     binding: Binding = field(init=False)
     comms: Comms = field(init=False)
+    running_source: RunningSource = field(default_factory=RunningSource.current, kw_only=True)
+    """Where this bridge's code came from: an install can replace an installed runtime's."""
 
     def __post_init__(self) -> None:
         """The bus this bridge's address names; resolving it creates no store."""
@@ -1327,7 +1329,14 @@ class CliBridge(HarnessDeliveryRecords, ExternalRuntime, DeliversInput, HarnessS
         await self.prepare_delivery()
         self.log(f'Watching {self.binding.bus} → {self.binding.thread}; unconfirmed attempts retained without replay')
         while True:
-            await self.comms.bus.when_open(self.watch_bus)
+            await self.comms.bus.when_open(self.watch_current_bus)
+
+    async def watch_current_bus(self) -> None:
+        """when_open runs this again after every maintenance hold, and every install holds
+        maintenance: a bridge whose runtime the install replaced stops instead of reading on
+        with the old code (on 2026-11-06 the host's bridge watch did, through three installs)."""
+        self.running_source.require_current()
+        await self.watch_bus()
 
     async def watch_bus(self) -> None:
         """The message read in this process: one line at a time reaches delivery, so the attempts
@@ -1514,6 +1523,10 @@ class MonitorFrame(TaggedWire, ABC, affix=""):
     ) -> tuple[MessageReference, ...]:
         return ()
 
+    def delivered(self) -> tuple[MessageReference, ...]:
+        """The bus messages this frame put in front of the model; only a message carries one."""
+        return ()
+
     def continued(
         self, line: str, decode: Callable[[str], MonitorFrame],
     ) -> tuple[MonitorFrame, ...]:
@@ -1603,6 +1616,9 @@ class MonitorReadFile(MonitorProtocolFrame, declared_name='read-file'):
         """A consumed body's export is evidence nobody reads again."""
         with self.directory() as directory, suppress(FileNotFoundError):
             os.unlink(Path(self.path).name, dir_fd=directory)
+
+    def delivered(self) -> tuple[MessageReference, ...]:
+        return (self.reference,)
 
     async def confirm(self, bridge: TranscriptConfirmsDelivery, record: ObservedMonitor) -> tuple[MessageReference, ...]:
         """The notice frees only its own reservation; it confirms no body."""

@@ -117,7 +117,7 @@ async def test_team_memory_stays_under_its_cap(tmp_path, native_workers, owner_c
     from acp.schema import TextContentBlock
     from agent_comms.acp import CommsClient
     from agent_comms.owner_launch import RetainedOwnerLaunch
-    from agent_comms.owner_lifecycle import OwnerRestartSelection
+    from agent_comms.execution.owner_lifecycle import OwnerRestartSelection
     from native_backend_fixture import NativeBackendFixture
     from delivery_owner_fixture import FakeClient
     from agent_comms.tools import CommsResourcesTool
@@ -152,12 +152,16 @@ async def test_team_memory_stays_under_its_cap(tmp_path, native_workers, owner_c
         for name in names:
             await client.load_session(cwd=str(tmp_path), session_id=name)
         gate = native_workers.provider.response_gate = asyncio.Event()
+        # The provider holds every answer until all owners have posted. Its hold must last
+        # as long as this wait: a shorter hold dropped the earliest requests under load, so
+        # Pi re-sent one (30 posts for 29 owners) or failed the prompt with "Internal error".
+        native_workers.provider.response_timeout = 60
         async with asyncio.TaskGroup() as replies:
             pending = tuple(replies.create_task(client.prompt(
                 session_id=name, prompt=[TextContentBlock(type="text", text=fresh_inputs[name])],
             )) for name in names)
             try:
-                async with asyncio.timeout(60):
+                async with asyncio.timeout(native_workers.provider.response_timeout):
                     while native_workers.provider.posts < len(names):
                         await asyncio.sleep(.01)
                 assert native_workers.provider.posts == len(names)
@@ -404,7 +408,7 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
         for index, (acknowledgement, (_, arguments, credential)) in enumerate(zip(replacements, settings, strict=True)):
             current = comms.registry.require(acknowledgement.thread)
             await ready(current)
-            from agent_comms.owner_lifecycle import OwnerRestartSelection
+            from agent_comms.execution.owner_lifecycle import OwnerRestartSelection
 
             launch = RetainedOwnerLaunch.capture(
                 OwnerRestartSelection.capture(comms.registry.snapshot(), current.name),

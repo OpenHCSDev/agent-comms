@@ -13,6 +13,7 @@ import logging
 import os
 import secrets
 import time
+from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass, field, replace
@@ -23,21 +24,22 @@ from typing import ClassVar
 from aiohttp import WSCloseCode, WSMsgType, web
 from yarl import URL
 
-from .agent_inbox import SecondsWait, TakenInputPosition, TakenInputStart
+from .agent_inbox import NoWait, TakenInputPosition, TakenInputStart
 from .child_process import ProcessIdentity
 from .cli_bridges.claude_transcript import (
-    WATCH_REPORT, WATCH_STOPPED, WINDOW_ENDED, ClaudeJsonLines, ReceivesWatchReports,
-    ReportedLedger, WatchReport,
+    WATCH_DEFERRED, WATCH_REPORT, WATCH_STOPPED, WINDOW_ENDED, ClaudeJsonLines, ReceivesWatchReports,
+    ReconnectUrl, ReportedLedger, WatchReport,
 )
 from .cli_bridges.claude_protocol import ClaudeMonitorFrame
 from .cli_bridges.history import RemoteWatchHistory
 from .cli_bridges.shared import MonitorReadFile, TranscriptConfirmsDelivery
 from .comms import Comms, client_wire
-from .connector_store import BearerSecret, digest
+from .connector_store import BearerSecret, ConnectorStore, digest
 from .coordination.database import CoordinationStore
 from .coordination.tables.harness_deliveries import HarnessDelivery
 from .coordination.coordinator import Coordination
 from .errors import RelationViolationError
+from .storage.maintenance_barrier import MaintenanceHeldError
 from .harness_delivery_states import EmittedOutcome, PrintLedgerId, TakingLedger, UnconfirmedOutcome
 from .message_reference import MessageReference
 from .messages import Message
@@ -46,6 +48,8 @@ from .nominal.field_codec import FieldCodec, ThreadLookup
 from .runtime_updates import RuntimeUpdate
 from .tool_result import ToolResult
 from .tools import CommsInboxTool
+from .storage.locked_store import RegistryFile
+from .watched import ChangeSignal, FileSource
 
 
 @dataclass(frozen=True)
@@ -57,24 +61,81 @@ class InboxWatchUrl(ToolResult):
 
 
 @dataclass(frozen=True)
-class WatchTicket:
-    """One thread's right to open one socket. It lives in the connector's memory, so a restart
-    forgets it and the session asks again, as it does whenever its watch ends."""
+class WatchTicket(ABC):
+    """One thread's right to open one socket."""
 
     thread: str
+
+    @abstractmethod
+    def live(self, now: float) -> bool: ...
+
+    opened_on: ClassVar[str]
+    """How the connector's log names a socket opened with this kind of ticket."""
+
+    async def opened(self, offer: ReconnectUrl, viewer: web.WebSocketResponse) -> None:
+        """What the new socket is sent before anything else: by default nothing, since only a
+        client that says it reconnects can read a ReconnectUrl frame."""
+
+    def redeemed(self, store: ConnectorStore, token: BearerSecret) -> WatchTicket:
+        """The ticket the URL opens with once memory has answered: what memory held."""
+        return self
+
+
+@dataclass(frozen=True)
+class ArmedTicket(WatchTicket):
+    """What comms_watch hands the model: good for one minute, in the connector's memory, so a
+    restart forgets it and the model asks again, as it would once the minute passed."""
+
     expires_at: float
 
     seconds: ClassVar[int] = 60
+    opened_on = "an armed ticket"
 
     def live(self, now: float) -> bool:
         return self.expires_at > now
 
 
+@dataclass(frozen=True)
+class ReconnectTicket(WatchTicket):
+    """What a reset socket's client re-dials with. A network reset can strike at any point in a
+    watch's life, so it has no clock: it stands until it is redeemed or any newer watch of its
+    thread opens. It is kept in the connector's store (WatchReconnect), because the reset that
+    matters most is the connector's own restart."""
+
+    opened_on = "a reconnect ticket"
+
+    def live(self, now: float) -> bool:
+        return True
+
+    async def opened(self, offer: ReconnectUrl, viewer: web.WebSocketResponse) -> None:
+        """Only a client that reconnects alone redeems this ticket, so its next URL goes first,
+        before any message: resets come in bursts, and a socket hit again within seconds must
+        already hold it (2026-11-05 21:51: a re-dialled socket dropped 8 s after opening, while
+        its URL still waited on the transcript reader)."""
+        await viewer.send_str(offer.line())
+        logging.info("Watch for %s sent its reconnect URL on opening", self.thread)
+
+
+@dataclass(frozen=True)
+class UnheldTicket(WatchTicket):
+    """A URL the connector's memory holds no armed ticket for: a reconnect ticket kept in its
+    store, or nothing. Only this asks the store, so opening an armed watch writes nothing."""
+
+    opened_on = "no ticket"
+
+    def live(self, now: float) -> bool:
+        return False
+
+    def redeemed(self, store: ConnectorStore, token: BearerSecret) -> WatchTicket:
+        refused: WatchTicket = self
+        return store.watch_reconnect_taken(token).reopened(ReconnectTicket, refused)
+
+
 DAMAGED_RECORD = "A record from the session's transcript was not valid JSON and was left out."
 """What a transcript line that is not JSON leaves behind."""
 
-UNISSUED_TICKET = WatchTicket("", 0.0)
-"""An unknown or spent ticket is simply one that has already expired."""
+UNHELD_TICKET = UnheldTicket("")
+"""What memory answers for a URL it holds no armed ticket for."""
 
 
 @dataclass(frozen=True)
@@ -90,24 +151,47 @@ class OpenWatch:
 
     thread: str
     viewer: web.WebSocketResponse
+    handler: asyncio.Task[None]
+    """The request handler serving this socket."""
+
+    async def ended(self) -> None:
+        """Close the socket and end its handler. A handler busy away from the socket, as one
+        still publishing its transcript is, does not see the close, and held the connector's
+        stop for aiohttp's whole 60 s shutdown_timeout on 2026-11-06, while every watch's
+        re-dial met 502."""
+        await self.viewer.close()
+        self.handler.cancel()
 
 
 @dataclass
 class WatchTickets:
+    """Armed tickets in memory for their minute; reconnect tickets in the connector's store."""
+
+    store: ConnectorStore
     held: dict[str, WatchTicket] = field(default_factory=dict)
 
     def issued(self, thread: str, issuer: URL) -> InboxWatchUrl:
         now = time.time()
-        self.held = {key: ticket for key, ticket in self.held.items() if ticket.live(now)}
+        ticket = ArmedTicket(thread, now + ArmedTicket.seconds)
         token = BearerSecret(secrets.token_urlsafe(32))
-        ticket = WatchTicket(thread, now + WatchTicket.seconds)
+        self.held = {key: held for key, held in self.held.items() if held.live(now)}
         self.held[digest(token)] = ticket
+        return InboxWatchUrl(self.url(token, issuer), ticket.expires_at)
+
+    def reconnect(self, thread: str, issuer: URL) -> ReconnectUrl:
+        """One standing reconnect ticket per thread: minting it ends any older one."""
+        return ReconnectUrl(url=self.url(self.store.watch_reconnect_issued(thread), issuer))
+
+    @staticmethod
+    def url(token: BearerSecret, issuer: URL) -> str:
         scheme = {"http": "ws", "https": "wss"}[issuer.scheme]
-        return InboxWatchUrl(str(issuer.with_scheme(scheme) / "watch" / token), ticket.expires_at)
+        return str(issuer.with_scheme(scheme) / "watch" / token)
 
     def taken(self, token: BearerSecret) -> WatchTicket:
-        """The ticket is spent here, whatever happens to the socket it opens."""
-        ticket = self.held.pop(digest(token), UNISSUED_TICKET)
+        """The ticket is spent here, whatever happens to the socket it opens: a reconnect ticket
+        from the store, an armed one from memory. The socket it opens mints its thread's next
+        reconnect ticket, which ends any older one."""
+        ticket = self.held.pop(digest(token), UNHELD_TICKET).redeemed(self.store, token)
         if not ticket.live(time.time()):
             raise web.HTTPForbidden(text="Unknown, used or expired URL; call comms_watch again.")
         return ticket
@@ -122,6 +206,7 @@ class PushedTranscript(ReceivesWatchReports, TranscriptConfirmsDelivery, ClaudeJ
     comms: Comms
     transcript_thread: str
     socket: web.WebSocketResponse
+    offer: ReconnectUrl
     reported: ReportedLedger = field(default_factory=lambda: ReportedLedger())
 
     delivery_kind: ClassVar[type[RemoteWatchHistory]] = RemoteWatchHistory
@@ -148,6 +233,12 @@ class PushedTranscript(ReceivesWatchReports, TranscriptConfirmsDelivery, ClaudeJ
         for delivery in unconfirmed:
             if delivery.reference in printed:
                 await self.finish(delivery, partial(replace, outcome=EmittedOutcome))
+
+    async def reconnectable(self) -> None:
+        """The socket's own standing URL, the one minted when it opened: a second mint would
+        end the first while its frame might still be lost in a reset."""
+        await self.socket.send_str(self.offer.line())
+        logging.info("Watch for %s sent its reconnect URL on request", self.transcript_thread)
 
     async def transcript(self) -> AsyncIterator[RuntimeUpdate]:
         state, offset = self.start_state(), 0
@@ -191,8 +282,12 @@ class InboxWatch:
 
     thread: str
     root: Path
+    offer: ReconnectUrl
+    """The socket's one standing reconnect URL, minted when it opened."""
 
-    wait_seconds: ClassVar[int] = 5
+    recheck_seconds: ClassVar[float] = 5
+    """With no registry write to wake it, how often an open socket asks again whether this
+    watch still holds its thread."""
 
     @contextmanager
     def wire(self) -> Iterator[Comms]:
@@ -204,8 +299,8 @@ class InboxWatch:
         older untaken one, so its next read starts past it instead of at the thread's birth."""
         with self.wire() as comms:
             request = CommsInboxTool(
-                thread=self.thread, after=after, wait=SecondsWait(self.wait_seconds))
-            return request.page(comms).page.messages
+                thread=self.thread, after=after, wait=NoWait())
+            return request.messages(comms)
 
     def taken(self, message: Message, ledger: TakingLedger) -> None:
         """A message leaves the inbox before its frame goes out: the client may ack a print
@@ -269,30 +364,75 @@ class InboxWatch:
         for message in await asyncio.to_thread(self.unshown, before, reported.current):
             await socket.send_str(FieldCodec.compact(FieldCodec.encode(message)))
 
+    def commit_sources(self) -> tuple[FileSource, ...]:
+        """The bus's commit signal, read in a thread so no Comms is built or held on the loop."""
+        with self.wire() as comms:
+            return comms.bus.bus.commit_sources()
+
+    def registry_sources(self) -> tuple[FileSource, ...]:
+        """The registry file a stop on the bus writes."""
+        return tuple(FileSource(path) for path in RegistryFile.source_paths(self.root))
+
     async def pushed(self, socket: web.WebSocketResponse, here: ProcessIdentity) -> None:
         """Frames until it closes, or until the thread is stopped on the bus; a reader must run
         for the socket to notice closing. What earlier sockets took unconfirmed is read before
         this one sends anything, so a message this socket sends is never replayed by it. Nothing
-        waits on the client's ledger: a message taken before it lands is taken under none."""
+        waits on the client's ledger: a message taken before it lands is taken under none.
+        Whichever of sending, holding and reading ends first ends the socket, and its result is
+        read, so a failed change signal is raised instead of dying in its task."""
         reported = ReportedLedger()
         taken = await asyncio.to_thread(self.unconfirmed)
         before = frozenset(attempt.reference for attempt in taken)
-        reader = asyncio.create_task(self.read_until_closed(socket, reported))
+        commits = await asyncio.to_thread(self.commit_sources)
         replay = asyncio.create_task(self.replayed(socket, before, reported))
-        after: TakenInputPosition = TakenInputStart()
+        running = {
+            asyncio.create_task(self.read_until_closed(socket, reported)),
+            asyncio.create_task(self.sending(socket, commits, reported)),
+            asyncio.create_task(self.holding(socket, here)),
+        }
         try:
-            while not socket.closed:
+            finished, _ = await asyncio.wait(running, return_when=asyncio.FIRST_COMPLETED)
+            for task in finished:
+                task.result()
+        except ConnectionResetError:
+            return
+        finally:
+            for task in (*running, replay):
+                task.cancel()
+
+    async def sending(
+        self, socket: web.WebSocketResponse, commits: tuple[FileSource, ...],
+        reported: ReportedLedger,
+    ) -> None:
+        """Send what no harness took, woken by each bus commit; nothing blocks a thread between
+        commits, so a closed socket ends its handler at once."""
+        after: TakenInputPosition = TakenInputStart()
+        async with ChangeSignal.opened(*commits) as changes:
+            while True:
+                # Drained before the read, so a commit landing during it wakes the wait.
+                changes.prepare()
                 for message in await asyncio.to_thread(self.untaken, after):
                     await asyncio.to_thread(self.taken, message, reported.current)
                     await socket.send_str(FieldCodec.compact(FieldCodec.encode(message)))
                     after = after.advanced(message.reference)
+                await changes.wait()
+
+    async def holding(self, socket: web.WebSocketResponse, here: ProcessIdentity) -> None:
+        """Close the socket once this watch no longer holds its thread, and end once the socket
+        has closed. A stop is a registry write, which wakes this at once; the recheck covers
+        what no file announces, a close included: a client that never answers the server's
+        CLOSE leaves the reader waiting on frames that never come, so this is what ends the
+        handler instead of aiohttp's shutdown timeout."""
+        async with ChangeSignal.opened(*self.registry_sources()) as writes:
+            while not socket.closed:
+                writes.prepare()
                 if not await asyncio.to_thread(self.holds, here):
                     await socket.close(code=WATCH_STOPPED, message=b"stopped on the bus")
-        except ConnectionResetError:
-            return
-        finally:
-            reader.cancel()
-            replay.cancel()
+                    return
+                try:
+                    await asyncio.wait_for(writes.wait(), self.recheck_seconds)
+                except TimeoutError:
+                    continue
 
     async def read_until_closed(
         self, socket: web.WebSocketResponse, reported: ReportedLedger,
@@ -303,7 +443,9 @@ class InboxWatch:
         host_commit = await asyncio.to_thread(STAMP.commit)
         with self.wire() as comms:
             try:
-                await PushedTranscript(comms, self.thread, socket, reported).publish_transcript()
+                await PushedTranscript(
+                    comms, self.thread, socket, self.offer, reported,
+                ).publish_transcript()
             except* Exception as failures:
                 logging.exception("Transcript from %s stopped", self.thread)
                 comms.messaging.send(self.thread, "#comms", TranscriptStopped(self.thread, failures, host_commit).text())
@@ -315,6 +457,9 @@ class InboxWatch:
         attachment = self.attached(here)
         try:
             await asyncio.to_thread(attachment.__enter__)
+        except MaintenanceHeldError as held:
+            await socket.close(code=WATCH_DEFERRED, message=str(held)[:120].encode())
+            return
         except RelationViolationError as refused:
             await socket.close(
                 code=WSCloseCode.POLICY_VIOLATION, message=str(refused)[:120].encode()

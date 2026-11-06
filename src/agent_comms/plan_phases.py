@@ -674,7 +674,7 @@ class AbsencePhase(RemainingSlopPhase):
             for path in (
                 "storage/typed_table.py",
                 "backend.py",
-                "input_drain.py",
+                "execution/input_drain.py",
                 "turn_watchdog.py",
                 "commander/order.py",
                 "attempt_start.py",
@@ -874,7 +874,7 @@ class RecordsPhase(RemainingSlopPhase):
                     "src/agent_comms/relationships.py",
                     "src/agent_comms/shared_ledger.py",
                     "src/agent_comms/input_disposition.py",
-                    "src/agent_comms/owner_lifecycle.py",
+                    "src/agent_comms/execution/owner_lifecycle.py",
                 ),
             ),
         )

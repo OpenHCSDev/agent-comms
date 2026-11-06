@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from agent_comms.notification_assignment import NotificationSelection
-from collections.abc import Awaitable, Callable, Generator
+from collections.abc import Generator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from functools import partial
@@ -48,6 +48,21 @@ from .turn_phase import PreparingPhase, TurnPhase
 from .turn_goal_permission import OwnerGoalPermission, TurnGoalPermission
 
 
+class NoLivePublication(MroDispatch):
+    """A selected turn run without an ACP runtime (foreground, tests) has no live viewers."""
+
+
+@dataclass(frozen=True)
+class TriagePublication(MroDispatch):
+    """A triage call shows viewers only what changes the session, never its decision text."""
+
+    publication: MroDispatch
+
+    @handles(CompactionEvent)
+    async def compacted(self, event: CompactionEvent) -> None:
+        await self.publication.dispatch(event)
+
+
 @dataclass
 class SelectedParticipant(MroDispatch):
     comms: Comms
@@ -64,16 +79,15 @@ class SelectedParticipant(MroDispatch):
     goal_permission: TurnGoalPermission = field(init=False, repr=False)
     # The turn keeps its last context record, so recording never re-reads it.
     context_prior: ContextPrior = field(default=UNREAD_CONTEXT, init=False, repr=False)
-    on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = field(default=None, kw_only=True, repr=False, compare=False)
+    # The runtime's live publication: viewers attached to this session see the turn as it runs.
+    publication: MroDispatch = field(default_factory=NoLivePublication, kw_only=True, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         self.goal_permission = TurnGoalPermission(OwnerGoalPermission(self.owner.thread.goal.authority))
 
-    @handles(CompactionEvent)
-    async def publish_compaction(self, event: CompactionEvent) -> None:
-        """Lend the same native observation to this acquired output resource."""
-        if self.on_compaction is not None:
-            await self.on_compaction(event)
+    async def observe_triage(self, event) -> None:
+        await self.dispatch(event)
+        await TriagePublication(self.publication).dispatch(event)
 
     @handles(ObservedAttestation)
     async def native_source(self, event: ObservedAttestation) -> None:
@@ -159,7 +173,7 @@ class SelectedParticipant(MroDispatch):
     async def select(
         cls, comms: Comms, store: Coordination, root_id: RootId, name: str, after_seq: int,
         *, cursor_delivery: CursorDelivery,
-        on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = None,
+        publication: MroDispatch = NoLivePublication(),
     ):
         bus = MessageBus(comms.root, comms.registry, ParticipantPublisher)
         with cursor_delivery.measurements.operation("claim_prepare"):
@@ -192,7 +206,7 @@ class SelectedParticipant(MroDispatch):
                 sent_outcomes,
                 model,
                 cursor_delivery,
-                on_compaction=on_compaction,
+                publication=publication,
             )
             await selected.require_current()
             await selected.transition(

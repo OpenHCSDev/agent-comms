@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from .bus_tables import ReceivedSource
 from .class_fact import ClassFact
@@ -16,7 +16,7 @@ from .messages import BusProjectionTables, BusRow, MessageInput, PublicRecord, P
 from .projection_source import ProducedRow
 from .read_basis import ReadCursor
 from .routing import DeliveryScope
-from .storage.typed_table import Column, Index, TypedRow
+from .storage.typed_table import Column, ExpressionIndex, Index, TypedRow
 
 if TYPE_CHECKING:
     from .bus_publication import Delivered
@@ -44,6 +44,48 @@ class BusRouteCounts(BusProjectionTables):
     def from_message(cls, message: PublicRecord | Delivered):
         return cls(message.seq, message.target, message.sender,
                    message.sender_lookup, message.timestamp)
+
+
+@dataclass(frozen=True)
+class BusRouteKeys(BusProjectionTables):
+    """Each route a message took, once, with the first message that took it.
+
+    A read asks which routes reach its targets. Deriving that per read crossed every registered
+    sender with every target (41,000 index probes for 762 routes on the live bus, 11 of a watch
+    read's 20 ms); the route is a fact of the write, so it is kept there."""
+
+    @ClassFact
+    def writes(cls: type[BusRouteKeys]) -> tuple[type[ProducedRow], ...]:
+        return (BusRouteKeys,)
+
+    target: str
+    sender: str
+    sender_lookup: ThreadLookup | PublicSender
+    first_seq: int
+    indexes: ClassVar = (
+        ExpressionIndex(("{target}", "{sender}", "coalesce({sender_lookup}, '')"), unique=True),
+    )
+    """A public sender has no lookup and stores NULL, which no primary key holds and every
+    NULL-distinct UNIQUE admits twice; the expression makes it one route like any other."""
+
+    @classmethod
+    def from_message(cls, message: PublicRecord | Delivered) -> Self:
+        return cls(message.target, message.sender, message.sender_lookup, message.seq)
+
+    def insertion(self) -> tuple[str, tuple]:
+        """Messages are projected in sequence order, so the first insert of a route keeps its
+        first message and every later one leaves it as it is."""
+        statement, values = super().insertion()
+        return statement + " ON CONFLICT DO NOTHING", values
+
+    @classmethod
+    def senders_reaching(cls, db: sqlite3.Connection, targets: list[str], through: int) -> list[str]:
+        """The senders with a route to any of ``targets`` by ``through``: the only registry
+        members a read of those targets can join."""
+        return [row[0] for row in db.execute(
+            f'SELECT DISTINCT sender FROM "{cls.declared_name}" '
+            'WHERE target IN (SELECT value FROM json_each(?)) AND first_seq<=?',
+            (json.dumps(targets), through))]
 
 
 @dataclass(frozen=True)
@@ -108,12 +150,16 @@ class RouteCounts(ABC):
              ORDER BY route.seq LIMIT 1) AS sender_lookup
         FROM request_targets AS target,arguments,json_each(arguments.unrecorded) AS source
     ), route_keys AS MATERIALIZED (
-        SELECT DISTINCT target.target,sender.sender,sender.sender_lookup,sender.since
-        FROM request_targets AS target CROSS JOIN sender_keys AS sender
-        WHERE EXISTS (SELECT 1 FROM "{BusRouteCounts.declared_name}" AS row
-            WHERE row.target=target.target AND row.sender=sender.sender
-                AND row.sender_lookup IS sender.sender_lookup
-                AND row.seq>(SELECT after FROM arguments) AND row.seq<=(SELECT through FROM arguments))
+        SELECT route.target,route.sender,route.sender_lookup,sender.since
+        FROM arguments,request_targets AS target
+        JOIN "{BusRouteKeys.declared_name}" AS route ON route.target=target.target
+            AND route.first_seq<=arguments.through
+        JOIN sender_keys AS sender ON sender.sender=route.sender
+            AND sender.sender_lookup IS route.sender_lookup
+        WHERE arguments.after=0 OR EXISTS (SELECT 1 FROM "{BusRouteCounts.declared_name}" AS row
+            WHERE row.target=route.target AND row.sender=route.sender
+                AND row.sender_lookup IS route.sender_lookup
+                AND row.seq>arguments.after AND row.seq<=arguments.through)
         UNION ALL
         SELECT route.*,birth.since FROM unrecorded AS route
         JOIN births AS birth ON birth.name=route.sender WHERE route.sender_lookup IS NOT NULL
@@ -161,7 +207,11 @@ class RouteCounts(ABC):
     def _route_rows[Row: TypedRow](self, row_type: type[Row], registry, deliveries, seen,
                                   after: int, query: str, parameters=()) -> list[Row]:
         with self.observing() as db:
-            namespace = registry.sender_bindings
+            through = BusRow.last_seq(db)
+            targets = sorted({target for delivery in deliveries.values()
+                              for target in delivery.index_targets})
+            senders, unrecorded, births = registry.sender_bindings.bound(
+                BusRouteKeys.senders_reaching(db, targets, through))
             bindings = (
                 *ReadCursor.sql_bindings(registry,
                     {actor: seen[actor].counted(delivery, registry)
@@ -170,8 +220,8 @@ class RouteCounts(ABC):
                             for actor, delivery in deliveries.items()}),
                 json.dumps({actor: registry.require(actor).incarnation.require_recorded().lookup
                             for actor in deliveries}),
-                namespace.senders, namespace.unrecorded, BusRow.last_seq(db), after,
-                namespace.births, json.dumps(dict(registry.aliases)),
+                senders, unrecorded, through, after,
+                births, json.dumps(dict(registry.aliases)),
                 json.dumps({actor: registry.unread_since(
                     actor, registry.require(actor).incarnation.wire_birth, False,
                 ) for actor in deliveries}),

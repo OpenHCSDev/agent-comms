@@ -12,7 +12,7 @@ from .turn_failure import BackendFailed, NoTurnFailure, TurnFailure
 if TYPE_CHECKING:
     from .agent_events import Done
     from .storage.maintenance_barrier import MaintenanceBarrier
-    from agent_comms.owned_turn import TurnGoalAccount
+    from agent_comms.execution.owned_turn import TurnGoalAccount
     from .turn_progress import TurnProgress
 
 

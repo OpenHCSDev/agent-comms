@@ -125,7 +125,8 @@ from agent_comms.recorded_time import (
 )
 from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import (
-    Checkout, FailedGitCommand, GitCommandError, Repo, RepositoryReads, SourceReadFailure,
+    Checkout, CommitFilter, CommitsNaming, EveryCommit, FailedGitCommand, GitCommandError, Repo,
+    RepositoryReads, SourceReadFailure,
 )
 from agent_comms.repository_name import RepositoryName
 from agent_comms.slop import DeclarationDerivation, Slop
@@ -1384,7 +1385,7 @@ class ProgressCheckout(DeclaredFamily, affix="Checkout"):
     path: Path
 
     @abstractmethod
-    def commits(self, pattern: str, refs: tuple[str, ...],
+    def commits(self, selected: CommitFilter, refs: tuple[str, ...],
                 *excluded: str) -> Iterator[ProgressPoint]: ...
 
     @abstractmethod
@@ -1394,7 +1395,7 @@ class ProgressCheckout(DeclaredFamily, affix="Checkout"):
     def readings(self, source: ProgressSource, refs: tuple[str, ...]) -> DistanceReadings: ...
 
     @abstractmethod
-    def pushes(self, pattern: str) -> Iterator[tuple[str, float]]: ...
+    def pushes(self, selected: CommitFilter) -> Iterator[tuple[str, float]]: ...
 
     def require_read(self) -> None:
         """A retired checkout needs no local read; present and unread ones decide."""
@@ -1412,7 +1413,7 @@ class ProgressCheckout(DeclaredFamily, affix="Checkout"):
         """Consume this capture's selected refs inside its checkout failure boundary."""
         points = (
             *self.checked_commits(todo.order.checked(), refs, *excluded),
-            *self.commits(todo.reference_pattern, refs, *excluded),
+            *self.commits(todo.named_commits, refs, *excluded),
         )
         return tuple(sorted({point.sha: point for point in points}.values(),
                             key=lambda point: point.at, reverse=True)[:1])
@@ -1421,14 +1422,14 @@ class ProgressCheckout(DeclaredFamily, affix="Checkout"):
                         *excluded: str) -> Iterator[ProgressPoint]:
         return iter(())
 
-    def published(self, pattern: str) -> Iterator[ProgressPoint]:
+    def published(self, selected: CommitFilter) -> Iterator[ProgressPoint]:
         return iter(())
 
 
 class MissingCheckout(ProgressCheckout):
     """A retired checkout contributes no local history, not a failed Git read."""
 
-    def commits(self, pattern: str, refs: tuple[str, ...],
+    def commits(self, selected: CommitFilter, refs: tuple[str, ...],
                 *excluded: str) -> Iterator[ProgressPoint]:
         return iter(())
 
@@ -1438,7 +1439,7 @@ class MissingCheckout(ProgressCheckout):
     def readings(self, source: ProgressSource, refs: tuple[str, ...]) -> DistanceReadings:
         return DistanceReadings()
 
-    def pushes(self, pattern: str) -> Iterator[tuple[str, float]]:
+    def pushes(self, selected: CommitFilter) -> Iterator[tuple[str, float]]:
         return iter(())
 
 
@@ -1451,7 +1452,7 @@ class UnreadCheckout(ProgressCheckout):
     def require_read(self) -> None:
         raise WorkBranchError(self.reason)
 
-    def commits(self, pattern: str, refs: tuple[str, ...],
+    def commits(self, selected: CommitFilter, refs: tuple[str, ...],
                 *excluded: str) -> Iterator[ProgressPoint]:
         raise WorkBranchError(self.reason)
 
@@ -1461,7 +1462,7 @@ class UnreadCheckout(ProgressCheckout):
     def readings(self, source: ProgressSource, refs: tuple[str, ...]) -> DistanceReadings:
         raise WorkBranchError(self.reason)
 
-    def pushes(self, pattern: str) -> Iterator[tuple[str, float]]:
+    def pushes(self, selected: CommitFilter) -> Iterator[tuple[str, float]]:
         raise WorkBranchError(self.reason)
 
 
@@ -1526,21 +1527,21 @@ class PresentCheckout(ProgressCheckout):
                              for checkout in map(Path, paths)))
         return (*owned, *self.origin_refs)
 
-    def commits(self, pattern: str, refs: tuple[str, ...],
+    def commits(self, selected: CommitFilter, refs: tuple[str, ...],
                 *excluded: str) -> Iterator[ProgressPoint]:
         """Newest problem commit across owned branches and retained origin references."""
-        for commit in self.branches.history.commits(refs, *excluded, pattern=pattern):
+        for commit in self.branches.history.commits(refs, *excluded, selected=selected):
             yield ProgressPoint(commit.sha, commit.at)
             return
 
     def checked_commits(self, order: CheckedProblemOrder, refs: tuple[str, ...],
                         *excluded: str) -> Iterator[ProgressPoint]:
         """A recorded check links a head even without a problem token in its title."""
-        return (point for point in self.commits("", refs, *excluded)
+        return (point for point in self.commits(EveryCommit(), refs, *excluded)
                 if order.check.recorded_among(self.stored(point.sha)))
 
-    def published(self, pattern: str) -> Iterator[ProgressPoint]:
-        return self.commits(pattern, self.origin_refs, *self.default_refs)
+    def published(self, selected: CommitFilter) -> Iterator[ProgressPoint]:
+        return self.commits(selected, self.origin_refs, *self.default_refs)
 
     @cached_property
     def edits(self) -> tuple[float, ...]:
@@ -1575,9 +1576,9 @@ class PresentCheckout(ProgressCheckout):
             yield DistanceReading(point.at, order.check.result.distance(run).plus(
                 order.untouched(touched)), order.check.command)
 
-    def pushes(self, pattern: str) -> Iterator[tuple[str, float]]:
+    def pushes(self, selected: CommitFilter) -> Iterator[tuple[str, float]]:
         """Retained origin commits prove publication; their push reflog supplies its clock."""
-        published = {point.sha for point in self.published(pattern)}
+        published = {point.sha for point in self.published(selected)}
         return ((sha, at) for sha, at in self.origin_pushes if sha in published)
 
 
@@ -1726,12 +1727,12 @@ class ProgressSource(PullRequestSource):
         return iter(self.committed)
 
     def published(self) -> Iterator[ProgressPoint]:
-        return self.checkout.published(self.todo.reference_pattern)
+        return self.checkout.published(self.todo.named_commits)
 
     @cached_property
     def pushes(self) -> tuple[PushedProgress, ...]:
         return tuple(PushedProgress(sha[:9], at=at)
-                     for sha, at in self.checkout.pushes(self.todo.reference_pattern))
+                     for sha, at in self.checkout.pushes(self.todo.named_commits))
 
     @cached_property
     def edited_at(self) -> tuple[float, ...]:
@@ -5831,8 +5832,8 @@ class Todo(TodoStoreRows, TypedTable):
                     *self.history.facts_for(self.id).ordered_at))
 
     @property
-    def reference_pattern(self) -> str:
-        return rf"(^|[^A-Za-z0-9_]){re.escape(self.id)}([^A-Za-z0-9_]|$)"
+    def named_commits(self) -> CommitFilter:
+        return CommitsNaming(self.id)
 
     @classmethod
     def ordered(cls, todo_id: str, repo: RepositoryName, text: str, creator: ThreadIncarnation,

@@ -43,11 +43,10 @@ from .owner_protocol import (
     UnannouncedOwner,
 )
 from .owner_connection import CapturedOwner, NoControllerToken, OwnerConnection, OwnerIdentityChangedError
-from agent_comms.runtime_server import RuntimeRequest
 from .runtime_requests import SubscribeRuntimeRequest
 from .thread_identity import ThreadIncarnation
 
-from .runtime_server import ClientPermissionResponse
+from .runtime_server import ClientPermissionResponse, RuntimeRequest
 
 if TYPE_CHECKING:
     from .acp import CommsAgent
@@ -182,8 +181,11 @@ class RuntimeProxy(RuntimeConnection):
                         ),
                         timeout=ACP_PERMISSION_TIMEOUT_SECONDS,
                     )
-                    response = ClientPermissionResponse.of(
-                        request.id, RequestPermissionResponse.model_validate(reply)
+                    response = ClientPermissionResponse(
+                        id=request.id,
+                        outcome=RequestPermissionResponse.model_validate(reply).outcome.model_dump(
+                            by_alias=True, exclude_none=True
+                        ),
                     )
             finally:
                 try:

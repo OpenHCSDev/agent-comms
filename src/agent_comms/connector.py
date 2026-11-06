@@ -18,7 +18,6 @@ Usage:
 
 from __future__ import annotations
 
-from agent_comms.nominal.field_codec import WireExclude
 
 
 import asyncio
@@ -27,50 +26,40 @@ import hashlib
 import html
 import json
 import logging
-import multiprocessing
 import os
 import secrets
 import signal
 import socket
 import sys
 import time
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field, replace
-from functools import partial
+from functools import cached_property, partial
 from pathlib import Path
 from types import MappingProxyType
-from typing import Annotated, ClassVar, Literal, Self, cast
+from typing import Annotated, ClassVar, Self, cast
 
-from agent_comms_hooks import ToolRefusedError
 from aiohttp import web
 from aiohttp.typedefs import Handler
 from aiohttp.web_urldispatcher import AbstractResource, ResourceRoute, SystemRoute
 from yarl import URL
-from pydantic import JsonValue
 
 
 from .declared_verb import DeclaredVerb
-from .cli_protocol import CoreError
 from .command import Command
 from .launch_root import started
-from .child_process import GitChildren, OwnedGitOpening, join_retirement
+from .child_process import GitChildren, HelperStart, OwnedGitOpening, SpawnedHelper, join_retirement
 from .active_route import CommsRoute, resolve_comms_route
 from .comms import Comms, client_wire, wire
 from .ui_model.observation import RelayConnection, relay_frames, serve_encoded
 from .repo import Checkout
 from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
-from .errors import (
-    RelationViolationError,
-)
-from .coordination.errors import CommandFailure, Refused
 from .nominal.field_codec import (
-    Argument, FieldCodec, GitCommitText, MalformedRecord, NullMember, PathText, SingleFieldValue,
-    SubclassUnion, WireName, WireOmitDefault, WireTransient, RecordMember, boundary_decoder,
-    projected,
+    Argument, FieldCodec, GitCommitText, MalformedRecord, PathText, WireTransient, boundary_decoder,
 )
-from .exporting import CancellableWireExport, WireExportCancelled, WireExportObserver, WireExportProgress
+from .exporting import CancellableWireExport, WireExportObserver
 from agent_comms.channel_targets import NamedTarget
 from agent_comms.owner_requests import NewestOpenRequest, RequestSelection
 from .host_services import HostService
@@ -98,9 +87,21 @@ from .inbox_watch import InboxWatch, OpenWatch, WatchRoute, WatchTickets
 from .tool_caller import ThreadCaller
 from .tools import CommsSendTool, SendTool
 from .order_tools import CommsHeadVerdictTool, HeadVerdictTool, MessagePublished
-from .tool_request import ConnectorService, NoConnectorService, ToolCall, ToolRequest, tool_field
+from .transport.mcp import (
+    AnsweredCall,
+    InvalidRequestError,
+    JsonRpcId,
+    McpError,
+    McpErrorReply,
+    McpMessage,
+    McpServer,
+    McpSession,
+    MethodNotFoundError,
+    ParseError,
+    declared,
+)
+from .tool_request import ConnectorService, NoConnectorService, ToolRequest, tool_field
 
-JsonRpcId = int | str
 """A JSON-RPC request id, as the client chose it."""
 
 
@@ -160,15 +161,6 @@ class ConnectorWatchTool(ConnectorTool, declared_name="comms_watch"):
 class ConnectorHeadVerdictTool(HeadVerdictTool, ConnectorTool,
                                declared_name=CommsHeadVerdictTool.declared_name):
     """Director and native callers share the same persisted verdict and publication path."""
-
-
-PROTOCOL_VERSION = "2025-06-18"
-
-
-def declared(record: type, values: Mapping[str, object]) -> dict[str, object]:
-    """The values a record declares; an OAuth peer may send parameters it does not read."""
-    names = {plan.key for plan in FieldCodec.field_plans(record)}
-    return {key: value for key, value in values.items() if key in names}
 
 
 @dataclass
@@ -284,517 +276,13 @@ class ClientRegistrationReply(ClientRegistration):
 
 
 @dataclass(frozen=True)
-class McpResult(RecordMember):
-    """An untagged JSON-RPC result. Ping has no additional fields."""
-
-
-@dataclass(frozen=True, kw_only=True)
-class McpEnvelope:
-    jsonrpc: Literal["2.0"] = "2.0"
-
-
-@dataclass(frozen=True)
-class McpReply(McpEnvelope):
-    id: JsonRpcId
-    result: McpResult
-
-
-@dataclass(frozen=True)
-class McpError(RecordMember):
-    """A JSON-RPC error object; each kind of refusal declares its own code."""
-
-    message: str
-
-
-@dataclass(frozen=True)
-class ParseError(McpError):
-    code: Literal[-32700] = -32700
-
-
-@dataclass(frozen=True)
-class InvalidRequestError(McpError):
-    code: Literal[-32600] = -32600
-
-
-@dataclass(frozen=True)
-class MethodNotFoundError(McpError):
-    @projected(view=WireExclude)
-    def code(self) -> int:
-        return Refused.METHOD_NOT_FOUND
-
-
-@dataclass(frozen=True)
-class McpErrorReply(McpEnvelope):
-    """A refusal of a request whose own id cannot be read: JSON-RPC answers it with null."""
-
-    error: McpError
-    id: None = None
-
-    @staticmethod
-    def refusing(data: object, error: McpError) -> McpErrorReply | AddressedErrorReply:
-        """A client never matches a null id to its call, so a readable id is always answered."""
-        match data:
-            case {"id": int() | str() as request_id}:
-                return AddressedErrorReply(error, request_id)
-        return McpErrorReply(error)
-
-
-@dataclass(frozen=True)
-class AddressedErrorReply(McpEnvelope):
-    """A refusal answering the request it refuses."""
-
-    error: McpError
-    id: JsonRpcId
-
-
-@dataclass(frozen=True)
-class ToolCapabilities:
-    list_changed: Annotated[bool, WireName("listChanged")] = False
-
-
-@dataclass(frozen=True)
-class ServerCapabilities:
-    tools: ToolCapabilities = ToolCapabilities()
-
-
-@dataclass(frozen=True)
-class ServerInfo:
-    name: str = "agent-comms"
-    version: str = "1"
-
-
-@dataclass(frozen=True)
-class InitializeResult(McpResult):
-    protocol_version: Annotated[str, WireName("protocolVersion")] = (
-        PROTOCOL_VERSION
-    )
-    capabilities: ServerCapabilities = ServerCapabilities()
-    server_info: Annotated[ServerInfo, WireName("serverInfo")] = ServerInfo()
-    instructions: str = (
-        "Several Claude sessions can share one connector grant. When a tool offers the fork "
-        "argument, choose one distinct name for this session and pass {\"name\": \"...\"} on "
-        "every call, so teammates can tell you apart: your sends come from that name and your "
-        "inbox (comms_inbox with thread set to it) holds only what is sent to it."
-    )
-
-
-@dataclass(frozen=True)
-class ToolAnnotations:
-    read_only_hint: Annotated[bool, WireName("readOnlyHint")]
-
-
-@dataclass(frozen=True)
-class ToolDescription:
-    name: str
-    title: str
-    description: str
-    input_schema: Annotated[dict[str, JsonValue], WireName("inputSchema")]
-    annotations: ToolAnnotations
-
-    @classmethod
-    def of(
-        cls, name: str, tool: type[ToolRequest] | type[ConnectorTool], caller: ConnectorCaller
-    ) -> ToolDescription:
-        """The name is the key tools/call dispatches on, so listing and calling share it."""
-        return cls(name, tool.label, f"{tool.description} {tool.bus_effect}",
-                   caller.input_schema(tool), ToolAnnotations(tool.read_only_hint))
-
-
-@dataclass(frozen=True)
-class ToolsListResult(McpResult):
-    tools: tuple[ToolDescription, ...]
-
-
-SESSION_HEADER = "Mcp-Session-Id"
-
-
-@dataclass(frozen=True)
-class McpSession:
-    """This connector process's MCP session. A client that initialized against an earlier
-    process holds an id this one never issued, so it is answered 404 and initializes again,
-    which makes it list the tools this process serves: the tools an install added reach a
-    session that was open across it."""
-
-    id: str = field(default_factory=lambda: secrets.token_hex(16))
-
-    def claimed(self, request: web.Request) -> SessionClaim:
-        """The header is foreign until it is compared with the id issued here."""
-        match request.headers.get(SESSION_HEADER):
-            case None:
-                return UnclaimedSession()
-            case self.id:
-                return CurrentSession()
-            case _:
-                return PastSession()
-
-
-class SessionClaim:
-    """What a request's session header says about the process answering it."""
-
-    async def answer(
-        self, message: McpMessage, connector: Connector, caller: ConnectorCaller,
-        http: web.Request,
-    ) -> web.StreamResponse:
-        return await message.answer(connector, caller, http)
-
-
-class UnclaimedSession(SessionClaim):
-    """No header: a client that has not initialized yet, or one that keeps no session."""
-
-
-class CurrentSession(SessionClaim):
-    """The id this process issued."""
-
-
-class PastSession(SessionClaim):
-    """An id from an earlier process: its tool list may be missing what this one serves."""
-
-    async def answer(
-        self, message: McpMessage, connector: Connector, caller: ConnectorCaller,
-        http: web.Request,
-    ) -> web.StreamResponse:
-        return await message.past_session(connector, caller, http)
-
-
-@dataclass(frozen=True, kw_only=True)
-class McpMessage(DeclaredFamily, affix="Message"):
-    """A JSON-RPC message from the client; each method answers for itself."""
-
-    family_discriminator: ClassVar[str] = "method"
-    jsonrpc: Literal["2.0"]
-    @classmethod
-    def received(cls, data: object) -> Self:
-        """An undeclared method is refused by its name before its record is read."""
-        match data:
-            case {"method": str() as method}:
-                cls.member_named(method)
-        return FieldCodec.decode(cls, data)
-
-    @property
-    def log_name(self) -> str:
-        return self.declared_name
-
-    @abstractmethod
-    async def answer(
-        self, connector: Connector, caller: ConnectorCaller, http: web.Request,
-    ) -> web.StreamResponse: ...
-
-    async def past_session(
-        self, connector: Connector, caller: ConnectorCaller, http: web.Request,
-    ) -> web.StreamResponse:
-        """The session this message names ended with the process that issued it."""
-        return web.Response(status=404)
-
-
-@dataclass(frozen=True, kw_only=True)
-class McpNotification(McpMessage, declared_name=None):
-    """A notification gets no reply."""
-
-    params: dict[str, object] = field(default_factory=dict)
-
-    async def answer(
-        self, connector: Connector, caller: ConnectorCaller, http: web.Request,
-    ) -> web.StreamResponse:
-        return web.Response(status=202)
-
-
-@dataclass(frozen=True, kw_only=True)
-class InitializedMessage(McpNotification, declared_name="notifications/initialized"):
-    pass
-
-
-@dataclass(frozen=True)
-class CancelledParams:
-    request_id: Annotated[JsonRpcId, WireName("requestId")]
-
-
-@dataclass(frozen=True, kw_only=True)
-class CancelledMessage(McpNotification, declared_name="notifications/cancelled"):
-    """The client stops one of its running calls; a call that cannot stop finishes as usual."""
-
-    async def answer(
-        self, connector: Connector, caller: ConnectorCaller, http: web.Request,
-    ) -> web.StreamResponse:
-        connector.cancel_call(FieldCodec.decode(CancelledParams, self.params).request_id)
-        return web.Response(status=202)
-
-
-@dataclass(frozen=True, kw_only=True)
-class McpRequest(McpMessage):
-    id: JsonRpcId
-
-    async def answer(
-        self, connector: Connector, caller: ConnectorCaller, http: web.Request,
-    ) -> web.StreamResponse:
-        return web.json_response(
-            FieldCodec.encode(McpReply(self.id, await self.result(connector, caller)))
-        )
-
-    @abstractmethod
-    async def result(self, connector: Connector, caller: ConnectorCaller) -> McpResult: ...
-
-
-@dataclass(frozen=True, kw_only=True)
-class InitializeMessage(McpRequest, declared_name="initialize"):
-    params: dict[str, object]
-
-    async def answer(
-        self, connector: Connector, caller: ConnectorCaller, http: web.Request,
-    ) -> web.StreamResponse:
-        response = await super().answer(connector, caller, http)
-        response.headers[SESSION_HEADER] = connector.session.id
-        return response
-
-    async def past_session(
-        self, connector: Connector, caller: ConnectorCaller, http: web.Request,
-    ) -> web.StreamResponse:
-        """Initializing is how a past session's client starts this process's session."""
-        return await self.answer(connector, caller, http)
-
-    async def result(self, connector: Connector, caller: ConnectorCaller) -> InitializeResult:
-        return InitializeResult()
-
-
-@dataclass(frozen=True, kw_only=True)
-class PingMessage(McpRequest, declared_name="ping"):
-    params: dict[str, object] = field(default_factory=dict)
-
-    async def result(self, connector: Connector, caller: ConnectorCaller) -> McpResult:
-        return McpResult()
-
-
-@dataclass(frozen=True, kw_only=True)
-class ToolsListMessage(McpRequest, declared_name="tools/list"):
-    params: dict[str, object] = field(default_factory=dict)
-
-    async def result(self, connector: Connector, caller: ConnectorCaller) -> ToolsListResult:
-        return ToolsListResult(tuple(
-            ToolDescription.of(name, tool, caller) for name, tool in caller.exposed().items()
-        ))
-
-
-class ProgressRequest(SubclassUnion, affix="Progress"):
-    """Whether a tools/call asked for progress: no token (null) or the client's token."""
-
-    @abstractmethod
-    async def answered(
-        self, message: ToolsCallMessage, connector: Connector, caller: ConnectorCaller,
-        http: web.Request,
-    ) -> web.StreamResponse: ...
-
-
-@dataclass(frozen=True)
-class NoProgress(NullMember, ProgressRequest):
-    async def answered(
-        self, message: ToolsCallMessage, connector: Connector, caller: ConnectorCaller,
-        http: web.Request,
-    ) -> web.StreamResponse:
-        return web.json_response(FieldCodec.encode(
-            ToolsCallReply(message.id, await message.result(connector, caller, WireExportObserver()))))
-
-
-@dataclass(frozen=True)
-class ProgressToken(SingleFieldValue, ProgressRequest):
-    """MCP's progressToken is a string or a number; Claude Code sends a number."""
-
-    token: JsonRpcId
-
-    async def answered(
-        self, message: ToolsCallMessage, connector: Connector, caller: ConnectorCaller,
-        http: web.Request,
-    ) -> web.StreamResponse:
-        """Stream progress events while the call runs, then its reply, as server-sent events."""
-        stream = web.StreamResponse(headers={"Content-Type": "text/event-stream", "Cache-Control": "no-cache"})
-        await stream.prepare(http)
-        observer = StreamedProgress(asyncio.get_running_loop())
-        connector.observed[message.id] = observer
-        try:
-            call = asyncio.create_task(message.result(connector, caller, observer))
-            while True:
-                progressed = asyncio.create_task(observer.events.get())
-                await asyncio.wait((call, progressed), return_when=asyncio.FIRST_COMPLETED)
-                if not progressed.done():
-                    progressed.cancel()
-                    break
-                await stream.write(ProgressNotice.sent(self.token, progressed.result()))
-            while not observer.events.empty():
-                await stream.write(ProgressNotice.sent(self.token, observer.events.get_nowait()))
-            await stream.write(StreamedEvent.framed(FieldCodec.encode(ToolsCallReply(message.id, call.result()))))
-        finally:
-            connector.observed.pop(message.id, None)
-        await stream.write_eof()
-        return stream
-
-
-class StreamedProgress(CancellableWireExport):
-    """A connector-side export observer: each advance becomes one streamed event."""
-
-    def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
-        super().__init__()
-        self.loop = loop
-        self.events: asyncio.Queue[WireExportProgress] = asyncio.Queue()
-
-    def advanced(self, progress: WireExportProgress) -> None:
-        self.loop.call_soon_threadsafe(self.events.put_nowait, progress)
-
-
-@dataclass(frozen=True)
-class ToolCallMeta:
-    """The part of a call's `_meta` Core reads. MCP's `_meta` is open: a client adds its own
-    namespaced keys (Claude Code's claudecode/toolUseId), and those are not Core's to refuse."""
-
-    progress: Annotated[ProgressRequest, WireName("progressToken")] = NoProgress()
-
-    @classmethod
-    def of(cls, meta: Mapping[str, object]) -> ToolCallMeta:
-        declared = {entry.key for entry in FieldCodec.argument_fields(cls)}
-        return FieldCodec.decode(cls, {key: meta[key] for key in declared & meta.keys()})
-
-
-class StreamedEvent(ABC):
-    """One server-sent event of a streamed call: a progress notice or the final reply."""
-
-    @abstractmethod
-    def delivered(self, observer: WireExportObserver, replies: list[ToolsCallReply]) -> None: ...
-
-    @staticmethod
-    def framed(encoded: object) -> bytes:
-        return f"data: {FieldCodec.compact(encoded)}\n\n".encode()
-
-
-@dataclass(frozen=True)
-class ExportProgressMeta:
-    export: Annotated[WireExportProgress, WireName("agent_comms/export")]
-
-
-@dataclass(frozen=True)
-class ProgressParams:
-    token: Annotated[JsonRpcId, WireName("progressToken")]
-    progress: int
-    meta: Annotated[ExportProgressMeta, WireName("_meta")]
-
-
-@dataclass(frozen=True)
-class ProgressNotice(StreamedEvent):
-    jsonrpc: Literal["2.0"]
-    method: Literal["notifications/progress"]
-    params: ProgressParams
-
-    def delivered(self, observer: WireExportObserver, replies: list[ToolsCallReply]) -> None:
-        observer.advanced(self.params.meta.export)
-
-    @classmethod
-    def sent(cls, token: JsonRpcId, progress: WireExportProgress) -> bytes:
-        notice = cls("2.0", "notifications/progress",
-                     ProgressParams(token, progress.messages_written, ExportProgressMeta(progress)))
-        return cls.framed(FieldCodec.encode(notice))
-
-
-@dataclass(frozen=True, kw_only=True)
-class ToolsCallMessage(McpMessage, declared_name="tools/call"):
-    id: JsonRpcId
-    params: ToolCall
-
-    @property
-    def log_name(self) -> str:
-        return f"{super().log_name} {self.params.name}"
-
-    async def answer(
-        self, connector: Connector, caller: ConnectorCaller, http: web.Request,
-    ) -> web.StreamResponse:
-        """The call's own meta says whether the client asked for progress."""
-        meta = ToolCallMeta.of(self.params.meta)
-        return await meta.progress.answered(self, connector, caller, http)
-
-    async def result(
-        self, connector: Connector, caller: ConnectorCaller, observer: WireExportObserver,
-    ) -> ToolsCallResult:
-        tool = caller.exposed().get(self.params.name)
-        if tool is None:
-            return ToolsCallResult.failed(
-                ToolRefusedError(f"The connector exposes no tool {self.params.name!r}.")
-            )
-        try:
-            answered = await connector.call(tool, self.params.arguments, caller, observer)
-            return answered.result()
-        except (
-            # Invalid input (ToolRefusedError, MalformedRecord, an unrecorded time) and any
-            # declared CommandFailure (git, Refused, coordination) are the caller's refusal;
-            # escaping here answers HTTP 500, which the client sees as a lost connection.
-            ValueError, CommandFailure, ConnectionError, TimeoutError, WireExportCancelled,
-        ) as error:
-            logging.exception("Connector tool %s failed", self.params.name)
-            return ToolsCallResult.failed(error)
-
-
-@dataclass(frozen=True)
-class TextContent:
-    text: str
-    type: Literal["text"] = "text"
-
-
-@dataclass(frozen=True)
-class AnsweredCall:
-    """A tool's declared reply and the new board rows naming the caller who made it."""
-
-    reply: dict[str, JsonValue]
-    board: tuple[str, ...]
-
-    def result(self) -> ToolsCallResult:
-        """The rows ride as their own text after the reply, never inside it: structured
-        content stays exactly the declared result that remote cores decode."""
-        return ToolsCallResult((TextContent(json.dumps(self.reply)),
-                                *(TextContent(line) for line in self.board)), False, self.reply)
-
-
-@dataclass(frozen=True)
-class ToolsCallResult(McpResult):
-    """A tool's encoded reply, or its failed call encoded as an MCP error result."""
-
-    content: tuple[TextContent, ...]
-    is_error: Annotated[bool, WireName("isError")]
-    structured_content: Annotated[
-        dict[str, JsonValue],
-        WireName("structuredContent"),
-        WireOmitDefault(),
-    ] = field(default_factory=dict)
-
-    @classmethod
-    def failed(cls, error: Exception) -> ToolsCallResult:
-        return cls((TextContent(CoreError.from_exception(error).model_dump_json()),), True)
-
-
-@dataclass(frozen=True)
-class ToolsCallReply(McpReply, StreamedEvent):
-    result: ToolsCallResult
-
-    def structured(self) -> dict[str, JsonValue]:
-        """The tool's declared reply, or its declared failure raised."""
-        if self.result.is_error:
-            raise RelationViolationError(" ".join(content.text for content in self.result.content))
-        return self.result.structured_content
-
-    def delivered(self, observer: WireExportObserver, replies: list[ToolsCallReply]) -> None:
-        replies.append(self)
-
-
-@dataclass(frozen=True)
-class StreamedLine:
-    """One line of a streamed call; only server-sent `data:` lines carry an event."""
-
-    line: bytes
-
-    @boundary_decoder
-    def delivered(self, observer: WireExportObserver, replies: list[ToolsCallReply]) -> None:
-        text = self.line.decode().strip()
-        if text.startswith("data: "):
-            event = FieldCodec.decode(ProgressNotice | ToolsCallReply, json.loads(text[len("data: "):]))
-            event.delivered(observer, replies)
-
-
-@dataclass(frozen=True)
-class Connector(ConnectorService):
+class Connector(ConnectorService, McpServer):
     """The MCP endpoint and the OAuth authorization server in front of it."""
+
+    heartbeat_seconds: ClassVar[float] = 25.0
+    """How often a watch socket is pinged; a client that misses the pong is dropped."""
+    helper_start: ClassVar[HelperStart] = SpawnedHelper()
+    """How a remote viewer's observation process starts."""
 
     store: ConnectorStore
     issuer: str
@@ -821,12 +309,13 @@ class Connector(ConnectorService):
         default_factory=list, init=False, repr=False, compare=False,
     )
 
-    watch_tickets: WatchTickets = field(
-        default_factory=WatchTickets, init=False, repr=False, compare=False,
-    )
     session: McpSession = field(
         default_factory=McpSession, init=False, repr=False, compare=False,
     )
+
+    @cached_property
+    def watch_tickets(self) -> WatchTickets:
+        return WatchTickets(self.store)
 
     def watch_url(self, thread: str) -> ToolResult:
         return self.watch_tickets.issued(thread, URL(self.issuer))
@@ -835,17 +324,22 @@ class Connector(ConnectorService):
         """The ticket in the path is the only credential; log_route logs the route's template.
         A newer socket for a thread replaces the older one, as a re-armed watch does."""
         route = FieldCodec.decode(WatchRoute, dict(request.match_info))
-        thread = self.watch_tickets.taken(route.ticket).thread
+        # Both write the connector's store, so they run off the loop.
+        ticket = await asyncio.to_thread(self.watch_tickets.taken, route.ticket)
+        thread = ticket.thread
+        offer = await asyncio.to_thread(self.watch_tickets.reconnect, thread, URL(self.issuer))
+        logging.info("Watch for %s opened on %s", thread, ticket.opened_on)
         # A transcript line holds whatever a tool returned, far past aiohttp's 4 MiB default.
-        viewer = web.WebSocketResponse(heartbeat=25.0, max_msg_size=64 * 1024 * 1024)
+        viewer = web.WebSocketResponse(heartbeat=self.heartbeat_seconds, max_msg_size=64 * 1024 * 1024)
         await viewer.prepare(request)
-        watch = OpenWatch(thread, viewer)
+        watch = OpenWatch(thread, viewer, request.task)
         replaced = tuple(held for held in self.open_watches if held.thread == thread)
         self.open_watches.append(watch)
         for held in replaced:
             await held.viewer.close(code=WATCH_REPLACED, message=b"replaced by a newer watch")
         try:
-            await InboxWatch(thread, self.root).carried(viewer)
+            await ticket.opened(offer, viewer)
+            await InboxWatch(thread, self.root, offer).carried(viewer)
         finally:
             self.open_watches.remove(watch)
             # The access log says only that the socket ended; this says which side ended it.
@@ -880,7 +374,7 @@ class Connector(ConnectorService):
         for task in self.watch_tasks:
             task.cancel()
         for watch in tuple(self.open_watches):
-            await watch.viewer.close()
+            await watch.ended()
         await join_retirement(retirement)
 
     async def stop_calls(self, app: web.Application) -> None:
@@ -1181,7 +675,7 @@ class Connector(ConnectorService):
             raise web.HTTPForbidden(text=str(error))
         viewer = web.WebSocketResponse()
         await viewer.prepare(request)
-        await ObservationRelay(resolve_comms_route(self.root)).carry(viewer)
+        await ObservationRelay(resolve_comms_route(self.root), self.helper_start).carry(viewer)
         return viewer
 
     async def mcp(self, request: web.Request) -> web.StreamResponse:
@@ -1206,10 +700,10 @@ class ObservationRelay:
     """One remote viewer's observation process. Its frames pass through unopened: the
     service end decodes each one as a declared record and refuses anything else."""
 
-    def __init__(self, route: CommsRoute) -> None:
+    def __init__(self, route: CommsRoute, start: HelperStart) -> None:
         relay, service = socket.socketpair()
         with service:
-            self.process = multiprocessing.get_context("spawn").Process(
+            self.process = start.context().Process(
                 target=serve_encoded, args=(route, service), daemon=False,
                 name="agent-comms-remote-observation")
             self.process.start()

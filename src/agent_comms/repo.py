@@ -6,12 +6,15 @@ import heapq
 import os
 import re
 import shutil
+import string
 import subprocess
 from abc import ABC, abstractmethod
+from bisect import bisect_right
 from collections.abc import Callable, Iterator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
 from functools import cache, cached_property
+from itertools import accumulate
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
@@ -1057,6 +1060,62 @@ class CommitSelection:
     first_parent: bool = False
 
 
+class CommitMessages:
+    """Every captured message in one lowered text, so naming a token is one search of it.
+
+    A regex per message cost 137 ms per order on 34,816 commits, in Python, every heartbeat
+    pass; one `find` over this text costs about 2.5 ms and the text is built once per pass."""
+
+    word: ClassVar[frozenset[str]] = frozenset(string.ascii_lowercase + string.digits + "_")
+
+    def __init__(self, commits: tuple[GitCommit, ...]) -> None:
+        lowered = tuple(commit.message.lower() for commit in commits)
+        self.text = "\n".join(lowered)
+        self.shas = tuple(commit.sha for commit in commits)
+        self.starts = tuple(accumulate((len(message) + 1 for message in lowered), initial=0))
+        self._named: dict[str, frozenset[str]] = {}
+
+    def naming(self, token: str) -> frozenset[str]:
+        """The commits whose message has this token on its own, in any case."""
+        if token not in self._named:
+            self._named[token] = frozenset(self._occurrences(token.lower()))
+        return self._named[token]
+
+    def _occurrences(self, token: str) -> Iterator[str]:
+        at = self.text.find(token)
+        while at >= 0:
+            end = at + len(token)
+            if self.text[max(at - 1, 0):at] in self.word or self.text[end:end + 1] in self.word:
+                at = self.text.find(token, at + 1)
+                continue
+            message = bisect_right(self.starts, at) - 1
+            yield self.shas[message]
+            at = self.text.find(token, self.starts[message + 1])
+
+
+class CommitFilter(ABC):
+    """Which commits of a captured newest-first walk a reader wants."""
+
+    @abstractmethod
+    def commits(self, history: CheckoutHistory, walk: tuple[GitCommit, ...]) -> Iterator[GitCommit]: ...
+
+
+class EveryCommit(CommitFilter):
+    def commits(self, history: CheckoutHistory, walk: tuple[GitCommit, ...]) -> Iterator[GitCommit]:
+        return iter(walk)
+
+
+@dataclass(frozen=True)
+class CommitsNaming(CommitFilter):
+    """The commits that name a token, such as a problem's ID."""
+
+    token: str
+
+    def commits(self, history: CheckoutHistory, walk: tuple[GitCommit, ...]) -> Iterator[GitCommit]:
+        naming = history.messages.naming(self.token)
+        return (commit for commit in walk if commit.sha in naming)
+
+
 class CheckoutHistory:
     """A pass's selected refs and immutable commit graph, never a command-output cache.
 
@@ -1223,12 +1282,14 @@ class CheckoutHistory:
             self._walks[selection] = tuple(commits)
         return self._walks[selection]
 
-    def commits(self, refs: tuple[str, ...], *excluded: str,
-                pattern: str = "", first_parent: bool = False) -> Iterator[GitCommit]:
+    @cached_property
+    def messages(self) -> CommitMessages:
+        return CommitMessages(tuple(self.graph.values()))
+
+    def commits(self, refs: tuple[str, ...], *excluded: str, selected: CommitFilter = EveryCommit(),
+                first_parent: bool = False) -> Iterator[GitCommit]:
         """Filter a captured newest-first walk without traversing the graph again."""
-        matching = re.compile(pattern, re.IGNORECASE | re.MULTILINE)
-        return (commit for commit in self.walk(CommitSelection(refs, excluded, first_parent))
-                if matching.search(commit.message))
+        return selected.commits(self, self.walk(CommitSelection(refs, excluded, first_parent)))
 
     @cached_property
     def children(self) -> dict[str, tuple[str, ...]]:

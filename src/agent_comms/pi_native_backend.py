@@ -54,7 +54,7 @@ if TYPE_CHECKING:
     from .launch_runtime import LaunchRuntime
     from .native_child import NativeChildState, PiSessionChild
     from .native_session_reopen import NativeSessionIdentity
-    from .owned_turn import TurnDelivery
+    from .execution.owned_turn import TurnDelivery
     from .pi_payloads import StateData
     from .threads import Thread
     from .turn_runner import TurnRunner

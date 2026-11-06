@@ -28,7 +28,7 @@ from .message_reference import InboxStart
 from .agent_inbox import TakenInputStart
 from .messages import Message
 from .messaging import Messaging
-from .owner_lifecycle import OwnerLifecycle
+from .execution.owner_lifecycle import OwnerLifecycle
 from .publisher import OwnerPublisher
 from .relationships import ThreadRelationships
 from .agent_activity import AgentActivity

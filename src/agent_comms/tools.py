@@ -36,7 +36,7 @@ from .native_tools import CommunicationCall
 import dataclasses
 import threading
 from abc import abstractmethod
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Type
@@ -78,12 +78,12 @@ from .goal_waits import NoStandbyReview, StandbyReview
 from .goals import GoalDeclaration
 from .history_result import HistoryPageResult
 from .input_attempt import UnresolvedInput
-from .message_page import NEWEST_PAGE, InboxPage, MessagePage, PageBounds
+from .message_page import NEWEST_PAGE, DisplayedMessagePage, InboxPage, MessagePage, PageBounds
 from .page_traversal import LatestSequence, LiveCursor
 from .historical_views import ConversationObservation, ConversationRevision, UnobservedConversation
 from .message_reference import MessageReference
 from .messages import InfoKind, Message, MessageKind, NoticeRole, SendableMessageKind
-from .owner_lifecycle import OwnerStartResult
+from .execution.owner_lifecycle import OwnerStartResult
 from .owner_launch import HostResources
 from .page_traversal import NewestCursor, PageCursor
 from .pi_payloads import PublishedGoalToolDetails
@@ -429,7 +429,7 @@ class SearchToolLookup(ToolLookup, declared_name="search"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsDiscoverTool(ReadTool, NativeToolRequest[ToolCaller, ToolsSelected]):
+class CommsDiscoverTool(ReadTool, NativeToolRequest):
     """The native adapter activates these declarations through Pi's existing tool loader."""
 
     label = "Find and load Comms tools"
@@ -1611,7 +1611,7 @@ class CommsSendRefusalsTool(ReadTool, NativeToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class SendTool(PublishingTool[ThreadCaller]):
+class SendTool(PublishingTool[ThreadCaller, MessagePublished]):
     label = "Comms Send"
     description = (
         "Send a message to another thread or channel. Address specific threads with "
@@ -1667,7 +1667,7 @@ class CommsSendTool(SendTool, ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsUserSendTool(PublishingToolRequest):
+class CommsUserSendTool(PublishingToolRequest[ToolCaller, MessagePublished]):
     """Local and connector UI input use the existing durable human publication."""
 
     label = "Send human input"
@@ -1707,7 +1707,7 @@ class CommsMarkThreadViewReadTool(HumanToolRequest[ThreadViewMarked]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsAuthoredTaskTool(ThreadToolRequest, PublishingToolRequest[ThreadCaller]):
+class CommsAuthoredTaskTool(ThreadToolRequest, PublishingToolRequest[ThreadCaller, TaskPublished]):
     """One original authorized publication path for authored task declarations."""
 
     target: Annotated[
@@ -1848,7 +1848,7 @@ class CommsHistoryTool(ReadTool, NativeToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsInboxTool(NativeToolRequest[ToolCaller, InboxPageRead]):
+class CommsInboxTool(NativeToolRequest):
     label = "Comms Inbox"
     description = (
         "Fetch one oldest-first page of messages no harness attempted and no native input took, "
@@ -1885,10 +1885,17 @@ class CommsInboxTool(NativeToolRequest[ToolCaller, InboxPageRead]):
         )
 
     def page(self, comms: Comms) -> InboxPage:
-        """The messages alone: a reader that shows no unresolved inputs need not project them."""
+        return self.waited(comms, comms.bus.inbox_at)
+
+    def messages(self, comms: Comms) -> tuple[Message, ...]:
+        """The messages alone: a reader that shows no unresolved inputs and no remainder need
+        not project them."""
+        return self.waited(comms, comms.bus.untaken_at).page.messages
+
+    def waited[Page: DisplayedMessagePage](self, comms: Comms, read: Callable[..., Page]) -> Page:
         if not (target := self.target.strip()):
             raise ToolRefusedError("An inbox target cannot be empty.")
-        return self.wait.read(comms.bus.bus, lambda: comms.bus.inbox_at(
+        return self.wait.read(comms.bus.bus, lambda: read(
             self.thread, comms.registry.snapshot(), CommandTarget.named(target),
             after=self.after, bounds=PageBounds(limit=self.limit),
         ))

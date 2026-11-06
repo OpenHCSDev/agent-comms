@@ -36,9 +36,9 @@ from .native_turn_context import ContextObserved
 from .turn_phase import NativePhaseChanged, PublishingPhase
 
 if TYPE_CHECKING:
-    from .owned_turn import OwnedTurn
+    from .execution.owned_turn import OwnedTurn
     from .turn_failure import TurnFailure
-    from agent_comms.owned_turn import TurnGoalAccount
+    from agent_comms.execution.owned_turn import TurnGoalAccount
 
 
 @dataclass(kw_only=True)

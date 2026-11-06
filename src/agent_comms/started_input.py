@@ -12,7 +12,7 @@ from .nominal.field_codec import AcpSessionId
 if TYPE_CHECKING:
     from .acp_extension import InputStartedUpdate, QueueScope
     from .input_attempt import StartedInput as StartedRow
-    from .input_drain import InputDrain
+    from .execution.input_drain import InputDrain
     from .turn_input_source import TurnInputSource
 
 

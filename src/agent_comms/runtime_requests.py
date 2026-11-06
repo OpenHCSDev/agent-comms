@@ -13,12 +13,13 @@ from .repo import Checkout
 import json
 from abc import abstractmethod
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
+from acp.exceptions import RequestError
 from acp.schema import PromptRequest, PromptResponse, SetSessionConfigOptionResponse
 from pydantic import BaseModel, JsonValue
 
@@ -39,9 +40,13 @@ from .goal_scope import AllGoals, OneGoal
 from .goals import Goal
 from .manual_compaction_bridge import compact_context
 from .order_tools import OwnerGoalRead
-from agent_comms.runtime_server import AttachedResultRuntimeRequest, AttachedRuntimeRequest, AttachedRuntimeRequestContext
+from agent_comms.runtime_server import (
+    AttachedResultRuntimeRequest, AttachedRuntimeRequest, AttachedRuntimeRequestContext,
+    SubscriberClosed,
+)
+from .coordination.errors import Refused
 from .owner_connection import NoControllerToken, OwnerConnection, socket_path
-from .owner_protocol import ClientLine, OwnerAnnouncement, OwnerReady
+from .owner_protocol import ClientLine, OwnerAnnouncement, OwnerFailure, OwnerReady
 from .pi_payloads import NativeContextData
 from .thread_identity import ThreadIncarnation
 from .threads import Thread
@@ -240,6 +245,19 @@ class PromptRuntimeRequest(AttachedResultRuntimeRequest):
         finally:
             ctx.server.controller.reset(token)
         return PromptReply(result)
+
+    async def apply(self, ctx: AttachedRuntimeRequestContext) -> None:
+        """Only a prompt runs through CommsAgent's ACP methods, so only it fails in protocol form.
+
+        The failed turn crosses whole, and the client's own boundary raises it as itself.
+        Closing without a reply would report it as an unknown outcome.
+        """
+        try:
+            await super().apply(ctx)
+        except RequestError as error:
+            with suppress(SubscriberClosed):
+                await ctx.send(OwnerFailure.refused(Refused(error.code, str(error), error.data)))
+            raise
 
 
 @dataclass(frozen=True, kw_only=True)

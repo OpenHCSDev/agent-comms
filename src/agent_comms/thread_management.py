@@ -54,7 +54,7 @@ from .launch_runtime import LaunchRuntime, TagListText
 from .message_bus import MessageBus
 from .native_arguments import ConfiguredBinary, NativeArguments
 from .native_settings import NativeThreadDefaults
-from .owner_lifecycle import LaunchInput, OwnerLifecycle, TaskLaunchInput
+from .execution.owner_lifecycle import LaunchInput, OwnerLifecycle, TaskLaunchInput
 from .pi_vocabulary import NoThinkingOverride, ThinkingChoice, ThinkingLevelField
 from .registry_provenance import RegistryNames
 from .session_file import RegistrySessionLocation

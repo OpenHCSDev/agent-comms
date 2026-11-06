@@ -2,6 +2,9 @@
   "env": {
     "BASH_DEFAULT_TIMEOUT_MS": "15000"
   },
+  "permissions": {
+    "allow": ["mcp__claude-code-remote__add_repo"]
+  },
   "hooks": {
     "SessionStart": [
       {
@@ -42,7 +45,7 @@
     "Stop": [
       {
         "hooks": [
-          { "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/rule_gate.py\" idle", "timeout": 5 }
+          { "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/rule_gate.py\" idle", "timeout": 15 }
         ]
       }
     ]

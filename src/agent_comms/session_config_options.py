@@ -31,8 +31,8 @@ if TYPE_CHECKING:
     from .pi_commands import SettingCommand
     from .runtime_server import RuntimeServer
     from .session_effects import SessionEffects
-    from .session_lifecycle import SessionLifecycle
-    from .input_drain import OwnerSession
+    from .execution.session_lifecycle import SessionLifecycle
+    from .execution.input_drain import OwnerSession
 
 
 class SessionConfigOptions:

@@ -135,7 +135,8 @@ class NativeRuntimeInput(
             f"AND n.stage={triage_stage} AND n.session_entry_id IS NULL) AS triage_inflight,"
             f"(SELECT n.committed_at_ms {cls.context_entered_from('member', 'w.assignment_id')} "
             f"ORDER BY CASE n.stage WHEN {triage_stage} THEN 0 ELSE 1 END,"
-            "member.ordinal,n.input_id LIMIT 1) AS context_committed_at_ms FROM w"
+            # A re-asked claim has two triage inputs; it entered context at its first attempt.
+            "member.ordinal,member.attempt,n.input_id LIMIT 1) AS context_committed_at_ms FROM w"
         )
 
     @ClassFact

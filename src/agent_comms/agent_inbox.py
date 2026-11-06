@@ -19,7 +19,7 @@ from .bus_tables import MessageIdentitySource
 from .coordination.database import CoordinationStore
 from .coordination.tables.assignments import WakeAssignment
 from .coordination.tables.harness_deliveries import HarnessDelivery
-from .message_page import InboxPage
+from .message_page import DisplayedMessagePage
 from .nominal.field_codec import NullMember, RecordMember, SingleFieldValue, SubclassUnion
 from .watched import Watched
 from .message_reference import AfterMessageStart, InboxStart, MessageReference, StreamBeginning
@@ -99,14 +99,14 @@ class InboxWait(SubclassUnion, affix="Wait"):
     connector."""
 
     @abstractmethod
-    def read(self, bus: Watched, page: Callable[[], InboxPage]) -> InboxPage: ...
+    def read[Page: DisplayedMessagePage](self, bus: Watched, page: Callable[[], Page]) -> Page: ...
 
 
 @dataclass(frozen=True, slots=True)
 class NoWait(NullMember, InboxWait):
     """Answer with what is there now."""
 
-    def read(self, bus: Watched, page: Callable[[], InboxPage]) -> InboxPage:
+    def read[Page: DisplayedMessagePage](self, bus: Watched, page: Callable[[], Page]) -> Page:
         return page()
 
 
@@ -122,7 +122,7 @@ class SecondsWait(SingleFieldValue, InboxWait):
         if not 0 < self.seconds <= self.longest:
             raise ValueError(f"An inbox wait lasts 1 to {self.longest} seconds")
 
-    def read(self, bus: Watched, page: Callable[[], InboxPage]) -> InboxPage:
+    def read[Page: DisplayedMessagePage](self, bus: Watched, page: Callable[[], Page]) -> Page:
         deadline = time.monotonic() + self.seconds
         # Only the bus's own commits can bring a message: a goal, attempt or guard write in the
         # same root re-ran this whole read for every waiting socket (P1200).

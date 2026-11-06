@@ -3,30 +3,40 @@
 import asyncio
 import os
 import signal
+import time
 import sys
 import json
 import re
+from dataclasses import dataclass, field
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from aiohttp import WSServerHandshakeError
+from aiohttp import WSMsgType, WSServerHandshakeError, web
 from pydantic import ValidationError
-from aiohttp.test_utils import TestClient, TestServer
+from aiohttp.test_utils import TestClient, TestServer, unused_port
 from yarl import URL
 
 from agent_comms.activity import ActivityState, ObservedActivity
 from agent_comms.cli_bridges.claude_protocol import ClaudeMonitorFrame
 from agent_comms.cli_bridges.claude_protocol import MonitorTaskNotification, TaskEnvelope
-from agent_comms.cli_bridges.claude_transcript import WATCH_REPLACED, PrintedLedger
+from agent_comms.cli_bridges.claude_transcript import (
+    WATCH_DEFERRED, WATCH_REPLACED, PrintedLedger, ReconnectsAlone, ReconnectUrl,
+)
 from agent_comms.harness_delivery_states import PrintLedgerId
 from agent_comms.cli_bridges.inbox_watch_client import (
-    FollowedTranscript, InboxSocket, WatchDropped, WatchEnd, WatchStopped,
+    RECONNECTS_ALONE, WAITS_FOR_MAINTENANCE, WATCHING, FollowedTranscript, InboxSocket, Pause,
+    Pauses, Redials, RuntimeReplaced, WatchDeferred, WatchDropped, WatchEnd, WatchReplaced, WatchStopped,
 )
+from agent_comms.storage.locked_store import RegistryFile
+from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.comms import Comms
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.connector import Connector
+from agent_comms.connector_caller import GrantRefusedError
 from agent_comms.connector_store import ConnectorStore
+from agent_comms.inbox_watch import OpenWatch
+from agent_comms.launch_runtime import InstalledSource, LaunchRuntime
 from agent_comms.message_reference import MessageReference
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
 from agent_comms.repo import Checkout
@@ -37,14 +47,28 @@ from agent_comms.cli_bridges.shared import MonitorReadFile
 from agent_comms.tools import CommsInboxTool
 
 
+class QuickHeartbeatConnector(Connector):
+    """Pings every second, so a frozen client is dropped in about one instead of 25."""
+
+    heartbeat_seconds = 1.0
+
+
 @pytest.fixture
-async def session(tmp_path: Path, comms: Comms):
+def connector_type() -> type[Connector]:
+    return Connector
+
+
+@pytest.fixture
+async def session(tmp_path: Path, comms: Comms, connector_type: type[Connector]):
     """A live connector over a real store, holding the Director login a claude.ai session has."""
     comms.registry.declare(ExternalThread("claude-ai", frozenset(), Checkout(comms.root)))
     comms.registry.declare(NativeThread("sender", frozenset(), Checkout(comms.root)))
     store = ConnectorStore.at(tmp_path / "auth")
-    connector = Connector(store, "http://127.0.0.1:18767", comms.root)
-    async with TestServer(connector.application()) as server:
+    # The connector names its own address in every URL it issues, and a reconnecting client
+    # dials that URL whole, so the server listens where the connector says it does.
+    port = unused_port()
+    connector = connector_type(store, f"http://127.0.0.1:{port}", comms.root)
+    async with TestServer(connector.application(), port=port) as server:
         async with TestClient(server) as client:
             with store.granted("test") as token:
                 yield client, token
@@ -89,7 +113,8 @@ async def test_the_cloud_client_shows_a_message_that_fits_one_event_as_written(
     exports.parent.mkdir(mode=0o700)
     lines = await delivered_lines(client, token, comms, exports, capsys, "short body\nsecond line")
     start = next(index for index, line in enumerate(lines) if line.startswith("Comms in"))
-    assert lines[start].startswith("Comms in · sender (external agent) · ")
+    # A direct message names the thread it went to, so a reader tells it from a channel post.
+    assert lines[start].startswith("Comms in · cloud · sender (external agent) · ")
     # A reply's answers cite the bus position as well as the id, so the header names both.
     assert re.search(r" · \d+-[0-9a-f]{12}$", lines[start])
     assert lines[start + 1:start + 3] == ["short body", "second line"]
@@ -107,7 +132,7 @@ async def test_the_cloud_client_names_the_whole_body_of_a_message_too_long_for_o
     notice = next(json.loads(line) for line in lines if line.startswith('{"protocol"'))
     assert notice["type"] == "read-file"
     written = Path(notice["path"]).read_text()
-    assert written.startswith("Comms in · sender (external agent) · ")
+    assert written.startswith("Comms in · cloud · sender (external agent) · ")
     assert written.count("a line of a long body") == 160
 
 
@@ -358,6 +383,22 @@ async def test_the_cloud_client_says_out_loud_when_its_url_is_refused(session, t
     assert "not-a-ticket" not in ended.line()
 
 
+async def test_a_watch_running_a_replaced_runtime_stops_instead_of_dialling(tmp_path: Path, monkeypatch) -> None:
+    """Every install closes the socket; a watch whose runtime the install replaced must not
+    re-dial into the new connector with the old client. It ends, and the model starts it anew."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    newer = tmp_path / "runtimes/core-newer"
+    newer.mkdir(parents=True)
+    pointer = LaunchRuntime.current_pointer()
+    pointer.parent.mkdir(parents=True)
+    pointer.symlink_to(newer, target_is_directory=True)
+    watch = InboxSocket("ws://127.0.0.1:9/watch/never-dialled", tmp_path / "messages",
+                        source=InstalledSource(tmp_path / "site"))
+    ended = await asyncio.wait_for(watch.carried(), 10)
+    assert ended == RuntimeReplaced()
+    assert ended.line().startswith("Core was reinstalled") and "comms_watch" in ended.line()
+
+
 async def inbox_emptied(comms: Comms, thread: str) -> None:
     """A frame goes out before its message is recorded as taken, so a test waits for the record."""
     request = CommsInboxTool(thread=thread)
@@ -476,11 +517,294 @@ async def test_a_stop_finishes_with_no_session_on_the_other_end(session, comms: 
 
 def test_an_install_or_a_newer_watch_still_says_rearm() -> None:
     """Only the stop code means stay off; an install's drop and a replacement mean come back."""
-    assert WatchEnd.closed(1006) == WatchDropped("closed with code 1006")
-    assert WatchEnd.closed(1000) == WatchDropped("closed with code 1000")
-    assert WatchEnd.closed(None).exit_code == 1
-    assert WatchEnd.closed(WATCH_REPLACED) == WatchDropped(f"closed with code {WATCH_REPLACED}")
-    assert "start this again" in WatchEnd.closed(1006).line()
+    assert WatchEnd.closed(1006, "") == WatchDropped("closed with code 1006")
+    assert WatchEnd.closed(1000, "") == WatchDropped("closed with code 1000")
+    assert WatchEnd.closed(None, "").exit_code == 1
+    assert WatchEnd.closed(WATCH_REPLACED, "") == WatchReplaced(f"closed with code {WATCH_REPLACED}")
+    assert "start this again" in WatchEnd.closed(1006, "").line()
+    assert "start this again" in WatchEnd.closed(WATCH_REPLACED, "").line()
+    # The connector's own reason rides along, so a 1008 says which refusal it was.
+    assert "code 1008: Another live process" in WatchEnd.closed(
+        1008, ": Another live process owns this CLI endpoint.").line()
+
+
+async def test_a_replaced_watch_never_reconnects_to_take_its_place_back(tmp_path: Path) -> None:
+    """Two clients reconnecting over each other would replace each other for ever."""
+    replaced = WatchEnd.closed(WATCH_REPLACED, "")
+    assert await replaced.settled(InboxSocket("ws://unused/watch/x", tmp_path)) == replaced
+
+
+async def reconnect_url(socket) -> str:
+    """What a client that says it reconnects alone is handed; the path this test client opens."""
+    await socket.send_str(ReconnectsAlone(printed=()).line())
+    line = await asyncio.wait_for(socket.receive_str(), timeout=30)
+    assert line.startswith(ReconnectUrl.wire_prefix)
+    return URL(ReconnectUrl.model_validate_json(line).url).path
+
+
+async def test_only_a_client_that_says_it_reconnects_is_handed_a_reconnect_url(
+    session, comms: Comms,
+) -> None:
+    """An older client decodes every frame as a message, so it must never get anything else."""
+    client, token = session
+    older = await client.ws_connect(await watch_path(client, token, "cloud"))
+    comms.messaging.send("sender", "cloud", "only messages")
+    assert (await frame(older))["text"] == "only messages"
+    await older.close()
+
+    newer = await client.ws_connect(await watch_path(client, token, "cloud"))
+    assert URL(await reconnect_url(newer)).parent.name == "watch"
+    await newer.close()
+
+
+async def test_a_redialled_socket_holds_its_next_url_before_anything_else(
+    session, comms: Comms,
+) -> None:
+    """Resets come in bursts: on 2026-11-05 at 21:51 a re-dialled socket dropped 8 s after it
+    opened, while its next URL still waited on the transcript reader. A socket opened with a
+    reconnect ticket is sent that URL first, unasked, ahead of a message already waiting."""
+    client, token = session
+    first = await client.ws_connect(await watch_path(client, token, "cloud"))
+    path = await reconnect_url(first)
+    await first.close()
+    comms.messaging.send("sender", "cloud", "waiting at the re-dial")
+    again = await client.ws_connect(path)
+    line = await asyncio.wait_for(again.receive_str(), timeout=30)
+    assert line.startswith(ReconnectUrl.wire_prefix)
+    following = URL(ReconnectUrl.model_validate_json(line).url).path
+    assert (await frame(again))["text"] == "waiting at the re-dial"
+    await again.close()
+    # The URL it was handed first is the socket's own: re-dialling it opens.
+    third = await client.ws_connect(following)
+    await third.close()
+
+
+async def test_a_reconnect_url_opens_once_and_a_newer_watch_ends_it(session, comms: Comms) -> None:
+    """It has no clock, so only redemption or a newer watch of its thread ends it."""
+    client, token = session
+    first = await client.ws_connect(await watch_path(client, token, "cloud"))
+    path = await reconnect_url(first)
+    await first.close()
+    again = await client.ws_connect(path)
+    opened_with = await asyncio.wait_for(again.receive_str(), timeout=30)
+    assert opened_with.startswith(ReconnectUrl.wire_prefix)
+    with pytest.raises(WSServerHandshakeError):
+        await client.ws_connect(path)
+    comms.messaging.send("sender", "cloud", "after the reconnect")
+    assert (await frame(again))["text"] == "after the reconnect"
+
+    # Asked again, the socket answers with the URL it opened with, never a second mint.
+    standing = await reconnect_url(again)
+    assert standing == URL(ReconnectUrl.model_validate_json(opened_with).url).path
+    rearmed = await client.ws_connect(await watch_path(client, token, "cloud"))
+    with pytest.raises(WSServerHandshakeError):
+        await client.ws_connect(standing)
+    await again.close()
+    await rearmed.close()
+
+
+async def test_a_reconnect_url_outlives_the_connector_that_minted_it(
+    tmp_path: Path, comms: Comms,
+) -> None:
+    """Every install restarts the connector, and a reset client re-dials into the new process:
+    at 03:15 on 2026-11-06 three cloud watches were refused across one install, because their
+    tickets lived in the old process's memory. The ticket is the connector's own fact, kept in
+    its store, so the next process honours it once, and it never authorizes an MCP call."""
+    comms.registry.declare(ExternalThread("claude-ai", frozenset(), Checkout(comms.root)))
+    store = ConnectorStore.at(tmp_path / "auth")
+    port = unused_port()
+    issuer = f"http://127.0.0.1:{port}"
+    with store.granted("test") as token:
+        async with TestServer(Connector(store, issuer, comms.root).application(), port=port) as server:
+            async with TestClient(server) as client:
+                first = await client.ws_connect(await watch_path(client, token, "cloud"))
+                path = await reconnect_url(first)
+                await first.close()
+        with pytest.raises(GrantRefusedError):
+            store.read().caller_for(URL(path).name)
+        async with TestServer(Connector(store, issuer, comms.root).application(), port=port) as server:
+            async with TestClient(server) as client:
+                again = await client.ws_connect(path)
+                opened_with = await asyncio.wait_for(again.receive_str(), timeout=30)
+                assert opened_with.startswith(ReconnectUrl.wire_prefix)
+                with pytest.raises(WSServerHandshakeError):
+                    await client.ws_connect(path)
+                standing = await reconnect_url(again)
+                await again.close()
+                # Revoking the thread ends its watch's reconnect URL with its grant.
+                store.thread_revoked("cloud")
+                with pytest.raises(WSServerHandshakeError):
+                    await client.ws_connect(standing)
+
+
+async def test_a_reconnect_into_maintenance_is_deferred_and_keeps_its_next_url(
+    session, comms: Comms,
+) -> None:
+    """Every install holds maintenance, and a reset client re-dials into it: on 2026-11-06 the
+    connector refused each re-dial as a policy violation (1008), and the client spent its five
+    resets in seconds. The refusal now says to wait, and the URL handed over first opens once
+    maintenance lifts."""
+    assert isinstance(WatchEnd.closed(WATCH_DEFERRED, ""), WatchDeferred)
+    client, token = session
+    first = await client.ws_connect(await watch_path(client, token, "cloud"))
+    path = await reconnect_url(first)
+    await first.close()
+    barrier = MaintenanceBarrier(RegistryFile.path_in(comms.root))
+    held = barrier.begin(MaintenanceOperator.current())
+    try:
+        deferred = await client.ws_connect(path)
+        handed = await asyncio.wait_for(deferred.receive_str(), timeout=30)
+        assert handed.startswith(ReconnectUrl.wire_prefix)
+        closing = await asyncio.wait_for(deferred.receive(), timeout=30)
+        assert closing.type is WSMsgType.CLOSE and closing.data == WATCH_DEFERRED, closing
+    finally:
+        barrier.clear(held)
+    again = await client.ws_connect(URL(ReconnectUrl.model_validate_json(handed).url).path)
+    # A reconnect ticket's socket holds its next URL before any message.
+    assert (await asyncio.wait_for(again.receive_str(), timeout=30)).startswith(ReconnectUrl.wire_prefix)
+    comms.messaging.send("sender", "cloud", "after the maintenance")
+    assert (await frame(again))["text"] == "after the maintenance"
+    await again.close()
+
+
+class QuickRedials(Redials):
+    """Millisecond pauses, so a wait past the old run's nine takes no time here."""
+
+    pauses = Pauses.of((0.01,))
+    first_wait = Pause(0.01, pauses)
+    still_held = Pause(0.01, pauses)
+    restarting = Pause(0.01, pauses)
+
+
+@dataclass(frozen=True)
+class CountedPause(Pause):
+    """A pause that counts the re-dials it makes, which a re-dial no longer prints."""
+
+    dials: list[str] = field(default_factory=list)
+
+    async def retried(self, watch: InboxSocket, url: str, ended: WatchDropped) -> WatchEnd:
+        self.dials.append(url)
+        return await super().retried(watch, url, ended)
+
+
+class CountedMaintenanceRedials(QuickRedials):
+    still_held = CountedPause(0.01, QuickRedials.pauses)
+
+
+async def test_a_watch_waits_out_maintenance_however_long_it_holds(
+    session, comms: Comms, tmp_path: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Tonight's install held maintenance for 5 min 16 s, past the 3.5 min wait first written for
+    it. A deferral is the connector, alive, saying maintenance still holds, so the real client
+    waits on for as long as that is the answer, says so once, and is watching when it lifts."""
+    client, token = session
+    first = await client.ws_connect(await watch_path(client, token, "cloud"))
+    path = await reconnect_url(first)
+    await first.close()
+    barrier = MaintenanceBarrier(RegistryFile.path_in(comms.root))
+    held = barrier.begin(MaintenanceOperator.current())
+    watch = InboxSocket(str(client.make_url(path)), tmp_path / "exports" / "messages",
+                        redials=CountedMaintenanceRedials())
+    dials = CountedMaintenanceRedials.still_held.dials
+    before = len(dials)
+    running = asyncio.create_task(watch.carried())
+    printed = ""
+    try:
+        try:
+            async with asyncio.timeout(20):
+                while len(dials) - before < 12:
+                    if running.done():
+                        pytest.fail(f"The watch gave up during maintenance: {printed}")
+                    await asyncio.sleep(0.05)
+                    printed += capsys.readouterr().out
+        finally:
+            barrier.clear(held)
+        comms.messaging.send("sender", "cloud", "after a long maintenance")
+        async with asyncio.timeout(20):
+            while "after a long maintenance" not in printed:
+                await asyncio.sleep(0.05)
+                printed += capsys.readouterr().out
+        assert printed.count(WAITS_FOR_MAINTENANCE) == 1, printed
+        assert printed.count(WATCHING) == 1, printed
+    finally:
+        running.cancel()
+
+
+async def test_a_watch_waits_out_a_restarting_connector(
+    tmp_path: Path, comms: Comms, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Every install restarts the connector, and a reset client re-dials while the proxy in front
+    of it answers 502: on 2026-11-06 claude-f-ci's watch met 502s past the 15 s unopened run and
+    gave up. Nothing listening is not a refusal, so the unspent URL is dialled again until the
+    connector is back, and the watch carries on."""
+    comms.registry.declare(ExternalThread("claude-ai", frozenset(), Checkout(comms.root)))
+    comms.registry.declare(NativeThread("sender", frozenset(), Checkout(comms.root)))
+    store = ConnectorStore.at(tmp_path / "auth")
+    port = unused_port()
+    connector = Connector(store, f"http://127.0.0.1:{port}", comms.root)
+    restarting = asyncio.Event()
+    unreachable: list[str] = []
+
+    @web.middleware
+    async def proxy(request: web.Request, handler):
+        """What the proxy answers while nothing listens behind it."""
+        if restarting.is_set() and request.path.startswith("/watch/"):
+            unreachable.append(request.path)
+            raise web.HTTPBadGateway()
+        return await handler(request)
+
+    application = connector.application()
+    application.middlewares.append(proxy)
+    async with TestServer(application, port=port) as server, TestClient(server) as client:
+        with store.granted("test") as token:
+            watch = InboxSocket(str(client.make_url(await watch_path(client, token, "cloud"))),
+                                tmp_path / "exports" / "messages", redials=QuickRedials())
+            running = asyncio.create_task(watch.carried())
+            printed = ""
+            try:
+                async with asyncio.timeout(20):
+                    while RECONNECTS_ALONE not in printed:
+                        await asyncio.sleep(0.05)
+                        printed += capsys.readouterr().out
+                restarting.set()
+                await connector.open_watches[0].viewer.close()
+                async with asyncio.timeout(20):
+                    while len(unreachable) < 8:
+                        if running.done():
+                            pytest.fail(f"The watch gave up while the connector restarted: {printed}")
+                        await asyncio.sleep(0.05)
+                        printed += capsys.readouterr().out
+                restarting.clear()
+                comms.messaging.send("sender", "cloud", "after the restart")
+                async with asyncio.timeout(20):
+                    while "after the restart" not in printed:
+                        await asyncio.sleep(0.05)
+                        printed += capsys.readouterr().out
+            finally:
+                running.cancel()
+
+
+async def test_a_stopping_connector_ends_a_watch_handler_that_never_sees_the_close(
+    tmp_path: Path, comms: Comms,
+) -> None:
+    """On 2026-11-06 the install's stop waited 60.07 s, aiohttp's shutdown_timeout to the
+    decimal, on one watch handler still publishing its transcript: the close never reached it,
+    and every watch's re-dial met 502 for that minute. A watch now ends its own handler."""
+    comms.registry.declare(ExternalThread("claude-ai", frozenset(), Checkout(comms.root)))
+    store = ConnectorStore.at(tmp_path / "auth")
+    port = unused_port()
+    connector = Connector(store, f"http://127.0.0.1:{port}", comms.root)
+    async with TestServer(connector.application(), port=port) as server:
+        async with TestClient(server) as client:
+            with store.granted("test") as token:
+                socket = await client.ws_connect(await watch_path(client, token, "cloud"))
+                held, = connector.open_watches
+                busy = asyncio.create_task(asyncio.Event().wait())
+                await OpenWatch(held.thread, held.viewer, busy).ended()
+                await asyncio.sleep(0)
+                assert busy.cancelled()
+                assert held.viewer.closed
+                await socket.close()
 
 
 def attempt_outcome(comms: Comms, message) -> str:
@@ -619,12 +943,14 @@ async def test_no_ledger_is_no_proof_so_nothing_is_replayed(session, comms: Comm
     await again.close()
 
 
-async def test_a_watch_frozen_past_its_heartbeat_loses_nothing_and_shows_nothing_twice(
+@pytest.mark.parametrize("connector_type", [QuickHeartbeatConnector])
+async def test_a_watch_frozen_past_its_heartbeat_reconnects_alone_and_shows_the_message_once(
     session, comms: Comms, tmp_path: Path,
 ) -> None:
     """The 62380 freeze with a real client process and a real SIGSTOP: the connector drops the
-    stopped socket at its heartbeat while the message it took sits unshown. Whatever the client
-    prints after SIGCONT is in its ledger, and the next watch sends exactly what it did not."""
+    stopped socket at its heartbeat while the message it took sits unshown. After SIGCONT the
+    client re-dials with its reconnect URL, with no comms_watch from the model, and its ledger
+    report makes the new socket send exactly what it did not print."""
     client, token = session
     url = str(client.make_url(await watch_path(client, token, "cloud")))
     (tmp_path / ".claude" / "projects" / "p").mkdir(parents=True)
@@ -638,6 +964,8 @@ async def test_a_watch_frozen_past_its_heartbeat_loses_nothing_and_shows_nothing
     assert watch.stdout is not None
     async with asyncio.timeout(30):
         assert b"Watching your inbox" in await watch.stdout.readline()
+        # Frozen before the reconnect URL arrives, it would hold nothing to re-dial with.
+        assert RECONNECTS_ALONE.encode() in await watch.stdout.readline()
     os.kill(watch.pid, signal.SIGSTOP)
     try:
         message = comms.messaging.send("sender", "cloud", "sent into the freeze").message
@@ -647,23 +975,31 @@ async def test_a_watch_frozen_past_its_heartbeat_loses_nothing_and_shows_nothing
                 await asyncio.sleep(0.5)
     finally:
         os.kill(watch.pid, signal.SIGCONT)
-    async with asyncio.timeout(30):
-        printed = (await watch.stdout.read()).decode()
-    await watch.wait()
-    ledger = tmp_path / ".local" / "state" / "claude-comms-inbox" / "cloud" / "printed" / "frozen-session"
-    names = ledger.read_text().split() if ledger.exists() else []
-    assert (message.body in printed) == (message.reference.name in names)
+    printed: list[str] = []
 
-    again = await client.ws_connect(await watch_path(client, token, "cloud"))
-    identity = PrintLedgerId(ledger.with_suffix(".id").read_text())
-    await again.send_str(PrintedLedger(
-        ledger=identity, printed=tuple(MessageReference.named(n) for n in names)).line())
-    if message.reference.name in names:
+    async def next_line() -> None:
+        """An exited client reads as EOF at once, which must fail rather than spin."""
+        line = await watch.stdout.readline()
+        assert line, f"the client exited instead of reconnecting: {printed}"
+        printed.append(line.decode().rstrip("\n"))
+
+    try:
+        async with asyncio.timeout(60):
+            while not any(message.body in line for line in printed):
+                await next_line()
         with pytest.raises(TimeoutError):
-            await asyncio.wait_for(again.receive_str(), timeout=2)
-    else:
-        assert (await frame(again))["text"] == message.body
-    await again.close()
+            async with asyncio.timeout(3):
+                while True:
+                    await next_line()
+    finally:
+        watch.terminate()
+        await watch.wait()
+    assert sum(line == message.body for line in printed) == 1, printed
+    # The message is all the reconnect prints: the session was told before the freeze that the
+    # watch is up and reconnects alone, and each printed line costs it a turn.
+    assert not any(line in (WATCHING, RECONNECTS_ALONE) or "reconnecting" in line
+                   for line in printed), printed
+    assert not any("/watch/" in line for line in printed), printed
 
 
 def read_records(path: str, text: str) -> tuple[str, str]:

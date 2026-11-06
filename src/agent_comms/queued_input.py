@@ -56,7 +56,7 @@ if TYPE_CHECKING:
     from .turn_inbox import InputContent, TurnInbox
     from .bus_publication import Delivered
     from .comms import Comms
-    from .input_drain import DrainedSession, InputDrain
+    from .execution.input_drain import DrainedSession, InputDrain
     from .message_bus import MessageBus
     from .registry_document import RegistryEntry, RegistrySnapshot
     from .turn_input_source import TurnInputSource
