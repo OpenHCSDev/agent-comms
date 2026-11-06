@@ -529,17 +529,17 @@ class MessageRoutes(ProjectionOutputs):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .bus_route_counts import BusRouteCounts
+        from .bus_route_counts import BusRouteCounts, BusRouteKeys
         from .bus_tables import AwaitingAnswerSource
-        return (BusRouteCounts, AwaitingAnswerSource)
+        return (BusRouteCounts, BusRouteKeys, AwaitingAnswerSource)
 
     conversation_message: ClassVar[bool] = True
 
     @classmethod
     def route_rows(cls, message):
-        from .bus_route_counts import BusRouteCounts
+        from .bus_route_counts import BusRouteCounts, BusRouteKeys
 
-        return (BusRouteCounts.from_message(message),)
+        return (BusRouteCounts.from_message(message), BusRouteKeys.from_message(message))
 
 
 class MessageKind(DeclaredFamily, MessageRoutes, ProjectionSource, affix="Kind"):
@@ -1172,12 +1172,12 @@ class BusRecord(CarriesEnvelope, Message, DeclaredFamily, affix="Record"):
     def writes(cls) -> tuple[type[ProducedRow], ...]:
         from .bus_activity_index import BusActivityIndex, SentActivity
         from .bus_display_index import BusDisplayIndex
-        from .bus_route_counts import BusRouteCounts
+        from .bus_route_counts import BusRouteCounts, BusRouteKeys
         from .bus_tables import MessageIdentitySource, AnsweredSource
         # Task rows are written by the record that carries the task, so the record kinds own
         # them too: that is what lets a carry replay old records into a new task row.
         return tuple(dict.fromkeys((
-            BusActivityIndex, SentActivity, BusDisplayIndex, BusRouteCounts,
+            BusActivityIndex, SentActivity, BusDisplayIndex, BusRouteCounts, BusRouteKeys,
             MessageIdentitySource, AnsweredSource,
             *(row for task in TaskAttachment.members_with(TaskAttachment)
               for owner in task.writer_declarations() for row in owner.writes),
