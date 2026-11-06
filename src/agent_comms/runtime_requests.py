@@ -83,8 +83,12 @@ class CancelReply(DeclaredReply):
     pass
 
 
+@dataclass(frozen=True)
 class QueueActionReply(DeclaredReply):
-    """The owner applied a queue action to its session's queued inputs."""
+    """The owner applied a queue action to its session's queued inputs.
+
+    Undeclared as a record, the codec could not encode it: every send_now and clear_queue ran,
+    then closed without its reply, and Toad showed a steer that worked as "outcome unknown"."""
 
 
 @dataclass(frozen=True)
