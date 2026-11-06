@@ -211,7 +211,7 @@ wheels = [
 [[package]]
 name = "batrachian-toad"
 version = "0.6.20"
-source = { git = "https://github.com/OpenHCSDev/toad.git?branch=main#4eced781df10aad6b9483bff8cb51c1aed175156" }
+source = { git = "https://github.com/OpenHCSDev/toad.git?branch=main#9a18f552fe19bb4ca6d2f89ce0f8e9817854a455" }
 dependencies = [
     { name = "agent-client-protocol" },
     { name = "agent-comms" },
