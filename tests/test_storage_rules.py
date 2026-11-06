@@ -50,7 +50,9 @@ from agent_comms.goals import OrderCheck
 from agent_comms.registry_document import RegisteredTeamProject
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.todos import EditWorkplaces, PendingProblemOrder, PullRequestLink
+from agent_comms.todos import (
+    AssignedBoundaryRead, EditWorkplaces, PendingProblemOrder, PullRequestLink,
+)
 from source_revision_fixture import SourceRepository
 
 
@@ -399,15 +401,18 @@ def test_existing_work_boundaries_do_not_select_a_new_checkout(
     Checkout.add(source, second, DetachedStart('HEAD'))
     if select_other:
         owner = replace(owner, worktree=Checkout(second))
-    assert rule.edit_boundaries(owner, 'P1', repository, (repository,), first_goal) == {first}
-    assert rule.edit_boundaries(owner, 'P2', repository, (repository,), second_goal) == {second}
+    reads = RepositoryReads()
+    assert rule.edit_boundaries(
+        owner, 'P1', repository, (repository,), first_goal, reads) == {first}
+    assert rule.edit_boundaries(
+        owner, 'P2', repository, (repository,), second_goal, reads) == {second}
     fresh = rule.order_checkout(rule.roots_of(owner), 'P3')
     if select_other:
         assert rule.edit_boundaries(
-            owner, 'P3', repository, (repository,), GoalId.mint()) == {second}
+            owner, 'P3', repository, (repository,), GoalId.mint(), reads) == {second}
     else:
         with pytest.raises(StorageDenied):
-            rule.edit_boundaries(owner, 'P3', repository, (repository,), GoalId.mint())
+            rule.edit_boundaries(owner, 'P3', repository, (repository,), GoalId.mint(), reads)
     with pytest.raises(StorageDenied):
         StorageProjection(rule, owner, comms).check((CreateCheckoutStorageEffect(
             fresh, LocalRepositorySource(Repo.of(source)), DetachedStart('HEAD')),))
@@ -432,7 +437,7 @@ def test_selected_edit_checkout_does_not_read_an_unrelated_broken_history(checko
     before = {path.name: path.read_bytes() for path in broken.iterdir()}
     fresh = rule.repository_checkout(rule.roots_of(owner), GoalId.mint(), repository)
     assert rule.reused_checkout(owner, repository, fresh, RepositoryReads()) == selected
-    assert rule.edit_boundaries(owner, 'P2', repository, (), goal.id) == {selected}
+    assert rule.edit_boundaries(owner, 'P2', repository, (), goal.id, RepositoryReads()) == {selected}
     StorageProjection(rule, owner, comms).require_write(selected / 'implementation.py')
     assert not fresh.exists()
     assert {path.name: path.read_bytes() for path in broken.iterdir()} == before
@@ -530,7 +535,7 @@ def test_independent_repository_choices_survive_navigation_and_reopening(
                 fresh, command.repository, DetachedStart('HEAD')),))
     primary, companion = multiple_repository_checkouts
     assert rule.edit_boundaries(owner, 'P1234', primary.repository,
-                                (companion.repository,), GoalId.mint()) == {
+                                (companion.repository,), GoalId.mint(), RepositoryReads()) == {
                                     primary.first, companion.first}
     assert {path: (path / 'held-work.txt').read_bytes() for path in before} == before
 
@@ -572,7 +577,8 @@ def test_normal_companion_order_admission_uses_the_persisted_repository_choices(
     selected = comms.registry.require('worker')
     admitted = admit()
     places = EditWorkplaces.for_assignment(
-        comms.root, comms.registry.snapshot(), (), (admitted,))
+        comms.root, comms.registry.snapshot(), (), (admitted,),
+        AssignedBoundaryRead(RepositoryReads()))
     assert places.roots_for(admitted.id) == frozenset((core.first, toad.first))
     assert comms.registry.require('worker') == selected
     assert comms.registry.require('requester') == requester
