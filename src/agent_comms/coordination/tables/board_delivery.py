@@ -14,7 +14,7 @@ from agent_comms.coordination.schema import CoordinatorRow
 from agent_comms.coordination.session import CoordinationSession
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
 from agent_comms.task_attachments.team_pings import TeamUpdate
-from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from agent_comms.storage.typed_table import Column
 from agent_comms.transcript_routes import WithoutRowid
 from agent_comms_hooks.board import BoardEntry, SessionBoard
@@ -36,22 +36,27 @@ class ReaderBoardDelivery(CoordinatorRow, WithoutRowid):
     def alarm_due(self, entry: BoardEntry, now: float) -> bool:
         return self.delivered_at < entry.alarm_at <= now
 
+    @staticmethod
+    def column(reader: RecordedThreadIncarnation) -> str:
+        """The stored form of the reader's birth, the table's key; only SQL sees it."""
+        return str(reader.lookup)
+
     @classmethod
-    def due(cls, db: sqlite3.Connection, lookup: str, entries: tuple[BoardEntry, ...],
-            now: float) -> tuple[BoardEntry, ...]:
+    def due(cls, db: sqlite3.Connection, reader: RecordedThreadIncarnation,
+            entries: tuple[BoardEntry, ...], now: float) -> tuple[BoardEntry, ...]:
         """The entries this reader has not been shown since they last changed or alarmed."""
         return tuple(
             entry for entry in entries
             if all(delivered.alarm_due(entry, now)
-                   for delivered in cls.select(db, reader=lookup, content=entry.content,
-                                               since=entry.since)))
+                   for delivered in cls.select(db, reader=cls.column(reader),
+                                               content=entry.content, since=entry.since)))
 
     @classmethod
-    def forgotten(cls, db: sqlite3.Connection, lookup: str,
+    def forgotten(cls, db: sqlite3.Connection, reader: RecordedThreadIncarnation,
                   entries: tuple[BoardEntry, ...]) -> tuple[ReaderBoardDelivery, ...]:
         """Delivery evidence for rows no longer on the board."""
         current = {entry.content for entry in entries}
-        return tuple(delivered for delivered in cls.select(db, reader=lookup)
+        return tuple(delivered for delivered in cls.select(db, reader=cls.column(reader))
                      if delivered.content not in current)
 
     @classmethod
@@ -61,7 +66,7 @@ class ReaderBoardDelivery(CoordinatorRow, WithoutRowid):
         quiet tool call never contends for coordination.sqlite3. The writer re-selects and stamps
         in one transaction, so two concurrent calls cannot both deliver one change. A busy writer
         delivers nothing on this call: its rows stay unstamped and print on the next call."""
-        lookup = str(reader.require_recorded().lookup)
+        recorded = reader.require_recorded()
         with (
             MaintenanceBarrier(RegistryFile.path_in(root)).allow_input(),
             CoordinationSession(str(CoordinationStore.path_in(root))) as store,
@@ -69,15 +74,15 @@ class ReaderBoardDelivery(CoordinatorRow, WithoutRowid):
             with store.read():
                 db = store._connection
                 cls.require_schema(db)
-                if not (cls.due(db, lookup, entries, now) or cls.forgotten(db, lookup, entries)):
+                if not (cls.due(db, recorded, entries, now) or cls.forgotten(db, recorded, entries)):
                     return SessionBoard.presented((), now)
             try:
                 with store.writing() as db:
-                    for delivered in cls.forgotten(db, lookup, entries):
-                        cls.delete(db, reader=lookup, content=delivered.content)
-                    due = cls.due(db, lookup, entries, now)
+                    for delivered in cls.forgotten(db, recorded, entries):
+                        cls.delete(db, reader=delivered.reader, content=delivered.content)
+                    due = cls.due(db, recorded, entries, now)
                     for entry in due:
-                        cls(lookup, entry.content, entry.since, now).upsert(db)
+                        cls(cls.column(recorded), entry.content, entry.since, now).upsert(db)
             except CoordinationBeginUnavailable:
                 return SessionBoard.presented((), now)
         return SessionBoard.presented(due, now)

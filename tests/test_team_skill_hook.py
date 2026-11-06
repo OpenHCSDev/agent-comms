@@ -287,7 +287,7 @@ def tool_call(hook, comms):
 
 def delivered(comms):
     """How many of the colleague's rows Core holds as delivered."""
-    lookup = str(comms.registry.require("colleague").incarnation.require_recorded().lookup)
+    lookup = ReaderBoardDelivery.column(comms.registry.require("colleague").incarnation.require_recorded())
     with CoordinationSession(str(CoordinationStore.path_in(comms.root))) as store, store.writing() as db:
         return len(ReaderBoardDelivery.select(db, reader=lookup))
 
