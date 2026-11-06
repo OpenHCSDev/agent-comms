@@ -118,3 +118,21 @@ def test_an_assistant_record_with_no_prompt_opens_its_own_turn():
     for position, data in enumerate(records):
         ClaudeJsonLines().decode_line(json.dumps(data).encode(), position).updates(session)
     assert session.turn == KnownTurn(NativeTurnId(transcript_record('thinking')))
+
+
+def test_an_api_retry_notice_reads_as_a_system_event_that_ends_no_turn():
+    """2026-11-06: Claude Code 2.1.318 wrote its first api_error record (a 529 retry notice) and
+    the undeclared subtype stopped claude-b-ui's watch; nothing reached the bus after it."""
+    running = NativeTurnId(transcript_record('prompt'))
+    session = ClaudeSession(phase=Live(), turn=KnownTurn(running))
+    notice = dict(
+        type='system', subtype='api_error', level='error', uuid=transcript_record('retry'),
+        timestamp='2026-11-06T19:53:37.000Z', sessionId='session', source='request_retry',
+        retryAttempt=1, retryInMs=501, maxRetries=7, version='2.1.318',
+        error=dict(message='529 overloaded_error', status=529, requestId='req_1', formatted='529 Overloaded',
+                   connection=None, isNetworkDown=False, rateLimits=None, noResponse=None),
+    )
+    record = ClaudeJsonLines().decode_line(json.dumps(notice).encode(), 0)
+    assert not record.ends_turn()
+    assert record.updates(session) == ()
+    assert session.turn == KnownTurn(running)

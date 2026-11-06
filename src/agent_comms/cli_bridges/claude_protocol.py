@@ -1241,6 +1241,12 @@ class ModelRefusalNoFallback(SystemEvent, declared_name='model_refusal_no_fallba
     pass
 
 
+class ApiError(SystemEvent, declared_name='api_error'):
+    """Claude Code's notice that it is retrying a failed API request (a 529 overload, say). It
+    delivers nothing and ends no turn; undeclared, its first record stopped claude-b-ui's watch
+    on 2026-11-06 at 19:53Z."""
+
+
 class SystemRecord(ClaudeRecord, declared_name='system'):
     subtype: Declared[SystemEvent]
 
