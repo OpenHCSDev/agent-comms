@@ -57,7 +57,8 @@ from agent_comms.cli_bridges.hook_read_gate import GatedCall, MonitorInput
 from agent_comms_hooks.shell_commands import EmergencyHookStop
 from agent_comms_hooks.skill import (DeckReader, DeckStart, LightReader,
                                      LightPrime, Prime, SessionSource)
-from agent_comms.cli_bridges.session_watch import DeafWatch, WatchClaim, WatchRecord
+from agent_comms.cli_bridges.session_watch import DeafWatch, WatchClaim
+from agent_comms_hooks.watch import WatchRecord
 from conftest import engaged, fresh_confession
 from test_team_notifications import beat
 from test_head_review import ACCEPTED, invoke

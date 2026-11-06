@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated
 
 from agent_comms_hooks import ToolRefusedError
-from agent_comms.cli_bridges.session_watch import WatchClaim
+from agent_comms_hooks.watch import SessionEndpoint
 
 from .bus_publication import AgentOrigin
 from .cli_result import ThreadToolCatalogResult, ToolCatalogResult
@@ -250,8 +250,8 @@ class ForkCaller(ActsForTeam, SubagentCaller):
         if self.name in comms.registry:
             parent, = comms.registry.require(self.name).parent.names()
             return parent
-        claim = WatchClaim(WatchClaim.environment_session())
-        bindings = claim.state().bindings()
+        claim = SessionEndpoint(SessionEndpoint.environment_session())
+        bindings = claim.bindings()
         if not bindings:
             raise ToolRefusedError(
                 f"{self.name} has no registered parent and Claude session {claim.thread}"

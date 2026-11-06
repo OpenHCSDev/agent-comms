@@ -29,10 +29,9 @@ from .acp_extension import (
 
 from .agent_event_updates import AcpEventConsumer
 from .acp_request_consumer import AcpRequestConsumer
-from agent_comms.cli_verbs.correct_annotation import CorrectAnnotationCliCommand
+from .annotation_correction import CorrectsAnnotation
 from .context_store import ContextManifestReference
 from .coordination.coordinator import Coordination
-from .errors import RelationViolationError
 from .nominal.field_codec import FieldCodec, WireName, WireValue, GoalId
 from .goal_actions import GoalAction
 from .goal_history import RecordedGoalHistory
@@ -528,7 +527,7 @@ class ContextAnnotationsRuntimeRequest(ContextRecordedSegmentRuntimeRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ContextAnnotationCorrectionRuntimeRequest(ContextRecordedSegmentRuntimeRequest):
+class ContextAnnotationCorrectionRuntimeRequest(CorrectsAnnotation, ContextRecordedSegmentRuntimeRequest):
     label: ModelLabel
     answer: type[SpanAnswer]
     worktree: Checkout
@@ -537,6 +536,4 @@ class ContextAnnotationCorrectionRuntimeRequest(ContextRecordedSegmentRuntimeReq
         segment = await self.selected_segment(ctx)
         if not segment.contains_span(self.label.span):
             raise ValueError("Correction belongs to another original context source")
-        request = CorrectAnnotationCliCommand(
-            label=self.label, answer=self.answer, worktree=self.worktree)
-        return await Coordination.run_worker(partial(request.apply, ctx.server.agent._comms))
+        return await Coordination.run_worker(partial(self.correct, ctx.server.agent._comms))

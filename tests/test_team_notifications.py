@@ -46,7 +46,8 @@ from agent_comms.standing_rules import ReviewTimerUp, ServicePassFailing, Standi
 from agent_comms.ui_model.teammate_state import (
     Spinning, TeammateState, UrgentGroup,
 )
-from agent_comms.cli_bridges.session_watch import WatchClaim, WatchRecord
+from agent_comms.cli_bridges.session_watch import WatchClaim
+from agent_comms_hooks.watch import WatchRecord
 from agent_comms.wake_policy import PassiveWake
 from agent_comms.bus_publication import AgentOrigin, HumanOrigin
 from agent_comms.channel_targets import TeammatesTag, ThreadTarget

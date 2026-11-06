@@ -2,7 +2,8 @@
 
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.hook_forks import SessionSubagents
-from agent_comms.cli_bridges.session_watch import WatchClaim, WatchRecord
+from agent_comms.cli_bridges.session_watch import WatchClaim
+from agent_comms_hooks.watch import WatchRecord
 from agent_comms.cli_bridges.hook_requests import ReadGateRequest, SubagentStartRequest, SubagentStopRequest
 
 from agent_comms.team.order import Team, MessageNotification

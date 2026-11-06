@@ -10,7 +10,8 @@ import pytest
 
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.hook_requests import HookReply, QueueBypassRequest
-from agent_comms.cli_bridges.session_watch import WatchClaim, WatchRecord
+from agent_comms.cli_bridges.session_watch import WatchClaim
+from agent_comms_hooks.watch import WatchRecord
 from hook_session_fixture import resident_hook, resident_session
 from agent_comms.todos import QualifiedHeadVerdict, ReviewedHeadVerdict, RejectedHeadVerdict
 from agent_comms_hooks.queue_bypass import MergeTarget, MergeTargetUnreadable, QueueBypass

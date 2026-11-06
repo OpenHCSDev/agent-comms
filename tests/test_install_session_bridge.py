@@ -3,12 +3,8 @@
 
 
 from agent_comms_hooks.watch import NoSessionBridge
-from agent_comms.cli_bridges.session_watch import (
-    LapsedWatch,
-    LiveWatch,
-    WatchClaim,
-    WatchRecord,
-)
+from agent_comms.cli_bridges.session_watch import LapsedWatch, LiveWatch, WatchClaim
+from agent_comms_hooks.watch import WatchRecord
 from agent_comms.repo import Checkout
 import json
 import os

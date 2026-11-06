@@ -606,6 +606,11 @@ class TargetActionCommand[Result: TargetEditResult | Channel = TargetEditResult 
     decodes, and the menu's catalog lists exactly these members."""
 
 
+class CreatesThread:
+    """A target action whose answer is a new thread: a UI that opens the new-thread form picks
+    the offered action carrying this, without importing the command that serves it."""
+
+
 class MultipleTargets:
     """Commands accepting a batch own its decoding and execution permission."""
 
