@@ -627,7 +627,7 @@ class ServedCommsQueueActionTool(HumanToolRequest[QueueActionApplied], CommsQueu
 
     def answered(self, comms: Comms) -> QueueActionApplied:
         original = comms.registry.snapshot().born(self.lookup)
-        self.action.at_owner(comms.root, original)
+        QueueActionRuntimeRequest.serving(self.action).at_owner(comms.root, original)
         return QueueActionApplied(original.name)
 
 

@@ -41,6 +41,7 @@ from .goals import Goal
 from .manual_compaction_bridge import compact_context
 from .bus_read import OwnerScopedRead
 from .transport.tools.reads import OwnerGoalRead
+from .transport.tools.sidebar import ClearQueueQueueAction, QueueAction, SendNowQueueAction
 from .ui_model.observation import SubscribeTranscript
 from agent_comms.runtime_server import (
     AttachedResultRuntimeRequest, AttachedRuntimeRequest, AttachedRuntimeRequestContext,
@@ -271,7 +272,18 @@ class CancelRuntimeRequest(AttachedResultRuntimeRequest):
 
 @dataclass(frozen=True, kw_only=True)
 class QueueActionRuntimeRequest(AttachedResultRuntimeRequest, declared_name=None):
-    """A queue action any client asks of a thread's owner, attached over ACP or not."""
+    """A queue action any client asks of a thread's owner, attached over ACP or not. Each
+    member names the declared QueueAction it serves."""
+
+    serves: ClassVar[dict[type[QueueAction], type[QueueActionRuntimeRequest]]] = {}
+
+    def __init_subclass__(cls, *, action: type[QueueAction], **kwargs) -> None:
+        super().__init_subclass__(**kwargs)
+        QueueActionRuntimeRequest.serves[action] = cls
+
+    @classmethod
+    def serving(cls, action: type[QueueAction]) -> type[QueueActionRuntimeRequest]:
+        return cls.serves[action]
 
     @classmethod
     def at_owner(cls, root: Path, thread: Thread) -> None:
@@ -280,14 +292,14 @@ class QueueActionRuntimeRequest(AttachedResultRuntimeRequest, declared_name=None
 
 
 @dataclass(frozen=True, kw_only=True)
-class SendNowRuntimeRequest(QueueActionRuntimeRequest):
+class SendNowRuntimeRequest(QueueActionRuntimeRequest, action=SendNowQueueAction):
     async def result(self, ctx: AttachedRuntimeRequestContext) -> QueueActionReply:
         await ctx.server.agent.inputs.send_now(ctx.session)
         return QueueActionReply()
 
 
 @dataclass(frozen=True, kw_only=True)
-class ClearQueueRuntimeRequest(QueueActionRuntimeRequest):
+class ClearQueueRuntimeRequest(QueueActionRuntimeRequest, action=ClearQueueQueueAction):
     async def result(self, ctx: AttachedRuntimeRequestContext) -> QueueActionReply:
         await ctx.server.agent.inputs.clear_queued_inputs(ctx.session)
         return QueueActionReply()

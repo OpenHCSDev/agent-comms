@@ -36,6 +36,7 @@ from ...input_origin import HumanInputOrigin
 from ...message_page import MessagePage
 from ...message_page import NEWEST_PAGE
 from ...message_page import PageBounds
+from ...nominal.declared_family import DeclaredFamily
 from ...nominal.field_codec import ThreadLookup
 from ...nominal.field_codec import WireName
 from ...send_result import MessagePublished
@@ -48,7 +49,6 @@ from ...registry_document import RegistrySnapshot
 from ...relationships import SortableRelationshipGroup
 from ...relationships import ThreadCommsSnapshot
 from ...repo import Checkout
-from ...runtime_requests import QueueActionRuntimeRequest
 from ...runtime_server import RuntimeRequest
 from ...session_revision import SessionObservation
 from ...thread_identity import ClaimedIdentity
@@ -301,6 +301,19 @@ class CommsPrepareTargetActionTool(ReadRequest[PreparedTargetAction]):
     action: Annotated[TargetAction, *tool_field("The action with its current values")]
 
 
+class QueueAction(DeclaredFamily, affix="QueueAction"):
+    """What a UI asks a thread's owner to do with its queued inputs. Core serves each
+    member with the owner request that declares it serves it."""
+
+
+class SendNowQueueAction(QueueAction, declared_name="send_now"):
+    """Send the queued message now."""
+
+
+class ClearQueueQueueAction(QueueAction, declared_name="clear_queue"):
+    """Clear the queue."""
+
+
 @dataclass(frozen=True, kw_only=True)
 class CommsQueueActionTool(ToolRequest[QueueActionApplied]):
     """A UI sends a queued message now, or clears a queue, at its original recipient's owner;
@@ -309,7 +322,7 @@ class CommsQueueActionTool(ToolRequest[QueueActionApplied]):
     description = ("Send a queued message now, or clear the queue, at the original recipient's "
                    "running owner; requires a human UI caller.")
     lookup: Annotated[ThreadLookup, *tool_field("The original recipient's creation lookup")]
-    action: Annotated[type[QueueActionRuntimeRequest], *tool_field("Send now or clear")]
+    action: Annotated[type[QueueAction], *tool_field("Send now or clear")]
 
 
 @dataclass(frozen=True, kw_only=True)
