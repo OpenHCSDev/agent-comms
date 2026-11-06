@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 from . import agent_events as events
 from . import turn_phase as phases
 from .acp_failure import UnrecordedFailureSource
+from .controller import ChoiceRequest
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import (
     DeclaredWireType,
@@ -536,7 +537,7 @@ class SetStatusUiRequest(ExtensionUiRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class DialogUiRequest(ExtensionUiRequest):
+class DialogUiRequest(ExtensionUiRequest, ChoiceRequest[ExtensionUiChoice]):
     title: str | None = None
 
     def confirm(self, value: bool) -> ExtensionUiResponse:
@@ -549,6 +550,9 @@ class DialogUiRequest(ExtensionUiRequest):
         return None
 
     def choice(self, option_id: str) -> ExtensionUiChoice:
+        return CancelledUiChoice()
+
+    def cancelled(self) -> ExtensionUiChoice:
         return CancelledUiChoice()
 
     async def act(self, session: TurnSession) -> None:

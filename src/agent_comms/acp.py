@@ -69,7 +69,7 @@ from .channel_targets import NamedTarget
 from .cohort_foreground import _accept_visible_deliveries
 from .comms import Comms, wire
 from .controller import (
-    ACP_PERMISSION_TIMEOUT_SECONDS, CANCELLED_OUTCOME, Controller, NoController, SessionUpdateSink,
+    ACP_PERMISSION_TIMEOUT_SECONDS, CancelledOutcome, Controller, PermissionOutcome, NoController, SessionUpdateSink,
 )
 from .coordinated_runtime import SelectedExecution
 from .coordination.cohort import next_sealed_assignment
@@ -202,7 +202,7 @@ class SdkSessionConnection(AgentSideConnection, Controller, SessionUpdateSink):
     async def request_ui_permission(
         self, runner: TurnRunner, session_id: AcpSessionId,
         request: tuple[ToolCallUpdate, list[PermissionOption]],
-    ) -> dict[str, object]:
+    ) -> PermissionOutcome:
         tool_call, options = request
         if self is runner.sessions.client:
             response = await asyncio.wait_for(
@@ -211,10 +211,8 @@ class SdkSessionConnection(AgentSideConnection, Controller, SessionUpdateSink):
                 ),
                 timeout=ACP_PERMISSION_TIMEOUT_SECONDS,
             )
-            return RequestPermissionResponse.model_validate(response).outcome.model_dump(
-                by_alias=True, exclude_none=True
-            )
-        return dict(CANCELLED_OUTCOME)
+            return PermissionOutcome.from_acp(RequestPermissionResponse.model_validate(response).outcome)
+        return CancelledOutcome()
 
     def departed(self, runtime: RuntimeServer, session_id: AcpSessionId) -> bool:
         return False

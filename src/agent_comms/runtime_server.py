@@ -21,7 +21,9 @@ from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Self
 from pydantic import BaseModel
 
 from .command import Command
-from .controller import CANCELLED_OUTCOME, UNBOUND_CONTROLLER, Controller, SessionUpdateSink
+from .controller import (
+    UNBOUND_CONTROLLER, CancelledOutcome, Controller, PermissionOutcome, SessionUpdateSink,
+)
 from .coordination.coordinator import Coordination
 from .coordination.errors import CoordinationError, IdentityConflict, Refused
 from .errors import RelationViolationError
@@ -66,11 +68,11 @@ class ClientPermissionResponse(ClientLine):
     """The controller's decision on one permission request."""
 
     id: str
-    outcome: dict[str, object]
+    outcome: PermissionOutcome
 
     @classmethod
     def cancelled(cls, request_id: str) -> Self:
-        return cls(id=request_id, outcome=dict(CANCELLED_OUTCOME))
+        return cls(id=request_id, outcome=CancelledOutcome())
 
     def answer(self, client: SocketClient) -> None:
         pending = client.pending.get(self.id)
@@ -89,7 +91,7 @@ class SocketClient(Controller, SessionUpdateSink):
         send_bytes = writer.get_extra_info("socket").getsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF)
         transport.set_write_buffer_limits(high=max(high_water, send_bytes), low=low_water)
         self.token = secrets.token_hex(32)
-        self.pending: dict[str, asyncio.Future[dict[str, object]]] = {}
+        self.pending: dict[str, asyncio.Future[PermissionOutcome]] = {}
 
     def require_current(self, authority: AcpSelectedWriteAuthority, session_id: AcpSessionId) -> None:
         if not authority.agent._runtime.is_controller(session_id, self):
@@ -98,7 +100,7 @@ class SocketClient(Controller, SessionUpdateSink):
     async def request_ui_permission(
         self, runner: TurnRunner, session_id: AcpSessionId,
         request: tuple[BaseModel, Sequence[BaseModel]],
-    ) -> dict[str, object]:
+    ) -> PermissionOutcome:
         """The socket forwards the request's wire form and reads nothing else of ACP's models."""
         tool_call, options = request
         return await runner.runtime.request_permission(
@@ -136,13 +138,12 @@ class SocketClient(Controller, SessionUpdateSink):
 
     async def permission(
         self, tool_call: dict[str, object], options: list[dict[str, object]]
-    ) -> dict[str, object]:
-        """The controller's outcome as it sent it; turn_runner reads only what it needs.
-        A request it never answers is cancelled."""
+    ) -> PermissionOutcome:
+        """The controller's outcome as it sent it; a request it never answers is cancelled."""
         if len(self.pending) >= 4:
-            return dict(CANCELLED_OUTCOME)
+            return CancelledOutcome()
         request_id = secrets.token_hex(16)
-        future: asyncio.Future[dict[str, object]] = (
+        future: asyncio.Future[PermissionOutcome] = (
             asyncio.get_running_loop().create_future()
         )
         self.pending[request_id] = future
@@ -162,7 +163,7 @@ class SocketClient(Controller, SessionUpdateSink):
         except (OSError, ConnectionError, TimeoutError):
             if task is not None and task.cancelling():
                 raise asyncio.CancelledError from None
-            return dict(CANCELLED_OUTCOME)
+            return CancelledOutcome()
         finally:
             self.pending.pop(request_id, None)
             if not future.done():
@@ -173,7 +174,7 @@ class SocketClient(Controller, SessionUpdateSink):
             if not future.done():
                 # Connection loss is denial, not cancellation of the *owner*
                 # turn task. Explicit ACP cancellation must still propagate.
-                future.set_result(dict(CANCELLED_OUTCOME))
+                future.set_result(CancelledOutcome())
         self.pending.clear()
 
     async def publish_update(self, *, session_id: AcpSessionId, update: BaseModel) -> bool:
@@ -315,11 +316,11 @@ class RuntimeServer(SessionUpdateSink):
         controller: SocketClient,
         tool_call: dict[str, object],
         options: list[dict[str, object]],
-    ) -> dict[str, object]:
+    ) -> PermissionOutcome:
         if not self.is_controller(session_id, controller):
-            return dict(CANCELLED_OUTCOME)
+            return CancelledOutcome()
         reply = await controller.permission(tool_call, options)
-        return reply if self.is_controller(session_id, controller) else dict(CANCELLED_OUTCOME)
+        return reply if self.is_controller(session_id, controller) else CancelledOutcome()
 
     async def handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         client = SocketClient(writer)
