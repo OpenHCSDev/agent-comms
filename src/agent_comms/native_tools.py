@@ -89,7 +89,7 @@ class NativeToolDeclaration(ToolDeclaration):
         try:
             member = cls.member_named(name)
         except UnknownFamilyMember:
-            return McpToolCall(call_id=call_id, declared_name=offered.admitted(name).value,
+            return McpToolCall(call_id=call_id, declared_name=offered.tool_named(name).value,
                                arguments=decoded)
         return member.create_call(call_id, decoded)
 
@@ -141,7 +141,7 @@ class CommunicationCall(CoordinationCall, declared_name=None):
 @dataclass(frozen=True, kw_only=True)
 class McpToolCall(NamedArgumentsCall, declared_name=None):
     """A tool pi-mcp-client registered for this turn: one per connected MCP server's tool,
-    plus its catalogue, resource and prompt tools. The thread's offered catalogue admits the
+    plus its catalogue, resource and prompt tools. The thread's offered catalogue holds the
     name. These tools touch no worktree path, so the owner grants no file claim."""
 
     @classmethod
