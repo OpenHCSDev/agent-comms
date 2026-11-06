@@ -1,5 +1,7 @@
 # agent-comms: the owner's unowned asks, on the board
 
+> **Done.** All 9 phases of this plan hold their evidence on main (read by Core's PlanReading, 2026-11-06). Kept as the record of what was decided; it is not work.
+
 Opened: 2026-10-25, at `7f0923fca` (main).
 
 ## The thesis

@@ -1,5 +1,7 @@
 # Package structure follows behavior ownership
 
+> **Done.** All 5 phases of this plan hold their evidence on main (read by Core's PlanReading, 2026-11-06). Kept as the record of what was decided; it is not work.
+
 This is the package-structure plan requested in `OWNER-ASKS-PLAN.md`, against
 Core main `715c3c18e46c987949c28eab744451e03ad76f9e` (#3511). It plans the complete
 flat production surface; it does not move modules or change stored data.
