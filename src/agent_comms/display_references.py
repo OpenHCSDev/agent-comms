@@ -301,6 +301,10 @@ class CurrentDisplayReferences(SnapshotRestored, DisplayReferences, ThreadNames)
         """Resolve an exact birth to its current name; a missing birth fails."""
         return ThreadDisplayReference(self.root, self.current[incarnation.require_recorded().wire_birth])
 
+    def holds(self, incarnation: ThreadIncarnation) -> bool:
+        """Whether this cut still has the birth; a deleted or redeclared peer's old one is gone."""
+        return incarnation.require_recorded().wire_birth in self.current
+
 
 @dataclass(frozen=True)
 class ReferenceNames(ToolResult):

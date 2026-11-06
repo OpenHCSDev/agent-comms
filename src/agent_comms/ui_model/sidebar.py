@@ -204,8 +204,13 @@ class ObservedSidebar(SidebarObservation):
 
     def peer_unread(self, peer: ThreadIncarnation) -> UnreadPresentation:
         """The peer's current name and its unread count come from this one snapshot. A name the
-        caller resolved from an earlier cut can be one a rename has since replaced."""
-        return self.bus_unread(self.snapshot.references.thread(peer).name)
+        caller resolved from an earlier cut can be one a rename has since replaced. A retired
+        incarnation (its peer deleted or redeclared) has no unread left to show; its tab may
+        still paint once before retirement closes it."""
+        references = self.snapshot.references
+        if not references.holds(peer):
+            return UnobservedUnread()
+        return self.bus_unread(references.thread(peer).name)
 
     def references_for(self, root):
         return self.snapshot.references.at(root)

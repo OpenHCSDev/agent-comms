@@ -115,6 +115,20 @@ def test_recreated_thread_reference_resolves_new_birth_not_same_name(comms, decl
     assert before.thread(original.incarnation).incarnation == original.incarnation
     with pytest.raises(KeyError):
         references.thread(original.incarnation)
+    assert references.holds(recreated.incarnation)
+    assert not references.holds(original.incarnation)
+
+
+def test_retired_dm_peer_has_no_unread_to_paint(comms, declare_reference):
+    """A tab for a deleted-and-redeclared peer can paint once before retirement closes it."""
+    original = declare_reference()
+    comms.threads.delete(original.name)
+    recreated = declare_reference(original.name)
+    model = SidebarModel([].append)
+    snapshot = comms.views.viewer_snapshot(Checkout(comms.root.parent))
+    model.apply(snapshot, SidebarModel.derive(snapshot))
+    assert model.observation.peer_unread(original.incarnation) == UnobservedUnread()
+    assert model.observation.peer_unread(recreated.incarnation) == ExactUnread(0)
 
 
 def test_current_reference_membership_and_lookup_share_the_retained_registry(comms, declare_reference):
