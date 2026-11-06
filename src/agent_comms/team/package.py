@@ -14,33 +14,18 @@ class TeamPackage:
 
     reading_order: ClassVar[tuple[str, ...]] = (
         "spine",
-        "after-compaction",
-        "unnecessary",
-        "correct-maintenance",
-        "slop-and-polymorphism",
-        "owner-authority",
-        "evidence-not-claims",
-        "plain-reporting",
-        "refactor-game",
-        "no-blocking",
-        "finish-line",
-        "fork-orders",
-        "tests-and-commands",
-        "ship-and-install",
-        "hotfix",
-        "storage-and-cleanup",
-        "send-backs-and-strikes",
-        "blunt-reviews",
-        "coordination",
-        "self-correction",
-        "deadlines",
+        "slop",
+        "team",
+        "no-waiting",
+        "evidence",
+        "talk",
     )
     """The one declaration of the order every deal and unit prompt presents the rules in. The
     papers are dealt before all of them; the spine comes next and kills the hedge on what they
-    proved, then the price of calling an abstraction unnecessary; each rule after it is set up by
-    the one before: the verdict index, the slop it defines, the owner whose positions they are,
-    evidence, reporting, the work, then how the teammate enforces it. A rule this tuple does not name still loads, after the named ones in name order; the package test
-    holds the tuple to exactly the packaged rules."""
+    proved; slop is what they define and its theorem index; then the team the work belongs to,
+    the stall it must not wait in, the evidence a claim needs and how it is said. A rule this
+    tuple does not name still loads, after the named ones in name order; the package test holds
+    the tuple to exactly the packaged rules."""
 
     @classmethod
     def rules_files(cls) -> tuple[Path, ...]:

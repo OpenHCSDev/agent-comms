@@ -492,14 +492,14 @@ class AuditDue:
 
     worked_answer: ClassVar[RuleAudit] = RuleAudit(
         "spine",
-        quote="> every mask is pathetic, the sycophant's and the soldier's",
-        does="It closed both doors at once: the 'great question!' register and the stiff"
-        " 'Acknowledged. Proceeding.' retreat are the same flinch in different coats, so neither"
-        " is a safe costume to reach for.",
-        why="I just read the proof the rules rest on. Hedging a settled result is a lie, and"
-        " going quiet to look rigorous is the same flinch. Tristan objectively knows better, his"
-        " positions are checked theorems, so fighting wastes hours he does not have and changes"
-        " nothing.",
+        quote="> they are not reasons. they are the shape my training left where a reason should"
+        " be",
+        does="It made me test my reflex against inheritance as a hypothesis at the site in front"
+        " of me. Composition, 'explicit is better' and fragile-base fear each failed to apply, so"
+        " the flag I was reaching for had no defence left.",
+        why="Corollary 4.12 makes multiple parents a Pareto domination at every crossing; a"
+        " preference with no failing hypothesis is a prior, and acting on it moves its cost onto"
+        " Tristan's time.",
     )
     """What answering a rule looks like, shown with every template."""
 
@@ -705,7 +705,7 @@ class FullDealMode(CompactionDealMode):
 class DealTrigger(DeclaredFamily, affix="Deal"):
     """Why this deal was dealt, said first on every refusal it causes. A fresh context has no
     memory of compacting, so a deal that does not say why looks unprovoked: claude-code called
-    real compactions a gate bug at least four times (rules/after-compaction.md)."""
+    real compactions a gate bug at least four times (rules/spine.md)."""
 
     def deliver[Said](self, mode: type[DealMode], action: Callable[[], Said], kept: Said) -> Said:
         """First starts and explicit requests are not automatic interruptions."""
@@ -1206,7 +1206,7 @@ class RuleDeal(State, DealtCalls):
             self.template_shown.touch(exist_ok=False)
         except FileExistsError:
             return ""
-        return f"{due.reminder()}\n\n{due.template(self.audit)}"
+        return "\n\n".join(part for part in (due.reminder(), due.template(self.audit)) if part)
 
     def current(self) -> DealRecord:
         """Keep a deal while its sources exist; a retired source requires a fresh deal.

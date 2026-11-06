@@ -1,5 +1,5 @@
 """A cloud session's reader sees only the session's own text, so a turn that took a bus message
-cannot end until that text names it (plain-reporting.md). On 2026-11-06 Tristan, reading
+cannot end until that text names it (talk.md). On 2026-11-06 Tristan, reading
 claude-i-notices in the Claude app, did not see his own message 64189 that the session had been
 shown."""
 

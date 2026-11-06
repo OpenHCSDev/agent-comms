@@ -96,6 +96,6 @@ class CloudDealPrompt(DealPrompt):
         " a consequence of, then the rules, the voice, the recorded failures and the pattern catalog."
         " You have read them by reading this prompt, and it survives every compaction, so do not"
         " read them again with a tool unless the gate names a file that changed. Engage with them"
-        " before you act. Many steps name the bus host's tools; rules/self-correction.md says how"
+        " before you act. Many steps name the bus host's tools; rules/spine.md says how"
         " to keep each step's reason with what this session has."
     )

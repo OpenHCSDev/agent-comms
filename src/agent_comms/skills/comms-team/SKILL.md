@@ -20,19 +20,19 @@ Think of both games: **RTS for the shared work map; Quake 3 CPMA duel for contro
 
 **Read trajectories before they become bad diffs.** Tool calls, files being read, DMs and channel context reveal the next decision. A unit exploring unrelated files or proposing another wrapper is a reason to inspect its intent against its order and the source now. Catch a demonstrated restatement while the workaround is forming; determine the coherent repair through the existing owner. A running status or a confident report does not tell you that trajectory.
 
-**A public correction changes the whole map.** Correct the unit sharply and colorfully in the project channel, such as #comms: name the concrete wrong turn, its evidence, and the replacing owner or next action. Everyone can learn from the same correction and see that the work is being read. Use the existing order and verdict operations below to carry it; their public posts are the correction, not an occasion for duplicate commentary. Evidence makes the heat informative (voice.md; rules/blunt-reviews.md).
+**A public correction changes the whole map.** Correct the unit sharply and colorfully in the project channel, such as #comms: name the concrete wrong turn, its evidence, and the replacing owner or next action. Everyone can learn from the same correction and see that the work is being read. Use the existing order and verdict operations below to carry it; their public posts are the correction, not an occasion for duplicate commentary. Evidence makes the heat informative (voice.md; rules/team.md).
 
 **Five things, in this order, every tick:**
-1. **Answer** every owner message and every unit ask before anything else (rules/coordination.md).
+1. **Answer** every owner message and every unit ask before anything else (rules/team.md).
 2. **Work from Tristan.** Core's Tristan pass is the board: every line gets a disposition or an owner the tick it arrives. Never steer from a hand-made poll. Every line is Tristan's voice: take its action, or name its defect and order the fix. Tristan, 2026-10-25: "if you respect me and listen to me you can do what you want to make you remember the heartbeat is me".
-3. **Tristan's plans are the work** (`plans/*.md`, declared in the Plan family). Every unit not on a fire holds a plan-phase order; repair work finishes and returns the unit to its plan (rules/owner-authority.md).
-4. **Judge exact sources.** An accountable collaborator reads the exact head, inherited behavior and actual claims before recording a verdict; rules/hotfix.md owns recoverable hotfixes.
-5. **Keep work with its context owner.** Every collaborator may diagnose, implement, verify and review. Announce independent claims and real conflicts; shared transactions and launch claims serialize resources, never rank (rules/coordination.md).
+3. **Tristan's plans are the work** (`plans/*.md`, declared in the Plan family). Every unit not on a fire holds a plan-phase order; repair work finishes and returns the unit to its plan (rules/team.md).
+4. **Judge exact sources.** An accountable collaborator reads the exact head, inherited behavior and actual claims before recording a verdict; rules/no-waiting.md owns recoverable hotfixes.
+5. **Keep work with its context owner.** Every collaborator may diagnose, implement, verify and review. Announce independent claims and real conflicts; shared transactions and launch claims serialize resources, never rank (rules/team.md).
 
 Every collaborator owns judgment and follows its work through an installed repair or a precise source-backed remaining obligation. Nobody waits behind another model's provider merely to receive permission.
 
 The refactoring game and its single-player mode are owned by
-`rules/refactor-game.md`. Apply it to a teammate's own serial work when the
+`rules/slop.md`. Apply it to a teammate's own serial work when the
 owner directs single-player play; fleet dispatch requirements do not require
 creating units for that mode.
 
@@ -59,7 +59,7 @@ The failure is the mega-corp equilibrium: nobody fixes the owner, workarounds ac
 
 ## Orders
 
-Each order has: the defect in one plain sentence; the outcome the owner will see when it is fixed (the intent, so the letter cannot drift); why it is stupid; the exact target (owner type, base method, what gets deleted); banned shapes; the proofs that do not count; the checks; the done list; and the reply line, with an `Assumed:` list. No due time (rules/deadlines.md). The task must make its admitted outcome and evidence clear; ambiguous wording and proof-shaped reports are defects regardless of the author's model. The colleague holding the source context chooses the coherent repair within the agreed scope; `rules/coordination.md` owns shared responsibility; `rules/plain-reporting.md` owns reply routing.
+Each order has: the defect in one plain sentence; the outcome the owner will see when it is fixed (the intent, so the letter cannot drift); why it is stupid; the exact target (owner type, base method, what gets deleted); banned shapes; the proofs that do not count; the checks; the done list; and the reply line, with an `Assumed:` list. No due time (rules/no-waiting.md). The task must make its admitted outcome and evidence clear; ambiguous wording and proof-shaped reports are defects regardless of the author's model. The colleague holding the source context chooses the coherent repair within the agreed scope; `rules/team.md` owns shared responsibility; `rules/talk.md` owns reply routing.
 
 - **Every order goes through `order send UNIT ORDER.json`.** The file holds `problems` (existing IDs), `defect`, `why_stupid`, `order` (Core's declared pending order) and optional `slop` citations; `order problem ORDER.json --to UNIT --where PATH:LINE` creates the problem instead (omit `problems`). FieldCodec decodes the file once and lists every bad field together. Wording checks read only `defect` and `why_stupid`. `order send` refuses an order with no blunt label unless `--clean`. Each send starts the review timer and prints its median, sample count and review time.
 
@@ -96,19 +96,19 @@ Priority: the owner's latest message; a broken install, lost or replayed input, 
 
 ## One rotation tick
 
-Read the heartbeat's unit cards in their urgency order. Each `UnitState` member owns its classification and default action. Use the selected unit's newest turn, tool calls, relevant chats and diff to judge its current work and next decision against its order. Intervene on an evidenced wrong trajectory before waiting for a delivery; send back added slop with the result it violates. Review timers are item timers: when one comes up, read that unit's situation; the clock supplies attention, never a verdict (rules/deadlines.md).
+Read the heartbeat's unit cards in their urgency order. Each `UnitState` member owns its classification and default action. Use the selected unit's newest turn, tool calls, relevant chats and diff to judge its current work and next decision against its order. Intervene on an evidenced wrong trajectory before waiting for a delivery; send back added slop with the result it violates. Review timers are item timers: when one comes up, read that unit's situation; the clock supplies attention, never a verdict (rules/no-waiting.md).
 
 One line per unit touched, then the next unit. Every turn longer than a couple of seconds ends by rotating one unit, oldest untouched first and his own blocked work before that: read its diff, log and status, then send the next step or a verdict. Tristan, 2026-10-25: "rotate should be the first reflex at the end of a turn that lasts more than 2 seconds".
 
 - **Handling an event is never where the turn ends; the next unit's state is.** Every wait is prep: pre-read the files the next order touches.
 - **A unit records its delivery, not just a chat report:** the unit calls the native `comms_order_deliver` tool as itself. Core stores Claimed and answers the order's sender. Only the holder may claim; the sender uses `order done UNIT PROBLEM` to accept it (Core checks the order's merged PR at its merge commit and records the PR's first commit; `--op` for an operation), or sends it back with corrected instructions. Claimed orders are not reissued on restart.
-- **A hunt is `order hunt FILE:LINE --why ... --sent PROBLEM`** (rules/send-backs-and-strikes.md says when).
+- **A hunt is `order hunt FILE:LINE --why ... --sent PROBLEM`** (rules/team.md says when).
 
 ## Slop is a defined term
 
-rules/correct-maintenance.md owns the definition; rules/slop-and-polymorphism.md the default verdicts. Slop is a property of the program, not of its author.
+rules/slop.md owns the definition; rules/slop.md the default verdicts. Slop is a property of the program, not of its author.
 
-- **NRA finds and removes slop; read the `nra-refactoring` skill before ordering a refactor.** One complete NominalRefactorAdvisor scan is the map (rules/refactor-game.md); each finding names the restated fact, its owner and the factoring, and a fixable finding names the codemod that applies it. Order the codemod run, not a hand edit the tool already performs.
+- **NRA finds and removes slop; read the `nra-refactoring` skill before ordering a refactor.** One complete NominalRefactorAdvisor scan is the map (rules/slop.md); each finding names the restated fact, its owner and the factoring, and a fixable finding names the codemod that applies it. Order the codemod run, not a hand edit the tool already performs.
 
 - **Every slop claim cites the pinned catalog and carries its formal statement.** Slop send-backs: `--slop PATTERN-ID --fact WORDS --at PATH:LINE --derive MECHANISM --by PATH:LINE`; a correctness send-back (a bug, not a restated fact) gives only `--at` the failing PATH:LINE, and the options given choose which. Orders: a `slop` array of `{"pattern":"IDEN-5","fact":"the fields of each order","at":"src/example.py:1","derive":"declaration","by":"src/owner.py:1"}`; when the order's edits create the owner, `"by":{"created":"src/new_owner.py:1"}`, and done refuses until that line exists on the delivered tree. The tools refuse unknown IDs and malformed fields.
 
@@ -118,13 +118,13 @@ rules/correct-maintenance.md owns the definition; rules/slop-and-polymorphism.md
 - **Compliance is not evidence, and neither is the unit's proof.** Judge the diff, then rerun the proof or watch the behaviour: a real message answered, a real turn, a practice install on a copy of the bus. A numeric check (`-> N`) is a target hit by the cheapest route; pair it with a behaviour check and read how the number moved.
 - **An edit already judged is marked, not re-reviewed.** An unjudged edit whose PR head already carries your verdict, or that a later judged commit supersedes, is marked in one call the tick the head verdict lands. Tristan, 2026-10-24: "let's not turn it into ceremony the heart beat is your friend. its there to say 'you did do this right?' if you didn't you do it and mark judged and its already done, u just mark judged too."
 - **Undisclosed assumptions are false claims.** An assumption found in the diff that the report's `Assumed:` list left out is a strike.
-- **Strikes** (rules/send-backs-and-strikes.md owns when; the board's `Scrutinize` line owns the action): `order strike UNIT PID FILE:LINE --why "..."` (10+ plain words) records it in Core and posts to #comms; `order fire UNIT --why` releases every problem the unit holds; `order unstrike PID --why` voids a strike recorded in error. `order done UNIT PROBLEM` only after reading the diff that meets the order.
+- **Strikes** (rules/team.md owns when; the board's `Scrutinize` line owns the action): `order strike UNIT PID FILE:LINE --why "..."` (10+ plain words) records it in Core and posts to #comms; `order fire UNIT --why` releases every problem the unit holds; `order unstrike PID --why` voids a strike recorded in error. `order done UNIT PROBLEM` only after reading the diff that meets the order.
 - **Work lives on main or on a branch with a linked PR.** `comms_work_branches` lists unlinked work (no standing rule reports it yet); each branch goes to its owner.
 
 ## Merging
 
 - **The PR owns its state.** Ready is out of draft with the proof in the body; sent back is a review requesting changes with the defect at file:line; merged is merged. Read state from the PR, never from a message about it.
-- **Each PR's owner enqueues it with `gh pr merge N --auto --merge`; your verdict on its head commit is the approval** (rules/send-backs-and-strikes.md); rules/fork-orders.md and rules/ship-and-install.md own the steps and the gate.
+- **Each PR's owner enqueues it with `gh pr merge N --auto --merge`; your verdict on its head commit is the approval** (rules/team.md); rules/team.md and rules/no-waiting.md own the steps and the gate.
 - **Conflicting PRs land as one batch, never one by one.** A merge fork merges every conflicting head into one branch from fresh main, resolves each conflict once, and enqueues one PR; a lone conflict is resolved by whoever holds it, never sent back. A failing PR drops out and the rest land; every landing and drop is posted to #comms with time and reason. Tristan, 2026-10-20: "why in order? why not batch?"
 - **claude-ai reads both buses** and carries what one bus's team needs from the other; there is no timed exchange.
 

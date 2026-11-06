@@ -505,7 +505,7 @@ class BusReader:
 
 class AppReader(BusReader):
     """A cloud session, read in the Claude app, which shows nothing of the bus but this text
-    (plain-reporting.md). A turn with no shown bus message never loads the decoder, which needs
+    (talk.md). A turn with no shown bus message never loads the decoder, which needs
     the checkout's venv: main re-execs every hook under it (under_checkout_python), and without
     it the check says so instead of crashing the stop."""
 
@@ -521,7 +521,7 @@ class AppReader(BusReader):
         if names := [reference.name for reference in ClaudeJsonLines().unrendered(turn)]:
             return ["Tristan reads only your closing text: before you stop, quote each of these "
                     "bus messages there with its bus number, where it was posted (channel or DM), "
-                    "sender, time and body (plain-reporting.md): " + ", ".join(names)]
+                    "sender, time and body (talk.md): " + ", ".join(names)]
         return []
 
 
@@ -534,7 +534,7 @@ def idle(event: HookEvent) -> None:
     if own_background_jobs():
         reasons.append(
             "A background job of this session is still running. Waiting time is tracing time "
-            "(tests-and-commands.md): trace the paths it will exercise and act on what you find; "
+            "(evidence.md): trace the paths it will exercise and act on what you find; "
             "its notification resumes you.")
     turn = event.this_turn()
     reasons.extend(BusReader.of(turn).reasons(turn))
