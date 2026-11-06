@@ -34,6 +34,7 @@ from agent_comms.channel_targets import CommandTarget
 from agent_comms.connector import Connector
 from agent_comms.connector_caller import GrantRefusedError
 from agent_comms.connector_store import ConnectorStore
+from agent_comms.inbox_watch import OpenWatch
 from agent_comms.message_reference import MessageReference
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
 from agent_comms.repo import Checkout
@@ -745,6 +746,29 @@ async def test_a_watch_waits_out_a_restarting_connector(
                         printed += capsys.readouterr().out
             finally:
                 running.cancel()
+
+
+async def test_a_stopping_connector_ends_a_watch_handler_that_never_sees_the_close(
+    tmp_path: Path, comms: Comms,
+) -> None:
+    """On 2026-11-06 the install's stop waited 60.07 s, aiohttp's shutdown_timeout to the
+    decimal, on one watch handler still publishing its transcript: the close never reached it,
+    and every watch's re-dial met 502 for that minute. A watch now ends its own handler."""
+    comms.registry.declare(ExternalThread("claude-ai", frozenset(), Checkout(comms.root)))
+    store = ConnectorStore.at(tmp_path / "auth")
+    port = unused_port()
+    connector = Connector(store, f"http://127.0.0.1:{port}", comms.root)
+    async with TestServer(connector.application(), port=port) as server:
+        async with TestClient(server) as client:
+            with store.granted("test") as token:
+                socket = await client.ws_connect(await watch_path(client, token, "cloud"))
+                held, = connector.open_watches
+                busy = asyncio.create_task(asyncio.Event().wait())
+                await OpenWatch(held.thread, held.viewer, busy).ended()
+                await asyncio.sleep(0)
+                assert busy.cancelled()
+                assert held.viewer.closed
+                await socket.close()
 
 
 def attempt_outcome(comms: Comms, message) -> str:
