@@ -190,7 +190,26 @@ Multiple parents take that outside pair to zero (Proposition 4.2):
   served member, which registers itself at `__init_subclass__` from its MRO. No roster.
 
 A client constructs and posts the declaration; only the server imports the served
-module. Shared behaviour across implementations stays on its existing parents
+module. The result is part of the wire contract, so the declaration binds it in its header
+(`ToolRequest[Result]`) and the client decodes replies from it; the served `apply()` returns
+that type and mypy checks the override. (While the classes were fused, #4194 read the result
+from `apply()`'s annotation; the split moves the declaration to the header.) The caller
+family (`tool_caller`) is the server's model of who calls, so `Caller` is a parameter of the
+serving side (`ServedRequest[Caller, Result]`), not of the declaration.
+
+### Step 0: the base
+
+`agent_comms.tool_request` imports `agent_comms.comms`, the composition root, and
+`tool_caller` (which imports `cli_bridges.session_watch`), only to annotate the serving
+methods: `import agent_comms.tool_request` alone is 1.5 s and loads `todos`. Its five
+direct subclasses (`ObservedToolRequest`, `HumanToolRequest`, `NativeToolRequest`,
+`PublishingToolRequest`, `CoreRead`) are where the serving mixin enters. Declaration
+members: `schema`, `called`, `result_type`, `context_bindings`, `posted`, `dropped`, the
+field directives (`tool_field`, `ContextBinding`, `ListedNames`, `OmittedNames`) and the
+`ToolCall` wire record. Serving members: `invoke`, `decoded`, `replied`, `reply`, `board`,
+`apply`, `apply_without_thread`, `context_types`, `bound`, `served_by`,
+`require_read_only` and `ConnectorService`. Done when `import agent_comms.transport.request`
+loads no `agent_comms.comms`. Shared behaviour across implementations stays on its existing parents
 (`PublishingTool`, `ReadTool`, `HumanToolRequest`); a declaration family's shared fields
 stay on the declaration parents.
 
