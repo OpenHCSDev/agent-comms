@@ -11,6 +11,7 @@ from .assignment_states import CompletedAssignment
 from .channel_coding_tools import SelectedCodingToolOwner
 from .coordination.errors import CoordinationError, IdentityConflict, StaleFence
 from .coordination.coordinator import Coordination
+from .coordination.tables.assignments import WakeAssignment
 from .coordination.tables.executions import WireOrigin
 from .coordination.snapshot import RecoverySnapshot
 from .coordination.tables.responses import ResponseObligation
@@ -18,6 +19,7 @@ from .durable_turn import DurableTurn
 from .envelope_claim_transitions import WakeClaim
 from .optional_awareness_projection import OptionalAwarenessProjection
 from .native_failures import NativePiUnavailable
+from .native_pi import NativeTurnResult
 from .owner_fence import prepare_fence_token
 from .private_send_stage import FullNativeSend, TriageNativeSend
 from .selected_actions import BatchSelectedAction, NoSelectedTools, SelectedAction
@@ -254,6 +256,16 @@ class SelectedAttempt:
 
 
 @dataclass(frozen=True)
+class TriageAnswer:
+    """One triage ask: its decoded outcome, the request that asked, its result and claims."""
+
+    outcome: SelectedTriageOutcome
+    request: SelectedRequest
+    result: NativeTurnResult
+    settled: tuple[WakeAssignment, ...]
+
+
+@dataclass(frozen=True)
 class SelectedConsideration:
     participant: SelectedParticipant
 
@@ -279,7 +291,7 @@ class SelectedConsideration:
             prepare_fence_token(),
             SelectedPrompt(participant).triage(),
         )
-        async with request.native_failures():
+        async def asked(request: SelectedRequest) -> tuple[NativeTurnResult, SelectedTriageOutcome]:
             await participant.transition(PromptAcceptancePhase())
             result = await request.claim_scope.execute(
                 execution,
@@ -288,36 +300,35 @@ class SelectedConsideration:
                 observe_event=participant.observe_triage,
             )
             await participant.transition(PublishingPhase())
-            outcome = SelectedTriageOutcome.acquire(result.text)
-            if isinstance(outcome, RejectedTriageOutcome):
-                # An unreadable decision costs the turn, not the claim: close the answer,
-                # return the claim to triage-pending, and ask once more with the refusal
-                # and the decisions that would have been accepted. A second unreadable
-                # answer is terminal, which settle() handles.
-                stage.burn_turn(participant.store, participant.identity,
-                                request.claim_scope.input_id, request.claim_scope.token_digest,
-                                result.context)
-                continued = session.continued(result.context)
-                request = await SelectedRequest.reserve(
-                    participant, continued, stage.refreshed(participant.store),
-                    prepare_fence_token(),
-                    replace(request.claim_scope.prompt,
-                            text=f"{request.claim_scope.prompt.text}\n\n{outcome.reason()}"),
-                    attempt=1,
-                )
-                await participant.transition(PromptAcceptancePhase())
-                result = await request.claim_scope.execute(
-                    execution,
-                    model=participant.model,
-                    selected_tool_mode=NoSelectedTools(),
-                    observe_event=participant.observe_triage,
-                )
-                await participant.transition(PublishingPhase())
-                outcome = SelectedTriageOutcome.acquire(result.text)
-            settled = outcome.settle(participant, stage, request.claim_scope, result.context)
-            continued = session.continued(result.context)
+            return result, SelectedTriageOutcome.acquire(result.text)
+
+        async with request.native_failures():
+            result, outcome = await asked(request)
+            first = TriageAnswer(outcome, request, result, outcome.close_ask(
+                participant, stage, request.claim_scope, result.context))
+
+        async def reask(rejected: RejectedTriageOutcome) -> TriageAnswer:
+            # Ask once more with the refusal and the decisions that would have been accepted.
+            # The replacement owns its claim revision and its failure boundary: settling it
+            # through the first stage or request would fence on the revision the burn and
+            # this reservation already moved past.
+            refreshed = stage.refreshed(participant.store)
+            replacement = await SelectedRequest.reserve(
+                participant, session.continued(first.result.context), refreshed,
+                prepare_fence_token(),
+                replace(request.claim_scope.prompt,
+                        text=f"{request.claim_scope.prompt.text}\n\n{rejected.reason()}"),
+                attempt=1,
+            )
+            async with replacement.native_failures():
+                result, outcome = await asked(replacement)
+                return TriageAnswer(outcome, replacement, result, outcome.settle(
+                    participant, refreshed, replacement.claim_scope, result.context))
+
+        answer = await first.outcome.asked_again(first, reask)
+        continued = session.continued(answer.result.context)
         # The FULL request owns its own failure boundary. Never report its
         # failure through the already-completed triage request's error handler.
-        return await outcome.continue_turn(
-            participant, continued, request.claim_scope.input_id, execution, settled
+        return await answer.outcome.continue_turn(
+            participant, continued, answer.request.claim_scope.input_id, execution, answer.settled
         )

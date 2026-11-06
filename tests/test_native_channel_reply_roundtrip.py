@@ -61,7 +61,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                 assert self.headers["Authorization"] == "Bearer local-only"
                 requests.append(request)
                 request_times.append(time.monotonic())
-                assert len(requests) <= (8 if broadcast else 2 + seed_count + restart_after_reply + 2 * reject_triage), "Reply observation caused replay or ping-pong"
+                assert len(requests) <= (8 if broadcast else 2 + seed_count + restart_after_reply + 3 * reject_triage), "Reply observation caused replay or ping-pong"
                 # The current original native reservation owns stage. Join its
                 # exact ID to the saved input; prompt prose is not a stage codec.
                 from agent_comms.coordination.tables.assignments import WakeAssignment
@@ -140,9 +140,11 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                     if is_triage
                     else "ROUNDTRIP_NATIVE_REPLY"
                 )
-                if reject_triage and len(requests) == 2:
+                if reject_triage and len(requests) in (2, 3):
                     # Actual successful native output from the live failure:
                     # bare IGNORE violates the required JSON decision contract.
+                    # An unreadable decision earns one re-ask (request 3); a second
+                    # unreadable answer fails the claim.
                     text = "IGNORE"
                 chunk = {
                     "id": f"roundtrip-{len(requests)}",
@@ -303,7 +305,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
         reply = read_history(comms, "#team")[-1]
         assert reply.sender == "answerer" and reply.body == "ROUNDTRIP_NATIVE_REPLY"
         # No user prompt, explicit inbox drain, participant insertion, or selected claim seeding.
-        await until(lambda: len(requests) == seed_count + 2, "A automatically observed native reply")
+        await until(lambda: len(requests) == seed_count + 2 + reject_triage, "A automatically observed native reply")
         users = [item for item in requests[seed_count + 1]["messages"] if item["role"] == "user"]
         assert reply.body in json.dumps(users[-1]["content"])
         # The same response remains available through canonical natural-turn awareness.
@@ -347,11 +349,12 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
         assert delivered[-1].covered_seq == reply.seq + reject_triage
         assert delivered[-1].reference_stage is TriageNativeExecution
         assert delivered[-1].reference.require_recorded().input_id in {row[0] for row in rows}
-        assert len(rows) == 2 and all(row[2] for row in rows)
-        assert len({row[0] for row in rows}) == 2
+        # A rejected triage adds its one replacement input for the same reply.
+        assert len(rows) == 2 + reject_triage and all(row[2] for row in rows)
+        assert len({row[0] for row in rows}) == 2 + reject_triage
         assert len({row[1] for row in rows}) == 2  # Two actual native owners/children.
         await asyncio.sleep(1.2)  # Beyond the watcher fallback interval; no recursive wake/replay.
-        assert len(requests) == seed_count + 2 and not failures
+        assert len(requests) == seed_count + 2 + reject_triage and not failures
         await until(
             lambda: len(read_history(comms, "#team")) == 2 + reject_triage,
             "Canonical reply and any rejected-result alert published",
@@ -380,7 +383,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
             assert "Received: 'IGNORE'" in body
             assert "IGNORE" in body and "FULL" in body
             fresh = comms.messaging.send("answerer", "#team", "CONTINUITY_FRESH_SOURCE").message
-            await until(lambda: len(requests) == 3, "Fresh channel source authorized without retrying rejected input")
+            await until(lambda: len(requests) == 4, "Fresh channel source authorized without retrying rejected input")
             await until(
                 lambda: any(isinstance(fact, CursorAdvancedUpdate)
                             and isinstance(fact.envelope.observation, VerifiedCursorObservation)
@@ -393,7 +396,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                     session_id="questioner",
                     prompt=[TextContentBlock(type="text", text="CONTINUITY_HUMAN_INPUT")],
                 )
-            assert answer.stop_reason == "end_turn" and len(requests) == 4
+            assert answer.stop_reason == "end_turn" and len(requests) == 5
             assert "CONTINUITY_HUMAN_INPUT" in json.dumps(requests[-1])
             with sqlite3.connect(comms.root / "coordination.sqlite3") as db:
                 assert db.execute("SELECT count(*) FROM native_runtime_input WHERE input_id=?",

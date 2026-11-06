@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Literal
 
 from agent_comms.coordination.tables.executions import ExecutionRecord
 
+from .assignment_states import TriagePendingAssignment
 from .coordination.contracts import validate_execution_id
 from .coordination.errors import IdentityConflict, UnrecordedNativeContext
 from .coordination.tables.assignments import (
@@ -172,9 +173,9 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
     def matches_execution(self, execution: ExecutionRecord, owner_lookup: ThreadLookup) -> bool:
         return False
 
-    def retried_in(self, db: sqlite3.Connection) -> bool:
-        """TRIAGE has no attempts, so a later attempt never replaces it."""
-        return False
+    @abstractmethod
+    def retried_in(self, db: sqlite3.Connection, input_id: InputId) -> bool:
+        """Whether a later attempt replaced this input, so it no longer proves its source."""
 
     def proves_full_source(self, proof: HistoricalNativeInput) -> bool:
         return False
@@ -245,6 +246,20 @@ class TriageNativeExecution(NativeInputExecution):
     ) -> list[TranscriptEvent]:
         return [event.as_context() for event in
                 super().transcript_events(entry, projection, user)]
+
+    def retried_in(self, db: sqlite3.Connection, input_id: InputId) -> bool:
+        """A burned attempt no longer proves its source: its claim went back to
+        triage-pending (the replacement is owed) or a later attempt already holds it."""
+        members = f"({self.source_membership_sql()})"
+        claims = WakeAssignment.qualified_table(LOCAL_TABLE_SOURCE)
+        superseded, = db.execute(
+            f"SELECT EXISTS (SELECT 1 FROM {members} s WHERE s.input_id=? AND ("
+            f"EXISTS (SELECT 1 FROM {members} later WHERE later.assignment_id=s.assignment_id "
+            "AND later.attempt>s.attempt) OR "
+            f"EXISTS (SELECT 1 FROM {claims} c WHERE c.assignment_id=s.assignment_id "
+            f"AND c.disposition={sql_literal(TriagePendingAssignment)})))", (input_id,),
+        ).fetchone()
+        return bool(superseded)
 
     @classmethod
     def source_membership_sql(
@@ -345,7 +360,7 @@ class FullNativeExecution(NativeInputExecution):
     def _execution(self, db: sqlite3.Connection) -> ExecutionRecord:
         return ExecutionRecord.require(db, execution_id=self.execution_id)
 
-    def retried_in(self, db: sqlite3.Connection) -> bool:
+    def retried_in(self, db: sqlite3.Connection, input_id: InputId) -> bool:
         """A transient provider failure leaves this input behind a later attempt."""
         return self._execution(db).lifecycle.current_attempt_ordinal != self.attempt_ordinal
 
