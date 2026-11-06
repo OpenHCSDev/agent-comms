@@ -498,17 +498,20 @@ async def test_a_stop_finishes_with_no_session_on_the_other_end(session, comms: 
 
 def test_an_install_or_a_newer_watch_still_says_rearm() -> None:
     """Only the stop code means stay off; an install's drop and a replacement mean come back."""
-    assert WatchEnd.closed(1006) == WatchDropped("closed with code 1006")
-    assert WatchEnd.closed(1000) == WatchDropped("closed with code 1000")
-    assert WatchEnd.closed(None).exit_code == 1
-    assert WatchEnd.closed(WATCH_REPLACED) == WatchReplaced(f"closed with code {WATCH_REPLACED}")
-    assert "start this again" in WatchEnd.closed(1006).line()
-    assert "start this again" in WatchEnd.closed(WATCH_REPLACED).line()
+    assert WatchEnd.closed(1006, "") == WatchDropped("closed with code 1006")
+    assert WatchEnd.closed(1000, "") == WatchDropped("closed with code 1000")
+    assert WatchEnd.closed(None, "").exit_code == 1
+    assert WatchEnd.closed(WATCH_REPLACED, "") == WatchReplaced(f"closed with code {WATCH_REPLACED}")
+    assert "start this again" in WatchEnd.closed(1006, "").line()
+    assert "start this again" in WatchEnd.closed(WATCH_REPLACED, "").line()
+    # The connector's own reason rides along, so a 1008 says which refusal it was.
+    assert "code 1008: Another live process" in WatchEnd.closed(
+        1008, ": Another live process owns this CLI endpoint.").line()
 
 
 async def test_a_replaced_watch_never_reconnects_to_take_its_place_back(tmp_path: Path) -> None:
     """Two clients reconnecting over each other would replace each other for ever."""
-    replaced = WatchEnd.closed(WATCH_REPLACED)
+    replaced = WatchEnd.closed(WATCH_REPLACED, "")
     assert await replaced.settled(InboxSocket("ws://unused/watch/x", tmp_path)) == replaced
 
 
@@ -622,7 +625,7 @@ async def test_a_reconnect_into_maintenance_is_deferred_and_keeps_its_next_url(
     connector refused each re-dial as a policy violation (1008), and the client spent its five
     resets in seconds. The refusal now says to wait, and the URL handed over first opens once
     maintenance lifts."""
-    assert isinstance(WatchEnd.closed(WATCH_DEFERRED), WatchDeferred)
+    assert isinstance(WatchEnd.closed(WATCH_DEFERRED, ""), WatchDeferred)
     client, token = session
     first = await client.ws_connect(await watch_path(client, token, "cloud"))
     path = await reconnect_url(first)

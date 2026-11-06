@@ -171,9 +171,10 @@ class WatchEnd(ABC):
     def line(self) -> str: ...
 
     @classmethod
-    def closed(cls, code: int | None) -> WatchEnd:
-        """The close code is decided once, here, where it arrives."""
-        reason = f"closed with code {code}"
+    def closed(cls, code: int | None, said: str) -> WatchEnd:
+        """The close code is decided once, here, where it arrives; ``said`` is the connector's
+        own reason, when its close frame gave one."""
+        reason = f"closed with code {code}{said}"
         match code:
             case int(stopped) if stopped == WATCH_STOPPED:
                 return WatchStopped()
@@ -489,14 +490,25 @@ class InboxSocket:
                 await socket.send_str(ReconnectsAlone(printed=()).line())
                 publishing = asyncio.create_task(self.publishing(socket))
                 try:
-                    async for frame in socket:
-                        if frame.type is WSMsgType.TEXT:
-                            await self.received(frame.data, socket)
+                    return await self.frames_until_closed(socket)
                 finally:
                     publishing.cancel()
-                return WatchEnd.closed(socket.close_code)
         except (ClientError, OSError) as failure:
             return stage.ended(SocketFailure(failure))
+
+    async def frames_until_closed(self, socket: ClientWebSocketResponse) -> WatchEnd:
+        """Every frame until the socket ends, then how it ended. A close frame carries the
+        connector's reason, which `async for` swallows: the 1008s of 2026-11-06 printed only a
+        number, so nobody could tell maintenance from an ownership conflict."""
+        while True:
+            frame = await socket.receive()
+            match frame.type:
+                case WSMsgType.TEXT:
+                    await self.received(frame.data, socket)
+                case WSMsgType.CLOSE:
+                    return WatchEnd.closed(socket.close_code, f": {frame.extra}" if frame.extra else "")
+                case WSMsgType.CLOSING | WSMsgType.CLOSED | WSMsgType.ERROR:
+                    return WatchEnd.closed(socket.close_code, "")
 
     async def received(self, frame: str, socket: ClientWebSocketResponse) -> None:
         """A message, or the connector's reconnect URL, which is kept and never shown."""
