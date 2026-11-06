@@ -12,7 +12,8 @@ import pytest
 from agent_comms.channels import AnyOfMatch, ViewPredicate, ParticipantsView
 from agent_comms.cli import CliInvocation
 from agent_comms.comms import Comms
-from agent_comms.errors import RelationViolationError
+from agent_comms.errors import ExportDestinationExists, RelationViolationError
+from agent_comms_hooks import ToolRefusedError
 from agent_comms.exporting import (
     ChannelScope,
     DmScope,
@@ -268,8 +269,10 @@ def test_atomic_private_output_refuses_existing_and_symlink_and_force_replaces(t
     destination = tmp_path / "wire.jsonl"
     destination.write_text("keep me")
 
-    with pytest.raises(FileExistsError):
+    with pytest.raises(ExportDestinationExists) as refused:
         exporter().export([message(1, "first")], destination)
+    # A taken path is the caller's refusal, shown as one, and still the file-exists condition.
+    assert isinstance(refused.value, ToolRefusedError) and isinstance(refused.value, FileExistsError)
     assert destination.read_text() == "keep me"
     assert not list(tmp_path.glob(".wire.jsonl.*.tmp"))
 
