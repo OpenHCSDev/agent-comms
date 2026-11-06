@@ -847,7 +847,7 @@ class Connector(ConnectorService):
         # A transcript line holds whatever a tool returned, far past aiohttp's 4 MiB default.
         viewer = web.WebSocketResponse(heartbeat=self.heartbeat_seconds, max_msg_size=64 * 1024 * 1024)
         await viewer.prepare(request)
-        watch = OpenWatch(thread, viewer)
+        watch = OpenWatch(thread, viewer, request.task)
         replaced = tuple(held for held in self.open_watches if held.thread == thread)
         self.open_watches.append(watch)
         for held in replaced:
@@ -889,7 +889,7 @@ class Connector(ConnectorService):
         for task in self.watch_tasks:
             task.cancel()
         for watch in tuple(self.open_watches):
-            await watch.viewer.close()
+            await watch.ended()
         await join_retirement(retirement)
 
     async def stop_calls(self, app: web.Application) -> None:

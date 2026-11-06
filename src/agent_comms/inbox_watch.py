@@ -151,6 +151,16 @@ class OpenWatch:
 
     thread: str
     viewer: web.WebSocketResponse
+    handler: asyncio.Task[None]
+    """The request handler serving this socket."""
+
+    async def ended(self) -> None:
+        """Close the socket and end its handler. A handler busy away from the socket, as one
+        still publishing its transcript is, does not see the close, and held the connector's
+        stop for aiohttp's whole 60 s shutdown_timeout on 2026-11-06, while every watch's
+        re-dial met 502."""
+        await self.viewer.close()
+        self.handler.cancel()
 
 
 @dataclass
