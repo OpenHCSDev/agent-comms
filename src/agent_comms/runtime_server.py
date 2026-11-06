@@ -42,7 +42,6 @@ from .threads import Thread
 from .tool_result import DeclaredReply
 
 if TYPE_CHECKING:
-    from acp.schema import PermissionOption, ToolCallUpdate
     from .acp import AcpSelectedWriteAuthority, CommsAgent
     from .turn_runner import TurnRunner
 
@@ -98,8 +97,9 @@ class SocketClient(Controller, SessionUpdateSink):
 
     async def request_ui_permission(
         self, runner: TurnRunner, session_id: AcpSessionId,
-        request: tuple[ToolCallUpdate, list[PermissionOption]],
+        request: tuple[BaseModel, list[BaseModel]],
     ) -> dict[str, object]:
+        """The socket forwards the request's wire form and reads nothing else of ACP's models."""
         tool_call, options = request
         return await runner.runtime.request_permission(
             session_id,
