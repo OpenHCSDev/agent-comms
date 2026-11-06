@@ -28,6 +28,7 @@ Phase evidence reads only the plan repository's `origin/main`, and Toad's tree i
 
 Landed:
 - page_quarter_scroll landed: OpenHCSDev/toad@24badf03f60e829abd3ed3383262ef7db669ccca
+- keymap_k2_k7 landed: OpenHCSDev/toad@5ea88ac452a5625f1c961d08bf83656af5243ced
 - loading_spinner landed: OpenHCSDev/toad@1ce4872a8a8cf3ae988b6f2ff5a28b9fe1f6f81a
 
 ### Latency and memory asks
