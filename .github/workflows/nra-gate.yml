@@ -248,10 +248,11 @@ jobs:
   # then refuses unless ClientImportsProbe imports them. Run that probe on the same pair here,
   # so a move in src that a pinned Toad still imports from fails this change, not the next
   # install (2026-11-06: #4218 moved six classes and every install after it was refused).
+  # Ordinary pull requests run it too: #4218 was one, and combined carriers alone would miss it.
   client-imports:
     name: client-imports
     needs: [ready, base]
-    if: needs.base.outputs.combined == 'true' && needs.base.outputs.reused != 'true'
+    if: needs.base.outputs.reused != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
