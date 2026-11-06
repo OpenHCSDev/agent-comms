@@ -12,12 +12,11 @@ from agent_comms.nominal.field_codec import RootId
 
 import threading
 from abc import ABC, abstractmethod
-from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
-from .agent_events import CompactionEvent
+from metaclass_registry.mro_dispatch import MroDispatch
 from .comms import wire
 from .coordination.database import CoordinationStore
 from .coordination.errors import (
@@ -35,7 +34,7 @@ from .native_failures import NativePiUnavailable
 from agent_comms.native_session_files import NativeSessionFiles
 from .pi_native_backend import PersistentPiSession
 from .selected_actions import CodingSelectedAction, SelectedAction
-from .selected_participant import SelectedParticipant
+from .selected_participant import NoLivePublication, SelectedParticipant
 from .selected_result import CoordinatedTurn
 from .selected_session import SelectedSession
 from .selected_turn import SelectedAttempt, SelectedConsideration
@@ -120,7 +119,7 @@ class SelectedExecution(NativeExecution):
         return await attempt.run(self, session, self.action, self.write_authority)
 
     async def run(
-        self, *, on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = None,
+        self, *, publication: MroDispatch = NoLivePublication(),
         pi_session: PersistentPiSession | None = None,
         following: FollowingInputs | None = None,
     ) -> CoordinatedTurn | None:
@@ -144,7 +143,7 @@ class SelectedExecution(NativeExecution):
                     self.owner_name,
                     self.after_seq,
                     cursor_delivery=self.cursor_delivery,
-                    on_compaction=on_compaction,
+                    publication=publication,
                 ) as participant:
                     if participant is None:
                         return None

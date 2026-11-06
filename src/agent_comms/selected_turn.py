@@ -250,6 +250,7 @@ class SelectedAttempt:
     async def observe_event(self, event):
         await self.stage.progress.dispatch(event)
         await self.participant.dispatch(event)
+        await self.participant.publication.dispatch(event)
 
 
 @dataclass(frozen=True)
@@ -284,7 +285,7 @@ class SelectedConsideration:
                 execution,
                 model=participant.model,
                 selected_tool_mode=NoSelectedTools(),
-                observe_event=participant.dispatch,
+                observe_event=participant.observe_triage,
             )
             await participant.transition(PublishingPhase())
             outcome = SelectedTriageOutcome.acquire(result.text)
@@ -309,7 +310,7 @@ class SelectedConsideration:
                     execution,
                     model=participant.model,
                     selected_tool_mode=NoSelectedTools(),
-                    observe_event=participant.dispatch,
+                    observe_event=participant.observe_triage,
                 )
                 await participant.transition(PublishingPhase())
                 outcome = SelectedTriageOutcome.acquire(result.text)
