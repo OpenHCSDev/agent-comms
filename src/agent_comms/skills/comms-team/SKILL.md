@@ -124,7 +124,7 @@ rules/slop.md owns the definition; rules/slop.md the default verdicts. Slop is a
 ## Merging
 
 - **The PR owns its state.** Ready is out of draft with the proof in the body; sent back is a review requesting changes with the defect at file:line; merged is merged. Read state from the PR, never from a message about it.
-- **Each PR's owner enqueues it with `gh pr merge N --auto --merge`; your verdict on its head commit is the approval** (rules/team.md); rules/team.md and rules/no-waiting.md own the steps and the gate.
+- **Each PR's owner merges it once its local run is green; CI runs behind** (rules/no-waiting.md owns the steps; rules/team.md owns review).
 - **Conflicting PRs land as one batch, never one by one.** A merge fork merges every conflicting head into one branch from fresh main, resolves each conflict once, and enqueues one PR; a lone conflict is resolved by whoever holds it, never sent back. A failing PR drops out and the rest land; every landing and drop is posted to #comms with time and reason. Tristan, 2026-10-20: "why in order? why not batch?"
 - **claude-ai reads both buses** and carries what one bus's team needs from the other; there is no timed exchange.
 
