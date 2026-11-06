@@ -4,6 +4,7 @@ from __future__ import annotations
 
 
 from abc import ABC, abstractmethod
+from annotationlib import Format, ForwardRef, get_annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -150,19 +151,24 @@ class ToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResu
 
     @classmethod
     def result_type(cls) -> type[Result]:
-        """The result this request declares once, as the family's second type argument in its
-        own or an inherited class header, followed through every intermediate generic parent;
-        a remote reply decodes into it.
+        """What this request's apply returns; a remote reply decodes into it.
 
-        A header that omits the argument still reads as the family default (ToolResult), so
-        every path's binding is collected and the most derived wins: a result declared on one
-        parent refines the default another parent inherited. Unrelated declarations conflict."""
+        The resolved apply's return annotation is the declaration. When that apply is a
+        family member's generic one (its annotation names the owner's own type parameter),
+        the parameter is followed through the class headers to the argument bound for it:
+        every path's binding is collected and the most derived wins, so a result declared on
+        one parent refines the default another parent inherited. Unrelated bindings conflict."""
+        apply = cls.apply
+        owner = next(declaration for declaration in cls.__mro__ if "apply" in vars(declaration))
+        annotation = get_annotations(apply, format=Format.STRING)["return"]
+        parameters = {parameter.__name__: parameter for parameter in owner.__type_params__}
+        if annotation not in parameters:
+            return cast(type[Result], ForwardRef(annotation, module=apply.__module__).evaluate())
         bindings: dict[object, list[object]] = {}
-        requests = cls.__mro__[:cls.__mro__.index(ToolRequest) + 1]
         for declaration in cls.__mro__:
-            generic = (base for base in get_original_bases(declaration) if get_origin(base) in requests)
-            for base in generic:
-                for parameter, argument in zip(get_origin(base).__type_params__, get_args(base)):
+            for base in get_original_bases(declaration):
+                origin = get_origin(base)
+                for parameter, argument in zip(getattr(origin, "__type_params__", ()), get_args(base)):
                     bindings.setdefault(parameter, []).append(argument)
 
         def declared_by(parameter: object, seen: frozenset[object]) -> list[type]:
@@ -175,7 +181,7 @@ class ToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResu
                     found.append(argument)
             return found
 
-        declared = ToolRequest.__type_params__[1]
+        declared = parameters[annotation]
         default = declared.__default__
         candidates = list(dict.fromkeys(
             found for found in declared_by(declared, frozenset({declared})) if found is not default

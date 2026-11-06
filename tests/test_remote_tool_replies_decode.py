@@ -42,3 +42,14 @@ def test_a_human_send_reply_decodes_into_its_published_message():
     from agent_comms.tools import CommsUserSendTool
 
     assert CommsUserSendTool.result_type() is MessagePublished
+
+
+def test_a_result_declared_only_on_apply_is_the_one_a_remote_reply_decodes_into():
+    from agent_comms.cli_commands import ThreadArchivedResult
+    from agent_comms.order_tools import CommsBoardTool, TeamBoard
+    from agent_comms.tools import CommsArchiveTool
+
+    # Neither header names a result; each tool's apply does. A remote board or archive reply
+    # used to decode into the bare ToolResult, dropping every field the caller reads.
+    assert CommsBoardTool.result_type() is TeamBoard
+    assert CommsArchiveTool.result_type() is ThreadArchivedResult
