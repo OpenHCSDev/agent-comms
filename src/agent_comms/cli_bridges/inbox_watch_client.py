@@ -459,8 +459,10 @@ class InboxSocket:
     async def received(self, frame: str, socket: ClientWebSocketResponse) -> None:
         """A message, or the connector's reconnect URL, which is kept and never shown."""
         if frame.startswith(ReconnectUrl.wire_prefix):
-            self.redials.held = ReconnectWith(ReconnectUrl.model_validate_json(frame).url)
-            print(RECONNECTS_ALONE, flush=True)
+            held = ReconnectWith(ReconnectUrl.model_validate_json(frame).url)
+            if held != self.redials.held:
+                print(RECONNECTS_ALONE, flush=True)
+            self.redials.held = held
             return
         await self.deliver(frame, socket)
 
