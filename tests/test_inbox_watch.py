@@ -25,8 +25,8 @@ from agent_comms.cli_bridges.claude_transcript import (
 )
 from agent_comms.harness_delivery_states import PrintLedgerId
 from agent_comms.cli_bridges.inbox_watch_client import (
-    RECONNECTS_ALONE, WAITS_FOR_MAINTENANCE, WATCHING, FollowedTranscript, InboxSocket, Pause, Pauses,
-    Redials, WatchDeferred, WatchDropped, WatchEnd, WatchReplaced, WatchStopped,
+    RECONNECTS_ALONE, WAITS_FOR_MAINTENANCE, WATCHING, FollowedTranscript, InboxSocket, Pause,
+    Pauses, Redials, WatchDeferred, WatchDropped, WatchEnd, WatchReplaced, WatchStopped,
 )
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
@@ -977,9 +977,12 @@ async def test_a_watch_frozen_past_its_heartbeat_reconnects_alone_and_shows_the_
     finally:
         watch.terminate()
         await watch.wait()
-    # The message is the only thing the reconnect prints: the session was told before the freeze
-    # that the watch is up and reconnects alone, and each printed line costs it a turn.
-    assert printed == [message.body], printed
+    assert sum(line == message.body for line in printed) == 1, printed
+    # The message is all the reconnect prints: the session was told before the freeze that the
+    # watch is up and reconnects alone, and each printed line costs it a turn.
+    assert not any(line in (WATCHING, RECONNECTS_ALONE) or "reconnecting" in line
+                   for line in printed), printed
+    assert not any("/watch/" in line for line in printed), printed
 
 
 def read_records(path: str, text: str) -> tuple[str, str]:

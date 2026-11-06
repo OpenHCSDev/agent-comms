@@ -292,7 +292,7 @@ WAITS_FOR_MAINTENANCE = ("The bus is under maintenance, as during an install; th
 """Said when the connector hands over a reconnect URL; the URL itself is never shown."""
 
 
-class Announcement(ABC):
+class Announcement:
     """What this process has told the session about its watch. Every printed line wakes the
     session for a turn, so each fact is said once per process: a reconnect that works is the
     watch doing its job and says nothing; one that fails ends with its own line. On 2026-11-06
