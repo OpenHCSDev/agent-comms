@@ -36,10 +36,6 @@ class MessageReference(TypedRow, ProjectionSource):
         """How a reader names this message: its bus position, then its identity."""
         return f"{self.seq}-{self.message_id}"
 
-    def renders_in(self, text: str) -> bool:
-        """Whether a reader's text names this message: its bus position, as a whole number."""
-        return str(self.seq) in re.findall(r"\d+", text)
-
     @classmethod
     def named(cls, name: str) -> MessageReference:
         """The reference a name reads back as; anything else is a malformed name."""
