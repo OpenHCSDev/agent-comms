@@ -26,7 +26,7 @@ from agent_comms.cli_bridges.claude_transcript import (
 from agent_comms.harness_delivery_states import PrintLedgerId
 from agent_comms.cli_bridges.inbox_watch_client import (
     RECONNECTS_ALONE, WAITS_FOR_MAINTENANCE, WATCHING, FollowedTranscript, InboxSocket, Pause,
-    Pauses, Redials, WatchDeferred, WatchDropped, WatchEnd, WatchReplaced, WatchStopped,
+    Pauses, Redials, RuntimeReplaced, WatchDeferred, WatchDropped, WatchEnd, WatchReplaced, WatchStopped,
 )
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
@@ -36,6 +36,7 @@ from agent_comms.connector import Connector
 from agent_comms.connector_caller import GrantRefusedError
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.inbox_watch import OpenWatch
+from agent_comms.launch_runtime import InstalledSource, LaunchRuntime, RunningSource
 from agent_comms.message_reference import MessageReference
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
 from agent_comms.repo import Checkout
@@ -380,6 +381,21 @@ async def test_the_cloud_client_says_out_loud_when_its_url_is_refused(session, t
     ended = await InboxSocket(used, tmp_path / "messages").carried()
     assert ended.line().startswith("Your inbox watch failed: WSServerHandshakeError")
     assert "not-a-ticket" not in ended.line()
+
+
+async def test_a_watch_running_a_replaced_runtime_stops_instead_of_dialling(tmp_path: Path, monkeypatch) -> None:
+    """Every install closes the socket; a watch whose runtime the install replaced must not
+    re-dial into the new connector with the old client. It ends, and the model starts it anew."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    newer = tmp_path / "runtimes/core-newer"
+    newer.mkdir(parents=True)
+    pointer = LaunchRuntime.current_pointer()
+    pointer.parent.mkdir(parents=True)
+    pointer.symlink_to(newer, target_is_directory=True)
+    monkeypatch.setattr(RunningSource, "current", staticmethod(lambda: InstalledSource(tmp_path / "site")))
+    ended = await asyncio.wait_for(InboxSocket("ws://127.0.0.1:9/watch/never-dialled", tmp_path / "messages").carried(), 10)
+    assert ended == RuntimeReplaced()
+    assert ended.line().startswith("Core was reinstalled") and "comms_watch" in ended.line()
 
 
 async def inbox_emptied(comms: Comms, thread: str) -> None:

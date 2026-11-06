@@ -10,8 +10,8 @@ from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.refusals import OwnersNotRestarted, UpgradeRefused
 from agent_comms.installer.upgrade import OwnersStopped, Stack
 from agent_comms.launch_runtime import (
-    LaunchRuntime, NoImportPath, RecordedRuntime, RestartEnvironment, RestoredRuntime, RunningRuntime,
-    RunningSource,
+    CheckoutSource, InstalledSource, LaunchRuntime, NoImportPath, RecordedRuntime, RestartEnvironment,
+    RestoredRuntime, RunningRuntime, RunningSource,
 )
 from agent_comms.storage.maintenance_barrier import TargetRuntime
 
@@ -99,3 +99,19 @@ def test_a_recorded_target_keeps_the_import_path_its_capture_selected(tmp_path):
     installed = RecordedRuntime(interpreter, NoImportPath()).environment(
         {**os.environ, "PYTHONPATH": str(tmp_path / "stray")})
     assert "PYTHONPATH" not in installed
+
+
+def test_an_install_replaces_the_runtime_of_an_installed_source_but_never_a_checkout(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    installed, checkout = InstalledSource(tmp_path / "site"), CheckoutSource(tmp_path / "tree")
+    assert not installed.replaced_by_install(), "with nothing installed, nothing was replaced"
+    pointer = LaunchRuntime.current_pointer()
+    pointer.parent.mkdir(parents=True)
+    pointer.symlink_to(LaunchRuntime.running().prefix, target_is_directory=True)
+    assert not installed.replaced_by_install(), "the current runtime is this process's own"
+    newer = tmp_path / "runtimes/core-newer"
+    newer.mkdir(parents=True)
+    pointer.unlink()
+    pointer.symlink_to(newer, target_is_directory=True)
+    assert installed.replaced_by_install()
+    assert not checkout.replaced_by_install(), "a checkout runs its tree, whatever is installed"

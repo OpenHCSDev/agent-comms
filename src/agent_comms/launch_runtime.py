@@ -173,12 +173,22 @@ class RunningSource(ABC):
     @abstractmethod
     def environment(self, environment: Mapping[str, str]) -> dict[str, str]: ...
 
+    @abstractmethod
+    def replaced_by_install(self) -> bool:
+        """Whether an install has since made another runtime current, so this process runs
+        code the host no longer serves."""
+
 
 class InstalledSource(RunningSource):
     """The interpreter's own site-packages: every child of it already imports this copy."""
 
     def environment(self, environment: Mapping[str, str]) -> dict[str, str]:
         return dict(environment)
+
+    def replaced_by_install(self) -> bool:
+        """Installed into a runtime: replaced once the current pointer names another one."""
+        return (LaunchRuntime.current_pointer().exists()
+                and LaunchRuntime.installed().prefix != LaunchRuntime.running().prefix)
 
 
 class CheckoutSource(RunningSource):
@@ -187,6 +197,10 @@ class CheckoutSource(RunningSource):
     def environment(self, environment: Mapping[str, str]) -> dict[str, str]:
         inherited = RestartEnvironment.inherit(environment).with_import_root(self.root)
         return inherited.apply_runtime(environment)
+
+    def replaced_by_install(self) -> bool:
+        """A checkout runs whatever its tree holds; an install replaces no runtime under it."""
+        return False
 
 
 class RestoredRuntime(LaunchRuntime):
