@@ -179,8 +179,8 @@ class NativeCoordinationSession(CoordinationSession):
     @cached_property
     def bus(self) -> MessageBus:
         """Create native bus owners only when this session first needs a boundary."""
-        from .. import message_bus, publisher
-        from ..registry import registration
+        import agent_comms.message_bus as message_bus, agent_comms.publisher as publisher, \
+            agent_comms.registry.registration as registration
 
         return message_bus.MessageBus(
             self.path.parent,

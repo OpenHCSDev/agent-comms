@@ -7,25 +7,24 @@ from abc import abstractmethod
 from collections import defaultdict
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, ClassVar, Annotated
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
-
-from .projection_source import ProjectionSource
 from .channel_targets import ChannelTarget, Tag
 from .cli_result import CliResult
-from .nominal.declared_family import DeclaredFamily
 from .display_order import CreatedThreadSort, ThreadSort
 from .errors import RelationViolationError
-from .nominal.field_codec import FieldCodec, CatalogExclude
 from .history_result import ChannelHistoryPageResult, EverythingHistoryPageResult, HistoryPageResult
 from .messages import MembershipTransition
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import CatalogExclude, FieldCodec
+from .projection_source import ProjectionSource
 from .read_basis import AllChannelDisplayScope, ChannelDisplayScope, MemberActivityDisplayScope
 from .tool_result import ToolResult
 
 if TYPE_CHECKING:
     from .registry.registry_document import RosterVisibility
-    from .registry_provenance import RegistryProvenance
     from .registry.threads import Thread
+    from .registry_provenance import RegistryProvenance
 
 
 class ChannelMemberIndex(dict[str, tuple["Thread", ...]]):

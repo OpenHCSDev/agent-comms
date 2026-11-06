@@ -639,7 +639,7 @@ class TeamProject(DeclaredFamily, CitationProject, affix="TeamProject"):
     """This bus's teammate declaration; identity resolves through the registry lookup."""
 
     def participants(self, threads: Iterable[Thread]) -> tuple[Thread, ...]:
-        """An undeclared project admits no participants."""
+        """An undeclared project has no participants."""
         return ()
 
     def colleagues(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:

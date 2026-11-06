@@ -6,7 +6,6 @@ does not create a new historical thread; a new turn does not change its owner.
 
 from __future__ import annotations
 
-from .class_fact import ClassFact
 import hashlib
 import math
 from abc import ABC, abstractmethod
@@ -17,22 +16,23 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self, TypeVar
 
 from agent_comms.participant_identity import ParticipantIdentity
 
+from .class_fact import ClassFact
 from .cli_options import JsonFlagRecord
+from .errors import RelationViolationError
 from .nominal.declared_family import (
     DeclaredFamily,
     UniqueExternalSelector,
     UnknownFamilyMember,
     declared_words,
 )
-from .errors import RelationViolationError
 from .nominal.field_codec import (
     DisclosureIdentity,
     FieldCodec,
-    TurnId,
     SingleFieldValue,
+    ThreadLookup,
+    TurnId,
     WireName,
     WireValue,
-    ThreadLookup,
 )
 from .projection_source import ProducedRow, ProjectionSource
 from .response_policy import CollectivePolicy, InformationalPolicy, ResponsePolicy
@@ -41,8 +41,8 @@ if TYPE_CHECKING:
     from .child_process import ProcessIdentity
     from .messages import Message
     from .read_ledger import ReadDocument, ReadLedger
-    from .registry_provenance import RegistryProvenance
     from .registry.threads import Thread
+    from .registry_provenance import RegistryProvenance
     from .todos import Todo
 
 T = TypeVar("T")

@@ -5,9 +5,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from .bus_publication import ServiceOrigin
+from .registry.threads import ServiceThread
 from .repo import Checkout
 from .thread_identity import ServiceThreadRole
-from .registry.threads import ServiceThread
 
 if TYPE_CHECKING:
     from .registry.registration import Registration

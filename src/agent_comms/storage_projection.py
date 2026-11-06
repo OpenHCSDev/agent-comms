@@ -10,10 +10,10 @@ from pathlib import Path
 from .comms import Comms
 from .native_tool_call import CodingCall
 from .registry.registry_document import RegistrySnapshot
+from .registry.threads import Thread
 from .repo import Checkout, RepositoryReads
 from .shell_effects import StorageEffect
 from .storage_rules import CheckoutAllocation, StorageRule, UnitStorage
-from .registry.threads import Thread
 
 
 @dataclass

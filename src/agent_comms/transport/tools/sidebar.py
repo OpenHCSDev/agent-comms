@@ -49,6 +49,7 @@ from ...registry.registry_document import (
     RegistrySlice,
     RegistrySnapshot,
 )
+from ...registry.threads import Thread
 from ...relationships import SortableRelationshipGroup, ThreadCommsSnapshot
 from ...repo import Checkout
 from ...runtime_server import RuntimeRequest
@@ -58,13 +59,11 @@ from ...thread_identity import ClaimedIdentity, ThreadIncarnation
 from ...thread_management import ImportDirectory, ProjectChangeResult, RenameThreadResult
 from ...thread_presentation import ThreadPresentation
 from ...thread_text import ExpectedSession
-from ...registry.threads import Thread
 from ...tool_result import ToolResult
 from ...transcripts import TranscriptCursor
-from ..request import tool_field
 from ...turn_context import CodexRolloutProvenance, ContextSourceText, Provenance, SegmentManifest
 from ...working_memory_labels import ModelLabel
-from ..request import ObservedRequest, ReadRequest, ToolRequest
+from ..request import ObservedRequest, ReadRequest, ToolRequest, tool_field
 
 
 @dataclass(frozen=True, kw_only=True)

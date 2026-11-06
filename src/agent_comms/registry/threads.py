@@ -11,12 +11,21 @@ from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
+from ..activity import ObservedActivity
 from ..agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
 from ..channel_targets import DeclaredTag, Tag
 from ..child_process import NoProcess, ProcessIdentity, ProcessState
 from ..context_segments.wake_values import WakeWorkContext
-from ..nominal.declared_family import DeclaredFamily
 from ..errors import RelationViolationError
+from ..goals import (
+    GoalDeclaration,
+    NoGoal,
+)
+from ..heartbeat_delivery import HeartbeatDelivery, OffHeartbeatDelivery
+from ..launch_runtime import ThreadLaunch
+from ..lifecycle import LifecycleState
+from ..lifecycle_capability import Executing
+from ..nominal.declared_family import DeclaredFamily
 from ..nominal.field_codec import (
     Argument,
     Description,
@@ -29,15 +38,6 @@ from ..nominal.field_codec import (
     WireOmitDefault,
     WireRequired,
 )
-from ..goals import (
-    GoalDeclaration,
-    NoGoal,
-)
-from ..launch_runtime import ThreadLaunch
-from ..heartbeat_delivery import HeartbeatDelivery, OffHeartbeatDelivery
-from ..lifecycle import LifecycleState
-from ..lifecycle_capability import Executing
-from ..storage.locked_store import DurableFile, PatternFile
 from ..pi_vocabulary import (
     NoThinkingOverride,
     ServiceTier,
@@ -51,6 +51,7 @@ from ..registration_inheritance import (
 )
 from ..repo import Checkout, RepositoryReads
 from ..session_file import NoSessionFile, SessionFile
+from ..storage.locked_store import DurableFile, PatternFile
 from ..task_sources import TaskScope
 from ..thread_creation import CreationSeconds, CreationTime, GeneratedCreationTime
 from ..thread_identity import (
@@ -85,13 +86,19 @@ from ..thread_storage import (
     UnassignedThreadStorage,
 )
 from ..thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
-from ..activity import ObservedActivity
-from ..turn_lease import FinishedTurn, NoTurnRecord, TurnLease, TurnLeaseFence, TurnRecord, TurnState
+from ..turn_lease import (
+    FinishedTurn,
+    NoTurnRecord,
+    TurnLease,
+    TurnLeaseFence,
+    TurnRecord,
+    TurnState,
+)
 
 if TYPE_CHECKING:
     from ..goal_management import Goals
-    from .registry_document import RegistrySnapshot
     from ..storage_rules import StorageRule
+    from .registry_document import RegistrySnapshot
 
 
 class ThreadCommandAvailability:

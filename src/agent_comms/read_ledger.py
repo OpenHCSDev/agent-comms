@@ -18,9 +18,7 @@ from .bus import Bus, BusReader
 from .channel_targets import CommandTarget
 from .coordination.errors import DMScopeChanged
 from .nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
-from .storage.locked_store import DocumentChange
-from .storage.maintenance_barrier import CarriedDocument
-from .storage.private_path import ObservedPath
+from .nominal.sealed import Sealed
 from .read_basis import (
     AllConversation,
     ChannelConversation,
@@ -32,7 +30,9 @@ from .read_basis import (
     ReadCursor,
 )
 from .recorded_bus import NoRecordedBus, RecordedBus, RecordedBusIdentity
-from .nominal.sealed import Sealed
+from .storage.locked_store import DocumentChange
+from .storage.maintenance_barrier import CarriedDocument
+from .storage.private_path import ObservedPath
 from .storage.store_files import DependentStateTier, SingleFileStore
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
@@ -42,8 +42,8 @@ if TYPE_CHECKING:
     from .messages import Message
     from .read_basis import MessageDisplayScope
     from .registry.registry_document import RegistrySnapshot
-    from .registry_provenance import RegistryProvenance
     from .registry.threads import Thread
+    from .registry_provenance import RegistryProvenance
 
 
 class ReadNotice(SubclassUnion, affix="ReadNotice"):

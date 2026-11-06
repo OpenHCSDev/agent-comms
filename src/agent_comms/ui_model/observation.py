@@ -15,15 +15,13 @@ The receiving worker still shares its interpreter lock with the UI.
 """
 
 from __future__ import annotations
-from agent_comms.repo import Checkout
 
 import asyncio
 import itertools
 import os
+import signal
 import socket
 import struct
-import signal
-from multiprocessing.process import BaseProcess
 import sys
 import time
 import traceback
@@ -32,11 +30,12 @@ from collections.abc import Callable, Generator, Iterator, Mapping
 from contextlib import AbstractAsyncContextManager, AsyncExitStack, ExitStack, aclosing
 from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
+from multiprocessing.connection import Connection
+from multiprocessing.process import BaseProcess
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self, cast, final
 
-
-from agent_comms_hooks import ToolRefusedError
+from aiohttp import ClientWebSocketResponse, WSMsgType, web
 from metaclass_registry.mro_dispatch import MroDispatch, handles
 
 from agent_comms.acp_extension import (
@@ -47,11 +46,7 @@ from agent_comms.acp_extension import (
 from agent_comms.active_route import CommsRoute
 from agent_comms.activity import ObservedActivity
 from agent_comms.bus_read import CapturesTranscriptPage, OwnerScopedRead, UiRead
-from agent_comms.transport.request import ToolRequest
 from agent_comms.child_process import HelperStart, SpawnedHelper, join_retirement
-from agent_comms.input_disposition import DeliveryOverview
-from agent_comms.team_hud import TeamFrame, TeamHud
-from agent_comms.team_hud_records import TeammateDetail
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import (
@@ -59,40 +54,59 @@ from agent_comms.coordination.errors import (
     CoordinationReadUnavailable,
     DeferredRead,
     ReadAgain,
-    ReloadRequired,
     Refused,
+    ReloadRequired,
     StaleRevision,
 )
 from agent_comms.errors import RelationViolationError
 from agent_comms.history_views import RetiredViews
+from agent_comms.input_disposition import DeliveryOverview
 from agent_comms.launch_root import started
-from agent_comms.message_notification import NotificationPass, NotificationWindow
-from agent_comms.notification_read import (
-    NotificationsRead, StaleNotificationsRead, UnreadableNotificationsRead,
+from agent_comms.message_notification import (
+    MessageNotification,
+    NotificationPass,
+    NotificationWindow,
 )
 from agent_comms.message_reference import MessageReference
-from agent_comms.nominal.field_codec import DeclaredError, FieldCodec, MessageId, TaggedRecordMember, TaggedUnion
+from agent_comms.nominal.field_codec import (
+    DeclaredError,
+    FieldCodec,
+    MessageId,
+    TaggedRecordMember,
+    TaggedUnion,
+)
 from agent_comms.nominal.fold import Absorbs, Accumulates, Fold
+from agent_comms.notification_read import (
+    NotificationsRead,
+    StaleNotificationsRead,
+    UnreadableNotificationsRead,
+)
 from agent_comms.notification_reads import NotificationRead
-from agent_comms.read_basis import DisplayCut, NoDisplaySelection
-from agent_comms.message_notification import MessageNotification
 from agent_comms.presentation import CoordinationSnapshot, NoRevision, ReadState, WireRevision
-from agent_comms.registry.registry_document import RegistrySnapshot, RosterVisibility, UnreadRegistry
+from agent_comms.read_basis import DisplayCut, NoDisplaySelection
+from agent_comms.registry.registry_document import (
+    RegistrySnapshot,
+    RosterVisibility,
+    UnreadRegistry,
+)
 from agent_comms.registry_provenance import DeletedThread
+from agent_comms.repo import Checkout
 from agent_comms.revision_views import (
-    TeamFramesView,
     NotificationsView,
     RegistrationsView,
     RevisionView,
     SidebarView,
     StatusView,
     StoresView,
+    TeamFramesView,
 )
+from agent_comms.team_hud import TeamFrame, TeamHud
+from agent_comms.team_hud_records import TeammateDetail
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.transcripts import AcquiredThreadPresentation
 from agent_comms.thread_presentation import ThreadPresentation
+from agent_comms.transcripts import AcquiredThreadPresentation, TranscriptReadIdentity
+from agent_comms.transport.request import ToolRequest
 from agent_comms.transport.tools.reads import TranscriptPageRead
-from agent_comms.transcripts import TranscriptReadIdentity
 from agent_comms.ui_model.sidebar import (
     ChannelRowModel,
     SidebarModel,
@@ -103,10 +117,7 @@ from agent_comms.ui_model.status import OpenThreadStatus, ThreadStatusModel
 from agent_comms.view_unread import ReplyIndexResult
 from agent_comms.watched import FileSource
 from agent_comms.work_branches import WorkBranchError
-
-from multiprocessing.connection import Connection
-
-from aiohttp import ClientWebSocketResponse, WSMsgType, web
+from agent_comms_hooks import ToolRefusedError
 
 type WebSocketFrames = ClientWebSocketResponse | web.WebSocketResponse
 

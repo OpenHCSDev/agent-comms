@@ -7,11 +7,12 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from agent_comms.nominal.field_codec import GoalId
+
 from .goal_authority import GoalTurnAuthority
 
 if TYPE_CHECKING:
-    from .planning.goal_waits import GoalWait
     from .goals import GoalDeclaration
+    from .planning.goal_waits import GoalWait
     from .turn_input_source import InputDependency
 
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from agent_comms.channels import Channel
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
@@ -30,32 +29,36 @@ from agent_comms.channel_targets import (
     ResolvedTarget,
     SurroundingChannel,
 )
+from agent_comms.channels import Channel
 from agent_comms.cli_failures import CLI_FAILURES
 from agent_comms.cli_result import CliResult, ResultShower, TargetEditResult
 from agent_comms.command import Command
 from agent_comms.comms import Comms
 from agent_comms.config_options import CatalogChoice, ConfigOptions
-from agent_comms.tool_result import ToolResult
-from agent_comms.nominal.declared_family import ModuleMembers
 from agent_comms.declared_verb import DeclaredCommand
-from agent_comms.nominal.field_codec import (
-    TaggedUnion,
-    FieldCodec, FieldPlan, RecordMember, TaggedRecordMember, TargetBound, WireValue,
-)
 from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, StartedOwner
-from agent_comms.lifecycle_capability import LifecycleCapability, Successful
-from agent_comms.registry.registry_document import RegistrySnapshot
-from agent_comms.target_fields import TargetField
-from agent_comms_hooks import ToolRefusedError
-
 from agent_comms.launch_root import LaunchRoot
-from agent_comms.registry.registry_document import ResolvedChannel
+from agent_comms.lifecycle_capability import LifecycleCapability, Successful
+from agent_comms.nominal.declared_family import ModuleMembers
+from agent_comms.nominal.field_codec import (
+    FieldCodec,
+    FieldPlan,
+    RecordMember,
+    TaggedRecordMember,
+    TaggedUnion,
+    TargetBound,
+    WireValue,
+)
+from agent_comms.registry.registry_document import RegistrySnapshot, ResolvedChannel
 from agent_comms.repo import Checkout
+from agent_comms.target_fields import TargetField
+from agent_comms.tool_result import ToolResult
+from agent_comms_hooks import ToolRefusedError
 
 if TYPE_CHECKING:
     from agent_comms.active_route import CommsRoute
-    from agent_comms.thread_status import ThreadStatus
     from agent_comms.registry.threads import Thread
+    from agent_comms.thread_status import ThreadStatus
 
 
 class ChannelBound(TargetBound):
