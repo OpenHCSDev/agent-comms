@@ -2279,8 +2279,31 @@ class TimestampText(TextRepresentation[RecordedTimestamp]):
         return recorded
 
 
-class AcpSessionId(NominalText):
+class AcpSessionSelection:
+    """Whether an ACP session is bound; each answer here is the unbound one, and the bound
+    id overrides it."""
+
+    bound: ClassVar[bool] = False
+
+    def admits(self, session: AcpSessionId) -> bool:
+        """An unbound attachment takes whichever session answers first."""
+        return True
+
+    def selected[T](self, unbound: T, bound: Callable[[AcpSessionId], T]) -> T:
+        """The caller's answer for this selection: its unbound answer, or its bound one."""
+        return unbound
+
+
+class AcpSessionId(NominalText, AcpSessionSelection):
     """A local ACP attachment/execution identifier, not a native Pi journal ID."""
+
+    bound = True
+
+    def admits(self, session: AcpSessionId) -> bool:
+        return self == session
+
+    def selected[T](self, unbound: T, bound: Callable[[AcpSessionId], T]) -> T:
+        return bound(self)
 
 
 class AcpSessionIdText(NominalSpelling[AcpSessionId]):
@@ -2288,7 +2311,7 @@ class AcpSessionIdText(NominalSpelling[AcpSessionId]):
 
 
 @dataclass(frozen=True)
-class NoAcpSessionId(NullMember):
+class NoAcpSessionId(NullMember, AcpSessionSelection):
     """No ACP session is bound yet: a tab or saved row before the agent answers new_session."""
 
 
