@@ -8,7 +8,7 @@ from annotationlib import Format, ForwardRef, get_annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import Self, ClassVar, NoReturn, cast
+from typing import Self, ClassVar, NoReturn, TypedDict, Unpack, cast
 
 from agent_comms_hooks import ToolRefusedError
 from metaclass_registry.core import REPLACES_REGISTERED_ATTRIBUTE
@@ -55,6 +55,14 @@ class NoConnectorService(ConnectorService):
         raise ToolRefusedError("Only a connector call can open an inbox watch.")
 
 
+class FamilyOptions(TypedDict, total=False):
+    """The class-header options FamilyMeta reads, each present only when a header gives it."""
+
+    affix: str
+    discovery_package: str
+    declared_name: str
+
+
 class ServesDeclaration(FamilyMeta):
     """A served class built on a wire declaration takes that declaration's name and its slot in
     the family, so a wire name decodes into the served class wherever the served module is
@@ -62,14 +70,15 @@ class ServesDeclaration(FamilyMeta):
 
     def __new__(
         mcs: type[ServesDeclaration], name: str, bases: tuple[type, ...],
-        namespace: dict[str, object], **options: object,
+        namespace: dict[str, object], **options: Unpack[FamilyOptions],
     ) -> ServesDeclaration:
         declarations = DeclarationBases.of(bases)
         if len(declarations) > 1:
             raise TypeError(f"{name} serves two declarations: {declarations!r}")
         for declaration in declarations:
+            # FamilyMeta reads a member's name from its namespace when the header gives none.
             namespace.setdefault(REPLACES_REGISTERED_ATTRIBUTE, declaration)
-            options.setdefault("declared_name", declaration.declared_name)
+            namespace.setdefault("declared_name", declaration.selection_key())
             namespace.setdefault("__eq__", DeclaredValue(declaration).equal)
             namespace.setdefault("__hash__", declaration.__hash__)
         return cast(ServesDeclaration, super().__new__(mcs, name, bases, namespace, **options))
@@ -108,7 +117,7 @@ class DeclarationBases(MroDispatch):
     @staticmethod
     def declared(base: type[DeclaredFamily]) -> tuple[type[DeclaredFamily], ...]:
         """A family member registered under its own name; an intermediate has no name."""
-        return (base,) if dict.get(base.__registry__, base.declared_name) is base else ()
+        return (base,) if base in dict.values(base.__registry__) else ()
 
     @handles(type)
     @staticmethod

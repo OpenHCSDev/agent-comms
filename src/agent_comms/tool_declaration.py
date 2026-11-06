@@ -117,7 +117,7 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
         fields: what the wire round trip decodes, without the wire. Looking the name up
         acquires the family's members, so a process meets the served module only when it
         first serves a request itself."""
-        member = cls.member_named(request.declared_name)
+        member = cls.member_named(request.selection_key())
         return member(**{
             field.name: getattr(request, field.name) for field in fields(request) if field.init
         })
