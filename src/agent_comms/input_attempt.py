@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field, fields, replace
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -246,29 +246,46 @@ UNOBSERVED_DELIVERY_SCOPE = UnobservedInputDeliveryScope()
 
 
 @dataclass(frozen=True)
-class UnresolvedInput:
-    """An unresolved input as a reply shows it; its owner, claim and origin stay in the store."""
+class UnresolvedInputReference:
+    """An unresolved input named by its identity. Its body stays in the bus that holds it under
+    this sequence, so a page listing many of them never carries a second copy of each message."""
 
     sequence: int | None
     target: str
-    text: str
     input_id: Annotated[InputKey, PublicInputKeyText, WireName("inputId")]
     status: str
     reviewed_for_goals: Annotated[
         tuple[str, ...], WireName("reviewedForGoals"), WireOmitDefault()
     ] = ()
 
+    @classmethod
+    def of(cls, row: StoredInput, **declared: object) -> Self:
+        """Every member is built from a stored row the same way; a member adds only its own
+        fields, through row_fields or the caller's declared ones."""
+        return cls(sequence=row.sequence, target=row.target, input_id=row.key,
+                   status=row.public_status, reviewed_for_goals=tuple(sorted(row.goal_reviews)),
+                   **cls.row_fields(row), **declared)
+
+    @classmethod
+    def row_fields(cls, row: StoredInput) -> dict[str, object]:
+        return {}
+
+
+@dataclass(frozen=True)
+class UnresolvedInput(UnresolvedInputReference):
+    """An unresolved input shown to a person, with its text; its owner, claim and origin stay
+    in the store."""
+
+    text: str = field(kw_only=True)
+
+    @classmethod
+    def row_fields(cls, row: StoredInput) -> dict[str, object]:
+        return {"text": row.source_text}
+
     def record_text(self) -> str:
         sequence = self.sequence if self.sequence is not None else "direct input"
         return (f"Sequence: {sequence} · Target: {self.target}\n"
                 f"Input: {self.input_id.public_text()}\n{self.text}")
-
-    @classmethod
-    def of(cls, row: StoredInput) -> UnresolvedInput:
-        return UnresolvedInput(
-            sequence=row.sequence, target=row.target, text=row.source_text,
-            input_id=row.key, status=row.public_status,
-            reviewed_for_goals=tuple(sorted(row.goal_reviews)))
 
 
 @dataclass(frozen=True)
@@ -284,10 +301,7 @@ class HistoricalInput(UnresolvedInput):
 
     @classmethod
     def notice(cls, row: StoredInput, notice_dismissed: bool) -> HistoricalInput:
-        return HistoricalInput(
-            sequence=row.sequence, target=row.target, text=row.source_text,
-            input_id=row.key, status=row.public_status,
-            reviewed_for_goals=tuple(sorted(row.goal_reviews)), notice_dismissed=notice_dismissed)
+        return cls.of(row, notice_dismissed=notice_dismissed)
 
 
 @dataclass(frozen=True)

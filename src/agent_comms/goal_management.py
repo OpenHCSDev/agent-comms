@@ -54,7 +54,7 @@ from .goals import Goal, GoalDeclaration
 from .input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
     InputDeliveryScope,
-    UnresolvedInput,
+    UnresolvedInputReference,
 )
 from .input_disposition import DeliveryOverview
 from .threads import NativeThread, Thread
@@ -227,11 +227,12 @@ class Goals(GoalRecords):
             store.recover_unreserved_ready(generation.goal_id, generation.number)
             return store.ready_grant(generation.goal_id, generation.number)
 
-    def unresolved_inputs(self, name: str) -> tuple[UnresolvedInput, ...]:
-        """Project durable unresolved inputs; reading never schedules another attempt."""
+    def unresolved_inputs(self, name: str) -> tuple[UnresolvedInputReference, ...]:
+        """Project durable unresolved inputs by reference; reading never schedules another
+        attempt, and each body stays in the bus under its sequence."""
         entry = self.registry.entry(name).entry
         rows = self.dispositions.unresolved((entry,)).unknown(entry.names)
-        return tuple(UnresolvedInput.of(row) for row in rows)
+        return tuple(UnresolvedInputReference.of(row) for row in rows)
 
     def input_delivery(
         self,

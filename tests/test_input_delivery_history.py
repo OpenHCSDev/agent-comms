@@ -20,7 +20,7 @@ from agent_comms.nominal.field_codec import FieldCodec, GoalId, InputId, TurnId
 from agent_comms.input_attempt import (
     OwnerQueueInputDeliveryScope,
     UnobservedInputDeliveryScope,
-    UnresolvedInput,
+    UnresolvedInputReference,
 )
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.goal_actions import SetGoalAction
@@ -98,7 +98,7 @@ def test_history_clear_is_notice_only_and_survives_rename_and_reopen(tmp_path):
     )
     reopened = wire(tmp_path)
     assert reopened.goals.input_delivery("renamed", scope=scope) == result
-    assert reopened.goals.unresolved_inputs("renamed") == tuple(UnresolvedInput.of(r) for r in before)
+    assert reopened.goals.unresolved_inputs("renamed") == tuple(UnresolvedInputReference.of(r) for r in before)
     assert all(
         r.notice_dismissed
         for r in reopened.goals.input_delivery(

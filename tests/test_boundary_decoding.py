@@ -34,8 +34,8 @@ def test_coding_socket_record_keeps_object_arguments_and_strict_fields():
 
 
 def test_delivery_uses_declared_overview_and_preserves_typed_rows():
-    current = UnresolvedInput(4, 'worker', 'retained input', BusInputKey(4), 'unknown')
-    historical = HistoricalInput(3, 'worker', 'earlier input', BusInputKey(3), 'unknown',
+    current = UnresolvedInput(4, 'worker', BusInputKey(4), 'unknown', text='retained input')
+    historical = HistoricalInput(3, 'worker', BusInputKey(3), 'unknown', text='earlier input',
                                  notice_dismissed=True)
     overview = DeliveryOverview((current,), 1, 2, (historical,), OwnerQueueInputDeliveryScope)
     wire = FieldCodec.encode(overview)

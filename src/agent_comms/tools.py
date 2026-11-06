@@ -77,7 +77,7 @@ from .goal_presentation import GoalExecution, GoalSnapshot
 from .goal_waits import NoStandbyReview, StandbyReview
 from .goals import GoalDeclaration
 from .history_result import HistoryPageResult
-from .input_attempt import UnresolvedInput
+from .input_attempt import UnresolvedInputReference
 from .message_page import NEWEST_PAGE, DisplayedMessagePage, InboxPage, MessagePage, PageBounds
 from .page_traversal import LatestSequence, LiveCursor
 from .historical_views import ConversationObservation, ConversationRevision, UnobservedConversation
@@ -342,7 +342,7 @@ class InboxPageRead(ToolResult):
 
     messages: tuple[Message, ...]
     remaining: int
-    unresolved_inputs: tuple[UnresolvedInput, ...]
+    unresolved_inputs: tuple[UnresolvedInputReference, ...]
     standby_review: Annotated[StandbyReview | NoStandbyReview, WireOmitDefault()] = (
         NoStandbyReview()
     )
@@ -1856,7 +1856,9 @@ class CommsInboxTool(NativeToolRequest):
         "Reading records nothing: a message leaves the page when its harness takes it, never "
         "because a page showed it, and human read markers are never touched. remaining counts "
         "the untaken messages after this page. One oversized message is returned alone for "
-        "progress. Unresolved inputs remain UNKNOWN and are not paged. For standby, supply standby "
+        "progress. Unresolved inputs remain UNKNOWN and are not paged; each is listed by its "
+        "sequence, target, input ID and status, and its body stays in the bus under that "
+        "sequence (comms_input_delivery shows them with their text). For standby, supply standby "
         "(goal_id and wait_for) to get standby_review: exact eligible keys and messages, "
         "already reviewed entries, and excluded owner/other-dependency inputs."
     )

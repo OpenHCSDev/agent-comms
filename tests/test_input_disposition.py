@@ -21,7 +21,7 @@ from agent_comms.input_attempt import (
     ReservedInput,
     StartedInput,
     UnchangedInput,
-    UnresolvedInput,
+    UnresolvedInputReference,
 )
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_origin import DeliveredInput, UndeliveredInput, WireInputOrigin
@@ -129,7 +129,7 @@ def test_unresolved_projection_follows_rename_without_private_receipts(tmp_path:
         text="private wrapper",
     )
     comms.threads.rename_managed_thread(comms.registry.require("kid").incarnation, "new-kid", owner=ProcessIdentity.capture(os.getpid()))
-    expected = (UnresolvedInput(7, "#review", "exact source", BusInputKey(7), "unknown"),)
+    expected = (UnresolvedInputReference(7, "#review", BusInputKey(7), "unknown"),)
     assert comms.goals.unresolved_inputs("new-kid") == expected
     assert comms.goals.unresolved_inputs("kid") == expected
     assert store.started(
