@@ -84,8 +84,8 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
     def read_keys(self):
         return (self.read_key,)
 
-    def transcript_cursor(self, frontier, offset, *, source):
-        return frontier.cursor(source.read_key, offset)
+    def transcript_cursor(self, frontier, cut, *, source):
+        return frontier.cursor(source.read_key, cut.offset, file=cut.file_identity())
 
     def history_locations(self, thread, registry, visited):
         yield self, OwnHistory()

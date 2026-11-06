@@ -30,6 +30,7 @@ from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.registration import Registration
 from agent_comms.revision_views import BusSourceView, StoresView
 from agent_comms.transcripts import NativeTranscriptCursor, TranscriptCursor
+from agent_comms.storage.private_path import FileIdentity
 from agent_comms.storage.typed_table import RowNotFoundError
 from agent_comms.threads import NativeThread
 
@@ -181,7 +182,7 @@ def test_native_cursor_resumes_by_file_byte_offset(tmp_path):
         "message": {"role": "assistant", "content": [{"type": "text", "text": text}]},
     }, ensure_ascii=False) + "\n").encode() for text in ("first λ", "second"))
     session.write_bytes(b"".join(records))
-    cursor = NativeTranscriptCursor(str(session), len(records[0]))
+    cursor = NativeTranscriptCursor(str(session), len(records[0]), file=FileIdentity.from_stat(session.stat()))
     restored = FieldCodec.decode(TranscriptCursor, FieldCodec.encode(cursor))
     resumed = tuple(NativeTranscript(session).forward(restored.offset, session.stat().st_size))
     assert restored == cursor

@@ -48,6 +48,7 @@ from agent_comms.pi_wire import McpLiveAcknowledgement
 from agent_comms.thread_identity import ClaimedIdentity, RecordedThreadIncarnation
 from agent_comms.threads import NativeThread
 from agent_comms.transcripts import NativeTranscriptCursor
+from agent_comms.storage.private_path import MissingFile
 from agent_comms.turn_context import ContextManifest, NextContextTurn
 from agent_comms.turn_lease import ActiveTurn, FinishedTurn, TurnState
 
@@ -137,7 +138,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
         ),
         TurnChangedUpdate(TurnState(finished=FinishedTurn(TurnId('9b473845f684444f80a26586ae298d2b')))),
         TextRouteUpdate(),
-        TranscriptChangedUpdate(NativeTranscriptCursor("session.jsonl", 42)),
+        TranscriptChangedUpdate(NativeTranscriptCursor("session.jsonl", 42, file=MissingFile())),
         InputFailedUpdate("prompt", BackendDeliveryFailure("provider refused")),
     )
     assert {type(item) for item in samples} == set(AgentCommsUpdate.members_with(AgentCommsUpdate))

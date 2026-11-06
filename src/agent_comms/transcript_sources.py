@@ -38,6 +38,7 @@ from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import FieldCodec, MalformedRecord, NullMember
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .recorded_time import EventTime, UnrecordedEventTime
+from .storage.private_path import FileIdentity, MissingFile
 from .routing import TurnRouting
 from .rule_deal import Mute, Speaking, Voice
 from .sent_message import AssignedSourceIdentity, PublishedSentMessage
@@ -80,9 +81,10 @@ class WireFrontier(DeclaredFamily, ResolvesSentReports, affix="WireFrontier"):
 
     sequence: int
 
-    def cursor(self, session_file: str, offset: int) -> NativeTranscriptCursor:
+    def cursor(self, session_file: str, offset: int, *,
+               file: FileIdentity | MissingFile) -> NativeTranscriptCursor:
         from .transcripts import NativeTranscriptCursor
-        return NativeTranscriptCursor(session_file, offset)
+        return NativeTranscriptCursor(session_file, offset, file=file)
 
     def at(self, sequence: int) -> Self:
         if sequence:
@@ -116,9 +118,10 @@ class NoWireFrontier(WireFrontier):
 class AssignedSourceCursor(AssignedSourceIdentity, WireFrontier):
     sequence: int = field()
 
-    def cursor(self, session_file: str, offset: int) -> NativeTranscriptCursor:
+    def cursor(self, session_file: str, offset: int, *,
+               file: FileIdentity | MissingFile) -> NativeTranscriptCursor:
         from .transcripts import WireTranscriptCursor
-        return WireTranscriptCursor(session_file, offset, self)
+        return WireTranscriptCursor(session_file, offset, self, file=file)
 
     def within(self, parent: WireFrontier) -> bool:
         return parent.contains(self)

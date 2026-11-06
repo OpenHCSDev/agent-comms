@@ -9,7 +9,9 @@ from agent_comms.repo import Checkout
 from conftest import installed_comms, transcript_records
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.coordination.errors import TranscriptChanged
+from agent_comms.storage.private_path import FileIdentity, MissingFile
 import json
+import os
 import time
 from datetime import UTC, datetime
 from dataclasses import replace
@@ -126,7 +128,31 @@ def test_oversized_message_and_file_identity(tmp_path):
     with pytest.raises(TranscriptChanged):
         comms.transcripts.capture_page_read("worker", position=EarlierThan(page.before)).read()
     with pytest.raises(TranscriptChanged):
-        comms.transcripts.capture_page_read("worker", position=EarlierThan(NativeTranscriptCursor(str(path), -1))).read()
+        comms.transcripts.capture_page_read("worker", position=EarlierThan(NativeTranscriptCursor(str(path), -1, file=MissingFile()))).read()
+
+
+def test_a_cursor_into_a_replaced_session_is_refused_even_where_its_offset_still_fits(tmp_path):
+    path = tmp_path / "session.jsonl"
+    transcript(path, 30)
+    comms = installed_comms(tmp_path / "wire")
+    comms.registry.declare(NativeThread('worker', frozenset(), Checkout(tmp_path),
+                                        session_file=RegistrySessionLocation.from_path(str(path), comms.root)))
+    page = comms.transcripts.capture_page_read("worker").read()
+    # A producer that rewrites rather than appends: a longer file under a new inode, so the
+    # old offsets still fit inside it but no longer land on its record boundaries.
+    rewritten = tmp_path / "session.jsonl.tmp"
+    transcript(rewritten, 45)
+    os.replace(rewritten, path)
+    assert path.stat().st_size > page.after.offset
+    with pytest.raises(TranscriptChanged):
+        comms.transcripts.capture_page_read("worker", position=LaterThan(page.after)).read()
+    with pytest.raises(TranscriptChanged):
+        comms.transcripts.capture_page_read("worker", position=EarlierThan(page.before)).read()
+    with pytest.raises(TranscriptChanged):
+        comms.views.mark_thread_view_read("worker", worktree=Checkout(tmp_path), through=page.after)
+    latest = comms.transcripts.capture_page_read("worker").read()
+    assert [event.text for event in latest.events][-1] == "Record 44"
+    comms.views.mark_thread_view_read("worker", worktree=Checkout(tmp_path), through=latest.after)
 
 
 def test_empty_transcript_and_non_message_records(tmp_path):
@@ -196,19 +222,22 @@ def test_inherited_scroll_window_survives_child_session_persistence(tmp_path):
     transcript(unrelated, 1)
     with pytest.raises(TranscriptChanged):
         comms.transcripts.capture_page_read(
-            "child", limit=Through(NativeTranscriptCursor(str(unrelated), unrelated.stat().st_size))).read()
+            "child", limit=Through(NativeTranscriptCursor(str(unrelated), unrelated.stat().st_size,
+                                                file=FileIdentity.from_stat(unrelated.stat())))).read()
 
 
 def test_wire_cursor_keeps_the_furthest_committed_native_prefix_within_it():
     from agent_comms.transcript_sources import AssignedSourceCursor
 
     wire_at = AssignedSourceCursor("root", RecordedThreadIncarnation("recipient", 1.0), 5).at
-    cursor = WireTranscriptCursor("a.jsonl", 900, wire_at(5))
-    committed = (WireTranscriptCursor("a.jsonl", 40, wire_at(2)), WireTranscriptCursor("a.jsonl", 70, wire_at(5)),
-                 WireTranscriptCursor("a.jsonl", 99, wire_at(6)), WireTranscriptCursor("b.jsonl", 500, wire_at(1)))
-    assert cursor.over_native(committed) == WireTranscriptCursor("a.jsonl", 70, wire_at(5))
-    assert cursor.over_native(committed[3:]) == WireTranscriptCursor("b.jsonl", 500, wire_at(5))
-    assert cursor.over_native(()) == WireTranscriptCursor("a.jsonl", 0, wire_at(5))
+    cursor = WireTranscriptCursor("a.jsonl", 900, wire_at(5), file=MissingFile())
+    committed = (WireTranscriptCursor("a.jsonl", 40, wire_at(2), file=MissingFile()),
+                 WireTranscriptCursor("a.jsonl", 70, wire_at(5), file=MissingFile()),
+                 WireTranscriptCursor("a.jsonl", 99, wire_at(6), file=MissingFile()),
+                 WireTranscriptCursor("b.jsonl", 500, wire_at(1), file=MissingFile()))
+    assert cursor.over_native(committed) == WireTranscriptCursor("a.jsonl", 70, wire_at(5), file=MissingFile())
+    assert cursor.over_native(committed[3:]) == WireTranscriptCursor("b.jsonl", 500, wire_at(5), file=MissingFile())
+    assert cursor.over_native(()) == WireTranscriptCursor("a.jsonl", 0, wire_at(5), file=MissingFile())
 
 
 def test_never_started_native_child_keeps_no_native_cursor_and_no_read_mark(tmp_path):
@@ -227,9 +256,10 @@ def test_never_started_native_child_keeps_no_native_cursor_and_no_read_mark(tmp_
     inherited = comms.transcripts.capture_page_read("child").read().after
     painted = checkpoint.over_native((inherited,))
     assert painted == NoNativeTranscriptCursor(source=comms.registry.require("child").runtime,
-                                               wire=checkpoint.wire)
+                                               wire=checkpoint.wire, file=MissingFile())
     assert inherited == NoNativeTranscriptCursor(source=comms.registry.require("parent").runtime,
-                                                 offset=path.stat().st_size, wire=checkpoint.wire)
+                                                 offset=path.stat().st_size, wire=checkpoint.wire,
+                                                 file=FileIdentity.from_stat(path.stat()))
     assert FieldCodec.decode(TranscriptCursor, FieldCodec.encode(painted)) == painted
     ledger = comms.bus.reads.path
     before = ledger.read_bytes() if ledger.exists() else b""

@@ -22,7 +22,7 @@ from agent_comms.notification_reads import (
 from agent_comms.order_tools import (
     TeammateRead, InputDeliveryRead, OwnerGoalRead, TranscriptPageRead,
 )
-from agent_comms.storage.private_path import FileRevision
+from agent_comms.storage.private_path import FileRevision, MissingFile
 from agent_comms.registry_provenance import DeletedThread
 from agent_comms.repo import Checkout
 from agent_comms.presentation import NoRevision, WireRevision
@@ -307,7 +307,7 @@ ORDERS = (OrderId.mint(),)
 UI_ONLY_FIELDS = {"root", "request_id", "previous", "owner", "identity"}
 SHARED_UI_READS = [
     TeammateRead(frame_owner=COLLEAGUE, unit=WORKER, orders=ORDERS),
-    TranscriptPageRead(thread="worker", position=EarlierThan(NativeTranscriptCursor("session.jsonl", 7)),
+    TranscriptPageRead(thread="worker", position=EarlierThan(NativeTranscriptCursor("session.jsonl", 7, file=MissingFile())),
                        page_source=RecordedPageSource(HistorySourceKey("archive"))),
 ]
 
@@ -344,7 +344,7 @@ def test_witnesses_cursors_and_archive_each_distinguish_a_shared_read_request():
         replace(teammate_read, operation=replace(SHARED_UI_READS[0], unit=RecordedThreadIncarnation("worker", 3.0))),
         replace(teammate_read, operation=replace(SHARED_UI_READS[0], orders=(OrderId.mint(),))),
         page,
-        replace(page, operation=replace(SHARED_UI_READS[1], position=EarlierThan(NativeTranscriptCursor("session.jsonl", 8)))),
+        replace(page, operation=replace(SHARED_UI_READS[1], position=EarlierThan(NativeTranscriptCursor("session.jsonl", 8, file=MissingFile())))),
         replace(page, operation=replace(SHARED_UI_READS[1], page_source=RecordedPageSource("other-archive"))),
     )
     assert len({teammate_read, *distinct}) == 1 + len(distinct)
