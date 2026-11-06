@@ -34,7 +34,7 @@ from agent_comms.message_notification import NotificationWindow
 from .notification_evidence import OwnerOutcomes
 from .message_notification import MessageNotification
 from .thread_presentation import ThreadPresentation
-from .storage.private_path import FileObservation, FileRevision
+from .storage.private_path import FileIdentity, FileObservation, FileRevision, MissingFile
 from .private_registry_guard import RegistryPrivacy
 from .recorded_bus import RecordedBusIdentity
 from .registration import Registration
@@ -80,6 +80,11 @@ class TranscriptCursor(DeclaredFamily, affix="TranscriptCursor"):
     offset: ClassVar[int] = 0
     wire: ClassVar[WireFrontier] = NoWireFrontier()
 
+    def indexed_by(self, current: RecordsCut) -> bool:
+        """Whether the current source still indexes this position. A position in no file's bytes
+        has nothing a rewrite can move."""
+        return True
+
     def at_offset(self, offset: int) -> TranscriptCursor:
         return replace(self, offset=offset)
 
@@ -121,9 +126,10 @@ class TranscriptCursor(DeclaredFamily, affix="TranscriptCursor"):
         return self.session_file == runtime.read_key
 
     def require_readable(
-        self, runtime: RuntimeLocation, reader: TranscriptSource, size: int,
+        self, runtime: RuntimeLocation, reader: TranscriptSource, current: RecordsCut, through: int,
     ) -> None:
-        if not self.matches_runtime(runtime) or not reader.valid_offset(self.offset, size):
+        if (not self.matches_runtime(runtime) or not reader.valid_offset(self.offset, through)
+                or not self.indexed_by(current)):
             raise TranscriptChanged()
 
     def requires_commit(self) -> bool:
@@ -203,13 +209,25 @@ class UnreadTranscriptCursor(TranscriptCursor):
         """Nothing has been drawn, so there is nothing to acknowledge."""
 
 
+class FileTranscriptCursor(TranscriptCursor, declared_name=None):
+    """A position in a file's bytes: a session rewritten through os.replace is another file,
+    and every old offset past 0 indexes nothing in it, even where it still fits."""
+
+    __slots__ = ()
+    file: FileIdentity | MissingFile
+
+    def indexed_by(self, current: RecordsCut) -> bool:
+        return current.indexes(self.file, self.offset)
+
+
 @dataclass(frozen=True, slots=True)
-class NoNativeTranscriptCursor(TranscriptCursor):
+class NoNativeTranscriptCursor(FileTranscriptCursor):
     """A thread owns no native read mark, even while showing an inherited source."""
 
     source: RuntimeLocation = field(kw_only=True)
     offset: int = 0
     wire: WireFrontier = field(default_factory=NoWireFrontier)
+    file: FileIdentity | MissingFile = field(kw_only=True)
 
     @property
     def session_file(self) -> str | None:
@@ -223,9 +241,10 @@ class NoNativeTranscriptCursor(TranscriptCursor):
 
 
 @dataclass(frozen=True, slots=True)
-class NativeTranscriptCursor(TranscriptCursor):
+class NativeTranscriptCursor(FileTranscriptCursor):
     session_file: str = field()
     offset: int = field()
+    file: FileIdentity | MissingFile = field(kw_only=True)
 
     def inherited_prefix(self, prefixes: Sequence[TranscriptCursor]) -> TranscriptCursor:
         return next(iter(prefixes), self.at_offset(0))
@@ -234,13 +253,18 @@ class NativeTranscriptCursor(TranscriptCursor):
         return prefix.with_frontier(self.wire)
 
     def with_frontier(self, frontier: WireFrontier) -> TranscriptCursor:
-        return frontier.cursor(self.session_file, self.offset)
+        return frontier.cursor(self.session_file, self.offset, file=self.file)
 
     def mark_read(self, reads: TranscriptReadState, viewer: str, runtime: RuntimeLocation) -> None:
         if self.session_file != runtime.read_key:
             raise TranscriptChanged()
         for key in runtime.read_keys():
-            reads.mark_read(viewer, key, self.offset, NativeTranscript(Path(key)).cut())
+            # A mark painted from a replaced file would count the new file read through an
+            # offset that indexes nothing in it.
+            current = NativeTranscript(Path(key)).cut()
+            if not self.indexed_by(current):
+                raise TranscriptChanged()
+            reads.mark_read(viewer, key, self.offset, current)
 
 
 @dataclass(frozen=True)
@@ -253,7 +277,8 @@ class NativeCommittedPrefix:
 
     @property
     def page_bound(self) -> NativeTranscriptCursor:
-        return NativeTranscriptCursor(self.original.session_file, self.original.session_entry_end)
+        return NativeTranscriptCursor(self.original.session_file, self.original.session_entry_end,
+                                      file=self.records_cut.file_identity())
 
     def contains_native_prefix(self, current: TranscriptReadIdentity) -> bool:
         current_source = AssignedSourceIdentity(current.root, current.thread.incarnation)
@@ -274,7 +299,7 @@ class PagePosition(DeclaredFamily, affix=""):
     """Where a bounded transcript page starts: the latest page, or one side of a read cursor."""
 
     def require_readable(
-        self, runtime: RuntimeLocation, reader: TranscriptSource, size: int,
+        self, runtime: RuntimeLocation, reader: TranscriptSource, current: RecordsCut, through: int,
     ) -> None:
         """The latest page has no cursor to validate."""
 
@@ -308,9 +333,9 @@ class CursorPage(PagePosition, declared_name=None):
     cursor: TranscriptCursor
 
     def require_readable(
-        self, runtime: RuntimeLocation, reader: TranscriptSource, size: int,
+        self, runtime: RuntimeLocation, reader: TranscriptSource, current: RecordsCut, through: int,
     ) -> None:
-        self.cursor.require_readable(runtime, reader, size)
+        self.cursor.require_readable(runtime, reader, current, through)
 
     def within(self, frontier: TranscriptCursor) -> bool:
         return frontier.contains(self.cursor)
@@ -503,7 +528,7 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
     def page_bound(self) -> TranscriptCursor:
         """The last native byte and assigned message included in this page."""
         return self.limit.bound(self.thread.runtime.transcript_cursor(
-            self.wire_frontier, self.records_cut.offset, source=self.runtime))
+            self.wire_frontier, self.records_cut, source=self.runtime))
 
     def contains_records_cut(self, other: TranscriptReadIdentity) -> bool:
         """Whether ``other`` still contains the thread records this read captured."""
@@ -911,9 +936,9 @@ class Transcripts:
         thread, runtime = page.thread, page.runtime
         source = page.projection
         with page.records.reading() as reader:
-            through.require_readable(runtime, reader, reader.cut().offset)
-            size = through.offset
-            position.require_readable(runtime, reader, size)
+            current = reader.cut()
+            through.require_readable(runtime, reader, current, current.offset)
+            position.require_readable(runtime, reader, current, through.offset)
             frontier = through
             source.require_cursor(frontier)
             if frontier.wire.sequence < 0 or not position.within(frontier):
@@ -949,9 +974,9 @@ class Transcripts:
         registry = self.registry.snapshot()
         thread = registry.require(name)
         with thread.runtime.history_source(self.root, thread.incarnation).reading() as source:
-            offset = source.cut().offset
+            cut = source.cut()
         frontier = AssignedTranscriptSource.for_thread(self.root, thread, self.bus.bus).frontier
-        return thread.runtime.transcript_cursor(frontier, offset, source=thread.runtime)
+        return thread.runtime.transcript_cursor(frontier, cut, source=thread.runtime)
 
     def record_turn_publication(
         self, *, lease: TurnLeaseFence, checkpoint: TranscriptCursor,

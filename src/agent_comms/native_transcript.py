@@ -38,7 +38,7 @@ from .native_entries import (
 )
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .native_session_reopen import NativeSessionIdentity
-from .storage.private_path import FileRevision
+from .storage.private_path import FileIdentity, FileRevision, MissingFile
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .transcript_sources import TranscriptRecord, TranscriptSource
 from .turn_item import FreshNativeId, NativeItemId
@@ -107,6 +107,15 @@ class RecordsCut(DeclaredFamily, affix="Cut"):
     def draft_current(self, current: RecordsCut) -> bool:
         """Whether this cut can still accompany the source's current draft."""
 
+    def file_identity(self) -> FileIdentity | MissingFile:
+        """The file whose bytes this cut's offsets index; records kept outside a file have none."""
+        return MissingFile()
+
+    def indexes(self, file: FileIdentity | MissingFile, offset: int) -> bool:
+        """Whether an offset read from ``file`` still indexes this source's records. Records kept
+        outside a file are never replaced underneath their offsets."""
+        return True
+
 
 class SessionCut(RecordsCut):
     """The saved session's actual file state, including one not written yet."""
@@ -151,6 +160,13 @@ class PresentSessionCut(SessionCut):
     def contains(self, current: PresentSessionCut, through: int) -> bool:
         # A session is append-only within one inode; replacement changes the cut.
         return self.revision.holds_cut(current.revision, through)
+
+    def file_identity(self) -> FileIdentity:
+        return self.revision.identity
+
+    def indexes(self, file: FileIdentity | MissingFile, offset: int) -> bool:
+        # Appends keep the inode; a rewrite through os.replace moves every offset past 0.
+        return offset == 0 or file == self.revision.identity
 
     def mark_read(self, reads: ReadLedger, viewer: str, source: str, through: int) -> None:
         if not 0 <= through <= self.offset:
