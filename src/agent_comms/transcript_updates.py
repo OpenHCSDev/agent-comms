@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING
@@ -20,7 +18,7 @@ from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import AcpSessionId
 from .transport.tools.reads import TranscriptPageRead
 from .turn_lease import TurnState
-from .ui_model.observation import ObservationProcess, ReadTranscript, SubscribeTranscript
+from .ui_model.observation import ReadTranscript
 
 if TYPE_CHECKING:
     from .acp_extension import TranscriptSnapshotUpdate
@@ -54,46 +52,20 @@ class TurnTranscriptUpdate(TranscriptUpdate):
 
 
 class TranscriptReplay:
-    """Active transcript consumers, rather than the runtime, retain their shared reader."""
+    """The agent reads saved history from the Comms it already holds and publishes one
+    snapshot; the read's kind decides how contention is answered."""
 
     def __init__(self, comms: Comms):
         self.comms = comms
-        self._subscriptions: list[ObservationProcess] = []
-
-    @asynccontextmanager
-    async def observing(self) -> AsyncIterator[ObservationProcess]:
-        reads = (
-            self._subscriptions[0]
-            if self._subscriptions
-            else ObservationProcess.awaited(self.comms.route)
-        )
-        self._subscriptions.append(reads)
-        try:
-            yield reads
-        finally:
-            self._subscriptions.remove(reads)
-            if not self._subscriptions:
-                await reads.close()
 
     async def replay(
         self, thread: str, *, session_id: AcpSessionId, client: SessionUpdateSink,
+        read: type[ReadTranscript] = ReadTranscript,
     ) -> None:
-        async with self.observing() as reads:
-            snapshot = await reads.read(
-                ReadTranscript(str(self.comms.root), TranscriptPageRead(thread=thread)),
-            )
-            await self._publish(session_id, snapshot, client)
-
-    @asynccontextmanager
-    async def subscribe(
-        self, thread: str, *, session_id: AcpSessionId, client: SessionUpdateSink,
-    ) -> AsyncIterator[None]:
-        async with self.observing() as reads:
-            snapshot = await reads.read(
-                SubscribeTranscript(str(self.comms.root), TranscriptPageRead(thread=thread)),
-            )
-            await self._publish(session_id, snapshot, client)
-            yield
+        snapshot = await read(
+            str(self.comms.root), TranscriptPageRead(thread=thread),
+        ).answered(self.comms)
+        await self._publish(session_id, snapshot, client)
 
     async def _publish(
         self,

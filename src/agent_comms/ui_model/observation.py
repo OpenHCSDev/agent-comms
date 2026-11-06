@@ -558,6 +558,16 @@ class TranscriptRequest[ResultT](ReadRequest):
     def read(self, comms: Comms) -> ResultT:
         return UnreadableHistory.outcome(lambda: self.result(self.page_read(comms))).raised()
 
+    async def answered(self, comms: Comms) -> ResultT:
+        """This process reads ``comms`` itself: a deferred read waits for the source the way
+        the service does, and a refusal raises here as it would at the UI's waiter."""
+        self.require_root(comms)
+        while True:
+            try:
+                return await Coordination.run_worker(partial(self.read, comms))
+            except self.deferred_reads:
+                await asyncio.sleep(ReadBusy.retry_seconds)
+
     def page_read(self, comms: Comms) -> TranscriptRead:
         page = CapturesTranscriptPage.serving(self.operation)
         return page.capture_as(comms, NoDisplaySelection())
