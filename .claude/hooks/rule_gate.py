@@ -512,8 +512,7 @@ def idle(event: HookEvent) -> None:
         reasons.append(
             "Tristan reads only your closing text: before you stop, quote each of these bus "
             "messages there with its bus number, where it was posted (channel or DM), sender, "
-            "time and body, and forward it with the Claude Code Remote send_message tool to "
-            "this session (plain-reporting.md): " + ", ".join(names))
+            "time and body (plain-reporting.md): " + ", ".join(names))
     if reasons:
         print(json.dumps({"decision": "block", "reason": "\n".join(reasons)}))
 
