@@ -40,7 +40,9 @@ from agent_comms.message_reference import (
 from agent_comms.peer_relevance import Prioritized
 from agent_comms.publisher import Publisher
 from agent_comms.read_selection import CapturedSelection
-from agent_comms.read_basis import AnonymousViewer, DisplayViewer, ListedDeliveries, NamedViewer, ReadCursor
+from agent_comms.read_basis import (
+    AnonymousViewer, DisplayViewer, ListedDeliveries, NamedViewer, ReadCursor,
+)
 from agent_comms.read_ledger import ReadDocument, ReadLedger
 from agent_comms.agent_inbox import TakenInputCursor
 from agent_comms.routing import DeliveryScope
@@ -132,12 +134,13 @@ class UnreadCut:
     request: MessagePageRequest
     document: ReadDocument
 
-    def counts(self) -> Mapping[str, int]:
+    def counts(self) -> dict[str, int]:
         """Inside the cut: what is pending for this thread, per conversation."""
         actor = self.delivery.actor
-        return self.source.unseen_counts(
+        counts: dict[str, int] = self.source.unseen_counts(
             self.snapshot, {actor: self.delivery}, {actor: self.seen}, after=self.cursor,
         )[actor]
+        return counts
 
 
 class MessageBus[Writes: Publisher]:
@@ -204,9 +207,10 @@ class MessageBus[Writes: Publisher]:
         return self._displayed(cut)
 
     def _displayed(self, cut: UnreadCut) -> DisplayedMessagePage:
-        return cut.request.displayed(
+        page: DisplayedMessagePage = cut.request.displayed(
             self.reads, cut.document, cut.delivery.actor, cut.snapshot, cut.snapshot, self.bus,
         )
+        return page
 
     @contextmanager
     def _unread_cut(
