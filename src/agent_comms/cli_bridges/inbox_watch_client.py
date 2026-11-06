@@ -281,7 +281,7 @@ class ReconnectWith(HeldReconnect):
 
     async def redialed(self, watch: InboxSocket, dropped: WatchDropped) -> WatchEnd:
         watch.redials.held = NoReconnect()
-        if not watch.redials.spent(time.monotonic()):
+        if not watch.redials.admits(time.monotonic()):
             print(f"Your inbox watch {dropped.reason}, and it has reset "
                   f"{watch.redials.most} times in {watch.redials.window_seconds} s; giving the "
                   "reconnect back to you.", flush=True)
@@ -304,8 +304,8 @@ class Redials:
     window_seconds: ClassVar[int] = 600
     delays: ClassVar[tuple[float, ...]] = (1.0, 2.0, 4.0, 8.0)
 
-    def spent(self, now: float) -> bool:
-        """Records one reconnect if the window has room for it."""
+    def admits(self, now: float) -> bool:
+        """Whether the window has room for one more reconnect; one it admits is recorded."""
         self.used = [at for at in self.used if now - at < self.window_seconds]
         if len(self.used) >= self.most:
             return False
