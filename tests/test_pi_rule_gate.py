@@ -20,7 +20,7 @@ from agent_comms.channel_targets import CommandTarget
 from agent_comms.team.package import TeamPackage
 from agent_comms.context_reading import ContextUsage
 from agent_comms.native_tool_call import CodingCall
-from agent_comms.native_tools import ReadTool
+from agent_comms.native_tools import McpToolCall, ReadTool
 from agent_comms.pi_rule_gate import PiRedeal, RulesUnread
 from agent_comms.repo import Checkout
 from agent_comms.selected_tool_broker import SelectedToolRequest, SelectedWriteArguments
@@ -104,6 +104,9 @@ def test_a_compacted_pi_thread_reads_every_dealt_rule_then_writes_its_audit(
         SelectedToolRequest("call-write", SelectedWriteArguments("notes.md", "x")).judge_under(
             peer_deal
         )
+    with pytest.raises(RulesUnread):  # nor an MCP server's tool the turn was offered
+        McpToolCall(call_id="call-mcp", declared_name="mcp_fixture_echo_092c79e8f8",
+                    arguments={"message": "x"}).judge_under(peer_deal)
     sources = DeckReader.sources()
     call("read", {"path": str(sources[0])}).judge_under(peer_deal)  # a dealt file is
     call("read", {"path": str(sources[0]), "limit": 3}).completed_under(peer_deal)

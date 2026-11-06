@@ -40,6 +40,9 @@ from agent_comms.comms import wire
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec
 from agent_comms.native_arguments import GivenArguments, GivenBinary
+from agent_comms.cli_verbs.rule_gate import RuleGateCliCommand
+from agent_comms.pi_rule_gate import PiRedeal
+from agent_comms.rule_deal import OffDealMode
 from agent_comms.thread_identity import NoObservedTurn, TurnFence
 from delivery_owner_fixture import canonical_agent
 
@@ -496,6 +499,14 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, native_runtime_
                 owner.on_connect(Audit())  # Passive evidence sink, never a permission controller.
                 session = await owner.new_session(cwd=str(project), mcp_servers=[])
                 session_id = FieldCodec.decode(AcpSessionId, session.session_id)
+                # These cases test MCP, not the rule deal: binding dealt the session, and
+                # the product's own switch turns its gate off, keeping the deal's evidence.
+                # test_pi_rule_gate's dealt-session case refuses an McpToolCall like any tool.
+                RuleGateCliCommand(
+                    stem=PiRedeal.of(owner._comms, owner._comms.registry.require(
+                        owner.sessions.require(session_id))).stem,
+                    mode=OffDealMode,
+                ).apply(owner._comms)
                 attached = canonical_agent(owner._comms, auto_wake=False)
                 retirement.push_async_callback(attached.shutdown)
                 attached.on_connect(Attachment())
