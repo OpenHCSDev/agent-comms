@@ -1773,13 +1773,15 @@ class HelperStart(ABC):
     """
 
     @abstractmethod
-    def context(self) -> multiprocessing.context.BaseContext: ...
+    def context(self) -> multiprocessing.context.SpawnContext:
+        """Every member speaks spawn's protocol (a pickled process object on a pipe); a
+        member decides only what interpreter receives it."""
 
 
 class SpawnedHelper(HelperStart):
     """A fresh interpreter per helper, importing what it runs."""
 
-    def context(self) -> multiprocessing.context.BaseContext:
+    def context(self) -> multiprocessing.context.SpawnContext:
         return multiprocessing.get_context("spawn")
 
 
