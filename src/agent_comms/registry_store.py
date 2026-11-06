@@ -330,6 +330,11 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
 
     record_type = RegistryDocument
 
+    def stored_files(self) -> tuple[Path, Path]:
+        """The files that together are this registry: its document, and the presence rows every
+        declared thread must have. A copy that leaves one behind cannot be read."""
+        return self.path, self.presence.path
+
     def empty(self) -> RegistryDocument:
         return RegistryDocument()
 
