@@ -33,6 +33,22 @@ def declared_words(stem: str) -> str:
 
 
 class FamilyMeta(AutoRegisterMeta, ABCMeta):
+    """A family admits its members by declaration, so membership is the member's MRO.
+
+    ABCMeta answers a negative check by asking every subclass in the tree, looking for
+    virtual members ``register`` added outside a class body; a family has none, and its
+    tree is thousands of classes deep. Abstract methods stay enforced by ABCMeta.
+    """
+
+    __instancecheck__ = type.__instancecheck__
+    __subclasscheck__ = type.__subclasscheck__
+
+    def register[S](cls, subclass: type[S]) -> type[S]:
+        raise TypeError(
+            f"{cls.__name__} admits members by declaration; {subclass.__name__} must "
+            f"inherit it to belong."
+        )
+
     def __new__(
         mcs,
         name: str,
