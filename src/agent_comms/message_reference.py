@@ -38,7 +38,7 @@ class MessageReference(TypedRow, ProjectionSource):
 
     def renders_in(self, text: str) -> bool:
         """Whether a reader's text names this message: its bus position, as a whole number."""
-        return re.search(rf"(?<!\d){self.seq}(?!\d)", text) is not None
+        return str(self.seq) in re.findall(r"\d+", text)
 
     @classmethod
     def named(cls, name: str) -> MessageReference:
