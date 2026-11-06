@@ -48,6 +48,20 @@ class ClaudeJsonLines(JsonLines):
         receipts.turn_ended()
         return receipts
 
+    def unrendered(self, lines: Iterable[bytes]) -> tuple[MessageReference, ...]:
+        """Bus messages the watch put in front of the model since the last ended turn that its
+        own text has not named since. The person reading a cloud session sees only that text."""
+        pending: dict[MessageReference, None] = {}
+        for position, raw in enumerate(lines):
+            record = self.decode_line(raw, position)
+            if record.ends_turn():
+                pending.clear()
+            pending.update(dict.fromkeys(record.delivered()))
+            if said := ' '.join(record.said()):
+                for reference in [ref for ref in pending if ref.renders_in(said)]:
+                    del pending[reference]
+        return tuple(pending)
+
     def opening_before(self, stream: BinaryIO, boundary: int) -> int:
         """Recover the actual opening, including every prompt folded into that occurrence."""
         opening = boundary

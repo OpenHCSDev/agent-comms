@@ -236,13 +236,30 @@ class HookEvent:
     source: str
     call: ToolCall
     already_stopped_once: bool
+    transcript: Path
 
     @classmethod
     def decode(cls, record: dict) -> HookEvent:
         kind = ToolCall.by_tool.get(str(record.get("tool_name")), OtherCall)
         call = kind.decode(record.get("tool_input") or {}, record.get("tool_response"))
         return cls(str(record.get("session_id", "session")), "agent_id" in record,
-                   str(record.get("source", "start")), call, bool(record.get("stop_hook_active")))
+                   str(record.get("source", "start")), call, bool(record.get("stop_hook_active")),
+                   Path(str(record.get("transcript_path", ""))))
+
+    def this_turn(self) -> list[bytes]:
+        """Transcript lines since the last stop that ended a turn: a stop writes its summary
+        after its hooks run, and a summary with output was a refused stop the turn went on
+        from (StopHookSummary.ends_turn). A missing transcript has no turn."""
+        if not self.transcript.is_file():
+            return []
+        with self.transcript.open("rb") as stream:
+            start = max(0, stream.seek(0, 2) - 6_000_000)
+            stream.seek(start)
+            lines = stream.read().splitlines()[1 if start else 0:]
+        last = max((index for index, line in enumerate(lines)
+                    if b'"stop_hook_summary"' in line and b'"hasOutput":false' in line),
+                   default=-1)
+        return lines[last + 1:]
 
     @staticmethod
     def state() -> Path:
@@ -468,16 +485,38 @@ def jobs_among(rows: list[list[str]], pid: int) -> int:
                and int(row[1]) in ancestors and int(row[0]) not in ancestors)
 
 
+def unrendered(event: HookEvent) -> tuple[str, ...]:
+    """Bus messages this turn's watch delivered that the session's text has not shown: in a
+    cloud session the person reads nothing else (plain-reporting.md). A turn with no shown bus
+    message never loads the decoder."""
+    turn = event.this_turn()
+    if not any(b"Comms in" in line for line in turn):
+        return ()
+    sys.path.insert(0, str(team_directory().parent.parent))
+    from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
+    return tuple(reference.name for reference in ClaudeJsonLines().unrendered(turn))
+
+
 def idle(event: HookEvent) -> None:
-    """One nudge per wait: a stop this hook already refused goes through, and the job's
+    """One nudge per stop: a stop this hook already refused goes through, and a job's
     notification resumes the session."""
     if event.subagent or event.already_stopped_once:
         return
+    reasons = []
     if own_background_jobs():
-        print(json.dumps({"decision": "block", "reason": (
+        reasons.append(
             "A background job of this session is still running. Waiting time is tracing time "
             "(tests-and-commands.md): trace the paths it will exercise and act on what you find; "
-            "its notification resumes you.")}))
+            "its notification resumes you.")
+    if names := unrendered(event):
+        reasons.append(
+            "Tristan reads only your closing text: before you stop, quote each of these bus "
+            "messages that is for you (to you, @-mentioning you, or from him) with its bus "
+            "number, sender, time and body, and forward it with the Claude Code Remote "
+            "send_message tool to this session; name the rest by number on one 'not for me' "
+            "line (plain-reporting.md): " + ", ".join(names))
+    if reasons:
+        print(json.dumps({"decision": "block", "reason": "\n".join(reasons)}))
 
 
 VERBS = {"deal": deal, "gate": gate, "record": record, "remind": remind, "fg": foreground, "idle": idle}

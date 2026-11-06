@@ -89,7 +89,8 @@ async def test_the_cloud_client_shows_a_message_that_fits_one_event_as_written(
     exports.parent.mkdir(mode=0o700)
     lines = await delivered_lines(client, token, comms, exports, capsys, "short body\nsecond line")
     start = next(index for index, line in enumerate(lines) if line.startswith("Comms in"))
-    assert lines[start].startswith("Comms in · sender (external agent) · ")
+    # A direct message names the thread it went to, so a reader tells it from a channel post.
+    assert lines[start].startswith("Comms in · cloud · sender (external agent) · ")
     # A reply's answers cite the bus position as well as the id, so the header names both.
     assert re.search(r" · \d+-[0-9a-f]{12}$", lines[start])
     assert lines[start + 1:start + 3] == ["short body", "second line"]
@@ -107,7 +108,7 @@ async def test_the_cloud_client_names_the_whole_body_of_a_message_too_long_for_o
     notice = next(json.loads(line) for line in lines if line.startswith('{"protocol"'))
     assert notice["type"] == "read-file"
     written = Path(notice["path"]).read_text()
-    assert written.startswith("Comms in · sender (external agent) · ")
+    assert written.startswith("Comms in · cloud · sender (external agent) · ")
     assert written.count("a line of a long body") == 160
 
 
