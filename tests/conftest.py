@@ -593,16 +593,10 @@ def declare_team(comms: Comms, colleague: Thread) -> Comms:
 
 def answer_rules(comms: Comms, name: str) -> None:
     """Deal a Pi teammate its team rules and answer them, as a teammate does before its first tool:
-    every dealt file read in full, then an audit answering every rule and prompt."""
+    every dealt file read in full, then an audit answering every prompt and probe."""
     deal = PiRedeal.of(comms, comms.registry.require(name))
     deal.redeal(StartedDeal())
     answer_deal(deal)
-
-
-def engaged(rule: str, source: Path) -> dict[str, str]:
-    """An audit entry answering one rule file with a greentext line it really holds."""
-    line = next(line for line in source.read_text(encoding="utf-8").splitlines() if line.startswith("> "))
-    return {"rule": rule, "quote": line, "does": "tested", "why": "tested"}
 
 
 def probe_answers(owner_words: tuple[str, ...] = ()) -> list[dict[str, str]]:
@@ -628,17 +622,11 @@ def fresh_confession(deal: RuleDeal) -> bool:
 
 
 def answer_deal(deal: PiRedeal) -> None:
-    """Read every file of the current deal in full, answering each rule as it is read, and write
-    the audit answering the deal."""
+    """Read every file of the current deal in full, then write the audit answering the deal."""
     record = deal.current()
-    answered = []
     for source in record.dealt:
         deal.record_read(source, ReadSpan(1, sys.maxsize, sys.maxsize))
-        if source.stem in record.due.rules:
-            answered.append(engaged(source.stem, source))
-        deal.audit.write_text(json.dumps({"rules": answered, "owner_words": []}))
     deal.audit.write_text(json.dumps({
-        "rules": answered,
         "owner_words": [{"words": words, "doing": "testing"} for words in record.due.owner_words],
         "probes": probe_answers(record.due.owner_words),
     }))

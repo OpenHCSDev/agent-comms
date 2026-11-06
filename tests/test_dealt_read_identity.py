@@ -73,15 +73,17 @@ def test_a_refresh_passed_while_reading_the_deal_is_answered_by_it(team_bus):
 
 def test_his_question_quotes_the_written_audit_statement_and_asks():
     """He quotes what the session wrote and asks; he never narrates what it did."""
-    from agent_comms.rule_deal import MeantRecord, RuleAudit, SessionAudit
+    from agent_comms.nominal.field_codec import FieldCodec
+    from agent_comms.rule_deal import MeantRecord, SessionAudit
+    from agent_comms.rule_probes import Probe
 
-    wrote = RuleAudit("spine", does="I end turns on a teammate's state, not on a wait.\nSecond line")
-    audit = SessionAudit((wrote, RuleAudit("deadlines"), RuleAudit("owner-authority", does="I take his plan as the work.")), ())
-    asked = audit.batch(frozenset({"spine", "deadlines"})).his_question()
-    assert asked == f"> I end turns on a teammate's state, not on a wait.\n\n{MeantRecord.question}"
-    assert audit.batch(frozenset({"owner-authority"})).his_question() == (
-        f"> I take his plan as the work.\n\n{MeantRecord.question}")  # its own batch, not an older line
-    assert SessionAudit((), ()).his_question() == MeantRecord.question
+    flinch = FieldCodec.decode(Probe, {"probe": "flinch", "answer": "Yes: I ended turns on a wait.\nSecond line"})
+    prior = FieldCodec.decode(Probe, {"probe": "prior", "prior": "I take his plan as the work.",
+                                      "words": "w", "refuted_by": "Corollary 4.12"})
+    audit = SessionAudit((), probes=(flinch, prior))
+    assert audit.his_question(frozenset({"flinch"})) == f"> Yes: I ended turns on a wait.\n\n{MeantRecord.question}"
+    assert audit.his_question(frozenset({"prior"})).startswith("> ")  # its own probe, not an older line
+    assert SessionAudit(()).his_question(frozenset()) == MeantRecord.question
 
 
 def transcript_line(kind, content):
