@@ -277,7 +277,10 @@ jobs:
           python -m pip install "$(python -I src/agent_comms/installer/declared_uv.py pyproject.toml)"
       - name: Sync the stack exactly as the installer does
         if: steps.reach.outputs.reaches == 'true'
-        run: uv sync --project stack --locked --no-editable
+        run: |
+          uv sync --project stack --locked --no-editable
+          uv lock --project stack $(stack/.venv/bin/python -I -m agent_comms.installer.refresh_arguments stack/uv.lock)
+          uv sync --project stack --locked --no-editable
       - name: Run the installer's client-import probe in the stack
         if: steps.reach.outputs.reaches == 'true'
         run: >-
