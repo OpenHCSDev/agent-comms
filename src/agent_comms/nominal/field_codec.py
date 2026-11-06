@@ -2287,6 +2287,11 @@ class AcpSessionIdText(NominalSpelling[AcpSessionId]):
     spelling = re.compile(r"\S{1,4096}")
 
 
+@dataclass(frozen=True)
+class NoAcpSessionId(NullMember):
+    """No ACP session is bound yet: a tab or saved row before the agent answers new_session."""
+
+
 class StoredSessionId(NominalText):
     """The session a harness's stored history names: a Claude transcript's stem, a Codex
     rollout's or an OpenCode export's session, a Pi journal's entry."""
