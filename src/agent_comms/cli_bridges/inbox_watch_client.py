@@ -34,6 +34,7 @@ from yarl import URL
 from agent_comms.bus import Bus
 from agent_comms.bus_publication import Delivered
 from agent_comms.harness_delivery_states import PrintLedgerId
+from agent_comms.launch_runtime import RunningSource
 from agent_comms.message_reference import MessageReference
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.watched import FileSource
@@ -285,11 +286,26 @@ class WatchStopped(WatchEnd):
                 "someone wakes it, connect again.")
 
 
+@dataclass(frozen=True)
+class RuntimeReplaced(WatchEnd):
+    """Core was reinstalled while this watch ran from the runtime it replaced. Re-dialling would
+    keep the old client watching for ever: on 2026-11-06 the host's watch survived three installs
+    on its first runtime, missed every client fix, and showed up as an unretired old-runtime PID
+    each time. Only a watch started anew runs the new runtime, so this one goes back to the model."""
+
+    exit_code = 1
+
+    def line(self) -> str:
+        return ("Core was reinstalled, and this watch was running the old runtime, so it has "
+                "stopped. Call comms_watch and start this again to watch on the new one.")
+
+
 WATCHING = "Watching your inbox; each message arrives as an event."
 RECONNECTS_ALONE = "This watch reconnects on its own after a network reset."
+"""Said when the connector hands over a reconnect URL; the URL itself is never shown."""
 WAITS_FOR_MAINTENANCE = ("The bus is under maintenance, as during an install; this watch waits for "
                          "it and reconnects on its own.")
-"""Said when the connector hands over a reconnect URL; the URL itself is never shown."""
+"""Said once, when a maintenance wait begins."""
 
 
 class Announcement:
@@ -494,6 +510,9 @@ class InboxSocket:
     exports: Path
     transcript: TranscriptRoute = UnfoundTranscript("no transcript was given to this watch")
     redials: Redials = field(default_factory=Redials)
+    source: RunningSource = field(default_factory=RunningSource.current)
+    """Where this process's client code came from: an install can replace an installed runtime's,
+    never a checkout's."""
 
     batch_gap_seconds: ClassVar[float] = 0.25
     """Monitor joins the lines of each 200 ms into one event and cuts a long event mid-line: of 11
@@ -537,7 +556,10 @@ class InboxSocket:
         return await (await self.opened(self.url)).settled(self)
 
     async def opened(self, url: str) -> WatchEnd:
-        """One socket's life: how it ended. A failure means what the stage it struck says."""
+        """One socket's life: how it ended. A failure means what the stage it struck says. Every
+        install closes the socket, so a dial is where a replaced runtime is noticed."""
+        if self.source.replaced_by_install():
+            return RuntimeReplaced()
         stage: SocketStage = Dialing()
         try:
             async with ClientSession() as session, session.ws_connect(

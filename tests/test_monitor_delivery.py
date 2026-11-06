@@ -4,6 +4,7 @@ from agent_comms.repo import Checkout
 from collections.abc import Callable
 from contextlib import asynccontextmanager, contextmanager, suppress
 from agent_comms.cli_bridges.shared import CoreWatchEnded, core_watch_failure
+from agent_comms.launch_runtime import InstalledSource, LaunchRuntime, RuntimeReplacedError
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError, MaintenanceOperator
 import asyncio
 import os
@@ -1170,6 +1171,23 @@ async def test_the_bus_read_survives_a_restart_without_repeats(bridge):
         await stopped(watching)
         rows = await stored_attempts(bridge)
         assert [row.reference for row in rows] == [first.reference, during.reference, after.reference]
+
+
+@pytest.mark.asyncio
+async def test_a_bridge_whose_runtime_an_install_replaced_stops_instead_of_reading_on(bridge, tmp_path, monkeypatch):
+    """when_open re-runs the watch after every maintenance hold, and every install holds one: a
+    bridge running the replaced runtime ends loudly, reads nothing, and is started anew."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    newer = tmp_path / "runtimes/core-newer"
+    newer.mkdir(parents=True)
+    pointer = LaunchRuntime.current_pointer()
+    pointer.parent.mkdir(parents=True)
+    pointer.symlink_to(newer, target_is_directory=True)
+    bridge.running_source = InstalledSource(tmp_path / "site")
+    bridge.comms.messaging.send('peer', 'viewer', 'never read by the old runtime')
+    with pytest.raises(RuntimeReplacedError, match="Start it again"):
+        await asyncio.wait_for(bridge.comms.bus.when_open(bridge.watch_current_bus), 10)
+    assert await stored_attempts(bridge) == ()
 
 
 @pytest.mark.asyncio
