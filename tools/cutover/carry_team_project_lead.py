@@ -44,7 +44,7 @@ class TeamProjectLead(Carry):
             dict[str, JsonValue], FieldCodec.parse(path.read_text(encoding="utf-8"))
         )
         version = FieldCodec.record_key(RegistryDocument, "version")
-        if document[version] >= self.stamped_version:
+        if FieldCodec.decode(int, document[version]) >= self.stamped_version:
             return Carried(0)
         if self.retired_key in document:  # a bus without a team stored no project
             project = FieldCodec.decode(dict[str, JsonValue], document.pop(self.retired_key))

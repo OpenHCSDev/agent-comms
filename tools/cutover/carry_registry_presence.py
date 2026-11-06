@@ -46,7 +46,8 @@ class RegistryPresence(Carry):
             MaintenanceBarrier(path).read().require_held_by(
                 MaintenanceHolder.current(), "Move thread presence out of the registry"
             )
-            presence.update(lambda stored: DocumentChange.to(PresenceDocument({**stored.seen, **seen})))
+            presence.update(
+                lambda stored: DocumentChange.to(PresenceDocument({**stored.seen, **seen})))
             registry.carry_text(json.dumps(document, indent=2))
         return Carried(
             1,
