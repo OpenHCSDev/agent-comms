@@ -431,7 +431,7 @@ class CommsTodoCreateTool(CommsOrderTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller], ThreadToolRequest):
+class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller, TodoChanged], ThreadToolRequest):
     label = "Claim order delivery"
     description = (
         "Record the holder's delivery claim and answer its teammate. "

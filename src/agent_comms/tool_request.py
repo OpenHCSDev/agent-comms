@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import get_original_bases
-from typing import Self, Annotated, ClassVar, NoReturn, cast, get_args, get_origin
+from typing import Self, Annotated, ClassVar, NoReturn, TypeVar, cast, get_args, get_origin
 
 from agent_comms_hooks import ToolRefusedError
 from pydantic import JsonValue
@@ -152,16 +152,41 @@ class ToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResu
     def result_type(cls) -> type[Result]:
         """The result this request declares once, as the family's second type argument in its
         own or an inherited class header, followed through every intermediate generic parent;
-        a remote reply decodes into it."""
-        bindings: dict[object, object] = {}
+        a remote reply decodes into it.
+
+        A header that omits the argument still reads as the family default (ToolResult), so
+        every path's binding is collected and the most derived wins: a result declared on one
+        parent refines the default another parent inherited. Unrelated declarations conflict."""
+        bindings: dict[object, list[object]] = {}
         requests = cls.__mro__[:cls.__mro__.index(ToolRequest) + 1]
         for declaration in cls.__mro__:
             generic = (base for base in get_original_bases(declaration) if get_origin(base) in requests)
             for base in generic:
                 for parameter, argument in zip(get_origin(base).__type_params__, get_args(base)):
-                    bindings.setdefault(parameter, bindings.get(argument, argument))
+                    bindings.setdefault(parameter, []).append(argument)
+
+        def declared_by(parameter: object, seen: frozenset[object]) -> list[type]:
+            found: list[type] = []
+            for argument in bindings.get(parameter, ()):
+                if isinstance(argument, TypeVar):
+                    if argument not in seen:
+                        found.extend(declared_by(argument, seen | {argument}))
+                else:
+                    found.append(argument)
+            return found
+
         declared = ToolRequest.__type_params__[1]
-        return cast(type[Result], bindings.get(declared, declared))
+        default = declared.__default__
+        candidates = list(dict.fromkeys(
+            found for found in declared_by(declared, frozenset({declared})) if found is not default
+        )) or [default]
+        if len(candidates) == 1:
+            return cast(type[Result], candidates[0])
+        for result in candidates:
+            if isinstance(result, type) and all(
+                    isinstance(other, type) and issubclass(result, other) for other in candidates):
+                return cast(type[Result], result)
+        raise TypeError(f"{cls.__name__} declares unrelated results: {candidates}")
 
     @classmethod
     def invoke(
@@ -297,21 +322,22 @@ class NativeToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = To
             call_id=call_id, declared_name=cls.declared_name, arguments=arguments)
 
 
-class PublishingTool[Caller: ToolCaller = ToolCaller]:
+class PublishingTool[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResult]:
     """A publication refuses at its store's write guard during maintenance; waiting here
     would hold the connector's stop."""
 
-    def apply(self, comms: Comms, caller: Caller) -> ToolResult:
+    def apply(self, comms: Comms, caller: Caller) -> Result:
         return self.publish(comms, caller)
 
     @abstractmethod
-    def publish(self, comms: Comms, caller: Caller) -> ToolResult: ...
+    def publish(self, comms: Comms, caller: Caller) -> Result: ...
 
 
-class PublishingToolRequest[Caller: ToolCaller = ToolCaller](
-    PublishingTool[Caller], ToolRequest[Caller], declared_name=None,
+class PublishingToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResult](
+    PublishingTool[Caller, Result], ToolRequest[Caller, Result], declared_name=None,
 ):
-    """Requests using the shared publication capability."""
+    """Requests using the shared publication capability. Each binds the result its publication
+    returns once, here in its base list; a remote caller decodes the reply into it."""
 
 
 class LiveOwnerTool:
