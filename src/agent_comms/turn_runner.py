@@ -487,9 +487,7 @@ class TurnRunner:
                 )
                 try:
                     result = await execution.run(
-                        on_compaction=AcpEventConsumer(
-                            self.effects, session_id, self.runtime,
-                        ).dispatch,
+                        publication=AcpEventConsumer(self.effects, session_id, self.runtime),
                         pi_session=self.backend_for(session_id, owner),
                         following=following,
                     )
