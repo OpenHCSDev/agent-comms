@@ -10,7 +10,6 @@ import pytest
 
 from agent_comms.team import judge
 from agent_comms_hooks import ToolRefusedError
-from agent_comms.team_heartbeat import TeamHeartbeat
 from agent_comms.closed_pull_requests import ClosedPullRequestWatch
 from agent_comms.team.publication_rules import (
     ClosedPullRequestScanPending, ClosedUnmergedPullRequest,
@@ -40,19 +39,18 @@ def test_unscanned_repository_is_pending_not_lost(head_bus, reviewed_source):
         7, 'closed/7', source.branch_commit, closed_at=stamp, updated=stamp,
         base='main', reviewable_times=(stamp,)))
     repos = comms.registry.snapshot().team_project.require().repository_names()
-    plans = TeamHeartbeat()
 
     def rules(frame):
         return (ClosedUnmergedPullRequest.scan_observed(comms, (), frame),
                 ClosedPullRequestScanPending.scan_observed(comms, (), frame))
 
-    lost, pending = rules(capture_frame(comms, ProgressRead(()), plans))
+    lost, pending = rules(capture_frame(comms, ProgressRead(())))
     assert lost == ()
     assert {rule.repo for rule in pending} == set(repos)
 
     watch = ClosedPullRequestWatch()
     asyncio.run(watch.run(lambda: nullcontext(comms)))
-    lost, pending = rules(capture_frame(comms, ProgressRead(()), plans))
+    lost, pending = rules(capture_frame(comms, ProgressRead(())))
     assert {rule.request.pr for rule in lost} == {7}
     assert source.github not in {rule.repo for rule in pending}
 
@@ -70,7 +68,7 @@ def test_unrelated_closed_head_does_not_poison_its_repository(head_bus, reviewed
             base='main', reviewable_times=(stamp,)))
     watch = ClosedPullRequestWatch()
     asyncio.run(watch.run(lambda: nullcontext(comms)))
-    frame = capture_frame(comms, ProgressRead(()), TeamHeartbeat())
+    frame = capture_frame(comms, ProgressRead(()))
     rules = {rule.request.pr: rule for rule in
              ClosedUnmergedPullRequest.scan_observed(comms, (), frame)}
     assert set(rules) == {7, 10}
@@ -96,7 +94,7 @@ def test_closed_head_no_ref_reaches_is_compared_and_an_unservable_one_is_its_own
             number, f'closed/{number}', closed, updated=stamp, closed_at=stamp,
             base='main', reviewable_times=(stamp,)))
     asyncio.run(ClosedPullRequestWatch().run(lambda: nullcontext(comms)))
-    frame = capture_frame(comms, ProgressRead(()), TeamHeartbeat())
+    frame = capture_frame(comms, ProgressRead(()))
     rules = {rule.request.pr: rule for rule in
              ClosedUnmergedPullRequest.scan_observed(comms, (), frame)}
     assert rules[7].base == SharedCommitBase(source.main_commit)
@@ -142,11 +140,10 @@ def test_closed_unmerged_pull_request_flags_lost_commits(head_bus, reviewed_sour
         return ClosedUnmergedPullRequest.scan_observed(comms, (), frame)
 
     watch = ClosedPullRequestWatch()
-    plans = TeamHeartbeat()
 
     def capture():
         asyncio.run(watch.run(lambda: nullcontext(comms)))
-        return capture_frame(comms, ProgressRead(()), plans)
+        return capture_frame(comms, ProgressRead(()))
 
     frame = capture()
     found = {rule.request.pr: rule for rule in scan(frame)}

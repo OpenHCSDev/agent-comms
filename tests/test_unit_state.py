@@ -12,9 +12,9 @@ import pytest
 
 from agent_comms.activity import ActivityState
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.team_heartbeat import TeamHeartbeat, TeamObservation
+from agent_comms.team_heartbeat import TeamObservation
 from agent_comms.team_hud import TeamFrame
-from team_heartbeat_fixture import ObservedHeartbeat, capture_frame, current_hud, observe_team
+from team_heartbeat_fixture import LIVE_PLAN_READINGS, ObservedHeartbeat, capture_frame, current_hud, observe_team
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.nominal.field_codec import OrderId, ToolCallId
 from agent_comms.goal_actions import CreateProblemGoalAction
@@ -320,7 +320,7 @@ def test_failed_object_preparation_is_canonical_unread_progress_not_a_normal_car
     Repo.git(directory, "update-ref", "refs/remotes/publication/main", head)
     Repo.git(directory, "config", f"branch.{branch}.remote", "publication")
     Repo.git(directory, "config", f"branch.{branch}.merge", "refs/heads/main")
-    plans = TeamHeartbeat()
+    plans = LIVE_PLAN_READINGS
     with LaunchRoot.from_path(held_bus.root).selected():
         prepared = TeamInputs.prepare(held_bus, held_bus.registry.snapshot().team_project.require(), ProgressRead(), plans)
         progress = prepared.pulls.progress((todo,), held_bus.registry)[todo.id]
