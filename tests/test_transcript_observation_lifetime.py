@@ -24,7 +24,7 @@ from test_runtime import until
 @pytest.fixture
 async def headless_owner(comms, tmp_path, caplog, native_runtime_package):
     owner = canonical_agent(comms, agent_bin=GivenBinary('pi'),
-                            runtime_enabled=True, auto_wake=False)
+                            auto_wake=False)
     try:
         thread = await Coordination.run_worker(
             partial(owner.sessions.declare_thread, str(tmp_path))

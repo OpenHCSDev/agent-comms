@@ -35,7 +35,7 @@ async def test_saved_owner_dm_replies_and_core_reads_exact_native_proof(tmp_path
         async with AsyncExitStack() as lifetime:
             lifetime.enter_context(trace.active())
             agent, session = await lifetime.enter_async_context(
-                native.open_owner(runtime_enabled=True, auto_wake=True))
+                native.open_owner(auto_wake=True))
             comms = agent._comms
             comms.threads.claim_thread('sender', tags=frozenset(), worktree=Checkout(native.project))
             native.provider.text = 'The bus-owned native proof answered.'

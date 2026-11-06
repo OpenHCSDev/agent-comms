@@ -36,7 +36,7 @@ async def run_host(comms: Comms, listener_fd: int) -> None:
         if not host.runs_here():
             raise ValueError("This process is not the root's reserved worker host")
         async with Coordination.worker(CoordinationStore.path_in(comms.root)):
-            agent = CommsAgent(comms, runtime_enabled=True)
+            agent = CommsAgent(comms, auto_wake=True)
             stopped = asyncio.Event()
             loop = asyncio.get_running_loop()
             for sig in (signal.SIGTERM, signal.SIGINT):

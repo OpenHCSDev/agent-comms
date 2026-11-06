@@ -126,7 +126,7 @@ class TestEndToEndLifecycle:
         assert (await cli(source_programs, native.root, 'inbox', '--thread', 'a'))['messages'] == []
 
     async def test_acp_client_and_cli_share_one_wire(self, native, source_programs):
-        async with native.open_owner() as (agent, session):
+        async with native.open_owner(auto_wake=False) as (agent, session):
             await cli(source_programs, native.root, 'register', '--name', 'cli-agent',
                       '--worktree', str(native.project))
             await cli(source_programs, native.root, 'send', '--from', 'cli-agent', '--to', session,

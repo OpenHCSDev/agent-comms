@@ -17,7 +17,7 @@ async def test_bus_turn_thinking_and_reply_reach_a_subscribed_viewer_live(tmp_pa
         await native.author_history()
         async with AsyncExitStack() as lifetime:
             agent, session = await lifetime.enter_async_context(
-                native.open_owner(runtime_enabled=True, auto_wake=True))
+                native.open_owner(auto_wake=True))
             comms = agent._comms
             viewer = canonical_agent(comms, auto_wake=False)
             received = []

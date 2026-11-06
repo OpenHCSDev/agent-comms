@@ -92,7 +92,7 @@ def session_project(tmp_path: Path) -> Path:
 
 class TestHandlers:
     def _agent(self, tmp_path: Path) -> CommsAgent:
-        return canonical_agent(wire(tmp_path / "wire"))
+        return canonical_agent(wire(tmp_path / "wire"), auto_wake=False)
 
     async def test_initialize_echoes_protocol_version(self, tmp_path):
         agent = self._agent(tmp_path)
@@ -123,7 +123,7 @@ class TestHandlers:
         agent._comms.agents.observe_runtime_info(
             "proj", ae.AgentInfo(model=DeclaredModel('test/model'), context_size=PiCount.from_wire(272000))
         )
-        reopened = canonical_agent(wire(agent._comms.root))
+        reopened = canonical_agent(wire(agent._comms.root), auto_wake=False)
         assert facts((await reopened.sessions.metadata("proj", session_id=session_id)), CoordinationChangedUpdate)[
             0
         ].context_usage == ContextUsage(38723, 272000)
@@ -139,7 +139,7 @@ class TestHandlers:
 
         monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "openrouter/one")
         agent = canonical_agent(
-            wire(tmp_path / "wire"), agent_args=GivenArguments(("--provider", "openrouter", "--model", "one",))
+            wire(tmp_path / "wire"), agent_args=GivenArguments(("--provider", "openrouter", "--model", "one",)), auto_wake=False
         )
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         with pytest.raises(RequestError):
@@ -244,7 +244,7 @@ class TestHandlers:
             await agent.shutdown()
 
     async def test_new_session_starts_after_existing_wire_history(self, tmp_path, native_runtime_package):
-        agent = canonical_agent(wire(tmp_path / "wire"))
+        agent = canonical_agent(wire(tmp_path / "wire"), auto_wake=False)
         agent._comms.registry.declare(NativeThread(name='peer', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         agent._comms.messaging.send("peer", "#all", "old message")
         response = await agent.new_session(cwd="/wt/proj", mcp_servers=[])
@@ -257,7 +257,7 @@ class TestHandlers:
     async def test_same_cwd_allocates_distinct_threads(
         self, tmp_path: Path, session_project: Path, native_runtime_package,
     ):
-        agent = canonical_agent(wire(tmp_path / "wire"), runtime_enabled=True)
+        agent = canonical_agent(wire(tmp_path / "wire"), auto_wake=True)
         try:
             await agent.new_session(cwd=str(session_project), mcp_servers=[])
             await asyncio.to_thread(agent._comms.owners.stop, "proj")
@@ -278,11 +278,10 @@ class TestHandlers:
         assert agent._comms.registry.require("proj").worktree == Checkout(Path("/a/proj"))
         assert agent._comms.registry.require("proj-2").worktree == Checkout(Path("/b/proj"))
 
-    async def test_separate_servers_in_same_cwd_get_distinct_threads(self, tmp_path, native_runtime_package):
-        first = self._agent(tmp_path)
-        second = self._agent(tmp_path)
-        first_response = await first.new_session(cwd="/wt/proj", mcp_servers=[])
-        second_response = await second.new_session(cwd="/wt/proj", mcp_servers=[])
+    async def test_a_second_session_in_the_same_cwd_gets_a_distinct_thread(self, tmp_path, native_runtime_package):
+        agent = self._agent(tmp_path)
+        first_response = await agent.new_session(cwd="/wt/proj", mcp_servers=[])
+        second_response = await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         assert first_response.session_id == "proj"
         assert second_response.session_id == "proj-2"
 
@@ -342,7 +341,7 @@ class TestHandlers:
         ]
 
     async def test_prompt_broadcasts_to_global_channel(self, tmp_path, native_runtime_package):
-        agent = canonical_agent(wire(tmp_path / "wire"))
+        agent = canonical_agent(wire(tmp_path / "wire"), auto_wake=False)
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         response = await agent.prompt(
             session_id="proj", prompt=[TextContentBlock(type="text", text="!relay hello all")]
@@ -476,7 +475,7 @@ class TestWireProtocol:
 
 class TestLiveDrain:
     async def test_cancel_keeps_background_drain_live(self, tmp_path, native_runtime_package):
-        agent = canonical_agent(wire(tmp_path / "wire"))
+        agent = canonical_agent(wire(tmp_path / "wire"), auto_wake=False)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         await agent.prompt(
             session_id="proj", prompt=[TextContentBlock(type="text", text="!relay hi")]
@@ -571,7 +570,7 @@ class TestTargetPrefix:
         assert parse_target(text) == target
 
     async def test_dm_prompt_reaches_only_target(self, wired, native_runtime_package):
-        agent = canonical_agent(wired)
+        agent = canonical_agent(wired, auto_wake=False)
         wired.registry.declare(NativeThread(name='peer', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         await agent.prompt(

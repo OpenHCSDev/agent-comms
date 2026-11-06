@@ -55,7 +55,7 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
         await saved.author_history()
         source = SourceRepository.create(tmp_path / 'source')
         (saved.project / 'probe.txt').write_text('following input reached the new turn\n')
-        async with saved.open_owner(native_options=()) as (agent, session_id):
+        async with saved.open_owner(native_options=(), auto_wake=False) as (agent, session_id):
             comms = agent._comms
             worker = agent.sessions.require(session_id)
             declare_team(comms, NativeThread(

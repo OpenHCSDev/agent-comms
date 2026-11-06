@@ -29,7 +29,7 @@ def goal_updates(metadata) -> tuple[GoalChangedUpdate, ...]:
 async def test_goal_edit_and_history_over_owner_socket(tmp_path, monkeypatch, native_runtime_package, caplog):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
-    owner = canonical_agent(comms, agent_bin=GivenBinary("pi"), agent_args=GivenArguments(()), runtime_enabled=True)
+    owner = canonical_agent(comms, agent_bin=GivenBinary("pi"), agent_args=GivenArguments(()), auto_wake=True)
     # Keep this non-provider test's goal paused. Edits must preserve that state.
     project = tmp_path / "project"
     project.mkdir()
@@ -44,7 +44,7 @@ async def test_goal_edit_and_history_over_owner_socket(tmp_path, monkeypatch, na
             updates.append(update.model_dump(mode="json", by_alias=True, exclude_none=True))
             return True
 
-    observer = canonical_agent(comms)
+    observer = canonical_agent(comms, auto_wake=False)
     observer.on_connect(Client())
     proxy = observer._create_runtime_proxy(comms.registry.require(session), session)
     try:

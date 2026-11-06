@@ -32,7 +32,7 @@ async def test_message_injects_into_next_tool_call(
         practice.include(tuple(RootFile.existing_in(private_comms.root)))
         await native.author_history()
         async with native.open_owner(
-            runtime_enabled=True, auto_wake=True, native_options=(),
+            auto_wake=True, native_options=(),
         ) as (agent, session):
             comms = agent._comms
             comms.threads.claim_thread('sender', tags=frozenset(), worktree=Checkout(native.project))

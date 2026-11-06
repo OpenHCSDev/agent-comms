@@ -299,7 +299,7 @@ async def _acp_threshold(comms, project, session, native_bin, native_args, child
         monkeypatch.setenv(key, value)
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(comms.root))
     owner = CommsAgent(
-        comms, agent_bin=GivenBinary(native_bin), agent_args=GivenArguments(tuple(native_args)), runtime_enabled=True,
+        comms, agent_bin=GivenBinary(native_bin), agent_args=GivenArguments(tuple(native_args)), 
         auto_wake=False,
     )
     updates = []

@@ -9,7 +9,7 @@ async def test_new_pi_thread_requests_one_concise_title(
     private_comms, monkeypatch, native_runtime_package
 ):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
-    agent = CommsAgent(private_comms, agent_args=GivenArguments(("--model", "test/model",)))
+    agent = CommsAgent(private_comms, agent_args=GivenArguments(("--model", "test/model",)), auto_wake=False)
     await agent.new_session("/tmp/project")
     assert agent._comms.registry.require("project").auto_title_pending
     monkeypatch.setenv("AGENT_COMMS_THREAD", "project")

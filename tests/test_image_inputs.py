@@ -64,7 +64,7 @@ def test_combined_image_budget():
 async def make_agent(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     agent = canonical_agent(
-        wire(tmp_path / "wire"), agent_bin=GivenBinary("pi-image-stub"), agent_args=GivenArguments(("--model", "test/model",))
+        wire(tmp_path / "wire"), agent_bin=GivenBinary("pi-image-stub"), agent_args=GivenArguments(("--model", "test/model",)), auto_wake=False
     )
     await agent.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])
     return agent

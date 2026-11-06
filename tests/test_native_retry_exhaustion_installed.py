@@ -77,7 +77,7 @@ async def test_installed_429_exhaustion_publishes_one_retry_owned_failure(
     launcher = str(Path(__file__).parents[1] / "stack/bin/pi-native")
     arguments = ["--provider", "limit-offline", "--model", "fixture", "--thinking", "off",
                  "--no-extensions", "--no-skills", "--no-context-files"]
-    agent = canonical_agent(private_comms, agent_bin=GivenBinary(launcher), agent_args=GivenArguments(tuple(arguments)), runtime_enabled=True)
+    agent = canonical_agent(private_comms, agent_bin=GivenBinary(launcher), agent_args=GivenArguments(tuple(arguments)), auto_wake=True)
     updates = []
 
     class Client(SessionUpdateSink):

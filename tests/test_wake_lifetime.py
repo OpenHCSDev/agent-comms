@@ -21,7 +21,7 @@ async def test_wake_lock_wait_shutdown_keeps_input_unsent_and_controller_private
     comms.registry.declare(
         NativeThread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
-    agent = CommsAgent(comms, auto_wake=True, runtime_enabled=True)
+    agent = CommsAgent(comms, auto_wake=True)
     agent.sessions.publish(AcpSessionId("owner"), comms.registry.require("owner"))
     inputs = agent.inputs
     controller = object()

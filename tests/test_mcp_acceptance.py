@@ -419,7 +419,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, native_runtime_
                     wire(tmp_path / "wire"),
                     agent_bin=GivenBinary(binary),
                     agent_args=GivenArguments(tuple(args)),
-                    runtime_enabled=True,
+                    
                     auto_wake=False,
                 )
                 retirement.push_async_callback(owner.shutdown)

@@ -114,9 +114,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(tmp_path, native_runtime_
                     ) from error
 
             assert (await event("ready"))["pid"] == process.pid
-            attached = CommsAgent(
-                comms,
-            )
+            attached = CommsAgent(comms, auto_wake=False)
             await attached.load_session(str(work), "beta")
             message = comms.messaging.send("sender", "#team", "@beta inspect module.py").message
             bus = responder(root, comms.registry)

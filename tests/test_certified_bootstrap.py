@@ -57,7 +57,7 @@ def test_truncated_coverage_cannot_hide_an_unproven_source(tmp_path, *, source_r
 
 async def test_unconfigured_acp_attach_refuses_before_creating_owner(tmp_path):
     comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms)
+    agent = CommsAgent(comms, auto_wake=False)
     with pytest.raises(PublicationActivationBlocked):
         await agent.new_session(cwd=str(tmp_path))
     assert not comms.registry.snapshot().threads

@@ -519,7 +519,6 @@ class InputObservation(ABC):
         return observation(source_prefix, entry, (
             root_id,
             self.auto_wake,
-            self.sessions.runtime_enabled,
             self.sessions.published.get(session_id),
             self.state(session_id).turn_open(),
             self.state(session_id).turn_task.busy,
@@ -1133,7 +1132,7 @@ class InputDrain(InputObservation):
 
     @property
     def background_wakes_disabled(self) -> bool:
-        return not self.auto_wake or not self.sessions.runtime_enabled
+        return not self.auto_wake
 
     async def accept_followup(
         self,
