@@ -39,6 +39,7 @@ from .mentions import ThreadMention
 from .message_reference import MessageReference
 from .messages import MessageInput
 from .notification_evidence import AllOutcomes, DisplayOutcomes, OutcomeViewer
+from .storage.bound_set import BoundSet
 from .storage.private_path import FileObservation, MissingFile
 from .projection_source import ProjectionSource
 from .recorded_bus import RecordedBus, RecordedBusIdentity
@@ -1047,11 +1048,10 @@ class DMDisplayScope(MessageDisplayScope):
         return self.address_predicate("{sender}", "{target}")
 
     def address_predicate(self, sender: str, target: str) -> tuple[str, tuple]:
-        first, second = tuple(self.first_names), tuple(self.second_names)
-        a, b = ",".join("?" for _ in first), ",".join("?" for _ in second)
-        return (f"(({sender} IN ({a}) AND {target} IN ({b})) OR "
-                f"({sender} IN ({b}) AND {target} IN ({a})))",
-                (*first, *second, *second, *first))
+        first, second = BoundSet(self.first_names), BoundSet(self.second_names)
+        return (f"(({first.within(sender)} AND {second.within(target)}) OR "
+                f"({second.within(sender)} AND {first.within(target)}))",
+                (*first.parameters, *second.parameters, *second.parameters, *first.parameters))
 
     @property
     def index_targets(self) -> frozenset[str]:
@@ -1069,9 +1069,8 @@ class RepliesDisplayScope(AnyTargetDisplayScope, DMDisplayScope):
 
     @property
     def condition(self) -> tuple[str, tuple]:
-        names = tuple(self.first_names | self.second_names)
-        marks = ",".join("?" for _ in names)
-        return f"{{sender}} IN ({marks})", names
+        names = BoundSet(self.first_names | self.second_names)
+        return names.within("{sender}"), names.parameters
 
     def includes(self, message: Message) -> bool:
         return message.sender in self.first_names or (
@@ -1094,7 +1093,8 @@ class ListedDeliveries(MessageDisplayScope):
 
     @property
     def condition(self) -> tuple[str, tuple]:
-        return "{seq} IN (" + ",".join("?" for _ in self.sequences) + ")", tuple(self.sequences)
+        sequences = BoundSet(self.sequences)
+        return sequences.within("{seq}"), sequences.parameters
 
     def includes(self, message: Message) -> bool:
         return message.seq in self.sequences and self.scope.includes(message)
@@ -1124,8 +1124,8 @@ class ChannelDisplayScope(MessageDisplayScope):
 
     @property
     def condition(self) -> tuple[str, tuple]:
-        targets = tuple(self.index_targets)
-        return "{target} IN (" + ",".join("?" for _ in targets) + ")", targets
+        targets = BoundSet(self.index_targets)
+        return targets.within("{target}"), targets.parameters
 
     def identity(self, history_revision: FileObservation) -> ChannelDisplayIdentity:
         displayed = self.require_displayed()
@@ -1191,14 +1191,14 @@ class MemberActivityDisplayScope(AllTargetsDisplayScope):
 
     @property
     def condition(self) -> tuple[str, tuple]:
-        targets, names = tuple(self.targets), tuple(self.participant_names)
-        target_marks, name_marks = ",".join("?" for _ in targets), ",".join("?" for _ in names)
+        targets, names = BoundSet(self.targets), BoundSet(self.participant_names)
         mention_key = FieldCodec.field_plan(ThreadMention, "thread").key
-        return (f"{{target}} IN ({target_marks}) OR {{sender}} IN ({name_marks}) OR "
-                f"({{target}} NOT LIKE '#%' AND {{target}} IN ({name_marks})) OR "
+        return (f"{targets.within('{target}')} OR {names.within('{sender}')} OR "
+                f"({{target}} NOT LIKE '#%' AND {names.within('{target}')}) OR "
                 f"EXISTS (SELECT 1 FROM json_each({{mentions}}) "
-                f"WHERE json_extract(value,?) IN ({name_marks}))",
-                (*targets, *names, *names, f"$.{mention_key}", *names))
+                f"WHERE {names.within('json_extract(value,?)')})",
+                (*targets.parameters, *names.parameters, *names.parameters, f"$.{mention_key}",
+                 *names.parameters))
 
     def includes(self, message: Message) -> bool:
         return self._includes(message.sender, message.target,
@@ -1253,14 +1253,14 @@ class UnreadQuery:
         cursors = [{key: row.cursor for key, row in side.items()} for side in (before, after)]
         floor = min(cursors[0].get(key, ConversationCursor()).agrees_through(
             cursors[1].get(key, ConversationCursor())) for key in changed)
-        targets = tuple(sorted({row.target for row in rows}))
+        targets = BoundSet(frozenset(row.target for row in rows))
         return earlier.within(targets, floor), self.within(targets, floor)
 
-    def within(self, targets: tuple[str, ...], floor: int) -> UnreadQuery:
+    def within(self, targets: BoundSet[str], floor: int) -> UnreadQuery:
         """This query over only these targets' rows above floor; every row at or below a
         moved conversation's lower high water is read under both cursors."""
         return replace(self, lower_bound=max(self.lower_bound, floor),
-                       predicate=f"({self.predicate}) AND target IN ({', '.join('?' * len(targets))})",
-                       parameters=(*self.parameters, *targets))
+                       predicate=f"({self.predicate}) AND {targets.within('target')}",
+                       parameters=(*self.parameters, *targets.parameters))
 
 

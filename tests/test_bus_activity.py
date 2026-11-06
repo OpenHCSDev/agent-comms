@@ -8,7 +8,7 @@ from agent_comms.bus import PublicRecord
 from agent_comms.mentions import ThreadMention
 from agent_comms.messages import InfoKind, Message, NoticeRole
 from agent_comms.read_basis import (
-    AllChannelDisplayScope, ChannelDisplayScope, MemberActivityDisplayScope,
+    AllChannelDisplayScope, ChannelDisplayScope, ListedDeliveries, MemberActivityDisplayScope,
 )
 from agent_comms.thread_identity import UserThreadRole
 
@@ -123,3 +123,13 @@ def test_open_boundary_never_holds_the_registry_against_its_writers(private_comm
         assert acquired == [True]
         with pytest.raises(StaleFence, match="registry revision changed"), boundary.registry_cut.current():
             pass
+
+
+def test_equal_scopes_bind_equal_conditions_however_their_sets_were_built():
+    # Small ints hash to themselves, so these two equal sets iterate in their build order in
+    # every process: (0, 8) and (8, 0).
+    built_up, built_down = frozenset((0, 8)), frozenset((8, 0))
+    assert built_up == built_down and tuple(built_up) != tuple(built_down)
+    scope = AllChannelDisplayScope("#any")
+    assert (ListedDeliveries(scope, built_up, frozenset()).condition
+            == ListedDeliveries(scope, built_down, frozenset()).condition)
