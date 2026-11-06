@@ -100,7 +100,7 @@ from .transport.mcp import (
     ParseError,
     declared,
 )
-from .tool_request import ConnectorService, NoConnectorService
+from .tool_request import ConnectorService, NoConnectorService, ServedRequest
 from .transport.request import ToolRequest, tool_field
 
 """A JSON-RPC request id, as the client chose it."""
@@ -294,7 +294,7 @@ class Connector(ConnectorService, McpServer):
     )
 
     calls: dict[
-        asyncio.Task[AnsweredCall], type[ToolRequest] | type[ConnectorTool],
+        asyncio.Task[AnsweredCall], type[ServedRequest],
     ] = field(
         default_factory=dict, init=False, repr=False, compare=False,
     )
@@ -357,7 +357,7 @@ class Connector(ConnectorService, McpServer):
                                       if not task.done())) or "none")
 
     async def call(
-        self, tool: type[ToolRequest] | type[ConnectorTool],
+        self, tool: type[ServedRequest],
         arguments: Mapping[str, object], caller: ConnectorCaller, observer: WireExportObserver,
     ) -> AnsweredCall:
         """Start once; a disconnected HTTP client cannot abandon its write."""
@@ -409,7 +409,7 @@ class Connector(ConnectorService, McpServer):
         yield wire(self.root)
 
     def invoke(
-        self, tool: type[ToolRequest] | type[ConnectorTool], arguments: Mapping[str, object],
+        self, tool: type[ServedRequest], arguments: Mapping[str, object],
         caller: ConnectorCaller, observer: WireExportObserver,
     ) -> AnsweredCall:
         tool.require_entry_open(self.root)

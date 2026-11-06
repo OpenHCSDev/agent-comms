@@ -48,7 +48,6 @@ from agent_comms.ui_model.observation import (
 )
 
 
-from test_tool_replies import result_type
 
 def test_notification_read_states_use_the_request_revision_contract(comms):
     original = WireRevision.empty()
@@ -369,7 +368,7 @@ def test_the_three_public_reads_are_cataloged_once_with_their_original_results()
                TranscriptPageRead: TranscriptSnapshotUpdate}
     for operation, result in results.items():
         assert tools.count(operation) == 1 and native.count(operation) == 1
-        assert result_type(operation) is result
+        assert operation.result_type() is result
     assert set(ToolRequest.members_with(UiRead)) == {TeammateRead, TranscriptPageRead}
     assert ToolRequest.members_with(OwnerScopedRead) == NativeRequestTools.members_with(OwnerScopedRead)
     lifecycle = (ReadOperation, ReadOwnerOperation, ReadNotifications, ReadTranscript,

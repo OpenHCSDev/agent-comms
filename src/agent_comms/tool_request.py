@@ -34,7 +34,6 @@ from .nominal.field_codec import (
 )
 from .storage.maintenance_barrier import FreshIngress
 from .native_tools import CoordinationCall, NativeToolDeclaration
-from .transport.request import ArgumentTool
 from .threads import ThreadCommandAvailability
 from .tool_caller import NoThreadCaller, ThreadCaller, ToolCaller
 from .tool_declaration import NativeRequestTools, ToolDeclaration
@@ -48,6 +47,7 @@ from .transport.request import (
     RequestPoster,
     SubjectBinding,
     ToolCall,
+    declared_result,
     ToolRequest,
     tool_field,
 )
@@ -78,13 +78,15 @@ class ServedRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolRe
 
     @classmethod
     def result_type(cls) -> type[Result]:
-        """What this request's apply returns, while a member still declares its result there;
-        otherwise the result its declaration binds in its header."""
+        """What this request's apply returns, while a member still declares its result there.
+        A generic apply names its owner's own type parameter (OwnerScopedRead's Result, not
+        necessarily ToolRequest's), so that parameter is the one followed through the headers."""
         apply = cls.apply
         owner = next(declaration for declaration in cls.__mro__ if "apply" in vars(declaration))
         annotation = get_annotations(apply, format=Format.STRING)["return"]
-        if annotation in {parameter.__name__ for parameter in owner.__type_params__}:
-            return super().result_type()
+        parameters = {parameter.__name__: parameter for parameter in owner.__type_params__}
+        if annotation in parameters:
+            return cast(type[Result], declared_result(cls, parameters[annotation]))
         return cast(type[Result], ForwardRef(annotation, module=apply.__module__).evaluate())
 
     @classmethod

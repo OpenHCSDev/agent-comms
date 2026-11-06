@@ -37,6 +37,7 @@ from .tool_declaration import (
     one_line,
 )
 from .tool_denial import SelectedToolDenied
+from .transport.request import ArgumentTool
 
 if TYPE_CHECKING:
     from .pi_payloads import PiToolResult

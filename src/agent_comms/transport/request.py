@@ -98,7 +98,9 @@ class ToolCall:
     meta: Annotated[dict[str, object], WireName("_meta")] = field(default_factory=dict)
 
 
-class ToolRequest[Result: ToolResult = ToolResult](FreshIngress, ArgumentTool, ToolDeclaration):
+class ToolRequest[Result: ToolResult = ToolResult](
+    FreshIngress, ArgumentTool, ToolDeclaration, declared_name=None
+):
     """A tool request as the wire declares it: its fields, name, schema and result. Serving it
     (decoding a call, running apply under a caller) is ServedRequest's, in agent_comms.tool_request."""
 
