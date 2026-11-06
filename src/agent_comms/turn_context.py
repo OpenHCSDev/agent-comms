@@ -242,6 +242,23 @@ class ContextSourceText(ToolResult):
     description: str
     text: str
 
+    def span_text(self, coordinates: ContributionCoordinates) -> str:
+        """A span's own bytes, proved against this original text."""
+        return coordinates.public_text(self.text)
+
+
+@dataclass(frozen=True)
+class UnretainedSourceText(ContextSourceText):
+    """A saved record that kept no public text. Its text says so, and a span cannot be proved
+    against a notice, so a span reads as the notice too."""
+
+    text: str = (
+        "Public SDK text was not retained in this saved record; no live preview is available."
+    )
+
+    def span_text(self, coordinates: ContributionCoordinates) -> str:
+        return self.text
+
 
 @dataclass(frozen=True)
 class InstructionFile:
@@ -399,6 +416,13 @@ class SegmentManifest(ToolResult):
             return True
         parts = self.recorded_parts()
         return bool(parts) and all(part.public_text_recorded for part in parts)
+
+    def saved_source_text(self) -> ContextSourceText:
+        """What a saved record of this segment can show: its retained text, or that none was kept.
+        A saved record has no live owner to read the rest from."""
+        if self.public_text_recorded:
+            return ContextSourceText(self.public_description(), self.recorded_public_text({}))
+        return UnretainedSourceText(self.public_description())
 
 
 @dataclass(frozen=True)
