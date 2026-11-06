@@ -717,8 +717,10 @@ class TurnOwnerIdentityPhase(RemainingSlopPhase):
 class FormatIdentityPhase(RemainingSlopPhase):
     """4.7: the FieldCodec-derived schema is a stored format's identity."""
 
+    # Bracketed so the declaration is not itself a match: unbracketed, this line was the one
+    # occurrence left in src and the phase could never be done.
     evidence = PatternAbsent(
-        r"format_fingerprint|_canonical_schema|convert_format|source_fingerprints"
+        r"[f]ormat_fingerprint|_[c]anonical_schema|[c]onvert_format|[s]ource_fingerprints"
     )
 
 
