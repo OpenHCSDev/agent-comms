@@ -49,19 +49,20 @@ class ThreadReferenceIdentity:
         return self.incarnation.name
 
 
-UnreadT = TypeVar("UnreadT")
+ReadT = TypeVar("ReadT")
 
 
-class ThreadUnreadSource(ABC, Generic[UnreadT]):
-    """What answers a thread reference's unread count."""
-
-    @abstractmethod
-    def bus_unread(self, target: str) -> UnreadT:
-        """The unread count of the thread currently registered under this name."""
+class ThreadReferenceReader(ABC, Generic[ReadT]):
+    """A question whose answer differs between a current and a retired birth. The reference
+    calls the hook for what it is, so no reader tests which member it holds."""
 
     @abstractmethod
-    def retired_unread(self) -> UnreadT:
-        """A retired birth's answer: it has nothing unread to show."""
+    def current(self, reference: ThreadDisplayReference) -> ReadT:
+        """The answer for a birth the cut holds, whose name is current."""
+
+    @abstractmethod
+    def retired(self, reference: RetiredThreadReference) -> ReadT:
+        """The answer for a birth the cut no longer holds; its name may belong to a successor."""
 
 
 @dataclass(frozen=True)
@@ -74,8 +75,8 @@ class ThreadReference(ThreadReferenceIdentity, DisplayReference, declared_name=N
         """Where a send to this birth goes."""
 
     @abstractmethod
-    def unread_from(self, source: ThreadUnreadSource[UnreadT]) -> UnreadT:
-        """This birth's unread count, read from the source."""
+    def read(self, reader: ThreadReferenceReader[ReadT]) -> ReadT:
+        """The reader's answer for this birth."""
 
 
 @dataclass(frozen=True)
@@ -85,8 +86,8 @@ class ThreadDisplayReference(ThreadReference):
     def target(self) -> ThreadTarget:
         return ThreadTarget(self.name)
 
-    def unread_from(self, source: ThreadUnreadSource[UnreadT]) -> UnreadT:
-        return source.bus_unread(self.name)
+    def read(self, reader: ThreadReferenceReader[ReadT]) -> ReadT:
+        return reader.current(self)
 
 
 @dataclass(frozen=True)
@@ -101,8 +102,8 @@ class RetiredThreadReference(ThreadReference):
         # Addresses the original birth, which refuses once it is unregistered.
         return IncarnationThreadTarget(self.incarnation)
 
-    def unread_from(self, source: ThreadUnreadSource[UnreadT]) -> UnreadT:
-        return source.retired_unread()
+    def read(self, reader: ThreadReferenceReader[ReadT]) -> ReadT:
+        return reader.retired(self)
 
 
 @dataclass(frozen=True)
