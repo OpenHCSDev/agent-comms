@@ -8,12 +8,16 @@ from pathlib import Path
 from typing import AsyncIterator, ClassVar
 
 import aiohttp
+from aiohttp import ClientError
 from pydantic import JsonValue
 
 from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.team_hud import CodexUsage, UnreadableUsage
+from agent_comms.usage_reading import RateLimits
+
 from .codex_protocol import (
-    Capabilities, ClientInfo, Initialize, InitializeResponse, Initialized, Request,
-    RPC_RESPONSE, RateLimits, RateLimitsResponse, ReadRateLimits, RequestParams, RpcNotification, RpcReply,
+    Capabilities, ClientInfo, CodexRefused, Initialize, InitializeResponse, Initialized, Request,
+    RPC_RESPONSE, RateLimitsResponse, ReadRateLimits, RequestParams, RpcNotification, RpcReply,
 )
 
 
@@ -73,6 +77,14 @@ class CodexConnection:
                     clientInfo=ClientInfo(), capabilities=Capabilities())))
                 await socket.send_str(Initialized().model_dump_json())
                 yield connection
+
+    @classmethod
+    def usage(cls) -> CodexUsage:
+        """The team HUD's usage line: the account's limits, or why they could not be read."""
+        try:
+            return CodexUsage(asyncio.run(cls.rate_limits()))
+        except (OSError, ClientError, CodexRefused) as error:
+            return CodexUsage(UnreadableUsage(reason=f'{type(error).__name__}: {error}'))
 
     @classmethod
     async def rate_limits(cls) -> RateLimits:

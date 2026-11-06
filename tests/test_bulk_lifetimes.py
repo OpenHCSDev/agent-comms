@@ -9,7 +9,8 @@ from typing import ClassVar
 
 import pytest
 
-from agent_comms.cli_bridges.history import AnySession, History, OfflineHistory
+from agent_comms.cli_bridges.history import History, OfflineHistory
+from agent_comms.thread_text import AnySession
 from agent_comms.errors import RelationViolationError
 from agent_comms.cli_verbs.restore_owner import RestoreOwnerCliCommand
 from agent_comms.harness_install import Harness, PiHarness

@@ -35,7 +35,7 @@ from agent_comms.transport.request import ToolRequest
 from agent_comms.tools import CommsMessageOutcomesTool
 from agent_comms.acp_extension import GoalSnapshotReply, TranscriptSnapshotUpdate
 from agent_comms.bus_read import OwnerScopedRead
-from agent_comms.team_hud import TeammateDetail
+from agent_comms.team_hud_records import TeammateDetail
 from agent_comms.nominal.field_codec import OrderId
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.transcripts import EarlierThan, NativeTranscriptCursor

@@ -11,12 +11,8 @@ import pytest
 
 from agent_comms.cli_bridges.monitor import InspectSession
 from agent_comms_hooks.watch import NoSessionBridge
-from agent_comms.cli_bridges.session_watch import (
-    LapsedWatch,
-    LiveWatch,
-    WatchClaim,
-    WatchRecord,
-)
+from agent_comms.cli_bridges.session_watch import LapsedWatch, LiveWatch, WatchClaim
+from agent_comms_hooks.watch import WatchRecord
 
 RECORD = WatchRecord(
     "colleague", "/bus", ("agent-comms-claude-bridge", "watch", "--state", "/bus with spaces"),

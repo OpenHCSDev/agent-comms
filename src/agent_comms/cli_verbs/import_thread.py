@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from agent_comms.cli_bridges.history import AnySession
-from agent_comms.cli_bridges.history import ExpectedSession
+from agent_comms.thread_text import AnySession
+from agent_comms.thread_text import ExpectedSession
 from agent_comms.cli_bridges.history import OfflineHistory
 from agent_comms.cli_result import CliResult
 from agent_comms.cli_support.importing import ImportingCliCommand

@@ -14,8 +14,10 @@ from abc import (
 from collections.abc import (
     Callable,
     Mapping,
+    Sequence,
 )
 from dataclasses import (
+    asdict,
     dataclass,
     field,
 )
@@ -82,6 +84,23 @@ class HookAnswer(HookRecord, SessionWire):
 
 
 @dataclass(frozen=True)
+class WatchRecord:
+    bus: str
+    root: str
+    command: tuple[str, ...]
+    base_state: Path
+
+    @classmethod
+    def decode(cls, bus: str, root: str, command: Sequence[str], base_state: str) -> WatchRecord:
+        """Normalize the saved JSON array before constructing the immutable record."""
+        return cls(bus, root, tuple(command), Path(base_state))
+
+    def to_json(self) -> str:
+        """The saved command carries its declared base directory as path text."""
+        return json.dumps({**asdict(self), "base_state": str(self.base_state)})
+
+
+@dataclass(frozen=True)
 class SessionEndpoint:
     """One locator, shared by the lightweight hook and the kernel-held WatchClaim."""
 
@@ -121,6 +140,13 @@ class SessionEndpoint:
     @property
     def record_path(self) -> Path:
         return self.record_beside(self.path)
+
+    def recorded(self) -> WatchRecord:
+        return WatchRecord.decode(**json.loads(self.record_path.read_text()))
+
+    def bindings(self) -> tuple[WatchRecord, ...]:
+        """The bus thread this session is bound to, once it is enrolled; none before."""
+        return self.session().when_bound(unbound=tuple, bound=lambda: (self.recorded(),))
 
     @property
     def socket_path(self) -> Path:

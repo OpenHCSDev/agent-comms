@@ -1,11 +1,10 @@
 from __future__ import annotations
 
+from agent_comms.annotation_correction import CorrectsAnnotation
 from agent_comms.cli_command import CliCommand
 from agent_comms.cli_commands import WorktreeArgument
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import Comms
-from agent_comms.coordination.database import CoordinationStore
-from agent_comms.coordination.coordinator import Coordination
 from agent_comms.nominal.field_codec import Argument
 from agent_comms.nominal.field_codec import Editor
 from agent_comms.target_fields import ChoiceTargetField
@@ -17,7 +16,9 @@ import json
 
 
 @dataclass(frozen=True, kw_only=True)
-class CorrectAnnotationCliCommand(WorktreeArgument, CliCommand, declared_name="correct-annotation"):
+class CorrectAnnotationCliCommand(
+    CorrectsAnnotation, WorktreeArgument, CliCommand, declared_name="correct-annotation"
+):
     help = "Correct one original stored model answer through the human identity owner"
     label: Annotated[
         ModelLabel, Argument(flags=("--label",), options={"type": json.loads})
@@ -29,7 +30,4 @@ class CorrectAnnotationCliCommand(WorktreeArgument, CliCommand, declared_name="c
     ]
 
     def apply(self, ctx: Comms) -> CliResult:
-        author = ctx.messaging.user_identity(self.worktree).incarnation
-        snapshot = ctx.registry.snapshot()
-        with Coordination(str(CoordinationStore.path_in(ctx.root))) as store:
-            return store.annotations.correct(self.label, self.answer, author, snapshot)
+        return self.correct(ctx)

@@ -16,7 +16,8 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.hook_deferral import FutureOrder, Later, NextTick, TranscriptRecord
 from agent_comms.cli_bridges.hook_requests import HookReply, StopRequest
-from agent_comms.cli_bridges.session_watch import WatchClaim, WatchRecord
+from agent_comms.cli_bridges.session_watch import WatchClaim
+from agent_comms_hooks.watch import WatchRecord
 from agent_comms.comms import Comms
 from agent_comms.repo import Checkout
 from agent_comms.threads import ExternalThread

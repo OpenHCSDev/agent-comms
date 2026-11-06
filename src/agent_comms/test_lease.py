@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import pwd
+import sys
+import time
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from contextlib import AbstractContextManager, ExitStack, contextmanager
@@ -11,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, TextIO
 
-from agent_comms_hooks.process_claim import ProcessSingleton
+from agent_comms_hooks.process_claim import ClaimHeldError, ProcessSingleton
 
 from .child_process import ProcessIdentity
 from .launch_runtime import LaunchRuntime
@@ -32,10 +34,27 @@ class LeaseStart(ABC):
 @dataclass(frozen=True)
 class NewTestRun(LeaseStart):
     """A new controller queues in the kernel until the current one lets go: a refusal made
-    every caller poll by relaunching pytest, which spent the CPU the lease exists to protect."""
+    every caller poll by relaunching pytest, which spent the CPU the lease exists to protect.
+    The holder writes who it is into the lease, and a queued run says whom it waits behind:
+    on 2026-11-06 a second suite sat silent in pytest_configure for minutes behind a stale run
+    of the same session's, and nobody could see it was waiting at all."""
 
-    def claim(self, owner: ProcessSingleton) -> AbstractContextManager[TextIO]:
-        return owner.waited()
+    @contextmanager
+    def claim(self, owner: ProcessSingleton) -> Iterator[TextIO]:
+        with ExitStack() as lease:
+            try:
+                held = lease.enter_context(owner.claimed())
+            except ClaimHeldError:
+                holder = owner.path.read_text(encoding="utf-8").strip() or "an unrecorded run"
+                sys.stderr.write(f"Waiting for the host test lease; {holder} holds it.\n")
+                sys.stderr.flush()
+                held = lease.enter_context(owner.waited())
+            held.seek(0)
+            held.truncate()
+            held.write(f"PID {os.getpid()} since {time.strftime('%H:%M:%S')}"
+                       f" ({' '.join(sys.argv)[:160]})\n")
+            held.flush()
+            yield held
 
 
 @dataclass(frozen=True)

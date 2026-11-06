@@ -50,7 +50,8 @@ from agent_comms.bus_read import CapturesTranscriptPage, OwnerScopedRead, UiRead
 from agent_comms.transport.request import ToolRequest
 from agent_comms.child_process import HelperStart, SpawnedHelper, join_retirement
 from agent_comms.input_disposition import DeliveryOverview
-from agent_comms.team_hud import TeamFrame, TeamHud, TeammateDetail
+from agent_comms.team_hud import TeamFrame, TeamHud
+from agent_comms.team_hud_records import TeammateDetail
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import (

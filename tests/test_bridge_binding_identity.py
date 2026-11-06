@@ -5,7 +5,8 @@ from pathlib import Path
 import pytest
 
 from agent_comms.cli_bridges.claude import ClaudeBridge
-from agent_comms.cli_bridges.session_watch import LiveWatch, WatchClaim, WatchRecord
+from agent_comms.cli_bridges.session_watch import LiveWatch, WatchClaim
+from agent_comms_hooks.watch import WatchRecord
 from agent_comms.cli_bridges.shared import (
     Binding,
     BindingAddress,
@@ -34,7 +35,7 @@ async def test_enrol_register_rename_and_rebind_preserve_reader(comms, tmp_path,
         bridge = ClaudeBridge(Options(Enrol(), StoredBinding(), state, state.parent), address, db)
         await bridge.options.operation.prepare(bridge)
         await bridge.options.operation.execute(bridge)
-        assert WatchClaim('session').state().bindings()[0].bus == 'new-reader'
+        assert WatchClaim('session').bindings()[0].bus == 'new-reader'
         assert not comms.registry.snapshot().taken('new-reader')
         assert Binding.select(db) == []
 

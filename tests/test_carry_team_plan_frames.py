@@ -7,9 +7,8 @@ from agent_comms.nominal.field_codec import FieldCodec, RecordProblems
 from agent_comms.plan_phases import ReviewQueuePhase
 from agent_comms.storage.locked_store import LiveFilesRequest
 from agent_comms.team.vibe_check import OverloadDegradation
-from agent_comms.team_hud import (
-    CodexUsage, TeamFrame, TeamHud, TeamPhase, TeamPlan, TeamPlanDocument, UnreadableUsage,
-)
+from agent_comms.team_hud import CodexUsage, TeamFrame, TeamHud, TeamPlan, TeamPlanDocument, UnreadableUsage
+from agent_comms.team_hud_records import TeamPhase
 from agent_comms.thread_identity import RecordedThreadIncarnation
 
 

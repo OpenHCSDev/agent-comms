@@ -9,8 +9,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import BinaryIO, ClassVar, Literal, Self
 
+from agent_comms.nominal.field_codec import StoredSessionId
 from agent_comms.runtime_updates import RuntimeUpdate, SessionFacts
-from agent_comms.thread_text import NoThreadText, ThreadText
+from agent_comms.thread_text import NamedSession, NoThreadText, ThreadText
 
 from ..session_receipts import SessionReceipts
 from ..cli_protocol import TaggedWire
@@ -20,7 +21,7 @@ from ..wire_models import WireModel
 from .shared import WireReference
 from .claude_protocol import CLAUDE_RECORD, ClaudeRecord, ClaudeSession, SubagentProgress
 from .history import (
-    ClaudeHistory, HarnessAddress, JsonLines, JsonLinesFile, NamedSession,
+    ClaudeHistory, HarnessAddress, JsonLines, JsonLinesFile,
     OfflineHistory, OnlineHistory,
 )
 
@@ -87,7 +88,7 @@ class ClaudeTranscript(ClaudeJsonLines, JsonLinesFile, ClaudeHistory, OfflineHis
 
     def facts(self, stream: BinaryIO, boundary: int) -> Iterator[RuntimeUpdate]:
         """The file is named by its session; a subagent's task description is beside it, not in it."""
-        if not self.session.holds(self.source.stem):
+        if not self.session.holds(StoredSessionId(self.source.stem)):
             raise ValueError('The transcript belongs to a different Claude session.')
         meta = self.source.with_suffix('.meta.json')
         title = (ThreadText.external(SubagentMeta.model_validate_json(meta.read_bytes()).description)

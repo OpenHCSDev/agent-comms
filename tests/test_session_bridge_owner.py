@@ -1,10 +1,8 @@
 """The real SessionStart program must leave an installable serve after hook exit."""
 
-from agent_comms.cli_bridges.session_watch import (
-    LiveWatch,
-    WatchClaim,
-    WatchRecord,
-)
+from agent_comms.cli_bridges.session_watch import LiveWatch, WatchClaim
+
+from agent_comms_hooks.watch import WatchRecord
 from agent_comms.repo import Checkout
 import asyncio
 import json

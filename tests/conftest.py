@@ -1,10 +1,10 @@
 """Shared fixtures: an isolated Comms wire per test."""
 
 
-from agent_comms.cli_bridges.session_watch import (
-    WatchClaim,
-    WatchRecord,
-)
+from agent_comms.cli_bridges.session_watch import WatchClaim
+
+
+from agent_comms_hooks.watch import WatchRecord
 from agent_comms.repo import Checkout
 import asyncio
 import fcntl

@@ -23,7 +23,7 @@ from agent_comms.harness_install import (
     OpenCodeHarness,
     PiHarness,
 )
-from agent_comms.cli_bridges.history import ExpectedSession
+from agent_comms.thread_text import ExpectedSession
 from agent_comms.thread_creation import RecordedCreationTime
 from agent_comms.transcript_events import (
     ImportedMessage,
@@ -51,9 +51,8 @@ from agent_comms.cli_bridges.codex import CodexAppServer
 from agent_comms.cli_bridges.codex_connection import CodexConnection
 from agent_comms.cli_bridges.codex_protocol import BusInput, InitializeResponse, RequestParams, ItemsList
 from agent_comms.cli_bridges.codex_rollout import ROLLOUT_RECORD, ForeignItem, ForeignRecord, ResponseItemRecord
-from agent_comms.cli_bridges.history import (
-    AnySession, DefaultAddress, NamedSession, OfflineHistory, OnlineHistory,
-)
+from agent_comms.cli_bridges.history import DefaultAddress, OfflineHistory, OnlineHistory
+from agent_comms.thread_text import AnySession, NamedSession
 from agent_comms.cli_bridges.opencode import OpenCodeServer, OpenCodeConnection
 from agent_comms.cli_bridges.opencode_parts import SavedMessage
 from agent_comms.cli_bridges.opencode_protocol import Session

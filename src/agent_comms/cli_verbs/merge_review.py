@@ -51,7 +51,7 @@ class MergeReviewCliCommand(ReviewedMerge, CliCommand[MergeReviewResult], declar
     bash: Annotated[str, Argument(flags=("--bash",))]
 
     def apply(self, ctx: Comms) -> MergeReviewResult:
-        bindings = tuple(binding for binding in WatchClaim(self.session).state().bindings()
+        bindings = tuple(binding for binding in WatchClaim(self.session).bindings()
                          if Path(binding.root) == ctx.root)
         if not bindings:
             raise ToolRefusedError("The teammate session has no recorded binding to this bus; no verdict can be read.")

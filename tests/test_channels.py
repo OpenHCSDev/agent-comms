@@ -363,7 +363,8 @@ def test_saved_view_names_are_reserved_for_tags_and_legacy_channels(tmp_path):
 def test_all_implicit_tag_introduction_paths_honor_name_reservations(tmp_path, source_repository):
     import json
 
-    from agent_comms.cli_bridges.history import AnySession, OfflineHistory
+    from agent_comms.cli_bridges.history import OfflineHistory
+    from agent_comms.thread_text import AnySession
     from agent_comms.harness_install import OpenCodeHarness
 
     comms = setup_wire(tmp_path)

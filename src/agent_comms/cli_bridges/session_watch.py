@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 from abc import (
     ABC,
@@ -9,11 +8,9 @@ from abc import (
 from collections.abc import (
     Callable,
     Iterator,
-    Sequence,
 )
 from contextlib import contextmanager
 from dataclasses import (
-    asdict,
     dataclass,
 )
 from pathlib import Path
@@ -22,7 +19,9 @@ from typing import (
 )
 
 from agent_comms_hooks.process_claim import ProcessSingleton
-from agent_comms_hooks.watch import HeldSocketWatch, SessionCommandError, SessionEndpoint, SessionFailure, SocketWatch
+from agent_comms_hooks.watch import (
+    HeldSocketWatch, SessionCommandError, SessionEndpoint, SessionFailure, SocketWatch, WatchRecord,
+)
 
 from ..registry_store import RegistryStore
 from ..storage.store_files import AtomicFile
@@ -53,23 +52,6 @@ class DeafWatch:
         return (f"RE-ARM this session's watch: its bridge has no confirmed Monitor {self.since},"
                 " so every Core line to it waits unread -> re-arm its watch:"
                 " agent-comms-claude-bridge watch (bare, no pipe)")
-
-
-@dataclass(frozen=True)
-class WatchRecord:
-    bus: str
-    root: str
-    command: tuple[str, ...]
-    base_state: Path
-
-    @classmethod
-    def decode(cls, bus: str, root: str, command: Sequence[str], base_state: str) -> WatchRecord:
-        """Normalize the saved JSON array before constructing the immutable record."""
-        return cls(bus, root, tuple(command), Path(base_state))
-
-    def to_json(self) -> str:
-        """The saved command carries its declared base directory as path text."""
-        return json.dumps({**asdict(self), "base_state": str(self.base_state)})
 
 
 @dataclass(frozen=True)
@@ -153,7 +135,7 @@ class WatchClaim(SessionEndpoint):
         )
 
     def recorded_state(self, held: bool) -> WatchState:
-        record = WatchRecord.decode(**json.loads(self.record_path.read_text()))
+        record = self.recorded()
         return LiveWatch(self, record) if held else LapsedWatch(self, record)
 
     def enrol(self, record: WatchRecord) -> None:
@@ -182,10 +164,6 @@ class WatchState(SocketWatch, ABC):
     def enrol(self, claim: WatchClaim, record: WatchRecord) -> None:
         with claim.held(record):
             pass
-
-    def bindings(self) -> tuple[WatchRecord, ...]:
-        """No session binding exists until this watch is enrolled."""
-        return ()
 
     def commands(self) -> bool:
         """An unbound session commands nothing: the registry names the teammate, and only
@@ -221,9 +199,6 @@ class ClaimingWatch(WatchState):
 class RecordedWatch(WatchState):
     claim: WatchClaim
     record: WatchRecord
-
-    def bindings(self) -> tuple[WatchRecord, ...]:
-        return (self.record,)
 
     def commands(self) -> bool:
         """Enrollment may predate registration; tags never decide a bound peer's authority."""

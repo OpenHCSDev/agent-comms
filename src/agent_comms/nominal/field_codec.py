@@ -2287,6 +2287,15 @@ class AcpSessionIdText(NominalSpelling[AcpSessionId]):
     spelling = re.compile(r"\S{1,4096}")
 
 
+class StoredSessionId(NominalText):
+    """The session a harness's stored history names: a Claude transcript's stem, a Codex
+    rollout's or an OpenCode export's session, a Pi journal's entry."""
+
+
+class StoredSessionIdText(NominalSpelling[StoredSessionId]):
+    spelling = re.compile(r"\S{1,4096}")
+
+
 class Id128(NominalText):
     """A 128-bit identity; subclasses declare the kind it belongs to."""
 

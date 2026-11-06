@@ -29,10 +29,9 @@ from .acp_extension import (
 
 from .agent_event_updates import AcpEventConsumer
 from .acp_request_consumer import AcpRequestConsumer
-from agent_comms.cli_verbs.correct_annotation import CorrectAnnotationCliCommand
+from .annotation_correction import CorrectsAnnotation
 from .context_store import ContextManifestReference
 from .coordination.coordinator import Coordination
-from .errors import RelationViolationError
 from .nominal.field_codec import FieldCodec, WireName, WireValue, GoalId
 from .goal_actions import GoalAction
 from .goal_history import RecordedGoalHistory
@@ -41,6 +40,7 @@ from .goals import Goal
 from .manual_compaction_bridge import compact_context
 from .bus_read import OwnerScopedRead
 from .transport.tools.reads import OwnerGoalRead
+from .transport.tools.sidebar import ClearQueueQueueAction, QueueAction, SendNowQueueAction
 from .ui_model.observation import SubscribeTranscript
 from agent_comms.runtime_server import (
     AttachedResultRuntimeRequest, AttachedRuntimeRequest, AttachedRuntimeRequestContext,
@@ -271,7 +271,18 @@ class CancelRuntimeRequest(AttachedResultRuntimeRequest):
 
 @dataclass(frozen=True, kw_only=True)
 class QueueActionRuntimeRequest(AttachedResultRuntimeRequest, declared_name=None):
-    """A queue action any client asks of a thread's owner, attached over ACP or not."""
+    """A queue action any client asks of a thread's owner, attached over ACP or not. Each
+    member names the declared QueueAction it serves."""
+
+    serves: ClassVar[dict[type[QueueAction], type[QueueActionRuntimeRequest]]] = {}
+
+    def __init_subclass__(cls, *, action: type[QueueAction], **kwargs: object) -> None:
+        super().__init_subclass__(**kwargs)
+        QueueActionRuntimeRequest.serves[action] = cls
+
+    @classmethod
+    def serving(cls, action: type[QueueAction]) -> type[QueueActionRuntimeRequest]:
+        return cls.serves[action]
 
     @classmethod
     def at_owner(cls, root: Path, thread: Thread) -> None:
@@ -280,14 +291,14 @@ class QueueActionRuntimeRequest(AttachedResultRuntimeRequest, declared_name=None
 
 
 @dataclass(frozen=True, kw_only=True)
-class SendNowRuntimeRequest(QueueActionRuntimeRequest):
+class SendNowRuntimeRequest(QueueActionRuntimeRequest, action=SendNowQueueAction):
     async def result(self, ctx: AttachedRuntimeRequestContext) -> QueueActionReply:
         await ctx.server.agent.inputs.send_now(ctx.session)
         return QueueActionReply()
 
 
 @dataclass(frozen=True, kw_only=True)
-class ClearQueueRuntimeRequest(QueueActionRuntimeRequest):
+class ClearQueueRuntimeRequest(QueueActionRuntimeRequest, action=ClearQueueQueueAction):
     async def result(self, ctx: AttachedRuntimeRequestContext) -> QueueActionReply:
         await ctx.server.agent.inputs.clear_queued_inputs(ctx.session)
         return QueueActionReply()
@@ -516,7 +527,7 @@ class ContextAnnotationsRuntimeRequest(ContextRecordedSegmentRuntimeRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ContextAnnotationCorrectionRuntimeRequest(ContextRecordedSegmentRuntimeRequest):
+class ContextAnnotationCorrectionRuntimeRequest(CorrectsAnnotation, ContextRecordedSegmentRuntimeRequest):
     label: ModelLabel
     answer: type[SpanAnswer]
     worktree: Checkout
@@ -525,6 +536,4 @@ class ContextAnnotationCorrectionRuntimeRequest(ContextRecordedSegmentRuntimeReq
         segment = await self.selected_segment(ctx)
         if not segment.contains_span(self.label.span):
             raise ValueError("Correction belongs to another original context source")
-        request = CorrectAnnotationCliCommand(
-            label=self.label, answer=self.answer, worktree=self.worktree)
-        return await Coordination.run_worker(partial(request.apply, ctx.server.agent._comms))
+        return await Coordination.run_worker(partial(self.correct, ctx.server.agent._comms))

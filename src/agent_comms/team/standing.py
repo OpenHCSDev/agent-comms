@@ -826,7 +826,7 @@ class ForkStalled(IndependentStandingRule, DatedStandingRule):
         return tuple(
             cls(fork.incarnation, owed.at, record.bus, written, owed)
             for bridge in Serve.running(Path.home()) if bridge.observed.owner.alive()
-            for record in bridge.claim.state().bindings() if record.bus in teammates
+            for record in bridge.claim.bindings() if record.bus in teammates
             for forks in ({thread.name: thread for thread in snapshot.visible_threads(
                 DEFAULT_ROSTER, names=(fork.name for fork in TeamService.forks(
                     snapshot, (teammates[record.bus],))))},)

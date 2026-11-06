@@ -381,7 +381,7 @@ class ResolvedBinding(GivenBinding):
     @classmethod
     def from_arguments(cls, arguments: CliArguments, bridge: type[CliBridge]) -> Self:
         session = arguments.binding_session.resolve(bridge)
-        bindings = WatchClaim(session).state().bindings()
+        bindings = WatchClaim(session).bindings()
         if len(bindings) != 1:
             raise ValueError(
                 f'Expected one enrolled binding for session {session}; '

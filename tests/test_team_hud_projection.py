@@ -5,7 +5,8 @@ from agent_comms.nominal.field_codec import HudExclude
 from dataclasses import replace
 
 from agent_comms.team.vibe_check import OverloadDegradation
-from agent_comms.team_hud import TeamHud, TeamOrder, Teammate, CodexUsage, HudRecord, UnreadableUsage
+from agent_comms.team_hud import TeamHud, CodexUsage, UnreadableUsage
+from agent_comms.team_hud_records import TeamOrder, Teammate, HudRecord
 from agent_comms.disclosure_text import (
     DisclosureText, EntityKey, FieldKey, IdentifiedRecordText, MappingText, SequenceText, ViewTable,
 )

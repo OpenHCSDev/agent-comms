@@ -6,7 +6,7 @@ from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from functools import partial
-from typing import Annotated, Literal
+from typing import Annotated
 
 from agent_comms_hooks import ToolRefusedError
 from pydantic import JsonValue
@@ -28,6 +28,7 @@ from agent_comms.todos import (
     OrderProgress,
     PlainText,
     ProgressRead,
+    ProgressSource,
     PullRequestLink,
     ResumeClaimOrder,
     ServeTodo,
@@ -45,10 +46,11 @@ from .acp_extension import (
     UpdateMetadata,
 )
 from .bus_read import CapturesTranscriptPage, OwnerLiveRead, OwnerScopedRead, UiRead
-from .team_hud import TeamFrame, TeamHud, TeamLoad, TeammateDetail
+from .team_hud import TeamFrame, TeamHud, TeamLoad
+from .team_hud_records import Teammate, TeamOrderDetail, TeammateDetail
 from .comms import Comms
 from .coordination.coordinator import Coordination
-from .nominal.field_codec import FieldCodec, MessageId, OrderId, RecordProblems, ToolCallId, WireName
+from .nominal.field_codec import FieldCodec, MessageId, OrderId, RecordProblems, ToolCallId
 from .channel_targets import CommsTag
 from .goal_actions import CompliedGoalAction, CreateProblemGoalAction, OrderGoalAction, OwnerInvocable
 from .goals import Goal, OrderCheck
@@ -63,7 +65,7 @@ from .plan_phases import OrderPhase
 from .problem_number import ProblemNumber
 from .progress_claims import ProgressClaim
 from .read_basis import ReadAuthority
-from .send_result import CorrectionResult, SendResult
+from .send_result import MessagePublished
 from .service_passes import ServicePassStore
 from .thread_identity import ThreadIncarnation
 from .tool_caller import ThreadCaller, ToolCaller
@@ -72,7 +74,6 @@ from .tool_request import PublishingToolRequest, ReadTool, ThreadReadTool, Threa
 from .transport.request import tool_field
 from .transport.tools.reads import InputDeliveryRead, OwnerGoalRead, TeammateRead, TranscriptPageRead
 from .tool_result import ToolResult
-from .transcript_events import SentTranscript
 from .transcripts import (
     TranscriptRead,
 )
@@ -115,22 +116,6 @@ class ProblemClosed(ToolResult):
 @dataclass(frozen=True)
 class ProblemNumberReserved(ToolResult):
     problem: str
-
-
-@dataclass(frozen=True)
-class MessagePublished(ToolResult):
-    """The Pi adapter decodes this reply as PublishedMessageToolDetails by its agentCommsKind."""
-
-    id: MessageId
-    message: SentTranscript
-    correction: CorrectionResult
-    agent_comms_kind: Annotated[
-        Literal["published_message"], WireName("agentCommsKind")
-    ] = "published_message"
-
-    @classmethod
-    def from_send(cls, result: SendResult) -> MessagePublished:
-        return cls(result.message.message_id, SentTranscript.from_message(result.message), result.correction)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -637,8 +622,33 @@ class ServedTeammateRead(UiRead, ReadTool, NativeToolRequest, TeammateRead):
         hud.require_current()
         for card in hud.units:
             if card.unit == self.unit:
-                return card.detail(comms, self.orders)
+                return self.detail(comms, card)
         raise ToolRefusedError("The selected teammate is no longer in this teammate's published frame")
+
+    def detail(self, comms: Comms, card: Teammate) -> TeammateDetail:
+        """Expand the published card this read selected from its original record owners."""
+        if card.order_ids != self.orders:
+            raise ToolRefusedError("The selected teammate's orders changed; read its current card")
+        store = comms.goals.todos
+        held = store.held_by(card.unit)
+        current = {todo.id: todo for todo in held}
+        if {(todo.id, todo.order.checked().id) for todo in held} != {
+            (order.problem, order.order) for order in card.orders
+        }:
+            raise ToolRefusedError(
+                "The selected teammate's assignments changed; read its current card"
+            )
+        pulls = ProgressRead(held)
+        details = tuple(TeamOrderDetail(
+            order, (current[order.problem].order.checked().instructions(current[order.problem]),),
+            OrderStory.collect(order.order, store.for_order(order.order)),
+            tuple(ProgressSource.of(current[order.problem], comms.registry, pulls).commits()),
+        ) for order in card.orders)
+        turns = comms.transcripts.turns(card.unit.name, LastTurns())
+        snapshot = comms.registry.snapshot()
+        if turns.thread != card.unit or not card.unit.current(snapshot):
+            raise ToolRefusedError("The selected incarnation changed while its details were read")
+        return TeammateDetail(card, details, turns.to_wire())
 
 
 @dataclass(frozen=True, kw_only=True)

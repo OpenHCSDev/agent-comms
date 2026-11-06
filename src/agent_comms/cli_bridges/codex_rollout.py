@@ -22,7 +22,7 @@ from pydantic import (
 )
 
 from agent_comms.cli_protocol import Declared, OpenWire, TimestampedWire, WireHeader
-from agent_comms.nominal.field_codec import ToolCallId
+from agent_comms.nominal.field_codec import StoredSessionId, ToolCallId
 from agent_comms.runtime_updates import (
     HiddenItem,
     HistoryNotice,
@@ -281,7 +281,7 @@ class CodexRollout(JsonLinesFile, CodexHistory, OfflineHistory):
         """The first record names the session; the selected history may start long after it."""
         for offset, raw in self.complete_lines(stream, 0, boundary):
             record = self.decode_line(raw, offset)
-            if not self.session.holds(record.session.id):
+            if not self.session.holds(StoredSessionId(record.session.id)):
                 raise ValueError('The rollout belongs to a different Codex session.')
             yield from record.updates(self.start_state(), offset)
             return

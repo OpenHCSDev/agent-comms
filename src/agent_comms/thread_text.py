@@ -11,7 +11,8 @@ from typing import ClassVar
 
 
 from agent_comms.history_view import ForkOwnHistory, HistoryView, OwnHistory
-from agent_comms.nominal.field_codec import NullMember, SingleFieldValue, SubclassUnion, boundary_decoder
+from agent_comms.nominal.field_codec import (NullMember, SingleFieldValue, StoredSessionId, SubclassUnion,
+                                            boundary_decoder)
 
 
 class TextChoice(ABC):
@@ -160,3 +161,24 @@ class SubagentRole(SingleFieldValue):
         yield base
         for ordinal in itertools.count(2):
             yield f"{base}-{ordinal}"
+
+
+class ExpectedSession(SubclassUnion, TextChoice, affix="Session"):
+    """The session a stored history must hold, when the import names one."""
+
+    @abstractmethod
+    def holds(self, session: StoredSessionId) -> bool: ...
+
+
+@dataclass(frozen=True, slots=True)
+class NamedSession(GivenText, ExpectedSession):
+    text: str
+
+    def holds(self, session: StoredSessionId) -> bool:
+        return session == self.text
+
+
+@dataclass(frozen=True, slots=True)
+class AnySession(AbsentText, ExpectedSession):
+    def holds(self, session: StoredSessionId) -> bool:
+        return True
