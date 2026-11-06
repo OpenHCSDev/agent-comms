@@ -1051,6 +1051,9 @@ class TaskContent(WireModel):
     def updates(self, record: TimedRecord, source_turn: SourceTurn) -> tuple[RuntimeUpdate, ...]:
         return self.text.updates(record, source_turn)
 
+    def delivered(self) -> tuple[MessageReference, ...]:
+        return self.text.delivered()
+
 
 class TaskText(TaskContent):
     type: Literal['text'] = 'text'
@@ -1061,6 +1064,9 @@ class TaskMessage(ContentBlocks):
 
     def updates(self, record: TimedRecord, source_turn: SourceTurn) -> tuple[RuntimeUpdate, ...]:
         return tuple(update for block in self.content for update in block.updates(record, source_turn))
+
+    def delivered(self) -> tuple[MessageReference, ...]:
+        return tuple(reference for block in self.content for reference in block.delivered())
 
 
 class ToolResult(UserBlock, ContentBlocks, declared_name='tool_result'):
@@ -1140,6 +1146,9 @@ class TaskUserRecord(PromptRecord, declared_name='task-user'):
 
     def opened_updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return self.message.updates(self, session.turn.source)
+
+    def delivered(self) -> tuple[MessageReference, ...]:
+        return self.message.delivered()
 
 
 class SubtypeHeader(WireHeader):
