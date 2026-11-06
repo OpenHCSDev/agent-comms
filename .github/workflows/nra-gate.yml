@@ -244,6 +244,45 @@ jobs:
         if: steps.reach.outputs.reaches == 'true'
         run: python -m agent_comms.installer.test_runtime $REHEARSALS
 
+  # The installer builds Core from this checkout beside the UI packages stack/uv.lock pins,
+  # then refuses unless ClientImportsProbe imports them. Run that probe on the same pair here,
+  # so a move in src that a pinned Toad still imports from fails this change, not the next
+  # install (2026-11-06: #4218 moved six classes and every install after it was refused).
+  client-imports:
+    name: client-imports
+    needs: [ready, base]
+    if: needs.base.outputs.combined == 'true' && needs.base.outputs.reused != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Whether the change reaches the installed Core, its stack or this check
+        id: reach
+        env:
+          BASE: ${{ needs.base.outputs.base }}
+        run: |
+          git diff --quiet "$BASE" HEAD -- src pyproject.toml stack .github/workflows/nra-gate.yml \
+            && echo "reaches=false" >> "$GITHUB_OUTPUT" || echo "reaches=true" >> "$GITHUB_OUTPUT"
+      - if: steps.reach.outputs.reaches == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: pyproject.toml
+      - name: Install uv
+        if: steps.reach.outputs.reaches == 'true'
+        run: |
+          python -m pip install packaging
+          python -m pip install "$(python -I src/agent_comms/installer/declared_uv.py pyproject.toml)"
+      - name: Sync the stack exactly as the installer does
+        if: steps.reach.outputs.reaches == 'true'
+        run: uv sync --project stack --locked --no-editable
+      - name: Run the installer's client-import probe in the stack
+        if: steps.reach.outputs.reaches == 'true'
+        run: >-
+          stack/.venv/bin/python -I -c
+          "from agent_comms.installer.probes.imports import ClientImportsProbe; ClientImportsProbe().run()"
+
   review-verdict:
     name: review-verdict
     needs: ready
@@ -413,7 +452,7 @@ jobs:
   # sources reuses instead of measuring again. A required job that did not run records failure.
   tested:
     name: tested
-    needs: [base, smoke, native-scripts, install-rehearsal, review-verdict, nra-gate]
+    needs: [base, smoke, native-scripts, install-rehearsal, client-imports, review-verdict, nra-gate]
     if: always() && github.event_name == 'pull_request' && !github.event.pull_request.draft
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -427,7 +466,7 @@ jobs:
           HEAD: ${{ github.event.pull_request.head.sha }}
           TESTED: ${{ needs.base.outputs.tested }}
           MEASURED: ${{ needs.base.result }} ${{ needs.native-scripts.result }} ${{ needs.review-verdict.result }} ${{ needs.nra-gate.result }}
-          OPTIONAL: ${{ needs.smoke.result }} ${{ needs.install-rehearsal.result }}
+          OPTIONAL: ${{ needs.smoke.result }} ${{ needs.install-rehearsal.result }} ${{ needs.client-imports.result }}
         run: |
           state=success
           for result in $MEASURED; do [[ $result == success ]] || state=failure; done
