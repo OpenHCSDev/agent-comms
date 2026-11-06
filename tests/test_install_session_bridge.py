@@ -109,7 +109,7 @@ def stop(child):
 
 
 def frame(child):
-    assert ready(child.stdout, 15), 'Monitor wrote nothing'
+    assert ready(child.stdout.fileno(), 15), 'Monitor wrote nothing'
     line = child.stdout.readline()
     assert line, child.stderr.read().decode()
     return MONITOR_FRAME.validate_json(line)
@@ -211,7 +211,7 @@ def confirm(transcript, line, record):
 def relayed(child):
     """A delivered message reaches the Monitor as text, not a protocol frame: its sender's
     header line, then the one-line body these tests send."""
-    assert ready(child.stdout, 15), 'Monitor wrote nothing'
+    assert ready(child.stdout.fileno(), 15), 'Monitor wrote nothing'
     assert child.stdout.readline().decode().startswith(ClaudeMonitorFrame.HEADER_PREFIX)
     return child.stdout.readline().decode()
 

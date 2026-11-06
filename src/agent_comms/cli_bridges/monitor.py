@@ -82,7 +82,7 @@ class ClaimedReplacement(BridgeReplacement):
                 announcement = FieldCodec.compact(FieldCodec.encode(SessionReady()))
                 stream.write((announcement + "\n").encode())
                 while operation.owner.alive():
-                    if ready(self.peer, 1):
+                    if ready(self.peer.fileno(), 1):
                         break
                 else:
                     self.left_stopped(f"owner {operation.owner.pid} exited")
