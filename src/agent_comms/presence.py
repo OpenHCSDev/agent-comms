@@ -3,8 +3,12 @@
 A heartbeat changes nothing about a thread's declaration, only when it was last seen. Kept in
 registry.json, every heartbeat rewrote the whole registry (5.7 MB on the live bus) and made
 every reader decode a new revision. The registry edit that changes a thread's ``last_seen``
-writes it here instead, before the registry itself, so a reader that sees a thread sees its
-presence too.
+writes it here instead, before the registry itself.
+
+A registry edit sets rows and never drops them. A reader lays presence over a registry revision
+it captured earlier, possibly before a later edit removed or renamed a thread; because rows only
+ever arrive, every revision a reader can hold names only threads that still have a row. A name
+that left the registry keeps its few bytes here until it is declared again.
 """
 
 from __future__ import annotations
@@ -30,9 +34,6 @@ class PresenceDocument(SingleFieldValue):
         return PresenceDocument({**self.seen, **{
             name: when for name, when in after.items() if before.get(name) != when}})
 
-    def without(self, names: frozenset[str]) -> PresenceDocument:
-        return PresenceDocument({name: when for name, when in self.seen.items() if name not in names})
-
 
 class PresenceStore(SingleFileStore, CarriedDocument[PresenceDocument], DependentStateTier):
     """Registered threads' presence, committed by the registry edit that changes it."""
@@ -45,10 +46,6 @@ class PresenceStore(SingleFileStore, CarriedDocument[PresenceDocument], Dependen
         return PresenceDocument()
 
     def set_rows(self, after: Mapping[str, float], before: Mapping[str, float]) -> None:
-        """Before the registry is saved: every revision a reader can see, the old one and the
-        new one, has a presence row for each thread it names."""
+        """Before the registry is saved, so the revision it writes names no thread without a
+        row; earlier revisions never lose theirs."""
         self.update(lambda document: DocumentChange.to(document.setting(after, before)))
-
-    def drop_rows(self, names: frozenset[str]) -> None:
-        """After the registry is saved: rows of names it no longer declares."""
-        self.update(lambda document: DocumentChange.to(document.without(names)))
