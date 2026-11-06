@@ -266,7 +266,8 @@ class Pauses(ABC):
 
     @classmethod
     def of(cls, delays: tuple[float, ...]) -> Pauses:
-        return reduce(lambda rest, delay: Pause(delay, rest), reversed(delays), NoPauses())
+        last: Pauses = NoPauses()
+        return reduce(lambda rest, delay: Pause(delay, rest), reversed(delays), last)
 
 
 class NoPauses(Pauses):
