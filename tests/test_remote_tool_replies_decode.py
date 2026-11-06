@@ -3,11 +3,22 @@ calls must declare a concrete one. CommsUserSendTool once inherited the abstract
 PublishingToolRequest: Core posted the owner's message, the remote Toad could not decode the
 reply, and its composer stayed held as if the send had failed."""
 
-import agent_comms.order_tools  # noqa: F401  (declares the order tools)
-import agent_comms.tools  # noqa: F401  (declares the Comms tools)
+from agent_comms.channels import Channel
+from agent_comms.cli_commands import ThreadArchivedResult
+from agent_comms.order_tools import CommsBoardTool, MessagePublished, TeamBoard
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.tool_request import HumanToolRequest, PublishingToolRequest
 from agent_comms.tool_result import ToolResult
+from agent_comms.tools import (
+    ChannelOrderSet,
+    CommsArchiveTool,
+    CommsAuthoredTaskTool,
+    CommsDecisionTool,
+    CommsSortChannelsTool,
+    CommsSortChannelTool,
+    CommsUserSendTool,
+    TaskPublished,
+)
 
 
 def test_every_publishing_and_human_tool_declares_a_concrete_result():
@@ -21,15 +32,12 @@ def test_every_publishing_and_human_tool_declares_a_concrete_result():
 
 
 def test_the_channel_sorts_a_remote_ui_calls_decode_their_replies():
-    from agent_comms.channels import Channel
-    from agent_comms.tools import ChannelOrderSet, CommsSortChannelsTool, CommsSortChannelTool
 
     assert CommsSortChannelsTool.result_type() is ChannelOrderSet
     assert CommsSortChannelTool.result_type() is Channel
 
 
 def test_a_result_declared_on_one_parent_refines_the_default_another_parent_inherits():
-    from agent_comms.tools import CommsAuthoredTaskTool, CommsDecisionTool, TaskPublished
 
     # ThreadToolRequest's header leaves the result at the family default; the publishing parent
     # declares TaskPublished. The declared result wins on the tool and on its subclasses.
@@ -38,16 +46,11 @@ def test_a_result_declared_on_one_parent_refines_the_default_another_parent_inhe
 
 
 def test_a_human_send_reply_decodes_into_its_published_message():
-    from agent_comms.order_tools import MessagePublished
-    from agent_comms.tools import CommsUserSendTool
 
     assert CommsUserSendTool.result_type() is MessagePublished
 
 
 def test_a_result_declared_only_on_apply_is_the_one_a_remote_reply_decodes_into():
-    from agent_comms.cli_commands import ThreadArchivedResult
-    from agent_comms.order_tools import CommsBoardTool, TeamBoard
-    from agent_comms.tools import CommsArchiveTool
 
     # Neither header names a result; each tool's apply does. A remote board or archive reply
     # used to decode into the bare ToolResult, dropping every field the caller reads.
