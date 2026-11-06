@@ -7,7 +7,9 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from types import get_original_bases
-from typing import Self, Annotated, ClassVar, TypeVar, cast, get_args, get_origin
+from typing import Self, Annotated, ClassVar, ParamSpec, TypeVar, cast, get_args, get_origin
+
+from typing_extensions import TypeVarTuple
 
 from pydantic import JsonValue
 
@@ -151,18 +153,21 @@ class ToolRequest[Result: ToolResult = ToolResult](
         return cast(type[Result], declared_result(cls, ToolRequest.__type_params__[0]))
 
 
-def declared_result(cls: type, declared: TypeVar) -> type:
+def declared_result(cls: type, declared: TypeVar | ParamSpec | TypeVarTuple) -> object:
     """The argument bound for `declared` in the class headers of `cls`, followed through
     every intermediate generic parent; the most derived of unrelated bindings wins."""
     bindings: dict[object, list[object]] = {}
     for declaration in cls.__mro__:
         for base in get_original_bases(declaration):
-            origin = get_origin(base)
-            for parameter, argument in zip(getattr(origin, "__type_params__", ()), get_args(base)):
-                bindings.setdefault(parameter, []).append(argument)
+            match get_origin(base):
+                case type() as origin:
+                    for parameter, argument in zip(
+                        origin.__type_params__, get_args(base), strict=False
+                    ):
+                        bindings.setdefault(parameter, []).append(argument)
 
-    def declared_by(parameter: object, seen: frozenset[object]) -> list[type]:
-        found: list[type] = []
+    def declared_by(parameter: object, seen: frozenset[object]) -> list[object]:
+        found: list[object] = []
         for argument in bindings.get(parameter, ()):
             if isinstance(argument, TypeVar):
                 if argument not in seen:

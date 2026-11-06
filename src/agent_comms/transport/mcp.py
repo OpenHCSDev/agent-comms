@@ -21,7 +21,7 @@ from aiohttp import web
 from pydantic import JsonValue
 
 from ..cli_protocol import CoreError
-from ..connector_caller import ConnectorCaller
+from ..connector_caller import ConnectorCaller, ConnectorTool
 from ..coordination.errors import CommandFailure, Refused
 from ..errors import RelationViolationError
 from .progress import CancellableWireExport, WireExportCancelled, WireExportObserver, WireExportProgress
@@ -54,7 +54,7 @@ class McpServer(ABC):
 
     @abstractmethod
     async def call(
-        self, tool: type[ServedRequest],
+        self, tool: type[ServedRequest] | type[ConnectorTool],
         arguments: Mapping[str, object], caller: ConnectorCaller, observer: WireExportObserver,
     ) -> AnsweredCall: ...
 

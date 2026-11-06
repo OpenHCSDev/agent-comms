@@ -18,7 +18,7 @@ from .todos import DirectiveText
 from .read_basis import OperatorOutcomes
 from .tool_caller import ForkCaller, HumanCaller, NoThreadCaller, ThreadCaller, ToolCaller
 from .tool_request import ReadTool, ServedRequest, ToolArgumentsRefusedError
-from .transport.request import tool_field
+from .transport.request import ToolRequest, tool_field
 from .tool_result import ToolResult
 
 
@@ -48,13 +48,13 @@ class ConnectorCaller(ToolCaller):
     def prepare_call(self, comms: Comms, acting: ToolCaller) -> None:
         """A thread-free, unscoped caller has no membership to publish."""
 
-    def exposed(self) -> dict[str, type[ServedRequest]]:
+    def exposed(self) -> dict[str, type[ServedRequest] | type[ConnectorTool]]:
         return {tool.declared_name: tool for tool in ServedRequest.members_with(ServedRequest)}
 
     def acting(self, arguments: Mapping[str, object]) -> tuple[ToolCaller, Mapping[str, object]]:
         return self, arguments
 
-    def input_schema(self, tool: type[ServedRequest]) -> dict[str, JsonValue]:
+    def input_schema(self, tool: type[ToolRequest]) -> dict[str, JsonValue]:
         return FieldCodec.record_schema(tool)
 
 
@@ -71,7 +71,7 @@ class ThreadConnectorCaller(ConnectorCaller, ThreadCaller):
 class ReadOnlyConnectorCaller(ConnectorCaller, NoThreadCaller):
     """A thread-free MCP caller with the declared read capability."""
 
-    def exposed(self) -> dict[str, type[ServedRequest]]:
+    def exposed(self) -> dict[str, type[ServedRequest] | type[ConnectorTool]]:
         return {tool.declared_name: tool for tool in ServedRequest.members_with(ReadTool)}
 
     def invoke(self, request: ServedRequest, comms: Comms) -> ToolResult:
@@ -129,7 +129,7 @@ class ForkingCaller(ThreadConnectorCaller):
             ) from error
         return acting_fork.fork.acting_caller(self), rest
 
-    def input_schema(self, tool: type[ServedRequest]) -> dict[str, JsonValue]:
+    def input_schema(self, tool: type[ToolRequest]) -> dict[str, JsonValue]:
         return FieldCodec.record_schema(tool, ActingFork)
 
 
@@ -147,7 +147,7 @@ class DirectorCaller(OperatorOutcomes, ForkingCaller):
     def origin(self) -> DirectorOrigin:
         return DirectorOrigin()
 
-    def exposed(self) -> dict[str, type[ServedRequest]]:
+    def exposed(self) -> dict[str, type[ServedRequest] | type[ConnectorTool]]:
         return super().exposed() | {
             tool.declared_name: tool for tool in ConnectorTool.members_with(ConnectorTool)
         }

@@ -10,8 +10,8 @@ from agent_comms.nominal.field_codec import WireExclude
 from .input_key import InputKeyText
 from .agent_inbox import InboxWait, NoWait, TakenInputPosition, TakenInputStart
 
-from .tool_request import HumanToolRequest, ObservedToolRequest, LiveOwnerTool, PublishingTool, PublishingToolRequest, ReadTool, ThreadReadTool, ThreadContextAction, ThreadToolRequest, CoreRead, NativeToolRequest
-from .transport.request import ListedNames, OmittedNames, SubjectBinding, ToolRequest, tool_field
+from .tool_request import ServedRequest, HumanToolRequest, ObservedToolRequest, LiveOwnerTool, PublishingTool, PublishingToolRequest, ReadTool, ThreadReadTool, ThreadContextAction, ThreadToolRequest, CoreRead, NativeToolRequest
+from .transport.request import ListedNames, OmittedNames, SubjectBinding, tool_field
 from .tool_declaration import NativeRequestTools
 from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from .order_tools import MessagePublished
@@ -2022,4 +2022,4 @@ class ToolReplyResult(CliResult):
 def invoke_tool(
     comms: Comms, name: str, arguments: Mapping[str, object], *, caller: ToolCaller
 ) -> dict[str, JsonValue]:
-    return ToolRequest.member_named(name).invoke(comms, arguments, caller=caller)
+    return ServedRequest.member_named(name).invoke(comms, arguments, caller=caller)

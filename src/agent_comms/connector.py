@@ -294,7 +294,7 @@ class Connector(ConnectorService, McpServer):
     )
 
     calls: dict[
-        asyncio.Task[AnsweredCall], type[ServedRequest],
+        asyncio.Task[AnsweredCall], type[ServedRequest] | type[ConnectorTool],
     ] = field(
         default_factory=dict, init=False, repr=False, compare=False,
     )
@@ -357,7 +357,7 @@ class Connector(ConnectorService, McpServer):
                                       if not task.done())) or "none")
 
     async def call(
-        self, tool: type[ServedRequest],
+        self, tool: type[ServedRequest] | type[ConnectorTool],
         arguments: Mapping[str, object], caller: ConnectorCaller, observer: WireExportObserver,
     ) -> AnsweredCall:
         """Start once; a disconnected HTTP client cannot abandon its write."""
@@ -409,7 +409,7 @@ class Connector(ConnectorService, McpServer):
         yield wire(self.root)
 
     def invoke(
-        self, tool: type[ServedRequest], arguments: Mapping[str, object],
+        self, tool: type[ServedRequest] | type[ConnectorTool], arguments: Mapping[str, object],
         caller: ConnectorCaller, observer: WireExportObserver,
     ) -> AnsweredCall:
         tool.require_entry_open(self.root)
