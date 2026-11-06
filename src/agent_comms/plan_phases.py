@@ -22,7 +22,7 @@ from agent_comms.tool_calls import CliToolArguments
 from agent_comms_hooks.process_claim import ProcessSingleton
 from agent_comms_hooks.queue_bypass import QueueBypassGuard
 from agent_comms.nominal.field_codec import Id128, MessageId, NominalSpelling, NominalText
-from agent_comms.phase_evidence import AllEvidence, AuditPatternPresent, BusStorageAbsent, ClassFlagsAbsent, QualifiedName, ClassDeclared, ClassRostersAbsent, CommitMerged, FunctionDeclared, NoAbsenceProbes, NoExactCopies, NoGodFunction, OwnClassChecksAbsent, ParentsShared, ParityEvidence, PathsAbsent, DocumentPatternPresent, PatternAbsent, PatternPresent, PhaseEvidence, RestatedMembersAbsent, RulesetGates
+from agent_comms.phase_evidence import AllEvidence, AuditPatternPresent, BusStorageAbsent, ClassFlagsAbsent, QualifiedName, ClassDeclared, ClassRostersAbsent, CommitMerged, FunctionDeclared, NoAbsenceProbes, NoExactCopies, NoGodFunction, OwnClassChecksAbsent, ParentsShared, ParityEvidence, PathsAbsent, DocumentPatternPresent, PatternAbsent, PatternPresent, PhaseEvidence, RestatedMembersAbsent
 from agent_comms.phase_tasks import PhaseTask, UnspecifiedPhaseTask
 
 if TYPE_CHECKING:
@@ -209,17 +209,14 @@ class RecordPlanePhase(TeamNativePhase):
 
 
 class ReviewQueuePhase(TeamNativePhase):
-    """A verdict per PR head gates merging through main's required review status.
-
-    QueueBypass declares each bypass's pin and recorded-verdict obligations.
-    No GitHub merge queue is required.
-    """
+    """A verdict per PR head is recorded, and QueueBypass declares each bypass's pin and
+    recorded-verdict obligations. No GitHub ruleset, merge queue or bypass ban is required:
+    one owner works alone and merges with --admin (Tristan, 2026-11-06)."""
 
     after = (RecordPlanePhase,)
     evidence = AllEvidence((
         ClassDeclared("HeadReviewRecord", ("src/agent_comms/todos.py",)),
         ClassDeclared(QueueBypassGuard.__name__, ("src/agent_comms_hooks/queue_bypass.py",)),
-        RulesetGates(),
     ))
 
 

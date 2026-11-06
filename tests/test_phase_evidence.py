@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.head_review import HeadReview, MergeHeadReview
 from agent_comms.plan_reading import PlanReading
 from agent_comms.phase_evidence import (
     AllEvidence,
@@ -30,7 +29,6 @@ from agent_comms.phase_evidence import (
     PatternPresent,
     PhaseEvidence,
     RestatedMembersAbsent,
-    RulesetGates,
     UnreadableEvidenceError,
 )
 from nominal_refactor_advisor.audit.findings import GodFunction
@@ -359,39 +357,6 @@ def test_source_shape_evidence_reads_declarations_on_main(tmp_path):
 def test_only_foreign_comparison_refusal_exempts_an_owned_type_check(source, allowed):
     facts = SourceFacts.of("value.py", "blob", ast.parse(source))
     assert (not facts.owned(facts.declared)) is allowed
-
-
-@pytest.mark.parametrize(("required", "queue", "actors", "expected"), (
-    (MergeHeadReview.required_contexts(), True, [], True),
-    (MergeHeadReview.required_contexts(), False, [], False),
-    (MergeHeadReview.required_contexts(), True, [{"actor_type": "RepositoryRole", "actor_id": 5}], False),
-    (MergeHeadReview.required_contexts(), True, [{"actor_type": "Integration", "actor_id": 15368}], False),
-    ((HeadReview.context,), True, [], False),
-    ((MergeHeadReview.context,), True, [], False),
-    (("review-verdict",), True, [], False),
-    (("smoke",), True, [], False),
-))
-def test_ruleset_requires_both_owned_contexts_and_actual_queue_without_bypass(
-    tmp_path, required, queue, actors, expected,
-):
-    main = main_of(tmp_path, {"src/a.py": "x = 1\n"}).main
-    # The real API may split independent requirements across rulesets.
-    rules = [{"ruleset": 7, "required": ["smoke"], "queue": False},
-             *({"ruleset": 8, "required": [context], "queue": False} for context in required),
-             {"ruleset": 9, "required": [], "queue": queue}]
-    answers = {"rules/branches/main": rules, "rulesets/7": [],
-               "rulesets/8": actors, "rulesets/9": []}
-    reads = []
-
-    class Answered(RulesetGates):
-        @staticmethod
-        def api(main, path, query):
-            reads.append(path)
-            return answers[path]
-
-    assert Answered().holds(PlanReading((), main)) is expected
-    assert reads.count("rulesets/8") == 1
-    assert all(context in RulesetGates().describe() for context in MergeHeadReview.required_contexts())
 
 
 def test_cleanup_evidence_counts_restated_members_and_class_rosters(tmp_path):
