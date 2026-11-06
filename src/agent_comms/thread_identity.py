@@ -79,6 +79,10 @@ class OfferedTools(DeclaredFamily, affix="OfferedTools"):
     def without_catalogue(self) -> tuple[OfferedTools, ...]:
         return ()
 
+    def tool_named(self, name: str) -> ToolName:
+        """The offered tool ``name`` names; a catalogue that never reported one names none."""
+        raise UnknownFamilyMember(f"{name!r} is not a tool this thread was offered")
+
     def fills_version(self, version: str) -> bool:
         return False
 
@@ -143,6 +147,10 @@ class ObservedTools(OfferedTools, declared_name=None):
 class ReportedTools(ObservedTools):
     # Not ``names``: dataclass would take the inherited DeclaredFamily.names as its default.
     tools: Annotated[frozenset[ToolName], WireName("names")]
+
+    def tool_named(self, name: str) -> ToolName:
+        offered = ToolName(name)
+        return offered if offered in self.tools else super().tool_named(name)
 
     def changes_from(self, previous: OfferedTools) -> tuple[str, ...]:
         return previous.before_reported(self)

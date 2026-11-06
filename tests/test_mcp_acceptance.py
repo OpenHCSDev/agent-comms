@@ -40,11 +40,30 @@ from agent_comms.comms import wire
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec
 from agent_comms.native_arguments import GivenArguments, GivenBinary
+from agent_comms.cli_verbs.rule_gate import RuleGateCliCommand
+from agent_comms.pi_rule_gate import PiRedeal
+from agent_comms.rule_deal import OffDealMode
 from agent_comms.thread_identity import NoObservedTurn, TurnFence
 from delivery_owner_fixture import canonical_agent
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX PTY acceptance")
 TIMEOUT = 40
+
+
+async def _before_prompt_ends(signal: asyncio.Event, prompt: asyncio.Task) -> None:
+    """Wait for ``signal`` while the prompt runs. A prompt that ends first fails the case at
+    once with its own error, instead of after the whole timeout as a bare TimeoutError."""
+    waiter = asyncio.ensure_future(signal.wait())
+    try:
+        done, _ = await asyncio.wait(
+            {waiter, prompt}, timeout=TIMEOUT, return_when=asyncio.FIRST_COMPLETED)
+    finally:
+        waiter.cancel()
+    if waiter in done:
+        return
+    if prompt in done:
+        raise AssertionError(f"the prompt ended before the permission ask: {prompt.result()!r}")
+    raise TimeoutError(f"no permission ask within {TIMEOUT} s while the prompt still ran")
 
 
 def _node_run(native_package, node, env, script, cwd, artifact):
@@ -408,8 +427,6 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, native_runtime_
                 "openrouter",
                 "--model",
                 "z-ai/glm-5.3-flash",
-                "--thinking",
-                "off",
                 "-e",
                 str(package),
             ]
@@ -429,13 +446,22 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, native_runtime_
                     AGENT_COMMS_NATIVE_CONFIG_DIR=str(agent),
                 )
 
+                owner_turn_ended = asyncio.Event()
+
                 class Audit(SessionUpdateSink):
+                    """The owner's passive log; it outlives any attachment, so it also sees
+                    the turn end after the controlling attachment is gone."""
+
                     async def publish_update(self, session_id, update):
                         row = {
                             "sessionId": session_id,
                             "update": update.model_dump(mode="json", by_alias=True, exclude_none=True),
                         }
                         updates.append(row)
+                        for fact in decode_updates(row["update"].get("_meta")):
+                            if isinstance(fact, TurnChangedUpdate) and receipt_seen.is_set() \
+                                    and not fact.state.active.phase.busy:
+                                owner_turn_ended.set()
                         return True
 
                 class Attachment(SessionUpdateSink):
@@ -452,12 +478,11 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, native_runtime_
                                 # cannot attest that the live view received it.
                                 receipt_seen.set()
                             if isinstance(fact, TurnChangedUpdate):
-                                thread = owner._comms.registry.require(
+                                thread, claim = owner._comms.registry.live_owner_with_claim(
                                     owner.sessions.require(session_id)
                                 )
                                 observed = fact.state.active.observed_turn(
-                                    fact.state.finished, thread.turn_identity,
-                                    thread.claimed_generation,
+                                    fact.state.finished, thread.turn_identity, claim,
                                 )
                                 if fact.state.active.phase.busy:
                                     if attachment_turn == NoObservedTurn():
@@ -483,6 +508,14 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, native_runtime_
                 owner.on_connect(Audit())  # Passive evidence sink, never a permission controller.
                 session = await owner.new_session(cwd=str(project), mcp_servers=[])
                 session_id = FieldCodec.decode(AcpSessionId, session.session_id)
+                # These cases test MCP, not the rule deal: binding dealt the session, and
+                # the product's own switch turns its gate off, keeping the deal's evidence.
+                # test_pi_rule_gate's dealt-session case refuses an McpToolCall like any tool.
+                RuleGateCliCommand(
+                    stem=PiRedeal.of(owner._comms, owner._comms.registry.require(
+                        owner.sessions.require(session_id))).stem,
+                    mode=OffDealMode,
+                ).apply(owner._comms)
                 attached = canonical_agent(owner._comms, auto_wake=False)
                 retirement.push_async_callback(attached.shutdown)
                 attached.on_connect(Attachment())
@@ -514,7 +547,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, native_runtime_
                             ),
                         )
                     )
-                    await asyncio.wait_for(entered.wait(), TIMEOUT)
+                    await _before_prompt_ends(entered, task)
                     assert (await Coordination.run_worker(partial(
                         owner.turns.turn_state, session_id
                     ))).active.phase.busy
@@ -561,13 +594,19 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, native_runtime_
                             )
                         )
                         release_final.set()
-                result = await asyncio.wait_for(task, TIMEOUT)
-                if case != "disconnect":
+                if case == "disconnect":
+                    # Closing the attachment cancels its own in-flight request
+                    # (OwnerConnection.close); the owner's turn runs on to its end.
+                    with pytest.raises(asyncio.CancelledError):
+                        await task
+                    await asyncio.wait_for(owner_turn_ended.wait(), TIMEOUT)
+                else:
+                    result = await asyncio.wait_for(task, TIMEOUT)
                     await asyncio.wait_for(attachment_settled.wait(), 5)
-                stop_reason = (
-                    result.get("stopReason") if isinstance(result, dict) else result.stop_reason
-                )
-                assert stop_reason == "end_turn", updates
+                    stop_reason = (
+                        result.get("stopReason") if isinstance(result, dict) else result.stop_reason
+                    )
+                    assert stop_reason == "end_turn", updates
                 assert not errors, errors
                 assert len(requests) == 2
                 assert len(permissions) == (0 if case == "no_controller" else 1)
@@ -579,12 +618,11 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, native_runtime_
                     assert row["sessionId"] == session_id
                     for fact in decode_updates(row["update"].get("_meta")):
                         if isinstance(fact, TurnChangedUpdate):
-                            thread = owner._comms.registry.require(
+                            thread, claim = owner._comms.registry.live_owner_with_claim(
                                 owner.sessions.require(session_id)
                             )
                             observed = fact.state.active.observed_turn(
-                                fact.state.finished, thread.turn_identity,
-                                thread.claimed_generation,
+                                fact.state.finished, thread.turn_identity, claim,
                             )
                             if fact.state.active.phase.busy:
                                 if active == NoObservedTurn():
@@ -598,7 +636,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, native_runtime_
                         if isinstance(fact, McpClientAcknowledgementUpdate):
                             assert active != NoObservedTurn()
                             assert active == TurnFence(
-                                thread.turn_identity, fact.turn_id, thread.claimed_generation,
+                                thread.turn_identity, fact.turn_id, claim,
                             )
                             receipts.append(fact.acknowledgement)
                 assert (

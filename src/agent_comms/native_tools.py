@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
+from .nominal.declared_family import UnknownFamilyMember
+from .thread_identity import OfferedTools
 from .nominal.field_codec import (
     FieldCodec,
     NullMember,
@@ -80,9 +82,16 @@ class NativeToolDeclaration(ToolDeclaration):
         return tuple(argument for extension in extensions for argument in ("-e", str(extension)))
 
     @classmethod
-    def from_call(cls, name: str, arguments: object, *, call_id: ToolCallId) -> CodingCall:
+    def from_call(cls, name: str, arguments: object, *, call_id: ToolCallId,
+                  offered: OfferedTools) -> CodingCall:
+        """A declared member's call, or else a tool this turn was offered by name."""
         decoded = FieldCodec.decode(dict[str, object], arguments)
-        return cls.member_named(name).create_call(call_id, decoded)
+        try:
+            member = cls.member_named(name)
+        except UnknownFamilyMember:
+            return McpToolCall(call_id=call_id, declared_name=offered.tool_named(name).value,
+                               arguments=decoded)
+        return member.create_call(call_id, decoded)
 
 
 @dataclass(frozen=True)
@@ -103,17 +112,23 @@ class NativeExecutableTool(NativeToolDeclaration, CodingCall):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CoordinationCall(GlobalCommsExtension, NativeExecutableTool, declared_name=None):
-    """Core's CLI owns argument decoding; this call owns identity and live events."""
+class NamedArgumentsCall(NativeExecutableTool, declared_name=None):
+    """A call whose name is data rather than a declared member, carrying its arguments whole
+    for whatever executes it to decode."""
 
     declared_name: str
     arguments: dict[str, object]
 
-    def published_goal(self, result: PiToolResult, permission: TurnGoalPermission) -> None:
-        result.published_goal(permission)
-
     def reads(self) -> str:
         return json.dumps(self.arguments)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CoordinationCall(GlobalCommsExtension, NamedArgumentsCall, declared_name=None):
+    """Core's CLI owns argument decoding; this call owns identity and live events."""
+
+    def published_goal(self, result: PiToolResult, permission: TurnGoalPermission) -> None:
+        result.published_goal(permission)
 
 
 class CommunicationCall(CoordinationCall, declared_name=None):
@@ -121,6 +136,17 @@ class CommunicationCall(CoordinationCall, declared_name=None):
 
     def judge_under(self, gate: PiRuleGate) -> None:
         return
+
+
+@dataclass(frozen=True, kw_only=True)
+class McpToolCall(NamedArgumentsCall, declared_name=None):
+    """A tool pi-mcp-client registered for this turn: one per connected MCP server's tool,
+    plus its catalogue, resource and prompt tools. The thread's offered catalogue holds the
+    name. These tools touch no worktree path, so the owner grants no file claim."""
+
+    @classmethod
+    def native_extension(cls, package: Path) -> Path:
+        return package / "agent-comms-extensions/pi-mcp-client/index.mjs"
 
 
 @dataclass(frozen=True, kw_only=True)

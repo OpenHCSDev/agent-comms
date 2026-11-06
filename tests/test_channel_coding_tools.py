@@ -13,6 +13,7 @@ from types import SimpleNamespace
 import pytest
 
 from agent_comms.channel_coding_tools import CodingToolSocket
+from agent_comms.thread_identity import UnobservedTools
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordination.session import NativeCapture
@@ -153,6 +154,8 @@ def test_coding_names_and_argument_types_come_from_declarations():
     ("edit", {"path": "x", "edits": [{"oldText": False, "newText": "new"}]}),
     ("edit", {"path": "x", "edits": [{"oldText": "old", "newText": "new", "newText_should_not_exist": "extra"}]}),
     ("write", {"path": "x", "content": 3}),
+    # A name no member declares is refused, not left to kill the owner's socket.
+    ("mcp_fixture_echo_092c79e8f8", {"message": "ACCEPTANCE_ECHO"}),
 ])
 def test_pi_argument_records_reject_bad_shapes_without_claiming(name, arguments):
     from agent_comms.tool_denial import SelectedToolDenied
@@ -163,6 +166,21 @@ def test_pi_argument_records_reject_bad_shapes_without_claiming(name, arguments)
     assert isinstance(call, RefusedCodingCall)
     with pytest.raises(SelectedToolDenied):
         call.allowed_claim()
+
+
+def test_an_offered_mcp_tool_decodes_as_its_call_and_an_unoffered_one_is_refused():
+    from agent_comms.native_tool_call import RefusedCodingCall
+    from agent_comms.native_tools import McpToolCall
+    from agent_comms.thread_identity import ReportedTools, ToolName
+
+    name, arguments = "mcp_fixture_echo_092c79e8f8", {"message": "ACCEPTANCE_ECHO"}
+    offered = ReportedTools("pi-test", frozenset({ToolName("read"), ToolName(name)}))
+    call = CodingCall.decode("echo-1", name, arguments, offered)
+    assert call == McpToolCall(call_id="echo-1", declared_name=name, arguments=arguments)
+    assert call.allowed_claim() is None
+    # A name this turn was not offered is refused, digest suffix or not.
+    other = CodingCall.decode("echo-2", "mcp_fixture_echo_ffffffffff", arguments, offered)
+    assert isinstance(other, RefusedCodingCall)
 
 
 def test_family_selector_is_denied_but_record_presentation_stays_readable():
@@ -195,6 +213,16 @@ def _request(socket, id, name, args):
     ).encode()
 
 
+class OwnerDouble:
+    """A coding owner whose thread was offered nothing beyond the declared tools; each
+    test overrides only how it answers ``allow``."""
+
+    offered = UnobservedTools()
+
+    def __init__(self) -> None:
+        self.input_id = secrets.token_hex(16)
+
+
 @pytest.mark.asyncio
 async def test_tool_error_while_check_waits_cannot_receive_late_permission(
         tmp_path, tool_listener, undealt_gate):
@@ -202,9 +230,7 @@ async def test_tool_error_while_check_waits_cannot_receive_late_permission(
 
     checking, release = asyncio.Event(), asyncio.Event()
 
-    class Owner:
-        input_id = secrets.token_hex(16)
-
+    class Owner(OwnerDouble):
         async def allow(self, turn, round_number, call):
             checking.set()
             await release.wait()
@@ -241,9 +267,7 @@ async def test_child_that_stopped_waiting_is_logged_not_raised(
 
     answered = asyncio.Event()
 
-    class Owner:
-        input_id = secrets.token_hex(16)
-
+    class Owner(OwnerDouble):
         async def allow(self, turn, round_number, call):
             from agent_comms.tool_denial import SelectedToolDenied
 
@@ -291,9 +315,7 @@ async def test_tool_call_pi_never_started_is_cancelled_by_transport_retirement(
     import asyncio
     import os
 
-    class Owner:
-        input_id = secrets.token_hex(16)
-
+    class Owner(OwnerDouble):
         async def allow(self, turn, round_number, call):
             raise AssertionError("an unstarted call was checked")
 

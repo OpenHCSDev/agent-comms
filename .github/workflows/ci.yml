@@ -56,6 +56,12 @@ jobs:
           PYTHONPATH="$PWD/src" \
             stack/.venv/bin/python -m pytest tests/test_stack_native_compaction.py tests/test_stack_persistent_compaction.py --no-cov -q
 
+      # Opt-in until now, so MCP calls in native turns came back UNKNOWN for three weeks unseen.
+      - name: Check native Pi MCP tool calls over ACP against a localhost provider
+        run: |
+          PYTHONPATH="$PWD/src" AC_MCP_NATIVE_BIN="$AC_NATIVE_STACK_BIN" \
+            stack/.venv/bin/python -m pytest tests/test_mcp_acceptance.py --no-cov -q -o faulthandler_timeout=60
+
   test:
     runs-on: ubuntu-latest
 
