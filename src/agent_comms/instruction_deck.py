@@ -81,6 +81,17 @@ class DealtCalls(StoreGuard):
             calls.write(QuietGate.marker())
             return calls.tell()
 
+    @property
+    def refusals(self) -> Path:
+        """One byte per refused call since the deal: what Tristan's line counts, apart from the
+        call ordinals the notices carry (2026-11-06: "that's 199 tries" counted every call)."""
+        return self.stem.with_suffix(".refusals")
+
+    def count_refusal(self) -> int:
+        with self.refusals.open("ab", buffering=0) as refusals:
+            refusals.write(QuietGate.marker())
+            return refusals.tell()
+
     @contextmanager
     def recorded_call(self) -> Iterator[RecordedGateCall]:
         """Order the refusal/read transition and its publication against parallel calls.

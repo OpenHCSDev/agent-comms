@@ -915,12 +915,12 @@ class Owed(State):
     def reason(self) -> str:
         """What the session skipped, and what clears it."""
 
-    def explain_refusal(self, tool: str, number: int, template: str) -> str:
+    def explain_refusal(self, tool: str, refusal: int, template: str) -> str:
         """The owed case owns its refusal; the backend owns how it is delivered. Tristan's line
         first, why the deal came on the first refusal only, then the one step that opens it."""
         return "\n\n".join((
-            f"Tristan: {self.nudge(number)}",
-            *((self.record.trigger.reason(),) if number == 1 else ()),
+            f"Tristan: {self.nudge(refusal)}",
+            *((self.record.trigger.reason(),) if refusal == 1 else ()),
             f"{tool} waits on {self.before}. {self.reason}",
             *((template,) if template else ()),
         ))
@@ -1250,6 +1250,7 @@ class RuleDeal(State, DealtCalls):
         held = frozenset(DealtSource.of(path) for path in paths)
         self.stem.parent.mkdir(parents=True, exist_ok=True)
         self.calls.unlink(missing_ok=True)
+        self.refusals.unlink(missing_ok=True)
         self.dealt_read.write_text("".join(
             read.line() for read in self.delivery().reads() if read.source in held
         ), encoding="utf-8")
@@ -1325,7 +1326,8 @@ class ToolGate(RuleDeal):
 
     def blocked(self, cause: Owed, tool: str) -> None:
         template = self.template_once(cause.record.due)
-        self.refuse(cause.explain_refusal(tool, self.count_call(), template))
+        self.count_call()
+        self.refuse(cause.explain_refusal(tool, self.count_refusal(), template))
 
     @abstractmethod
     def refuse(self, reason: str) -> None:

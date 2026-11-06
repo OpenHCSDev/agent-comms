@@ -177,7 +177,7 @@ class GatedCall(ClaudeToolHook, TranscriptWords, DealtRuleGate, BusVoice):
     def blocked(self, cause: Owed, tool: str) -> None:
         template = self.template_once(cause.record.due)
         with self.recorded_call() as call:
-            self.refuse(cause.explain_refusal(tool, call.number, template))
+            self.refuse(cause.explain_refusal(tool, self.count_refusal(), template))
             self.announce(call.refused(), call.number)
 
     def refuse(self, reason: str) -> None:
