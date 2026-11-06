@@ -24,7 +24,6 @@ from metaclass_registry.mro_dispatch import MroDispatch, handles
 
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.head_review import MergeHeadReview
 from agent_comms.repo import Checkout, CheckoutHistory, Repo
 
 if TYPE_CHECKING:
@@ -507,82 +506,6 @@ class AllEvidence(PhaseEvidence):
 @dataclass(frozen=True)
 class ParityEvidence(AllEvidence):
     """Native owners supply the facts; the historical comparison matrix cannot overrule them."""
-
-
-@dataclass(frozen=True)
-class BranchRule:
-    """An active GitHub rule, including its actual merge-queue requirement."""
-
-    ruleset: int
-    required: tuple[str, ...]
-    queue: bool
-
-    def requires(self, check: str) -> bool:
-        return check in self.required
-
-
-@dataclass(frozen=True)
-class BypassActor:
-    """A GitHub ruleset actor, decoded once by its declared identity fields."""
-
-    actor_type: str
-    actor_id: int
-
-
-@dataclass(frozen=True)
-class RulesetGates(PhaseEvidence):
-    """Main requires source review, explicit merge permission and the queue, without bypass.
-
-    GitHub policy changes without a main commit; read it once per reading.
-    """
-
-    def retained(self, previous: MainTree, current: MainTree) -> bool:
-        """GitHub policy can change without a main move; read it once each pass."""
-        return False
-
-    rules_query: ClassVar[str] = (
-        "[.[] | {ruleset: .ruleset_id, required: [.parameters.required_status_checks[]?.context],"
-        " queue: (.type == \"merge_queue\")}]"
-    )
-    bypass_query: ClassVar[str] = (
-        ".bypass_actors | map({"
-        + ", ".join(entry.key for entry in FieldCodec.argument_fields(BypassActor))
-        + "})"
-    )
-
-    def holds(self, reading: PlanReading) -> bool:
-        main = reading.main
-        rules = FieldCodec.decode(
-            tuple[BranchRule, ...],
-            self.api(main, f"rules/branches/{main.branch}", self.rules_query),
-        )
-        enforced = {ruleset for ruleset in {rule.ruleset for rule in rules}
-                    if self.no_bypass(main, ruleset)}
-        protected = tuple(rule for rule in rules if rule.ruleset in enforced)
-        return (all(any(rule.requires(context) for rule in protected)
-                    for context in MergeHeadReview.required_contexts())
-                and any(rule.queue for rule in protected))
-
-    def no_bypass(self, main: MainTree, ruleset: int) -> bool:
-        actors = FieldCodec.decode(
-            tuple[BypassActor, ...],
-            self.api(main, f"rulesets/{ruleset}", self.bypass_query),
-        )
-        return not actors
-
-    @staticmethod
-    def api(main: MainTree, path: str, query: str) -> object:
-        read = main.repo.github.rest(path, "--jq", query)
-        if read.returncode:
-            raise UnreadableEvidenceError(read.stderr.strip() or f"GitHub {path} could not be read")
-        return FieldCodec.parse(read.stdout)
-
-    def describe(self) -> str:
-        return (
-            f"active rules on {MainTree.branch} require "
-            + " and ".join(MergeHeadReview.required_contexts())
-            + " directly and an actual merge queue, with no bypass actors"
-        )
 
 
 class ErasedBody(ast.NodeTransformer):
