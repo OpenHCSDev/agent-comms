@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import BinaryIO, ClassVar, Literal, Self
 
 from agent_comms.runtime_updates import RuntimeUpdate, SessionFacts
-from agent_comms.thread_text import NoThreadText, ThreadText
+from agent_comms.thread_text import NamedSession, NoThreadText, ThreadText
 
 from ..session_receipts import SessionReceipts
 from ..cli_protocol import TaggedWire
@@ -20,7 +20,7 @@ from ..wire_models import WireModel
 from .shared import WireReference
 from .claude_protocol import CLAUDE_RECORD, ClaudeRecord, ClaudeSession, SubagentProgress
 from .history import (
-    ClaudeHistory, HarnessAddress, JsonLines, JsonLinesFile, NamedSession,
+    ClaudeHistory, HarnessAddress, JsonLines, JsonLinesFile,
     OfflineHistory, OnlineHistory,
 )
 

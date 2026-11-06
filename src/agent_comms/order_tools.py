@@ -63,7 +63,7 @@ from .plan_phases import OrderPhase
 from .problem_number import ProblemNumber
 from .progress_claims import ProgressClaim
 from .read_basis import ReadAuthority
-from .send_result import CorrectionResult, SendResult
+from .send_result import CorrectionResult, MessagePublished, SendResult
 from .service_passes import ServicePassStore
 from .thread_identity import ThreadIncarnation
 from .tool_caller import ThreadCaller, ToolCaller
@@ -115,22 +115,6 @@ class ProblemClosed(ToolResult):
 @dataclass(frozen=True)
 class ProblemNumberReserved(ToolResult):
     problem: str
-
-
-@dataclass(frozen=True)
-class MessagePublished(ToolResult):
-    """The Pi adapter decodes this reply as PublishedMessageToolDetails by its agentCommsKind."""
-
-    id: MessageId
-    message: SentTranscript
-    correction: CorrectionResult
-    agent_comms_kind: Annotated[
-        Literal["published_message"], WireName("agentCommsKind")
-    ] = "published_message"
-
-    @classmethod
-    def from_send(cls, result: SendResult) -> MessagePublished:
-        return cls(result.message.message_id, SentTranscript.from_message(result.message), result.correction)
 
 
 @dataclass(frozen=True, kw_only=True)

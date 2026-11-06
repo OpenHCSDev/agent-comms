@@ -29,7 +29,7 @@ from agent_comms.harness_install import (
 from agent_comms.importing import ImportLimits, ImportSnapshot, ImportedConversation
 
 from agent_comms.runtime_updates import EarlierRequest, HistoryNotice, RuntimeUpdate, SessionFacts
-from agent_comms.thread_text import AbsentText, GivenText, TextChoice, ThreadText
+from agent_comms.thread_text import AnySession, ExpectedSession, AbsentText, GivenText, TextChoice, ThreadText
 
 if TYPE_CHECKING:
     from .opencode_parts import SavedMessage
@@ -96,27 +96,6 @@ class ReadAtOnce(ABC):
     async def history(self) -> AsyncIterator[RuntimeUpdate]:
         for update in self.read():
             yield update
-
-
-class ExpectedSession(SubclassUnion, TextChoice, affix="Session"):
-    """The session a stored history must hold, when the import names one."""
-
-    @abstractmethod
-    def holds(self, session_id: str) -> bool: ...
-
-
-@dataclass(frozen=True, slots=True)
-class NamedSession(GivenText, ExpectedSession):
-    text: str
-
-    def holds(self, session_id: str) -> bool:
-        return session_id == self.text
-
-
-@dataclass(frozen=True, slots=True)
-class AnySession(AbsentText, ExpectedSession):
-    def holds(self, session_id: str) -> bool:
-        return True
 
 
 class HarnessAddress(SubclassUnion, TextChoice, affix="Address"):

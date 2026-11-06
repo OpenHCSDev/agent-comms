@@ -86,7 +86,8 @@ from .cli_bridges.claude_transcript import WATCH_REPLACED
 from .inbox_watch import InboxWatch, OpenWatch, WatchRoute, WatchTickets
 from .tool_caller import ThreadCaller
 from .tools import CommsSendTool, SendTool
-from .order_tools import CommsHeadVerdictTool, HeadVerdictTool, MessagePublished
+from .order_tools import CommsHeadVerdictTool, HeadVerdictTool
+from .send_result import MessagePublished
 from .transport.mcp import (
     AnsweredCall,
     InvalidRequestError,

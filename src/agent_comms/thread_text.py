@@ -160,3 +160,24 @@ class SubagentRole(SingleFieldValue):
         yield base
         for ordinal in itertools.count(2):
             yield f"{base}-{ordinal}"
+
+
+class ExpectedSession(SubclassUnion, TextChoice, affix="Session"):
+    """The session a stored history must hold, when the import names one."""
+
+    @abstractmethod
+    def holds(self, session_id: str) -> bool: ...
+
+
+@dataclass(frozen=True, slots=True)
+class NamedSession(GivenText, ExpectedSession):
+    text: str
+
+    def holds(self, session_id: str) -> bool:
+        return session_id == self.text
+
+
+@dataclass(frozen=True, slots=True)
+class AnySession(AbsentText, ExpectedSession):
+    def holds(self, session_id: str) -> bool:
+        return True

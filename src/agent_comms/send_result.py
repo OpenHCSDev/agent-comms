@@ -1,10 +1,15 @@
 """A committed send and its independent post-delivery wording correction."""
+from __future__ import annotations
+
 from abc import abstractmethod
 from dataclasses import dataclass
+from typing import Annotated, Literal
 
 from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import MessageId
+from .nominal.field_codec import MessageId, WireName
 from .messages import Message
+from .tool_result import ToolResult
+from .transcript_events import SentTranscript
 
 
 class CorrectionResult(DeclaredFamily):
@@ -55,3 +60,18 @@ class MessageSentResult(CliResult):
                 'correction': FieldCodec.encode(self.sent.correction),
                 'notices': self.sent.notices}
 
+
+@dataclass(frozen=True)
+class MessagePublished(ToolResult):
+    """The Pi adapter decodes this reply as PublishedMessageToolDetails by its agentCommsKind."""
+
+    id: MessageId
+    message: SentTranscript
+    correction: CorrectionResult
+    agent_comms_kind: Annotated[
+        Literal["published_message"], WireName("agentCommsKind")
+    ] = "published_message"
+
+    @classmethod
+    def from_send(cls, result: SendResult) -> MessagePublished:
+        return cls(result.message.message_id, SentTranscript.from_message(result.message), result.correction)

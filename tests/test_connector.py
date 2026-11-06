@@ -60,7 +60,7 @@ from agent_comms.host_services.connector import ConnectorService
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.native_transcript import NativeTranscript
-from agent_comms.order_tools import MessagePublished
+from agent_comms.send_result import MessagePublished
 from agent_comms.transport.tools.reads import TranscriptPageRead
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.storage.maintenance_barrier import (
