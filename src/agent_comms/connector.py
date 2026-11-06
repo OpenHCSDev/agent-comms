@@ -796,9 +796,9 @@ class Connector(ConnectorService):
     """The MCP endpoint and the OAuth authorization server in front of it."""
 
     heartbeat_seconds: ClassVar[float] = 25.0
-    # How a remote viewer's observation process starts.
-    helper_start: ClassVar[HelperStart] = SpawnedHelper()
     """How often a watch socket is pinged; a client that misses the pong is dropped."""
+    helper_start: ClassVar[HelperStart] = SpawnedHelper()
+    """How a remote viewer's observation process starts."""
 
     store: ConnectorStore
     issuer: str
