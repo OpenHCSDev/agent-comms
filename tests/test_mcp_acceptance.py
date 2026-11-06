@@ -47,6 +47,22 @@ pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX PTY accep
 TIMEOUT = 40
 
 
+async def _before_prompt_ends(signal: asyncio.Event, prompt: asyncio.Task) -> None:
+    """Wait for ``signal`` while the prompt runs. A prompt that ends first fails the case at
+    once with its own error, instead of after the whole timeout as a bare TimeoutError."""
+    waiter = asyncio.ensure_future(signal.wait())
+    try:
+        done, _ = await asyncio.wait(
+            {waiter, prompt}, timeout=TIMEOUT, return_when=asyncio.FIRST_COMPLETED)
+    finally:
+        waiter.cancel()
+    if waiter in done:
+        return
+    if prompt in done:
+        raise AssertionError(f"the prompt ended before the permission ask: {prompt.result()!r}")
+    raise TimeoutError(f"no permission ask within {TIMEOUT} s while the prompt still ran")
+
+
 def _node_run(native_package, node, env, script, cwd, artifact):
     command = [
         node, "--no-global-search-paths",
@@ -408,8 +424,6 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, native_runtime_
                 "openrouter",
                 "--model",
                 "z-ai/glm-5.3-flash",
-                "--thinking",
-                "off",
                 "-e",
                 str(package),
             ]
@@ -452,12 +466,11 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, native_runtime_
                                 # cannot attest that the live view received it.
                                 receipt_seen.set()
                             if isinstance(fact, TurnChangedUpdate):
-                                thread = owner._comms.registry.require(
+                                thread, claim = owner._comms.registry.live_owner_with_claim(
                                     owner.sessions.require(session_id)
                                 )
                                 observed = fact.state.active.observed_turn(
-                                    fact.state.finished, thread.turn_identity,
-                                    thread.claimed_generation,
+                                    fact.state.finished, thread.turn_identity, claim,
                                 )
                                 if fact.state.active.phase.busy:
                                     if attachment_turn == NoObservedTurn():
@@ -514,7 +527,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, native_runtime_
                             ),
                         )
                     )
-                    await asyncio.wait_for(entered.wait(), TIMEOUT)
+                    await _before_prompt_ends(entered, task)
                     assert (await Coordination.run_worker(partial(
                         owner.turns.turn_state, session_id
                     ))).active.phase.busy
@@ -579,12 +592,11 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, native_runtime_
                     assert row["sessionId"] == session_id
                     for fact in decode_updates(row["update"].get("_meta")):
                         if isinstance(fact, TurnChangedUpdate):
-                            thread = owner._comms.registry.require(
+                            thread, claim = owner._comms.registry.live_owner_with_claim(
                                 owner.sessions.require(session_id)
                             )
                             observed = fact.state.active.observed_turn(
-                                fact.state.finished, thread.turn_identity,
-                                thread.claimed_generation,
+                                fact.state.finished, thread.turn_identity, claim,
                             )
                             if fact.state.active.phase.busy:
                                 if active == NoObservedTurn():
@@ -598,7 +610,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, native_runtime_
                         if isinstance(fact, McpClientAcknowledgementUpdate):
                             assert active != NoObservedTurn()
                             assert active == TurnFence(
-                                thread.turn_identity, fact.turn_id, thread.claimed_generation,
+                                thread.turn_identity, fact.turn_id, claim,
                             )
                             receipts.append(fact.acknowledgement)
                 assert (
