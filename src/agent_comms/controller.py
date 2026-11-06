@@ -44,7 +44,8 @@ class Controller(ABC):
     async def request_ui_permission(
         self, runner: TurnRunner, session_id: AcpSessionId,
         request: tuple[ToolCallUpdate, list[PermissionOption]],
-    ) -> dict[str, object] | None: ...
+    ) -> dict[str, object]:
+        """The controller's outcome; a request nobody answers is CANCELLED_OUTCOME."""
 
     @abstractmethod
     def departed(self, runtime: RuntimeServer, session_id: AcpSessionId) -> bool: ...
