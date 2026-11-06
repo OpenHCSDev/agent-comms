@@ -248,10 +248,9 @@ UNOBSERVED_DELIVERY_SCOPE = UnobservedInputDeliveryScope()
 @dataclass(frozen=True)
 class UnresolvedInputReference:
     """An unresolved input named by its identity, so a page listing many of them never carries
-    a second copy of each body. A bus input's body stays in the bus under its sequence; a direct
-    input has no sequence and no bus row, and comms_input_delivery shows its text."""
+    a second copy of each body. Its key says where the body is: a bus input's key is its bus
+    sequence; a direct input has no bus row, and comms_input_delivery shows its text."""
 
-    sequence: int | None
     target: str
     input_id: Annotated[InputKey, PublicInputKeyText, WireName("inputId")]
     status: str
@@ -263,7 +262,7 @@ class UnresolvedInputReference:
     def of(cls, row: StoredInput, **declared: object) -> Self:
         """Every member is built from a stored row the same way; a member adds only its own
         fields, through row_fields or the caller's declared ones."""
-        return cls(sequence=row.sequence, target=row.target, input_id=row.key,
+        return cls(target=row.target, input_id=row.key,
                    status=row.public_status, reviewed_for_goals=tuple(sorted(row.goal_reviews)),
                    **cls.row_fields(row), **declared)
 
@@ -284,9 +283,8 @@ class UnresolvedInput(UnresolvedInputReference):
         return {"text": row.source_text}
 
     def record_text(self) -> str:
-        sequence = self.sequence if self.sequence is not None else "direct input"
-        return (f"Sequence: {sequence} · Target: {self.target}\n"
-                f"Input: {self.input_id.public_text()}\n{self.text}")
+        return (f"Input: {self.input_id.public_text()} · Target: {self.target}\n"
+                f"{self.text}")
 
 
 @dataclass(frozen=True)
