@@ -186,9 +186,11 @@ class InstalledSource(RunningSource):
         return dict(environment)
 
     def replaced_by_install(self) -> bool:
-        """Installed into a runtime: replaced once the current pointer names another one."""
-        return (LaunchRuntime.current_pointer().exists()
-                and LaunchRuntime.installed().prefix != LaunchRuntime.running().prefix)
+        """Installed into a runtime: replaced once the current pointer names another one. The
+        pointer is resolved once and never strictly, so an install swapping it mid-check answers
+        one way or the other instead of raising out of the watch."""
+        current = LaunchRuntime.current_pointer().resolve()
+        return current.is_dir() and current != LaunchRuntime.running().prefix
 
 
 class CheckoutSource(RunningSource):
@@ -199,7 +201,9 @@ class CheckoutSource(RunningSource):
         return inherited.apply_runtime(environment)
 
     def replaced_by_install(self) -> bool:
-        """A checkout runs whatever its tree holds; an install replaces no runtime under it."""
+        """A checkout runs the code it imported from its tree, not an installed runtime, so an
+        install replaces nothing under it. (A later pull does not reach it either; that is not
+        an install's to notice.)"""
         return False
 
 

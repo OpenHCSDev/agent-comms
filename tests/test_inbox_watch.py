@@ -36,7 +36,7 @@ from agent_comms.connector import Connector
 from agent_comms.connector_caller import GrantRefusedError
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.inbox_watch import OpenWatch
-from agent_comms.launch_runtime import InstalledSource, LaunchRuntime, RunningSource
+from agent_comms.launch_runtime import InstalledSource, LaunchRuntime
 from agent_comms.message_reference import MessageReference
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
 from agent_comms.repo import Checkout
@@ -392,8 +392,9 @@ async def test_a_watch_running_a_replaced_runtime_stops_instead_of_dialling(tmp_
     pointer = LaunchRuntime.current_pointer()
     pointer.parent.mkdir(parents=True)
     pointer.symlink_to(newer, target_is_directory=True)
-    monkeypatch.setattr(RunningSource, "current", staticmethod(lambda: InstalledSource(tmp_path / "site")))
-    ended = await asyncio.wait_for(InboxSocket("ws://127.0.0.1:9/watch/never-dialled", tmp_path / "messages").carried(), 10)
+    watch = InboxSocket("ws://127.0.0.1:9/watch/never-dialled", tmp_path / "messages",
+                        source=InstalledSource(tmp_path / "site"))
+    ended = await asyncio.wait_for(watch.carried(), 10)
     assert ended == RuntimeReplaced()
     assert ended.line().startswith("Core was reinstalled") and "comms_watch" in ended.line()
 

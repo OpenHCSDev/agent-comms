@@ -510,6 +510,9 @@ class InboxSocket:
     exports: Path
     transcript: TranscriptRoute = UnfoundTranscript("no transcript was given to this watch")
     redials: Redials = field(default_factory=Redials)
+    source: RunningSource = field(default_factory=RunningSource.current)
+    """Where this process's client code came from: an install can replace an installed runtime's,
+    never a checkout's."""
 
     batch_gap_seconds: ClassVar[float] = 0.25
     """Monitor joins the lines of each 200 ms into one event and cuts a long event mid-line: of 11
@@ -555,7 +558,7 @@ class InboxSocket:
     async def opened(self, url: str) -> WatchEnd:
         """One socket's life: how it ended. A failure means what the stage it struck says. Every
         install closes the socket, so a dial is where a replaced runtime is noticed."""
-        if RunningSource.current().replaced_by_install():
+        if self.source.replaced_by_install():
             return RuntimeReplaced()
         stage: SocketStage = Dialing()
         try:
