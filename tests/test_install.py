@@ -118,6 +118,22 @@ def test_practice_copy_is_the_declared_files_without_its_maintenance_witnesses(p
     assert bus_files(LiveFilesRequest(root)) == saved
 
 
+def test_the_rehearsal_copy_holds_the_registry_with_its_presence_rows(private_directory):
+    # Installs of 8921dfdb refused twice, 2026-11-06: once no pending carry named
+    # presence.json, the selected copy held registry.json alone, and the installed runtime's
+    # owners probe on that copy raised "a declared thread has no presence row".
+    from agent_comms.installer.interpreter_operation import InstallClock
+    from agent_comms.installer.upgrade import PracticeBus
+
+    root, _ = bus(private_directory)
+    (root / "storage.json").write_text(json.dumps({"floor_gib": 0}))
+    copy = PracticeCopy(root, private_directory / "practice/bus")
+    PracticeBus(private_directory / "practice", copy, root, private_directory / "spill",
+                InstallClock()).select((), ())
+    assert (wire(copy.path).registry.snapshot().threads.keys()
+            == wire(root).registry.snapshot().threads.keys())
+
+
 def test_a_message_sent_while_the_bus_is_copied_preserves_one_database_cut(
         private_directory, monkeypatch, capsys):
     # The live install of 0d81f55e2 refused its practice copy ("Private bus checkpoint

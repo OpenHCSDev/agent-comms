@@ -776,7 +776,7 @@ class PracticeBus:
     def select(self, pending: tuple[Carry, ...], reconciled: tuple[Path, ...]) -> tuple[Path, ...]:
         # This is the one input union consumed by both rehearsal and live backup.
         paths = tuple(sorted({
-            RegistryStore.at(self.original_root).path,
+            *RegistryStore.at(self.original_root).stored_files(),
             RootRuntimeStore.path_in(self.original_root),
             *(self.original_root / path for path in reconciled),
             *(path for step in pending for path in step.input_files()),
