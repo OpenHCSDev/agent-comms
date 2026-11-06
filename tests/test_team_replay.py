@@ -21,6 +21,7 @@ from agent_comms.team.publication_rules import EmptyPullRequest, UnpushedBranch
 from agent_comms.team.spinning import SpinningTeammate, StaleUncommittedEdits
 from agent_comms.team_heartbeat import TeamHeartbeat, TeamObservation
 from team_heartbeat_fixture import current_hud, observe_team
+from agent_comms.team_hud import CodexUsage
 from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.nominal.field_codec import ToolCallId
@@ -710,7 +711,8 @@ def test_a_merged_order_running_its_proof_is_not_spinning(fleet):
     # This fixture's repository is no installed package: the HUD line says so, never raises.
     observed = built.observe()
     assert not any(type(rule) is SpinningTeammate for rule in observed.rules)
-    hud = current_hud(built.comms, Team.teammate, observed.frame, observed.states)
+    hud = current_hud(built.comms, Team.teammate, observed.frame, observed.states,
+                      CodexUsage.read())
     assert any(order.state == "Merged, no runtime install, waiting on the run"
                for unit in hud.units for order in unit.orders)
 

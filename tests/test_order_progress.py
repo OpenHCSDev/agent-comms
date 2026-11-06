@@ -169,8 +169,9 @@ def test_deleted_branch_marks_one_card_unreadable(held_bus):
             assert broken.reason == str(source_failure.value)
             assert tuple(card for card in frame.states if card.unit.name != 'worker') == healthy
             asyncio.run(ObservedHeartbeat(frame).run(lambda: nullcontext(comms)))
-            expected = current_hud(comms, colleague.name, frame.frame, frame.states)
-            assert TeamFrame.read_all(comms.root) == (expected,)
+            published, = TeamFrame.read_all(comms.root)
+            assert published == current_hud(comms, colleague.name, frame.frame, frame.states,
+                                            published.usage)
 
 
 def test_push_times_come_from_origin_reflogs_only(tmp_path):

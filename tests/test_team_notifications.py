@@ -223,7 +223,11 @@ def refused_publication(comms: Comms) -> Iterator[None]:
 
 
 def lead_hud(comms, states=()):
-    return current_hud(comms, "colleague", capture_frame(comms, ProgressRead()), states)
+    """The board the colleague reads, shown with the usage its last published board showed:
+    tests compare its status fields with that publication, and the live account answers a
+    second read with whatever its reset clock says by then."""
+    return current_hud(comms, "colleague", capture_frame(comms, ProgressRead()), states,
+                       TeamFrame.current(comms, "colleague").usage)
 
 
 def assert_status_fields(message, hud):
@@ -638,7 +642,8 @@ def test_frame_keeps_original_ping_order_and_folded_idle_records(tmp_path):
 def test_a_registered_fork_is_on_the_hud(notification_bus):
     comms = notification_bus
     fork = comms.registry.register_child("judge-fork", "colleague", ForkThread, comms.goals)
-    assert fork.incarnation in lead_hud(comms).forks
+    hud = current_hud(comms, "colleague", capture_frame(comms, ProgressRead()), (), CodexUsage.read())
+    assert fork.incarnation in hud.forks
 
 
 def test_quiet_completion_is_per_teammate_even_when_a_later_recipient_fails(
