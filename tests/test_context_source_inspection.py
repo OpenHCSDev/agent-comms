@@ -23,6 +23,7 @@ from agent_comms.turn_context import ObservedDispatchRequest, UnobservedDispatch
 from agent_comms.turn_context import (
     ContextManifest,
     ContextSourceText,
+    ContributionCoordinates,
     FileProvenance,
     JournalProvenance,
     NativeProvenance,
@@ -31,6 +32,9 @@ from agent_comms.turn_context import (
     SystemLayerSegment,
     TranscriptSegment,
     TurnContext,
+    UnattributedProvenance,
+    UnretainedSourceText,
+    UserInputSegment,
 )
 from bus_record_fixture import context_comms
 from agent_comms.turn_item import PiRequestKey
@@ -364,3 +368,22 @@ else:
     raise AssertionError("Unknown context kind must still refuse")
 '''], input=json.dumps(payload), capture_output=True, text=True, timeout=20)
     assert result.returncode == 0, result.stderr
+
+
+def test_a_saved_segment_shows_its_retained_text_or_says_none_was_kept():
+    """A saved record has no live owner to read from. Before, a segment that kept no public text
+    came back as the not-retained notice in the field that means "the original text", and a span
+    read against it raised "Contribution differs from its original addressed bytes", so opening
+    an annotation on a stopped thread's record crashed the detail (toad#1557's census)."""
+    segment = UserInputSegment(content="Keep the original instruction.",
+                               provenance=(UnattributedProvenance(),))
+    coordinates = ContributionCoordinates.capture(
+        UserInputSegment, segment.provenance, 0, "Keep")
+    retained = replace(segment.manifest(0), captured_text=(segment.content,)).saved_source_text()
+    assert type(retained) is ContextSourceText
+    assert retained.text == segment.content and retained.span_text(coordinates) == "Keep"
+    unretained = segment.manifest(0).saved_source_text()
+    assert isinstance(unretained, UnretainedSourceText)
+    assert unretained.span_text(coordinates) == unretained.text
+    with pytest.raises(ValueError):
+        ContextSourceText(unretained.description, unretained.text).span_text(coordinates)
