@@ -3,6 +3,7 @@
 import asyncio
 import os
 import signal
+import time
 import sys
 import json
 import re
@@ -716,7 +717,8 @@ async def test_a_watch_frozen_past_its_heartbeat_reconnects_alone_and_shows_the_
 
     try:
         async with asyncio.timeout(60):
-            while printed.count("Watching your inbox; each message arrives as an event.") < 2 \
+            # The first socket's line was read before the freeze; this is the reconnected one.
+            while "Watching your inbox; each message arrives as an event." not in printed \
                     or not any(message.body in line for line in printed):
                 await next_line()
         with pytest.raises(TimeoutError):
