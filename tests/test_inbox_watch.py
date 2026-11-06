@@ -23,7 +23,8 @@ from agent_comms.cli_bridges.claude_transcript import (
 )
 from agent_comms.harness_delivery_states import PrintLedgerId
 from agent_comms.cli_bridges.inbox_watch_client import (
-    FollowedTranscript, InboxSocket, WatchDropped, WatchEnd, WatchReplaced, WatchStopped,
+    RECONNECTS_ALONE, FollowedTranscript, InboxSocket, WatchDropped, WatchEnd, WatchReplaced,
+    WatchStopped,
 )
 from agent_comms.comms import Comms
 from agent_comms.channel_targets import CommandTarget
@@ -691,6 +692,8 @@ async def test_a_watch_frozen_past_its_heartbeat_reconnects_alone_and_shows_the_
     assert watch.stdout is not None
     async with asyncio.timeout(30):
         assert b"Watching your inbox" in await watch.stdout.readline()
+        # Frozen before the reconnect URL arrives, it would hold nothing to re-dial with.
+        assert RECONNECTS_ALONE.encode() in await watch.stdout.readline()
     os.kill(watch.pid, signal.SIGSTOP)
     try:
         message = comms.messaging.send("sender", "cloud", "sent into the freeze").message

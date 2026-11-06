@@ -174,8 +174,9 @@ class WatchEnd(ABC):
     def closed(cls, code: int | None) -> WatchEnd:
         """The close code is decided once, here, where it arrives."""
         reason = f"closed with code {code}"
-        return {WATCH_STOPPED: WatchStopped(), WATCH_REPLACED: WatchReplaced(reason)}.get(
-            code, WatchDropped(reason))
+        ends: dict[int | None, WatchEnd] = {
+            WATCH_STOPPED: WatchStopped(), WATCH_REPLACED: WatchReplaced(reason)}
+        return ends.get(code, WatchDropped(reason))
 
     async def settled(self, watch: InboxSocket) -> WatchEnd:
         """What is left for the model once this process has done what it can."""
@@ -251,6 +252,10 @@ class WatchStopped(WatchEnd):
         return ("This thread was stopped on the bus. Do not call comms_watch again now: tell the "
                 "person in one line that you were stopped, then stop. This session stays; when "
                 "someone wakes it, connect again.")
+
+
+RECONNECTS_ALONE = "This watch reconnects on its own after a network reset."
+"""Said when the connector hands over a reconnect URL; the URL itself is never shown."""
 
 
 class HeldReconnect(ABC):
@@ -389,6 +394,7 @@ class InboxSocket:
         """A message, or the connector's reconnect URL, which is kept and never shown."""
         if frame.startswith(ReconnectUrl.wire_prefix):
             self.redials.held = ReconnectWith(ReconnectUrl.model_validate_json(frame).url)
+            print(RECONNECTS_ALONE, flush=True)
             return
         await self.deliver(frame, socket)
 
