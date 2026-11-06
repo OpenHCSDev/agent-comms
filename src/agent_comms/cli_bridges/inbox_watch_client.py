@@ -249,14 +249,16 @@ class WatchDeferred(WatchDropped):
     """The bus is under maintenance, as every install holds it. The socket opened and was handed
     its next URL before the connector found it could not attach the thread, so that URL waits
     out the maintenance; it spends no reset, since nothing reset. On 2026-11-06 a watch re-dialled
-    into an install five times in seconds, each one refused, and gave up before it ended."""
+    into an install five times in seconds, each one refused, and gave up before it ended. A
+    deferral is the connector, alive, saying the maintenance still holds, so the wait has no
+    bound while that is the answer: that install held it for 5 min 16 s."""
 
     async def settled(self, watch: InboxSocket) -> WatchEnd:
         return await watch.redials.held.waiting(watch, self)
 
     async def redialing(self, watch: InboxSocket, url: str, pauses: Pauses) -> WatchEnd:
-        """Still under maintenance: the newest URL waits on with the pauses left."""
-        return await watch.redials.held.waited(watch, self, pauses)
+        """Still under maintenance: the newest URL waits on, whatever pauses were left."""
+        return await watch.redials.held.waited(watch, self, watch.redials.still_held)
 
 
 @dataclass(frozen=True)
@@ -320,8 +322,8 @@ class HeldReconnect(ABC):
     async def waited(self, watch: InboxSocket, deferred: WatchDeferred, pauses: Pauses) -> WatchEnd: ...
 
     async def waiting(self, watch: InboxSocket, deferred: WatchDeferred) -> WatchEnd:
-        """The first refusal of a maintenance: the whole wait is still ahead."""
-        return await self.waited(watch, deferred, watch.redials.maintenance)
+        """The first refusal of a maintenance, which may be about to end."""
+        return await self.waited(watch, deferred, watch.redials.first_wait)
 
 
 class NoReconnect(HeldReconnect):
@@ -375,8 +377,10 @@ class Redials:
     most: ClassVar[int] = 5
     window_seconds: ClassVar[int] = 600
     pauses: ClassVar[Pauses] = Pauses.of((1.0, 2.0, 4.0, 8.0))
-    maintenance: ClassVar[Pauses] = Pauses.of((5.0, 10.0, 15.0, 30.0, 30.0, 30.0, 30.0, 30.0, 30.0))
-    """Installs held maintenance for 41 s to over 2 min on 2026-11-06; this waits 3.5 min."""
+    first_wait: ClassVar[Pauses] = Pause(5.0, pauses)
+    still_held: ClassVar[Pauses] = Pause(30.0, pauses)
+    """Before each re-dial into a maintenance that still holds. A dial that does not open at all
+    has the ordinary pauses after it, then the model."""
 
     def has_room(self, now: float) -> bool:
         """Whether the window has room for one more reconnect, which is then recorded."""

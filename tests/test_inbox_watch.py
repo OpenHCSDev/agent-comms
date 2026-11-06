@@ -24,8 +24,8 @@ from agent_comms.cli_bridges.claude_transcript import (
 )
 from agent_comms.harness_delivery_states import PrintLedgerId
 from agent_comms.cli_bridges.inbox_watch_client import (
-    RECONNECTS_ALONE, FollowedTranscript, InboxSocket, WatchDeferred, WatchDropped, WatchEnd,
-    WatchReplaced, WatchStopped,
+    RECONNECTS_ALONE, WAITS_FOR_MAINTENANCE, FollowedTranscript, InboxSocket, Pause, Pauses,
+    Redials, WatchDeferred, WatchDropped, WatchEnd, WatchReplaced, WatchStopped,
 )
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
@@ -646,6 +646,50 @@ async def test_a_reconnect_into_maintenance_is_deferred_and_keeps_its_next_url(
     comms.messaging.send("sender", "cloud", "after the maintenance")
     assert (await frame(again))["text"] == "after the maintenance"
     await again.close()
+
+
+class QuickRedials(Redials):
+    """Millisecond pauses, so a wait past the old run's nine takes no time here."""
+
+    pauses = Pauses.of((0.01,))
+    first_wait = Pause(0.01, pauses)
+    still_held = Pause(0.01, pauses)
+
+
+async def test_a_watch_waits_out_maintenance_however_long_it_holds(
+    session, comms: Comms, tmp_path: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Tonight's install held maintenance for 5 min 16 s, past the 3.5 min wait first written for
+    it. A deferral is the connector, alive, saying maintenance still holds, so the real client
+    waits on for as long as that is the answer, says so once, and is watching when it lifts."""
+    client, token = session
+    first = await client.ws_connect(await watch_path(client, token, "cloud"))
+    path = await reconnect_url(first)
+    await first.close()
+    barrier = MaintenanceBarrier(RegistryFile.path_in(comms.root))
+    held = barrier.begin(MaintenanceOperator.current())
+    watch = InboxSocket(str(client.make_url(path)), tmp_path / "exports" / "messages",
+                        redials=QuickRedials())
+    running = asyncio.create_task(watch.carried())
+    printed = ""
+    try:
+        try:
+            async with asyncio.timeout(20):
+                while printed.count("Watching your inbox") < 12:
+                    if running.done():
+                        pytest.fail(f"The watch gave up during maintenance: {printed}")
+                    await asyncio.sleep(0.05)
+                    printed += capsys.readouterr().out
+        finally:
+            barrier.clear(held)
+        comms.messaging.send("sender", "cloud", "after a long maintenance")
+        async with asyncio.timeout(20):
+            while "after a long maintenance" not in printed:
+                await asyncio.sleep(0.05)
+                printed += capsys.readouterr().out
+        assert printed.count(WAITS_FOR_MAINTENANCE) == 1, printed
+    finally:
+        running.cancel()
 
 
 def attempt_outcome(comms: Comms, message) -> str:
