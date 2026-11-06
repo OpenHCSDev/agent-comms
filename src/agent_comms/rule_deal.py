@@ -34,6 +34,7 @@ from .nominal.field_codec import FieldCodec, MalformedRecord, MessageId
 from .storage.locked_store import DocumentChange, LockedStore
 from .storage.store_files import AtomicFile, DependentStateTier, SingleFileStore
 
+from .rule_probes import Probe, ProbeContext
 from .team.rule_file import RuleFile
 from .context_reading import ContextUsage
 
@@ -403,6 +404,7 @@ class SessionAudit:
     rules: tuple[RuleAudit, ...]
     owner_words: tuple[OwnerWordsAnswer, ...]
     meant: tuple[MeantAnswer, ...] = field(default=(), kw_only=True)
+    probes: tuple[Probe, ...] = field(default=(), kw_only=True)
 
     @classmethod
     def read(cls, path: Path) -> SessionAudit:
@@ -555,6 +557,20 @@ class AuditDue:
         if unanswered:
             return ("the audit does not answer the owner's prompts, each copied exactly as this"
                     " JSON string into owner_words.words: " + self.quoted(unanswered.elements()))
+        return self.probe_refusal(audit)
+
+    def probe_refusal(self, audit: SessionAudit) -> str:
+        """Why the audit's probes do not answer them: one answer per probe, each checked against
+        what the rules cannot supply, and none mostly copied from the rules or another answer."""
+        if missing := Probe.missing(audit.probes, self.owner_words):
+            return "the audit answers no " + "; no ".join(
+                f"{probe.declared_name} probe: {probe.question}" for probe in missing)
+        dealt = tuple(f"{rule.wakeup}\n{rule.body}" for rule in RuleFile.packaged())
+        for answer in audit.probes:
+            others = tuple(other.text() for other in audit.probes if other is not answer)
+            context = ProbeContext(self.owner_words, Path.cwd(), (*dealt, *others))
+            if fault := answer.fault(context):
+                return f"its {answer.declared_name} probe does not answer: {fault}"
         return ""
 
     @staticmethod

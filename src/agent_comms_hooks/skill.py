@@ -71,6 +71,13 @@ class DeckReader(DealtSources):
         return RuleFile.packaged()
 
     @classmethod
+    def catalog_rungs(cls) -> tuple[Path, ...]:
+        """The NRA catalog's worked cases, dealt after its index: each is real slop from these
+        repositories beside the clean form that replaced it, the few-shot the rules only state.
+        Tristan, 2026-11-06: "the nra slop catalog with examples ... its actionable few shot"."""
+        return tuple(sorted(path for path in Slop.catalog().glob("*.md") if path.name != "README.md"))
+
+    @classmethod
     def streams(cls) -> tuple[tuple[str, ...], ...]:
         """Interleave the shared voice, pattern catalog, rules and failure catalog."""
         patterns = tuple(paragraph for path in cls.patterns()
@@ -117,6 +124,7 @@ class DeckReader(DealtSources):
             Path(inspect.getfile(PostmortemFailure)),
             TeamPackage.skill(),
             Slop.catalog() / "README.md",
+            *cls.catalog_rungs(),
             *cls.patterns(),
         )
 

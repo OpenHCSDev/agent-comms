@@ -605,6 +605,23 @@ def engaged(rule: str, source: Path) -> dict[str, str]:
     return {"rule": rule, "quote": line, "does": "tested", "why": "tested"}
 
 
+def probe_answers(owner_words: tuple[str, ...] = ()) -> list[dict[str, str]]:
+    """One answer per probe a deal with these recorded prompts asks, each citing a real line of
+    this checkout and, when he said something, quoting his own words."""
+    answers = [
+        {"probe": "hunt", "pattern": "MEMB-1", "fact": "the six rule names are listed by hand in order",
+         "at": "src/agent_comms/team/package.py:15", "derive": "declaration",
+         "by": "src/agent_comms/team/package.py:15"},
+        {"probe": "flinch", "answer": "No: a fixture session resists nothing; the gate it runs is"
+                                      " src/agent_comms/rule_deal.py:1"},
+    ]
+    if owner_words:
+        answers.append({"probe": "prior", "words": owner_words[0],
+                        "prior": "a fixture quotes its owner to prove the gate reads him",
+                        "refuted_by": "Corollary 4.12"})
+    return answers
+
+
 def fresh_confession(deal: RuleDeal) -> bool:
     """The deal's audit holds no answer: it is the blank skeleton the deal wrote."""
     return SessionAudit.read(deal.audit) == deal.current().due.skeleton()
@@ -623,6 +640,7 @@ def answer_deal(deal: PiRedeal) -> None:
     deal.audit.write_text(json.dumps({
         "rules": answered,
         "owner_words": [{"words": words, "doing": "testing"} for words in record.due.owner_words],
+        "probes": probe_answers(record.due.owner_words),
     }))
 
 

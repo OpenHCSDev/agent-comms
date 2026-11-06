@@ -31,7 +31,7 @@ from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.cli_bridges.hook_read_gate import ReadInput
 from agent_comms_hooks.skill import DeckReader
-from conftest import answer_deal, engaged, fresh_confession
+from conftest import answer_deal, engaged, fresh_confession, probe_answers
 
 
 def call(name: str, arguments: dict[str, object]) -> CodingCall:
@@ -134,6 +134,10 @@ def test_a_compacted_pi_thread_reads_every_dealt_rule_then_writes_its_audit(
             }
         )
     )
+    with pytest.raises(RulesUnread, match="probe"):
+        bash.judge_under(peer_deal)  # the costly probes are owed after the reading
+    audit = json.loads(peer_deal.audit.read_text())
+    peer_deal.audit.write_text(json.dumps({**audit, "probes": probe_answers(words)}))
     bash.judge_under(peer_deal)
     call("read", {"path": "notes.md"}).judge_under(peer_deal)
     events.CompactionEnd().deal_rules(peer_deal)  # the next compaction
