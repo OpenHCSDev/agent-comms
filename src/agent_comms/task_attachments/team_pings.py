@@ -42,7 +42,7 @@ if TYPE_CHECKING:
 
     from agent_comms.cli_bridges.shared import CliBridge
     from agent_comms.comms import Comms
-    from agent_comms.registry_document import RegistrySnapshot
+    from agent_comms.registry.registry_document import RegistrySnapshot
     from agent_comms.storage.typed_table import TypedTable
 
 

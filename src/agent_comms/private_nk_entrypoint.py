@@ -31,7 +31,7 @@ from agent_comms.native_session_files import NativeSessionFiles
 if TYPE_CHECKING:
     from .active_route import CommsRoute
     from .launch_runtime import LaunchRuntime
-    from .threads import Thread
+    from .registry.threads import Thread
 
 
 class RootLaunch(ABC):
@@ -46,7 +46,7 @@ class RootLaunch(ABC):
         The registry guard owns the native namespace; the installed pin owns
         the package. No bus-file metadata participates in either decision.
         """
-        from .registry_store import RegistryStore
+        from .registry.registry_store import RegistryStore
 
         root = route.observe_root()
         return RegistryStore.at(root).privacy().launch(root)
@@ -71,7 +71,7 @@ class RootLaunch(ABC):
 
     def prepare_owner(self, thread: Thread, agent_bin: str, runtime: LaunchRuntime) -> str:
         """Explicit owner launch prepares registry authority, then native tables."""
-        from .registry_store import RegistryStore
+        from .registry.registry_store import RegistryStore
 
         if agent_bin == NativeArguments.default_binary:
             agent_bin = runtime.native_entrypoint
@@ -146,7 +146,7 @@ class PrivateNkLaunch(RootLaunch):
         directory, registry or database and make no provider request.
         """
         NativeSessionFiles.require_private_directory(self.validated_root)
-        from .registry_store import RegistryStore
+        from .registry.registry_store import RegistryStore
 
         Bus(Bus.path_in(self.validated_root)).revision()
         registry = RegistryStore(RegistryFile.path_in(self.validated_root))

@@ -21,15 +21,21 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 from pydantic import BaseModel, ConfigDict, InstanceOf, JsonValue, PlainSerializer, PlainValidator
 
 from .coordination.errors import CommandFailure
-from .nominal.declared_family import DeclaredFamily
 from .errors import MissingSourceLine
-from .nominal.field_codec import FieldCodec, GitCommitText, PresentMember, SingleFieldValue, WireValue
 from .native_build_inputs import CloneShape, GitLaunch
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import (
+    FieldCodec,
+    GitCommitText,
+    PresentMember,
+    SingleFieldValue,
+    WireValue,
+)
 from .repository_name import RepositoryName
 
 if TYPE_CHECKING:
+    from .registry.threads import Thread
     from .storage_rules import StorageRule
-    from .threads import Thread
 
 
 class RepositorySelection(ABC):

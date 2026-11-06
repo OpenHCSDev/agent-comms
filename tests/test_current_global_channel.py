@@ -3,7 +3,7 @@ import pytest
 
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.errors import UnregisteredThreadError
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from conftest import installed_comms
 
 

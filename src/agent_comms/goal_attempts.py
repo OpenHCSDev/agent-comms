@@ -94,7 +94,7 @@ from .nominal.field_codec import TurnId
 if TYPE_CHECKING:
     from .goal_scope import GoalScope
     from .goal_management import Goals
-    from .threads import Thread
+    from .registry.threads import Thread
     from .turn_context import TurnContext
     from .goals import Goal
     from .turn_lease import TurnLeaseFence

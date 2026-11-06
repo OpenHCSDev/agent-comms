@@ -36,9 +36,9 @@ from .owner_protocol import (
 )
 from .storage.maintenance_barrier import MaintenanceHolder, NoMaintenanceHolder
 from .storage.private_path import PrivateSocketRole
-from .registry_document import RegistryEntry
+from .registry.registry_document import RegistryEntry
 from .thread_identity import ThreadIncarnation
-from .threads import Thread
+from .registry.threads import Thread
 from .tool_result import DeclaredReply
 
 if TYPE_CHECKING:

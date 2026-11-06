@@ -15,7 +15,7 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.goal_states import ActiveGoal
 from goal_owner_fixture import canonical_goal_wire
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.goal_scope import OneGoal
 
 

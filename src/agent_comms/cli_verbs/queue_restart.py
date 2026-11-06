@@ -7,7 +7,7 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.execution.owner_lifecycle import OwnerRestartSelection
 from agent_comms.restart_queue import RestartQueued, RestartQueue
 from agent_comms.thread_status import ThreadStatus
-from agent_comms.threads import Thread
+from agent_comms.registry.threads import Thread
 from dataclasses import dataclass
 
 

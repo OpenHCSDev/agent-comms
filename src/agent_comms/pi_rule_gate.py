@@ -30,11 +30,11 @@ from .rule_deal import (
 )
 from .meant_voice import BusVoice
 from .tool_denial import SelectedToolDenied
-from .threads import Thread
+from .registry.threads import Thread
 
 if TYPE_CHECKING:
     from .native_tool_call import NativeToolCall
-    from .registry_document import RegistrySnapshot
+    from .registry.registry_document import RegistrySnapshot
     from .transcript_sources import TranscriptSource
 
 

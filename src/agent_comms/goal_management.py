@@ -34,7 +34,7 @@ from .goal_attempts import Generation
 from .errors import UnresolvedAttemptError
 from .goal_history import GoalHistoryEntry, RecordedGoalHistory
 from .goal_scope import AllGoals, GoalScope, OneGoal
-from .goal_waits import (
+from .planning.goal_waits import (
     GoalWait,
     StandbyReview,
 )
@@ -43,7 +43,7 @@ from .owner_requests import NewestOpenRequest, RequestDirective
 
 from dataclasses import dataclass
 from .goal_failure_observation import GoalFailureEvidence
-from .registry_document import RegistryDocument, RegistrySnapshot
+from .registry.registry_document import RegistryDocument, RegistrySnapshot
 from .thread_identity import ThreadIncarnation
 if TYPE_CHECKING:
     from .agent_events import GoalChange
@@ -57,7 +57,7 @@ from .input_attempt import (
     UnresolvedInputReference,
 )
 from .input_disposition import DeliveryOverview
-from .threads import NativeThread, Thread
+from .registry.threads import NativeThread, Thread
 from .errors import TodoError
 from .todos import SendBackVerdict, StrikeReason, Todo, JudgedCall, TodoBatch, TodoCommand, TodoStore
 

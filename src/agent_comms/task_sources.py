@@ -38,10 +38,10 @@ if TYPE_CHECKING:
     from .input_attempt import StoredInput
     from .input_disposition import InputDispositions
     from .messages import Message
-    from .registry_document import RegistrySnapshot
+    from .registry.registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
     from .retained_task_facts import RetainedTaskFacts
-    from .threads import Thread
+    from .registry.threads import Thread
     from .turn_context import ContextSegment
     from .storage.typed_table import TypedTable
 
@@ -633,7 +633,7 @@ class NativeInputConstraintPin(HumanConstraintPin):
 
     def require_wording_publication(self, registry: RegistrySnapshot, original_source: BusReader) -> None:
         from .input_disposition import InputDispositions
-        from .registry_store import RegistryStore
+        from .registry.registry_store import RegistryStore
 
         privacy = RegistryStore.at(original_source.path.parent).privacy()
         row = self.subject.require_human_input().require_original(

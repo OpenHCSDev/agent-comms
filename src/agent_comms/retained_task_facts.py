@@ -11,20 +11,20 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .nominal.field_codec import FieldCodec
 from .input_attempt import StoredInput
 from .message_reference import MessageReference
 from .messages import ClaimMessage, Message
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import FieldCodec
 from .text_digest import TextDigest
 
 if TYPE_CHECKING:
     from .bus import BusReader
     from .input_disposition import InputDispositions
-    from .registry_document import RegistrySnapshot
+    from .registry.registry_document import RegistrySnapshot
+    from .registry.threads import Thread
     from .thread_identity import ThreadIncarnation
-    from .threads import Thread
 
 
 class ExactTaskFact(DeclaredFamily, affix="TaskFact"):

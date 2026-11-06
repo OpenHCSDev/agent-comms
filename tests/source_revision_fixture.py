@@ -10,7 +10,7 @@ from tempfile import mkdtemp
 
 import tomli_w
 
-from agent_comms.registry_document import RegisteredTeamProject
+from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.change_report import OrderRoots

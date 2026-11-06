@@ -25,7 +25,7 @@ from agent_comms.pi_vocabulary import ServiceTier
 from agent_comms.repo import Checkout, Repo
 from agent_comms.runtime_server import RuntimeRequest
 from agent_comms.runtime_requests import PromptRuntimeRequest
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch, tmp_path):

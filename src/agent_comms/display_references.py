@@ -22,7 +22,7 @@ from agent_comms.tool_result import ToolResult
 if TYPE_CHECKING:
     from agent_comms.historical_views import HistorySource
     from agent_comms.messages import MessageHistory
-    from agent_comms.registry_document import RegistrySnapshot
+    from agent_comms.registry.registry_document import RegistrySnapshot
 
 
 @dataclass(frozen=True)

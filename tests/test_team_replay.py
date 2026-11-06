@@ -45,7 +45,7 @@ from agent_comms.standing_rules import (
 )
 from agent_comms.thread_identity import ReportedTools, ToolName
 from agent_comms.thread_text import ForkedParent
-from agent_comms.threads import Thread, NativeThread
+from agent_comms.registry.threads import Thread, NativeThread
 from agent_comms.todos import (
     ClaimOrder,
     DraftListedPullRequest,

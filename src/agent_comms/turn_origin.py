@@ -9,7 +9,7 @@ from .input_key import InputKey
 if TYPE_CHECKING:
     from .input_disposition import InputDispositions
     from .messages import Message
-    from .threads import Thread
+    from .registry.threads import Thread
 
 
 class TurnOrigin(ABC):

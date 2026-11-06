@@ -20,7 +20,7 @@ from agent_comms.thread_identity import UserThreadRole
 from agent_comms.thread_text import GivenThreadText
 from agent_comms.turn_lease import RecordedGeneration
 from agent_comms.turn_phase import PreparingPhase
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def registered(root):

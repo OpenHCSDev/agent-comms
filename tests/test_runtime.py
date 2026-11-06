@@ -31,7 +31,7 @@ from agent_comms.input_key import BusInputKey
 from agent_comms.bus_read import OwnerReadRuntimeRequest
 from agent_comms.transport.tools.reads import InputDeliveryRead
 from agent_comms.runtime_server import RuntimeRequest
-from agent_comms.threads import ExternalThread, NativeThread
+from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.tool_caller import ToolCaller
 from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import AcpSessionId, RootId

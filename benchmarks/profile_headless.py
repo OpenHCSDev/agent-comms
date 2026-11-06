@@ -29,7 +29,7 @@ import agent_comms
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
-from agent_comms.threads import Thread
+from agent_comms.registry.threads import Thread
 
 from lock_observation import ReadPolicy, LockObservation, distribution
 

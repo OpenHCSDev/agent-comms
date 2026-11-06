@@ -20,7 +20,7 @@ from agent_comms.task_attachments.team_pings import (
     TeamUpdateNotice, TeamUpdate, TeamUpdateStore,
 )
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from cutover.carry_team_observations import TeamObservations
 from cutover.carry_team_update_lines import TeamUpdateLines
 from cutover.carry_rule_ping_types import RulePingTypes

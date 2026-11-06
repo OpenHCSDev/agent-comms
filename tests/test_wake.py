@@ -23,7 +23,7 @@ from agent_comms.messages import (
 )
 from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, MentionedPolicy
 from agent_comms.thread_identity import AgentThreadRole, ThreadRole, UserThreadRole
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.wake import (
     MessageControl,
     OrdinaryControl,

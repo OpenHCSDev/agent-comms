@@ -10,7 +10,7 @@ import pytest
 
 from agent_comms.team import judge, order
 from agent_comms.errors import TodoError
-from agent_comms.threads import ForkThread, ExternalThread
+from agent_comms.registry.threads import ForkThread, ExternalThread
 from agent_comms.team.standing import DeliveryAwaitingJudgement
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.goal_actions import SetGoalAction

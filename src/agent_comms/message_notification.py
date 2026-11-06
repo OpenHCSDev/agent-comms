@@ -10,7 +10,7 @@ from functools import cached_property
 from pathlib import Path
 from .agent_activity import AgentActivity, RecordedRecipientActivity
 from .read_ledger import ReadDocument, ReadLedger
-from .registry_document import RegistrySnapshot
+from .registry.registry_document import RegistrySnapshot
 from .frozen_recipient import FrozenRecipient
 from .channel_targets import CommandTarget
 from .nominal.field_codec import MessageId, TaggedUnion, TaggedRecordMember, ThreadLookup
@@ -34,7 +34,7 @@ if TYPE_CHECKING:
     from .agent_activity import RecipientActivity
     from .bus import Bus
     from .bus_publication import Delivered
-    from .registration import Registration
+    from .registry.registration import Registration
     from .registry_provenance import RegistryProvenance
     from .comms import Comms
     from .presentation import WireRevision

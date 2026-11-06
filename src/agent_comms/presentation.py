@@ -41,7 +41,7 @@ from .nominal.field_codec import (
     projected,
 )
 from .goal_presentation import GoalExecution
-from .goal_waits import GoalWaits
+from .planning.goal_waits import GoalWaits
 from .storage.locked_store import GoalWakeFile
 from .mentions import MentionCandidate
 from .message_page import (
@@ -57,7 +57,7 @@ from .read_selection import CapturedSelection
 from .read_basis import AnonymousViewer, ChannelDisplayScope, DisplayViewer, NamedViewer
 from .read_ledger import NoReadNotice, ReadNotice
 from .recorded_bus import NoRecordedBus, RecordedBusIdentity
-from .registry_document import DEFAULT_ROSTER, RosterVisibility
+from .registry.registry_document import DEFAULT_ROSTER, RosterVisibility
 from .revision_views import (
     ActivityView,
     BusSourceView,
@@ -76,7 +76,7 @@ from .storage_room import RoomLedger
 from .thread_presentation import ThreadOwnerBinding, UnavailableThreadOwnerBinding
 from .thread_presentation import ThreadPresentation
 from .thread_status import ActiveThreadPresence, ThreadStatus, ThreadStatusName
-from .threads import Thread
+from .registry.threads import Thread
 from .tool_result import ToolResult
 from .ui_model.unread import ExactUnread, IndexingUnread, UnobservedUnread, UnreadPresentation
 
@@ -92,8 +92,8 @@ if TYPE_CHECKING:
     from .history_views import HistoryViews
     from .message_bus import MessageBus
     from .pi_counts import PiCount
-    from .registration import Registration
-    from .registry_document import RegistrySnapshot
+    from .registry.registration import Registration
+    from .registry.registry_document import RegistrySnapshot
     from .registry_provenance import DeletedThread
     from .ui_model.observation import ThreadsObserved
 

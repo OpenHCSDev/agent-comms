@@ -49,7 +49,7 @@ from ..errors import RelationViolationError
 from ..nominal.field_codec import AcpSessionId, FieldCodec, MalformedRecord, boundary_decoder
 from ..owner_protocol import IncompatibleOwner, IncompatibleOwnerError
 from ..pi_rule_gate import PiRedeal
-from ..registry_document import RegistryEntry
+from ..registry.registry_document import RegistryEntry
 from ..runtime_server import RuntimeServer
 from ..runtime import RuntimeProxy
 from ..runtime_requests import FreshSubscribeRuntimeRequest, SubscribeRuntimeRequest
@@ -60,7 +60,7 @@ from ..thread_model import ThreadModel
 from ..thread_status import ActiveThreadPresence
 from ..thread_text import NoThreadText, ThreadText
 from ..repo import Checkout
-from ..threads import NativeThread, Thread
+from ..registry.threads import NativeThread, Thread
 from ..transcript_updates import TranscriptReplay
 
 

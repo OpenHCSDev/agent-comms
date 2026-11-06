@@ -4,7 +4,7 @@ import pytest
 
 from agent_comms.repo import Checkout
 from conftest import installed_comms
-from agent_comms.threads import ExternalThread
+from agent_comms.registry.threads import ExternalThread
 from agent_comms.ui_model.sidebar import SidebarModel
 from agent_comms.ui_model.unread import ExactUnread, IndexingUnread, UnreadPresentation
 

@@ -37,7 +37,7 @@ from agent_comms.selected_claim import (
 )
 from agent_comms.selected_source_batch import SelectedSource
 from agent_comms.thread_identity import TurnIdentity
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.turn_context import (
     ContextManifest,
     OwnerProvenance,

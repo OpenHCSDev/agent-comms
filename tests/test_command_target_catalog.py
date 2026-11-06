@@ -23,7 +23,7 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_status import (
     ArchivedThreadStatus, RunningThreadStatus, StoppedThreadStatus, ThreadStatus,
 )
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 @dataclass

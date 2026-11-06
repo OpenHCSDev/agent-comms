@@ -5,7 +5,7 @@ from agent_comms.repo import Checkout
 import json
 
 from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def line(record):

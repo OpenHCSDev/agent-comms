@@ -24,7 +24,7 @@ from agent_comms.goal_actions import (
     SetGoalAction,
     StandbyGoalAction,
 )
-from agent_comms.goal_waits import GoalWaitReview, NoGoalWait, RecordedGoalWait
+from agent_comms.planning.goal_waits import GoalWaitReview, NoGoalWait, RecordedGoalWait
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.messages import ConversationRole, NoticeRole
 from agent_comms.storage.store_files import store_lock_path
@@ -34,7 +34,7 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsGoalTool
 from agent_comms.reported_turn import NoReportedTurn
 from goal_owner_fixture import canonical_goal_wire
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.goal_scope import OneGoal
 
 

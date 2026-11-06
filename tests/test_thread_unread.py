@@ -11,7 +11,7 @@ from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.comms import wire
 from conftest import installed_comms
 from agent_comms.storage.private_path import FileRevision
-from agent_comms.registry_document import DEFAULT_ROSTER
+from agent_comms.registry.registry_document import DEFAULT_ROSTER
 from agent_comms.ui_model.unread import CappedReplyUnread, EmptyCappedReplyUnread, ReplyUnread
 from agent_comms.view_unread import (
     CappedCount,
@@ -26,7 +26,7 @@ from agent_comms.view_unread import (
     TranscriptReply,
 )
 from native_unread_fixture import completed_counts, completed_snapshot
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def append(path, role='assistant', content='Reply', **fields):

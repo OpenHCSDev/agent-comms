@@ -30,7 +30,7 @@ from .notification_progress import (
     ShownToModelProgress,
 )
 from .private_registry_guard import RegistryPrivacy
-from .registry_store import RegistryStore
+from .registry.registry_store import RegistryStore
 from .storage.typed_table import BooleanStorage, TypedRow
 from .wake_policy import RecipientDecision
 

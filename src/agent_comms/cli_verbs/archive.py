@@ -5,7 +5,7 @@ from agent_comms.cli_command import MultipleTargets
 from agent_comms.cli_commands import ThreadArchivedResult
 from agent_comms.cli_support.named_thread import NamedThreadCliCommand
 from agent_comms.comms import Comms
-from agent_comms.threads import ArchiveOwnerControl
+from agent_comms.registry.threads import ArchiveOwnerControl
 from dataclasses import dataclass
 
 

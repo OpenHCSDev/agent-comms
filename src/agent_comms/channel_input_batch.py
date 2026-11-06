@@ -16,7 +16,7 @@ from .input_attempt import StoredInput
 if TYPE_CHECKING:
     from .input_disposition import InputDocument
     from .messages import Message
-    from .threads import Thread
+    from .registry.threads import Thread
 
 
 @dataclass(frozen=True)

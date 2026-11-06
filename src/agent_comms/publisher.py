@@ -43,13 +43,13 @@ from .errors import (
 )
 from .mentions import ThreadMention
 from .storage.private_path import FileRevision
-from .registry_document import DEFAULT_ROSTER, RegistrySnapshot
-from .registration import Registration
+from .registry.registry_document import DEFAULT_ROSTER, RegistrySnapshot
+from .registry.registration import Registration
 from .wake import OrdinaryControl, resolve_wake_cohort
 
 if TYPE_CHECKING:
     from .coordination.session import NativeCapture
-    from .threads import Thread
+    from .registry.threads import Thread
 
 from .catalog_document import CatalogDocument
 from .catalog_store import ChannelCatalog

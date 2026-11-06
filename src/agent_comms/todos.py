@@ -123,7 +123,7 @@ from agent_comms.recorded_time import (
     RecordedEventTime,
     UnrecordedEventTime,
 )
-from agent_comms.registry_store import RegistryStore
+from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.repo import (
     Checkout, CommitFilter, CommitsNaming, EveryCommit, FailedGitCommand, GitCommandError, Repo,
     RepositoryReads, SourceReadFailure,
@@ -136,7 +136,7 @@ from agent_comms.thread_identity import (
     RecordedThreadIncarnation,
     ThreadIncarnation,
 )
-from agent_comms.threads import Thread
+from agent_comms.registry.threads import Thread
 from agent_comms.tool_result import ToolResult
 from agent_comms.storage.typed_table import (
     CapturedRows,
@@ -170,7 +170,7 @@ from agent_comms_hooks import ToolRefusedError
 from .goal_scope import OneGoal
 
 from agent_comms.change_report import CitationProject, FetchedRevision, OrderRoots
-from agent_comms.registry_document import TeamProject
+from agent_comms.registry.registry_document import TeamProject
 
 # What reading one source checkout or its listing can raise: one source's failure is data.
 SOURCE_READ_FAILURES = (OSError, SourceReadFailure, TimeoutExpired)
@@ -187,8 +187,8 @@ if TYPE_CHECKING:
     )
     from agent_comms.comms import Comms
     from agent_comms.goal_management import Goals
-    from agent_comms.registration import Registration
-    from agent_comms.registry_document import RegistrySnapshot
+    from agent_comms.registry.registration import Registration
+    from agent_comms.registry.registry_document import RegistrySnapshot
 
 
 @dataclass(frozen=True)

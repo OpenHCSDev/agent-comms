@@ -12,7 +12,7 @@ from source_revision_fixture import SourceRepository
 from agent_comms.todos import PullRequestHeadRevision
 from agent_comms.change_report import FileLine
 from agent_comms.goals import OrderCheck
-from agent_comms.registry_document import NoTeamProject, RegisteredTeamProject
+from agent_comms.registry.registry_document import NoTeamProject, RegisteredTeamProject
 from agent_comms.errors import MissingSourceLine
 from agent_comms.check_root import CheckRoot
 from agent_comms.team.order import OrderFile
@@ -28,7 +28,7 @@ from agent_comms.todos import (
     CommitDelivery, DoneTodoState, FixShape, OrderScope,
     PendingProblemOrder, ReportDelivery, ReportedProblemOrder, TodoStore, TriageScope,
 )
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 @pytest.mark.parametrize('scope', (TriageScope(), FIX_SCOPE))

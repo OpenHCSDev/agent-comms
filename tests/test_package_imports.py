@@ -14,7 +14,7 @@ def test_entrypoint_keeps_catalog_out_and_thread_lookup_seals_backends(entrypoin
 import importlib, json, sys
 sys.path.insert(0, {str(source)!r})
 importlib.import_module({entrypoint!r})
-from agent_comms.threads import Thread
+from agent_comms.registry.threads import Thread
 from agent_comms.agent_backend import AgentBackend, NewThreadBackend
 print(json.dumps({{
     'catalog_loaded': 'agent_comms.tools' in sys.modules,

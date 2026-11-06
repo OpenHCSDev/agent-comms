@@ -1,8 +1,8 @@
 """A stored revision owns one immutable registry snapshot, including empty files."""
 
 from agent_comms.repo import Checkout
-from agent_comms.registration import Registration
-from agent_comms.threads import NativeThread
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.threads import NativeThread
 
 
 def test_absence_and_recreation_have_distinct_snapshots(tmp_path):

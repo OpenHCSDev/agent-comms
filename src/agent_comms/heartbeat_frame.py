@@ -14,11 +14,11 @@ from agent_comms.plan_reading import PlanReading, PlanReadings
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.repo import Repo
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.registry_document import RegisteredTeamProject
+from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.standing_rules import OwedAnswer, StandingRule
 from agent_comms.team_service import TeamService
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.threads import Thread
+from agent_comms.registry.threads import Thread
 from agent_comms.transcript_events import TurnDigest
 from agent_comms.turn_digests import LastTurns, OrderEditCountRead, RecentTurnsSince, TurnDigestRead
 from agent_comms.todos import (

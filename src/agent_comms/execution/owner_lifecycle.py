@@ -50,9 +50,9 @@ from ..native_arguments import (
     NativeArguments,
 )
 from ..private_nk_entrypoint import PrivateNkLaunch, RootLaunch
-from ..registration import Registration
-from ..registry_document import RegistrySnapshot
-from ..registry_store import RegistryEdit
+from ..registry.registration import Registration
+from ..registry.registry_document import RegistrySnapshot
+from ..registry.registry_store import RegistryEdit
 from ..restart_refusals import (
     OwnerBusyRefusal,
     OwnerGenerationChangedRefusal,
@@ -64,7 +64,7 @@ from ..thread_identity import (
     OwnerIdentity,
 )
 from ..thread_text import GivenThreadText, NoThreadText, ThreadText
-from ..threads import NativeThread, Thread
+from ..registry.threads import NativeThread, Thread
 
 if TYPE_CHECKING:
     from ..goal_management import Goals

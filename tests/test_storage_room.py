@@ -19,7 +19,7 @@ from agent_comms.storage_rules import StorageRule
 from agent_comms.tool_denial import StorageDenied
 from agent_comms.shell_effects import shell_storage_effects
 from agent_comms.thread_status import RunningThreadStatus
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.nominal.field_codec import RoomTicket
 
 

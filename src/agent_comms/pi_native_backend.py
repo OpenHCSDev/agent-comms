@@ -56,7 +56,7 @@ if TYPE_CHECKING:
     from .native_session_reopen import NativeSessionIdentity
     from .execution.owned_turn import TurnDelivery
     from .pi_payloads import StateData
-    from .threads import Thread
+    from .registry.threads import Thread
     from .turn_runner import TurnRunner
 
 

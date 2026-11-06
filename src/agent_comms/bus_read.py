@@ -22,10 +22,10 @@ from .owner_connection import (
 from .storage.private_path import FileRevision, ObservedPath
 from .runtime_server import AttachedResultRuntimeRequest, AttachedRuntimeRequestContext
 from .read_basis import NoDisplaySelection, ReadAuthority
-from .registry_document import RegistrySnapshot
-from .registry_store import RegistryCut
+from .registry.registry_document import RegistrySnapshot
+from .registry.registry_store import RegistryCut
 from .thread_identity import ThreadIncarnation
-from .threads import Thread
+from .registry.threads import Thread
 from .tool_declaration import ToolDeclaration
 from .tool_request import ThreadReadTool
 from .tool_result import ToolResult

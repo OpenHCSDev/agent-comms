@@ -13,7 +13,7 @@ from pydantic import JsonValue
 from .bus_publication import DirectorOrigin
 from .comms import Comms
 from .nominal.field_codec import FieldCodec, MalformedRecord, RootId
-from .registry_store import RegistryStore
+from .registry.registry_store import RegistryStore
 from .todos import DirectiveText
 from .read_basis import OperatorOutcomes
 from .tool_caller import ForkCaller, HumanCaller, NoThreadCaller, ThreadCaller, ToolCaller

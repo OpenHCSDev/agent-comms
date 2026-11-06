@@ -65,7 +65,7 @@ from agent_comms.owner_requests import NewestOpenRequest, RequestSelection
 from .host_services import HostService
 from .connector_caller import CALLER, ConnectorCaller, ConnectorTool, GrantRefusedError
 from .connector_profile import HttpsMcpEndpoint, UiGrantId
-from .registry_store import RegistryStore
+from .registry.registry_store import RegistryStore
 from .connector_store import (
     CODE_SECONDS, ApprovalQueueFull, ApprovalRefused, AuthorizationQuery,
     AuthorizationRequest, ClaudeCallback,

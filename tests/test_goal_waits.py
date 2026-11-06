@@ -3,7 +3,7 @@ import sqlite3
 
 from agent_comms.nominal.field_codec import GoalId
 from agent_comms.goal_presentation import GoalWaitTarget
-from agent_comms.goal_waits import GoalWaits, GoalWaitTargetRow, RecordedGoalWait
+from agent_comms.planning.goal_waits import GoalWaits, GoalWaitTargetRow, RecordedGoalWait
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.storage.typed_table import ReconciledFile, WriterOwnedFile
 from test_goal_standby_liveness import _finish, _waiting

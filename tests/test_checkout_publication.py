@@ -14,7 +14,7 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.tool_denial import StorageDenied
 from agent_comms.storage_projection import StorageProjection
 from agent_comms.storage_rules import StorageRule
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_caller import ThreadCaller
 from source_revision_fixture import SourceRepository
 

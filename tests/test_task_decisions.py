@@ -25,7 +25,7 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.turn_lease import NoTurnLease
 from functools import partial
 from bus_history import read_history
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 # These source declarations belong to alpha unless a case explicitly supplies beta.
 invoke_tool = partial(invoke_tool, caller=ThreadCaller("alpha"))

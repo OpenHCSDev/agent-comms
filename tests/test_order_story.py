@@ -29,9 +29,9 @@ from agent_comms.order_tools import (
     CommsVerdictTool,
 )
 from agent_comms.recorded_time import EventTime, RecordedEventTime
-from agent_comms.registry_document import RegisteredTeamProject
+from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.repository_name import RepositoryName
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.todos import (
     AcceptedVerdict,
     DoneTodoState,

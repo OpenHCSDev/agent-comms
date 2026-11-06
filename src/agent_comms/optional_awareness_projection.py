@@ -47,9 +47,9 @@ from .nominal.field_codec import FieldCodec, RootId, ThreadLookup
 from .message_reference import MessageReference
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import RegistryPrivacy
-from .registration import Registration
+from .registry.registration import Registration
 from .storage.store_files import StoreBusy
-from .threads import NativeThread, Thread
+from .registry.threads import NativeThread, Thread
 from .turn_context import ContextSegment, InstructionFile, ResourceProvenance, WireProvenance
 from .storage.typed_table import TypedRow
 from .wake_candidate_index import ProjectionUnavailableError, WakeCandidateIndex

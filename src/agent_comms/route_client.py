@@ -15,7 +15,7 @@ from .active_route import CommsRoute
 from .agent_activity import AgentActivity
 from .launch_runtime import LaunchRuntime
 from .storage.locked_store import RegistryFile
-from .registration import Registration
+from .registry.registration import Registration
 from .root_runtime import RootRuntime
 
 

@@ -17,7 +17,7 @@ from .storage.typed_table import TypedRow
 if TYPE_CHECKING:
     from .read_basis import ReadCursor
     from .read_ledger import ReadDocument, ReadLedger
-    from .registry_document import RegistrySnapshot
+    from .registry.registry_document import RegistrySnapshot
 
 
 @dataclass(frozen=True, slots=True)

@@ -20,7 +20,7 @@ from agent_comms.goals import OrderCheck
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.owner_requests import NewestOpenRequest
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.registry_document import RegisteredTeamProject
+from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.repo import Checkout, Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.thread_status import StoppedThreadStatus
@@ -35,7 +35,7 @@ from agent_comms.todos import (
 )
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsSendTool
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def test_retired_team_requests_follow_peer_authority(

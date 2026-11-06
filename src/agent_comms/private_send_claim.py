@@ -39,7 +39,7 @@ from .native_startup import NativeStartup
 from .native_tool_call import NativeToolMode
 from .owned_send import OwnedSend
 from .publication_measurements import PublicationMeasurements
-from .registry_document import RegistrySnapshot
+from .registry.registry_document import RegistrySnapshot
 from .text_digest import TextDigest
 from .tracked_turn import (
     NO_FOLLOWING_INPUTS,

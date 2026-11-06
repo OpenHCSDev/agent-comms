@@ -26,7 +26,7 @@ from .native_pi import NativePiRpcLaunch
 from .pi_vocabulary import ServiceTier, ThinkingChoice
 from .coordination.coordinator import Coordination
 from .nominal.field_codec import FieldCodec
-from .threads import ChosenServiceTier, NextTurnConfiguration, Thread
+from .registry.threads import ChosenServiceTier, NextTurnConfiguration, Thread
 from .thread_model import CatalogSelection, ThreadModel
 from .pi_commands import (
     GetAvailableModels,
@@ -40,7 +40,7 @@ if TYPE_CHECKING:
     from .nominal.field_codec import AcpSessionId
     from .session_config_options import SessionConfigOptions
     from .native_package import VerifiedNativePackage
-    from .registry_document import RegistrySnapshot
+    from .registry.registry_document import RegistrySnapshot
 
 
 class InvalidConfigChoice(ValueError):

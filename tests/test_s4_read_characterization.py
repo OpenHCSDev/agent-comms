@@ -8,7 +8,7 @@ from agent_comms.coordination.errors import DMScopeChanged
 from agent_comms.read_basis import NamedViewer
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.repo import Checkout
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from conftest import installed_comms
 
 

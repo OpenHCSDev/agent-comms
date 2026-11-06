@@ -27,7 +27,7 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_origin import DeliveredInput, UndeliveredInput, WireInputOrigin
 from agent_comms.message_reference import MessageReference
 from agent_comms.text_digest import TextDigest
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from stored_inputs import stored_inputs
 from agent_comms.comms import wire
 

@@ -36,7 +36,7 @@ from agent_comms.restart_scope import OwnersNamed
 from agent_comms.session_file import NoSessionFile
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_text import GivenThreadText
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.turn_failure import BackendFailed
 from delivery_owner_fixture import canonical_agent
 import fixture_git

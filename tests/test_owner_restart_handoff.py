@@ -14,7 +14,7 @@ import os
 from pathlib import Path
 import pytest
 
-from agent_comms.registry_document import ThreadRows
+from agent_comms.registry.registry_document import ThreadRows
 
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.errors import RelationViolationError
@@ -23,11 +23,11 @@ from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SetVariable, UnsetVariable
 from agent_comms.execution.owner_lifecycle import OwnerRestartSelection
 from agent_comms.owner_restart import OwnerRestartHandoff, RetiredOwnerLaunch
-from agent_comms.registry_document import RegistryDocument, RegistrySnapshot
+from agent_comms.registry.registry_document import RegistryDocument, RegistrySnapshot
 from agent_comms.thread_identity import GenerationCounter, OwnerIdentity
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.native_arguments import ConfiguredBinary, InheritedArguments
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 @pytest.mark.parametrize("source", [{}, {"PYTHONPATH": ""}, {"PYTHONPATH": "/source"}])

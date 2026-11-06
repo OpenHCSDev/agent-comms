@@ -22,7 +22,7 @@ from agent_comms.goal_generation import ReadyGeneration
 from agent_comms.goal_states import BlockedGoal
 from agent_comms.goals import Goal
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.goal_scope import OneGoal
 
 

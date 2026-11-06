@@ -19,7 +19,7 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.goals import Goal, NoGoal
 from agent_comms.task_sources import GoalTaskScope, TurnTaskScope
-from agent_comms.threads import ChosenModel, NextTurnConfiguration, Thread, NativeThread
+from agent_comms.registry.threads import ChosenModel, NextTurnConfiguration, Thread, NativeThread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.transport.request import ToolRequest
 from agent_comms.thread_model import DeclaredModel

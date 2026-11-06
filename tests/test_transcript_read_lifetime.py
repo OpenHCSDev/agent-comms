@@ -15,9 +15,9 @@ from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.view_unread import transcript_read_state
 from agent_comms.comms import wire
 from native_unread_fixture import native_reader
-from agent_comms.registry_document import DEFAULT_ROSTER
+from agent_comms.registry.registry_document import DEFAULT_ROSTER
 from agent_comms.ui_model.unread import IndexingUnread
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def test_collected_reader_cancels_and_joins_its_worker_then_closes_sqlite(tmp_path):

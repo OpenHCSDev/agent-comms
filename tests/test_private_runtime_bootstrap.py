@@ -11,7 +11,7 @@ from agent_comms.comms import wire
 from agent_comms.coordination.errors import SchemaVersionError
 from agent_comms.coordination.coordinator import Coordination
 from bus_history import read_history
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def test_drifted_private_owner_refused_and_readers_leave_missing_schema_alone(tmp_path):

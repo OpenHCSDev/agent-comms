@@ -19,7 +19,7 @@ from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript, UserTranscript
 from agent_comms.native_entries import NativeEntry
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 
 

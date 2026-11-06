@@ -24,7 +24,7 @@ from .message_reference import MessageReference
 from .private_registry_guard import RegistryPrivacy
 from .order_work import OrderWork
 from .problem_number import ProblemNumber
-from .threads import ConversationPreparation, Thread
+from .registry.threads import ConversationPreparation, Thread
 from .thread_identity import ThreadIncarnation
 from .todos import (
     EditWorkplaces, NoCommitProgress, OrderProgress, ProgressRead, Todo, TodoStore,

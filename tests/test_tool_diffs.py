@@ -13,7 +13,7 @@ from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.tool_results import NoSentMessage, NoToolDiff, ToolDiff, tool_result_content
 from agent_comms.native_entries import TranscriptProjection
 from conftest import transcript_records
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 PATCH = "--- src/example.py\n+++ src/example.py\n@@ -40,2 +40,2 @@\n context\n-old = 1\n+new = 2\n"
 

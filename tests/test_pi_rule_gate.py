@@ -25,7 +25,7 @@ from agent_comms.pi_rule_gate import PiRedeal, RulesUnread
 from agent_comms.repo import Checkout
 from agent_comms.selected_tool_broker import SelectedToolRequest, SelectedWriteArguments
 from agent_comms.task_attachments.owner_notices import MeantNotice, RestartNotice
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.thread_model import DeclaredModel

@@ -8,10 +8,10 @@ from pathlib import Path
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.nominal.field_codec import FieldCodec, TurnId
-from agent_comms.registration import Registration
+from agent_comms.registry.registration import Registration
 from agent_comms.repo import Checkout
 from agent_comms.thread_text import ForkedParent, GivenThreadText
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def main(root: Path, turn: TurnId) -> None:

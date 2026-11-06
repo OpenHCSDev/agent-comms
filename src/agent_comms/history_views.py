@@ -23,11 +23,11 @@ from .context_segments.retained import RetainedSegment
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import FieldCodec, WireForm
 from .input_disposition import InputDispositions
-from .registration import Registration
-from .registry_document import DEFAULT_ROSTER, RegistrySnapshot, RosterVisibility
+from .registry.registration import Registration
+from .registry.registry_document import DEFAULT_ROSTER, RegistrySnapshot, RosterVisibility
 from .retained_task_facts import RetainedTaskFacts
 from .shared_ledger import LedgerDocument
-from .threads import ConversationPreparation, Thread, current_thread
+from .registry.threads import ConversationPreparation, Thread, current_thread
 from .thread_identity import ThreadIncarnation
 from .sent_message import AssignedSourceIdentity
 from .view_unread import transcript_read_state

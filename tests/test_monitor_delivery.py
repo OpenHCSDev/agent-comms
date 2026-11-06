@@ -64,7 +64,7 @@ from agent_comms.runtime_updates import (
 )
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.external_transcript import ExternalTurnInput
-from agent_comms.threads import ExternalThread, NativeThread
+from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.messages import AlertKind, InfoKind, Message, NoticeRole, QuestionKind
 from agent_comms.channel_targets import ThreadTarget
 from agent_comms.diagnostics import record_terminal_failure
@@ -1097,7 +1097,7 @@ async def test_confirmed_human_direct_request_receives_one_reply(bridge, reply_e
 
 def test_independent_sessions_share_the_delivered_message_reply_policy(comms, tmp_path):
     """Storage colleague and peer follow the same original-message reply policy."""
-    from agent_comms.registry_document import RegisteredTeamProject
+    from agent_comms.registry.registry_document import RegisteredTeamProject
     from agent_comms.runtime_updates import ReplyingThreadOutput
 
     colleague, teammate = (comms.registry.declare(ExternalThread(

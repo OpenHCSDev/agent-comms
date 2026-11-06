@@ -19,7 +19,7 @@ from agent_comms.head_review import PullRequestHead
 from agent_comms.owner_requests import OwnerRequestId
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
-from agent_comms.registry_document import RegistrySnapshot
+from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.service_passes import ServicePasses, ServicePassStore
 from agent_comms.team_service import TeamService
 from agent_comms.thread_identity import RecordedThreadIncarnation, ThreadIncarnation

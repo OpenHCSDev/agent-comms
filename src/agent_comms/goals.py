@@ -28,8 +28,10 @@ from .child_process import (
     TimedOutOutcome,
 )
 from .context_segments.wake_values import NoWakeGoalContext, WakeGoalContext, WakeGoalValue
-from .nominal.declared_family import DeclaredFamily
 from .errors import GoalRefused, RejectedEnforcementError, RelationViolationError
+from .goal_authority import GoalAuthority, GoalTurnAuthority, NoGoalAuthority
+from .goal_states import ActiveGoal, GoalState
+from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import (
     FieldCodec,
     GoalId,
@@ -41,8 +43,6 @@ from .nominal.field_codec import (
     SubclassUnion,
     TurnId,
 )
-from .goal_states import ActiveGoal, GoalState
-from .goal_authority import GoalAuthority, GoalTurnAuthority, NoGoalAuthority
 from .registration_inheritance import RegistrationInheritance
 from .repo import DetachedStart, GitCommandError, Repo, ScratchCheckout
 from .reported_turn import NoReportedTurn, ReportedTurnState
@@ -55,9 +55,9 @@ from .ui_model.goal import GoalDisplay
 if TYPE_CHECKING:
     from .goal_actions import GoalAction, GoalActionContext
     from .goal_presentation import GoalExecution
-    from .goal_waits import GoalWaits
+    from .planning.goal_waits import GoalWaits
+    from .registry.threads import Thread
     from .task_sources import TaskScope
-    from .threads import Thread
     from .turn_context import TurnContext
 
 if TYPE_CHECKING:

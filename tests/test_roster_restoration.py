@@ -14,7 +14,7 @@ import pytest
 
 from agent_comms.nominal.field_codec import TurnId
 from agent_comms.assignment_states import FullPendingAssignment, TriagePendingAssignment
-from agent_comms.registry_document import ThreadRows
+from agent_comms.registry.registry_document import ThreadRows
 
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.coordination.tables.executions import NoPointedExecution
@@ -25,7 +25,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
 from agent_comms.turn_lease import NoTurnRecord
 from agent_comms.thread_text import GivenThreadText
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity(tmp_path):

@@ -28,7 +28,7 @@ def test_archived_identity_cannot_reacquire_a_live_registry_or_thread():
     from dataclasses import MISSING, fields
     from typing import get_type_hints
     from agent_comms.historical_views import HistorySource, HistoricalThread
-    from agent_comms.threads import ThreadProvenance
+    from agent_comms.registry.threads import ThreadProvenance
 
     provenance = next(item for item in fields(HistorySource) if item.name == "provenance")
     assert provenance.default is MISSING and provenance.default_factory is MISSING

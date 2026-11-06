@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.storage.locked_store import LiveFilesRequest, RegistryFile
-from agent_comms.registration import Registration
+from agent_comms.registry.registration import Registration
 from agent_comms.bus import Bus, PublicRecord
 from agent_comms.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.comms import wire
@@ -31,7 +31,7 @@ from agent_comms.routing import MessageRoute, TurnRouting
 from agent_comms.transcript_routes import DisplayText
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.storage.store_files import StoreOwner
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 from agent_comms.nominal.field_codec import FieldCodec
@@ -40,7 +40,7 @@ from agent_comms.transport.tools.reads import TranscriptPageRead
 from test_transcript_pages import shared_page
 from dataclasses import fields
 from agent_comms.registry_provenance import RegistryProvenance
-from agent_comms.threads import ThreadProvenance
+from agent_comms.registry.threads import ThreadProvenance
 from test_locked_store import process
 
 @pytest.mark.parametrize('exists', [False, True])

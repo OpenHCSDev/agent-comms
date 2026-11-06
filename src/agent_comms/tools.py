@@ -106,7 +106,7 @@ from .goal_actions import (
 from .goal_history import RecordedGoalHistory
 from .goal_scope import AllGoals, OneGoal
 from .goal_presentation import GoalExecution, GoalSnapshot
-from .goal_waits import NoStandbyReview, StandbyReview
+from .planning.goal_waits import NoStandbyReview, StandbyReview
 from .goals import GoalDeclaration
 from .history_result import HistoryPageResult
 from .input_attempt import UnresolvedInputReference
@@ -156,7 +156,7 @@ from .task_sources import (
     TaskChange,
     TaskScopeSelection,
 )
-from .threads import (
+from .registry.threads import (
     ArchiveOwnerControl,
     NativeOwnerCommand,
     OwnerLifecycleControl,
@@ -180,7 +180,7 @@ from .acp_extension import CoordinationChangedUpdate
 from .history_views import RetiredViews
 from .thread_identity import ThreadIncarnation
 from .display_references import ReferenceNames
-from .registry_document import ProjectThreadSelection, RegistrySlice, RegistrySnapshot
+from .registry.registry_document import ProjectThreadSelection, RegistrySlice, RegistrySnapshot
 from .host_logs import HostLog, HostLogRead
 from .tool_result import ToolResult
 from .notification_reads import LiveNotificationRead

@@ -37,17 +37,17 @@ from .peer_relevance import (
     PeerRelevance,
     StrangerRelevance,
 )
-from .registry_document import RegistrySnapshot, RosterVisibility
+from .registry.registry_document import RegistrySnapshot, RosterVisibility
 from .routing import DeliveryScope
 from .storage.store_files import DependentStateTier, SingleFileStore
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
-from .threads import Thread
+from .registry.threads import Thread
 
 if TYPE_CHECKING:
     from .history_views import HistoryViews
     from .message_bus import MessageBus
-    from .registration import Registration
+    from .registry.registration import Registration
 
 
 @dataclass(frozen=True, slots=True)

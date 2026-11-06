@@ -16,7 +16,7 @@ from agent_comms.thread_owned_state import ThreadOwnedState
 from .storage.store_files import DependentStateTier, SingleFileStore
 
 if TYPE_CHECKING:
-    from agent_comms.threads import Thread
+    from agent_comms.registry.threads import Thread
 
 
 class LedgerValue(DeclaredFamily, JsonShapeFamily, affix="LedgerValue"):

@@ -5,12 +5,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from .bus_publication import ServiceOrigin
+from .registry.threads import ServiceThread
 from .repo import Checkout
 from .thread_identity import ServiceThreadRole
-from .threads import ServiceThread
 
 if TYPE_CHECKING:
-    from .registration import Registration
+    from .registry.registration import Registration
 
 
 class ServiceSender:

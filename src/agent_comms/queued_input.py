@@ -42,7 +42,7 @@ from .input_disposition import InputDispositions
 from .input_origin import InputOrigin, UnattributedInputOrigin, WireInputOrigin
 from .routing import ScheduledTurn
 from .thread_identity import ClaimedIdentity, ClaimScoped
-from .threads import Thread
+from .registry.threads import Thread
 from .turn_context import TurnContext
 from .turn_goal_permission import AcceptedGoalPermission, TurnGoalPermission
 from .turn_input_source import AcceptedFollowingInput, DeliveredFollowingInput
@@ -58,7 +58,7 @@ if TYPE_CHECKING:
     from .comms import Comms
     from .execution.input_drain import DrainedSession, InputDrain
     from .message_bus import MessageBus
-    from .registry_document import RegistryEntry, RegistrySnapshot
+    from .registry.registry_document import RegistryEntry, RegistrySnapshot
     from .turn_input_source import TurnInputSource
     from .turn_runner import TurnRunner
     from .runtime_server import RuntimeServer

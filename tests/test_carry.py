@@ -50,9 +50,9 @@ from agent_comms.storage.maintenance_barrier import (
     MaintenanceOperator,
     ReadyPhase,
 )
-from agent_comms.registry_store import RegistryStore
+from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
-from agent_comms.threads import ExternalThread, NativeThread
+from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.thread_status import RunningThreadStatus
 from conftest import ledger_one_failure_short
 import fixture_git

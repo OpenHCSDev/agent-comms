@@ -12,7 +12,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.execution.owner_lifecycle import OwnerRestartSelection
 from agent_comms.repo import Checkout
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from delivery_owner_fixture import canonical_agent, start_headless_owner
 
 

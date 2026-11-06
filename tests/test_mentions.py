@@ -15,7 +15,7 @@ from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, M
 from agent_comms.routing import ScheduledTurn
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
 from agent_comms.thread_model import DeclaredModel
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def test_mentions_are_addressees_without_changing_channel_delivery(tmp_path):

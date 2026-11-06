@@ -14,9 +14,9 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, RootId, TurnId
 from agent_comms.read_basis import Conversation
 from agent_comms.read_ledger import ReadDocument
-from agent_comms.registration import Registration
+from agent_comms.registry.registration import Registration
 from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.threads import ExternalThread, NativeThread
+from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.thread_identity import (
     ClaimedIdentity,
     GenerationCounter,

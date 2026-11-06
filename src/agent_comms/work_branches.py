@@ -33,7 +33,7 @@ from .wire_models import WireModel
 
 if TYPE_CHECKING:
     from .closed_pull_requests import ClosedHeadScan
-    from .registry_document import RegistrySnapshot
+    from .registry.registry_document import RegistrySnapshot
 
 
 class WorkBranchError(ValueError, SourceReadFailure):

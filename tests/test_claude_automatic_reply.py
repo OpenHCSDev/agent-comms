@@ -21,14 +21,14 @@ from agent_comms.connector import ConnectorSendTool
 from agent_comms.connector_caller import DirectorCaller
 from agent_comms.standing_rules import DirectiveUnacted
 from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.harness_delivery_states import DeliveredOutcome
 from agent_comms.messages import AckKind, AlertKind, HandoffKind, InfoKind, Message, MessageKind, NoticeRole, QuestionKind
 from agent_comms.channel_targets import TeammatesTag, ThreadTarget
 from agent_comms.repo import Checkout
 from agent_comms.turn_digests import LastTurns
-from agent_comms.registration import Registration
-from agent_comms.registry_document import RegisteredTeamProject
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.runtime_updates import AllTurnsCancelled, AllTurnsEnded, RuntimeUpdate, ThreadOutput
 from agent_comms.turn_item import NamedSourceTurn, NativeTurnId
 from transcript_record_fixture import transcript_record

@@ -9,8 +9,8 @@ from agent_comms.nominal.field_codec import Normalize
 from agent_comms.importing import ThreadImported
 from agent_comms.thread_management import ImportDirectory
 from agent_comms.thread_management import SourceDirectory
-from agent_comms.threads import KeptModel
-from agent_comms.threads import ModelChoice
+from agent_comms.registry.threads import KeptModel
+from agent_comms.registry.threads import ModelChoice
 from dataclasses import dataclass
 from typing import Annotated
 import dataclasses

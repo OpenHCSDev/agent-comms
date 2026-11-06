@@ -8,7 +8,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Checkout
 from agent_comms.task_attachments.team_pings import RulePing, TeamUpdate, TeamUpdateNotice
 from agent_comms.team.standing import TeamDeaf
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def test_a_teammate_with_no_packet_inherits_the_boards_earliest_start(tmp_path):

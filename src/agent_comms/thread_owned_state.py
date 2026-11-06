@@ -10,7 +10,7 @@ from .storage.store_files import StoreOwner
 from .errors import RelationViolationError
 
 if TYPE_CHECKING:
-    from .threads import Thread
+    from .registry.threads import Thread
 
 
 class ThreadOwnedState(StoreOwner):

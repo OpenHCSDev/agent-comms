@@ -27,12 +27,12 @@ from agent_comms.presentation import WireRevision
 from agent_comms.publisher import Publisher
 from agent_comms.read_basis import ChannelDisplayScope
 from agent_comms.recorded_bus import RecordedBusIdentity
-from agent_comms.registration import Registration
+from agent_comms.registry.registration import Registration
 from agent_comms.revision_views import BusSourceView, StoresView
 from agent_comms.transcripts import NativeTranscriptCursor, TranscriptCursor
 from agent_comms.storage.private_path import FileIdentity
 from agent_comms.storage.typed_table import RowNotFoundError
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def channel_bus(root):

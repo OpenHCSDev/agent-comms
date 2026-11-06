@@ -24,7 +24,7 @@ from .message_reference import MessageReference
 from .messages import Message, StoredWireHistory
 from .bus_tables import MessageIdentitySource
 from .read_basis import DMDisplayScope
-from .registration import Registration
+from .registry.registration import Registration
 from .storage.store_files import AtomicFile, ExclusiveAtomicFile
 
 

@@ -7,12 +7,12 @@ from collections.abc import Callable, Iterable
 from typing import TYPE_CHECKING
 
 from .errors import NobodyOwedError
-from .threads import Thread
+from .registry.threads import Thread
 
 if TYPE_CHECKING:
     from .goal_management import Goals
-    from .registration import Registration
-    from .registry_document import RegistrySnapshot
+    from .registry.registration import Registration
+    from .registry.registry_document import RegistrySnapshot
     from .todos import OwnerRequest
 
 

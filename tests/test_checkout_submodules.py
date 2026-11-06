@@ -19,13 +19,13 @@ from agent_comms.goals import OrderCheck
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.registry_document import RegisteredTeamProject
+from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.repo import Checkout, CheckoutHoldsWorkError, DetachedStart, GitCommandError, LaunchCheckout, NewBranchStart, Repo, RepositoryReads, ScratchCheckout
 from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import StorageRule
 from agent_comms.tool_denial import StorageDenied
 from agent_comms.thread_creation import RecordedCreationTime
-from agent_comms.threads import ExternalThread, NativeThread
+from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.todos import PendingProblemOrder, WithdrawTodo
 from cli_command import core, core_process

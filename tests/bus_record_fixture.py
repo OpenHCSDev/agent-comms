@@ -24,7 +24,7 @@ from agent_comms.response_acknowledgement import (
     canonical_publication_key,
     public_envelope_digest,
 )
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.wake import OrdinaryControl, resolve_wake_cohort
 
 publication_processes = ForkServerContext()

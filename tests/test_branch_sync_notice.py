@@ -8,7 +8,7 @@ from agent_comms.repo import Checkout
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import BranchBehindMain
 from agent_comms.task_attachments.owner_notices import OrderNotice
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from conftest import declare_test_bus
 
 

@@ -44,7 +44,7 @@ if TYPE_CHECKING:
     from .agent_events import AgentEvent
     from .launch_runtime import LaunchRuntime
     from .execution.owned_turn import TurnDelivery
-    from .threads import Thread
+    from .registry.threads import Thread
     from .transcript_sources import TranscriptSource
     from .turn_runner import TurnRunner
 

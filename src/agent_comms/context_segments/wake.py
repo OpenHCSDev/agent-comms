@@ -16,7 +16,7 @@ from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.message_notification import SentMessageOutcome
 
 from ..bus_publication import Delivered
-from ..threads import Thread
+from ..registry.threads import Thread
 from ..turn_context import (
     InstructionFile,
     InstructionSegment,

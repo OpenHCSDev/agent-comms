@@ -5,20 +5,22 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from abc import abstractmethod, ABC
+from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, ClassVar, Self, Annotated
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from pydantic import JsonValue
 
-
 from .annotation_disclosure import PublicInstructionAnnotations, WithheldAnnotations
 from .cli_result import CliResult
-from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
+from .goals import Goal, NoGoal
+from .message_reference import MessageReference
+from .native_session_reopen import NativeSessionIdentity
+from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import (
     FieldCodec,
     IdentityExclude,
@@ -29,9 +31,6 @@ from .nominal.field_codec import (
     TurnId,
     WireOmitDefault,
 )
-from .goals import Goal, NoGoal
-from .message_reference import MessageReference
-from .native_session_reopen import NativeSessionIdentity
 from .peer_relevance import AlwaysListed, GoalShown, PeerRelevance
 from .repo import Checkout
 from .thread_identity import ThreadIncarnation, TurnIdentity
@@ -39,13 +38,12 @@ from .tool_result import DeclaredReply, ToolResult
 from .turn_item import NativeItemId, PiRequestKey
 from .wake_policy import WakePolicy
 
-
 if TYPE_CHECKING:
     from .context_store import RecordedContextState
     from .input_attempt import StoredInput
     from .presentation import ThreadView
+    from .registry.threads import Thread
     from .relationships import PeerRelation
-    from .threads import Thread
 
 
 @dataclass(frozen=True)

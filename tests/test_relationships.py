@@ -7,7 +7,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.registry_document import RosterVisibility
+from agent_comms.registry.registry_document import RosterVisibility
 from agent_comms.relationships import (
     ChildrenRelationshipGroup, CollaboratingRelationshipGroup, InboundRelationshipGroup,
     OutboundRelationshipGroup, ParentRelationshipGroup, RelationshipEdit,
@@ -17,7 +17,7 @@ from conftest import installed_comms
 from agent_comms.display_order import LastActivityThreadSort
 from agent_comms.thread_text import ForkedParent, NoParent
 from agent_comms.tools import invoke_tool
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def add_peer(root, peer):

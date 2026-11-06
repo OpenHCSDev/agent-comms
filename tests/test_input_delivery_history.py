@@ -29,7 +29,7 @@ from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import NoGoal
 from agent_comms.transport.tools.reads import InputDeliveryRead, OwnerGoalRead
 from agent_comms.reported_turn import ReportedTurn
-from agent_comms.threads import ExternalThread, NativeThread, Thread
+from agent_comms.registry.threads import ExternalThread, NativeThread, Thread
 from agent_comms.thread_status import ConnectedThreadStatus, StoppedThreadStatus, ThreadStatus
 from agent_comms.owner_connection import OwnerIdentityChangedError
 from agent_comms.coordination.errors import ReloadRequired, StaleFence

@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from agent_comms.repo import Checkout
 from agent_comms.read_basis import NamedViewer
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def later_counts(comms, viewer):

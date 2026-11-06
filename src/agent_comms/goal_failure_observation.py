@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from agent_comms.goal_attempts import FailedTurnObservation
     from .goal_attempts import Reservation
     from .goal_presentation import GoalExecution
-    from .threads import Thread
+    from .registry.threads import Thread
 
 
 class GoalLedgerTable(DurableTables):

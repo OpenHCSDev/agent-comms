@@ -29,7 +29,7 @@ from agent_comms.revision_views import (
     SidebarView, StatusView, StoresView,
 )
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_declaration import NativeRequestTools
 from agent_comms.transport.request import ToolRequest
 from agent_comms.tools import CommsMessageOutcomesTool

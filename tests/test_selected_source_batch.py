@@ -16,7 +16,7 @@ from agent_comms.coordination.cohort import pending_sealed_assignments
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.selected_participant import SelectedParticipant
 from agent_comms.thread_model import DeclaredModel
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 @pytest.mark.asyncio

@@ -10,12 +10,12 @@ from agent_comms.nominal.field_codec import TurnId
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError
-from agent_comms.registration import Registration
+from agent_comms.registry.registration import Registration
 from agent_comms.thread_identity import ReportedTools, ToolName, UnreportedTools
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.turn_lease import ActiveTurn, NoFinishedTurn
 from agent_comms.thread_text import GivenThreadText
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def _metadata(registry, leased, lease, tmp_path):

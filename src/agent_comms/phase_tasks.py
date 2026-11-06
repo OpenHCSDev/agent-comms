@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from .comms import Comms
     from .plan_reading import PlanReading
     from .plan_phases import PlanPhase
-    from .threads import Thread
+    from .registry.threads import Thread
 
 
 class PhaseTask(ABC):

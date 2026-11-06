@@ -21,7 +21,7 @@ from agent_comms_hooks.watch import WatchRecord
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.repo import Checkout
-from agent_comms.threads import ExternalThread
+from agent_comms.registry.threads import ExternalThread
 from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms_hooks import deferral

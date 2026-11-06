@@ -8,7 +8,7 @@ from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from conftest import installed_comms
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def test_prefixes_and_alias_union_stay_in_their_conversation():

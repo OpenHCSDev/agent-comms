@@ -43,10 +43,10 @@ from agent_comms.plan_phases import PlanPhase
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun, OrderRun
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.registration import Registration
+from agent_comms.registry.registration import Registration
 from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import StorageRule
-from agent_comms.threads import ExternalThread, Thread, NativeThread
+from agent_comms.registry.threads import ExternalThread, Thread, NativeThread
 from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId

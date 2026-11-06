@@ -52,7 +52,7 @@ from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.storage.locked_store import DocumentChange
 from agent_comms.recorded_bus import RecordedBusIdentity
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from connector_readiness import ConnectorReadiness
 
 

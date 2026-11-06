@@ -15,7 +15,7 @@ from agent_comms.owner_connection import OwnerConnection
 from agent_comms.owner_launch import ReadOwnerLaunchRuntimeRequest, RetainedOwnerLaunch
 from agent_comms.pi_rule_gate import PiRedeal
 from agent_comms.repo import Checkout
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from bus_record_fixture import prepare_native_comms
 
 

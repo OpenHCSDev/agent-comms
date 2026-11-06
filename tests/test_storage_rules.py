@@ -44,10 +44,10 @@ from agent_comms.thread_storage import (
     SelectedCheckout,
     UnassignedThreadStorage,
 )
-from agent_comms.threads import Thread, NativeThread
+from agent_comms.registry.threads import Thread, NativeThread
 from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.goals import OrderCheck
-from agent_comms.registry_document import RegisteredTeamProject
+from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (

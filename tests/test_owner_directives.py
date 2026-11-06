@@ -13,7 +13,7 @@ from agent_comms.owner_requests import RequestDirective
 from agent_comms.tools import invoke_tool
 from agent_comms.storage.typed_table import RowNotFoundError
 from goal_owner_fixture import canonical_goal_wire
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def requesting_lead(tmp_path):

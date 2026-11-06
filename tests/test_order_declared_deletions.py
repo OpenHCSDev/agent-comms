@@ -1,7 +1,7 @@
 """A cited file line keeps its absolute path."""
 
 from agent_comms.change_report import FileLine
-from agent_comms.registry_document import NoTeamProject
+from agent_comms.registry.registry_document import NoTeamProject
 
 
 def test_file_line_scan_keeps_the_absolute_path():

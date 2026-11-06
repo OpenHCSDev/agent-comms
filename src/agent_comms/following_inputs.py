@@ -14,7 +14,7 @@ from .queued_input import DeliveredInput, InputHandoffRefused
 from .owned_send import OwnedSend
 from .thread_identity import ClaimedIdentity
 from .turn_input_source import AcceptedFollowingInput
-from .threads import Thread
+from .registry.threads import Thread
 from .execution.input_drain import InputDrain
 
 if TYPE_CHECKING:

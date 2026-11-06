@@ -36,7 +36,7 @@ from agent_comms.standing_rules import (
 from agent_comms.repo import Checkout
 from agent_comms.task_attachments.team_pings import TeamDecisions, TeamUpdate, TeamUpdateStore, RulePing
 from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.errors import TodoError
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, MalformedRecord, RecordProblems
 from agent_comms.tool_caller import PeerCaller, ThreadCaller

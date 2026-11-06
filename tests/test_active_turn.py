@@ -12,7 +12,7 @@ from agent_comms.nominal.field_codec import (
     ToolCallId,
     TurnId,
 )
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.turn_phase import (
     CompactionPhase,
     IdlePhase,

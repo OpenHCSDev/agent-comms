@@ -15,10 +15,10 @@ from .coordination.tables.board_delivery import ReaderBoardDelivery
 from .nominal.field_codec import FieldCodec, WireForm
 from .launch_root import LaunchRoot
 from .read_basis import DisplayViewer, OperatorOutcomes, ReadAuthority
-from .registration import Registration
+from .registry.registration import Registration
 from .notification_evidence import OutcomeViewer, OwnerOutcomes
 from .presentation import SentMessageSummary, ThreadRecord
-from .threads import ForkThread, SubagentThread, Thread
+from .registry.threads import ForkThread, SubagentThread, Thread
 from .thread_identity import ThreadIncarnation
 from .tool_result import ToolResult
 from .turn_phase import IdlePhase

@@ -10,8 +10,8 @@ from .nominal.field_codec import ClaimId
 
 if TYPE_CHECKING:
     from .coordination.tables.assignments import WakeAssignment
+    from .registry.threads import Thread
     from .selected_actions import SelectedAction
-    from .threads import Thread
 
 
 class SelectedWriteAuthority(ABC):

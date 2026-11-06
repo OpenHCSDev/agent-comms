@@ -8,7 +8,7 @@ from agent_comms.cli_command import CliCommand
 from typing import Self
 
 from agent_comms.catalog_document import CatalogAccess
-from agent_comms.registry_document import ResolvedChannel
+from agent_comms.registry.registry_document import ResolvedChannel
 from agent_comms.channels import Channel
 from agent_comms.cli_command import MultipleTargets
 from agent_comms.cli_support.named import NamedCliCommand
@@ -16,7 +16,7 @@ from agent_comms.cli_verbs.pin_thread import PinThreadCliCommand
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument
 from agent_comms.nominal.field_codec import TargetBound
-from agent_comms.registry_document import RegistrySnapshot
+from agent_comms.registry.registry_document import RegistrySnapshot
 from dataclasses import dataclass
 from typing import Annotated
 

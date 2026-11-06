@@ -21,7 +21,7 @@ from agent_comms.input_key import AcpInputKey
 from agent_comms.context_segments.retained import RetainedSegment
 from agent_comms.turn_lease import NoTurnLease
 from stored_inputs import stored_inputs
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 ORIGINAL_UNKNOWN_KEY = AcpInputKey(InputId.mint())

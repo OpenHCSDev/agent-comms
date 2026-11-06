@@ -14,7 +14,7 @@ from pathlib import Path
 
 from agent_comms.comms import wire
 from agent_comms.owner_connection import OwnerReplyLostError
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def main(root: Path, name: str) -> None:

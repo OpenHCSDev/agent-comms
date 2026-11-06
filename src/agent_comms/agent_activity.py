@@ -19,8 +19,8 @@ if TYPE_CHECKING:
     from .bus_publication import Delivered
     from .notification_progress import AssignmentProgress, DeliveryProgress
     from .message_notification import MessageNotification
-    from .registration import Registration
-    from .registry_document import RegistrySnapshot
+    from .registry.registration import Registration
+    from .registry.registry_document import RegistrySnapshot
     from .thread_status import ThreadStatus
 from .activity import (
     Activity,
@@ -40,7 +40,7 @@ from .frozen_recipient import FrozenRecipient
 from .routing import NoTurnRouting, Routing
 from .runtime_info import RuntimeInfo, RuntimeInfoStore
 from .thread_identity import OwnerIdentity, ThreadIncarnation
-from .threads import Thread
+from .registry.threads import Thread
 from .turn_lease import NoFinishedTurn, TurnCompletion, TurnLeaseFence, TurnState
 from .turn_phase import IdlePhase, PreparingPhase, TurnPhase
 

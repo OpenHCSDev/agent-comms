@@ -30,7 +30,7 @@ from agent_comms.native_tools import CodingTool
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import AssistantMessage, ReportedFlag, ReportedParts, ReportedText, ToolCallContent
 from agent_comms.storage_room import NoRoomNeeded
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def acquire(comms, name, turn_id, resource, work):

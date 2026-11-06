@@ -5,9 +5,9 @@ from pathlib import Path
 from .cli_result import ThreadToolCatalogResult
 from .nominal.field_codec import FieldCodec
 from .launch_root import LaunchRoot
-from .registry_store import RegistryStore
+from .registry.registry_store import RegistryStore
 from .storage.store_files import AtomicFile
-from .threads import Thread, ThreadCatalogFile
+from .registry.threads import Thread, ThreadCatalogFile
 from .tool_declaration import NativeRequestTools
 
 

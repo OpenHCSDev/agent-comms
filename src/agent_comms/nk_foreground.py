@@ -37,7 +37,7 @@ from .native_package import VerifiedNativePackage
 from .selected_result import CoordinatedTurn
 from .thread_text import GivenThreadText
 from .repo import Checkout
-from .threads import NativeThread
+from .registry.threads import NativeThread
 
 _MAX_GO_WAIT_SECONDS = 120
 _GO = re.compile(r"GO (0|[1-9][0-9]{0,17})\Z")

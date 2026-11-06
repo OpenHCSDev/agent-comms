@@ -11,13 +11,22 @@ from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from .agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
-from .channel_targets import DeclaredTag, Tag
-from .child_process import NoProcess, ProcessIdentity, ProcessState
-from .context_segments.wake_values import WakeWorkContext
-from .nominal.declared_family import DeclaredFamily
-from .errors import RelationViolationError
-from .nominal.field_codec import (
+from ..activity import ObservedActivity
+from ..agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
+from ..channel_targets import DeclaredTag, Tag
+from ..child_process import NoProcess, ProcessIdentity, ProcessState
+from ..context_segments.wake_values import WakeWorkContext
+from ..errors import RelationViolationError
+from ..goals import (
+    GoalDeclaration,
+    NoGoal,
+)
+from ..heartbeat_delivery import HeartbeatDelivery, OffHeartbeatDelivery
+from ..launch_runtime import ThreadLaunch
+from ..lifecycle import LifecycleState
+from ..lifecycle_capability import Executing
+from ..nominal.declared_family import DeclaredFamily
+from ..nominal.field_codec import (
     Argument,
     Description,
     FieldCodec,
@@ -29,31 +38,23 @@ from .nominal.field_codec import (
     WireOmitDefault,
     WireRequired,
 )
-from .goals import (
-    GoalDeclaration,
-    NoGoal,
-)
-from .launch_runtime import ThreadLaunch
-from .heartbeat_delivery import HeartbeatDelivery, OffHeartbeatDelivery
-from .lifecycle import LifecycleState
-from .lifecycle_capability import Executing
-from .storage.locked_store import DurableFile, PatternFile
-from .pi_vocabulary import (
+from ..pi_vocabulary import (
     NoThinkingOverride,
     ServiceTier,
     ThinkingChoice,
     ThinkingLevelField,
 )
-from .registration_inheritance import (
+from ..registration_inheritance import (
     InheritApplied,
     InheritEmpty,
     InheritPrevious,
 )
-from .repo import Checkout, RepositoryReads
-from .session_file import NoSessionFile, SessionFile
-from .task_sources import TaskScope
-from .thread_creation import CreationSeconds, CreationTime, GeneratedCreationTime
-from .thread_identity import (
+from ..repo import Checkout, RepositoryReads
+from ..session_file import NoSessionFile, SessionFile
+from ..storage.locked_store import DurableFile, PatternFile
+from ..task_sources import TaskScope
+from ..thread_creation import CreationSeconds, CreationTime, GeneratedCreationTime
+from ..thread_identity import (
     AgentThreadRole,
     ObservedTurn,
     OfferedTools,
@@ -64,7 +65,7 @@ from .thread_identity import (
     TurnIdentity,
     UnobservedTools,
 )
-from .thread_model import (
+from ..thread_model import (
     CatalogSelection,
     DeclaredModel,
     ModelSelection,
@@ -73,25 +74,31 @@ from .thread_model import (
     UndeclaredModel,
     UnselectedModel,
 )
-from .thread_presentation import (
+from ..thread_presentation import (
     ThreadOwnerBinding,
     ThreadPresentation,
     UnavailableThreadOwnerBinding,
 )
-from .thread_status import ServiceThreadStatus, ThreadStatus
-from .thread_storage import (
+from ..thread_status import ServiceThreadStatus, ThreadStatus
+from ..thread_storage import (
     AssignedStorageRoots,
     ThreadStorage,
     UnassignedThreadStorage,
 )
-from .thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
-from .activity import ObservedActivity
-from .turn_lease import FinishedTurn, NoTurnRecord, TurnLease, TurnLeaseFence, TurnRecord, TurnState
+from ..thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
+from ..turn_lease import (
+    FinishedTurn,
+    NoTurnRecord,
+    TurnLease,
+    TurnLeaseFence,
+    TurnRecord,
+    TurnState,
+)
 
 if TYPE_CHECKING:
-    from .goal_management import Goals
+    from ..goal_management import Goals
+    from ..storage_rules import StorageRule
     from .registry_document import RegistrySnapshot
-    from .storage_rules import StorageRule
 
 
 class ThreadCommandAvailability:
@@ -571,7 +578,7 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread")
 
     def native_environment(self, root, snapshot) -> dict[str, str]:
         """Project this captured owner through the original native binding."""
-        from .runtime_requests import ProjectRuntimeRequest
+        from ..runtime_requests import ProjectRuntimeRequest
 
         project = ProjectRuntimeRequest.for_native(snapshot, self)
         return {
@@ -956,6 +963,6 @@ def current_thread(registry) -> Thread:
 
 # Thread's backend field is the lookup boundary. Declare both implementations
 # after the record graph, then reject incomplete declarations before any lookup.
-from . import pi_durable_backend, pi_native_backend  # noqa: E402, F401
+from .. import pi_durable_backend, pi_native_backend  # noqa: E402, F401
 
 AgentBackend.seal()

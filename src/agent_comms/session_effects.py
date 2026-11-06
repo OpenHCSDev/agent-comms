@@ -6,8 +6,8 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 from .nominal.field_codec import AcpSessionId
+from .registry.threads import Thread
 from .runtime import RuntimeProxy
-from .threads import Thread
 
 if TYPE_CHECKING:
     from .cursor_publication import CursorPublication

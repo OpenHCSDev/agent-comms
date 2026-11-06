@@ -14,31 +14,31 @@ from functools import cached_property, partial
 from pathlib import Path
 from typing import ClassVar, Self
 
-from .child_process import NoProcess
-from .coordination.database import CoordinationStore, ReadableStore
-from .coordination.errors import StaleFence
-from .errors import RelationViolationError
-from .nominal.field_codec import FieldCodec, NullMember, TurnId
-from .storage.locked_store import DocumentBytes, LockedStore, PublishedProperty, RegistryFile
-from .storage.maintenance_barrier import CarriedDocument
-from .native_input_owner import RegistryOwner
-from .presence import PresenceStore
-from .storage.private_path import FileObservation, FileRevision, MissingFile
-from .private_registry_guard import PrivateRegistryGuard, PublicRegistry, RegistryPrivacy
-from .private_runtime_schema import PrivateCoordinatorTable
-from .registration_change import InitialRegistration, NativeSourcePublication
+from ..child_process import NoProcess
+from ..coordination.database import CoordinationStore, ReadableStore
+from ..coordination.errors import StaleFence
+from ..errors import RelationViolationError
+from ..nominal.field_codec import FieldCodec, NullMember, TurnId
+from ..storage.locked_store import DocumentBytes, LockedStore, PublishedProperty, RegistryFile
+from ..storage.maintenance_barrier import CarriedDocument
+from ..native_input_owner import RegistryOwner
+from ..presence import PresenceStore
+from ..storage.private_path import FileObservation, FileRevision, MissingFile
+from ..private_registry_guard import PrivateRegistryGuard, PublicRegistry, RegistryPrivacy
+from ..private_runtime_schema import PrivateCoordinatorTable
+from ..registration_change import InitialRegistration, NativeSourcePublication
 from .registry_document import (
     HistoricalRootPurpose,
     RegistryDocument,
     RegistryEntry,
     RegistrySnapshot,
 )
-from .routing import Routing
-from .session_file import RegistrySessionLocation
-from .storage.store_files import RegistryLocking
-from .thread_identity import TurnIdentity
+from ..routing import Routing
+from ..session_file import RegistrySessionLocation
+from ..storage.store_files import RegistryLocking
+from ..thread_identity import TurnIdentity
 from .threads import Thread
-from .turn_lease import (
+from ..turn_lease import (
     ActiveTurn, LockedTurn, NamedTurn, RecordedGeneration, RetiredTurn, StoredTurnRecord,
     TurnDeclaration, TurnRecord,
 )

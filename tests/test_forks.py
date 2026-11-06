@@ -62,7 +62,7 @@ from agent_comms.order_tools import CommsTeamLoadTool, CommsHudTool, CommsTodoLi
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.slop import DeclarationDerivation, ExistingLine, Slop
-from agent_comms.threads import ExternalThread, NativeThread, ForkThread
+from agent_comms.registry.threads import ExternalThread, NativeThread, ForkThread
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus

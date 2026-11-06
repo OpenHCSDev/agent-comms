@@ -30,7 +30,7 @@ from .storage_projection import StorageProjection
 from .thread_status import StoppedThreadStatus
 from .session_file import RegistrySessionLocation
 
-from .threads import NativeThread, Thread
+from .registry.threads import NativeThread, Thread
 from .todos import PendingProblemOrder
 
 if TYPE_CHECKING:

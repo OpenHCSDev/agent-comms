@@ -14,7 +14,7 @@ from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.channel_targets import CommandTarget, NoChannel, PerTargetChannels, ChannelTarget, ProjectTarget
 from agent_comms.catalog_document import NoCatalog
 from agent_comms.cli import build_parser, CliInvocation
-from agent_comms.threads import (
+from agent_comms.registry.threads import (
     ChosenServiceTier,
     NextTurnConfiguration,
     ExternalThread,

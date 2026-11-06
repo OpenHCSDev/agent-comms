@@ -22,10 +22,10 @@ from agent_comms.installer.upgrade import upgrade
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.storage.locked_store import LiveFilesRequest, RegistryFile
 from agent_comms.installer.refusals import UpgradeRefused
-from agent_comms.registry_store import RegistryStore
+from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.thread_text import GivenThreadText
 from bus_record_fixture import prepare_native_comms
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 class RegistryTitleCarry(Carry):
@@ -45,7 +45,7 @@ import os, signal, sys
 from pathlib import Path
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
-from agent_comms.registry_store import RegistryStore
+from agent_comms.registry.registry_store import RegistryStore
 
 root, route, path = map(Path, sys.argv[1:4])
 registry = RegistryStore.at(root)

@@ -5,8 +5,8 @@ from agent_comms.repo import Checkout
 from agent_comms.channel_targets import CommandTarget, DeclaredTag
 import pytest
 
-from agent_comms.registration import Registration
-from agent_comms.registry_store import UncachedRegistry
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.registry_store import UncachedRegistry
 from agent_comms.channels import AllChannel, BuiltinChannelView
 from agent_comms.comms import wire
 from conftest import installed_comms
@@ -15,7 +15,7 @@ from agent_comms.messages import Message, InfoKind
 from agent_comms.read_basis import NamedViewer
 from bus_history import read_history
 from agent_comms.thread_text import ForkedParent, GivenThreadText
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 @pytest.fixture
@@ -189,7 +189,7 @@ class TestPresence:
 class TestCurrentThreadEnvironment:
     def test_current_thread_decodes_its_launch_record(self, monkeypatch, tmp_path):
         from agent_comms.launch_runtime import ThreadLaunch
-        from agent_comms.threads import current_thread
+        from agent_comms.registry.threads import current_thread
 
         monkeypatch.setenv(ThreadLaunch.variable("name"), "me")
         monkeypatch.setenv(ThreadLaunch.variable("worktree"), str(tmp_path))

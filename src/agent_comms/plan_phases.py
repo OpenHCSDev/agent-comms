@@ -322,7 +322,7 @@ class BusDeliveryReadersPhase(VirtualBusPhase):
             "src/agent_comms/notification_assignment.py",
             "src/agent_comms/read_ledger.py",
             "src/agent_comms/cursor_publication.py",
-            "src/agent_comms/goal_waits.py",
+            "src/agent_comms/planning/goal_waits.py",
         ),
     )
 
@@ -1012,7 +1012,7 @@ class ScopedReadsPhase(StoreGuardsPhase):
         r"guarded_(read|write)(_async)?\(|StoreLock\.ordered|reading_snapshot\(|read_snapshot_unlocked\("
         r"|[^f]\._read_unlocked\(|store\.reading\(|CapturedSelection\.reading\(|catalog\.reading\("
         r"|reads\.reading\(",
-        ("src", *StoreGuardsPhase.owners, ":!src/agent_comms/registry_store.py"),
+        ("src", *StoreGuardsPhase.owners, ":!src/agent_comms/registry/registry_store.py"),
     )
 
 

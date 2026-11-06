@@ -22,9 +22,9 @@ from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.storage.locked_store import RegistryFile, RootFile
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceHolder
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.registry_document import RegistryDocument
-from agent_comms.registry_store import RegistryStore
-from agent_comms.threads import NativeThread, Thread
+from agent_comms.registry.registry_document import RegistryDocument
+from agent_comms.registry.registry_store import RegistryStore
+from agent_comms.registry.threads import NativeThread, Thread
 
 
 class TeamProjectLead(Carry):

@@ -60,8 +60,8 @@ from agent_comms.storage.typed_table import RowNotFoundError
 from .nominal.field_codec import MalformedRecord, ScratchName, ThreadLookup
 from .input_disposition import InputDispositions
 from .storage.locked_store import RegistryFile
-from .registration import Registration
-from .threads import Thread
+from .registry.registration import Registration
+from .registry.threads import Thread
 
 from .owner_release import OwnerRelease, OwnerReleaseEvidence
 

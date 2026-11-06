@@ -17,7 +17,7 @@ from agent_comms.thread_identity import CoreWatcherIncarnation, RecordedThreadIn
 from agent_comms.thread_status import (
     NoBridgeThreadStatus, PausedBridgeThreadStatus, StoppedThreadStatus, StoppingThreadStatus,
 )
-from agent_comms.threads import ParkedThreadWorkState
+from agent_comms.registry.threads import ParkedThreadWorkState
 from agent_comms.todos import AssignTodo, HolderConsentRequired, ReleaseTodo, StrikeReason
 from agent_comms.tool_caller import ForkCaller, PeerCaller, ThreadCaller
 

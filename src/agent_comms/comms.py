@@ -32,9 +32,9 @@ from .execution.owner_lifecycle import OwnerLifecycle
 from .publisher import OwnerPublisher
 from .relationships import ThreadRelationships
 from .agent_activity import AgentActivity
-from .registration import Registration
+from .registry.registration import Registration
 from .storage.private_path import FileRevision
-from .registry_document import RegistrySnapshot, UnreadRegistry
+from .registry.registry_document import RegistrySnapshot, UnreadRegistry
 from .route_client import ActivityClient
 from .thread_configuration import ThreadConfiguration
 from .thread_identity import ThreadIncarnation

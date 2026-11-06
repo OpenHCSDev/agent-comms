@@ -25,9 +25,9 @@ if TYPE_CHECKING:
     from .message_reference import MessageReference
     from .messaging import Messaging
     from .turn_item import SourceTurn
-    from .registry_document import RegistryEntry, RegistrySnapshot, RosterVisibility
+    from .registry.registry_document import RegistryEntry, RegistrySnapshot, RosterVisibility
     from .thread_identity import GenerationCounter, OwnerIdentity
-    from .threads import Thread
+    from .registry.threads import Thread
     from .turn_lease import TurnCompletion, TurnLeaseFence
 
 

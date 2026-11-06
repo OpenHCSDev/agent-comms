@@ -20,7 +20,7 @@ from agent_comms.nominal.field_codec import AcpSessionId, MalformedRecord
 from agent_comms.owner_protocol import OwnerAnnouncement
 from agent_comms.storage.private_path import PrivateSocketRole
 from agent_comms.owner_connection import socket_path
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
 

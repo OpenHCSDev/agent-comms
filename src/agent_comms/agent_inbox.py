@@ -28,7 +28,7 @@ from .read_basis import ReadCursor
 
 if TYPE_CHECKING:
     from .read_ledger import ReadDocument, ReadLedger
-    from .registry_document import RegistrySnapshot
+    from .registry.registry_document import RegistrySnapshot
 
 
 @dataclass(frozen=True, slots=True)

@@ -29,7 +29,7 @@ from agent_comms.queued_input import QueuedInput
 from agent_comms.retained_task_facts import CurrentHumanInputTaskFact, HumanInputTaskFact, InputTaskFact
 from test_acp_queue_contract import _owner
 from stored_inputs import stored_inputs
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 class Client(Controller, SessionUpdateSink):

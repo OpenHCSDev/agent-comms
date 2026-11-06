@@ -19,7 +19,7 @@ from agent_comms.native_input_proof import NativeContextJournal
 from agent_comms.native_input_proof import NativeInputProof
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.todos import TodoStore
 from agent_comms.native_session_reopen import PiSessionId
 from agent_comms.storage.typed_table import ReconciledFile

@@ -8,38 +8,38 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Concatenate
 
-from .catalog_store import ChannelCatalog
-from .channel_targets import DeclaredTag
-from .child_process import NoProcess, ProcessIdentity
-from .errors import RelationViolationError
-from .nominal.field_codec import ThreadLookup, TurnId
-from .repository_name import RepositoryName
-from .thread_identity import ThreadIncarnation
-from .goal_history import GoalHistoryEntry, GoalHistoryStore
-from .goal_scope import AllGoals, GoalScope
-from .native_input_owner import RegistryOwner
-from .registration_change import RegistrationChange
+from ..catalog_store import ChannelCatalog
+from ..channel_targets import DeclaredTag
+from ..child_process import NoProcess, ProcessIdentity
+from ..errors import RelationViolationError
+from ..nominal.field_codec import ThreadLookup, TurnId
+from ..repository_name import RepositoryName
+from ..thread_identity import ThreadIncarnation
+from ..goal_history import GoalHistoryEntry, GoalHistoryStore
+from ..goal_scope import AllGoals, GoalScope
+from ..native_input_owner import RegistryOwner
+from ..registration_change import RegistrationChange
 from .registry_document import FoundProjectThread, ProjectThreadSelection, RegistryDocument, RegistrySnapshot
 from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
-from .routing import NoTurnRouting, Routing
-from .storage_rules import StorageRule
+from ..routing import NoTurnRouting, Routing
+from ..storage_rules import StorageRule
 from .threads import ExternalThread, SubagentThread, Thread, NativeThread
-from .thread_identity import GenerationCounter, UserThreadRole
-from .thread_status import (
+from ..thread_identity import GenerationCounter, UserThreadRole
+from ..thread_status import (
     ConnectedThreadStatus,
     NoBridgeThreadStatus,
     ProcessThreadStatus,
     ThreadStatus,
 )
-from .thread_text import ForkedParent, SubagentRole
-from .repo import Checkout, CheckoutTransfer, Repo, RepositoryReads
+from ..thread_text import ForkedParent, SubagentRole
+from ..repo import Checkout, CheckoutTransfer, Repo, RepositoryReads
 
 if TYPE_CHECKING:
-    from .catalog_document import CatalogDocument
-    from .goals import GoalDeclaration
-    from .agent_backend import RuntimeLocation
-    from .goal_management import Goals
-    from .selected_participant import SelectedParticipant
+    from ..catalog_document import CatalogDocument
+    from ..goals import GoalDeclaration
+    from ..agent_backend import RuntimeLocation
+    from ..goal_management import Goals
+    from ..selected_participant import SelectedParticipant
 
 _DEFAULT_PRESENCE = ProcessThreadStatus()
 

@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     from .pi_commands import ExtensionUiResponse, PiCommand
     from .pi_native_backend import PiNativeBackend
     from .pi_payloads import PiResponseData, StateData
-    from .threads import Thread
+    from .registry.threads import Thread
     from .turn_context import TurnContext
 
 

@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from agent_comms.storage.locked_store import RegistryFile
-from agent_comms.registry_store import RegistryStore
+from agent_comms.registry.registry_store import RegistryStore
 
 ALIVE = {"pid": 2828048, "start_time": 657855705}
 

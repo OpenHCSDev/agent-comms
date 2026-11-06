@@ -25,7 +25,7 @@ from agent_comms.owner_restart import FencedOwnerBatch, OwnerRestartRequest, Sto
 from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.storage.store_files import ExclusiveLock, StoreLockContention, _store_lock
 from agent_comms.thread_model import DeclaredModel
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def source_runtime() -> RestoredRuntime:

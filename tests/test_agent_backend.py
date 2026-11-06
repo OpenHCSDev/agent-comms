@@ -20,7 +20,7 @@ from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.native_arguments import NativeArguments
 from agent_comms.pi_durable_backend import PiDurableBackend
 from agent_comms.pi_native_backend import PI_0_85_1_EVENT_KINDS, PiNativeBackend, PiSessionFile
-from agent_comms.threads import Thread, NativeThread
+from agent_comms.registry.threads import Thread, NativeThread
 from agent_comms.unstarted_runtime import UnstartedRuntime
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.session_file import NoSessionFile, RegistrySessionLocation
@@ -230,7 +230,7 @@ def test_cli_registry_reads_do_not_load_the_pi_runtime(tmp_path):
         [sys.executable, "-c", (
             "import sys, agent_comms.cli\n"
             "from pathlib import Path\n"
-            "from agent_comms.threads import NativeThread\n"
+            "from agent_comms.registry.threads import NativeThread\n"
             "NativeThread('a', frozenset(), '/tmp').backend\n"
             "assert 'agent_comms.backend' not in sys.modules\n"
             "assert 'agent_comms.tracked_turn' not in sys.modules\n"

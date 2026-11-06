@@ -30,14 +30,14 @@ from agent_comms.storage.maintenance_barrier import (
     PausedPhase,
     ReadyPhase,
 )
-from agent_comms.registration import Registration
+from agent_comms.registry.registration import Registration
 from agent_comms.storage.store_files import (
     ExclusiveLock,
     StoreGuard,
     _async_store_lock,
     _store_lock,
 )
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 
 

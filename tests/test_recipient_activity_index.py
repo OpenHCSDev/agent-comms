@@ -7,7 +7,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.registry_document import ThreadRows
+from agent_comms.registry.registry_document import ThreadRows
 
 from agent_comms.frozen_recipient import FrozenRecipient
 from agent_comms.comms import wire
@@ -19,12 +19,12 @@ from agent_comms.messages import InfoKind, Message
 from agent_comms.read_ledger import ReadDocument, ReadLedger
 from agent_comms.read_basis import ConversationCursor, ReadCursor
 from agent_comms.registry_provenance import RegistryProvenance
-from agent_comms.registry_document import RegistrySnapshot
+from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.thread_identity import (
     UnrecordedThreadIncarnation,
 )
 from goal_owner_fixture import canonical_goal_wire
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 
 
 def test_archived_duplicate_birth_keeps_names_without_selecting_an_arbitrary_owner(tmp_path):

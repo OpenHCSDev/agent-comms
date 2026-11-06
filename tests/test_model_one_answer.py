@@ -11,7 +11,7 @@ from agent_comms.thread_configuration import ThreadConfiguration
 from agent_comms.native_arguments import NativeArguments
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.thread_model import DeclaredModel, ThreadModel
-from agent_comms.threads import ModelChoice, NativeThread
+from agent_comms.registry.threads import ModelChoice, NativeThread
 from conftest import installed_comms
 
 

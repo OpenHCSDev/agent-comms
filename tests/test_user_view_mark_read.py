@@ -10,7 +10,7 @@ import pytest
 
 from agent_comms.comms import wire
 from conftest import installed_comms
-from agent_comms.threads import ExternalThread, NativeThread
+from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.ui_model.unread import ReplyUnread
 from native_unread_fixture import completed_snapshot
 

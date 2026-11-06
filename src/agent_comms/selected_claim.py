@@ -32,8 +32,8 @@ from .envelope_claim_transitions import (
 from .errors import RelationViolationError
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import RegistryPrivacy
-from .registry_document import RegistrySnapshot
-from .threads import NativeThread, Thread
+from .registry.registry_document import RegistrySnapshot
+from .registry.threads import NativeThread, Thread
 
 
 def verify_selected_wake(

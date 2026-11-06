@@ -9,7 +9,7 @@ import pytest
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
-from agent_comms.threads import NativeThread
+from agent_comms.registry.threads import NativeThread
 from agent_comms.thread_management import ThreadTitleResult
 from agent_comms.tool_caller import ThreadCaller
 
@@ -82,7 +82,7 @@ def test_a_remote_ui_reads_the_registry_with_its_renames(tmp_path):
     from agent_comms.core_access import LocalCoreAccess
     from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.tools import CommsRegistryTool
-    from agent_comms.registry_document import RegistrySnapshot
+    from agent_comms.registry.registry_document import RegistrySnapshot
 
     comms = wire(tmp_path / "wire")
     _declare(comms, "worker", str(tmp_path))
@@ -119,9 +119,9 @@ def test_a_ui_session_finds_its_project_thread_through_core(tmp_path):
     """Core resolves the project path on its own host, and the selection arrives as itself."""
     from agent_comms.core_access import LocalCoreAccess
     from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.registry_document import FoundProjectThread, NoProjectThread
+    from agent_comms.registry.registry_document import FoundProjectThread, NoProjectThread
     from agent_comms.tools import CommsSessionThreadTool
-    from agent_comms.registry_document import ProjectThreadSelection
+    from agent_comms.registry.registry_document import ProjectThreadSelection
 
     comms = wire(tmp_path / "wire")
     _declare(comms, "worker", str(tmp_path))
@@ -254,7 +254,7 @@ def test_a_ui_reads_a_renamed_thread_from_a_registry_slice(tmp_path):
     """The slice a remote UI reads answers under the old name and carries no other thread."""
     from agent_comms.core_access import LocalCoreAccess
     from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.registry_document import RegistrySlice
+    from agent_comms.registry.registry_document import RegistrySlice
     from agent_comms.tools import CommsRegistrySliceTool
 
     comms = wire(tmp_path / "wire")
