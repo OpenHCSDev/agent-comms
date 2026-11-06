@@ -391,12 +391,13 @@ def test_text_wire_is_inherited_by_real_external_part_decoders(family, record):
     assert isinstance(decoded, TextWire)
     assert decoded.text == "visible"
     assert decoded.model_dump()["type"] == record["type"]
-    unknown = family.unknown_member()
-    if unknown is None:
-        # A family admitting exactly its declared tags refuses any other.
+    undeclared = family.undeclared_tag("unrecognized")
+    if undeclared == "unrecognized":
+        # A family whose tags are exactly its declared members refuses any other.
         with pytest.raises(ValueError):
             adapter.validate_python({**record, "type": "unrecognized"})
     else:
-        # One the external CLI extends decodes the rest into its declared member,
-        # so a tag this version does not know still leaves the record readable.
-        assert isinstance(adapter.validate_python({**record, "type": "unrecognized"}), unknown)
+        # One the external CLI extends names the member its newer tags decode by,
+        # so a tag this version never saw still leaves the record readable.
+        decoded = adapter.validate_python({**record, "type": "unrecognized"})
+        assert decoded.tag() == undeclared

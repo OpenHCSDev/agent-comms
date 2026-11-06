@@ -27,7 +27,6 @@ from agent_comms.cli_protocol import (
     TaggedWire,
     TextWire,
     TimestampedWire,
-    UnknownTag,
     WireHeader,
 )
 from agent_comms.nominal.field_codec import (
@@ -643,6 +642,11 @@ class ClaudeRecord(TaggedWire, ABC, affix=""):
 
 class AssistantBlock(TaggedWire, ABC, affix="", declared_name=None):
 
+    @classmethod
+    def undeclared_tag(cls, tag: str) -> str:
+        """Claude Code adds content-block tags; an unread one keeps its record readable."""
+        return UnreadableBlock.tag()
+
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return ()
 
@@ -661,7 +665,7 @@ class AssistantBlock(TaggedWire, ABC, affix="", declared_name=None):
         return ()
 
 
-class UnreadableBlock(AssistantBlock, UnknownTag, declared_name='__undeclared__'):
+class UnreadableBlock(AssistantBlock, declared_name='__undeclared__'):
     """A content block whose tag this version does not declare.
 
     Claude Code writes one when the harness replaces a response, and adds new
