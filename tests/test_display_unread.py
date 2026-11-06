@@ -128,3 +128,33 @@ def test_status_row_equality_ignores_an_older_notification_outside_shown_lines()
     assert row != replace(row, presentation=replace(presentation, status=WorkingThreadPresentationStatus()))
     assert row != replace(row, summary=("Changed overview",))
     assert row != replace(row, lines=("Changed status line",))
+
+
+def test_reading_the_newest_rows_recounts_from_them_not_from_the_stale_prefix(bus):
+    """Reading what is on screen at the bottom of a channel leaves its proved prefix where it
+    was and adds out-of-order reads above it. Each such read used to recount the channel from
+    that prefix, twice, so a channel read at its newest end paid for its whole unread backlog
+    on every mark. Only the rows whose read state changed are recounted now."""
+    Bus.install(bus.path, history=(
+        PublicRecord.from_message(Message("author", "#team", f"backlog {seq}", InfoKind, seq=seq))
+        for seq in range(1, 201)
+    ))
+    selection = DisplayUnreadSelection(
+        ReadCursor(), (ChannelDisplayScope("#team", frozenset({"#team"})),), ("viewer",),
+        RegistryProvenance(threads={}, aliases={}))
+    selection = replace(selection, seen=selection.seen.add((
+        DisplayedConversation(ChannelConversation("#team"), (190,), prefix_through=150),
+    )))
+    with bus.reading() as source:
+        first = DisplayUnread().advanced(source, selection)
+    newest = replace(selection, seen=selection.seen.add((
+        DisplayedConversation(ChannelConversation("#team"), (195, 196), prefix_through=150),
+    )))
+    queries = []
+    with bus.reading() as source, source.observing() as db:
+        db.set_trace_callback(queries.append)
+        second = first.advanced(source, newest)
+        recounted = [query for query in queries if query.startswith("WITH read_cursors")]
+        assert len(recounted) == 2 and all("seq > 194" in query for query in recounted)
+        assert second.counts == {"#team": 47}
+        assert second == source.display_unread(newest, through=source.revision())

@@ -415,6 +415,14 @@ class ConversationCursor:
             prefix += 1
         return type(self)(high_water, tuple(exceptions[prefix:]))
 
+    def agrees_through(self, other: ConversationCursor) -> int:
+        """The highest sequence at or below which both cursors read every row alike. Both read
+        all of the lower high water's prefix; with equal high waters, they first differ at the
+        lowest sequence only one of them read out of order."""
+        if self.high_water != other.high_water:
+            return min(self.high_water, other.high_water)
+        return min(set(self.exceptions) ^ set(other.exceptions), default=self.high_water + 1) - 1
+
     def through(self, sequence: int) -> ConversationCursor:
         sequence = max(sequence, self.high_water)
         return type(self)(sequence, self.exceptions[bisect_right(self.exceptions, sequence):])
@@ -1239,8 +1247,12 @@ class UnreadQuery:
         rows = tuple(side[key] for side in (before, after) for key in changed if key in side)
         if any(row.whole_bus for row in rows):
             return ()
-        floor = (0 if any(key not in before or key not in after for key in changed)
-                 else min((row.cursor.high_water for row in rows), default=0))
+        # A key with no cursor on one side has read nothing there. A read of the newest rows
+        # leaves the high water where it was and adds exceptions above it, so the floor is the
+        # first sequence the two cursors read differently, not the high water.
+        cursors = [{key: row.cursor for key, row in side.items()} for side in (before, after)]
+        floor = min(cursors[0].get(key, ConversationCursor()).agrees_through(
+            cursors[1].get(key, ConversationCursor())) for key in changed)
         targets = tuple(sorted({row.target for row in rows}))
         return earlier.within(targets, floor), self.within(targets, floor)
 
