@@ -123,3 +123,17 @@ def test_open_boundary_never_holds_the_registry_against_its_writers(private_comm
         assert acquired == [True]
         with pytest.raises(StaleFence, match="registry revision changed"), boundary.registry_cut.current():
             pass
+
+
+def test_equal_scopes_bind_equal_conditions_however_their_sets_were_built():
+    # A frozenset iterates in an order its construction decides, and string hashes change per
+    # process, so find two constructions of one set that iterate differently in this run.
+    names = [f"#room-{index}" for index in range(12)]
+    built = [frozenset(names[:split]) | frozenset(names[split:]) for split in range(len(names))]
+    built += [frozenset(reversed(names)), frozenset(names)]
+    first, second = next((a, b) for a in built for b in built if tuple(a) != tuple(b))
+    assert first == second
+    assert (ChannelDisplayScope("#all", first).condition
+            == ChannelDisplayScope("#all", second).condition)
+    assert (MemberActivityDisplayScope("#all", first, participant_names=first).condition
+            == MemberActivityDisplayScope("#all", second, participant_names=second).condition)

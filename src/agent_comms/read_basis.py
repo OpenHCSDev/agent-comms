@@ -39,6 +39,7 @@ from .mentions import ThreadMention
 from .message_reference import MessageReference
 from .messages import MessageInput
 from .notification_evidence import AllOutcomes, DisplayOutcomes, OutcomeViewer
+from .storage.bound_set import BoundSet
 from .storage.private_path import FileObservation, MissingFile
 from .projection_source import ProjectionSource
 from .recorded_bus import RecordedBus, RecordedBusIdentity
@@ -1047,11 +1048,11 @@ class DMDisplayScope(MessageDisplayScope):
         return self.address_predicate("{sender}", "{target}")
 
     def address_predicate(self, sender: str, target: str) -> tuple[str, tuple]:
-        first, second = tuple(self.first_names), tuple(self.second_names)
-        a, b = ",".join("?" for _ in first), ",".join("?" for _ in second)
+        first, second = BoundSet(self.first_names), BoundSet(self.second_names)
+        a, b = first.marks, second.marks
         return (f"(({sender} IN ({a}) AND {target} IN ({b})) OR "
                 f"({sender} IN ({b}) AND {target} IN ({a})))",
-                (*first, *second, *second, *first))
+                (*first.parameters, *second.parameters, *second.parameters, *first.parameters))
 
     @property
     def index_targets(self) -> frozenset[str]:
@@ -1069,9 +1070,8 @@ class RepliesDisplayScope(AnyTargetDisplayScope, DMDisplayScope):
 
     @property
     def condition(self) -> tuple[str, tuple]:
-        names = tuple(self.first_names | self.second_names)
-        marks = ",".join("?" for _ in names)
-        return f"{{sender}} IN ({marks})", names
+        names = BoundSet(self.first_names | self.second_names)
+        return f"{{sender}} IN ({names.marks})", names.parameters
 
     def includes(self, message: Message) -> bool:
         return message.sender in self.first_names or (
@@ -1094,7 +1094,8 @@ class ListedDeliveries(MessageDisplayScope):
 
     @property
     def condition(self) -> tuple[str, tuple]:
-        return "{seq} IN (" + ",".join("?" for _ in self.sequences) + ")", tuple(self.sequences)
+        sequences = BoundSet(self.sequences)
+        return "{seq} IN (" + sequences.marks + ")", sequences.parameters
 
     def includes(self, message: Message) -> bool:
         return message.seq in self.sequences and self.scope.includes(message)
@@ -1124,8 +1125,8 @@ class ChannelDisplayScope(MessageDisplayScope):
 
     @property
     def condition(self) -> tuple[str, tuple]:
-        targets = tuple(self.index_targets)
-        return "{target} IN (" + ",".join("?" for _ in targets) + ")", targets
+        targets = BoundSet(self.index_targets)
+        return "{target} IN (" + targets.marks + ")", targets.parameters
 
     def identity(self, history_revision: FileObservation) -> ChannelDisplayIdentity:
         displayed = self.require_displayed()
@@ -1191,8 +1192,9 @@ class MemberActivityDisplayScope(AllTargetsDisplayScope):
 
     @property
     def condition(self) -> tuple[str, tuple]:
-        targets, names = tuple(self.targets), tuple(self.participant_names)
-        target_marks, name_marks = ",".join("?" for _ in targets), ",".join("?" for _ in names)
+        bound_targets, bound_names = BoundSet(self.targets), BoundSet(self.participant_names)
+        targets, names = bound_targets.parameters, bound_names.parameters
+        target_marks, name_marks = bound_targets.marks, bound_names.marks
         mention_key = FieldCodec.field_plan(ThreadMention, "thread").key
         return (f"{{target}} IN ({target_marks}) OR {{sender}} IN ({name_marks}) OR "
                 f"({{target}} NOT LIKE '#%' AND {{target}} IN ({name_marks})) OR "
