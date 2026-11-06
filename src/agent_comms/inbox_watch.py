@@ -27,7 +27,7 @@ from yarl import URL
 from .agent_inbox import NoWait, TakenInputPosition, TakenInputStart
 from .child_process import ProcessIdentity
 from .cli_bridges.claude_transcript import (
-    WATCH_REPORT, WATCH_STOPPED, WINDOW_ENDED, ClaudeJsonLines, ReceivesWatchReports,
+    WATCH_DEFERRED, WATCH_REPORT, WATCH_STOPPED, WINDOW_ENDED, ClaudeJsonLines, ReceivesWatchReports,
     ReconnectUrl, ReportedLedger, WatchReport,
 )
 from .cli_bridges.claude_protocol import ClaudeMonitorFrame
@@ -39,6 +39,7 @@ from .coordination.database import CoordinationStore
 from .coordination.tables.harness_deliveries import HarnessDelivery
 from .coordination.coordinator import Coordination
 from .errors import RelationViolationError
+from .storage.maintenance_barrier import MaintenanceHeldError
 from .harness_delivery_states import EmittedOutcome, PrintLedgerId, TakingLedger, UnconfirmedOutcome
 from .message_reference import MessageReference
 from .messages import Message
@@ -443,6 +444,9 @@ class InboxWatch:
         attachment = self.attached(here)
         try:
             await asyncio.to_thread(attachment.__enter__)
+        except MaintenanceHeldError as held:
+            await socket.close(code=WATCH_DEFERRED, message=str(held)[:120].encode())
+            return
         except RelationViolationError as refused:
             await socket.close(
                 code=WSCloseCode.POLICY_VIOLATION, message=str(refused)[:120].encode()

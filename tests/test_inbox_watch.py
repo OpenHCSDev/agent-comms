@@ -11,7 +11,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from aiohttp import WSServerHandshakeError
+from aiohttp import WSMsgType, WSServerHandshakeError
 from pydantic import ValidationError
 from aiohttp.test_utils import TestClient, TestServer, unused_port
 from yarl import URL
@@ -20,13 +20,15 @@ from agent_comms.activity import ActivityState, ObservedActivity
 from agent_comms.cli_bridges.claude_protocol import ClaudeMonitorFrame
 from agent_comms.cli_bridges.claude_protocol import MonitorTaskNotification, TaskEnvelope
 from agent_comms.cli_bridges.claude_transcript import (
-    WATCH_REPLACED, PrintedLedger, ReconnectsAlone, ReconnectUrl,
+    WATCH_DEFERRED, WATCH_REPLACED, PrintedLedger, ReconnectsAlone, ReconnectUrl,
 )
 from agent_comms.harness_delivery_states import PrintLedgerId
 from agent_comms.cli_bridges.inbox_watch_client import (
-    RECONNECTS_ALONE, FollowedTranscript, InboxSocket, WatchDropped, WatchEnd, WatchReplaced,
-    WatchStopped,
+    RECONNECTS_ALONE, FollowedTranscript, InboxSocket, WatchDeferred, WatchDropped, WatchEnd,
+    WatchReplaced, WatchStopped,
 )
+from agent_comms.storage.locked_store import RegistryFile
+from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.comms import Comms
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.connector import Connector
@@ -611,6 +613,36 @@ async def test_a_reconnect_url_outlives_the_connector_that_minted_it(
                 store.thread_revoked("cloud")
                 with pytest.raises(WSServerHandshakeError):
                     await client.ws_connect(standing)
+
+
+async def test_a_reconnect_into_maintenance_is_deferred_and_keeps_its_next_url(
+    session, comms: Comms,
+) -> None:
+    """Every install holds maintenance, and a reset client re-dials into it: on 2026-11-06 the
+    connector refused each re-dial as a policy violation (1008), and the client spent its five
+    resets in seconds. The refusal now says to wait, and the URL handed over first opens once
+    maintenance lifts."""
+    assert isinstance(WatchEnd.closed(WATCH_DEFERRED), WatchDeferred)
+    client, token = session
+    first = await client.ws_connect(await watch_path(client, token, "cloud"))
+    path = await reconnect_url(first)
+    await first.close()
+    barrier = MaintenanceBarrier(RegistryFile.path_in(comms.root))
+    held = barrier.begin(MaintenanceOperator.current())
+    try:
+        deferred = await client.ws_connect(path)
+        handed = await asyncio.wait_for(deferred.receive_str(), timeout=30)
+        assert handed.startswith(ReconnectUrl.wire_prefix)
+        closing = await asyncio.wait_for(deferred.receive(), timeout=30)
+        assert closing.type is WSMsgType.CLOSE and closing.data == WATCH_DEFERRED, closing
+    finally:
+        barrier.clear(held)
+    again = await client.ws_connect(URL(ReconnectUrl.model_validate_json(handed).url).path)
+    # A reconnect ticket's socket holds its next URL before any message.
+    assert (await asyncio.wait_for(again.receive_str(), timeout=30)).startswith(ReconnectUrl.wire_prefix)
+    comms.messaging.send("sender", "cloud", "after the maintenance")
+    assert (await frame(again))["text"] == "after the maintenance"
+    await again.close()
 
 
 def attempt_outcome(comms: Comms, message) -> str:

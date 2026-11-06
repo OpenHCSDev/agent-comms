@@ -40,7 +40,7 @@ from agent_comms.watched import FileSource
 
 from .claude_protocol import ClaudeMonitorFrame
 from .claude_transcript import (
-    WATCH_REPLACED, WATCH_STOPPED, WINDOW_ENDED, PrintedLedger, PrintedNow, ReconnectsAlone,
+    WATCH_DEFERRED, WATCH_REPLACED, WATCH_STOPPED, WINDOW_ENDED, PrintedLedger, PrintedNow, ReconnectsAlone,
     ReconnectUrl, RecentClaudeWindow, RunningClaude,
 )
 from .session_watch import WatchClaim
@@ -179,6 +179,8 @@ class WatchEnd(ABC):
                 return WatchStopped()
             case int(replaced) if replaced == WATCH_REPLACED:
                 return WatchReplaced(reason)
+            case int(deferred) if deferred == WATCH_DEFERRED:
+                return WatchDeferred(reason)
             case _:
                 return WatchDropped(reason)
 
@@ -242,6 +244,21 @@ class WatchRefused(WatchDropped):
 
 
 @dataclass(frozen=True)
+class WatchDeferred(WatchDropped):
+    """The bus is under maintenance, as every install holds it. The socket opened and was handed
+    its next URL before the connector found it could not attach the thread, so that URL waits
+    out the maintenance; it spends no reset, since nothing reset. On 2026-11-06 a watch re-dialled
+    into an install five times in seconds, each one refused, and gave up before it ended."""
+
+    async def settled(self, watch: InboxSocket) -> WatchEnd:
+        return await watch.redials.held.waiting(watch, self)
+
+    async def redialing(self, watch: InboxSocket, url: str, pauses: Pauses) -> WatchEnd:
+        """Still under maintenance: the newest URL waits on with the pauses left."""
+        return await watch.redials.held.waited(watch, self, pauses)
+
+
+@dataclass(frozen=True)
 class WatchStopped(WatchEnd):
     """The thread was stopped on the bus: re-arming now would undo the stop. The session is
     not archived; it connects again when someone wakes it."""
@@ -255,6 +272,8 @@ class WatchStopped(WatchEnd):
 
 
 RECONNECTS_ALONE = "This watch reconnects on its own after a network reset."
+WAITS_FOR_MAINTENANCE = ("The bus is under maintenance, as during an install; this watch waits for "
+                         "it and reconnects on its own.")
 """Said when the connector hands over a reconnect URL; the URL itself is never shown."""
 
 
@@ -262,7 +281,7 @@ class Pauses(ABC):
     """The pauses left before the same unopened URL is tried again."""
 
     @abstractmethod
-    async def retried(self, watch: InboxSocket, url: str, unopened: WatchUnopened) -> WatchEnd: ...
+    async def retried(self, watch: InboxSocket, url: str, ended: WatchDropped) -> WatchEnd: ...
 
     @classmethod
     def of(cls, delays: tuple[float, ...]) -> Pauses:
@@ -273,8 +292,8 @@ class Pauses(ABC):
 class NoPauses(Pauses):
     """None left: the URL never opened, and that is what the model hears."""
 
-    async def retried(self, watch: InboxSocket, url: str, unopened: WatchUnopened) -> WatchEnd:
-        return unopened
+    async def retried(self, watch: InboxSocket, url: str, ended: WatchDropped) -> WatchEnd:
+        return ended
 
 
 @dataclass(frozen=True)
@@ -284,7 +303,7 @@ class Pause(Pauses):
     delay: float
     rest: Pauses
 
-    async def retried(self, watch: InboxSocket, url: str, unopened: WatchUnopened) -> WatchEnd:
+    async def retried(self, watch: InboxSocket, url: str, ended: WatchDropped) -> WatchEnd:
         await asyncio.sleep(self.delay)
         return await (await watch.opened(url)).redialing(watch, url, self.rest)
 
@@ -296,12 +315,22 @@ class HeldReconnect(ABC):
     @abstractmethod
     async def redialed(self, watch: InboxSocket, dropped: WatchDropped) -> WatchEnd: ...
 
+    @abstractmethod
+    async def waited(self, watch: InboxSocket, deferred: WatchDeferred, pauses: Pauses) -> WatchEnd: ...
+
+    async def waiting(self, watch: InboxSocket, deferred: WatchDeferred) -> WatchEnd:
+        """The first refusal of a maintenance: the whole wait is still ahead."""
+        return await self.waited(watch, deferred, watch.redials.maintenance)
+
 
 class NoReconnect(HeldReconnect):
     """The connector gave this socket no reconnect URL: an older connector, or it is spent."""
 
     async def redialed(self, watch: InboxSocket, dropped: WatchDropped) -> WatchEnd:
         return dropped
+
+    async def waited(self, watch: InboxSocket, deferred: WatchDeferred, pauses: Pauses) -> WatchEnd:
+        return deferred
 
 
 @dataclass(frozen=True)
@@ -321,6 +350,17 @@ class ReconnectWith(HeldReconnect):
         return await (await watch.opened(self.url)).redialing(
             watch, self.url, watch.redials.pauses)
 
+    async def waiting(self, watch: InboxSocket, deferred: WatchDeferred) -> WatchEnd:
+        """Said once, when the wait begins: every printed line wakes the session."""
+        print(WAITS_FOR_MAINTENANCE, flush=True)
+        return await super().waiting(watch, deferred)
+
+    async def waited(self, watch: InboxSocket, deferred: WatchDeferred, pauses: Pauses) -> WatchEnd:
+        """Dial this URL after the next pause; the socket it opens spends it and hands over the
+        next one, which is what a further wait dials."""
+        watch.redials.held = NoReconnect()
+        return await pauses.retried(watch, self.url, deferred)
+
 
 @dataclass
 class Redials:
@@ -334,6 +374,8 @@ class Redials:
     most: ClassVar[int] = 5
     window_seconds: ClassVar[int] = 600
     pauses: ClassVar[Pauses] = Pauses.of((1.0, 2.0, 4.0, 8.0))
+    maintenance: ClassVar[Pauses] = Pauses.of((5.0, 10.0, 15.0, 30.0, 30.0, 30.0, 30.0, 30.0, 30.0))
+    """Installs held maintenance for 41 s to over 2 min on 2026-11-06; this waits 3.5 min."""
 
     def has_room(self, now: float) -> bool:
         """Whether the window has room for one more reconnect, which is then recorded."""
