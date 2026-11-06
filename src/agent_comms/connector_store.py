@@ -5,7 +5,7 @@ import hashlib
 import re
 import secrets
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -132,6 +132,25 @@ class ConnectorAccess(GrantLifetime, DeclaredFamily, affix=""):
     def holds_ui_grant(self, grant_id: UiGrantId) -> bool:
         return False
 
+    def reconnects(self, thread: str) -> bool:
+        """Whether this is the standing reconnect URL of ``thread``'s inbox watch."""
+        return False
+
+    def lapses_with(self, thread: str) -> bool:
+        """Whether revoking or re-granting ``thread`` ends this: its grant, and its watch's
+        reconnect URL, which would otherwise keep reading a revoked thread's inbox."""
+        return self.holds_thread(thread)
+
+    def reopened[T](self, reconnect: Callable[[str], T], refused: T) -> T:
+        """What an inbox watch URL with this digest opens: only a watch's reconnect does."""
+        return refused
+
+    def spent_in(self, grants: ConnectorGrants, key: str) -> ConnectorGrants:
+        """The grants once a watch URL with this digest is redeemed: only a watch's reconnect
+        is spent by it, so a watch path never revokes an MCP grant, and an armed ticket's
+        redemption returns the same document, which the store does not rewrite."""
+        return grants
+
 
 @dataclass(frozen=True)
 class UnissuedAccess(ConnectorAccess):
@@ -182,6 +201,29 @@ class ThreadGrant(ConnectorAccess):
 
     def holds_thread(self, thread: str) -> bool:
         return self.thread == thread
+
+
+@dataclass(frozen=True)
+class WatchReconnect(ConnectorAccess):
+    """An inbox watch's standing reconnect URL, kept as its digest beside the grants because
+    the connector issued it and must honour it across its own restart: every install restarts
+    the connector, and a reset client re-dials into the new process (2026-11-06 03:15, three
+    watches refused across one install). It names no MCP caller and holds no thread grant."""
+
+    thread: str
+
+    def reconnects(self, thread: str) -> bool:
+        return self.thread == thread
+
+    def lapses_with(self, thread: str) -> bool:
+        return self.reconnects(thread)
+
+    def reopened[T](self, reconnect: Callable[[str], T], refused: T) -> T:
+        return reconnect(self.thread)
+
+    def spent_in(self, grants: ConnectorGrants, key: str) -> ConnectorGrants:
+        return replace(grants, access={held: grant for held, grant in grants.access.items()
+                                       if held != key})
 
 
 @dataclass(frozen=True)
@@ -299,7 +341,7 @@ class ConnectorGrants:
         return any(grant.holds_thread(thread) for grant in self.access.values())
 
     def access_without(self, thread: str) -> dict[str, ConnectorAccess]:
-        return {key: grant for key, grant in self.access.items() if not grant.holds_thread(thread)}
+        return {key: grant for key, grant in self.access.items() if not grant.lapses_with(thread)}
 
     def ui_issued(
         self, namespace: RootId, seconds: int,
@@ -369,6 +411,23 @@ class ConnectorStore(SingleFileStore, CarriedDocument[ConnectorGrants], Connecto
             replace(grants, access=grants.access_without(thread) | {digest(token): ThreadGrant(thread)}),
             token,
         ))
+
+    def watch_reconnect_issued(self, thread: str) -> BearerSecret:
+        """A thread's one standing reconnect URL: minting it ends any older one of the thread."""
+        token = BearerSecret(secrets.token_urlsafe(32))
+        self.update(lambda grants: DocumentChange.to(replace(grants, access={
+            key: held for key, held in grants.access.items() if not held.reconnects(thread)
+        } | {digest(token): WatchReconnect(thread)})))
+        return token
+
+    def watch_reconnect_taken(self, token: BearerSecret) -> ConnectorAccess:
+        """What the watch URL's digest held, spent in the same write when it is a reconnect."""
+        key = digest(token)
+
+        def taken(grants: ConnectorGrants) -> DocumentChange[ConnectorGrants, ConnectorAccess]:
+            held = grants.access.get(key, UnissuedAccess())
+            return DocumentChange(held.spent_in(grants, key), held)
+        return self.update(taken)
 
     def thread_revoked(self, thread: str) -> None:
         self.update(lambda grants: DocumentChange.to(replace(grants, access=grants.access_without(thread))))

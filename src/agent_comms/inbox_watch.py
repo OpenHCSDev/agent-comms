@@ -27,18 +27,19 @@ from yarl import URL
 from .agent_inbox import NoWait, TakenInputPosition, TakenInputStart
 from .child_process import ProcessIdentity
 from .cli_bridges.claude_transcript import (
-    WATCH_REPORT, WATCH_STOPPED, WINDOW_ENDED, ClaudeJsonLines, ReceivesWatchReports,
+    WATCH_DEFERRED, WATCH_REPORT, WATCH_STOPPED, WINDOW_ENDED, ClaudeJsonLines, ReceivesWatchReports,
     ReconnectUrl, ReportedLedger, WatchReport,
 )
 from .cli_bridges.claude_protocol import ClaudeMonitorFrame
 from .cli_bridges.history import RemoteWatchHistory
 from .cli_bridges.shared import MonitorReadFile, TranscriptConfirmsDelivery
 from .comms import Comms, client_wire
-from .connector_store import BearerSecret, digest
+from .connector_store import BearerSecret, ConnectorStore, digest
 from .coordination.database import CoordinationStore
 from .coordination.tables.harness_deliveries import HarnessDelivery
 from .coordination.coordinator import Coordination
 from .errors import RelationViolationError
+from .storage.maintenance_barrier import MaintenanceHeldError
 from .harness_delivery_states import EmittedOutcome, PrintLedgerId, TakingLedger, UnconfirmedOutcome
 from .message_reference import MessageReference
 from .messages import Message
@@ -61,8 +62,7 @@ class InboxWatchUrl(ToolResult):
 
 @dataclass(frozen=True)
 class WatchTicket(ABC):
-    """One thread's right to open one socket. It lives in the connector's memory, so a restart
-    forgets it and the session asks again, as it does whenever its watch ends."""
+    """One thread's right to open one socket."""
 
     thread: str
 
@@ -72,18 +72,19 @@ class WatchTicket(ABC):
     opened_on: ClassVar[str]
     """How the connector's log names a socket opened with this kind of ticket."""
 
-    def superseded_by(self, opened: WatchTicket) -> bool:
-        """Whether a watch opened with ``opened`` ends this ticket's use."""
-        return False
-
     async def opened(self, offer: ReconnectUrl, viewer: web.WebSocketResponse) -> None:
         """What the new socket is sent before anything else: by default nothing, since only a
         client that says it reconnects can read a ReconnectUrl frame."""
 
+    def redeemed(self, store: ConnectorStore, token: BearerSecret) -> WatchTicket:
+        """The ticket the URL opens with once memory has answered: what memory held."""
+        return self
+
 
 @dataclass(frozen=True)
 class ArmedTicket(WatchTicket):
-    """What comms_watch hands the model: good for one minute."""
+    """What comms_watch hands the model: good for one minute, in the connector's memory, so a
+    restart forgets it and the model asks again, as it would once the minute passed."""
 
     expires_at: float
 
@@ -96,17 +97,15 @@ class ArmedTicket(WatchTicket):
 
 @dataclass(frozen=True)
 class ReconnectTicket(WatchTicket):
-    """What a reset socket's client re-dials with, minted only when a watch's client asks for
-    it. A network reset can strike at any point in a watch's life, so it has no clock: it
-    stands until it is redeemed or any newer watch of its thread opens."""
+    """What a reset socket's client re-dials with. A network reset can strike at any point in a
+    watch's life, so it has no clock: it stands until it is redeemed or any newer watch of its
+    thread opens. It is kept in the connector's store (WatchReconnect), because the reset that
+    matters most is the connector's own restart."""
 
     opened_on = "a reconnect ticket"
 
     def live(self, now: float) -> bool:
         return True
-
-    def superseded_by(self, opened: WatchTicket) -> bool:
-        return opened.thread == self.thread
 
     async def opened(self, offer: ReconnectUrl, viewer: web.WebSocketResponse) -> None:
         """Only a client that reconnects alone redeems this ticket, so its next URL goes first,
@@ -117,11 +116,26 @@ class ReconnectTicket(WatchTicket):
         logging.info("Watch for %s sent its reconnect URL on opening", self.thread)
 
 
+@dataclass(frozen=True)
+class UnheldTicket(WatchTicket):
+    """A URL the connector's memory holds no armed ticket for: a reconnect ticket kept in its
+    store, or nothing. Only this asks the store, so opening an armed watch writes nothing."""
+
+    opened_on = "no ticket"
+
+    def live(self, now: float) -> bool:
+        return False
+
+    def redeemed(self, store: ConnectorStore, token: BearerSecret) -> WatchTicket:
+        refused: WatchTicket = self
+        return store.watch_reconnect_taken(token).reopened(ReconnectTicket, refused)
+
+
 DAMAGED_RECORD = "A record from the session's transcript was not valid JSON and was left out."
 """What a transcript line that is not JSON leaves behind."""
 
-UNISSUED_TICKET = ArmedTicket("", 0.0)
-"""An unknown or spent ticket is simply one that has already expired."""
+UNHELD_TICKET = UnheldTicket("")
+"""What memory answers for a URL it holds no armed ticket for."""
 
 
 @dataclass(frozen=True)
@@ -141,35 +155,35 @@ class OpenWatch:
 
 @dataclass
 class WatchTickets:
+    """Armed tickets in memory for their minute; reconnect tickets in the connector's store."""
+
+    store: ConnectorStore
     held: dict[str, WatchTicket] = field(default_factory=dict)
 
     def issued(self, thread: str, issuer: URL) -> InboxWatchUrl:
-        ticket = ArmedTicket(thread, time.time() + ArmedTicket.seconds)
-        return InboxWatchUrl(self.minted(ticket, issuer), ticket.expires_at)
+        now = time.time()
+        ticket = ArmedTicket(thread, now + ArmedTicket.seconds)
+        token = BearerSecret(secrets.token_urlsafe(32))
+        self.held = {key: held for key, held in self.held.items() if held.live(now)}
+        self.held[digest(token)] = ticket
+        return InboxWatchUrl(self.url(token, issuer), ticket.expires_at)
 
     def reconnect(self, thread: str, issuer: URL) -> ReconnectUrl:
         """One standing reconnect ticket per thread: minting it ends any older one."""
-        ticket = ReconnectTicket(thread)
-        self.held = {key: held for key, held in self.held.items()
-                     if not held.superseded_by(ticket)}
-        return ReconnectUrl(url=self.minted(ticket, issuer))
+        return ReconnectUrl(url=self.url(self.store.watch_reconnect_issued(thread), issuer))
 
-    def minted(self, ticket: WatchTicket, issuer: URL) -> str:
-        now = time.time()
-        self.held = {key: held for key, held in self.held.items() if held.live(now)}
-        token = BearerSecret(secrets.token_urlsafe(32))
-        self.held[digest(token)] = ticket
+    @staticmethod
+    def url(token: BearerSecret, issuer: URL) -> str:
         scheme = {"http": "ws", "https": "wss"}[issuer.scheme]
         return str(issuer.with_scheme(scheme) / "watch" / token)
 
     def taken(self, token: BearerSecret) -> WatchTicket:
-        """The ticket is spent here, whatever happens to the socket it opens, and so is every
-        reconnect ticket an older watch of its thread still held."""
-        ticket = self.held.pop(digest(token), UNISSUED_TICKET)
+        """The ticket is spent here, whatever happens to the socket it opens: a reconnect ticket
+        from the store, an armed one from memory. The socket it opens mints its thread's next
+        reconnect ticket, which ends any older one."""
+        ticket = self.held.pop(digest(token), UNHELD_TICKET).redeemed(self.store, token)
         if not ticket.live(time.time()):
             raise web.HTTPForbidden(text="Unknown, used or expired URL; call comms_watch again.")
-        self.held = {key: held for key, held in self.held.items()
-                     if not held.superseded_by(ticket)}
         return ticket
 
 
@@ -430,6 +444,9 @@ class InboxWatch:
         attachment = self.attached(here)
         try:
             await asyncio.to_thread(attachment.__enter__)
+        except MaintenanceHeldError as held:
+            await socket.close(code=WATCH_DEFERRED, message=str(held)[:120].encode())
+            return
         except RelationViolationError as refused:
             await socket.close(
                 code=WSCloseCode.POLICY_VIOLATION, message=str(refused)[:120].encode()

@@ -38,7 +38,7 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field, replace
-from functools import partial
+from functools import cached_property, partial
 from pathlib import Path
 from types import MappingProxyType
 from typing import Annotated, ClassVar, Literal, Self, cast
@@ -824,12 +824,13 @@ class Connector(ConnectorService):
         default_factory=list, init=False, repr=False, compare=False,
     )
 
-    watch_tickets: WatchTickets = field(
-        default_factory=WatchTickets, init=False, repr=False, compare=False,
-    )
     session: McpSession = field(
         default_factory=McpSession, init=False, repr=False, compare=False,
     )
+
+    @cached_property
+    def watch_tickets(self) -> WatchTickets:
+        return WatchTickets(self.store)
 
     def watch_url(self, thread: str) -> ToolResult:
         return self.watch_tickets.issued(thread, URL(self.issuer))
@@ -838,9 +839,10 @@ class Connector(ConnectorService):
         """The ticket in the path is the only credential; log_route logs the route's template.
         A newer socket for a thread replaces the older one, as a re-armed watch does."""
         route = FieldCodec.decode(WatchRoute, dict(request.match_info))
-        ticket = self.watch_tickets.taken(route.ticket)
+        # Both write the connector's store, so they run off the loop.
+        ticket = await asyncio.to_thread(self.watch_tickets.taken, route.ticket)
         thread = ticket.thread
-        offer = self.watch_tickets.reconnect(thread, URL(self.issuer))
+        offer = await asyncio.to_thread(self.watch_tickets.reconnect, thread, URL(self.issuer))
         logging.info("Watch for %s opened on %s", thread, ticket.opened_on)
         # A transcript line holds whatever a tool returned, far past aiohttp's 4 MiB default.
         viewer = web.WebSocketResponse(heartbeat=self.heartbeat_seconds, max_msg_size=64 * 1024 * 1024)

@@ -115,6 +115,9 @@ never blank (JsonLines.complete_lines), so this cannot be mistaken for one."""
 WATCH_STOPPED = 4000
 WATCH_REPLACED = 4001
 """A newer watch of the same thread took this socket's place, as a re-armed watch does."""
+WATCH_DEFERRED = 4002
+"""The bus is under maintenance, as every install holds it: the socket opened and was handed
+its next URL, but the thread cannot be attached until maintenance lifts."""
 
 
 @dataclass
