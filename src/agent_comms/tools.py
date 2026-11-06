@@ -1857,8 +1857,9 @@ class CommsInboxTool(NativeToolRequest):
         "because a page showed it, and human read markers are never touched. remaining counts "
         "the untaken messages after this page. One oversized message is returned alone for "
         "progress. Unresolved inputs remain UNKNOWN and are not paged; each is listed by its "
-        "sequence, target, input ID and status, and its body stays in the bus under that "
-        "sequence (comms_input_delivery shows them with their text). For standby, supply standby "
+        "sequence, target, input ID and status. A bus input's body stays in the bus under its "
+        "sequence; a direct input has no sequence, and comms_input_delivery shows every "
+        "unresolved input with its text. For standby, supply standby "
         "(goal_id and wait_for) to get standby_review: exact eligible keys and messages, "
         "already reviewed entries, and excluded owner/other-dependency inputs."
     )

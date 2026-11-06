@@ -247,8 +247,9 @@ UNOBSERVED_DELIVERY_SCOPE = UnobservedInputDeliveryScope()
 
 @dataclass(frozen=True)
 class UnresolvedInputReference:
-    """An unresolved input named by its identity. Its body stays in the bus that holds it under
-    this sequence, so a page listing many of them never carries a second copy of each message."""
+    """An unresolved input named by its identity, so a page listing many of them never carries
+    a second copy of each body. A bus input's body stays in the bus under its sequence; a direct
+    input has no sequence and no bus row, and comms_input_delivery shows its text."""
 
     sequence: int | None
     target: str
