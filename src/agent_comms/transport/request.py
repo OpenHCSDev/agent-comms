@@ -193,6 +193,24 @@ class ObservedRequest[Result: ToolResult = ToolResult](ToolRequest[Result], decl
         return remote.post_observed(self)
 
 
+class ReadRequest[Result: ToolResult = ToolResult](ToolRequest[Result], declared_name=None):
+    """A request that changes nothing on the bus, as the wire declares it."""
+
+    bus_effect: ClassVar[str] = "Reads only; changes nothing on the bus."
+    read_only_hint: ClassVar[bool] = True
+
+    def dropped(self, remote: RequestPoster, dropped: ConnectionDropped) -> dict[str, JsonValue]:
+        """A read changes nothing, so it is asked once more on a fresh connection."""
+        return remote.exchange(self)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ThreadReadRequest[Result: ToolResult = ToolResult](ReadRequest[Result], declared_name=None):
+    """A read about one thread; empty names the caller's own."""
+
+    thread: Annotated[str, *tool_field("Thread to read; omit to read your own")] = ""
+
+
 class ConnectionDropped(ConnectionError):
     """The connection to Core dropped during a call: whether Core ran it is unknown."""
 
