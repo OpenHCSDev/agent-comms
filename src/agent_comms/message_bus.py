@@ -234,7 +234,7 @@ class MessageBus[Writes: Publisher]:
             )
             yield UnreadCut(
                 source, snapshot, require_channel, delivery, seen, cursor,
-                MessagePageRequest(
+                MessagePageRequest.listed(
                     ListedDeliveries(selection, frozenset(row.seq for row in unread),
                                      frozenset(row.target for row in unread)),
                     PageBounds(traversal, bounds.limit),

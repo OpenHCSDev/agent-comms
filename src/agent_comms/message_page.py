@@ -10,7 +10,7 @@ from typing import ClassVar
 from .messages import Message, MessageKind
 from .page_traversal import OlderTraversal, PageCursor, PageTraversal
 from .read_basis import (
-    DisplayBasis, SelectedDisplay, NoDisplaySelection, MessageDisplayScope,
+    DisplayBasis, SelectedDisplay, NoDisplaySelection, MessageDisplayScope, ListedDeliveries,
 )
 from .bus import BusReader
 from .tool_result import ToolResult
@@ -157,11 +157,25 @@ class MessagePageRequest(MessageReadRequest[MessagePage]):
                     break
         return traversal.result(window, more, opposite)
 
+    @classmethod
+    def listed(cls, listing: ListedDeliveries, bounds: PageBounds) -> MessagePageRequest:
+        """The page of what the route index listed; a listing of no sequences is the empty
+        page without opening the bus, which on every empty watch wake ran two scoped scans."""
+        return (cls if listing.sequences else NothingListedRequest)(listing, bounds)
+
     def displayed(self, reads, document, viewer, snapshot, conversation_snapshot, source):
         page = self.read_opened(source)
         return DisplayedMessagePage(page, reads.capture(
             viewer, page.messages, snapshot, source,
             conversation_snapshot=conversation_snapshot, document=document))
+
+
+@dataclass(frozen=True, slots=True)
+class NothingListedRequest(MessagePageRequest):
+    """The route index listed no sequence, so the page is the declared empty page."""
+
+    def read_opened(self, source: BusReader) -> MessagePage:
+        return self.empty
 
 
 class ConversationMessagePageRequest(MessagePageRequest):

@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from .bus_tables import ReceivedSource
 from .class_fact import ClassFact
@@ -55,7 +55,7 @@ class BusRouteKeys(BusProjectionTables):
     read's 20 ms); the route is a fact of the write, so it is kept there."""
 
     @ClassFact
-    def writes(cls) -> tuple[type[ProducedRow], ...]:
+    def writes(cls: type[BusRouteKeys]) -> tuple[type[ProducedRow], ...]:
         return (BusRouteKeys,)
 
     target: str
@@ -69,7 +69,7 @@ class BusRouteKeys(BusProjectionTables):
     NULL-distinct UNIQUE admits twice; the expression makes it one route like any other."""
 
     @classmethod
-    def from_message(cls, message: PublicRecord | Delivered):
+    def from_message(cls, message: PublicRecord | Delivered) -> Self:
         return cls(message.target, message.sender, message.sender_lookup, message.seq)
 
     def insertion(self) -> tuple[str, tuple]:
