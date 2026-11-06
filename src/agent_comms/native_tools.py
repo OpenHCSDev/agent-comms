@@ -123,18 +123,6 @@ class CommunicationCall(CoordinationCall, declared_name=None):
         return
 
 
-class ArgumentTool:
-    """One declared execution record supplies validation and native serialization."""
-
-    @property
-    def arguments(self) -> dict[str, object]:
-        # The native argument object has no family envelope. Its contents come
-        # entirely from the record codec, never a retained raw dictionary.
-        encoded = FieldCodec.project(self, ArgumentsExclude)
-        del encoded[self.family_discriminator]
-        return encoded
-
-
 @dataclass(frozen=True, kw_only=True)
 class PathTool:
     path: str

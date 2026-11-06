@@ -26,7 +26,7 @@ from .turn_phase import IdlePhase
 if TYPE_CHECKING:
     from .comms import Comms
     from .head_review import HeadReviewOrder, PullRequestHead
-    from .tool_request import ToolRequest
+    from .transport.request import ToolRequest
 
 
 @dataclass(frozen=True)

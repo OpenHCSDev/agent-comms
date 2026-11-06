@@ -455,7 +455,7 @@ async def test_a_cancel_from_another_thread_stops_the_waiting_call_and_a_plain_o
     import asyncio
     import threading
 
-    from agent_comms.exporting import CancellableWireExport, WireExportObserver
+    from agent_comms.transport.progress import CancellableWireExport, WireExportObserver
 
     export = CancellableWireExport()
     waiting = asyncio.create_task(export.stopped())

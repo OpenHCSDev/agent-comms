@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from agent_comms.nominal.field_codec import WireExclude
 
+from .transport.progress import InterruptibleRead
 from .input_key import InputKey
 
 from .class_fact import ClassFact
@@ -14,8 +15,8 @@ import re
 import sqlite3
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Iterator, Mapping, Sequence
-from contextlib import closing
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from contextlib import closing, contextmanager
 from dataclasses import Field, dataclass, field, fields, make_dataclass, replace
 from functools import cache
 from inspect import get_annotations
@@ -1243,12 +1244,21 @@ class StoredWireMessage:
 
 
 @dataclass(frozen=True)
-class StoredWireHistory:
+class StoredWireHistory(InterruptibleRead):
     """A captured public-envelope query; cursors stream and retire with the read."""
 
     db: sqlite3.Connection
     query: str
     parameters: tuple[object, ...]
+
+    @contextmanager
+    def interruptible(self, stopped: Callable[[], bool]) -> Iterator[None]:
+        """SQLite checks `stopped` every thousand steps of this read's query."""
+        self.db.set_progress_handler(stopped, 1000)
+        try:
+            yield
+        finally:
+            self.db.set_progress_handler(None, 0)
 
     def rows(self) -> Iterator[StoredWireMessage]:
         with closing(self.db.execute(

@@ -59,7 +59,7 @@ from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from .nominal.field_codec import (
     Argument, FieldCodec, GitCommitText, MalformedRecord, PathText, WireTransient, boundary_decoder,
 )
-from .exporting import CancellableWireExport, WireExportObserver
+from .transport.progress import CancellableWireExport, WireExportObserver
 from agent_comms.channel_targets import NamedTarget
 from agent_comms.owner_requests import NewestOpenRequest, RequestSelection
 from .host_services import HostService
@@ -100,7 +100,8 @@ from .transport.mcp import (
     ParseError,
     declared,
 )
-from .tool_request import ConnectorService, NoConnectorService, ToolRequest, tool_field
+from .tool_request import ConnectorService, NoConnectorService
+from .transport.request import ToolRequest, tool_field
 
 """A JSON-RPC request id, as the client chose it."""
 

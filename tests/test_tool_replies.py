@@ -5,7 +5,7 @@ from typing import TypeVar, get_args, get_origin, get_type_hints
 from agent_comms.bus_read import BusRead
 from agent_comms.comms import Comms
 from agent_comms.tool_result import ToolResult
-from agent_comms.tool_request import ToolRequest
+from agent_comms.transport.request import ToolRequest
 
 
 def bus_read_result(tool: type[BusRead]) -> type:

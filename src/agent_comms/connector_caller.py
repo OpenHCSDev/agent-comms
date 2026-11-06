@@ -17,7 +17,8 @@ from .registry_store import RegistryStore
 from .todos import DirectiveText
 from .read_basis import OperatorOutcomes
 from .tool_caller import ForkCaller, HumanCaller, NoThreadCaller, ThreadCaller, ToolCaller
-from .tool_request import ReadTool, ToolArgumentsRefusedError, ToolRequest, tool_field
+from .tool_request import ReadTool, ToolArgumentsRefusedError
+from .transport.request import ToolRequest, tool_field
 from .tool_result import ToolResult
 
 

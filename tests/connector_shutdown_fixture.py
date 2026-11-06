@@ -13,7 +13,8 @@ from agent_comms.connector_store import ConnectorStore
 from agent_comms.nominal.field_codec import PathText
 from agent_comms.launch_root import LaunchRoot, started
 from agent_comms.tool_caller import ToolCaller
-from agent_comms.tool_request import ReadTool, ToolRequest
+from agent_comms.tool_request import ReadTool
+from agent_comms.transport.request import ToolRequest
 from agent_comms.tool_result import ToolResult
 
 

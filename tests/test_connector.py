@@ -32,7 +32,7 @@ from conftest import transcript_records
 
 from agent_comms.bus import Bus
 from agent_comms.comms import Comms, wire
-from agent_comms.exporting import WireExportObserver
+from agent_comms.transport.progress import WireExportObserver
 from agent_comms.connector import (
     ApprovalLink, AuthorizationCodeGrant, Connector, ConnectorSendTool, ConnectorVerb, GrantUiVerb,
     ServeVerb, RevokeVerb,
@@ -69,7 +69,8 @@ from agent_comms.storage.store_files import ExclusiveLock, StoreGuard, _store_lo
 from agent_comms.tools import ChannelListing, CommsChannelsTool, CommsPinChannelTool, CommsSendTool, CommsUserSendTool, invoke_tool
 from agent_comms.tool_caller import HumanCaller, NoThreadCaller, ThreadCaller
 from agent_comms.thread_identity import UserThreadRole
-from agent_comms.tool_request import ReadTool, ToolCall, ToolRequest
+from agent_comms.tool_request import ReadTool
+from agent_comms.transport.request import ToolCall, ToolRequest
 from agent_comms.threads import NativeThread
 import subprocess
 from agent_comms.repo import FailedGitCommand
@@ -1252,7 +1253,7 @@ def test_a_call_meta_reads_its_declared_key_from_an_open_object(meta, streamed):
 
 async def test_a_cancel_reaches_the_running_call_it_names(connector):
     """notifications/cancelled stops the observed call with that request id and no other."""
-    from agent_comms.exporting import CancellableWireExport
+    from agent_comms.transport.progress import CancellableWireExport
 
     named, other = CancellableWireExport(), CancellableWireExport()
     connector.observed["export-1"] = named

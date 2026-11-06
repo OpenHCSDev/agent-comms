@@ -153,7 +153,8 @@ def test_core_commands_share_native_identity_without_changing_external_decode():
     from agent_comms.native_tool_call import CodingCall
     from agent_comms.native_tools import NativeExecutableTool
     from agent_comms.tool_declaration import NativeRequestTools
-    from agent_comms.tool_request import NativeToolRequest, ToolRequest
+    from agent_comms.tool_request import NativeToolRequest
+    from agent_comms.transport.request import ToolRequest
     from agent_comms.tools import CommsSendTool
 
     schemas = NativeRequestTools.catalog()

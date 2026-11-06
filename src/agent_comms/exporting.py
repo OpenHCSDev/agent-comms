@@ -20,6 +20,7 @@ from typing import BinaryIO, ClassVar
 from .channels import Channel
 from .errors import ExportDestinationExists
 from .cli_result import CliResult
+from .transport.progress import CancellableWireExport, WireExportCancelled, WireExportObserver, WireExportProgress
 from .tool_result import ToolResult
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
@@ -450,79 +451,6 @@ class WireExportRow(WireExportSelection):
 
     def describe_last(self, metadata: WireExportProvenance) -> WireExportProvenance:
         return replace(metadata, last_sequence=self.seq, last_timestamp=self.timestamp)
-
-
-@dataclass(frozen=True)
-class WireExportProgress:
-    bytes_written: int
-    messages_written: int
-
-
-class WireExportCancelled(InterruptedError):
-    """The owner cancelled this export; staging must unwind without publication."""
-
-
-class WireExportObserver:
-    """Stateless default for CLI and retained-context exports."""
-
-    def advanced(self, progress: WireExportProgress) -> None:
-        pass
-
-    def check(self) -> None:
-        pass
-
-    async def stopped(self) -> None:
-        """An observer that cannot be cancelled never stops a running call."""
-        await asyncio.Event().wait()
-
-    @contextmanager
-    def reading(self, source: StoredWireHistory) -> Iterator[None]:
-        yield
-
-
-class CancellableWireExport(WireExportObserver):
-    def __init__(self) -> None:
-        self.stop_requested = Event()
-        self.stop_waiters: list[Callable[[], None]] = []
-        super().__init__()
-
-    def cancel(self) -> None:
-        self.stop_requested.set()
-        for wake in tuple(self.stop_waiters):
-            wake()
-
-    async def stopped(self) -> None:
-        """Resolves when cancel is called, from any thread; no polling."""
-        loop, here = asyncio.get_running_loop(), asyncio.Event()
-
-        def wake() -> None:
-            loop.call_soon_threadsafe(here.set)
-
-        self.stop_waiters.append(wake)
-        try:
-            if not self.cancelled():
-                await here.wait()
-        finally:
-            self.stop_waiters.remove(wake)
-
-    def cancelled(self) -> bool:
-        return self.stop_requested.is_set()
-
-    def check(self) -> None:
-        if self.cancelled():
-            raise WireExportCancelled("Wire export cancelled")
-
-    @contextmanager
-    def reading(self, source: StoredWireHistory) -> Iterator[None]:
-        self.check()
-        source.db.set_progress_handler(self.cancelled, 1000)
-        try:
-            yield
-        except sqlite3.OperationalError:
-            self.check()
-            raise
-        finally:
-            source.db.set_progress_handler(None, 0)
 
 
 class _ArtifactWriter:

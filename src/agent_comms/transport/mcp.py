@@ -24,13 +24,13 @@ from ..cli_protocol import CoreError
 from ..connector_caller import ConnectorCaller, ConnectorTool
 from ..coordination.errors import CommandFailure, Refused
 from ..errors import RelationViolationError
-from ..exporting import CancellableWireExport, WireExportCancelled, WireExportObserver, WireExportProgress
+from .progress import CancellableWireExport, WireExportCancelled, WireExportObserver, WireExportProgress
 from ..nominal.declared_family import DeclaredFamily
 from ..nominal.field_codec import (
     FieldCodec, NullMember, RecordMember, SingleFieldValue, SubclassUnion, WireExclude, WireName,
     WireOmitDefault, boundary_decoder, projected,
 )
-from ..tool_request import ToolCall, ToolRequest
+from .request import ToolCall, ToolRequest
 
 JsonRpcId = int | str
 PROTOCOL_VERSION = "2025-06-18"

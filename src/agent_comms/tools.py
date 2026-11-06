@@ -10,24 +10,8 @@ from agent_comms.nominal.field_codec import WireExclude
 from .input_key import InputKeyText
 from .agent_inbox import InboxWait, NoWait, TakenInputPosition, TakenInputStart
 
-from .tool_request import (
-    HumanToolRequest,
-    ObservedToolRequest,
-    ListedNames,
-    LiveOwnerTool,
-    OmittedNames,
-    PublishingTool,
-    PublishingToolRequest,
-    ReadTool,
-    SubjectBinding,
-    ThreadReadTool,
-    ThreadContextAction,
-    ThreadToolRequest,
-    CoreRead,
-    ToolRequest,
-    NativeToolRequest,
-    tool_field,
-)
+from .tool_request import HumanToolRequest, ObservedToolRequest, LiveOwnerTool, PublishingTool, PublishingToolRequest, ReadTool, ThreadReadTool, ThreadContextAction, ThreadToolRequest, CoreRead, NativeToolRequest
+from .transport.request import ListedNames, OmittedNames, SubjectBinding, ToolRequest, tool_field
 from .tool_declaration import NativeRequestTools
 from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from .order_tools import MessagePublished
