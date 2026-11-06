@@ -106,6 +106,7 @@ class PlainContextRows(ContextRows):
         return tuple(enumerate(text.split('\n'), start=1))
 
 
+@dataclass(frozen=True)
 class ToolDeclaration(DeclaredFamily, affix="Tool"):
     family_discriminator: ClassVar[str] = "tool"
     label: ClassVar[str]
