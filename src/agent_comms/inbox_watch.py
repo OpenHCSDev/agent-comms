@@ -408,10 +408,13 @@ class InboxWatch:
                 await changes.wait()
 
     async def holding(self, socket: web.WebSocketResponse, here: ProcessIdentity) -> None:
-        """Close the socket once this watch no longer holds its thread. A stop is a registry
-        write, which wakes this at once; the recheck covers what no file announces."""
+        """Close the socket once this watch no longer holds its thread, and end once the socket
+        has closed. A stop is a registry write, which wakes this at once; the recheck covers
+        what no file announces, a close included: a client that never answers the server's
+        CLOSE leaves the reader waiting on frames that never come, so this is what ends the
+        handler instead of aiohttp's shutdown timeout."""
         async with ChangeSignal.opened(*self.registry_sources()) as writes:
-            while True:
+            while not socket.closed:
                 writes.prepare()
                 if not await asyncio.to_thread(self.holds, here):
                     await socket.close(code=WATCH_STOPPED, message=b"stopped on the bus")
