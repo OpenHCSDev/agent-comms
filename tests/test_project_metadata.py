@@ -131,6 +131,26 @@ def test_materialized_metadata_is_built_once_and_revalidated_when_borrowed(
         resource.projects(HeadSide)
 
 
+def test_a_commit_is_built_once(tmp_path: Path, test_uv: Path) -> None:
+    """The merge queue built the same twelve metadata wheels twice per debt job and again in the
+    next queue entry. A clean commit fixes its metadata, so the second acquisition reads what the
+    first kept and never runs the backend: here it has no uv to run."""
+    source = package(tmp_path / "source", "source-package", dependencies=("packaging>=24",))
+    kept_here = type("KeptHere", (ProjectMetadata,), {"kept": tmp_path / "kept"})
+    with InstallCommands() as commands:
+        built = kept_here.acquire(source.checkout, uv=test_uv, python=Path(sys.executable),
+                                  commands=commands, output=tmp_path / "metadata")
+        read = kept_here.acquire(source.checkout, uv=tmp_path / "no-uv", python=Path(sys.executable),
+                                 commands=commands, output=tmp_path / "metadata")
+    assert read == built
+    source.publish_change("A new commit is built afresh", *source.write_files({
+        Path("src/module.py"): "value = 2\n"}))
+    # A new commit runs the backend, which here does not exist.
+    with InstallCommands() as commands, pytest.raises(FileNotFoundError, match="no-uv"):
+        kept_here.acquire(source.checkout, uv=tmp_path / "no-uv", python=Path(sys.executable),
+                          commands=commands, output=tmp_path / "metadata")
+
+
 @pytest.mark.parametrize("mutation", ("dirty", "moved"))
 def test_backend_cannot_mutate_the_captured_source(tmp_path: Path, test_uv: Path, mutation: str) -> None:
     source = package(tmp_path / "source", "source-package")
