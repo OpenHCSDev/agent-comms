@@ -14,7 +14,7 @@ from agent_comms.connector_profile import BearerSecret, HttpsMcpEndpoint, UiCred
 from agent_comms.nominal.field_codec import RootId
 from agent_comms.order_tools import CommsEmergencyReleaseTool
 from agent_comms.remote_core import RemoteCoreAccess
-from agent_comms.tool_request import ConnectionDropped
+from agent_comms.transport.request import ConnectionDropped
 from agent_comms.tools import CommsChannelsTool
 
 REPLY = json.dumps({"jsonrpc": "2.0", "id": 1, "result": {

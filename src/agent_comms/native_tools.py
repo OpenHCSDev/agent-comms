@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.nominal.field_codec import ArgumentsExclude
 
 import json
 from abc import abstractmethod
@@ -37,6 +36,7 @@ from .tool_declaration import (
     one_line,
 )
 from .tool_denial import SelectedToolDenied
+from .transport.request import ArgumentTool
 
 if TYPE_CHECKING:
     from .pi_payloads import PiToolResult
@@ -121,18 +121,6 @@ class CommunicationCall(CoordinationCall, declared_name=None):
 
     def judge_under(self, gate: PiRuleGate) -> None:
         return
-
-
-class ArgumentTool:
-    """One declared execution record supplies validation and native serialization."""
-
-    @property
-    def arguments(self) -> dict[str, object]:
-        # The native argument object has no family envelope. Its contents come
-        # entirely from the record codec, never a retained raw dictionary.
-        encoded = FieldCodec.project(self, ArgumentsExclude)
-        del encoded[self.family_discriminator]
-        return encoded
 
 
 @dataclass(frozen=True, kw_only=True)

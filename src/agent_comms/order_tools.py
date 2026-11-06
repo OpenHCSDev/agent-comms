@@ -69,14 +69,8 @@ from .service_passes import ServicePassStore
 from .thread_identity import ThreadIncarnation
 from .tool_caller import ThreadCaller, ToolCaller
 from .tool_declaration import EditCall
-from .tool_request import (
-    PublishingToolRequest,
-    ReadTool,
-    ThreadReadTool,
-    ThreadToolRequest,
-    NativeToolRequest,
-    tool_field,
-)
+from .tool_request import PublishingToolRequest, ReadTool, ThreadReadTool, ThreadToolRequest, NativeToolRequest
+from .transport.request import tool_field
 from .tool_result import ToolResult
 from .transcript_events import SentTranscript
 from .transcripts import (

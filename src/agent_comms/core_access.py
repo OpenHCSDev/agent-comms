@@ -8,19 +8,14 @@ nothing in the UI knows which side answered.
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import cast
 
 from .comms import Comms
 from .tool_caller import HumanCaller, ToolCaller
-from .tool_request import ToolRequest
+from .tool_request import ServedRequest
+from .transport.request import CoreAccess, ToolRequest
 from .tool_result import ToolResult
-
-
-class CoreAccess(ABC):
-    @abstractmethod
-    def call[R: ToolResult](self, request: ToolRequest[ToolCaller, R]) -> R:
-        """The request's declared result, from whichever Core this access reaches."""
 
 
 @dataclass(frozen=True)
@@ -30,5 +25,8 @@ class LocalCoreAccess(CoreAccess):
 
     comms: Comms
 
-    def call[R: ToolResult](self, request: ToolRequest[ToolCaller, R]) -> R:
-        return request.apply_without_thread(self.comms, HumanCaller())
+    def call[R: ToolResult](self, request: ToolRequest[R]) -> R:
+        # In this process the request is its served class: every tool still declares and
+        # serves in one class until its declaration moves to transport (the package plan's
+        # tool phases), when this applies the served member for its wire name instead.
+        return cast(ServedRequest[ToolCaller, R], request).apply_without_thread(self.comms, HumanCaller())

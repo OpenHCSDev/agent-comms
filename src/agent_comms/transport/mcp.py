@@ -24,13 +24,14 @@ from ..cli_protocol import CoreError
 from ..connector_caller import ConnectorCaller, ConnectorTool
 from ..coordination.errors import CommandFailure, Refused
 from ..errors import RelationViolationError
-from ..exporting import CancellableWireExport, WireExportCancelled, WireExportObserver, WireExportProgress
+from .progress import CancellableWireExport, WireExportCancelled, WireExportObserver, WireExportProgress
 from ..nominal.declared_family import DeclaredFamily
 from ..nominal.field_codec import (
     FieldCodec, NullMember, RecordMember, SingleFieldValue, SubclassUnion, WireExclude, WireName,
     WireOmitDefault, boundary_decoder, projected,
 )
-from ..tool_request import ToolCall, ToolRequest
+from .request import ToolCall, ToolRequest
+from ..tool_request import ServedRequest
 
 JsonRpcId = int | str
 PROTOCOL_VERSION = "2025-06-18"
@@ -53,7 +54,7 @@ class McpServer(ABC):
 
     @abstractmethod
     async def call(
-        self, tool: type[ToolRequest] | type[ConnectorTool],
+        self, tool: type[ServedRequest] | type[ConnectorTool],
         arguments: Mapping[str, object], caller: ConnectorCaller, observer: WireExportObserver,
     ) -> AnsweredCall: ...
 
@@ -171,7 +172,7 @@ class ToolDescription:
 
     @classmethod
     def of(
-        cls, name: str, tool: type[ToolRequest] | type[ConnectorTool], caller: ConnectorCaller
+        cls, name: str, tool: type[ToolRequest], caller: ConnectorCaller
     ) -> ToolDescription:
         """The name is the key tools/call dispatches on, so listing and calling share it."""
         return cls(name, tool.label, f"{tool.description} {tool.bus_effect}",

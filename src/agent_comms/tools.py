@@ -10,24 +10,8 @@ from agent_comms.nominal.field_codec import WireExclude
 from .input_key import InputKeyText
 from .agent_inbox import InboxWait, NoWait, TakenInputPosition, TakenInputStart
 
-from .tool_request import (
-    HumanToolRequest,
-    ObservedToolRequest,
-    ListedNames,
-    LiveOwnerTool,
-    OmittedNames,
-    PublishingTool,
-    PublishingToolRequest,
-    ReadTool,
-    SubjectBinding,
-    ThreadReadTool,
-    ThreadContextAction,
-    ThreadToolRequest,
-    CoreRead,
-    ToolRequest,
-    NativeToolRequest,
-    tool_field,
-)
+from .tool_request import ServedRequest, HumanToolRequest, ObservedToolRequest, LiveOwnerTool, PublishingTool, PublishingToolRequest, ReadTool, ThreadReadTool, ThreadContextAction, ThreadToolRequest, CoreRead, NativeToolRequest
+from .transport.request import ListedNames, OmittedNames, SubjectBinding, tool_field
 from .tool_declaration import NativeRequestTools
 from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from .order_tools import MessagePublished
@@ -65,7 +49,7 @@ from .cli_command import PreparedTargetAction, TargetAction, TargetActionCommand
 from .cli_result import CliResult, TargetEditResult
 from .coordination.tables.refusals import SendRefusal
 from .display_order import ChannelSort, ThreadSort
-from .nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion, WireForm, WireName, WireOmitDefault, projected, GoalId
+from .nominal.field_codec import ContextSource, FieldCodec, NullMember, WireChoices, SingleFieldValue, SubclassUnion, WireForm, WireName, WireOmitDefault, projected, GoalId
 from .goal_actions import (
     ActiveGoalAction, ClearGoalAction, EditGoalAction, GoalAction, GoalActor, GoalPrecondition,
     ModelInvocable, PausedGoalAction, PeerInvocable, RuntimeInvocable, SetGoalAction,
@@ -931,7 +915,7 @@ class CommsModelTool(NextTurnConfiguration, NativeOwnerCommand, NativeToolReques
     )
     thread: Annotated[
         ToolSubject,
-        *tool_field("Thread to change (defaults to the executing thread)", binding=SubjectBinding),
+        *tool_field("Thread to change (defaults to the executing thread)", ContextSource(SubjectBinding)),
     ] = CallerSubject()
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ModelChanged:
@@ -1185,7 +1169,7 @@ class CommsGoalTool(ThreadToolRequest):
     )
     goal_id: Annotated[GoalId, *tool_field("Goal identity provided in the turn context")]
     status: Annotated[
-        type[TransitionGoalAction], *tool_field("Goal state", choices=GoalAction.model_choices)
+        type[TransitionGoalAction], *tool_field("Goal state", WireChoices(GoalAction.model_choices))
     ]
     progress: Annotated[
         str, *tool_field("Progress summary; blocked requires a nonempty explicit reason")
@@ -1620,13 +1604,13 @@ class SendTool(PublishingTool[ThreadCaller, MessagePublished]):
         "External sends may name received originals in answers; "
         "source-turn identity is not a model argument."
     )
-    target: Annotated[str, *tool_field("Target thread name or channel", wire_name="to")]
+    target: Annotated[str, *tool_field("Target thread name or channel", WireName("to"))]
     body: Annotated[str, *tool_field("Message text")]
     audience: Annotated[
         tuple[str, ...], *tool_field("Threads a channel message is for; no other member is woken")
     ] = ()
     type: Annotated[
-        Type[MessageKind], *tool_field("Message kind", choices=SendableMessageKind.names)
+        Type[MessageKind], *tool_field("Message kind", WireChoices(SendableMessageKind.names))
     ] = InfoKind
     report: Annotated[
         ReportEvidence,
@@ -1673,7 +1657,7 @@ class CommsUserSendTool(PublishingToolRequest[ToolCaller, MessagePublished]):
     label = "Send human input"
     description = ("Publish input typed by the owner to a thread or channel under the owner's "
                    "durable user identity; requires a human UI caller.")
-    target: Annotated[str, *tool_field("Target thread name or channel", wire_name="to")]
+    target: Annotated[str, *tool_field("Target thread name or channel", WireName("to"))]
     body: Annotated[str, *tool_field("Human input text")]
 
     def publish(self, comms: Comms, caller: ToolCaller) -> MessagePublished:
@@ -1711,7 +1695,7 @@ class CommsAuthoredTaskTool(ThreadToolRequest, PublishingToolRequest[ThreadCalle
     """One original authorized publication path for authored task declarations."""
 
     target: Annotated[
-        str, *tool_field("Thread or channel receiving the original declaration", wire_name="to")
+        str, *tool_field("Thread or channel receiving the original declaration", WireName("to"))
     ]
     scope: Annotated[
         TaskScopeSelection, *tool_field("Current project/goal or explicit scope")
@@ -1932,7 +1916,7 @@ class CommsForkTool(LiveOwnerTool, NativeOwnerCommand, ThreadContextAction):
     description = "Fork a child agent thread from a registered parent's persistent session."
     action_label = "Fork from this thread"
     name: Annotated[str, *tool_field("Child thread name")]
-    parent: Annotated[str, *tool_field("Parent thread name", binding=SubjectBinding)]
+    parent: Annotated[str, *tool_field("Parent thread name", ContextSource(SubjectBinding))]
     task: Annotated[str, *tool_field("Optional task for the child")] = ""
     tags: Annotated[
         TagChoice, *tool_field("Comma-separated tags; omitted inherits parent tags")
@@ -1972,7 +1956,7 @@ class CommsStopTool(NativeOwnerCommand, OwnerLifecycleControl, ThreadContextActi
     label = "Stop Comms Thread"
     description = "Stop a thread after verifying that its process owns the registered identity."
     action_label = "Stop process"
-    name: Annotated[str, *tool_field("Thread name", binding=SubjectBinding)]
+    name: Annotated[str, *tool_field("Thread name", ContextSource(SubjectBinding))]
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadStoppedResult:
         return StopCliCommand(name=self.name).apply(comms)
@@ -1987,7 +1971,7 @@ class CommsStartTool(LiveOwnerTool, NativeOwnerCommand, StartOwnerControl, Threa
         "reserved; startup may still be in progress. Does not send a new task."
     )
     action_label = "Start thread"
-    name: Annotated[str, *tool_field("Thread to start", binding=SubjectBinding)]
+    name: Annotated[str, *tool_field("Thread to start", ContextSource(SubjectBinding))]
 
     def apply(self, comms: Comms, caller: ToolCaller) -> OwnerStartResult:
         return StartCliCommand(name=self.name).apply(comms)
@@ -2004,7 +1988,7 @@ class CommsQueueRestartTool(
         "Restarts in the calling process's runtime; does not deploy another runtime."
     )
     action_label = "Queue idle restart"
-    name: Annotated[str, *tool_field("Live agent thread", binding=SubjectBinding)]
+    name: Annotated[str, *tool_field("Live agent thread", ContextSource(SubjectBinding))]
 
     def apply(self, comms: Comms, caller: ToolCaller) -> RestartQueued:
         return QueueRestartCliCommand(name=self.name).apply(comms)
@@ -2015,7 +1999,7 @@ class CommsArchiveTool(ArchiveOwnerControl, ThreadContextAction):
     label = "Archive Comms Thread"
     description = "Archive a stopped thread while retaining its messages."
     action_label = "Archive stopped thread"
-    name: Annotated[str, *tool_field("Stopped thread name", binding=SubjectBinding)]
+    name: Annotated[str, *tool_field("Stopped thread name", ContextSource(SubjectBinding))]
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadArchivedResult:
         return ArchiveCliCommand(name=self.name).apply(comms)
@@ -2038,4 +2022,4 @@ class ToolReplyResult(CliResult):
 def invoke_tool(
     comms: Comms, name: str, arguments: Mapping[str, object], *, caller: ToolCaller
 ) -> dict[str, JsonValue]:
-    return ToolRequest.member_named(name).invoke(comms, arguments, caller=caller)
+    return ServedRequest.member_named(name).invoke(comms, arguments, caller=caller)

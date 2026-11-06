@@ -22,11 +22,9 @@ from yarl import URL
 
 from .transport.mcp import CancelledMessage, JsonRpcId, StreamedLine, ToolsCallMessage, ToolsCallReply
 from .connector_profile import HttpsMcpEndpoint, UiConnectionProfile, UiCredential
-from .core_access import CoreAccess
-from .exporting import WireExportCancelled
+from .transport.progress import WireExportCancelled
 from .nominal.field_codec import FieldCodec, RpcCallId
-from .tool_caller import ToolCaller
-from .tool_request import ConnectionDropped, ObservedToolRequest, RequestPoster, ToolRequest
+from .transport.request import ConnectionDropped, CoreAccess, ObservedRequest, RequestPoster, ToolRequest
 from .tool_result import ToolResult
 from .ui_model.observation import (
     ObservationPeer, ObservationSource, ObserverDied, RelayConnection, RelayEnding, ViewerEnd, relay_frames,
@@ -174,7 +172,7 @@ class RemoteCoreAccess(UiConnectionProfile, CoreAccess, ConnectorClient, Request
     timeout_seconds = 30
 
 
-    def call[R: ToolResult](self, request: ToolRequest[ToolCaller, R]) -> R:
+    def call[R: ToolResult](self, request: ToolRequest[R]) -> R:
         return FieldCodec.decode(request.result_type(), request.posted(self))
 
     @property
@@ -185,15 +183,15 @@ class RemoteCoreAccess(UiConnectionProfile, CoreAccess, ConnectorClient, Request
     def connections(self) -> ThreadConnection:
         return ThreadConnection(self.endpoint, self.tls, self.timeout_seconds)
 
-    def post[C: ToolCaller, R: ToolResult](self, request: ToolRequest[C, R]) -> dict[str, JsonValue]:
+    def post[R: ToolResult](self, request: ToolRequest[R]) -> dict[str, JsonValue]:
         """One posted tools/call and its reply; a dropped connection is the request's to answer."""
         try:
             return self.exchange(request)
         except ConnectionDropped as dropped:
             return request.dropped(self, dropped)
 
-    def exchange[C: ToolCaller, R: ToolResult](
-        self, request: ToolRequest[C, R],
+    def exchange[R: ToolResult](
+        self, request: ToolRequest[R],
     ) -> dict[str, JsonValue]:
         """One round trip on this thread's kept connection, so a call pays no new handshake."""
         envelope = ToolsCallMessage(jsonrpc="2.0", id=1, params=request.called())
@@ -213,13 +211,13 @@ class RemoteCoreAccess(UiConnectionProfile, CoreAccess, ConnectorClient, Request
                 io.BytesIO(payload))
         return FieldCodec.decode(ToolsCallReply, json.loads(payload)).structured()
 
-    def post_observed[C: ToolCaller, R: ToolResult](self, request: ObservedToolRequest[C, R]) -> dict[str, JsonValue]:
+    def post_observed[R: ToolResult](self, request: ObservedRequest[R]) -> dict[str, JsonValue]:
         """A call the client asked progress for: its events reach the request's observer, and a
         cancel there reaches the running call on Core."""
         return asyncio.run(self.streamed(request))
 
-    async def streamed[C: ToolCaller, R: ToolResult](
-        self, request: ObservedToolRequest[C, R],
+    async def streamed[R: ToolResult](
+        self, request: ObservedRequest[R],
     ) -> dict[str, JsonValue]:
         call_id = RpcCallId.mint()
         called = request.called()
@@ -243,8 +241,8 @@ class RemoteCoreAccess(UiConnectionProfile, CoreAccess, ConnectorClient, Request
             raise WireExportCancelled("Wire export cancelled")
         return reply.structured()
 
-    async def cancel_when_stopped[C: ToolCaller, R: ToolResult](
-        self, session: aiohttp.ClientSession, request: ObservedToolRequest[C, R], call_id: JsonRpcId,
+    async def cancel_when_stopped[R: ToolResult](
+        self, session: aiohttp.ClientSession, request: ObservedRequest[R], call_id: JsonRpcId,
         cancelled: asyncio.Event,
     ) -> None:
         """The observer's stop reaches the running call on Core as one cancel."""

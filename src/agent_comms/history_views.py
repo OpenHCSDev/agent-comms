@@ -42,15 +42,8 @@ from .channel_targets import ChannelTarget, CommandTarget, ThreadTarget
 from .channels import ChannelMemberIndex
 from .collaboration_ledger import CollaborationLedger
 from .errors import UnknownChannelError
-from .exporting import (
-    WireExportBoundary,
-    WireExportFormat,
-    WireExportLimit,
-    WireExportProvenance,
-    WireExportObserver,
-    WireExportScope,
-    WireTranscriptExporter,
-)
+from .exporting import WireExportBoundary, WireExportFormat, WireExportLimit, WireExportProvenance, WireExportScope, WireTranscriptExporter
+from .transport.progress import WireExportObserver
 from .goal_management import Goals
 from .historical_views import ChannelDisplayHistory, ChannelHistory, DMDisplayHistory, DMHistory, HistorySource
 from .message_bus import MessageBus

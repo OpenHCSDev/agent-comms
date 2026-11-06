@@ -6,101 +6,39 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from annotationlib import Format, ForwardRef, get_annotations
 from collections.abc import Mapping
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass
 from pathlib import Path
-from types import get_original_bases
-from typing import Self, Annotated, ClassVar, NoReturn, TypeVar, cast, get_args, get_origin
+from typing import Self, Annotated, ClassVar, NoReturn, cast
 
 from agent_comms_hooks import ToolRefusedError
 from pydantic import JsonValue
 
 from .child_process import AsyncWork, ReadWork
 from .comms import Comms
-from .nominal.declared_family import DeclaredFamily
-from .exporting import WireExportObserver
+from .transport.progress import WireExportObserver
 from .nominal.field_codec import (
-    WireTransient,
-    ContextSource,
-    DefaultNonNull,
-    Description,
     FieldCodec,
-    FieldDirective,
     MalformedRecord,
-    NullMember,
-    SingleFieldValue,
     ToolCallId,
-    WireChoices,
-    WireName,
 )
 from .storage.maintenance_barrier import FreshIngress
-from .native_tools import (
-    ArgumentTool,
-    CoordinationCall,
-    NativeToolDeclaration,
-)
+from .native_tools import CoordinationCall, NativeToolDeclaration
 from .threads import ThreadCommandAvailability
 from .tool_caller import NoThreadCaller, ThreadCaller, ToolCaller
-from .tool_declaration import NativeRequestTools, ToolDeclaration
+from .tool_declaration import NativeRequestTools
 from .tool_result import ToolResult
+from .transport.request import (
+    ConnectionDropped,
+    ObservedRequest,
+    RequestPoster,
+    declared_result,
+    ToolRequest,
+    tool_field,
+)
 
 
 class ToolArgumentsRefusedError(MalformedRecord, ToolRefusedError):
     """Bad external tool arguments, not malformed stored state or a broken implementation."""
-
-
-class ContextBinding(DeclaredFamily, affix="Binding"):
-    @classmethod
-    @abstractmethod
-    def resolve(cls, subject: str, actor: str | None) -> str: ...
-
-
-class SubjectBinding(ContextBinding):
-    @classmethod
-    def resolve(cls, subject: str, actor: str | None) -> str:
-        return subject
-
-
-def tool_field(
-    description: str,
-    *,
-    wire_name=None,
-    binding: type[ContextBinding] | None = None,
-    choices=None,
-) -> tuple[FieldDirective, ...]:
-    directives: list[FieldDirective] = [
-        Description(description),
-        DefaultNonNull(),
-    ]
-    if wire_name is not None:
-        directives.append(WireName(wire_name))
-    if binding is not None:
-        directives.append(ContextSource(binding))
-    if choices is not None:
-        directives.append(WireChoices(choices))
-    return tuple(directives)
-
-
-@dataclass(frozen=True)
-class ListedNames(SingleFieldValue):
-    """Names a tool call listed for an optional argument."""
-
-    names: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class OmittedNames(NullMember):
-    """A tool call left an optional list of names out, or sent null."""
-
-    names: ClassVar[tuple[str, ...]] = ()
-
-
-@dataclass(frozen=True)
-class ToolCall:
-    """The MCP tools/call parameters: a tool by the name the connector exposes it under."""
-
-    name: str
-    arguments: dict[str, object] = field(default_factory=dict)
-    meta: Annotated[dict[str, object], WireName("_meta")] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -116,83 +54,24 @@ class NoConnectorService(ConnectorService):
         raise ToolRefusedError("Only a connector call can open an inbox watch.")
 
 
-class ToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResult](
-    AsyncWork, FreshIngress, ArgumentTool, ThreadCommandAvailability, ToolDeclaration
+class ServedRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResult](
+    AsyncWork, ThreadCommandAvailability, ToolRequest[Result], declared_name=None,
 ):
-    """A transport request; native exposure is an independent declared capability."""
-
-    description: ClassVar[str]
-    read_only_hint: ClassVar[bool] = False
-    bus_effect: ClassVar[str] = (
-        "Changes the bus. Tristan has authorized claude-ai to call this without asking him."
-    )
-    @classmethod
-    def context_bindings(cls) -> dict[str, type[ContextBinding]]:
-        return {
-            plan.key: binding.value
-            for plan in FieldCodec.field_plans(cls)
-            for binding in ContextSource.single(plan.annotation)
-        }
-
-    def called(self) -> ToolCall:
-        """This request as a connector call: its declared name and the arguments invoke
-        decodes back into it."""
-        return ToolCall(self.declared_name, self.arguments)
-
-    @classmethod
-    def schema(cls) -> dict[str, object]:
-        result = {
-            "name": cls.declared_name,
-            "label": cls.label,
-            "description": cls.description,
-            "parameters": FieldCodec.record_schema(cls),
-        }
-        return result
+    """A tool request as the Core that runs it sees it: the declaration plus decoding a call,
+    applying it under a caller and replying. Only the server imports this."""
 
     @classmethod
     def result_type(cls) -> type[Result]:
-        """What this request's apply returns; a remote reply decodes into it.
-
-        The resolved apply's return annotation is the declaration. When that apply is a
-        family member's generic one (its annotation names the owner's own type parameter),
-        the parameter is followed through the class headers to the argument bound for it:
-        every path's binding is collected and the most derived wins, so a result declared on
-        one parent refines the default another parent inherited. Unrelated bindings conflict."""
+        """What this request's apply returns, while a member still declares its result there.
+        A generic apply names its owner's own type parameter (OwnerScopedRead's Result, not
+        necessarily ToolRequest's), so that parameter is the one followed through the headers."""
         apply = cls.apply
         owner = next(declaration for declaration in cls.__mro__ if "apply" in vars(declaration))
         annotation = get_annotations(apply, format=Format.STRING)["return"]
         parameters = {parameter.__name__: parameter for parameter in owner.__type_params__}
-        if annotation not in parameters:
-            return cast(type[Result], ForwardRef(annotation, module=apply.__module__).evaluate())
-        bindings: dict[object, list[object]] = {}
-        for declaration in cls.__mro__:
-            for base in get_original_bases(declaration):
-                origin = get_origin(base)
-                for parameter, argument in zip(getattr(origin, "__type_params__", ()), get_args(base)):
-                    bindings.setdefault(parameter, []).append(argument)
-
-        def declared_by(parameter: object, seen: frozenset[object]) -> list[type]:
-            found: list[type] = []
-            for argument in bindings.get(parameter, ()):
-                if isinstance(argument, TypeVar):
-                    if argument not in seen:
-                        found.extend(declared_by(argument, seen | {argument}))
-                else:
-                    found.append(argument)
-            return found
-
-        declared = parameters[annotation]
-        default = declared.__default__
-        candidates = list(dict.fromkeys(
-            found for found in declared_by(declared, frozenset({declared})) if found is not default
-        )) or [default]
-        if len(candidates) == 1:
-            return cast(type[Result], candidates[0])
-        for result in candidates:
-            if isinstance(result, type) and all(
-                    isinstance(other, type) and issubclass(result, other) for other in candidates):
-                return cast(type[Result], result)
-        raise TypeError(f"{cls.__name__} declares unrelated results: {candidates}")
+        if annotation in parameters:
+            return cast(type[Result], declared_result(cls, parameters[annotation]))
+        return cast(type[Result], ForwardRef(annotation, module=apply.__module__).evaluate())
 
     @classmethod
     def invoke(
@@ -222,19 +101,10 @@ class ToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResu
         """A request that asks nothing of its connector runs the same under any of them."""
         return self
 
-    def posted(self, remote: RequestPoster) -> dict[str, JsonValue]:
-        """How a remote access sends this request: one posted call and its reply."""
-        return remote.post(self)
-
-    def dropped(self, remote: RequestPoster, dropped: ConnectionDropped) -> dict[str, JsonValue]:
-        """A call that may change the bus is never sent twice: Core may already have run it, so
-        the caller hears the connection failed."""
-        raise dropped
-
     def replied(self, comms: Comms, caller: ToolCaller) -> dict[str, JsonValue]:
         # A request decoded from the wire meets whichever caller arrived; the caller's own
         # invoke checks at runtime that it may apply this request (thread-only refusals).
-        applied = caller.invoke(cast(ToolRequest, self), comms)
+        applied = caller.invoke(cast(ServedRequest, self), comms)
         return self.reply(FieldCodec.encode(applied.to_wire()), caller)
 
     def board(self, comms: Comms, caller: ToolCaller) -> tuple[str, ...]:
@@ -261,57 +131,20 @@ class ToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResu
         """Each tool declares its own result record; invoke alone encodes it."""
 
     def apply_without_thread[R: ToolResult](
-        self: ToolRequest[ToolCaller, R], comms: Comms, caller: NoThreadCaller
+        self: ServedRequest[ToolCaller, R], comms: Comms, caller: NoThreadCaller
     ) -> R:
         return self.apply(comms, caller)
 
 
 @dataclass(frozen=True, kw_only=True)
 class ObservedToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResult](
-    ToolRequest[Caller, Result], declared_name=None,
+    ObservedRequest[Result], ServedRequest[Caller, Result], declared_name=None,
 ):
-    """A tool whose run reports progress to an observer and stops when it is cancelled. The
-    observer never crosses the wire: each end binds its own, and a remote call streams the
-    progress between them and carries a cancel back."""
-
-    observer: Annotated[WireExportObserver, WireTransient()] = field(
-        default_factory=WireExportObserver, compare=False)
-
-    def observed_by(self, observer: WireExportObserver) -> Self:
-        return replace(self, observer=observer)
-
-    def bound(self, observer: WireExportObserver) -> Self:
-        return self.observed_by(observer)
-
-    def posted(self, remote: RequestPoster) -> dict[str, JsonValue]:
-        return remote.post_observed(self)
-
-
-class ConnectionDropped(ConnectionError):
-    """The connection to Core dropped during a call: whether Core ran it is unknown."""
-
-
-class RequestPoster(ABC):
-    """Who sends a request to a Core across the connector; each request picks which way it is
-    sent, plainly or with its progress and cancel streamed."""
-
-    @abstractmethod
-    def post[C: ToolCaller, R: ToolResult](self, request: ToolRequest[C, R]) -> dict[str, JsonValue]: ...
-
-    @abstractmethod
-    def exchange[C: ToolCaller, R: ToolResult](
-        self, request: ToolRequest[C, R],
-    ) -> dict[str, JsonValue]:
-        """One round trip on the kept connection; a drop raises ConnectionDropped."""
-
-    @abstractmethod
-    def post_observed[C: ToolCaller, R: ToolResult](
-        self, request: ObservedToolRequest[C, R],
-    ) -> dict[str, JsonValue]: ...
+    """A served request whose run reports progress (ObservedRequest) and stops when cancelled."""
 
 
 class HumanToolRequest[Result: ToolResult = ToolResult](
-    ToolRequest[ToolCaller, Result], declared_name=None,
+    ServedRequest[ToolCaller, Result], declared_name=None,
 ):
     """A request only the owner's UI may make: Core checks the human caller here, once,
     and the member answers from comms alone."""
@@ -325,7 +158,7 @@ class HumanToolRequest[Result: ToolResult = ToolResult](
 
 
 class NativeToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResult](
-    ToolRequest[Caller, Result], NativeRequestTools, NativeToolDeclaration, declared_name=None,
+    ServedRequest[Caller, Result], NativeRequestTools, NativeToolDeclaration, declared_name=None,
 ):
     """A model command supplies both its native schema and its executing call."""
 
@@ -355,7 +188,7 @@ class PublishingTool[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolR
 
 
 class PublishingToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResult](
-    PublishingTool[Caller, Result], ToolRequest[Caller, Result], declared_name=None,
+    PublishingTool[Caller, Result], ServedRequest[Caller, Result], declared_name=None,
 ):
     """Requests using the shared publication capability. Each binds the result its publication
     returns once, here in its base list; a remote caller decodes the reply into it."""
@@ -390,7 +223,7 @@ class ReadTool(ReadWork, FreshIngress):
         """Declared reads remain available to the installer's readiness checks."""
 
 
-class CoreRead[Result: ToolResult = ToolResult](ReadTool, ToolRequest[ToolCaller, Result], declared_name=None):
+class CoreRead[Result: ToolResult = ToolResult](ReadTool, ServedRequest[ToolCaller, Result], declared_name=None):
     """A read any caller may ask of Core, answering its declared result and changing nothing."""
 
 

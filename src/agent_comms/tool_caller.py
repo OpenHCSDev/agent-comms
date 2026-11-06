@@ -26,7 +26,7 @@ from .turn_phase import IdlePhase
 if TYPE_CHECKING:
     from .comms import Comms
     from .head_review import HeadReviewOrder, PullRequestHead
-    from .tool_request import ToolRequest
+    from .tool_request import ServedRequest
 
 
 @dataclass(frozen=True)
@@ -45,7 +45,7 @@ class ToolCaller(ReadAuthority):
         return ThreadCaller(actor) if actor else NoThreadCaller()
 
     @abstractmethod
-    def invoke(self, request: ToolRequest, comms: Comms) -> ToolResult: ...
+    def invoke(self, request: ServedRequest, comms: Comms) -> ToolResult: ...
 
     def board(self, comms: Comms) -> tuple[str, ...]:
         """The board rows a verb's reply carries for this caller; a caller acting as no thread
@@ -109,7 +109,7 @@ class NoThreadCaller(OperatorOutcomes, ToolCaller):
             "Team verbs act as the teammate running them: pass --as NAME, or --fork NAME for a "
             "fork acting for its teammate. There is no lead to act as.")
 
-    def invoke(self, request: ToolRequest, comms: Comms) -> ToolResult:
+    def invoke(self, request: ServedRequest, comms: Comms) -> ToolResult:
         return request.apply_without_thread(comms, self)
 
     def listing(self, comms: Comms, threads: tuple[ThreadRecord, ...]) -> ThreadListing:
@@ -153,7 +153,7 @@ class ThreadCaller(ToolCaller):
         order.require_reviewer(comms.goals, request, actor)
         return actor
 
-    def invoke(self, request: ToolRequest[ThreadCaller], comms: Comms) -> ToolResult:
+    def invoke(self, request: ServedRequest[ThreadCaller], comms: Comms) -> ToolResult:
         return request.apply(comms, self)
 
     def board(self, comms: Comms) -> tuple[str, ...]:
