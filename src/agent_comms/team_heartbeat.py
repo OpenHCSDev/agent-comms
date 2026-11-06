@@ -8,7 +8,10 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from agent_comms.team_hud import CodexUsage, TeamFrame, TeamHud, TeamPlan, HudUnavailableGroup
+from agent_comms.cli_bridges.codex_connection import CodexConnection
+from agent_comms.team_hud import TeamFrame, TeamHud, TeamPlan
+
+from agent_comms.team_hud_records import HudUnavailableGroup
 from agent_comms.child_process import ReadWork
 from agent_comms.task_attachments.team_pings import (
     AlarmGroup, TeamUpdate, TeamUpdateStore, PublishedFacts, RulePing, TeammatePing,
@@ -132,7 +135,7 @@ class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
                          *(state for state in observed.states
                            if state.attention() and TeammatePing.capture(state) not in known))),
                 )
-                usage = CodexUsage.read()
+                usage = CodexConnection.usage()
                 # Include acknowledgements committed during forge/provider reads and enforcement.
                 history = TeamHistory.of_team(comms)
                 states = tuple(state for state in observed.states if state not in rejected)

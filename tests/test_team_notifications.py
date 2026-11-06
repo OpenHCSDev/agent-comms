@@ -22,9 +22,8 @@ from agent_comms.team_heartbeat import TeamHeartbeat, TeamObservation
 from agent_comms.comms import Comms
 from agent_comms.tool_caller import ThreadCaller
 from team_heartbeat_fixture import ObservedHeartbeat, capture_frame, current_hud
-from agent_comms.team_hud import (
-    TeamFrame, TeamHud, TeamPlan, Teammate, CodexUsage, PhasesDoneByPlanGroup, UnreadableUsage,
-)
+from agent_comms.team_hud import TeamFrame, TeamHud, TeamPlan, CodexUsage, UnreadableUsage
+from agent_comms.team_hud_records import Teammate, PhasesDoneByPlanGroup
 from agent_comms.team.vibe_check import OverloadDegradation
 from agent_comms.task_attachments.team_pings import TeamDecisions, TeamUpdateNotice, TeamUpdate, TeamUpdateStore, PublishedFacts, RulePing
 from agent_comms.errors import HumanSendRefusedError, RelationViolationError, UnregisteredThreadError
@@ -568,7 +567,7 @@ def test_failure_packet_follows_the_team_rename_alias(notification_bus):
 
 def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_bus):
     """Ready and done-but-held phases colleague; finished phases are one count per plan."""
-    from agent_comms.team_hud import TeamPhase
+    from agent_comms.team_hud_records import TeamPhase
     from agent_comms.plan_phases import (
         BusInterfacePhase, DesignReconciledPhase, OneOrderOwnerPhase, RecordPlanePhase,
         RetainedStorePhase, ReviewQueuePhase,
@@ -643,7 +642,7 @@ def test_frame_keeps_original_ping_order_and_folded_idle_records(tmp_path):
 def test_a_registered_fork_is_on_the_hud(notification_bus):
     comms = notification_bus
     fork = comms.registry.register_child("judge-fork", "colleague", ForkThread, comms.goals)
-    hud = current_hud(comms, "colleague", capture_frame(comms, ProgressRead()), (), CodexUsage.read())
+    hud = current_hud(comms, "colleague", capture_frame(comms, ProgressRead()), (), CodexConnection.usage())
     assert fork.incarnation in hud.forks
 
 
@@ -881,11 +880,11 @@ def test_codex_usage_decodes_window_and_keeps_refusal_visible():
     reply = FieldCodec.decode(RateLimitsResponse, json.loads('''{
         "rateLimits": {"primary": {
             "usedPercent": 37, "windowDurationMins": 10080, "resetsAt": 1793513456
-        }}
+        }, "planType": "pro"}
     }'''))
     usage = CodexUsage(reply.rate_limits)
     reset = datetime.fromtimestamp(1793513456).strftime('%a %b %d %H:%M')
-    assert usage.line() == f'Codex usage 37% weekly, resets {reset}'
+    assert usage.line() == f'Codex (pro) usage 37% weekly, resets {reset}'
     assert not usage.needs_hand()
     assert FieldCodec.decode(CodexUsage, FieldCodec.encode(usage)) == usage
     refused = CodexUsage(UnreadableUsage(reason='Codex: account unavailable'))
@@ -1007,7 +1006,7 @@ def test_subject_evidence_is_shared_without_losing_each_pings_start(notification
     opened = packet.open_pings(history)
     assert opened == (new,) and opened[0].since == new.since
     hud = TeamHud.of(comms, capture_frame(comms, ProgressRead()), (),
-                          delivery=TeamDelivery(packet, opened), usage=CodexUsage.read())
+                          delivery=TeamDelivery(packet, opened), usage=CodexConnection.usage())
     assert hud.open_pings is opened
     assert hud.board == (new.board_entry(),)
     # A later original action changes a fresh beat, never the already captured evidence.

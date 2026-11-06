@@ -6,7 +6,6 @@ consumers neither inspect JSON fields nor rediscover what kind of item it is.
 from __future__ import annotations
 
 import json
-import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Literal, TypeVar
@@ -14,7 +13,6 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Literal, TypeVar
 from pydantic import (
     Field,
     JsonValue,
-    PlainSerializer,
     SerializeAsAny,
     ValidateAs,
     field_validator,
@@ -30,13 +28,13 @@ from agent_comms.nominal.field_codec import (
     boundary_decoder,
 )
 from agent_comms.native_tools import FilePatchTool
-from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from agent_comms.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.runtime_updates import (
+    HiddenItem,
     AppendDraftItem,
     CompletedItem,
     DraftAccumulator,
     FinishedTurn,
-    HiddenItem,
     PageItem,
     ParagraphDraft,
     PresentableDraft,
@@ -62,8 +60,9 @@ from agent_comms.transcript_events import (
 from agent_comms.turn_item import NativeItemId, NativeTurnId, NamedSourceTurn
 from agent_comms.turn_phase import CompactionPhase, ModelWaitPhase, ToolRunningPhase, TurnPhase
 
-from ..wire_models import DeclaredModel, DeclaredWireFamily, WireModel, _WireFamilyMeta
+from ..wire_models import DeclaredWireFamily, WireModel
 from .shared import BridgeInputObserved
+from ..usage_reading import RateLimits
 
 
 class UserInput(TaggedWire, ABC, affix=""):
@@ -142,37 +141,6 @@ class RequestParams(WireModel):
 
 class ReadRateLimits(RequestParams):
     method = 'account/rateLimits/read'
-
-
-class RateWindow(WireModel):
-    used_percent: float = Field(alias='usedPercent')
-    window_minutes: int = Field(alias='windowDurationMins')
-    resets_at: Annotated[
-        RecordedEventTime, ValidateAs(float, RecordedEventTime),
-        PlainSerializer(lambda instant: instant.at, return_type=float),
-    ] = Field(alias='resetsAt')
-
-    def line(self) -> str:
-        period = 'weekly' if self.window_minutes == 7 * 24 * 60 else f'{self.window_minutes}-minute'
-        reset = time.strftime('%a %b %d %H:%M', time.localtime(self.resets_at.at))
-        return f'usage {self.used_percent:g}% {period}, resets {reset}'
-
-
-class RateLimitReading(DeclaredFamily, ABC, affix='RateLimitReading'):
-    """A usage reading supplies its own display and need for operator attention."""
-
-    @abstractmethod
-    def line(self) -> str: ...
-
-    def needs_hand(self) -> bool:
-        return False
-
-
-class RateLimits(RateLimitReading, DeclaredModel, metaclass=_WireFamilyMeta):
-    primary: RateWindow
-
-    def line(self) -> str:
-        return self.primary.line()
 
 
 class RateLimitsResponse(WireModel):
