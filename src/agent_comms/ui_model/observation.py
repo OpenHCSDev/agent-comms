@@ -1450,7 +1450,18 @@ class NoObserverFailure(ObserverStatus):
         process.abandon_reads(retired)
 
 
-class ObserverRetired(ReadAgain, ObserverStatus):
+class ObservationEnded(CoordinationError):
+    """The observation is over, so a request to it cannot be answered.
+
+    The one base both terminal outcomes share: `ObserverRetired` for a process already closed,
+    `ObserverDied` (and the connector's `ConnectorObserverClosed`) for one that ended while the
+    request was being sent. A caller ending the observation itself is entering this state, not
+    failing at it, so it catches this and nothing wider — `CoordinationError` is the whole error
+    family, and `ObserverReadFailed` re-raises an arbitrary cause through the same method.
+    """
+
+
+class ObserverRetired(ReadAgain, ObservationEnded, ObserverStatus):
     """This observation process closed and never answers again; the read is dropped, and the
     owner's replacement process reads afresh. Retrying here never answers: no DeferredRead."""
 
@@ -1470,7 +1481,7 @@ class ObserverReadFailed(ObserverStatus):
         process.abandon_reads(self.error)
 
 
-class ObserverDied(CoordinationError, ObserverStatus):
+class ObserverDied(ObservationEnded, ObserverStatus):
     """The observation service ended; reads share its reported cause.
 
     Presentation and recovery belong to the consuming application; each member says how it
@@ -1973,6 +1984,19 @@ class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
 
     def failed(self, error: Exception) -> None:
         """The status and pending reads already carry this failure."""
+
+    def stop_observing(self) -> None:
+        """Tell the peer to stop observing; an observation that ends while saying so has ended.
+
+        The goodbye is a courtesy, not a precondition: a peer that already dropped the
+        connection makes `request` raise its own terminal outcome, which is the state this
+        method is entering. Catching `ObservationEnded` here keeps that answer with the process
+        that owns it instead of raising it at every caller that ends an observation.
+        """
+        try:
+            self.request(StopObserving())
+        except ObservationEnded:
+            pass
 
     def request(self, request: ObservationRequest) -> None:
         """Tell the service what the UI shows, or report its end to this caller."""
