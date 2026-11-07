@@ -118,6 +118,19 @@ class TeammatesResult(CliResult):
 
 
 @dataclass(frozen=True)
+class RegisteredRepository:
+    """One repository the team works on, and the checkout it reads it from."""
+
+    github: str
+    checkout: Path
+
+
+@dataclass(frozen=True)
+class RepositoriesResult(CliResult):
+    repositories: tuple[RegisteredRepository, ...]
+
+
+@dataclass(frozen=True)
 class TagRenamedResult(RecordMember, TargetEditResult):
     renamed: str
     name: str

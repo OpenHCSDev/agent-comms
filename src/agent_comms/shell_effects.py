@@ -337,13 +337,14 @@ class WritesWorkingTree(ShellProgram):
 class GitProgram(GitLaunch, ForbidsCommands, WritesWorkingTree):
 
     forbidden = (('clone',), ('worktree', 'add'), ('worktree', 'move'), ('worktree', 'remove'))
-    reason = ('git clone, worktree add, worktree move and worktree remove are forbidden: a tree '
-              'comes from an allocated problem, and a problem needs a request first, so the chain '
-              'is `agent-comms-team request add --as UNIT "what is wrong"`, then '
-              '`agent-comms-team order problem ORDER.json --as UNIT --to UNIT --where PATH:LINE`, '
-              'then `agent-comms checkout add P<n> --from UNIT`, which owns the pinned submodules. '
-              'Skipping a step answers Unknown todo or "needs exactly one open owner request", '
-              'and both read like typos')
+    reason = ('git clone, worktree add, worktree move and worktree remove are forbidden: reading a '
+              'repository needs no allocation, and `agent-comms repositories` names the checkout '
+              'the team already has. A tree you intend to write comes from an allocated problem, '
+              'and a problem needs a request first, so the chain is `agent-comms-team request add '
+              '--as UNIT "what is wrong"`, then `agent-comms-team order problem ORDER.json --as '
+              'UNIT --to UNIT --where PATH:LINE`, then `agent-comms checkout add P<n> --from '
+              'UNIT`, which owns the pinned submodules. Skipping a step answers Unknown todo or '
+              '"needs exactly one open owner request", and both read like typos')
 
     @classmethod
     def git_invocation(cls, args: list[str], cwd: Path) -> GitInvocation:
