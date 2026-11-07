@@ -258,3 +258,21 @@ agent-comms is newer than its Oct 20 runtime.
 Slice2's transport is therefore present rather than designed; what it lacks is the
 demonstration this plan names: one remote message updating the local view, bounded
 history, disconnect and reconnect, with no stale-root or retired-thread result.
+
+The first of those now has a test (`tests/test_connector_observe.py`: a message on the
+bus reaches an observer across the connector, and it fails with the send removed). Two
+traps cost an hour there, for whoever writes the rest:
+
+- **A revision is not a change signal.** `WireRevision` carries `expiry_tick`, so two
+  reads a second apart differ whether or not the bus did. Any assertion of the form
+  "the revision moved" passes with the change removed. Assert on what the frame says.
+- **A sidebar observation answers twice on its own** (`RosterSidebarRead`, then the full
+  read), and a reconnect's first frame is the unsettled one. A settled frame against a
+  fresh connection's first frame differs for that reason alone: measured as
+  `ReplyUnread '(0)'` against `UnobservedUnread ''`. Settle both sides.
+
+The reconnect demonstration is not written, and not for want of plumbing: a content
+signal that moves is the open question. A DM between two other threads moves no row the
+reader sees, and sending to the reader left `threads["alice"].unread` at `'(0)'` through
+a settled reconnect, so what that presentation counts needs reading before it is asserted
+on. No test was kept for it; a vacuous one is worse than none.
