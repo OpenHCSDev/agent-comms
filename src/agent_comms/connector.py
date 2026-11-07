@@ -110,6 +110,10 @@ from .transport.request import tool_field
 
 LOOPBACK = "127.0.0.1"
 PORT = 18766
+MCP_PATH = "/mcp"
+"""Where this connector serves MCP: its route, the resource its metadata names, and the
+endpoint a profile points at are one fact, and a profile minted for the bare origin posts
+to / and is answered 404 (2026-11-07)."""
 
 
 class SystemdSite(web.TCPSite):
@@ -434,7 +438,7 @@ class Connector(ConnectorService, McpServer):
         app.add_routes(
             [
                 web.get("/.well-known/oauth-protected-resource", self.resource_metadata),
-                web.get("/.well-known/oauth-protected-resource/mcp", self.resource_metadata),
+                web.get(f"/.well-known/oauth-protected-resource{MCP_PATH}", self.resource_metadata),
                 web.get("/.well-known/oauth-authorization-server", self.server_metadata),
                 web.post("/register", self.register),
                 web.get("/authorize", self.authorize, allow_head=False),
@@ -444,7 +448,7 @@ class Connector(ConnectorService, McpServer):
                 ),
                 web.post(ApprovalLink.route, self.confirm),
                 web.post("/token", self.token),
-                web.post("/mcp", self.mcp),
+                web.post(MCP_PATH, self.mcp),
                 web.get("/observe", self.observe),
                 web.get("/watch/{ticket}", self.inbox_watch),
             ]
@@ -496,7 +500,7 @@ class Connector(ConnectorService, McpServer):
 
     async def resource_metadata(self, request: web.Request) -> web.Response:
         return web.json_response(FieldCodec.encode(
-            ResourceMetadata(f"{self.issuer}/mcp", (self.issuer,))))
+            ResourceMetadata(f"{self.issuer}{MCP_PATH}", (self.issuer,))))
 
     async def server_metadata(self, request: web.Request) -> web.Response:
         return web.json_response(FieldCodec.encode(ServerMetadata(
@@ -783,7 +787,7 @@ class ConnectorOptions(ConnectorRootOptions, declared_name=None):
 
 @dataclass(frozen=True, kw_only=True)
 class ServeVerb(ConnectorOptions):
-    help = f"Serve MCP on {LOOPBACK}:{PORT}/mcp"
+    help = f"Serve MCP on {LOOPBACK}:{PORT}{MCP_PATH}"
 
     def apply(self, ctx: ConnectorStore) -> int | str:
         connector = Connector(ctx, self.issuer.rstrip("/"), self.root)
@@ -873,8 +877,9 @@ class OfferUiVerb(ConnectorVerb, declared_name="offer-ui"):
         match offer:
             case OfferedByTailnet(endpoint=served):
                 namespace = RegistryStore.at(CommsRoute.current().root).privacy().namespace
+                resource = URL(served.target.url).with_path(MCP_PATH)
                 profile = ctx.offer_ui_profile(
-                    namespace, HttpsMcpEndpoint(URL(served.target.url)), self.seconds, self.access)
+                    namespace, HttpsMcpEndpoint(resource), self.seconds, self.access)
                 print(FieldCodec.compact(FieldCodec.encode(profile), allow_nan=False))
                 return 0
         return offer.refusal()

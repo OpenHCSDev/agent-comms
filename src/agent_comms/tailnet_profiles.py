@@ -13,10 +13,10 @@ reply without a tailnet.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
-from agent_comms.connector_profile import UiConnectionProfile
+from agent_comms.connector_profile import ReachedRoute, UiConnectionProfile
 from agent_comms.connector_store import HeldUiProfiles
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.tailnet_buses import PeerHoldsBus, TailnetBuses
@@ -105,9 +105,16 @@ class TailnetProfiles(TailnetBuses):
     def hold(cls, found: PeerHoldsBus, profile: UiConnectionProfile) -> Path:
         """Write it where this machine keeps the profiles it holds, under the peer and grant
         it names: the same place and the same name `hold-ui` writes, so one bus has one
-        profile however it arrived."""
+        profile however it arrived.
+
+        With the address this machine reached that peer on, because it is the only one that
+        knows it: a tailnet-only endpoint's name resolves to tailscale's public ingress on a
+        machine that does not accept tailnet DNS, and nothing answers the tailnet port
+        there (measured 2026-11-07, this laptop: TLS EOF by name, 200 by address).
+        """
         directory = HeldUiProfiles.directory()
-        return profile.write_new(
+        reached = replace(profile, route=ReachedRoute(found.peer.address))
+        return reached.write_new(
             directory / f"{found.peer.name}-{profile.credential.grant_id}.json")
 
     @classmethod
