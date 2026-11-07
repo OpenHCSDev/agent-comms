@@ -452,7 +452,7 @@ def test_a_verb_reply_carries_the_new_rows_naming_its_caller(notification_bus):
     from agent_comms.order_tools import CommsTodoListTool
     from agent_comms.task_attachments.team_pings import TeamUpdateStore
     from agent_comms.tool_caller import ThreadCaller
-    from agent_comms.tools import CommsSendTool
+    from agent_comms.transport.tools.send import CommsSendTool
 
     comms = notification_bus
     colleague = comms.registry.require("colleague").incarnation
@@ -491,7 +491,7 @@ def test_a_busy_core_writer_never_fails_a_verb_that_landed(notification_bus):
     from agent_comms.coordination.database import CoordinationStore
     from agent_comms.task_attachments.team_pings import TeamUpdateStore
     from agent_comms.tool_caller import ThreadCaller
-    from agent_comms.tools import CommsSendTool
+    from agent_comms.transport.tools.send import CommsSendTool
 
     comms = notification_bus
     colleague = comms.registry.require("colleague").incarnation

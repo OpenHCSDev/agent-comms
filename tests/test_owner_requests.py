@@ -34,7 +34,7 @@ from agent_comms.todos import (
     WithdrawTodo,
 )
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tools import CommsSendTool
+from agent_comms.transport.tools.send import CommsSendTool
 from agent_comms.registry.threads import NativeThread
 
 
