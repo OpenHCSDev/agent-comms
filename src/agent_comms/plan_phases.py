@@ -68,6 +68,12 @@ class PackageStructurePlan(Plan):
     document = "plans/PACKAGE-STRUCTURE-PLAN.md"
 
 
+class ModuleOwnershipPlan(Plan):
+    """The measured move: which package owns each flat module, proved by consumers, not paths."""
+
+    document = "plans/MODULE-OWNERSHIP-PLAN.md"
+
+
 class OrderPhase(DeclaredFamily, affix="Phase"):
     """What an order serves: one plan phase, or nothing in any plan."""
 
@@ -1118,3 +1124,82 @@ class ClosedUnmergedPrsPhase(OwnerAsksPhase):
     #1080, #1095)."""
 
     evidence = ClassDeclared("ClosedUnmergedPullRequest", ("src/agent_comms",))
+
+
+class ModuleOwnershipPhase(PlanPhase, declared_name=None):
+    """A phase of the module-ownership plan; every one of them owns a destination, not a move."""
+
+    plan = ModuleOwnershipPlan
+
+
+class ModuleMapPhase(ModuleOwnershipPhase):
+    """P0: the map before the moves. The plan document carries the measured scan and the R*
+    trace for the first batch, so this cannot clear on prose written before anyone measured."""
+
+    evidence = DocumentPatternPresent(r"^- P0 measured: [0-9]+ modules, [0-9]+ lines",
+                                      (ModuleOwnershipPlan.document,))
+
+
+class PlanningOwnersPhase(ModuleOwnershipPhase):
+    """P1: `todos.py`, `tools.py` and `standing_rules.py` split at their owners into
+    `planning/` and `transport/`, with every consumer following them."""
+
+    after = (ModuleMapPhase,)
+    evidence = AllEvidence((
+        PathsAbsent(("src/agent_comms/todos.py", "src/agent_comms/tools.py",
+                     "src/agent_comms/standing_rules.py")),
+        PatternAbsent(r"from agent_comms[.](todos|tools|standing_rules)\b", ("src",)),
+        PatternAbsent(r"import agent_comms[.](todos|tools|standing_rules)\b", ("src",)),
+    ))
+
+
+class ProjectOwnersPhase(ModuleOwnershipPhase):
+    """P2: `projects/` owns the repository, checkout and storage owners."""
+
+    after = (PlanningOwnersPhase,)
+    evidence = AllEvidence((
+        PathsAbsent(("src/agent_comms/repo.py", "src/agent_comms/storage_rules.py",
+                     "src/agent_comms/storage_projection.py")),
+        PatternAbsent(r"from agent_comms[.](repo|storage_rules|storage_projection)\b", ("src",)),
+    ))
+
+
+class MessagingOwnersPhase(ModuleOwnershipPhase):
+    """P3: `messaging/` owns the bus, channels and conversation owners."""
+
+    after = (ProjectOwnersPhase,)
+    evidence = AllEvidence((
+        PathsAbsent(("src/agent_comms/message_bus.py", "src/agent_comms/messaging.py")),
+        PatternAbsent(r"from agent_comms[.](message_bus|messaging)\b", ("src",)),
+    ))
+
+
+class ExecutionOwnersPhase(ModuleOwnershipPhase):
+    """P4: `execution/` takes the runtime mass: workers, turns and native sessions."""
+
+    after = (MessagingOwnersPhase,)
+    evidence = AllEvidence((
+        PathsAbsent(("src/agent_comms/worker.py", "src/agent_comms/native_pi.py")),
+        PatternAbsent(r"from agent_comms[.](worker|native_pi)\b", ("src",)),
+    ))
+
+
+class ModuleSlopPhase(ModuleOwnershipPhase):
+    """P5: the slop the moves expose, by census delta in the PR body, top patterns first."""
+
+    after = (ExecutionOwnersPhase,)
+    evidence = AllEvidence((
+        DocumentPatternPresent(r"^- P5 census: ", (ModuleOwnershipPlan.document,)),
+        PatternAbsent(r"\bkind == ", ("src/agent_comms",)),
+    ))
+
+
+class PhaseEvidenceClosurePhase(ModuleOwnershipPhase):
+    """P6: no phase may be satisfied by a file merely disappearing.
+
+    A predicate that only asks whether a path still exists proves nothing about ownership,
+    parity or consumers, which is how a plan can read Done while 69% of the code never moved.
+    """
+
+    after = (ModuleSlopPhase,)
+    evidence = PatternAbsent(r"^    evidence = PathsAbsent\(", ("src/agent_comms/plan_phases.py",))
