@@ -9,7 +9,7 @@ Every entry is a thing that stopped work, the exact command, and what it printed
 is a feeling about the codebase; each one cost a turn. Ordered by what it blocked, not by what
 it annoys.
 
-## 1. The team skill's whole Orders section names a command family that does not exist
+## 1. The team skill's whole Orders section omits the program, so every verb fails
 
 `src/agent_comms/skills/comms-team/SKILL.md` (lines 64, 87, 104, 105, 121) tells every
 teammate, at every start and every compaction, to use:
@@ -34,18 +34,29 @@ $ ls /home/ts/.local/bin | grep -x order
                                   (nothing)
 ```
 
-The declared surface is the `CliCommand` family in `agent-comms --help`, and it has no `order`
-member; the actual capabilities live in the tool surface (`comms_order`, `comms_todo_create`,
-`comms_order_done`, `comms_order_check`, `comms_todo` for strikes and releases, `comms_verdict`
-for a send-back that strikes). So the skill restates a vocabulary nothing declares: MEMB-1,
-a roster standing in for a family, and it is the highest-traffic document in the repo.
+The verbs are real, and so is the program:
+
+```
+$ agent-comms-team order --help
+usage: order [-h] {send,strike,fire,unstrike,withdraw,done,pr,check,run,unlink,serve,say,
+              retire,end,session-end,problem,drop,fold,link,close,hunt,next-hunt,install,idle} ...
+$ agent-comms-team judge --help
+usage: judge [-h] {show,alarm,ok,promote,reviewing,qualify,superseded,abandoned,dropped,back,batch,rewritten} ...
+```
+
+`pyproject.toml:66` installs `agent-comms-team = "agent_comms.team.cli:main"`; `agent-comms` is
+a different binary, the JSON adapter CLI, which has no `order` member. So the skill is correct
+about the verbs and silent about the program, and the silence is what fails: a teammate types
+`order send …` (not on PATH) or `agent-comms order send …` (`UnknownFamilyMember`), and both
+read as "this capability does not exist". The correction is one line naming the launcher, not a
+rewrite of thirteen commands.
 
 **Owner:** the skill. **Fix:** name the tools that exist, in the one place that already owns
 the tool list; do not add an `order` verb to Core to match a doc.
 
-**Why it is first:** this is the documented first step for every teammate, and it fails for
-all of them. The workaround (reading `order_tools.py` to find the real tool names, then
-hand-writing typed JSON) is not something the skill asks anyone to do.
+**Why it is first:** sending an order is the documented first step for every teammate, and it
+fails for all of them the same way. It also cost me the ability to open a problem for the Toad
+bug, which is entry 2 — one missing program name cascades into every later refusal.
 
 ## 2. Two gates each name the other as the exit
 
