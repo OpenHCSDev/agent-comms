@@ -142,6 +142,11 @@ class EndpointRoute(TaggedUnion, affix="Route"):
     def socket_session(self) -> aiohttp.ClientSession:
         """The session an observation socket opens on, reaching the endpoint by this route."""
 
+    def reaches(self, address: str) -> bool:
+        """Whether this route goes to that address, so a UI can tell that a profile it holds
+        and a machine the tailnet reports are one bus rather than two rows."""
+        return False
+
 
 @dataclass(frozen=True)
 class ResolvedRoute(NullMember, EndpointRoute):
@@ -174,6 +179,9 @@ class ReachedRoute(TaggedRecordMember, EndpointRoute):
     def socket_session(self) -> aiohttp.ClientSession:
         return aiohttp.ClientSession(
             connector=aiohttp.TCPConnector(resolver=PinnedResolver(self.address)))
+
+    def reaches(self, address: str) -> bool:
+        return self.address == address
 
 
 @dataclass(frozen=True)
