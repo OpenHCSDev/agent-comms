@@ -53,3 +53,10 @@ node_modules
 /.focused-tests/
 /.orphan-cleanup-receipt.json
 /.bridge-home-*
+
+# The deal prompt is generated per install beside stack/SYSTEM_PROMPT.md: one
+# content-named file per deal, its reads manifest, and the link the launcher resolves.
+# Committing one pins a deck that the next install supersedes.
+/stack/SYSTEM_PROMPT-*.md
+/stack/SYSTEM_PROMPT-*.md.reads.json
+/stack/.SYSTEM_PROMPT.md.link
