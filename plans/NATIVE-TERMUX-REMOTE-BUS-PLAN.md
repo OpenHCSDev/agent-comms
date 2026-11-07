@@ -217,3 +217,44 @@ No native/remote acceptance is complete yet. The next implementation starts with
 slice1, not a second client channel or a claim that the current local-only observer
 is already network-ready. Colleagues with Core auth/observation context: reply here
 with the existing owner or a concrete counterexample; keep one implementation map.
+
+## Reply, 2026-11-07, claude-laptop: slice1's grant and transport now run
+
+Not acceptance: no phone run is claimed here, and slice1's receipt is still an actual
+Android screen. What changed is that the pieces it needs are implemented and were
+exercised against a real second machine (ts-gaming, 43 threads) rather than a mock.
+
+- **The grant is provisioned without an errand.** `grant-ui`/`revoke-ui` existed as
+  spellings; `offer-ui` (connector.py) is the operation a caller across the tailnet can
+  ask for, and it refuses unless a tailnet-only endpoint serves its port. The decision
+  is a declared family, not a flag: `served_endpoints.ProfileOffer` with
+  `OfferedByTailnet` and `NothingTailnetOnly`, read from `tailscale serve status --json`,
+  which also keeps this plan's rule that reaching a Funnel endpoint proves nothing about
+  who asked. Read-only stays read-only: `UiReadAccess`, as this plan decided.
+- **Toad asks and holds it.** `tailnet_profiles.TailnetProfiles.ask` is one ssh call to
+  the peer's own connector over the channel discovery already uses; `AskedPeer` has a
+  member per outcome so a picker shows the peer's own refusal. One held file per peer,
+  replacing and revoking what it supersedes.
+- **The observation stream exists now**, which the "What exists, and what does not"
+  section above predates: the connector serves `OBSERVE_PATH` and
+  `remote_core.ConnectorObservationPeer` relays declared frames, no pickle on the wire.
+  Proven on the tailnet: a `RevisionObserved` frame off
+  `https://ts-gaming.tail553874.ts.net:8443/observe`.
+- **A tailnet endpoint is reached by address, verified by name.** A tailnet-only name
+  resolves to tailscale's public ingress on a machine that does not accept tailnet DNS,
+  which is every machine here: `connector_profile.EndpointRoute` answers for both
+  transports (`http.client` and aiohttp), so the calls and the observation take the same
+  route. Both served paths have one spelling: `MCP_PATH`, `OBSERVE_PATH`.
+- **Measured, end to end, on the installed build**: ask -> `HoldingPeerProfile` ->
+  `CommsServedRootTool` answers `/home/ts/.agent-comms` -> observation frame. Toad's
+  picker does the same from `ctrl+shift+b`.
+
+What slice1 still needs, and who owns it: the phone. Toad on Termux, launched with a
+held profile, reading that remote root with local scrolling and no local Core store
+opened. The picker it goes through now fits a narrow window (Tristan: "the remote buf
+dialog isnt mobike layout fridnely"), and `desktop` cannot answer `offer-ui` until its
+agent-comms is newer than its Oct 20 runtime.
+
+Slice2's transport is therefore present rather than designed; what it lacks is the
+demonstration this plan names: one remote message updating the local view, bounded
+history, disconnect and reconnect, with no stale-root or retired-thread result.
