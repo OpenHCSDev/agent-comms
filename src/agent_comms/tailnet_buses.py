@@ -12,11 +12,12 @@ reply without a tailnet.
 from __future__ import annotations
 
 import json
-import subprocess
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, ClassVar
+
+from agent_comms.probed_command import ProbedCommand
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,10 +110,11 @@ class PeerOffline(PeerBus):
         return f"{self.peer.name} · offline"
 
 
-class TailnetBuses:
+class TailnetBuses(ProbedCommand):
     """The probe: one ssh call per online peer, asking its own CLI for its registry."""
 
     timeout_seconds: ClassVar[float] = 12
+    """Longer than the default: each call crosses the tailnet to another machine."""
     remote_cli: ClassVar[str] = "~/.local/bin/agent-comms"
 
     @classmethod
@@ -139,12 +141,6 @@ class TailnetBuses:
         except (ValueError, KeyError, TypeError) as refusal:
             return PeerWithoutBus(peer, str(refusal))
         return PeerHoldsBus(peer, len(threads))
-
-    @classmethod
-    def run(cls, command: Sequence[str]) -> tuple[int, str]:
-        done = subprocess.run(tuple(command), capture_output=True, text=True, errors="replace",
-                              timeout=cls.timeout_seconds * 2, check=False)
-        return done.returncode, done.stdout + done.stderr
 
     @classmethod
     def peers(cls) -> tuple[TailnetPeer, ...]:

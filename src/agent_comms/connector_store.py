@@ -519,6 +519,25 @@ class ConnectorStore(SingleFileStore, CarriedDocument[ConnectorGrants], Connecto
     def thread_revoked(self, thread: str) -> None:
         self.update(lambda grants: DocumentChange.to(replace(grants, access=grants.access_without(thread))))
 
+    def offer_ui_profile(
+        self, namespace: RootId, endpoint: HttpsMcpEndpoint,
+        seconds: int = UiGrantAccess.default_seconds,
+        grant_type: type[UiGrantAccess] = UiReadAccess,
+    ) -> UiConnectionProfile:
+        """Mint a profile for a caller that already proved its reach, with no file to write.
+
+        `publish_ui_profile` writes the profile before committing the grant, so a failed
+        write never activates a bearer. There is nothing to fail here: the file belongs on
+        the machine that will hold it, and the caller receives the profile as this verb's
+        answer. A grant whose answer never arrives expires on its own and `revoke-ui` ends
+        it sooner; that is the whole cost of handing one out, and it is why only a
+        tailnet-only endpoint may (served_endpoints.ProfileOffer).
+        """
+        def issue(grants: ConnectorGrants) -> DocumentChange[ConnectorGrants, UiConnectionProfile]:
+            changed = grants.ui_issued(namespace, seconds, grant_type)
+            return DocumentChange(changed.document, UiConnectionProfile(endpoint, changed.result))
+        return self.update(issue)
+
     def publish_ui_profile(
         self, namespace: RootId, endpoint: HttpsMcpEndpoint, path: Path,
         seconds: int = UiGrantAccess.default_seconds,

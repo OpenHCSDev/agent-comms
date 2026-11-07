@@ -65,6 +65,7 @@ from agent_comms.owner_requests import NewestOpenRequest, RequestSelection
 from .host_services import HostService
 from .connector_caller import CALLER, ConnectorCaller, ConnectorTool, GrantRefusedError
 from .connector_profile import HttpsMcpEndpoint, UiConnectionProfile, UiGrantId, UiGrantSummary
+from .served_endpoints import OfferedByTailnet, ServedEndpoints
 from .registry.registry_store import RegistryStore
 from .connector_store import (
     CODE_SECONDS, ApprovalQueueFull, ApprovalRefused, AuthorizationQuery,
@@ -835,6 +836,46 @@ class GrantUiVerb(ConnectorRootOptions, declared_name="grant-ui"):
             namespace, self.endpoint, self.profile, self.seconds, self.access)
         print(FieldCodec.compact(FieldCodec.encode(profile), allow_nan=False))
         return 0
+
+
+@dataclass(frozen=True, kw_only=True)
+class OfferUiVerb(ConnectorRootOptions, declared_name="offer-ui"):
+    help = "Hand a UI profile to a caller that reached this machine's tailnet-only endpoint"
+
+    port: Annotated[
+        int, Argument(flags=("--port",), options={
+            "help": "The connector port whose served endpoints decide this"}),
+    ] = PORT
+    seconds: Annotated[
+        int, Argument(flags=("--seconds",), options={
+            "help": f"Lifetime, at most {UiGrantAccess.maximum_seconds} seconds"}),
+    ] = UiGrantAccess.default_seconds
+    access: Annotated[
+        type[UiGrantAccess],
+        Argument(flags=("--access",), options={"help": "Declared UI grant capability"}),
+    ] = UiReadAccess
+
+    def apply(self, ctx: ConnectorStore) -> int | str:
+        """The profile itself is printed, secret included, which `grant-ui` never does.
+
+        `grant-ui` writes the secret into a private file and prints only a summary, because
+        its caller is a person at a terminal with scrollback. This verb's caller is a machine
+        that just reached a tailnet-only endpoint of ours and is asking to hold a bus: the
+        profile is the answer to that request, and the channel carrying it is theirs. A
+        public endpoint refuses here (`ProfileOffer`), because reaching one proves nothing
+        about who asked.
+        """
+        offer = ServedEndpoints.offered(self.port)
+        if refusal := offer.refusal():
+            return refusal
+        match offer:
+            case OfferedByTailnet(endpoint=served):
+                namespace = RegistryStore.at(self.root).privacy().namespace
+                profile = ctx.offer_ui_profile(
+                    namespace, HttpsMcpEndpoint(URL(served.target.url)), self.seconds, self.access)
+                print(FieldCodec.compact(FieldCodec.encode(profile), allow_nan=False))
+                return 0
+        return offer.refusal()
 
 
 @dataclass(frozen=True, kw_only=True)
