@@ -743,3 +743,29 @@ def test_storage_violation_observation_key_resolves_every_compared_field(checkou
     assert storage.unit == thread.incarnation
     assert StorageHomeMissing(storage).observation_key() == StorageHomeMissing(
         UnitStorage.read(comms.registry.storage_rule, thread, RepositoryReads())).observation_key()
+
+
+def test_a_thread_writes_its_own_linked_worktree_without_a_goal_or_order(
+        checkout_comms: Comms) -> None:
+    """A declared linked worktree is the work its thread was made for.
+
+    A cleared goal, or a thread that never held an order, must not lock a teammate out of
+    its own checkout: the worktree declaration is already the ownership fact. The shared
+    main checkout stays a read/launch source, so the live installation is still safe."""
+    comms = checkout_comms
+    rule = comms.registry.storage_rule
+    main = rule.checkout_base / 'worker'
+    worktree = rule.checkout_base / 'worker--P1'
+    Checkout.add(main, worktree, DetachedStart('HEAD'))
+    assert (worktree / '.git').is_file(), 'a linked worktree links by file'
+    assert (main / '.git').is_dir(), 'the shared main checkout holds its own directory'
+    thread = comms.registry.declare(
+        NativeThread('unassigned', frozenset(), Checkout(worktree)))
+    assert tuple(thread.goal) == (), 'the fixture thread holds no goal'
+    assert not comms.goals.todos.held_by(thread.incarnation), 'and no order'
+
+    projection = StorageProjection(rule, thread, comms)
+
+    projection.require_write(worktree / 'implementation.py')
+    with pytest.raises(StorageDenied, match='not allocated editable work'):
+        projection.require_write(main / 'implementation.py')
