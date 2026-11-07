@@ -15,7 +15,7 @@ from agent_comms.nominal.field_codec import RootId
 from agent_comms.order_tools import CommsEmergencyReleaseTool
 from agent_comms.remote_core import RemoteCoreAccess
 from agent_comms.transport.request import ConnectionDropped
-from agent_comms.tools import CommsChannelsTool
+from agent_comms.transport.tools.channels import CommsChannelsTool
 
 REPLY = json.dumps({"jsonrpc": "2.0", "id": 1, "result": {
     "content": [{"type": "text", "text": "{}"}], "isError": False, "structuredContent": {"read": True}}}).encode()
