@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .transport.tools.sidebar import (
+from agent_comms.transport.tools.sidebar import (
     ChannelOrderSet,
     CommsCaptureHumanInputTool,
     CommsChannelTool,
@@ -55,18 +55,18 @@ import asyncio
 from agent_comms_hooks import ToolRefusedError
 from agent_comms.nominal.field_codec import WireExclude
 
-from .input_key import InputKeyText
-from .agent_inbox import InboxWait, NoWait, TakenInputPosition, TakenInputStart
+from agent_comms.input_key import InputKeyText
+from agent_comms.agent_inbox import InboxWait, NoWait, TakenInputPosition, TakenInputStart
 
-# The goal tools are declared in transport/tools/goals.py; importing them here assembles
-# them into the served surface that invoke_tool dispatches over.
-from .transport.tools import channels, goals, inbox, send
-from .tool_request import ServedRequest, HumanToolRequest, ObservedToolRequest, LiveOwnerTool, PublishingTool, PublishingToolRequest, ReadTool, ThreadReadTool, ThreadContextAction, ThreadToolRequest, CoreRead, NativeToolRequest
-from .transport.request import ListedNames, OmittedNames, SubjectBinding, tool_field
-from .tool_declaration import NativeRequestTools
-from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
-from .send_result import MessagePublished
-from .native_tools import CommunicationCall
+# Import the tool declaration owners to assemble the surface invoke_tool dispatches over.
+from agent_comms import order_tools
+from agent_comms.transport.tools import channels, goals, inbox, send
+from agent_comms.tool_request import ServedRequest, HumanToolRequest, ObservedToolRequest, LiveOwnerTool, PublishingTool, PublishingToolRequest, ReadTool, ThreadReadTool, ThreadContextAction, ThreadToolRequest, CoreRead, NativeToolRequest
+from agent_comms.transport.request import ListedNames, OmittedNames, SubjectBinding, tool_field
+from agent_comms.tool_declaration import NativeRequestTools
+from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
+from agent_comms.send_result import MessagePublished
+from agent_comms.native_tools import CommunicationCall
 
 import dataclasses
 import threading
@@ -74,16 +74,16 @@ from abc import abstractmethod
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Type
+from typing import Annotated, ClassVar, Type
 
 from pydantic import JsonValue
 
 from agent_comms.lifecycle_capability import Active
 
-from .change_report import NoChangeReport, ReportEvidence
-from .channel_management import ListTagEdit, TagEdit
+from agent_comms.change_report import NoChangeReport, ReportEvidence
+from agent_comms.channel_management import ListTagEdit, TagEdit
 from agent_comms.channel_targets import ChannelTarget, CommandTarget, NamedTarget
-from .channels import AnyChannel, Channel, SavedView, ViewMatch, ViewPredicate
+from agent_comms.channels import AnyChannel, Channel, SavedView, ViewMatch, ViewPredicate
 from agent_comms.cli_verbs.archive import ArchiveCliCommand
 from agent_comms.cli_verbs.delete_view import DeleteViewCliCommand
 from agent_comms.cli_verbs.fork import ForkCliCommand
@@ -95,60 +95,60 @@ from agent_comms.cli_verbs.start import StartCliCommand
 from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.cli_commands import ThreadArchivedResult, ThreadCreatedResult, ThreadStoppedResult
 from agent_comms.cli_verbs.threads import ThreadsCliCommand
-from .config_options import ConfigOptions
-from .cli_command import PreparedTargetAction, TargetActionCommand
-from .cli_result import CliResult, TargetEditResult
-from .coordination.tables.refusals import SendRefusal
-from .display_order import ChannelSort
-from .nominal.field_codec import ContextSource, FieldCodec, NullMember, WireChoices, SingleFieldValue, SubclassUnion, WireForm, WireName, WireOmitDefault, projected, GoalId
-from .goal_actions import (
+from agent_comms.config_options import ConfigOptions
+from agent_comms.cli_command import PreparedTargetAction, TargetActionCommand
+from agent_comms.cli_result import CliResult, TargetEditResult
+from agent_comms.coordination.tables.refusals import SendRefusal
+from agent_comms.display_order import ChannelSort
+from agent_comms.nominal.field_codec import ContextSource, FieldCodec, NullMember, WireChoices, SingleFieldValue, SubclassUnion, WireForm, WireName, WireOmitDefault, projected, GoalId
+from agent_comms.goal_actions import (
     ActiveGoalAction, ClearGoalAction, EditGoalAction, GoalAction, GoalActor, GoalPrecondition,
     ModelInvocable, PausedGoalAction, PeerInvocable, RuntimeInvocable, SetGoalAction,
     TransitionGoalAction,
 )
-from .goal_history import RecordedGoalHistory
-from .goal_scope import AllGoals, OneGoal
-from .goal_presentation import GoalExecution, GoalSnapshot
-from .planning.goal_waits import NoStandbyReview, StandbyReview
-from .goals import GoalDeclaration
-from .history_result import HistoryPageResult
-from .input_attempt import UnresolvedInputReference
-from .message_page import DisplayedMessagePage, InboxPage, MessagePage, PageBounds
-from .page_traversal import LatestSequence, LiveCursor
-from .historical_views import ConversationRevision
-from .message_reference import MessageReference
-from .messages import InfoKind, Message, MessageKind, NoticeRole, SendableMessageKind
-from .execution.owner_lifecycle import OwnerStartResult
-from .owner_launch import HostResources
-from .page_traversal import NewestCursor, PageCursor
-from .pi_payloads import PublishedGoalToolDetails
-from .pi_vocabulary import ServiceTier, ThinkingLevelField
-from .notification_evidence import AfterRecipient, FirstRecipient, RecipientCursor
-from .message_notification import MessageNotification
-from .presentation import ChannelView, WireRevision
-from .runtime_requests import QueueActionRuntimeRequest
-from .owner_connection import OwnerConnection
-from .turn_context import ContextManifest
-from .importing import ImportedSessionMetadata, ThreadImported
-from .exporting import WireExportProvenance
-from .cli_bridges.history import OfflineHistory
-from .turn_context import ContextSourceText, SegmentManifest
-from .working_memory_annotations import WorkingMemoryAnnotations
-from .working_memory_labels import JevClassifier
-from .notification_evidence import RecipientLimit
-from .progress_claims import ProgressClaim
-from .relationships import (
+from agent_comms.goal_history import RecordedGoalHistory
+from agent_comms.goal_scope import AllGoals, OneGoal
+from agent_comms.goal_presentation import GoalExecution, GoalSnapshot
+from agent_comms.planning.goal_waits import NoStandbyReview, StandbyReview
+from agent_comms.goals import GoalDeclaration
+from agent_comms.history_result import HistoryPageResult
+from agent_comms.input_attempt import UnresolvedInputReference
+from agent_comms.message_page import DisplayedMessagePage, InboxPage, MessagePage, PageBounds
+from agent_comms.page_traversal import LatestSequence, LiveCursor
+from agent_comms.historical_views import ConversationRevision
+from agent_comms.message_reference import MessageReference
+from agent_comms.messages import InfoKind, Message, MessageKind, NoticeRole, SendableMessageKind
+from agent_comms.execution.owner_lifecycle import OwnerStartResult
+from agent_comms.owner_launch import HostResources
+from agent_comms.page_traversal import NewestCursor, PageCursor
+from agent_comms.pi_payloads import PublishedGoalToolDetails
+from agent_comms.pi_vocabulary import ServiceTier, ThinkingLevelField
+from agent_comms.notification_evidence import AfterRecipient, FirstRecipient, RecipientCursor
+from agent_comms.message_notification import MessageNotification
+from agent_comms.presentation import ChannelView, WireRevision
+from agent_comms.runtime_requests import QueueActionRuntimeRequest
+from agent_comms.owner_connection import OwnerConnection
+from agent_comms.turn_context import ContextManifest
+from agent_comms.importing import ImportedSessionMetadata, ThreadImported
+from agent_comms.exporting import WireExportProvenance
+from agent_comms.cli_bridges.history import OfflineHistory
+from agent_comms.turn_context import ContextSourceText, SegmentManifest
+from agent_comms.working_memory_annotations import WorkingMemoryAnnotations
+from agent_comms.working_memory_labels import JevClassifier
+from agent_comms.notification_evidence import RecipientLimit
+from agent_comms.progress_claims import ProgressClaim
+from agent_comms.relationships import (
     Collaboration,
     GoalDerivedContact,
     GoalMentionDiagnostic,
     RelationshipEdit,
     ThreadCommsSnapshot,
 )
-from .restart_queue import QueuedRestart, RestartQueued, RestartQueue
-from .team.standing import InstallDue
-from .send_result import CorrectionComplete, CorrectionResult, SendResult
-from .repo import Checkout
-from .task_sources import (
+from agent_comms.restart_queue import QueuedRestart, RestartQueued, RestartQueue
+from agent_comms.team.standing import InstallDue
+from agent_comms.send_result import CorrectionComplete, CorrectionResult, SendResult
+from agent_comms.repo import Checkout
+from agent_comms.task_sources import (
     Constraint,
     CurrentTaskScopeSelection,
     NoTaskAttachment,
@@ -159,38 +159,37 @@ from .task_sources import (
     TaskChange,
     TaskScopeSelection,
 )
-from .registry.threads import (
+from agent_comms.registry.threads import (
     ArchiveOwnerControl,
     NativeOwnerCommand,
     OwnerLifecycleControl,
     StartOwnerControl,
     NextTurnConfiguration,
 )
-from .thread_management import (
+from agent_comms.thread_management import (
     InheritedTags,
     ProjectChangeResult,
     RenameThreadResult,
     TagChoice,
     ThreadTitleResult,
 )
-from .input_origin import HumanInputOrigin
-from .thread_presentation import ThreadPresentation
-from .child_process import ProcessIdentity
-from .thread_identity import ToolName
-from .thread_model import ThreadModel
-from .tool_caller import ThreadCaller, ThreadListing, ToolCaller
-from .acp_extension import CoordinationChangedUpdate
-from .history_views import RetiredViews
-from .thread_identity import ThreadIncarnation
-from .display_references import ReferenceNames
-from .registry.registry_document import ProjectThreadSelection, RegistrySlice, RegistrySnapshot
-from .host_logs import HostLog, HostLogRead
-from .tool_result import ToolResult
-from .notification_reads import LiveNotificationRead
-from .work_branches import WorkBranch, WorkBranches
+from agent_comms.input_origin import HumanInputOrigin
+from agent_comms.thread_presentation import ThreadPresentation
+from agent_comms.child_process import ProcessIdentity
+from agent_comms.thread_identity import ToolName
+from agent_comms.thread_model import ThreadModel
+from agent_comms.tool_caller import ThreadCaller, ThreadListing, ToolCaller
+from agent_comms.acp_extension import CoordinationChangedUpdate
+from agent_comms.history_views import RetiredViews
+from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.display_references import ReferenceNames
+from agent_comms.registry.registry_document import ProjectThreadSelection, RegistrySlice, RegistrySnapshot
+from agent_comms.host_logs import HostLog, HostLogRead
+from agent_comms.tool_result import ToolResult
+from agent_comms.notification_reads import LiveNotificationRead
+from agent_comms.work_branches import WorkBranch, WorkBranches
 
-if TYPE_CHECKING:
-    from .comms import Comms
+from agent_comms.comms import Comms
 
 
 
@@ -817,7 +816,7 @@ class CommsDeleteViewTool(NativeToolRequest):
     description = "Delete a saved projection without changing tags, channels, messages, or threads."
     name: Annotated[str, *tool_field("Saved view name")]
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> ChannelListing:
+    def apply(self, comms: Comms, caller: ToolCaller) -> channels.ChannelListing:
         DeleteViewCliCommand(name=self.name).apply(comms)
         return channels.CommsChannelsTool().apply(comms, caller)
 

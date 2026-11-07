@@ -56,7 +56,7 @@ def test_native_edit_evidence(name, native, ok, expected):
 
 def test_successful_send_preserves_original_publication_in_live_and_saved_content(tmp_path):
     from agent_comms.pi_payloads import ToolResultMessage, PublishedMessageToolDetails
-    from agent_comms.tools import invoke_tool
+    from agent_comms.transport.tools.served import invoke_tool
     from agent_comms.transcript_events import SentTranscript
 
     comms = installed_comms(tmp_path / "wire")

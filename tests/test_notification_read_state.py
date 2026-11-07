@@ -32,7 +32,7 @@ from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
 from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_declaration import NativeRequestTools
 from agent_comms.transport.request import ToolRequest
-from agent_comms.tools import CommsMessageOutcomesTool
+from agent_comms.transport.tools.served import CommsMessageOutcomesTool
 from agent_comms.acp_extension import GoalSnapshotReply, TranscriptSnapshotUpdate
 from agent_comms.bus_read import OwnerScopedRead
 from agent_comms.team_hud_records import TeammateDetail

@@ -74,7 +74,7 @@ from agent_comms.todos import (
     ResumeClaimOrder,
 )
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tools import CommsHistoryTool
+from agent_comms.transport.tools.served import CommsHistoryTool
 from agent_comms_hooks import ToolRefusedError
 from test_held_problem_orders import merge_two_commit_fix
 from test_todos import order, thread

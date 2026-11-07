@@ -14,7 +14,7 @@ def test_tool_discovery_loads_the_requested_declarations_without_changing_the_bu
     from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.nominal.declared_family import UnknownFamilyMember
     from agent_comms.tool_caller import NoThreadCaller
-    from agent_comms.tools import CommsDiscoverTool, NamedToolLookup, SearchToolLookup
+    from agent_comms.transport.tools.served import CommsDiscoverTool, NamedToolLookup, SearchToolLookup
     from agent_comms.thread_identity import ToolName
     import pytest
 

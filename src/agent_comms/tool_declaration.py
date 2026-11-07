@@ -107,7 +107,9 @@ class PlainContextRows(ContextRows):
 
 
 @dataclass(frozen=True)
-class ToolDeclaration(DeclaredFamily, affix="Tool"):
+class ToolDeclaration(
+    DeclaredFamily, affix="Tool", discovery_package="agent_comms.transport.tools",
+):
     family_discriminator: ClassVar[str] = "tool"
     label: ClassVar[str]
 
@@ -129,16 +131,6 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
             (action for base in cls.__mro__ for action in ToolAction.members if base is action),
             OtherAction,
         )
-
-    @classmethod
-    def _member_declarations(cls):
-        # The existing request owner also acquires its order-tool declarations, and
-        # order_tools its served reads: a UI read's wire name selects its served member
-        # (TranscriptPageRead -> ServedTranscriptPageRead), which a process meets only here.
-        # Registry reads must not depend on an unrelated command import cycle.
-        from . import order_tools, tools  # noqa: F401 - acquire the declaration owners
-
-        return super()._member_declarations()
 
     @classmethod
     def for_name(cls, name: str) -> type[ToolDeclaration] | UndeclaredTool:

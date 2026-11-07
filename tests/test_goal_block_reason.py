@@ -22,7 +22,7 @@ from agent_comms.goal_states import UnrecordedBlockGoal
 from agent_comms.goals import Goal
 from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tools import CommsGoalTool
+from agent_comms.transport.tools.served import CommsGoalTool
 from agent_comms.turn_failure import BackendFailed
 from conftest import installed_comms
 

@@ -120,7 +120,7 @@ async def test_team_memory_stays_under_its_cap(tmp_path, native_workers, owner_c
     from agent_comms.execution.owner_lifecycle import OwnerRestartSelection
     from native_backend_fixture import NativeBackendFixture
     from delivery_owner_fixture import FakeClient
-    from agent_comms.tools import CommsResourcesTool
+    from agent_comms.transport.tools.served import CommsResourcesTool
     from agent_comms.tool_caller import NoThreadCaller
 
     comms = wire(native_workers.root)

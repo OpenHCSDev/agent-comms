@@ -1,7 +1,7 @@
 import sys
 
 from agent_comms.core_access import LocalCoreAccess
-from agent_comms.tools import CommsImportedSourceTool
+from agent_comms.transport.tools.served import CommsImportedSourceTool
 from agent_comms.repo import Checkout
 from agent_comms.comms import Comms
 from agent_comms.registry.registration import Registration

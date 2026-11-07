@@ -42,7 +42,7 @@ from agent_comms.thread_status import ArchivedThreadStatus, RunningThreadStatus,
 from agent_comms.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
-from agent_comms.tools import invoke_tool
+from agent_comms.transport.tools.served import invoke_tool
 from conftest import installed_comms
 
 
@@ -225,7 +225,7 @@ async def test_new_tag_disposition_is_declared_in_original_editor_and_tool_catal
     from agent_comms.cli_command import CliCommand
     from agent_comms.nominal.field_codec import FieldCodec, compile_decoder
     from agent_comms.tool_declaration import NativeRequestTools
-    from agent_comms.tools import CommsTagsTool
+    from agent_comms.transport.tools.served import CommsTagsTool
 
     comms = setup_wire(tmp_path)
     selected = CliCommand.selected_targets((CommandTarget.named('#api'),))

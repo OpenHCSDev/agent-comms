@@ -1,13 +1,13 @@
 """The goal tools: what a caller publishes about a goal, and the verbs that change one.
 
-Separate from ``agent_comms.tools`` because every consumer of these classes is a goal writer or
+Separate from ``agent_comms.transport.tools.served`` because every consumer of these classes is a goal writer or
 the goal snapshot a heartbeat publishes; the served wiring for the other tools stays there.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import Annotated, ClassVar
 
 from pydantic import JsonValue
 
@@ -49,8 +49,7 @@ from agent_comms.tool_result import ToolResult
 from agent_comms.transport.request import ListedNames, OmittedNames, tool_field
 from agent_comms_hooks import ToolRefusedError
 
-if TYPE_CHECKING:
-    from agent_comms.comms import Comms
+from agent_comms.comms import Comms
 
 
 class OwnGoalPublication(ToolResult):

@@ -1,13 +1,13 @@
 """The send declaration: how a caller addresses a thread or channel and what it publishes.
 
 `SendTool` is the whole behaviour; `CommsSendTool` adds only the native call, so the pair is one
-owner. Serving it for external callers stays in ``agent_comms.tools``.
+owner. Serving it for external callers stays in ``agent_comms.transport.tools.served``.
 """
 
 from __future__ import annotations
 
 import threading
-from typing import TYPE_CHECKING, Annotated, Type
+from typing import Annotated, Type
 
 from agent_comms.channel_targets import CommandTarget, NamedTarget
 from agent_comms.coordination.tables.refusals import SendRefusal
@@ -26,8 +26,7 @@ from dataclasses import dataclass
 
 from agent_comms.change_report import NoChangeReport, ReportEvidence
 
-if TYPE_CHECKING:
-    from agent_comms.comms import Comms
+from agent_comms.comms import Comms
 
 
 @dataclass(frozen=True, kw_only=True)

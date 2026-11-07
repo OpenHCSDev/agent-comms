@@ -178,7 +178,7 @@ def test_failed_delivery_posts_a_non_waking_notice_to_the_origin(tmp_path):
 
 def test_model_tool_changes_own_and_another_thread(comms, tmp_path, monkeypatch):
     from functools import partial
-    from agent_comms.tools import invoke_tool
+    from agent_comms.transport.tools.served import invoke_tool
     from agent_comms.tool_caller import ThreadCaller
 
     invoke_tool = partial(invoke_tool, caller=ThreadCaller("owner"))
@@ -209,7 +209,7 @@ def test_model_tool_changes_own_and_another_thread(comms, tmp_path, monkeypatch)
 
 
 def test_targeted_inbox_returns_mentions_and_advances_only_own_cursor(comms, tmp_path):
-    from agent_comms.tools import invoke_tool
+    from agent_comms.transport.tools.served import invoke_tool
 
     for name in ("alpha", "beta"):
         comms.registry.declare(NativeThread(name, frozenset({'team'}), Checkout(tmp_path)))
@@ -229,7 +229,7 @@ def test_targeted_inbox_returns_mentions_and_advances_only_own_cursor(comms, tmp
 def test_inbox_rejects_an_empty_target(tmp_path):
     import pytest
 
-    from agent_comms.tools import invoke_tool
+    from agent_comms.transport.tools.served import invoke_tool
 
     comms = wire(tmp_path)
     comms.registry.declare(NativeThread('beta', frozenset({'team'}), Checkout(tmp_path)))

@@ -10,7 +10,7 @@ from agent_comms.send_result import MessagePublished
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.tool_request import HumanToolRequest, PublishingToolRequest
 from agent_comms.tool_result import ToolResult
-from agent_comms.tools import (
+from agent_comms.transport.tools.served import (
     ChannelOrderSet,
     CommsArchiveTool,
     CommsAuthoredTaskTool,

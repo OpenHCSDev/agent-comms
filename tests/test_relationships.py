@@ -16,7 +16,7 @@ from agent_comms.comms import wire
 from conftest import installed_comms
 from agent_comms.display_order import LastActivityThreadSort
 from agent_comms.thread_text import ForkedParent, NoParent
-from agent_comms.tools import invoke_tool
+from agent_comms.transport.tools.served import invoke_tool
 from agent_comms.registry.threads import NativeThread
 
 

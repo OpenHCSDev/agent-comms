@@ -13,7 +13,7 @@ from agent_comms.goal_actions import (
     PausedGoalAction,
     SetGoalAction,
 )
-from agent_comms.tools import CommsGoalTool, CommsResumeGoalTool
+from agent_comms.transport.tools.served import CommsGoalTool, CommsResumeGoalTool
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.registry.threads import NativeThread
 from agent_comms.goal_scope import OneGoal
