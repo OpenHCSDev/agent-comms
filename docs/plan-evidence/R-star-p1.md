@@ -1,84 +1,123 @@
-# R* — the ownership trace for P1's first batch
+# R* — first P1 batch and the remaining ownership questions
 
-P0 requires the relation before the moves: for each declaration, who implements it and who
-consumes it. This file is the map P1's first batch reads; a row with no traced owner is
-`OPEN` with the reason, never a guess.
+Source revision: `51d17a5cb1db130bbeb707e5448b5daa92670c54`.
 
-Measured at main `5161c723a` (`plans/MODULE-OWNERSHIP-PLAN.md:186` carries the census).
+This is a corrected, retrospective trace of the first batch, not evidence that the
+trace preceded #4321. That move already landed before P0 was established correctly.
+The retained static map is `module-map-imports-51d17a5cb.json` beside this file.
 
-## The batch
+## Scope and counts
 
-| module | lines | top-level classes | family roots | importers (src) | distinct symbols consumed |
-|---|---|---|---|---|---|
-| `src/agent_comms/todos.py` | 7134 | 254 | 22 | 39 (31 at package root) | 95 |
-| `src/agent_comms/tools.py` | 1795 | 116 | 19 | 12 (7 at package root) | 7 |
-| `src/agent_comms/standing_rules.py` | 1555 | 51 | 31 | 13 (7 in `team/`) | 22 |
+The map parses tracked Python under `src`, `tests` and `tools` from that Git tree.
+It records direct absolute and resolved relative imports, including imports inside
+functions, plus explicit module imports. Dynamic imports, reflective access and
+consumers in other repositories are unscored, not declared absent.
 
-The import counts are the whole argument for splitting them where they are, and the symbol
-counts are the whole argument against doing it by file size: `tools.py` exports **7** names to
-the rest of the package while holding 116 classes, and `todos.py` exports **95**.
+| Original module | Lines (LF) | Top-level classes | Production importer files | Distinct names directly imported by production code |
+|---|---:|---:|---:|---:|
+| `src/agent_comms/todos.py` | 7134 | 254 | 38 | 97 |
+| `src/agent_comms/tools.py` | 1795 | 116 | 6 | 7 |
+| `src/agent_comms/standing_rules.py` | 1555 | 51 | 12 | 22 |
 
-## `todos.py` — five consumers, five owners
+These are dependency observations, not ownership proofs. The earlier claim that
+seven named imports exhaust `tools.py`'s consumers was wrong: tests import other
+classes, and `tool_declaration.py:139` acquires the module itself for registration.
+The previous 39/12/13 importer counts came from a text heuristic, not this resolved
+import map. The previous "family roots" column was a base-name heuristic and is
+withdrawn; it did not establish registry roots or walk the MRO.
 
-Declaration anchors, then every consumer that names them:
+## First batch: goal-tool owner
 
-| declaration | at | consumers (file: symbols) | owner it implies |
-|---|---|---|---|
-| `Todo`, `TodoStore` | `todos.py:5760`, `todos.py:6507` | `team/standing.py:7`, `turn_digests.py:6`, `ui_model/teammate_state.py:5`, `behaviour_patterns.py:4`, `owner_requests.py:3`, `plan_phases.py`, `plan_reading.py`, `held_orders.py` | the row family: stays with the store |
-| `TodoCommand` and its members (`ClaimOrder`, `CorrectCheckTodo`, …) | `todos.py:4009`, `5537` | `team/order.py:31`, `team/judge.py:28`, `order_tools.py:26`, `goal_management.py:7`, `goal_actions.py:7`, `team/standing.py` | `planning/` — every consumer is an order verb |
-| `OrderCompletion` / `CheckedDelivery` / `DeliveryEvidence` / `BranchPointCheck` / `DeliveryMerge` | `todos.py:208`, `267`, `284`, `383`, `560` | `team/order.py`, `order_tools.py`, `integration.py` | `execution/` — evidence about a delivered commit, no order vocabulary |
-| `PullRequest`, `PullRequests` | `todos.py:703` | `integration.py:7`, `closed_pull_requests.py:7`, `team_hud_records.py:3`, `heartbeat_frame.py` | `transport/` — the GitHub boundary |
-| `HeadReviewRecord`, `Assignment`, `PlainText` | `todos.py:4869`, `3786`, `2043` | `team/judge.py:28`, `team/standing.py:7`, `heartbeat_frame.py:8` | `planning/` |
-| `ProgressRead` | `todos.py:1647` | `heartbeat_frame.py:8`, `turn_digests.py:6` | `planning/` (imports `transport/`) |
-| `EditWorkplaces` | `todos.py:6911` | `turn_digests.py:6`, `heartbeat_frame.py:8` | left for P2 (`projects/`) |
+Required destination: `agent_comms.transport.tools.goals`. The batch preserves
+these fifteen identities and their bodies; it does not merge declarations merely
+because their current implementations agree.
 
-Two rows were `OPEN` when this trace was first written. P0 does not let an open row become the
-next phase's guess, so they were resolved by reading the declarations, not by consumer counts:
+All declaration locations below are in `src/agent_comms/tools.py` at the pinned
+revision. The machine map records their bases and each directly declared method.
 
-- `HeadReviewRecord` (`todos.py:4869`) holds `request`, `actor`, `at`, `verdict: HeadVerdict`,
-  `order: HeadOrderLink`. Its fields are the verdict vocabulary, so `planning/` owns it;
-  `heartbeat_frame.py` reads it as a snapshot, and a consumer that reads a record does not own it.
-- `ProgressRead` (`todos.py:1647`) is *"one read of order progress"* composing `PullRequests`
-  (transport facts) with `CheckoutReads` (checkout facts), keyed by `Todo`. It declares no
-  fields of its own, so the order row family owns it and it imports `transport/`.
-- `EditWorkplaces` (`todos.py:6911`) is `StorageRule` + registry threads + path allocations +
-  held orders: the **edit boundary**, not the order vocabulary. P1 leaves it in `todos.py` and
-  P2 moves it to `projects/`; moving it twice would put the storage boundary in `planning/`.
+| Line | Declaration | Shared provider / distinct contribution |
+|---:|---|---|
+| 232 | `OwnGoalPublication` | `ToolResult`; owns the publication-kind projection |
+| 243 | `GoalSet` | `OwnGoalPublication`; goal and instruction fields |
+| 249 | `GoalProgress` | `OwnGoalPublication` and `GoalSnapshot`; execution field |
+| 254 | `GoalUpdated` | `OwnGoalPublication`; goal field |
+| 259 | `TeammateGoalChanged` | `ToolResult`; peer publication, not caller publication |
+| 268 | `OwnGoal` | `NullMember`; caller identity and runtime actor |
+| 281 | `TeammateGoal` | `SingleFieldValue`; named peer and peer actor |
+| 295 | `GoalChangeTool` | `ThreadToolRequest`; shared target/update/current operations |
+| 945 | `CommsSetGoalTool` | `GoalChangeTool`; sets a fresh goal |
+| 961 | `CommsGoalTool` | `ThreadToolRequest`; progress and transition of the caller's goal |
+| 1016 | `CommsResumeGoalTool` | `GoalChangeTool`; paused-goal resume semantics |
+| 1047 | `CommsEditGoalTool` | `GoalChangeTool`; text edit retaining goal identity |
+| 1070 | `CommsClearGoalTool` | `GoalChangeTool`; clear semantics |
+| 1090 | `CommsPauseGoalTool` | `GoalChangeTool`; pause semantics |
+| 1112 | `CommsGoalHistoryTool` | `ThreadReadTool`; history read |
 
-## `tools.py` — a transport module wearing a declaration module's size
+### Declaration → implementation → projection
 
-Seven consumed symbols: `CommsSendTool`, `CommsInboxTool`, `CommsChannelsTool`,
-`CommsSetGoalTool`, `SendTool`, `ToolReplyResult`, `invoke_tool`.
+- `GoalChangeTool.update/current` at `tools.py:304–308` uses the target's
+  `thread_name` and `actor`; `OwnGoal` and `TeammateGoal` own those differences.
+  The verbs at `:945`, `:1016`, `:1047`, `:1070`, `:1090` call that shared owner.
+  `GoalSet`/`GoalUpdated` are projected through the selected target's `published`
+  method, so a peer edit does not masquerade as the caller's own publication.
+- `CommsGoalTool.apply` at `tools.py:998–1012` validates claims through
+  `progress_claims.py:30`, builds its transition using `goal_actions` declarations,
+  and calls `Goals.update_goal_snapshot` at `goal_management.py:343`. Its result is
+  built by `GoalSnapshot.from_snapshot` at `goal_presentation.py:295`; the
+  `GoalProgress` subclass retains the `goal_execution` wire-name annotation.
+- `OwnGoalPublication.publication_kind` at `tools.py:238–239` encodes the
+  `PublishedGoalToolDetails` declaration from `pi_payloads`, rather than inventing
+  another publication tag in the moved module.
+- `CommsGoalHistoryTool.apply` at `tools.py:1119–1120` calls
+  `Goals.recorded_history` at `goal_management.py:269`.
+- `ThreadReadTool` and `ThreadToolRequest` at `tool_request.py:306/312` remain the
+  caller/read capability providers. The move does not replace their implementations.
 
-- `ToolReplyResult` and `invoke_tool` are the request/response pair every caller uses. Owner:
-  `transport/tools/` (its only importers are `transport/tools` itself, `plan_phases.py` and
-  `cli_verbs/`).
-- The `ServedComms*Tool` family from `tools.py:466` onward (`ServedCommsChannelTool`,
-  `ServedCommsHistoricalThreadsTool`, `ServedCommsExportWireTool`, …) has **no consumer outside
-  `tools.py`**. Owner: `transport/tools/`, and the split must not invent one.
+### Direct consumers of the selected declarations
 
-That second fact is the trap in this batch: 116 classes and 19 family roots look like a domain
-module, and the trace says the package sees seven names. P1 splits it by those seven.
+These are actual import locations, not counts printed as if they were line numbers:
 
-## `standing_rules.py` — one owner, already in the right package
+| Consumer | Imported selected declarations |
+|---|---|
+| `src/agent_comms/execution/owned_turn.py:67` | `CommsSetGoalTool` |
+| `tests/test_goal_block_reason.py:25` | `CommsGoalTool` |
+| `tests/test_goal_execution.py:48` | `CommsGoalHistoryTool` |
+| `tests/test_goal_history.py:35` | `CommsGoalHistoryTool` |
+| `tests/test_goal_input_review.py:26` | `CommsGoalTool` |
+| `tests/test_goal_owner_pause.py:16` | `CommsGoalTool`, `CommsResumeGoalTool` |
+| `tests/test_goal_reply_lock_scope.py:34` | `CommsGoalTool` |
+| `tests/test_report_goal_evidence.py:18` | `CommsGoalTool` |
+| `tests/test_turn_goal_permission.py:12` | `GoalSet` |
 
-13 importers, 7 of them in `team/`. The rule families — `StandingRule` (`standing_rules.py:185`),
-`UndatedStandingRule` (`396`), `HeldBranchRule` (`538`), `OwedAnswer` (`750`),
-`HeadReviewRule` (`918`), `ClearingVerb` (`138`), `Degradation` (`92`) — are consumed by
-`team/` and by `plan_phases.py`, `heartbeat_frame.py`, `team_heartbeat.py`,
-`behaviour_patterns.py`.
+`OwnedTurn.tool_ended` at `execution/owned_turn.py:125–132` uses the set-goal
+member's declared name to recognize a successful goal publication and reserve its
+origin usage. That dependency follows the moved class, not a copied name string.
+The test imports above must also follow the owner. #4321 initially missed some;
+that was a consumer-closure failure, not proof the consumers did not exist.
 
-Owner: `team/`. This file's split is relocation into the package that already consumes it, and
-per rules/slop.md a relocation is not factoring — so P1 moves it and claims nothing more, or
-leaves it until its own census delta says otherwise.
+### Registration is a consumer too
 
-## What P1 takes from this map
+`ToolDeclaration._member_declarations` at `tool_declaration.py:133–141` acquires
+`order_tools` and `tools`. The selected native tool classes register through the
+existing family/metaclass machinery when the module is acquired. Moving them
+requires acquisition of their new module as well as updating named imports.
+A successful direct import alone does not establish that retained wire records
+can still acquire their tool declaration in a fresh process.
 
-1. `todos.py` splits along the four consumer clusters above, not along line ranges: `planning/`
-   (the command family), `execution/` (delivery evidence), `transport/` (the pull-request
-   boundary), leaving the row/store family where it is.
-2. `tools.py` splits on its seven exported names, and the `ServedComms*Tool` family travels with
-   them because nothing outside needs it separately.
-3. `standing_rules.py` is a move to `team/`, described as a move.
-4. Both `OPEN` rows are resolved above from the declarations' own fields, so P1 starts with no
-   guessed owners; `EditWorkplaces` is the one row deliberately deferred, to P2.
+## OPEN before subsequent batches
+
+- `todos.py`'s 254 declarations have not been traced individually. The earlier
+  proposed planning/execution/transport partition is a hypothesis, not an accepted
+  ownership relation; import counts do not choose it. In particular, the claim
+  that delivery evidence has "no order vocabulary" was not established.
+- `ProgressRead` at `todos.py:1647` assigns `_progress` in `__init__`; the earlier
+  assertion that it declares no fields was false. Its ownership remains OPEN.
+- Leaving `Todo`/`TodoStore` in `todos.py` until a later phase contradicts P1's
+  requirement that the old path disappear. The final owner partition must close
+  that requirement; deferral cannot silently stand in for completion.
+- `standing_rules.py` has twelve production importers in the pinned static map,
+  but consumer location alone does not prove every declaration belongs in `team/`.
+  Its split still needs the declaration/implementation/consumer trace P1 requires.
+- Dynamic and cross-repository consumers remain OPEN and unscored. Any deletion or
+  identity merge needs additional closure over its admitted callers; this map
+  does not certify arbitrary future imports or behaviour.

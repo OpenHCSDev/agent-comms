@@ -24,6 +24,7 @@ from agent_comms_hooks.queue_bypass import QueueBypassGuard
 from agent_comms.nominal.field_codec import Id128, MessageId, NominalSpelling, NominalText
 from agent_comms.phase_evidence import AllEvidence, AuditPatternPresent, BusStorageAbsent, ClassFlagsAbsent, QualifiedName, ClassDeclared, ClassRostersAbsent, CommitMerged, FunctionDeclared, NoAbsenceProbes, NoExactCopies, NoGodFunction, OwnClassChecksAbsent, ParentsShared, ParityEvidence, PathsAbsent, DocumentPatternPresent, PatternAbsent, PatternPresent, PhaseEvidence, RestatedMembersAbsent
 from agent_comms.phase_tasks import PhaseTask, UnspecifiedPhaseTask
+from agent_comms.planning.phase_artifacts import RecordedArtifact
 
 if TYPE_CHECKING:
     from agent_comms.plan_reading import PlanReading
@@ -72,6 +73,7 @@ class ModuleOwnershipPlan(Plan):
     """The measured move: which package owns each flat module, proved by consumers, not paths."""
 
     document = "plans/MODULE-OWNERSHIP-PLAN.md"
+    evidence_manifest: ClassVar[str] = "docs/plan-evidence/module-map-manifest.json"
 
 
 class OrderPhase(DeclaredFamily, affix="Phase"):
@@ -1133,11 +1135,22 @@ class ModuleOwnershipPhase(PlanPhase, declared_name=None):
 
 
 class ModuleMapPhase(ModuleOwnershipPhase):
-    """P0: the map before the moves. The plan document carries the measured scan and the R*
-    trace for the first batch, so this cannot clear on prose written before anyone measured."""
+    """P0: retained source census, full/raw scan and the first batch's ownership trace.
 
-    evidence = DocumentPatternPresent(r"^- P0 measured: [0-9]+ modules, [0-9]+ lines",
-                                      (ModuleOwnershipPlan.document,))
+    A completion sentence proves none of these. Each artifact must be present on main
+    at the contents recorded after its evidence was checked.
+    """
+
+    evidence = AllEvidence((
+        RecordedArtifact(ModuleOwnershipPlan.evidence_manifest,
+                         "docs/plan-evidence/module-map-counts-51d17a5cb.json"),
+        RecordedArtifact(ModuleOwnershipPlan.evidence_manifest,
+                         "docs/plan-evidence/nra-p0-full-51d17a5cb.json"),
+        RecordedArtifact(ModuleOwnershipPlan.evidence_manifest,
+                         "docs/plan-evidence/module-map-imports-51d17a5cb.json"),
+        RecordedArtifact(ModuleOwnershipPlan.evidence_manifest,
+                         "docs/plan-evidence/R-star-p1.md"),
+    ))
 
 
 class PlanningOwnersPhase(ModuleOwnershipPhase):

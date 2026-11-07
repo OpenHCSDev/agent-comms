@@ -1,4 +1,5 @@
 import ast
+import json
 import gc
 import weakref
 from pathlib import Path
@@ -6,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.plan_reading import PlanReading
+from agent_comms.planning.phase_artifacts import RecordedArtifact
 from agent_comms.phase_evidence import (
     AllEvidence,
     ClassDeclared,
@@ -34,7 +36,7 @@ from agent_comms.phase_evidence import (
 from nominal_refactor_advisor.audit.findings import GodFunction
 
 from agent_comms.nominal_census import NominalCensus
-from agent_comms.plan_phases import BusDeletionPhase, FLAG, ExternalBoundariesPhase, PlanPhase, RostersPhase
+from agent_comms.plan_phases import BusDeletionPhase, FLAG, ExternalBoundariesPhase, ModuleMapPhase, PlanPhase, RostersPhase
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.work_branches import WorkBranches
@@ -497,6 +499,53 @@ def test_main_evidence_reads_once_per_commit_and_unknown_is_reported(tmp_path):
     assert not reading.holds(unreadable)
     assert reading.describe(unreadable).startswith("unknown (GitHub is down)")
     assert unreadable not in reading.following((), reading.main).reads
+
+
+def test_module_map_requires_artifacts_not_a_prose_completion_marker(tmp_path):
+    reading = main_of(tmp_path, {
+        ModuleMapPhase.plan.document: "- P0 measured: 1 modules, 1 lines\n",
+    })
+    assert not reading.holds(ModuleMapPhase.evidence)
+
+
+def test_recorded_artifact_reads_the_recorded_contents_on_main(tmp_path):
+    path = "docs/scan.json"
+    manifest = "docs/manifest.json"
+    reading = main_of(tmp_path, {path: '{"complete": true}\n'})
+    blob = reading.main.files[path]
+    (tmp_path / manifest).write_text(json.dumps({path: blob}))
+    recorded = advanced(tmp_path, "record evidence", reading)
+    evidence = RecordedArtifact(manifest, path)
+    assert recorded.holds(evidence)
+
+    (tmp_path / path).write_text('{"complete": false}\n')
+    assert evidence.read(recorded.main)
+    replaced = advanced(tmp_path, "replace evidence", recorded)
+    assert not replaced.holds(evidence)
+
+    (tmp_path / path).unlink()
+    removed = advanced(tmp_path, "remove evidence", replaced)
+    assert not removed.holds(evidence)
+
+
+@pytest.mark.parametrize("contents", [None, {}])
+def test_recorded_artifact_requires_a_manifest_entry(tmp_path, contents):
+    path = "docs/scan.json"
+    manifest = "docs/manifest.json"
+    files = {path: '{"complete": true}\n'}
+    if contents is not None:
+        files[manifest] = json.dumps(contents)
+    reading = main_of(tmp_path, files)
+    assert not reading.holds(RecordedArtifact(manifest, path))
+
+
+@pytest.mark.parametrize("contents", ["not json", '{"docs/scan.json": 4}'])
+def test_malformed_artifact_manifest_is_reported_as_unreadable(tmp_path, contents):
+    manifest = "docs/manifest.json"
+    reading = main_of(tmp_path, {manifest: contents})
+    evidence = RecordedArtifact(manifest, "docs/scan.json")
+    assert not reading.holds(evidence)
+    assert "Invalid artifact manifest" in reading.describe(evidence)
 
 
 def test_document_landing_evidence_reads_main_without_counting_quoted_source(tmp_path):

@@ -1,0 +1,19 @@
+{
+  "commit": "51d17a5cb1db130bbeb707e5448b5daa92670c54",
+  "scope": "tracked src/agent_comms/**/*.py including root .py files",
+  "line_unit": "LF bytes (wc -l)",
+  "counts": {
+    "flat": {
+      "modules": 410,
+      "lines": 119158
+    },
+    "packages": {
+      "modules": 263,
+      "lines": 53756
+    },
+    "total": {
+      "modules": 673,
+      "lines": 172914
+    }
+  }
+}

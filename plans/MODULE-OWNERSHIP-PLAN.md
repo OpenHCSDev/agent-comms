@@ -1,8 +1,10 @@
 # Module ownership: finishing the package move and killing the slop it exposes
 
-> Status: **draft for Tristan's review.** Not encoded in `plan_phases.py` yet; no
-> phase started. Baseline measured 2026-11-07 on main `eb664473a` with the installed
-> NRA (`nominal_refactor_advisor` 0.1.0, checkout `5af050d8`, 2026-10-25).
+> Status: **P0 evidence under correction; P1 incomplete.** Phases are encoded in
+> `plan_phases.py`. Four P1 tool relocations were merged before P0's evidence was
+> established correctly; the fifth is preserved, unmerged, in PR #4327. No further
+> moves start until the P0 repair is accepted. The original design baseline below
+> was measured on `eb664473a`; the corrected P0 source census uses `51d17a5cb`.
 
 This plan exists because `PACKAGE-STRUCTURE-PLAN.md` is marked **Done** while 69% of
 the production code is still flat. That is not a complaint about the people who
@@ -183,13 +185,33 @@ is on main; the census is re-run once per phase, not per edit.
 - **Evidence:** the scan JSON committed; `R*` document committed; phases present
   with `AllEvidence`. **Behaviour:** none (no source change).
 
-- P0 measured: 673 modules, 119158 lines in `src/agent_comms` at main `51d17a5cb`. One
-  complete NRA scan (`finding_payload_mode` `semantic_boundary_evidence`, 753 source files,
-  110 detectors, none omitted, `complete: true`) found 584 findings across 25 patterns:
-  P37 restated identity 76, P39 missing mixin 57, P1 nominal-boundary-over-sentinel 56,
-  P40 constant subtype answer 49, P49 own-class type test 48, P38 duplicate class 42,
-  P35 module nothing imports 38, P43 zero-or-one tuple 35. This is the baseline every
-  later phase's census delta is measured against.
+#### P0 evidence correction
+
+At source commit `51d17a5cb1db130bbeb707e5448b5daa92670c54`, tracked Python
+files under `src/agent_comms` contain **673 modules and 172,914 lines** (LF bytes,
+matching `wc -l`): 410 flat modules / 119,158 lines, plus 263 packaged modules /
+53,756 lines. The earlier claim combined the recursive module count with only the
+flat line count. The retained census is
+`docs/plan-evidence/module-map-counts-51d17a5cb.json`.
+
+The earlier `nra-p0-51d17a5cb.json` records compact semantic-boundary output from a
+scan of `.`. Its 584 findings are **not** the required full/raw `src` baseline.
+It remains historical evidence, not the accepted baseline for phase deltas.
+A subsequent full/raw attempt exited 124 with `complete: false` after its
+280-second budget; the checkout also changed during a restart. A replay on a
+read-only snapshot of the exact committed source also exited 124, exhausting
+560 seconds in `contextual_global_prepare:repeated_concrete_type_case_analysis`.
+Neither establishes P0 completion. NRA hard-exits at the deadline, so ordinary
+cProfile finalization did not save its profile. A separate 30-second launch-time
+attribution probe saves the profile before that exit; it is diagnostic evidence,
+not a replacement baseline or a successful scan.
+
+`ModuleMapPhase` requires the source census, full/raw scan, static import map and
+first-batch ownership trace at their recorded Git blob contents. Its manifest is
+written only after the artifacts are checked; absent artifacts, absent entries
+and changed contents leave the phase incomplete. A sentence in this document
+cannot substitute for those records. The import-map scope and remaining `OPEN`
+cases are recorded in `docs/plan-evidence/R-star-p1.md`.
 
 ### P1 — Split the two mirrors that keep the root fat
 
