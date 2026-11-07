@@ -66,7 +66,11 @@ class StorageProjection:
             resolved.is_relative_to(root) for root in allowed
         ):
             self.rule.deny(
-                f"{path} is a read/launch source, not allocated editable work of {owner.name}."
+                f"{path} is a read/launch source, not allocated editable work of {owner.name}: "
+                "editing it needs an open problem for that repository, so run "
+                f"`agent-comms-team request add --as {owner.name} \"...\"`, then "
+                "`agent-comms-team order problem ORDER.json`, then "
+                f"`agent-comms repository-checkout --from {owner.name} add P<n> OWNER/REPO`."
             )
 
     def check_call(self, call: CodingCall) -> tuple[StorageEffect, ...]:

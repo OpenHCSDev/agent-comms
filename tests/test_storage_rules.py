@@ -358,6 +358,24 @@ def test_git_source_inside_scratch_still_requires_an_edit_allocation(
         StorageProjection(rule, thread, comms).require_write(source / 'implementation.py')
 
 
+def test_the_source_write_refusal_names_the_way_to_an_allocation(checkout_comms: Comms) -> None:
+    """A refusal names the exit, not just the state.
+
+    "not allocated editable work" told a thread what it lacked and never what to do about it,
+    which is the same defect as a clone refusal naming one rung that also refuses. The message
+    now carries the three commands that produce the allocation.
+    """
+    comms = checkout_comms
+    rule = comms.registry.storage_rule
+    owner = comms.registry.require('worker')
+    projection = StorageProjection(rule, owner, comms)
+    with pytest.raises(StorageDenied) as refused:
+        projection.require_write(owner.project_path / 'implementation.py')
+    message = str(refused.value)
+    for step in ('request add', 'order problem', 'repository-checkout'):
+        assert step in message, f"the refusal must name {step}, got: {message}"
+
+
 def test_goal_donor_allocation_never_grants_source_writes(checkout_comms: Comms) -> None:
     comms = checkout_comms
     rule = comms.registry.storage_rule
