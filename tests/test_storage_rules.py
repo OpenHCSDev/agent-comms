@@ -703,6 +703,22 @@ def test_forbidden_shell_operations_use_declared_rule(tmp_path, command, comms):
         StorageProjection(rule, thread, comms).check(shell_storage_effects(command, tmp_path))
 
 
+def test_the_clone_refusal_names_every_step_that_creates_an_allocation(tmp_path, comms):
+    """The old refusal named `checkout add PROBLEM`, which answers Unknown todo when no problem
+    exists, and a problem needs an owner request. A refusal that names a rung that refuses is a
+    deadlock check, so the text names the whole chain in order."""
+    rule = StorageRule()
+    thread = NativeThread('worker', frozenset(), Checkout(tmp_path), storage_roots=rule.initial_roots('worker'))
+    with pytest.raises(SelectedToolDenied) as refused:
+        StorageProjection(rule, thread, comms).check(
+            shell_storage_effects('git clone remote target', tmp_path))
+    text = str(refused.value)
+    for step in ('agent-comms-team request add', 'agent-comms-team order problem',
+                 'agent-comms checkout add'):
+        assert step in text, text
+    assert text.index('request add') < text.index('order problem') < text.index('checkout add')
+
+
 @pytest.mark.parametrize('command,kind', [
     ('python3.14.7 -m venv env', 'ForbiddenStorageEffect'),
     ('python /scripts/build_runtime.py', 'BuildStorageEffect'),
