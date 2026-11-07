@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from dataclasses import dataclass
 
 from .nominal.field_codec import GoalId, NullMember, RecordMember, SubclassUnion
@@ -17,10 +18,17 @@ class GoalTurnAuthority(SubclassUnion, affix=""):
     def continues(self, captured: GoalAuthority) -> bool:
         return False
 
+    @abstractmethod
+    def describe(self) -> str:
+        """This authority in the words a refusal reads back to the model."""
+
 
 @dataclass(frozen=True)
 class NoGoalAuthority(NullMember, GoalTurnAuthority):
     """The absent member, declared beside the captured member before any consumer compiles it."""
+
+    def describe(self) -> str:
+        return "no goal"
 
 
 @dataclass(frozen=True)
@@ -41,3 +49,6 @@ class GoalAuthority(RecordMember, GoalTurnAuthority):
 
     def continues(self, captured: GoalAuthority) -> bool:
         return self.goal_id == captured.goal_id and self.state.continues_turn_from(captured.state)
+
+    def describe(self) -> str:
+        return f"goal {self.goal_id} in state {self.state.declared_name}"

@@ -20,6 +20,10 @@ class GoalPermission(ABC):
     @abstractmethod
     def allows(self, current: GoalDeclaration) -> bool: ...
 
+    def describe(self) -> str:
+        """How a refusal names this captured permission; a member with an authority names it."""
+        return "this input's captured permission"
+
     def allows_routed(self, current: GoalDeclaration) -> bool:
         return not current.accepts_following_handoff()
 
@@ -33,6 +37,9 @@ class OwnerGoalPermission(GoalPermission):
 
     def allows(self, current: GoalDeclaration) -> bool:
         return self.authority.keeps_turn_under(current.authority)
+
+    def describe(self) -> str:
+        return self.authority.describe()
 
 
 class PublishedGoalPermission(OwnerGoalPermission):
@@ -52,6 +59,9 @@ class ContinuationGoalPermission(GoalPermission):
     def allows(self, current: GoalDeclaration) -> bool:
         return current.active().accepts_observation(self.goal_id, 0)
 
+    def describe(self) -> str:
+        return f"continuation of goal {self.goal_id}"
+
 
 class InactiveGoalPermission(GoalPermission):
     def allows(self, current: GoalDeclaration) -> bool:
@@ -65,6 +75,9 @@ class AcceptedGoalPermission(GoalPermission):
     def allows(self, current: GoalDeclaration) -> bool:
         active = current.active()
         return self.goal_id == active.reported_id()
+
+    def describe(self) -> str:
+        return f"an accepted owner input for goal {self.goal_id}"
 
 
 @dataclass
@@ -86,6 +99,9 @@ class TurnGoalPermission(GoalPermission):
 
     def dependency_current(self, dependency: InputDependency, wait: GoalWait) -> bool:
         return self.captured.dependency_current(dependency, wait)
+
+    def describe(self) -> str:
+        return self.captured.describe()
 
     def published(self, goal: GoalDeclaration) -> None:
         self.captured = PublishedGoalPermission(goal.authority)

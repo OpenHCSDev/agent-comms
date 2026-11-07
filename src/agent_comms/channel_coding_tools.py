@@ -74,10 +74,23 @@ class OrdinaryGoalRule(ReservationRule):
     def violated(self, check: OrdinaryContextCheck) -> bool:
         return not check.source.goal_permission.allows(check.goal)
 
+    def explanation_for(self, check: OrdinaryContextCheck | None) -> str:
+        """Name the authority the input carried and the one the goal has now."""
+        if check is None:
+            return self.explanation
+        return self.sentence(check.source.goal_permission, check.goal)
+
+    @classmethod
+    def sentence(cls, permission: TurnGoalPermission, current: GoalDeclaration) -> str:
+        return (f"{cls.explanation} This input was captured under {permission.describe()},"
+                f" and the goal is now {current.authority.describe()}."
+                " End the turn and report what you found; a new input re-captures authority.")
+
     @classmethod
     def require(cls, permission: TurnGoalPermission, current: GoalDeclaration) -> None:
         if not permission.allows(current):
-            raise SelectedToolDenied(str(ReservationViolationError(cls())))
+            raise SelectedToolDenied(
+                f"{cls.declared_name}: {cls.sentence(permission, current)}")
 
 
 class OrdinaryDependencyRule(ReservationRule):
