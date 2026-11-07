@@ -5,6 +5,7 @@ gives — a profile, the offer-ui refusal, an older install with no such verb.
 """
 
 import json
+from dataclasses import replace
 
 import pytest
 from yarl import URL
@@ -72,3 +73,30 @@ def test_a_reply_that_is_not_a_profile_at_all_is_named_as_such():
     asked = TailnetProfiles.asked(GAMING, 0, json.dumps({"something": "else"}))
     assert isinstance(asked, PeerAnsweredNothing)
     assert asked.found is GAMING
+
+
+def test_a_held_profile_pointing_anywhere_but_mcp_is_not_openable(tmp_path, monkeypatch):
+    """The 404 Tristan hit: a profile minted for the bare origin, held beside good ones.
+
+    It decodes and its grant is live, so the only thing wrong with it is where it points,
+    and the family says so rather than offering a row that posts to / and fails.
+    """
+    import time
+
+    from agent_comms.connector_profile import MCP_PATH
+    from agent_comms.connector_store import HeldUiProfiles, MisdirectedProfile, OpenableProfile
+
+    monkeypatch.setattr(HeldUiProfiles, "directory", classmethod(lambda cls: tmp_path))
+    live = time.time() + 3600
+    held = FieldCodec.decode(UiConnectionProfile, FieldCodec.parse(profile_text().encode()))
+    unexpired = replace(held, credential=replace(held.credential, expires_at=live))
+    at_origin = replace(unexpired,
+                        endpoint=HttpsMcpEndpoint(unexpired.endpoint.url.with_path("/")))
+    at_mcp = replace(unexpired,
+                     endpoint=HttpsMcpEndpoint(unexpired.endpoint.url.with_path(MCP_PATH)))
+
+    misdirected = HeldUiProfiles.entry(at_origin.write_new(tmp_path / "origin.json"), live - 1)
+    openable = HeldUiProfiles.entry(at_mcp.write_new(tmp_path / "mcp.json"), live - 1)
+    assert isinstance(misdirected, MisdirectedProfile) and not misdirected.openable
+    assert "not /mcp" in misdirected.label(), "the row says where it points"
+    assert isinstance(openable, OpenableProfile) and openable.openable
