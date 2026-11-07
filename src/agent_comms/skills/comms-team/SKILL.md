@@ -61,6 +61,8 @@ The failure is the mega-corp equilibrium: nobody fixes the owner, workarounds ac
 
 Each order has: the defect in one plain sentence; the outcome the owner will see when it is fixed (the intent, so the letter cannot drift); why it is stupid; the exact target (owner type, base method, what gets deleted); banned shapes; the proofs that do not count; the checks; the done list; and the reply line, with an `Assumed:` list. No due time (rules/no-waiting.md). The task must make its admitted outcome and evidence clear; ambiguous wording and proof-shaped reports are defects regardless of the author's model. The colleague holding the source context chooses the coherent repair within the agreed scope; `rules/team.md` owns shared responsibility; `rules/talk.md` owns reply routing.
 
+**Every `order …` and `judge …` verb below runs through the team CLI named `agent-comms-team`:** `agent-comms-team order send UNIT ORDER.json`. Bare `order` is on no PATH and `agent-comms` is the separate JSON adapter CLI, so a bare verb there answers `UnknownFamilyMember`, which reads like a missing command rather than a missing program.
+
 - **Every order goes through `order send UNIT ORDER.json`.** The file holds `problems` (existing IDs), `defect`, `why_stupid`, `order` (Core's declared pending order) and optional `slop` citations; `order problem ORDER.json --to UNIT --where PATH:LINE` creates the problem instead (omit `problems`). FieldCodec decodes the file once and lists every bad field together. Wording checks read only `defect` and `why_stupid`. `order send` refuses an order with no blunt label unless `--clean`. Each send starts the review timer and prints its median, sample count and review time.
 
 ```json
