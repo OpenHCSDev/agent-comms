@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.phase_evidence import MainEvidence, MainTree
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
+from agent_comms.phase_evidence import MainEvidence, MainTree, UnreadableEvidenceError
 from agent_comms.repo import Repo
 
 
@@ -26,7 +26,10 @@ class RecordedArtifact(MainEvidence):
         if not main.has(self.manifest):
             return False
         content, = Repo.blobs(main.repo.checkout, main.files[self.manifest])
-        recorded = FieldCodec.decode(dict[str, str], json.loads(content))
+        try:
+            recorded = FieldCodec.decode(dict[str, str], json.loads(content))
+        except (json.JSONDecodeError, UnicodeDecodeError, MalformedRecord) as error:
+            raise UnreadableEvidenceError(f"Invalid artifact manifest {self.manifest}: {error}") from error
         return self.path in recorded and main.files.get(self.path) == recorded[self.path]
 
     def describe(self) -> str:

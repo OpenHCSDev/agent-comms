@@ -539,6 +539,15 @@ def test_recorded_artifact_requires_a_manifest_entry(tmp_path, contents):
     assert not reading.holds(RecordedArtifact(manifest, path))
 
 
+@pytest.mark.parametrize("contents", ["not json", '{"docs/scan.json": 4}'])
+def test_malformed_artifact_manifest_is_reported_as_unreadable(tmp_path, contents):
+    manifest = "docs/manifest.json"
+    reading = main_of(tmp_path, {manifest: contents})
+    evidence = RecordedArtifact(manifest, "docs/scan.json")
+    assert not reading.holds(evidence)
+    assert "Invalid artifact manifest" in reading.describe(evidence)
+
+
 def test_document_landing_evidence_reads_main_without_counting_quoted_source(tmp_path):
     document = "plans/OWNER-ASKS-PLAN.md"
     landing = "- page_quarter_scroll landed: OpenHCSDev/toad@" + "a" * 40
