@@ -158,6 +158,15 @@ class CheckoutAllocation(DeclaredFamily, affix="CheckoutAllocation"):
 
 @dataclass(frozen=True)
 class HomeCheckoutAllocation(CheckoutAllocation):
+    """The thread's own declared worktree: a launch source, or the work it was made for.
+
+    A linked worktree (its `.git` is a file) is a checkout created for this thread, so
+    writing in it needs no goal and no held order: the worktree declaration already says
+    whose work it is. The shared main checkout (its `.git` is a directory) stays a
+    read/launch source, because it is the live installation and no one thread's work.
+    A cleared goal therefore cannot lock a teammate out of its own checkout.
+    """
+
     @classmethod
     def read(cls, owner: Thread, path: Path, problem: str,
              suffix: str) -> Iterator[CheckoutAllocation]:
@@ -167,6 +176,13 @@ class HomeCheckoutAllocation(CheckoutAllocation):
     def owns_present(self, rule: StorageRule, owner: Thread, path: Path,
                      reads: RepositoryReads) -> bool:
         return path in owner.home_checkouts
+
+    def edit_boundary(self, rule: StorageRule, owner: Thread, path: Path,
+                      store: TodoStore, reads: RepositoryReads) -> frozenset[Path]:
+        """The declared linked worktree is editable; a shared main checkout is not."""
+        if not (path / '.git').is_file():
+            return frozenset()
+        return frozenset({path})
 
 
 class EditableCheckoutAllocation(CheckoutAllocation):
