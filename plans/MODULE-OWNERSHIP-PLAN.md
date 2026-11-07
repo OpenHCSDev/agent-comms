@@ -198,9 +198,13 @@ The earlier `nra-p0-51d17a5cb.json` records compact semantic-boundary output fro
 scan of `.`. Its 584 findings are **not** the required full/raw `src` baseline.
 It remains historical evidence, not the accepted baseline for phase deltas.
 A subsequent full/raw attempt exited 124 with `complete: false` after its
-280-second budget; the checkout also changed during a restart. Neither attempt
-establishes P0 completion. The replacement run uses a read-only snapshot extracted
-from the exact committed source, with profiling to expose its runtime cost.
+280-second budget; the checkout also changed during a restart. A replay on a
+read-only snapshot of the exact committed source also exited 124, exhausting
+560 seconds in `contextual_global_prepare:repeated_concrete_type_case_analysis`.
+Neither establishes P0 completion. NRA hard-exits at the deadline, so ordinary
+cProfile finalization did not save its profile. A separate 30-second launch-time
+attribution probe saves the profile before that exit; it is diagnostic evidence,
+not a replacement baseline or a successful scan.
 
 `ModuleMapPhase` requires the source census, full/raw scan, static import map and
 first-batch ownership trace at their recorded Git blob contents. Its manifest is
