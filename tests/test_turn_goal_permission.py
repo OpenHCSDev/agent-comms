@@ -1,14 +1,16 @@
 """Own live publications advance authority; external changes and saved data do not."""
 from dataclasses import replace
 
+import pytest
 
 from agent_comms.channel_coding_tools import OrdinaryGoalRule
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
-from agent_comms.goal_states import BlockedGoal, PausedGoal
+from agent_comms.goal_states import BlockedGoal, CompletedGoal, PausedGoal
 from agent_comms.goals import Goal, NoGoal, ProblemGoalOrder
 from agent_comms.native_tools import CoordinationCall, ReadTool
 from agent_comms.pi_payloads import ProvidedToolResult
 from agent_comms.tools import GoalSet
+from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.turn_goal_permission import OwnerGoalPermission, TurnGoalPermission
 
 
@@ -46,3 +48,16 @@ def test_order_revision_keeps_the_granted_authority():
     assert not permission.allows(replace(ordered, state=BlockedGoal("stopped by its owner")))
     assert not permission.allows(replace(ordered, state=PausedGoal()))
     assert not permission.allows(NoGoal())
+
+
+def test_a_dead_permission_names_both_authorities_it_compared():
+    """A refusal says which authority the input carried and which the goal has now, so the
+    model can end the turn instead of retrying the same tool call."""
+    completed = Goal('the completed goal', GoalId.mint(), published_seq=0, state=CompletedGoal())
+    permission = TurnGoalPermission(OwnerGoalPermission(completed.authority))
+    with pytest.raises(SelectedToolDenied) as denial:
+        OrdinaryGoalRule.require(permission, NoGoal())
+    said = str(denial.value)
+    assert str(completed.id) in said
+    assert 'in state completed' in said
+    assert 'the goal is now no goal' in said

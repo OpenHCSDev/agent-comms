@@ -9,9 +9,9 @@ from .nominal.declared_family import DeclaredFamily
 
 
 class ReservationViolationError(ValueError):
-    def __init__(self, rule: ReservationRule):
+    def __init__(self, rule: ReservationRule, check: RuleCheck | None = None):
         self.rule = rule
-        super().__init__(f"{rule.declared_name}: {rule.explanation}")
+        super().__init__(f"{rule.declared_name}: {rule.explanation_for(check)}")
 
 
 class RuleCheck:
@@ -22,12 +22,16 @@ class RuleCheck:
             if isinstance(self, declaration.check_type):
                 rule = declaration()
                 if rule.violated(self):
-                    raise ReservationViolationError(rule)
+                    raise ReservationViolationError(rule, self)
 
 
 class ReservationRule(DeclaredFamily, affix="Rule"):
     check_type: ClassVar[type[RuleCheck]]
     explanation: ClassVar[str]
+
+    def explanation_for(self, check: RuleCheck | None) -> str:
+        """The declared sentence, unless this rule reads the check to say what changed."""
+        return self.explanation
 
     @abstractmethod
     def violated(self, check: RuleCheck) -> bool: ...
