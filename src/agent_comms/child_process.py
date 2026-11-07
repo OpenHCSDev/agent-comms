@@ -877,6 +877,10 @@ class LinuxPlatform(PidfdHandles, Platform):
             os.close(descriptor)
 
 
+class AndroidPlatform(LinuxPlatform):
+    """Termux's Python names Android; its process and file operations use the Linux kernel."""
+
+
 class DarwinPlatform(Platform):
     """libproc exposes microsecond birth times, unlike formatted ps output."""
 
