@@ -277,18 +277,14 @@ what a channel post moves, and a row's own `unread` counts transcript reads, whi
 messages never touch (`history_views.viewer_snapshot` fills `thread_unread` from
 `transcript_reads.counts`). That is why asserting on a row's badge failed honestly.
 
-**The reconnect demonstration then hung, and that looks like a defect rather than a test
-artifact.** Written against that signal - settle, close the socket, send to the reader,
-reconnect with the same grant, settle again - the second connection is never answered.
-A worker thread sits in `multiprocessing.connection.recv_bytes` (faulthandler, 45 s):
-the first viewer's relay is still blocked reading its service's pipe, because closing a
-websocket does not interrupt that blocking read, so `ObservationRelay.carry`'s `finally`
-never runs and its service is never retired. `ObservationRelay` itself is sound - it
-closes and kills a service that will not exit - and never gets the chance. What the
-second connection then waits for was not traced: a new relay and process are started per
-request, so the suspicion is a per-viewer claim the stuck service still holds.
+**Reconnect works, and a defect I reported here was mine.** This section first claimed
+the reconnect demonstration hung on a stuck relay. It does not: measured, the first
+connection answers at 3.5 s, its socket closes, a message is sent, the second socket
+opens at 3.6 s and is answered at 7.1 s, on the same grant. The worker thread in
+`multiprocessing.connection.recv_bytes` that I read as a wedge is the documented design
+(`relay_frames`: "The local connection stays open: its owner records the returned reason
+and then closes it, which also wakes a worker thread still blocked on it").
 
-No test was kept: a hanging test is worse than none, and a vacuous one is worse than
-that. Whoever takes this starts at `connector.ObservationRelay.carry` and
-`relay_frames`, and the question is what ends a blocking relay read when its viewer
-leaves.
+What hung was the test: its settle step drained frames while any arrived within three
+seconds, and a sidebar observation keeps answering, so the loop had no end. Settling has
+to be bounded by a window, not by quiet.
