@@ -823,7 +823,7 @@ def test_the_full_audit_and_the_owners_words_open_the_gate(capsys, tmp_path, tea
     transcript.write_text(json.dumps({"type": "user", "message": {"content": words[0]}}) + "\n")
     start = DeckStart.decode(hook_record(transcript, "SessionStart"))
     start.take(team_bus, team_binding)
-    start.prepare(DeckReader(), words, StartedDeal())
+    start.prepare(DeckReader(), AuditDue(words), StartedDeal())
     for source in DeckReader.sources():
         read_whole(transcript, source.resolve(), comms=team_bus, binding=team_binding)
     start.audit.write_text(answered_audit())
@@ -881,7 +881,7 @@ def test_refusal_counts_names_tool_and_prefills_the_owned_audit(
     transcript.write_text("")
     start = DeckStart.decode(hook_record(transcript, "SessionStart"))
     words = ("Read the rules.\nThen write the audit.",)
-    start.prepare(DeckReader(), words, StartedDeal())
+    start.prepare(DeckReader(), AuditDue(words), StartedDeal())
     reasons = []
     for attempt, tool in enumerate(("Bash", "Edit"), 1):
         gated(transcript, tool, {"file_path": str(transcript), "command": "true"}, comms=team_bus, binding=team_binding).judge()
@@ -907,7 +907,7 @@ def test_refusal_counts_names_tool_and_prefills_the_owned_audit(
         output = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
         assert output["permissionDecision"] == "deny"
         assert str(start.audit) in output["permissionDecisionReason"]
-    start.prepare(DeckReader(), words, StartedDeal())
+    start.prepare(DeckReader(), AuditDue(words), StartedDeal())
     gated(transcript, "Bash", {"command": "true"}, comms=team_bus, binding=team_binding).judge()
     assert json.dumps(f"Tristan: {Owed.nudges[0]}")[1:-1] in capsys.readouterr().out
 

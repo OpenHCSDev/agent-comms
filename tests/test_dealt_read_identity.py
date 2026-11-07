@@ -10,7 +10,7 @@ from pathlib import Path
 
 from agent_comms.context_reading import ContextUsage
 from agent_comms.rule_deal import (
-    DealRecord, DealtRead, DealtSource, Open, OpenedReads, ReadSpan, StartedDeal, Unread,
+    AuditDue, DealRecord, DealtRead, DealtSource, Open, OpenedReads, ReadSpan, StartedDeal, Unread,
 )
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.pi_rule_gate import PiRedeal
@@ -39,7 +39,7 @@ def test_answers_and_reads_outlive_everything_but_lost_context(team_bus):
     read = deal.current().read_by(deal)
     deal.audit.write_text(deal.audit.read_text(encoding="utf-8"), encoding="utf-8")
     assert deal.current().read_by(deal) == read
-    deal.deal(DeckReader, (), StartedDeal())
+    deal.deal(DeckReader, AuditDue(()), StartedDeal())
     assert fresh_confession(deal) and deal.current().read_by(deal) == ()  # a fresh confession
 
 

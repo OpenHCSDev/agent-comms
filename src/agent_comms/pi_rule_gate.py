@@ -26,7 +26,7 @@ from .bus_publication import Delivered
 from .comms import Comms
 from .nominal.field_codec import ThreadLookup
 from .rule_deal import (
-    DealDelivery, DealTrigger, DealtRuleGate, Redeals, RuleDeal, Voice,
+    AuditDue, DealDelivery, DealTrigger, DealtRuleGate, Redeals, RuleDeal, Voice,
 )
 from .meant_voice import BusVoice
 from .tool_denial import SelectedToolDenied
@@ -115,7 +115,8 @@ class PiRedeal(PiThreadGate, Redeals):
         """Material selection is explicit; the captured incarnation still binds the deal."""
         snapshot = self.comms.registry.snapshot()
         snapshot.born(self.thread.incarnation.require_recorded().lookup)
-        self.deal(reader, self.owner_words(snapshot), trigger)
+        self.deal(reader, AuditDue(self.owner_words(snapshot),
+                                   snapshot.team_project.unique_repositories()), trigger)
 
     def owner_words(self, snapshot: RegistrySnapshot) -> tuple[str, ...]:
         """What the registry's human last typed to this thread, oldest first: the same person
