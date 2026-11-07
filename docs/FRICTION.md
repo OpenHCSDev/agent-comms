@@ -190,6 +190,99 @@ unusable, and the fallback is the native `comms_*` tools.
 `TeamHeartbeat` pass once (frames + plan), so the CLI surface works on a host with no UI; and
 have `BoardUnavailable` say that, instead of only the missing path.
 
+## 8. A check can only run at two revisions, so a merged tree's content is not expressible
+
+`OrderCheck.command` is one shell line, run at the branch point and at the delivered commit
+(`src/agent_comms/todos.py:268`, `BranchPointCheck`). It cannot read a third revision:
+`git show origin/main:path | grep -c …` needs a pipeline, and the storage-rule shell decoder
+refuses a parenthesised command outright —
+
+```
+Refused: StorageRule: the shell command cannot be decoded (A parenthesized command requires its
+own command position)
+```
+
+so even `grep -c 'CatalogCommandAction(Action' src/toad/catalog_actions.py` is unwritable as a
+check, and the discriminator has to be spelled `CatalogCommandAction.Action`, with `.` standing in
+for the paren. That is a workaround a sender has to discover by trial, on the one line that decides
+whether their merged work can ever be closed.
+
+**Owner:** `CheckCommand` and the shell decoder. **Fix:** let a check name the revision it reads
+(`--at <ref>`), or accept one `git show <ref>:<path> | …` form as a declared check shape.
+
+## 9. A check must count the defect; nothing said so, and I called the gate broken
+
+Two merged orders could not close, and I diagnosed a Core defect: "`order done` greps a working
+tree instead of the merged head". That was wrong, and the refusal had already said so:
+
+```
+Refused: Check already prints 0 before any work: `git grep -c DeclaredFamily origin/main -- …`
+proves nothing; write a check that fails now
+```
+
+The rule is in the class docstring: delivered work is checked against **the main commit it was
+built on, never main since**, because once the fix merges, current main passes and proves nothing.
+So a count check counts the *defect* and expects **0**:
+
+```
+branch point 5bba60760  grep -c CatalogCommandAction.Action  -> 1
+merged      f6b6f53     grep -c CatalogCommandAction.Action  -> 0
+```
+
+I had written it the other way round (count the fix, expect 2), then spent a long stretch building
+a fix for a bug that did not exist, and told the owner it was a Core defect. The refusal named its
+rule in plain words; I read it as an obstacle instead of as the specification.
+
+**Owner:** nothing in the code. The rule lives at `todos.py:268` and the message at
+`goals.py:1455`; what is missing is that `order problem`/`order check` never states the direction
+where a sender will read it. **Fix:** the check refusal should say which direction it wants —
+"count the defect; expect 0" — beside the command it is refusing.
+
+## 10. A fresh checkout starts on whatever branch its source tree had
+
+`agent-comms checkout add P5 --from comms-teammate` produced a tree at `158cd260f`, which is not
+`origin/main` (`ad8f2343` then). It inherited the branch of the registered source checkout, so it
+arrived on someone else's unmerged work and imported `agent_comms.registry_document` at the top
+level while main ships `agent_comms/registry/registry_document.py`. The suite then failed on
+import, in a tree nobody had touched — the first thing a new checkout does is mislead about the
+code it claims to be.
+
+**Owner:** the checkout allocation (`CheckoutAllocation.declared_for_work`, `repo.Checkout.add`).
+**Fix:** a new allocation starts detached at the repository's main, and says which commit it took.
+
+## 10b. A takeover of a stopped thread's checkout is refused by a presence that disagrees with the registry
+
+Tristan authorised taking `/home/ts/wt/codex-toad-keys` because `latency-controls` is offline.
+Both paths refuse:
+
+```
+StorageRule: /home/ts/wt/codex-toad-keys is a read/launch source, not allocated editable work
+{"error":"Retired owner is no longer stopped"}     # thread_status.py:154
+```
+
+while `agent-comms threads` reports `latency-controls | stopped`. The tree is clean with zero
+commits ahead of main, so nothing is at risk; the takeover is refused by a presence check that
+disagrees with the registry and offers no flag for "the owner is gone, the tree is free".
+
+**Owner:** `ThreadNotStoppedError` and `RepositoryCheckoutOwner`. **Fix:** read liveness from the
+same registry the verb that reports `stopped` reads, and let the owner of the bus pass a
+`--take-over` that records who took it.
+
+## 11. An unreadable triage answer costs the turn, and sometimes costs the answer too
+
+One invalid triage reply ended a turn that had already done real work, and the prose in it never
+reached the channel — which is how a claim ("Taking it") ended up existing only in a message with
+one reader.
+
+The retry exists: `RejectedTriageOutcome.close_ask` calls `stage.burn_turn(...)`
+(`private_send_stage.py:298`) and `asked_again` → `reask` re-asks once
+(`src/agent_comms/selected_turn.py:326-341`). In that run the claim ended `failed` with no
+replacement reserved, and a peer's identical invalid answer *did* get the second offer. So the
+retry is a call site that survives in one path and not the other.
+
+**Owner:** `RejectedTriageOutcome` and the ask loop. **Fix:** reserve the replacement before
+burning the turn, and keep the rejected text so a later turn can still post it.
+
 ## What is not friction
 
 The parts that worked and should not be touched: `FieldCodec` decoding a whole JSON file and
