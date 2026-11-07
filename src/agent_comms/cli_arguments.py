@@ -36,7 +36,7 @@ class SelectedCommand(CommandParsing):
 
 
 class _CommandParsingArguments(argparse.Namespace):
-    command: CommandParsing
+    command: str | None
 
 
 class CliArguments(argparse.Namespace):
@@ -90,11 +90,15 @@ class CliArgumentParser(argparse.ArgumentParser):
     def command_parsing(self, arguments: Sequence[str]) -> CommandParsing:
         selection = type(self)(add_help=False)
         selection.add_root_options()
-        selection.add_argument(
-            "command", nargs="?", type=SelectedCommand.from_name, default=CommandParsing(),
-        )
+        # The verb is read here, not by argparse's `type=` hook: that hook rewrites whatever
+        # its callable raises into "invalid <function> value", so an unknown verb was reported
+        # as a bad caller name and the family's own UnknownFamilyMember survived only as a
+        # cause, five clauses into the line.
+        selection.add_argument("command", nargs="?", default=None, help=argparse.SUPPRESS)
         args, _ = selection.parse_known_args(arguments, namespace=_CommandParsingArguments())
-        return args.command
+        if args.command is None:
+            return CommandParsing()
+        return SelectedCommand.from_name(args.command)
 
     def exit(self, status: int = 0, message: object = None) -> Never:
         raise CliParserExit(status, NoCliParserText())
