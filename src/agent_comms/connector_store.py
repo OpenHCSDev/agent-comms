@@ -18,7 +18,8 @@ from .connector_caller import (
     UiCaller, UiReadCaller,
 )
 from .connector_profile import (
-    BearerSecret, HttpsMcpEndpoint, UiConnectionProfile, UiCredential, UiGrantId, UiGrantSummary,
+    MCP_PATH, BearerSecret, HttpsMcpEndpoint, UiConnectionProfile, UiCredential, UiGrantId,
+    UiGrantSummary,
 )
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import FieldCodec, NominalSpelling, NominalText, RootId
@@ -436,6 +437,24 @@ class ExpiredProfile(HeldProfile):
 
 
 @dataclass(frozen=True)
+class MisdirectedProfile(HeldProfile):
+    """Decoded and unexpired, and its endpoint is not where a connector serves MCP.
+
+    A profile minted for the bare origin posts to / and is answered 404; held beside the
+    good ones it was a row that looked identical and failed (Tristan, 2026-11-07: "i either
+    get 404 or ..."). Shown rather than hidden, because the owner is the one who can delete
+    it, and the reason is in the row.
+    """
+
+    path: Path
+    profile: UiConnectionProfile
+
+    def label(self) -> str:
+        return (f"{self.profile.endpoint.url.host} · points at "
+                f"{self.profile.endpoint.url.path or '/'}, not {MCP_PATH}")
+
+
+@dataclass(frozen=True)
 class UnreadableProfile(HeldProfile):
     """A file in the held directory that is not a private profile this build can read."""
 
@@ -475,6 +494,8 @@ class HeldUiProfiles:
             return UnreadableProfile(path, str(refusal))
         if profile.credential.expires_at <= now:
             return ExpiredProfile(path, profile)
+        if profile.endpoint.url.path != MCP_PATH:
+            return MisdirectedProfile(path, profile)
         return OpenableProfile(path, profile)
 
 
