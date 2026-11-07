@@ -26,7 +26,7 @@ if [[ -d "$source/.git" ]]; then
         printf 'Source has local edits: %s. Keeping them; installation stopped.\n' "$source" >&2
         exit 1
     fi
-    git -C "$source" fetch --depth 1 origin main
+    git -C "$source" fetch origin main
     git -C "$source" merge --ff-only FETCH_HEAD
 else
     git clone --depth 1 https://github.com/OpenHCSDev/agent-comms.git "$source"
