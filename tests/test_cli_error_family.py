@@ -52,6 +52,21 @@ def test_unknown_error_kind_is_not_a_retry():
         WATCH_LINE.validate_python({'type': 'new-unknown', 'error': 'database is locked'})
 
 
+def test_an_unknown_command_names_the_family_it_looked_in(capsys):
+    """argparse rewrites its `type=` callable's exception into `invalid <function> value`.
+
+    So an unknown verb was reported as a bad caller name -- `order` is a command, not a
+    caller -- and UnknownFamilyMember survived only as the fifth clause of the line. The
+    verb is resolved from the CliCommand family after parsing, so the family's own error
+    reaches the wire unchanged.
+    """
+    assert CliInvocation().invoke(['order', '--help'], sys.stdout) == 1
+    decoded = WATCH_LINE.validate_json(capsys.readouterr().out)
+    assert isinstance(decoded, FailedCoreError)
+    assert "Unknown CliCommand name: 'order'" in decoded.error
+    assert 'from_name' not in decoded.error
+
+
 @pytest.mark.parametrize('arguments', [[], ['not-a-command'], ['watch']])
 def test_argument_errors_use_the_same_single_line(arguments, capsys):
     assert CliInvocation().invoke(arguments, sys.stdout) == 1
