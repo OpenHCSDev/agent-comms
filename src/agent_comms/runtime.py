@@ -31,7 +31,7 @@ from acp.schema import (
 )
 
 from .controller import (
-    ACP_PERMISSION_TIMEOUT_SECONDS,
+    ACP_PERMISSION_TIMEOUT_SECONDS, PermissionOutcome,
 )
 from .nominal.field_codec import AcpSessionId, FieldCodec, MalformedRecord
 from .owner_protocol import (
@@ -183,9 +183,8 @@ class RuntimeProxy(RuntimeConnection):
                     )
                     response = ClientPermissionResponse(
                         id=request.id,
-                        outcome=RequestPermissionResponse.model_validate(reply).outcome.model_dump(
-                            by_alias=True, exclude_none=True
-                        ),
+                        outcome=PermissionOutcome.from_acp(
+                            RequestPermissionResponse.model_validate(reply).outcome),
                     )
             finally:
                 try:

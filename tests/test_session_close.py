@@ -11,7 +11,7 @@ from acp.schema import SessionInfoUpdate
 from agent_comms.acp import CommsAgent, CommsClient
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.controller import CANCELLED_OUTCOME, SessionUpdateSink
+from agent_comms.controller import CancelledOutcome, SessionUpdateSink
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.owner_connection import NoControllerToken
 from agent_comms.repo import Checkout
@@ -79,7 +79,7 @@ async def test_close_retires_one_real_subscription_and_permission(tmp_path, monk
         assert callbacks.retired == {"alpha"}
         async with asyncio.timeout(5):
             # A permission whose controller closed is answered cancelled, as the server declares.
-            assert await permissions[0] == CANCELLED_OUTCOME
+            assert await permissions[0] == CancelledOutcome()
         assert not permissions[1].done()
         assert comms.registry.require("alpha").require_process() == retained_owner
         assert retained_owner.alive() and comms.registry.status("alpha").running

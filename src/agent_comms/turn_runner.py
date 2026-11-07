@@ -388,10 +388,7 @@ class TurnRunner:
             return pi.CancelledUiChoice()
         if controller.departed(self.runtime, session_id):
             return pi.CancelledUiChoice()
-        selected = outcome.get("optionId")
-        if outcome.get("outcome") != "selected" or type(selected) is not str:
-            return pi.CancelledUiChoice()
-        return request.choice(selected)
+        return outcome.answer(request)
 
     def acquire_turn(
         self, resources: AsyncExitStack, session_id: AcpSessionId, thread_name: str,

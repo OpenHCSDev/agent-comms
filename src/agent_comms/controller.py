@@ -2,16 +2,68 @@
 
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from pydantic import BaseModel
 
 from .coordination.errors import IdentityConflict
-from .nominal.field_codec import AcpSessionId
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import AcpSessionId, FieldCodec, NominalSpelling, NominalText, WireName
 
-CANCELLED_OUTCOME: dict[str, object] = {"outcome": "cancelled"}
-"""ACP's denied permission outcome: what every answer without a choosing controller carries."""
+
+class PermissionOptionId(NominalText):
+    """ACP's identity for one option of a permission request, spelled as the request offered it."""
+
+
+class PermissionOptionIdText(NominalSpelling[PermissionOptionId]):
+    spelling = re.compile(r"\S{1,256}")
+
+
+class ChoiceRequest[Choice](ABC):
+    """A request a permission outcome answers: the choice for a selected option, or its
+    cancellation. The outcome picks which, so its reader never inspects it."""
+
+    @abstractmethod
+    def choice(self, option_id: PermissionOptionId) -> Choice: ...
+
+    @abstractmethod
+    def cancelled(self) -> Choice: ...
+
+
+@dataclass(frozen=True)
+class PermissionOutcome(DeclaredFamily, affix="Outcome"):
+    """A controller's answer to one permission request, as ACP's wire carries it."""
+
+    family_discriminator: ClassVar[str] = "outcome"
+
+    @classmethod
+    def from_acp(cls, outcome: BaseModel) -> PermissionOutcome:
+        """An ACP client's validated outcome, without the _meta extension this answer
+        never reads."""
+        return FieldCodec.decode(cls, outcome.model_dump(
+            by_alias=True, exclude_none=True, exclude={"field_meta"}))
+
+    @abstractmethod
+    def answer[Choice](self, request: ChoiceRequest[Choice]) -> Choice: ...
+
+
+@dataclass(frozen=True)
+class CancelledOutcome(PermissionOutcome):
+    """No option chosen: what every answer without a choosing controller carries."""
+
+    def answer[Choice](self, request: ChoiceRequest[Choice]) -> Choice:
+        return request.cancelled()
+
+
+@dataclass(frozen=True)
+class SelectedOutcome(PermissionOutcome):
+    option_id: Annotated[PermissionOptionId, WireName("optionId")]
+
+    def answer[Choice](self, request: ChoiceRequest[Choice]) -> Choice:
+        return request.choice(self.option_id)
 
 if TYPE_CHECKING:
     from acp.schema import PermissionOption, ToolCallUpdate
@@ -44,8 +96,8 @@ class Controller(ABC):
     async def request_ui_permission(
         self, runner: TurnRunner, session_id: AcpSessionId,
         request: tuple[ToolCallUpdate, list[PermissionOption]],
-    ) -> dict[str, object]:
-        """The controller's outcome; a request nobody answers is CANCELLED_OUTCOME."""
+    ) -> PermissionOutcome:
+        """The controller's outcome; a request nobody answers is cancelled."""
 
     @abstractmethod
     def departed(self, runtime: RuntimeServer, session_id: AcpSessionId) -> bool: ...
@@ -59,8 +111,8 @@ class UncontrolledController(Controller):
     async def request_ui_permission(
         self, runner: TurnRunner, session_id: AcpSessionId,
         request: tuple[ToolCallUpdate, list[PermissionOption]],
-    ) -> dict[str, object]:
-        return dict(CANCELLED_OUTCOME)
+    ) -> PermissionOutcome:
+        return CancelledOutcome()
 
 
 class UnboundController(UncontrolledController):
@@ -95,7 +147,7 @@ class NoController(UncontrolledController, SessionUpdateSink):
 
     async def request_permission(self, **request: object) -> dict[str, object]:
         """With no client, every permission request is cancelled."""
-        return {"outcome": dict(CANCELLED_OUTCOME)}
+        return {"outcome": FieldCodec.encode(CancelledOutcome())}
 
 
 UNBOUND_CONTROLLER = UnboundController()
