@@ -5,6 +5,7 @@ import hashlib
 import re
 import secrets
 import time
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
@@ -380,8 +381,13 @@ class ConnectorCredentialsFile(DrainedWriters, GuardedExternalStore, ConnectorFi
     """
 
     @classmethod
+    def directory(cls) -> Path:
+        """Where this machine keeps its connector state, grants and held profiles alike."""
+        return Path.home() / ".local/state/agent-comms/connector"
+
+    @classmethod
     def path(cls) -> Path:
-        return cls.path_in(Path.home() / ".local/state/agent-comms/connector")
+        return cls.path_in(cls.directory())
 
     @classmethod
     def practice_opening(cls, files: FilesRequest, directory: Path) -> None:
@@ -389,6 +395,87 @@ class ConnectorCredentialsFile(DrainedWriters, GuardedExternalStore, ConnectorFi
             path = files.location(resource)
             if path.is_file():
                 ConnectorStore(path).read()
+
+
+class HeldProfile(ABC):
+    """One remote bus this machine holds a profile for, as a UI offers it.
+
+    An unusable profile is a member too: a grant that expired or a file that will not
+    decode is what the owner needs to see, not a row quietly missing from a menu.
+    """
+
+    path: Path
+    openable: ClassVar[bool] = False
+
+    @abstractmethod
+    def label(self) -> str:
+        """How a UI names this entry in one line."""
+
+
+@dataclass(frozen=True)
+class OpenableProfile(HeldProfile):
+    """A decoded profile whose grant has not expired."""
+
+    path: Path
+    profile: UiConnectionProfile
+    openable = True
+
+    def label(self) -> str:
+        return f"{self.profile.endpoint.url.host} · {self.profile.credential.namespace}"
+
+
+@dataclass(frozen=True)
+class ExpiredProfile(HeldProfile):
+    """Decoded, but its grant's own expiry has passed; the server would refuse it."""
+
+    path: Path
+    profile: UiConnectionProfile
+
+    def label(self) -> str:
+        return f"{self.profile.endpoint.url.host} · grant expired"
+
+
+@dataclass(frozen=True)
+class UnreadableProfile(HeldProfile):
+    """A file in the held directory that is not a private profile this build can read."""
+
+    path: Path
+    refusal: str
+
+    def label(self) -> str:
+        return f"{self.path.name} · {self.refusal}"
+
+
+class HeldUiProfiles:
+    """The remote buses a UI on this machine can open.
+
+    A UI grant lives in the connector store of the machine that serves its bus, keyed by
+    the digest of the token this machine holds, so that store cannot answer what this
+    machine can reach. These files are the connecting side's own answer, in one declared
+    place, so a UI lists them instead of taking a profile path on its command line.
+    """
+
+    @classmethod
+    def directory(cls) -> Path:
+        return ConnectorCredentialsFile.directory() / "profiles"
+
+    @classmethod
+    def held(cls, now: float) -> tuple[HeldProfile, ...]:
+        """Every profile file this machine holds, by name. No directory holds none."""
+        directory = cls.directory()
+        if not directory.is_dir():
+            return ()
+        return tuple(cls.entry(path, now) for path in sorted(directory.iterdir()))
+
+    @classmethod
+    def entry(cls, path: Path, now: float) -> HeldProfile:
+        try:
+            profile = UiConnectionProfile.read(path)
+        except (OSError, ValueError) as refusal:
+            return UnreadableProfile(path, str(refusal))
+        if profile.credential.expires_at <= now:
+            return ExpiredProfile(path, profile)
+        return OpenableProfile(path, profile)
 
 
 @dataclass(frozen=True, slots=True)

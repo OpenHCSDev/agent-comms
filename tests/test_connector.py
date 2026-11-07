@@ -45,8 +45,9 @@ from agent_comms.transport.mcp import (
 from agent_comms.connector_caller import CALLER, GrantRefusedError, ScopedUiCaller, UiCaller, UiReadCaller
 from agent_comms.connector_profile import HttpsMcpEndpoint, UiConnectionProfile, UiGrantId, UiGrantSummary
 from agent_comms.connector_store import (
-    CALLBACK, CODE_SECONDS, AuthorizationQuery, ConnectorGrants, ConnectorStore,
-    IssuedCode, TrustedBrowser, UiAccess, UiGrantAccess, UiReadAccess, digest,
+    CALLBACK, CODE_SECONDS, AuthorizationQuery, ConnectorCredentialsFile, ConnectorGrants,
+    ConnectorStore, ExpiredProfile, HeldUiProfiles, IssuedCode, OpenableProfile, TrustedBrowser,
+    UiAccess, UiGrantAccess, UiReadAccess, UnreadableProfile, digest,
 )
 from agent_comms.coordination.errors import TranscriptChanged
 from agent_comms.coordination.coordinator import Coordination
@@ -915,6 +916,42 @@ async def test_a_revoked_token_is_refused(client, store, comms):
     assert RevokeVerb().apply(store) == 0
     refused = await client.post("/mcp", json=LIST, headers={"Authorization": f"Bearer {token}"})
     assert refused.status == 401
+
+
+def test_the_held_profiles_name_every_bus_this_machine_can_open(
+    store: ConnectorStore, comms: Comms, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A UI asks this machine what it can open: the serving bus's own grants cannot say.
+
+    Every file in the held directory is named, including one that will not decode and one
+    whose grant has expired, because a profile the owner cannot use is the row they need
+    to see rather than a gap in a menu.
+    """
+    prepare_native_comms(comms)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert HeldUiProfiles.held(0.0) == (), "no directory holds no profiles"
+    directory = HeldUiProfiles.directory()
+    assert directory.parent == ConnectorCredentialsFile.path().parent
+    assert GrantUiVerb.parse([
+        "grant-ui", "--root", str(comms.root),
+        "--endpoint", "https://box-b.example/mcp", "--profile", str(directory / "box-b.json"),
+        "--seconds", "60",
+    ]).apply(store) == 0
+    unreadable = directory / "notes.txt"
+    unreadable.write_text("not a profile")
+    unreadable.chmod(0o600)
+    issued = UiConnectionProfile.read(directory / "box-b.json").credential.expires_at
+
+    held = HeldUiProfiles.held(issued - 1)
+    assert [type(entry) for entry in held] == [OpenableProfile, UnreadableProfile]
+    assert [entry.openable for entry in held] == [True, False]
+    assert held[0].label() == f"box-b.example · {comms.registry.store.privacy().namespace}"
+    assert held[1].label().startswith("notes.txt · ")
+
+    expired = HeldUiProfiles.held(issued)
+    assert [type(entry) for entry in expired] == [ExpiredProfile, UnreadableProfile]
+    assert expired[0].label() == "box-b.example · grant expired"
+    assert not any(entry.openable for entry in expired)
 
 
 @pytest.mark.parametrize("grant_type", UiGrantAccess.members_with(UiGrantAccess))
