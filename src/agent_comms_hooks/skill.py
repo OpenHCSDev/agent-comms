@@ -30,7 +30,7 @@ from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.comms import Comms
 from agent_comms.cli_bridges.shared import Binding
 from agent_comms.rule_deal import (
-    ClearedDeal, CompactedDeal, CompactionDeal, DealDelivery, DealTrigger, DealtSources,
+    AuditDue, ClearedDeal, CompactedDeal, CompactionDeal, DealDelivery, DealTrigger, DealtSources,
     PrimedDeal, StartedDeal, SystemPromptDelivery, UnstampedCompactionDeal,
 )
 from agent_comms.slop import Slop
@@ -303,7 +303,9 @@ class DeckStart(DealtDeck):
         """The order that goes with the deal, opening with why: read it, or answer what the
         system prompt already holds."""
         prompts = self.prompts()
-        self.prepare(reader, prompts, trigger)
+        # The repositories the bus registers travel with the deal: the gate reads a probe's
+        # cited file:line from the audit on every later tool call, with no snapshot in hand.
+        self.prepare(reader, AuditDue(prompts, snapshot.team_project.unique_repositories()), trigger)
         return (
             trigger.reason() + " " + self.delivery().told(reader.sources(), self.audit),
             self.template_once(self.current().due),
@@ -349,9 +351,9 @@ class DeckStart(DealtDeck):
             *(hold.recalled() for hold in HeldOrders.of(comms.goals.todos, snapshot).live),
         ))
 
-    def prepare(self, reader: DeckReader, prompts: tuple[str, ...], trigger: DealTrigger) -> None:
+    def prepare(self, reader: DeckReader, due: AuditDue, trigger: DealTrigger) -> None:
         """The deal, and the deck dealt again from its start."""
-        self.deal(type(reader), prompts, trigger)
+        self.deal(type(reader), due, trigger)
         self.deck(reader).write_text(json.dumps(reader.slices()), encoding="utf-8")
 
     def widened(self, reader: DeckReader, comms: Comms,

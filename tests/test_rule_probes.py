@@ -3,6 +3,8 @@ from pathlib import Path
 import pytest
 
 from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.repo import Repo
+from agent_comms.repository_name import RepositoryName
 from agent_comms.rule_probes import FlinchProbe, HuntProbe, PriorProbe, Probe, ProbeContext
 
 HIS = ("cam we use knheritsmce rather than a flag",)
@@ -10,7 +12,8 @@ HIS = ("cam we use knheritsmce rather than a flag",)
 
 @pytest.fixture
 def context() -> ProbeContext:
-    return ProbeContext(HIS, Path.cwd(), ("a rule says reach for a parent class before a flag",))
+    return ProbeContext(HIS, Path.cwd(),
+                        copied_from=("a rule says reach for a parent class before a flag",))
 
 
 def probe(**answer: str) -> Probe:
@@ -57,3 +60,39 @@ def test_a_deal_with_no_words_of_his_owes_no_prior():
     assert PriorProbe not in Probe.owed(())
     assert set(Probe.owed(HIS)) == {PriorProbe, HuntProbe, FlinchProbe}
     assert Probe.missing((), HIS) == Probe.owed(HIS)
+
+
+def test_a_hunt_cites_a_line_in_a_registered_checkout_outside_the_launch_directory(tmp_path):
+    """Where a session was started is not where the team's code is.
+
+    On 2026-11-07 a session launched in a course project owed the hunt probe, every line it
+    was about to edit lived in a Toad worktree, and the gate read only the launch directory:
+    the probe could not be answered at all, and the tools that could have found a line in
+    that directory were the ones the gate was holding.
+    """
+    launched = tmp_path / "course-project"
+    checkout = tmp_path / "toad"
+    (launched / "notes").mkdir(parents=True)
+    (checkout / "src").mkdir(parents=True)
+    (checkout / "src" / "frame_presentation.py").write_text("one\ntwo\nthree\n", encoding="utf-8")
+    repos = (Repo(checkout=checkout, github=RepositoryName.from_wire("OpenHCSDev/toad")),)
+    context = ProbeContext(HIS, launched, repos, ("a rule about parents",))
+
+    cited = "src/frame_presentation.py:2"
+    hunt = probe(probe="hunt", pattern="IDEN-3", fact="the rows not risen yet, counted twice",
+                 at=cited, derive="declaration", by=cited)
+    assert hunt.fault(context) == ""
+
+    # The refusal names every checkout it read, because the session cannot list them itself.
+    fault = probe(probe="hunt", pattern="IDEN-3", fact="the rows not risen yet, counted twice",
+                  at="src/frame_presentation.py:99", derive="declaration", by=cited).fault(context)
+    assert str(launched) in fault and str(checkout) in fault
+
+
+def test_a_bus_with_no_registered_project_reads_the_launch_directory_alone(tmp_path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "owner.py").write_text("one\n", encoding="utf-8")
+    context = ProbeContext(HIS, tmp_path, (), ("a rule about parents",))
+    assert context.roots() == (tmp_path,)
+    assert probe(probe="hunt", pattern="IDEN-3", fact="one fact restated in two owners",
+                 at="src/owner.py:1", derive="declaration", by="src/owner.py:1").fault(context) == ""

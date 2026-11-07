@@ -28,14 +28,21 @@ from agent_comms.team.package import TeamPackage
 @dataclass(frozen=True)
 class ProbeContext(CitationProject):
     """What a probe answer is checked against: never the rule text it could copy. It is the
-    citation project of the session's own checkout: a cited file:line names a line there, and
-    no other repository is registered for a prefix to name."""
+    citation project the session cites in, which is the team's registered repositories as well
+    as the directory it was launched in: a session launched outside a repository of ours (a
+    course project, a notes directory) still works in the team's checkouts, and on 2026-11-07
+    one launched in /home/ts/code/projects/bmde-520-001 could not answer the hunt probe at all,
+    because every line it was about to edit lives in a Toad worktree and the only tools that
+    could have found a line in the launch directory were the ones this gate holds."""
 
     owner_words: tuple[str, ...]
     """Tristan's own prompts as the deal recorded them."""
     worktree: Path
-    """The checkout the session works in; cited lines must exist there."""
-    copied_from: tuple[str, ...]
+    """The directory the session was launched in; an unqualified citation is read here first."""
+    repos: tuple[Repo, ...] = ()
+    """The team's registered repositories, as the deal recorded them: a cited line may name one.
+    Empty when the bus registers no project, which leaves the launch directory alone."""
+    copied_from: tuple[str, ...] = ()
     """Text an answer must not mostly repeat: every dealt rule and every other answer."""
 
     shingle: ClassVar[int] = 5
@@ -69,13 +76,22 @@ class ProbeContext(CitationProject):
         return ""
 
     def repository_names(self, name: str = "") -> tuple[RepositoryName, ...]:
-        return ()
+        return tuple(repository.github for repository in Repo.candidates(self.repos, name))
 
     def registered_repos(self) -> tuple[Repo, ...]:
-        return ()
+        return self.repos
+
+    def roots(self) -> tuple[Path, ...]:
+        """Where an unqualified file:line is read: the launch directory, then every registered
+        checkout. A session's work is wherever the team's repositories are checked out, which
+        is rarely where it was started."""
+        return (self.worktree, *(repository.checkout for repository in self.repos))
 
     def line_exists(self, line: FileLine) -> bool:
-        path = self.worktree / line.file
+        return any(self.line_in(root, line) for root in self.roots())
+
+    def line_in(self, root: Path, line: FileLine) -> bool:
+        path = root / line.file
         if not path.is_file():
             return False
         return 0 < line.line <= len(path.read_text(encoding="utf-8").splitlines())
@@ -152,7 +168,10 @@ class HuntProbe(Slop, Probe):
         missing = [line.to_wire() for line in (self.at, *self.by.cited())
                    if not context.line_exists(line)]
         if missing:
-            return f"{', '.join(missing)} is not a line in {context.worktree}"
+            # Name every checkout that was read: a session cannot discover them from here,
+            # because this gate holds the tools that would list them.
+            return (f"{', '.join(missing)} is not a line in "
+                    + " or ".join(str(root) for root in context.roots()))
         return context.copied(self.fact)
 
     def text(self) -> str:

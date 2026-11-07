@@ -35,6 +35,7 @@ from .nominal.field_codec import FieldCodec, MalformedRecord, MessageId
 from .storage.locked_store import DocumentChange, LockedStore
 from .storage.store_files import AtomicFile, DependentStateTier, SingleFileStore
 
+from .repo import Repo
 from .rule_probes import Probe, ProbeContext
 from .team.rule_file import RuleFile
 from .context_reading import ContextUsage
@@ -441,6 +442,10 @@ class AuditDue:
 
     owner_words: tuple[str, ...]
     """The owner's prompts exactly as the deal showed them, each occurrence once."""
+    repos: tuple[Repo, ...] = ()
+    """The team's registered repositories when the deal was dealt, where a probe's cited
+    file:line is read. Recorded with the deal because the gate answers from the audit on
+    every tool call, long after the registry snapshot that knew them."""
 
     def reminder(self) -> str:
         """His last words, shown once with the template; the audit carries them after."""
@@ -496,7 +501,7 @@ class AuditDue:
         dealt = tuple(f"{rule.wakeup}\n{rule.body}" for rule in RuleFile.packaged())
         for answer in audit.probes:
             others = tuple(other.text() for other in audit.probes if other is not answer)
-            context = ProbeContext(self.owner_words, Path.cwd(), (*dealt, *others))
+            context = ProbeContext(self.owner_words, Path.cwd(), self.repos, (*dealt, *others))
             if fault := answer.fault(context):
                 return f"its {answer.declared_name} probe does not answer: {fault}"
         return ""
@@ -1134,12 +1139,11 @@ class RuleDeal(State, DealtCalls):
             self.record.stat()  # Configuration targets an existing session, never fabricates a deal.
             self.publish(replace(self.current(), mode=mode))
 
-    def deal(self, dealt: type[DealtSources], prompts: tuple[str, ...],
-             trigger: DealTrigger) -> None:
+    def deal(self, dealt: type[DealtSources], due: AuditDue, trigger: DealTrigger) -> None:
         with self.write_guard(self.record):
-            trigger.deliver(self.current().mode, lambda: self.replace_deal(dealt, prompts, trigger), None)
+            trigger.deliver(self.current().mode, lambda: self.replace_deal(dealt, due, trigger), None)
 
-    def replace_deal(self, dealt: type[DealtSources], prompts: tuple[str, ...],
+    def replace_deal(self, dealt: type[DealtSources], due: AuditDue,
                      trigger: DealTrigger) -> None:
         """A start or compaction drops what was read: the read log resets first, to what the
         session's delivery already put in front of it (nothing, unless its launcher put the deal
@@ -1157,7 +1161,6 @@ class RuleDeal(State, DealtCalls):
             read.line() for read in self.delivery().reads() if read.source in held
         ), encoding="utf-8")
         self.dealt_opened.replace(OpenedReads())
-        due = AuditDue(prompts)
         AtomicFile(self.audit).write_bytes(json.dumps(
             FieldCodec.encode(due.skeleton()), ensure_ascii=False, indent=2).encode())
         self.meant.replace(MeantRecord())

@@ -12,7 +12,7 @@ from agent_comms.deal_prompt import DealPrompt
 from agent_comms.native_package import OWNER_INSTRUCTIONS
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.rule_deal import (
-    DealtRead, DealtRuleGate, OpenedReads, PromptReads, SessionRuleDeal,
+    AuditDue, DealtRead, DealtRuleGate, OpenedReads, PromptReads, SessionRuleDeal,
     StartedDeal, SystemPromptDelivery, Unaudited, Unread,
 )
 from agent_comms_hooks import LaunchedPrompt
@@ -43,7 +43,7 @@ def test_prompt_carries_the_owner_instructions_then_every_dealt_file_once(tmp_pa
 
 def test_a_deal_in_the_system_prompt_owes_the_audit_not_the_reads(tmp_path):
     deal = PromptedDeal(tmp_path / "deal", DealPrompt.prepare(tmp_path / "SYSTEM_PROMPT.md"))
-    deal.deal(DeckReader, (), StartedDeal())
+    deal.deal(DeckReader, AuditDue(()), StartedDeal())
     record = deal.current()
     assert record.read_by(deal) == record.paths
     assert not tuple(Unread.owed_by(deal, record, OpenedReads()))
@@ -57,7 +57,7 @@ def test_a_file_changed_after_the_prompt_was_prepared_is_read_like_any_other(tmp
     delivery.manifest.write_text(json.dumps(FieldCodec.encode(
         PromptReads((DealtRead(first.source, "0" * 64), *rest)))))
     deal = PromptedDeal(tmp_path / "deal", prompt)
-    deal.deal(DeckReader, (), StartedDeal())
+    deal.deal(DeckReader, AuditDue(()), StartedDeal())
     owed = tuple(Unread.owed_by(deal, deal.current(), OpenedReads()))
     assert [case.remaining for case in owed] == [(first.source.path,)]
 

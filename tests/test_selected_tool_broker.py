@@ -381,11 +381,11 @@ async def test_a_dealt_rule_gate_refuses_the_selected_write_before_its_owner_act
     """The selected write rides the shared gated transport: an unread deal refuses it before
     the owner callback could claim or write anything."""
     from agent_comms.pi_rule_gate import PiRuleGate, RulesUnread
-    from agent_comms.rule_deal import StartedDeal
+    from agent_comms.rule_deal import AuditDue, StartedDeal
     from agent_comms_hooks.skill import DeckReader
 
     gate = PiRuleGate(tmp_path / "scratch", tmp_path)
-    gate.deal(DeckReader, (), StartedDeal())
+    gate.deal(DeckReader, AuditDue(()), StartedDeal())
     token = secrets.token_hex(32)
     acted: list[broker.SelectedToolRequest] = []
     server = broker.SelectedToolSocket(
