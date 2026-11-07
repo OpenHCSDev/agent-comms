@@ -69,7 +69,8 @@ from agent_comms.storage.maintenance_barrier import (
     ReadyPhase,
 )
 from agent_comms.storage.store_files import ExclusiveLock, StoreGuard, _store_lock
-from agent_comms.tools import ChannelListing, CommsChannelsTool, CommsPinChannelTool, CommsSendTool, CommsUserSendTool, ServedCommsUserSendTool, invoke_tool
+from agent_comms.tools import ChannelListing, CommsChannelsTool, CommsPinChannelTool, CommsUserSendTool, ServedCommsUserSendTool, invoke_tool
+from agent_comms.transport.tools.send import CommsSendTool
 from agent_comms.tool_caller import HumanCaller, NoThreadCaller, ThreadCaller
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.tool_request import ReadTool
@@ -1261,7 +1262,7 @@ async def test_an_inbox_read_after_its_place_the_same_locally_and_remotely(
 def test_every_session_is_told_how_to_take_its_own_name() -> None:
     """The fork argument's description survives its union type, so each session sees it."""
     from agent_comms.connector_caller import ActingFork
-    from agent_comms.tools import CommsSendTool
+    from agent_comms.transport.tools.send import CommsSendTool
 
     fork = FieldCodec.record_schema(CommsSendTool, ActingFork)["properties"]["fork"]
     assert "Your own name on the bus" in fork["description"]

@@ -60,7 +60,7 @@ from .agent_inbox import InboxWait, NoWait, TakenInputPosition, TakenInputStart
 
 # The goal tools are declared in transport/tools/goals.py; importing them here assembles
 # them into the served surface that invoke_tool dispatches over.
-from .transport.tools import goals
+from .transport.tools import goals, send
 from .tool_request import ServedRequest, HumanToolRequest, ObservedToolRequest, LiveOwnerTool, PublishingTool, PublishingToolRequest, ReadTool, ThreadReadTool, ThreadContextAction, ThreadToolRequest, CoreRead, NativeToolRequest
 from .transport.request import ListedNames, OmittedNames, SubjectBinding, tool_field
 from .tool_declaration import NativeRequestTools
@@ -1159,60 +1159,8 @@ class CommsSendRefusalsTool(ReadTool, NativeToolRequest):
         ))
 
 
-@dataclass(frozen=True, kw_only=True)
-class SendTool(PublishingTool[ThreadCaller, MessagePublished]):
-    label = "Comms Send"
-    description = (
-        "Send a message to another thread or channel. Address specific threads with "
-        "@thread-name in the body: the named threads are told they are the intended "
-        "readers, and others dismiss quietly. Unknown names stay plain text. "
-        "External sends may name received originals in answers; "
-        "source-turn identity is not a model argument."
-    )
-    target: Annotated[str, *tool_field("Target thread name or channel", WireName("to"))]
-    body: Annotated[str, *tool_field("Message text")]
-    audience: Annotated[
-        tuple[str, ...], *tool_field("Threads a channel message is for; no other member is woken")
-    ] = ()
-    type: Annotated[
-        Type[MessageKind], *tool_field("Message kind", WireChoices(SendableMessageKind.names))
-    ] = InfoKind
-    report: Annotated[
-        ReportEvidence,
-        *tool_field("Change report fields; required for the change-report kind"),
-    ] = NoChangeReport()
-
-    answers: Annotated[
-        tuple[MessageReference, ...],
-        *tool_field("Original received messages explicitly answered; external sends without a named source turn must name these to link answers"),
-    ] = ()
-
-    def publish(self, comms: Comms, caller: ThreadCaller) -> MessagePublished:
-        sender = caller.own_thread()
-        target = CommandTarget.named(self.target)
-        try:
-            caller.require_directive(comms, self.body)
-            body = target.addressed(self.audience, self.body)
-            result = comms.messaging.send(
-                sender, target.name, body, self.type, report=self.report,
-                task=self.attachment(comms, target), origin=caller.origin(),
-                answers=self.answers)
-        except ToolRefusedError as error:
-            # The caller hears the refusal now; the record waits for the wire lock on its own.
-            threading.Thread(target=SendRefusal.record,
-                             args=(comms.root, sender, self.target, error)).start()
-            raise
-        return MessagePublished.from_send(result)
-
-    def attachment(self, comms: Comms, target: NamedTarget) -> TaskAttachment:
-        """An ordinary send carries no authored task or selected request."""
-        return NoTaskAttachment()
 
 
-class CommsSendTool(SendTool, ThreadToolRequest):
-    """The native send declaration; its fields and publication belong to SendTool."""
-
-    native_call = CommunicationCall
 
 
 class ServedCommsUserSendTool(PublishingToolRequest[ToolCaller, MessagePublished], CommsUserSendTool):
