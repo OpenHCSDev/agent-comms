@@ -32,3 +32,17 @@ def test_this_processes_own_root_flag_is_still_read_and_removed(tmp_path):
 
     assert root.path == mine.absolute()
     assert arguments == ["--thread", "reader"]
+
+
+def test_a_root_path_holding_a_placeholder_is_refused(tmp_path, monkeypatch):
+    """`--root {root}` from a checkout must not initialise a bus beside it.
+
+    On 2026-11-05 a literal `{root}/` appeared at a checkout root carrying a full
+    bus (bus_message, bus_addressed, bus_claimed) because Path("{root}").absolute()
+    accepted the template as a destination; a checkpoint then adopted it."""
+    import pytest
+
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(ValueError, match="placeholder"):
+        LaunchRoot.from_path("{root}")
+    assert not (tmp_path / "{root}").exists()

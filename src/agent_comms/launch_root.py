@@ -83,7 +83,13 @@ class LaunchRoot(LaunchSelection, LaunchRequest):
     @classmethod
     def from_path(cls, path: str | Path) -> LaunchRoot:
         """Capture cwd/home now; keep symlinks for private-root validation."""
-        return cls(Path(path).expanduser().absolute())
+        root = Path(path).expanduser().absolute()
+        # A placeholder that never expanded is a template, not a destination: taking it
+        # literally initialises a whole bus inside a brace-named directory (2026-11-05,
+        # a checkout carried {root}/bus.sqlite3 until a checkpoint adopted it).
+        if any(marker in str(root) for marker in "{}"):
+            raise ValueError(f"A root path still holding a placeholder is not a root: {path}")
+        return cls(root)
 
     @classmethod
     def unstarted(cls) -> UnstartedLaunch:
