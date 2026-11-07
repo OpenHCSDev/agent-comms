@@ -183,6 +183,14 @@ is on main; the census is re-run once per phase, not per edit.
 - **Evidence:** the scan JSON committed; `R*` document committed; phases present
   with `AllEvidence`. **Behaviour:** none (no source change).
 
+- P0 measured: 673 modules, 119158 lines in `src/agent_comms` at main `51d17a5cb`. One
+  complete NRA scan (`finding_payload_mode` `semantic_boundary_evidence`, 753 source files,
+  110 detectors, none omitted, `complete: true`) found 584 findings across 25 patterns:
+  P37 restated identity 76, P39 missing mixin 57, P1 nominal-boundary-over-sentinel 56,
+  P40 constant subtype answer 49, P49 own-class type test 48, P38 duplicate class 42,
+  P35 module nothing imports 38, P43 zero-or-one tuple 35. This is the baseline every
+  later phase's census delta is measured against.
+
 ### P1 — Split the two mirrors that keep the root fat
 
 `todos.py` (7,134), `tools.py` (1,795) and `standing_rules.py` (1,555) are not
