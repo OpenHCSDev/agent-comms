@@ -299,3 +299,22 @@ def test_proof_observation_rejects_file_replacement(tmp_path):
             changed.write_bytes(journal.read_bytes())
             changed.chmod(0o600)
             changed.replace(journal)
+
+
+def test_a_rejected_prompt_carries_the_providers_own_words():
+    """Pi's reason reaches the failure, not only the diagnostic file: on 2026-11-07 a thread
+    could not resume after install because summarisation hit "The usage limit has been
+    reached", and the turn reported only that something had been rejected."""
+    from agent_comms.pi_events import FailedResponseOutcome, Response
+    from agent_comms.pi_payloads import ReportedText
+    from agent_comms.native_pi import NativePiPromptRejected
+
+    response = Response(
+        success=FailedResponseOutcome(),
+        error=ReportedText("Summarization failed: Codex error: The usage limit has been reached"),
+    )
+
+    said = str(NativePiPromptRejected(response))
+
+    assert "The usage limit has been reached" in said
+    assert "rejected the tracked prompt" in said

@@ -96,7 +96,13 @@ class NativePiPromptRejected(NativePiUnavailable):
 
     def __init__(self, response: pi.Response):
         self.response = response
-        super().__init__("Native Pi rejected the tracked prompt (see diagnostic)")
+        # Pi's own words reach the failure, not just the diagnostic file: on 2026-11-07 a
+        # thread could not resume because summarisation hit "The usage limit has been
+        # reached", and the turn reported only that something had been rejected.
+        reason = response.error.text_or("")
+        super().__init__(
+            f"Native Pi rejected the tracked prompt: {reason}" if reason
+            else "Native Pi rejected the tracked prompt (see diagnostic)")
 
     def publish(self, publisher):
         return publisher(self.public_failure, native_response=self.response, source_error=self)
