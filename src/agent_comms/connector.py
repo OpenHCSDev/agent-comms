@@ -64,12 +64,12 @@ from agent_comms.channel_targets import NamedTarget
 from agent_comms.owner_requests import NewestOpenRequest, RequestSelection
 from .host_services import HostService
 from .connector_caller import CALLER, ConnectorCaller, ConnectorTool, GrantRefusedError
-from .connector_profile import HttpsMcpEndpoint, UiGrantId
+from .connector_profile import HttpsMcpEndpoint, UiConnectionProfile, UiGrantId, UiGrantSummary
 from .registry.registry_store import RegistryStore
 from .connector_store import (
     CODE_SECONDS, ApprovalQueueFull, ApprovalRefused, AuthorizationQuery,
     AuthorizationRequest, ClaudeCallback,
-    ConnectorGrants, ConnectorStore, IssuedTokens,
+    ConnectorGrants, ConnectorStore, HeldUiProfiles, IssuedTokens,
     RegisteredClient, TrustedBrowser, UiGrantAccess, UiReadAccess, digest,
 )
 from .storage.locked_store import DocumentChange
@@ -834,6 +834,33 @@ class GrantUiVerb(ConnectorRootOptions, declared_name="grant-ui"):
         profile = ctx.publish_ui_profile(
             namespace, self.endpoint, self.profile, self.seconds, self.access)
         print(FieldCodec.compact(FieldCodec.encode(profile), allow_nan=False))
+        return 0
+
+
+@dataclass(frozen=True, kw_only=True)
+class HoldUiVerb(ConnectorVerb, declared_name="hold-ui"):
+    help = "Hold a UI profile this machine was given, so a UI here can open its bus"
+
+    profile: Annotated[
+        Path, PathText,
+        Argument(flags=("--profile",), options={"help": "The private profile file to hold"}),
+    ]
+
+    def apply(self, ctx: ConnectorStore) -> int | str:
+        """Decode before holding, so a file that is not a profile is refused where it is
+        named rather than when a picker tries to open its bus. The held name is the
+        profile's own endpoint and grant, so nothing a caller types can leave the
+        directory and two grants for one host do not collide."""
+        held = UiConnectionProfile.read(self.profile)
+        match held.endpoint.url.host:
+            case str() as host:
+                destination = HeldUiProfiles.directory() / f"{host}-{held.credential.grant_id}.json"
+            case _:
+                return f"{held.endpoint.url} names no host to hold it under"
+        print(FieldCodec.compact(FieldCodec.encode(UiGrantSummary(
+            held.credential.grant_id, held.credential.namespace,
+            held.credential.expires_at, held.write_new(destination),
+        )), allow_nan=False))
         return 0
 
 

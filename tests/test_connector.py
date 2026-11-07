@@ -918,6 +918,43 @@ async def test_a_revoked_token_is_refused(client, store, comms):
     assert refused.status == 401
 
 
+def test_holding_a_profile_puts_it_where_a_picker_finds_it(
+    store: ConnectorStore, comms: Comms, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A profile handed to this machine becomes one of its openable buses.
+
+    The held name comes from the profile's own endpoint and grant, so nothing a caller
+    types can leave the directory, and a file that is not a profile is refused here
+    rather than when a picker tries to open its bus.
+    """
+    prepare_native_comms(comms)
+    given = tmp_path / "given" / "box-b.json"
+    assert GrantUiVerb.parse([
+        "grant-ui", "--root", str(comms.root),
+        "--endpoint", "https://box-b.example/mcp", "--profile", str(given), "--seconds", "600",
+    ]).apply(store) == 0
+    capsys.readouterr()
+
+    monkeypatch.setenv("HOME", str(tmp_path / "connecting"))
+    assert ConnectorVerb.parse(["hold-ui", "--profile", str(given)]).apply(store) == 0
+    receipt = FieldCodec.decode(UiGrantSummary, FieldCodec.parse(capsys.readouterr().out))
+    assert receipt.profile.parent == HeldUiProfiles.directory()
+    assert receipt.profile.name.startswith("box-b.example-")
+    held = HeldUiProfiles.held(0.0)
+    assert [type(entry) for entry in held] == [OpenableProfile]
+    assert held[0].profile == UiConnectionProfile.read(given)
+
+    with pytest.raises(FileExistsError):
+        ConnectorVerb.parse(["hold-ui", "--profile", str(given)]).apply(store)
+    not_a_profile = tmp_path / "given" / "notes.json"
+    not_a_profile.write_text("{}")
+    not_a_profile.chmod(0o600)
+    with pytest.raises(MalformedRecord):
+        ConnectorVerb.parse(["hold-ui", "--profile", str(not_a_profile)]).apply(store)
+    assert [type(entry) for entry in HeldUiProfiles.held(0.0)] == [OpenableProfile]
+
+
 def test_the_held_profiles_name_every_bus_this_machine_can_open(
     store: ConnectorStore, comms: Comms, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
