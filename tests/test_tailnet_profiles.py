@@ -38,12 +38,12 @@ def test_the_ask_runs_the_peers_own_connector_over_ssh():
     assert "BatchMode=yes" in command, "a peer wanting a password is a failure, not a prompt"
 
 
-def test_a_profile_comes_back_held_under_the_peer_and_grant(tmp_path, monkeypatch):
+def test_a_profile_comes_back_held_under_the_peer(tmp_path, monkeypatch):
     monkeypatch.setattr("agent_comms.connector_store.HeldUiProfiles.directory",
                         classmethod(lambda cls: tmp_path))
     asked = TailnetProfiles.asked(GAMING, 0, profile_text() + "\n")
     assert isinstance(asked, HoldingPeerProfile) and asked.reason() == ""
-    assert asked.path == tmp_path / f"ts-gaming-{"7f3a9c2b" * 4}.json"
+    assert asked.path == tmp_path / "ts-gaming.json"
     held = UiConnectionProfile.read(asked.path)
     assert str(held.endpoint.url) == "https://ts-gaming.tail553874.ts.net:8443"
     assert held.credential.token == BearerSecret("secret-token")
@@ -100,3 +100,24 @@ def test_a_held_profile_pointing_anywhere_but_mcp_is_not_openable(tmp_path, monk
     assert isinstance(misdirected, MisdirectedProfile) and not misdirected.openable
     assert "not /mcp" in misdirected.label(), "the row says where it points"
     assert isinstance(openable, OpenableProfile) and openable.openable
+
+
+def test_asking_again_replaces_what_was_held_and_revokes_it(tmp_path, monkeypatch):
+    """Every pick minted another grant, and the old one stayed live with a row beside the
+    new one that looked exactly the same."""
+    monkeypatch.setattr("agent_comms.connector_store.HeldUiProfiles.directory",
+                        classmethod(lambda cls: tmp_path))
+    asked: list[tuple[str, ...]] = []
+    monkeypatch.setattr(TailnetProfiles, "run",
+                        classmethod(lambda cls, command: asked.append(tuple(command)) or (0, "")))
+
+    first = TailnetProfiles.asked(GAMING, 0, profile_text())
+    held = sorted(path.name for path in tmp_path.iterdir())
+    second = TailnetProfiles.asked(GAMING, 0, profile_text())
+
+    assert held == ["ts-gaming.json"] and first.path == second.path
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["ts-gaming.json"], (
+        "one bus, one held profile, however many times it is asked")
+    revokes = [command for command in asked if "revoke-ui" in command[-1]]
+    assert len(revokes) == 1, f"the replaced grant is ended on the peer: {asked}"
+    assert "7f3a9c2b" in revokes[0][-1], "by the id the replaced profile named"

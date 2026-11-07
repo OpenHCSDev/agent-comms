@@ -12,12 +12,15 @@ reply without a tailnet.
 
 from __future__ import annotations
 
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from agent_comms.connector_profile import ReachedRoute, UiConnectionProfile
-from agent_comms.connector_store import HeldUiProfiles
+from agent_comms.connector_profile import ReachedRoute, UiConnectionProfile, UiGrantId
+from agent_comms.connector_store import (
+    ExpiredProfile, HeldUiProfiles, OpenableProfile,
+)
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.tailnet_buses import PeerHoldsBus, TailnetBuses
 
@@ -102,20 +105,42 @@ class TailnetProfiles(TailnetBuses):
         return HoldingPeerProfile(found, cls.hold(found, profile))
 
     @classmethod
+    def revoke_command(cls, found: PeerHoldsBus, grant: UiGrantId) -> tuple[str, ...]:
+        """Tell the peer to end a grant this machine no longer holds."""
+        return (*cls.probe_command(found.peer)[:-1],
+                f"{cls.connector_cli} revoke-ui --grant {grant}")
+
+    @classmethod
+    def replaced(cls, found: PeerHoldsBus, path: Path, now: float) -> None:
+        """End whatever this machine held for that peer before asking again.
+
+        Without this every pick minted another grant and left the last one live until it
+        expired, with a row in the picker that looked identical to the new one. A revoke
+        that does not land is not worth refusing the new profile over: the grant it names
+        expires on its own, and the person asked for a bus, not for housekeeping.
+        """
+        match HeldUiProfiles.entry(path, now):
+            case OpenableProfile(profile=held) | ExpiredProfile(profile=held):
+                cls.run(cls.revoke_command(found, held.credential.grant_id))
+            case _:
+                pass
+        path.unlink(missing_ok=True)
+
+    @classmethod
     def hold(cls, found: PeerHoldsBus, profile: UiConnectionProfile) -> Path:
-        """Write it where this machine keeps the profiles it holds, under the peer and grant
-        it names: the same place and the same name `hold-ui` writes, so one bus has one
-        profile however it arrived.
+        """Write it where this machine keeps the profiles it holds, one file per peer: this
+        machine asked, so it owns which profile it keeps for that bus, and asking again
+        replaces the last one rather than stacking another row beside it.
 
         With the address this machine reached that peer on, because it is the only one that
         knows it: a tailnet-only endpoint's name resolves to tailscale's public ingress on a
         machine that does not accept tailnet DNS, and nothing answers the tailnet port
         there (measured 2026-11-07, this laptop: TLS EOF by name, 200 by address).
         """
-        directory = HeldUiProfiles.directory()
+        path = HeldUiProfiles.directory() / f"{found.peer.name}.json"
+        cls.replaced(found, path, time.time())
         reached = replace(profile, route=ReachedRoute(found.peer.address))
-        return reached.write_new(
-            directory / f"{found.peer.name}-{profile.credential.grant_id}.json")
+        return reached.write_new(path)
 
     @classmethod
     def ask(cls, found: PeerHoldsBus) -> AskedPeer:
