@@ -66,7 +66,17 @@ class TeamPlanDocument(TeamPlanFile, JsonDocument[TeamPlan]):
         return cls(cls.path_in(root), reading=reading)
 
     def empty(self) -> TeamPlan:
-        raise BoardUnavailable(self.reading, f'team plan missing: {self.path}')
+        """No beat has published yet, so no phase is known ready: that is the empty plan.
+
+        The plan is a *publication* of readiness the heartbeat computes by counting main. Its
+        absence says only that nobody has counted, which is the same answer as "nothing is
+        ready" for every reader of `ready()` — and an order that serves no phase is legal
+        (`serves` is optional). A board *display* still refuses, through `TeamFrame.empty()`,
+        where a missing teammate frame has no meaningful empty value; a phase lookup does not.
+        Refusing here made every `agent-comms-team order` verb fail on a bus with no heartbeat,
+        which is exactly the bus where someone needs to be sent an order to fix the heartbeat.
+        """
+        return TeamPlan()
 
 
 @dataclass(frozen=True)
