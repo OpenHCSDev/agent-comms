@@ -239,7 +239,10 @@ class LiveWatch(RecordedWatch, HeldSocketWatch):
 
     def enrol(self, claim: WatchClaim, record: WatchRecord) -> None:
         if self.record != record:
-            raise ValueError('This session is already bound to another bridge command')
+            raise SessionCommandError(
+                f'This session is already bound to `{" ".join(self.record.command)}`, which still '
+                'holds its claim: a live watch never hands it to a second command. Stop that '
+                'Monitor or process first, then run the command you want.')
 
     def announce_absence(self, announce: Callable[[], None]) -> bool:
         """A held claim's absent socket is an install's swap, not an outage."""

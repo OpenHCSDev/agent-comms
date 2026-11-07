@@ -8,7 +8,9 @@ import pytest
 from agent_comms.cli_bridges.shared import Binding, GivenBinding
 
 from agent_comms.cli_bridges.monitor import AttachMonitor, InspectSession, SessionReady
-from agent_comms.cli_bridges.session_watch import SessionConnectionClosed, SessionRequestTimeout, WatchClaim
+from agent_comms.cli_bridges.session_watch import (
+    SessionCommandError, SessionConnectionClosed, SessionRequestTimeout, WatchClaim,
+)
 from agent_comms_hooks.watch import WatchRecord
 from agent_comms.cli_bridges.shared import BridgeLog
 from agent_comms.nominal.field_codec import FieldCodec
@@ -72,7 +74,7 @@ def test_enrol_is_idempotent_and_refuses_another_command(tmp_path, monkeypatch):
     assert claim.state().record == record
     with claim.held(record):
         claim.enrol(record)
-        with pytest.raises(ValueError):
+        with pytest.raises(SessionCommandError, match='bridge watch.*Stop that'):
             claim.enrol(WatchRecord('viewer', str(tmp_path), ('other', 'watch'), tmp_path))
         assert not claim.has_reader()
         with claim.reader_held():
