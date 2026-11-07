@@ -47,7 +47,7 @@ from .package_stamp import STAMP
 from .nominal.field_codec import FieldCodec, ThreadLookup
 from .runtime_updates import RuntimeUpdate
 from .tool_result import ToolResult
-from .tools import CommsInboxTool
+from .transport.tools.inbox import CommsInboxTool
 from .storage.locked_store import RegistryFile
 from .watched import ChangeSignal, FileSource
 

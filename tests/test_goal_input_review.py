@@ -23,7 +23,8 @@ from agent_comms.goal_actions import (
     StandbyGoalAction,
 )
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.tools import CommsGoalTool, CommsInboxTool
+from agent_comms.transport.tools.goals import CommsGoalTool
+from agent_comms.transport.tools.inbox import CommsInboxTool
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.read_basis import NamedViewer
 from stored_inputs import stored_inputs
@@ -72,7 +73,9 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     # A human read hides nothing from the agent: only what its runtime took leaves its inbox.
     assert result["messages"] == [message.to_wire() for message in messages]
     review = result["standby_review"]
-    assert [row["sequence"] for row in review["messages"]] == [m.seq for m in messages]
+    # The review names each input by its public key, "bus:<sequence>"; the old bare
+    # "sequence" field was renamed to inputId and this assertion still asked for it.
+    assert [row["inputId"] for row in review["messages"]] == [f"bus:{m.seq}" for m in messages]
     assert review["excluded_inputs"][0]["reason"] == "owner_input_without_bus_sequence"
     assert ledger.path.read_bytes() == before  # Inspection cannot adopt or schedule inputs.
     keys = review["reviewed_inputs"]
