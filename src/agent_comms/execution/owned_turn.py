@@ -64,7 +64,7 @@ from ..turn_terminal import EndedWithoutResult, TurnTerminal
 from agent_comms.errors import GoalAttemptError
 from dataclasses import field
 from ..turn_item import UsageChargeId
-from ..tools import CommsSetGoalTool
+from ..transport.tools.goals import CommsSetGoalTool
 from ..turn_lease import TurnLeaseFence
 from ..registry.threads import NativeThread, Thread
 from agent_comms.pi_wire import PiUsage

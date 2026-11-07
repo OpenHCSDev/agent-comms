@@ -45,7 +45,7 @@ from agent_comms.storage.maintenance_barrier import MaintenanceOperator
 from agent_comms.execution.owned_turn import OwnedTurn
 from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_caller import ToolCaller
-from agent_comms.tools import CommsGoalHistoryTool
+from agent_comms.transport.tools.goals import CommsGoalHistoryTool
 from agent_comms.turn_failure import NativeChildSignaled
 from agent_comms.turn_input_source import NoTurnAcceptance
 
