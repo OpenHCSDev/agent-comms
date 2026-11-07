@@ -146,6 +146,50 @@ literal destination") for a loop whose whole point is that there is no single de
 **Owner:** the storage rule's command scan. **Fix:** exempt commands that write nothing, or name
 the one write it thinks it found.
 
+## 7. Nothing on this host writes the frames, so every `order` verb refuses
+
+The largest one. Every `agent-comms-team order …` verb, which is the documented way to create
+or send work, refuses before doing anything:
+
+```
+$ agent-comms-team order problem ORDER.json --as comms-teammate --to comms-teammate --where …
+Refused: no failure recorded, so no heartbeat is running
+Tristan last completed: unrecorded
+Board unavailable: team plan missing: /home/ts/.agent-comms/team_plan.json
+```
+
+The file genuinely is not there, and neither is `team_frames/`:
+
+```
+$ ls /home/ts/.agent-comms/team_plan.json
+ls: cannot access '/home/ts/.agent-comms/team_plan.json': No such file or directory
+$ ls -d /home/ts/.agent-comms/team_frames
+ls: cannot access '/home/ts/.agent-comms/team_frames': No such file or directory
+```
+
+The chain, from the code: `ServicePasses.require_current` (`src/agent_comms/service_passes.py:101`)
+raises `BoardUnavailable` unless `services.heartbeat_current(self.heartbeat)`; `TeamFrame.empty`
+(`src/agent_comms/team_hud.py:325`) raises `Tristan frame missing` when a teammate's file is
+absent; and the only writer is `TeamFrame.replace_all` (`team_hud.py:340`), called once from
+`TeamHeartbeat` (`team_heartbeat.py:169`) — a long-running pass that runs in the commander/UI
+process, not in a teammate's runtime and not in the CLI:
+
+```
+$ agent-comms heartbeat --name comms-teammate
+{"heartbeat": "comms-teammate"}
+$ ls /home/ts/.agent-comms/team_frames
+ls: cannot access …: No such file or directory
+```
+
+`agent-comms heartbeat` only marks liveness (`src/agent_comms/cli_verbs/heartbeat.py:16`,
+`ctx.threads.heartbeat(self.name)`); it writes no frame and no plan. So on a bus with no
+commander attached — which is exactly every native Pi teammate — the documented order surface is
+unusable, and the fallback is the native `comms_*` tools.
+
+**Owner:** the heartbeat entry point. **Fix:** make `agent-comms heartbeat` run the same
+`TeamHeartbeat` pass once (frames + plan), so the CLI surface works on a host with no UI; and
+have `BoardUnavailable` say that, instead of only the missing path.
+
 ## What is not friction
 
 The parts that worked and should not be touched: `FieldCodec` decoding a whole JSON file and
