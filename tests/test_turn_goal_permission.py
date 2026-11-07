@@ -9,7 +9,7 @@ from agent_comms.goal_states import BlockedGoal, CompletedGoal, PausedGoal
 from agent_comms.goals import Goal, NoGoal, ProblemGoalOrder
 from agent_comms.native_tools import CoordinationCall, ReadTool
 from agent_comms.pi_payloads import ProvidedToolResult
-from agent_comms.tools import GoalSet
+from agent_comms.transport.tools.goals import GoalSet
 from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.turn_goal_permission import OwnerGoalPermission, TurnGoalPermission
 

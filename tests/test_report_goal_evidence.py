@@ -15,7 +15,7 @@ from agent_comms.progress_claims import ProgressClaim, ReportClaim
 from agent_comms.repo import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tools import CommsGoalTool
+from agent_comms.transport.tools.goals import CommsGoalTool
 from agent_comms.turn_context import FileProvenance
 
 
