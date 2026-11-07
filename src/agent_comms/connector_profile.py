@@ -5,6 +5,9 @@ from __future__ import annotations
 import http.client
 import os
 import socket
+
+import aiohttp
+from aiohttp.abc import AbstractResolver, ResolveResult
 import re
 import ssl
 from abc import abstractmethod
@@ -90,14 +93,54 @@ class DialedConnection(http.client.HTTPSConnection):
         self.sock = self._context.wrap_socket(raw, server_hostname=self.host)
 
 
+MCP_PATH = "/mcp"
+"""Where a connector serves MCP: its own route, the resource its metadata names and the
+endpoint a profile points at are one fact. A profile minted for the bare origin posts to /
+and is answered 404 (Tristan, 2026-11-07: "i either get 404 or ...")."""
+
+OBSERVE_PATH = "/observe"
+"""Where a connector serves the observation socket. A remote UI derives its own URL from the
+endpoint and this, so the two spellings cannot drift apart."""
+
+
+class PinnedResolver(AbstractResolver):
+    """Answers every lookup with one address, keeping the asked-for name for TLS.
+
+    aiohttp resolves the URL's host itself, so a client session reaching a tailnet-only
+    endpoint by name lands on tailscale's public ingress exactly as `http.client` did
+    (Tristan, 2026-11-07: "ClientConnectorError: ts-gaming.tail553874.t..."). The returned
+    hostname is what verifies the certificate; the host is what the socket connects to.
+    """
+
+    def __init__(self, address: str) -> None:
+        self.address = address
+
+    async def resolve(self, host: str, port: int = 0,
+                      family: socket.AddressFamily = socket.AF_INET) -> list[ResolveResult]:
+        return [ResolveResult(hostname=host, host=self.address, port=port,
+                              family=family, proto=0, flags=0)]
+
+    async def close(self) -> None:
+        """Nothing is held open to close."""
+
+
 class EndpointRoute(TaggedUnion, affix="Route"):
     """How this machine reaches a declared endpoint. The endpoint says where a bus is; this
-    says how to get there from here, which is the client's fact and not the bus's."""
+    says how to get there from here, which is the client's fact and not the bus's.
+
+    Both transports ask: the calls go over `http.client` and the observation socket over
+    aiohttp, and a route that only taught one of them left the observation resolving a name
+    that goes somewhere else.
+    """
 
     @abstractmethod
     def connection(self, endpoint: HttpsMcpEndpoint, context: ssl.SSLContext,
                    timeout: float) -> http.client.HTTPSConnection:
         """A connection to that endpoint by this route."""
+
+    @abstractmethod
+    def socket_session(self) -> aiohttp.ClientSession:
+        """The session an observation socket opens on, reaching the endpoint by this route."""
 
 
 @dataclass(frozen=True)
@@ -108,6 +151,9 @@ class ResolvedRoute(NullMember, EndpointRoute):
     def connection(self, endpoint: HttpsMcpEndpoint, context: ssl.SSLContext,
                    timeout: float) -> http.client.HTTPSConnection:
         return endpoint.connection(context, timeout)
+
+    def socket_session(self) -> aiohttp.ClientSession:
+        return aiohttp.ClientSession()
 
 
 @dataclass(frozen=True)
@@ -124,6 +170,10 @@ class ReachedRoute(TaggedRecordMember, EndpointRoute):
                 return DialedConnection(host, self.address, endpoint.url.port,
                                         context=context, timeout=timeout)
         raise MalformedRecord(f"The remote MCP endpoint {endpoint.url} names no host.")
+
+    def socket_session(self) -> aiohttp.ClientSession:
+        return aiohttp.ClientSession(
+            connector=aiohttp.TCPConnector(resolver=PinnedResolver(self.address)))
 
 
 @dataclass(frozen=True)
