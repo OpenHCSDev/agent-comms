@@ -1245,7 +1245,7 @@ async def test_an_inbox_read_after_its_place_the_same_locally_and_remotely(
     answers what a local read answers."""
     from agent_comms.agent_inbox import SecondsWait, TakenInputAfter
     from agent_comms.core_access import LocalCoreAccess
-    from agent_comms.tools import CommsInboxTool
+    from agent_comms.transport.tools.inbox import CommsInboxTool
 
     comms.registry.declare(NativeThread(CALLER.name, frozenset(), Checkout(comms.root)))
     first = comms.messaging.send(CALLER.name, "worker", "first").message

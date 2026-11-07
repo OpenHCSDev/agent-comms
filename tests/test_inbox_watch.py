@@ -44,7 +44,7 @@ from agent_comms.thread_status import ConnectedThreadStatus, NoBridgeThreadStatu
 from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.cli_bridges.shared import MonitorReadFile
-from agent_comms.tools import CommsInboxTool
+from agent_comms.transport.tools.inbox import CommsInboxTool
 
 
 class QuickHeartbeatConnector(Connector):
