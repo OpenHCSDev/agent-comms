@@ -132,9 +132,11 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
 
     @classmethod
     def _member_declarations(cls):
-        # The existing request owner also acquires its order-tool declarations.
+        # The existing request owner also acquires its order-tool declarations, and
+        # order_tools its served reads: a UI read's wire name selects its served member
+        # (TranscriptPageRead -> ServedTranscriptPageRead), which a process meets only here.
         # Registry reads must not depend on an unrelated command import cycle.
-        from . import tools  # noqa: F401 - acquire the declaration owner
+        from . import order_tools, tools  # noqa: F401 - acquire the declaration owners
 
         return super()._member_declarations()
 
