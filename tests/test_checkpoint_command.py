@@ -111,3 +111,32 @@ def test_a_stale_declaration_or_broken_transport_never_names_a_fake_push(tmp_pat
     assert unknown.branch == "checkpoint/Broken"
     # The commit exists locally even though the push could not be named.
     assert _git(broken, "rev-parse", "--short", "HEAD").strip()
+
+
+def test_a_nested_clone_is_left_untracked_and_never_adopted(tmp_path: Path):
+    """A clone inside the worktree belongs to its own repository. The checkpoint saves this
+    thread's work; it does not commit a pointer to somebody else's tree."""
+    comms = context_comms(tmp_path)
+    worktree = _repo(tmp_path, "repo")
+    (worktree / "step.py").write_text("print('step')\n")
+    _git(worktree, "add", "-A")
+    _git(worktree, "commit", "-q", "-m", "base")
+    (worktree / "step.py").write_text("print('step 2')\n")
+    nested = worktree / "skills" / "vendored"
+    nested.mkdir(parents=True)
+    _git(nested, "init", "-q", "-b", "main")
+    (nested / "SKILL.md").write_text("# vendored\n")
+    _git(nested, "add", "-A")
+    _git(nested, "commit", "-q", "-m", "vendored")
+    comms.registry.register(
+        NativeThread('Repo', frozenset({'team'}), Checkout(worktree), created_at=17009.0)
+    )
+
+    result = CheckpointCliCommand(name="Repo").apply(comms)
+    assert isinstance(result, PushedCheckpoint)
+    pushed = _git(tmp_path / "repo.origin.git", "ls-tree", "-r", "--name-only", result.branch)
+    assert "step.py" in pushed
+    assert "skills/vendored" not in pushed
+    assert "skills/vendored/SKILL.md" not in pushed
+    # The clone stays in the worktree, visible and untracked, owned by nobody here.
+    assert _git(worktree, "status", "--porcelain").strip().startswith("?? skills/")
