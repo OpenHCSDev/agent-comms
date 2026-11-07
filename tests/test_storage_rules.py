@@ -713,8 +713,8 @@ def test_the_clone_refusal_names_every_step_that_creates_an_allocation(tmp_path,
         StorageProjection(rule, thread, comms).check(
             shell_storage_effects('git clone remote target', tmp_path))
     text = str(refused.value)
-    for step in ('agent-comms-team request add', 'agent-comms-team order problem',
-                 'agent-comms checkout add'):
+    for step in ('agent-comms repositories', 'agent-comms-team request add',
+                 'agent-comms-team order problem', 'agent-comms checkout add'):
         assert step in text, text
     assert text.index('request add') < text.index('order problem') < text.index('checkout add')
 
@@ -785,3 +785,12 @@ def test_a_thread_writes_its_own_linked_worktree_without_a_goal_or_order(
     projection.require_write(worktree / 'implementation.py')
     with pytest.raises(StorageDenied, match='not allocated editable work'):
         projection.require_write(main / 'implementation.py')
+
+
+def test_the_read_path_is_a_declared_verb_not_a_clone():
+    """`git clone` was refused under every path, so a reader concluded another repository could
+    not be read at all; the team project already holds those checkouts and nothing named it."""
+    from agent_comms.cli_command import CliCommand
+
+    command = CliCommand.member_named('repositories')
+    assert command.declared_name == 'repositories'
