@@ -1,0 +1,2534 @@
+{
+  "source_commit": "51d17a5cb1db130bbeb707e5448b5daa92670c54",
+  "scope": "tracked Python under src, tests, tools; direct absolute/relative imports and explicit module imports; dynamic imports and other repositories unscored",
+  "summary": {
+    "agent_comms.todos": {
+      "lines": 7134,
+      "top_level_classes": 254,
+      "production_importer_files": 38,
+      "production_named_symbols": [
+        "AbandonedHeadVerdict",
+        "AcceptedVerdict",
+        "AssignedClaimReviewer",
+        "Assignment",
+        "BluntText",
+        "CarriedHeadVerdict",
+        "CheckedDelivery",
+        "ClaimOrder",
+        "ClaimReviewer",
+        "CleanHunt",
+        "ClosedHeadReading",
+        "CorrectCheckTodo",
+        "CorrectLinkTodo",
+        "CorrectRunTodo",
+        "DeliveryEvidence",
+        "DeliveryReport",
+        "DeliverySource",
+        "DirectiveText",
+        "DroppedVerdict",
+        "EditSendBackVerdict",
+        "EditWorkplaces",
+        "ExpectedProblem",
+        "GrowthReason",
+        "HeadReviewRecord",
+        "HeadReviewed",
+        "HeadVerdict",
+        "InstallTodo",
+        "JudgedCall",
+        "LinkedHeadReview",
+        "LocatedProblemFinding",
+        "MergeBlock",
+        "MergedProblemOrder",
+        "MergedProgress",
+        "NoCommitProgress",
+        "NoHeadOrder",
+        "NoSuccessor",
+        "OperationDelivery",
+        "OrderClaim",
+        "OrderCompletion",
+        "OrderHeadReview",
+        "OrderLink",
+        "OrderProgress",
+        "OrderQuote",
+        "OrderText",
+        "OrderWords",
+        "OrderedHunt",
+        "OwnerRequest",
+        "PeerAcceptedVerdict",
+        "PendingProblemOrder",
+        "PlainText",
+        "PresentCheckout",
+        "ProblemFinding",
+        "ProgressPoint",
+        "ProgressRead",
+        "ProgressSource",
+        "PullRequest",
+        "PullRequestLink",
+        "PullRequests",
+        "QualifiedHeadVerdict",
+        "RecordOrderHeadVerdict",
+        "RecordPullRequest",
+        "RejectedHeadVerdict",
+        "RestoreHolderTodo",
+        "ResumeClaimOrder",
+        "ReviewedHeadVerdict",
+        "RewrittenVerdict",
+        "SendBackVerdict",
+        "ServeTodo",
+        "SourceCompletion",
+        "StoredClosedHead",
+        "StoredClosedRepository",
+        "StoredCommitPatch",
+        "StoredHeadDiff",
+        "StoredHeadReview",
+        "StoredMainPatch",
+        "StrikeReason",
+        "StrikeTodo",
+        "Successor",
+        "SupersededHeadVerdict",
+        "SupersededVerdict",
+        "Todo",
+        "TodoBatch",
+        "TodoCommand",
+        "TodoOperation",
+        "TodoProblems",
+        "TodoStore",
+        "ToolCallVerdict",
+        "UnderReviewHeadVerdict",
+        "UnlocatedProblemFinding",
+        "UnmergedListedPullRequest",
+        "UnquotedHeadReview",
+        "VerdictAudience",
+        "VerdictReason",
+        "VoidStrikeTodo",
+        "WaivedVerdict",
+        "WithdrawTodo",
+        "WorkingEvidence"
+      ],
+      "module_aliases": []
+    },
+    "agent_comms.tools": {
+      "lines": 1795,
+      "top_level_classes": 116,
+      "production_importer_files": 6,
+      "production_named_symbols": [
+        "CommsChannelsTool",
+        "CommsInboxTool",
+        "CommsSendTool",
+        "CommsSetGoalTool",
+        "SendTool",
+        "ToolReplyResult",
+        "invoke_tool"
+      ],
+      "module_aliases": [
+        {
+          "path": "src/agent_comms/tool_declaration.py",
+          "line": 139,
+          "module_alias": "tools"
+        }
+      ]
+    },
+    "agent_comms.standing_rules": {
+      "lines": 1555,
+      "top_level_classes": 51,
+      "production_importer_files": 12,
+      "production_named_symbols": [
+        "BlocksRelease",
+        "BoardDisagrees",
+        "ClearingVerb",
+        "CoreActsStandingRule",
+        "DatedStandingRule",
+        "Degradation",
+        "FamilyScan",
+        "HeadLine",
+        "HeadReviewRule",
+        "HeldBranch",
+        "HeldBranchRule",
+        "HolderLine",
+        "HuntDue",
+        "IndependentStandingRule",
+        "OrderHeadReviewCommands",
+        "OwedAnswer",
+        "ReasonedStandingRule",
+        "ReviewTimerUp",
+        "ServicePassFailing",
+        "Sign",
+        "StandingRule",
+        "UndatedStandingRule"
+      ],
+      "module_aliases": []
+    }
+  },
+  "first_batch": {
+    "destination": "agent_comms.transport.tools.goals",
+    "declarations": [
+      {
+        "name": "OwnGoalPublication",
+        "path": "src/agent_comms/tools.py",
+        "line": 232,
+        "bases": [
+          "ToolResult"
+        ],
+        "methods": [
+          {
+            "name": "publication_kind",
+            "line": 238
+          }
+        ]
+      },
+      {
+        "name": "GoalSet",
+        "path": "src/agent_comms/tools.py",
+        "line": 243,
+        "bases": [
+          "OwnGoalPublication"
+        ],
+        "methods": []
+      },
+      {
+        "name": "GoalProgress",
+        "path": "src/agent_comms/tools.py",
+        "line": 249,
+        "bases": [
+          "OwnGoalPublication",
+          "GoalSnapshot"
+        ],
+        "methods": []
+      },
+      {
+        "name": "GoalUpdated",
+        "path": "src/agent_comms/tools.py",
+        "line": 254,
+        "bases": [
+          "OwnGoalPublication"
+        ],
+        "methods": []
+      },
+      {
+        "name": "TeammateGoalChanged",
+        "path": "src/agent_comms/tools.py",
+        "line": 259,
+        "bases": [
+          "ToolResult"
+        ],
+        "methods": []
+      },
+      {
+        "name": "OwnGoal",
+        "path": "src/agent_comms/tools.py",
+        "line": 268,
+        "bases": [
+          "NullMember"
+        ],
+        "methods": [
+          {
+            "name": "thread_name",
+            "line": 273
+          },
+          {
+            "name": "published",
+            "line": 276
+          }
+        ]
+      },
+      {
+        "name": "TeammateGoal",
+        "path": "src/agent_comms/tools.py",
+        "line": 281,
+        "bases": [
+          "SingleFieldValue"
+        ],
+        "methods": [
+          {
+            "name": "thread_name",
+            "line": 287
+          },
+          {
+            "name": "published",
+            "line": 290
+          }
+        ]
+      },
+      {
+        "name": "GoalChangeTool",
+        "path": "src/agent_comms/tools.py",
+        "line": 295,
+        "bases": [
+          "ThreadToolRequest"
+        ],
+        "methods": [
+          {
+            "name": "update",
+            "line": 303
+          },
+          {
+            "name": "current",
+            "line": 307
+          }
+        ]
+      },
+      {
+        "name": "CommsSetGoalTool",
+        "path": "src/agent_comms/tools.py",
+        "line": 945,
+        "bases": [
+          "GoalChangeTool"
+        ],
+        "methods": [
+          {
+            "name": "apply",
+            "line": 953
+          }
+        ]
+      },
+      {
+        "name": "CommsGoalTool",
+        "path": "src/agent_comms/tools.py",
+        "line": 961,
+        "bases": [
+          "ThreadToolRequest"
+        ],
+        "methods": [
+          {
+            "name": "apply",
+            "line": 998
+          }
+        ]
+      },
+      {
+        "name": "CommsResumeGoalTool",
+        "path": "src/agent_comms/tools.py",
+        "line": 1016,
+        "bases": [
+          "GoalChangeTool"
+        ],
+        "methods": [
+          {
+            "name": "apply",
+            "line": 1025
+          }
+        ]
+      },
+      {
+        "name": "CommsEditGoalTool",
+        "path": "src/agent_comms/tools.py",
+        "line": 1047,
+        "bases": [
+          "GoalChangeTool"
+        ],
+        "methods": [
+          {
+            "name": "apply",
+            "line": 1057
+          }
+        ]
+      },
+      {
+        "name": "CommsClearGoalTool",
+        "path": "src/agent_comms/tools.py",
+        "line": 1070,
+        "bases": [
+          "GoalChangeTool"
+        ],
+        "methods": [
+          {
+            "name": "apply",
+            "line": 1079
+          }
+        ]
+      },
+      {
+        "name": "CommsPauseGoalTool",
+        "path": "src/agent_comms/tools.py",
+        "line": 1090,
+        "bases": [
+          "GoalChangeTool"
+        ],
+        "methods": [
+          {
+            "name": "apply",
+            "line": 1099
+          }
+        ]
+      },
+      {
+        "name": "CommsGoalHistoryTool",
+        "path": "src/agent_comms/tools.py",
+        "line": 1112,
+        "bases": [
+          "ThreadReadTool"
+        ],
+        "methods": [
+          {
+            "name": "apply",
+            "line": 1119
+          }
+        ]
+      }
+    ],
+    "direct_import_consumers": [
+      {
+        "path": "src/agent_comms/execution/owned_turn.py",
+        "line": 67,
+        "names": [
+          "CommsSetGoalTool"
+        ]
+      },
+      {
+        "path": "tests/test_goal_block_reason.py",
+        "line": 25,
+        "names": [
+          "CommsGoalTool"
+        ]
+      },
+      {
+        "path": "tests/test_goal_execution.py",
+        "line": 48,
+        "names": [
+          "CommsGoalHistoryTool"
+        ]
+      },
+      {
+        "path": "tests/test_goal_history.py",
+        "line": 35,
+        "names": [
+          "CommsGoalHistoryTool"
+        ]
+      },
+      {
+        "path": "tests/test_goal_input_review.py",
+        "line": 26,
+        "names": [
+          "CommsGoalTool"
+        ]
+      },
+      {
+        "path": "tests/test_goal_owner_pause.py",
+        "line": 16,
+        "names": [
+          "CommsGoalTool",
+          "CommsResumeGoalTool"
+        ]
+      },
+      {
+        "path": "tests/test_goal_reply_lock_scope.py",
+        "line": 34,
+        "names": [
+          "CommsGoalTool"
+        ]
+      },
+      {
+        "path": "tests/test_report_goal_evidence.py",
+        "line": 18,
+        "names": [
+          "CommsGoalTool"
+        ]
+      },
+      {
+        "path": "tests/test_turn_goal_permission.py",
+        "line": 12,
+        "names": [
+          "GoalSet"
+        ]
+      }
+    ]
+  },
+  "imports": {
+    "agent_comms.todos": [
+      {
+        "path": "src/agent_comms/behaviour_patterns.py",
+        "line": 33,
+        "names": [
+          "PlainText",
+          "Todo",
+          "TodoStore",
+          "VoidStrikeTodo"
+        ]
+      },
+      {
+        "path": "src/agent_comms/build_identity.py",
+        "line": 21,
+        "names": [
+          "MergedProblemOrder",
+          "Todo"
+        ]
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 43,
+        "names": [
+          "Todo"
+        ]
+      },
+      {
+        "path": "src/agent_comms/cli_verbs/merge_review.py",
+        "line": 15,
+        "names": [
+          "StoredHeadReview"
+        ]
+      },
+      {
+        "path": "src/agent_comms/closed_pull_requests.py",
+        "line": 14,
+        "names": [
+          "PullRequests",
+          "StoredClosedHead",
+          "StoredClosedRepository",
+          "StoredCommitPatch",
+          "StoredHeadDiff",
+          "StoredMainPatch",
+          "TodoStore"
+        ]
+      },
+      {
+        "path": "src/agent_comms/connector_caller.py",
+        "line": 17,
+        "names": [
+          "DirectiveText"
+        ]
+      },
+      {
+        "path": "src/agent_comms/errors.py",
+        "line": 13,
+        "names": [
+          "Todo"
+        ]
+      },
+      {
+        "path": "src/agent_comms/goal_actions.py",
+        "line": 27,
+        "names": [
+          "ExpectedProblem",
+          "PendingProblemOrder",
+          "RecordOrderHeadVerdict",
+          "SendBackVerdict",
+          "Todo",
+          "TodoCommand",
+          "TodoOperation"
+        ]
+      },
+      {
+        "path": "src/agent_comms/goal_management.py",
+        "line": 62,
+        "names": [
+          "SendBackVerdict",
+          "StrikeReason",
+          "Todo",
+          "JudgedCall",
+          "TodoBatch",
+          "TodoCommand",
+          "TodoStore"
+        ]
+      },
+      {
+        "path": "src/agent_comms/goal_records.py",
+        "line": 25,
+        "names": [
+          "TodoStore"
+        ]
+      },
+      {
+        "path": "src/agent_comms/goals.py",
+        "line": 66,
+        "names": [
+          "Todo"
+        ]
+      },
+      {
+        "path": "src/agent_comms/head_review.py",
+        "line": 31,
+        "names": [
+          "HeadReviewRecord",
+          "HeadVerdict",
+          "Todo"
+        ]
+      },
+      {
+        "path": "src/agent_comms/heartbeat_frame.py",
+        "line": 24,
+        "names": [
+          "ClosedHeadReading",
+          "HeadReviewRecord",
+          "ProgressRead",
+          "StoredClosedHead",
+          "StoredHeadReview",
+          "EditWorkplaces",
+          "Todo",
+          "TodoStore"
+        ]
+      },
+      {
+        "path": "src/agent_comms/heartbeat_subjects.py",
+        "line": 26,
+        "names": [
+          "HeadVerdict",
+          "StoredHeadReview"
+        ]
+      },
+      {
+        "path": "src/agent_comms/held_orders.py",
+        "line": 10,
+        "names": [
+          "Todo"
+        ]
+      },
+      {
+        "path": "src/agent_comms/held_orders.py",
+        "line": 18,
+        "names": [
+          "TodoStore"
+        ]
+      },
+      {
+        "path": "src/agent_comms/integration.py",
+        "line": 60,
+        "names": [
+          "CarriedHeadVerdict",
+          "PullRequestLink",
+          "PullRequests",
+          "RecordPullRequest",
+          "StoredHeadReview",
+          "Todo",
+          "VerdictReason"
+        ]
+      },
+      {
+        "path": "src/agent_comms/messaging.py",
+        "line": 48,
+        "names": [
+          "TodoStore"
+        ]
+      },
+      {
+        "path": "src/agent_comms/order_runs.py",
+        "line": 15,
+        "names": [
+          "MergedProblemOrder",
+          "Todo"
+        ]
+      },
+      {
+        "path": "src/agent_comms/order_story.py",
+        "line": 17,
+        "names": [
+          "StrikeTodo",
+          "Todo"
+        ]
+      },
+      {
+        "path": "src/agent_comms/order_tools.py",
+        "line": 14,
+        "names": [
+          "AssignedClaimReviewer",
+          "ClaimReviewer",
+          "ClaimOrder",
+          "CorrectCheckTodo",
+          "CorrectRunTodo",
+          "DeliveryReport",
+          "HeadReviewed",
+          "HeadVerdict",
+          "InstallTodo",
+          "JudgedCall",
+          "NoHeadOrder",
+          "OrderClaim",
+          "OrderCompletion",
+          "OrderProgress",
+          "PlainText",
+          "ProgressRead",
+          "ProgressSource",
+          "PullRequestLink",
+          "ResumeClaimOrder",
+          "ServeTodo",
+          "StrikeReason",
+          "Todo",
+          "TodoOperation",
+          "TodoProblems",
+          "ToolCallVerdict",
+          "WaivedVerdict"
+        ]
+      },
+      {
+        "path": "src/agent_comms/owner_requests.py",
+        "line": 26,
+        "names": [
+          "OwnerRequest",
+          "Todo",
+          "TodoStore"
+        ]
+      },
+      {
+        "path": "src/agent_comms/plan_phases.py",
+        "line": 30,
+        "names": [
+          "Todo"
+        ]
+      },
+      {
+        "path": "src/agent_comms/plan_reading.py",
+        "line": 18,
+        "names": [
+          "Todo"
+        ]
+      },
+      {
+        "path": "src/agent_comms/standing_rules.py",
+        "line": 47,
+        "names": [
+          "HeadVerdict",
+          "MergeBlock",
+          "ProgressRead",
+          "ProgressSource",
+          "StoredHeadReview",
+          "Todo"
+        ]
+      },
+      {
+        "path": "src/agent_comms/standing_rules.py",
+        "line": 68,
+        "names": [
+          "OrderClaim",
+          "OwnerRequest",
+          "PresentCheckout",
+          "PullRequest",
+          "TodoStore"
+        ]
+      },
+      {
+        "path": "src/agent_comms/storage_rules.py",
+        "line": 43,
+        "names": [
+          "Todo",
+          "TodoStore"
+        ]
+      },
+      {
+        "path": "src/agent_comms/team/judge.py",
+        "line": 59,
+        "names": [
+          "AbandonedHeadVerdict",
+          "AcceptedVerdict",
+          "BluntText",
+          "DirectiveText",
+          "DroppedVerdict",
+          "EditSendBackVerdict",
+          "GrowthReason",
+          "HeadReviewed",
+          "HeadVerdict",
+          "JudgedCall",
+          "LinkedHeadReview",
+          "OrderHeadReview",
+          "OrderLink",
+          "OrderQuote",
+          "PeerAcceptedVerdict",
+          "QualifiedHeadVerdict",
+          "RejectedHeadVerdict",
+          "ReviewedHeadVerdict",
+          "RewrittenVerdict",
+          "SendBackVerdict",
+          "StrikeReason",
+          "SupersededHeadVerdict",
+          "SupersededVerdict",
+          "Todo",
+          "ToolCallVerdict",
+          "UnderReviewHeadVerdict",
+          "UnquotedHeadReview",
+          "VerdictReason"
+        ]
+      },
+      {
+        "path": "src/agent_comms/team/order.py",
+        "line": 93,
+        "names": [
+          "BluntText",
+          "CheckedDelivery",
+          "CleanHunt",
+          "CorrectLinkTodo",
+          "DeliveryEvidence",
+          "DeliverySource",
+          "DirectiveText",
+          "ExpectedProblem",
+          "LocatedProblemFinding",
+          "NoSuccessor",
+          "OperationDelivery",
+          "OrderedHunt",
+          "OrderProgress",
+          "OrderText",
+          "OrderWords",
+          "PendingProblemOrder",
+          "ProblemFinding",
+          "PullRequestLink",
+          "PullRequests",
+          "RecordPullRequest",
+          "SourceCompletion",
+          "StrikeReason",
+          "WorkingEvidence",
+          "StrikeTodo",
+          "Successor",
+          "Todo",
+          "TodoProblems",
+          "UnlocatedProblemFinding",
+          "VerdictAudience",
+          "VoidStrikeTodo",
+          "WithdrawTodo"
+        ]
+      },
+      {
+        "path": "src/agent_comms/team/publication_rules.py",
+        "line": 18,
+        "names": [
+          "PullRequestLink"
+        ]
+      },
+      {
+        "path": "src/agent_comms/team/questions.py",
+        "line": 17,
+        "names": [
+          "Todo"
+        ]
+      },
+      {
+        "path": "src/agent_comms/team/standing.py",
+        "line": 67,
+        "names": [
+          "Assignment",
+          "OwnerRequest",
+          "PullRequests",
+          "ProgressRead",
+          "UnmergedListedPullRequest",
+          "RestoreHolderTodo",
+          "Todo"
+        ]
+      },
+      {
+        "path": "src/agent_comms/team/vibe_check.py",
+        "line": 47,
+        "names": [
+          "OwnerRequest",
+          "Todo"
+        ]
+      },
+      {
+        "path": "src/agent_comms/team_heartbeat.py",
+        "line": 27,
+        "names": [
+          "ProgressRead",
+          "Todo"
+        ]
+      },
+      {
+        "path": "src/agent_comms/team_hud_records.py",
+        "line": 27,
+        "names": [
+          "OrderProgress",
+          "ProgressPoint",
+          "PullRequest"
+        ]
+      },
+      {
+        "path": "src/agent_comms/team_service.py",
+        "line": 16,
+        "names": [
+          "OwnerRequest"
+        ]
+      },
+      {
+        "path": "src/agent_comms/thread_identity.py",
+        "line": 46,
+        "names": [
+          "Todo"
+        ]
+      },
+      {
+        "path": "src/agent_comms/turn_digests.py",
+        "line": 29,
+        "names": [
+          "EditWorkplaces",
+          "NoCommitProgress",
+          "OrderProgress",
+          "ProgressRead",
+          "Todo",
+          "TodoStore"
+        ]
+      },
+      {
+        "path": "src/agent_comms/ui_model/teammate_state.py",
+        "line": 37,
+        "names": [
+          "MergedProgress",
+          "NoCommitProgress",
+          "OrderProgress",
+          "ProgressSource",
+          "Todo"
+        ]
+      },
+      {
+        "path": "src/agent_comms/work_dispatch.py",
+        "line": 34,
+        "names": [
+          "PendingProblemOrder"
+        ]
+      },
+      {
+        "path": "tests/github_fixture.py",
+        "line": 13,
+        "names": [
+          "ListedPullRequest",
+          "UnmergedListedPullRequest"
+        ]
+      },
+      {
+        "path": "tests/integration_source_fixture.py",
+        "line": 21,
+        "names": [
+          "DraftListedPullRequest",
+          "PullRequests",
+          "RecordPullRequest"
+        ]
+      },
+      {
+        "path": "tests/source_revision_fixture.py",
+        "line": 18,
+        "names": [
+          "FixScope",
+          "FixShape",
+          "PullRequestLink"
+        ]
+      },
+      {
+        "path": "tests/team_heartbeat_fixture.py",
+        "line": 14,
+        "names": [
+          "ProgressRead"
+        ]
+      },
+      {
+        "path": "tests/test_absence_owners.py",
+        "line": 56,
+        "names": [
+          "NoTodoHolder"
+        ]
+      },
+      {
+        "path": "tests/test_board_verbs.py",
+        "line": 24,
+        "names": [
+          "Assignment",
+          "ClaimOrder",
+          "DeliveredProblemOrder",
+          "NoHeadOrder",
+          "OrderHeadReview",
+          "OrderClaim",
+          "OrderHeadReviewRecord",
+          "OrderMessage",
+          "ProgressRead",
+          "RecordOrderHeadVerdict",
+          "RecordPullRequest",
+          "ReleaseTodo",
+          "PullRequestLink",
+          "ReviewedHeadVerdict",
+          "SendBackStrike",
+          "StoredHeadReview",
+          "StrikeReason",
+          "TodoStore",
+          "UnderReviewHeadVerdict",
+          "VerdictReason"
+        ]
+      },
+      {
+        "path": "tests/test_bus_files.py",
+        "line": 23,
+        "names": [
+          "TodoStore"
+        ]
+      },
+      {
+        "path": "tests/test_carry_team_vocabulary.py",
+        "line": 26,
+        "names": [
+          "OwnerRequest",
+          "TodoStore"
+        ]
+      },
+      {
+        "path": "tests/test_checker_stack.py",
+        "line": 22,
+        "names": [
+          "DraftListedPullRequest"
+        ]
+      },
+      {
+        "path": "tests/test_checkout_submodules.py",
+        "line": 30,
+        "names": [
+          "PendingProblemOrder",
+          "WithdrawTodo"
+        ]
+      },
+      {
+        "path": "tests/test_declared_family.py",
+        "line": 180,
+        "names": [
+          "FoundProgress"
+        ]
+      },
+      {
+        "path": "tests/test_delivery_merge.py",
+        "line": 5,
+        "names": [
+          "BranchDeliveryMerge",
+          "CheckedCommitDelivery",
+          "CommitDelivery",
+          "DeliveryMerge",
+          "DraftListedPullRequest",
+          "DraftPullRequest",
+          "ListedPullRequest",
+          "MainDeliveryMerge",
+          "MergedListedPullRequest",
+          "MergedPullRequest",
+          "OrderDelivery",
+          "PullRequestCommit",
+          "UnmergedDeliveryMerge",
+          "UnmergedListedPullRequest",
+          "UnmergedPullRequest"
+        ]
+      },
+      {
+        "path": "tests/test_edit_allocations.py",
+        "line": 18,
+        "names": [
+          "Assignment",
+          "IncomingWork",
+          "SharedWorktreeRefusal"
+        ]
+      },
+      {
+        "path": "tests/test_fork_record_authority.py",
+        "line": 20,
+        "names": [
+          "NoHeadOrder",
+          "RequestDirective",
+          "ReviewedHeadVerdict",
+          "VerdictAudience",
+          "VerdictReason"
+        ]
+      },
+      {
+        "path": "tests/test_forks.py",
+        "line": 53,
+        "names": [
+          "EditWorkplaces"
+        ]
+      },
+      {
+        "path": "tests/test_forks.py",
+        "line": 70,
+        "names": [
+          "Assignment",
+          "DraftListedPullRequest",
+          "ExpectedProblem",
+          "FixScope",
+          "FixShape",
+          "IncomingWork",
+          "LocatedProblemFinding",
+          "PendingProblemOrder",
+          "ProblemAllocation",
+          "ProgressRead",
+          "PullRequests",
+          "PullRequestLink",
+          "ReleaseTodo",
+          "StrikeReason",
+          "SupersededVerdict",
+          "Todo",
+          "UnlocatedProblemFinding"
+        ]
+      },
+      {
+        "path": "tests/test_forks.py",
+        "line": 101,
+        "names": [
+          "MergedProgress",
+          "NoCommitProgress"
+        ]
+      },
+      {
+        "path": "tests/test_head_review.py",
+        "line": 48,
+        "names": [
+          "CarriedHeadVerdict",
+          "ClosedListedPullRequest",
+          "ConflictMergeBlock",
+          "DraftListedPullRequest",
+          "FailedCheckMergeBlock",
+          "GrownHeadVerdict",
+          "GrowthReason",
+          "OrderHeadReview",
+          "LinkedHeadReview",
+          "NoHeadOrder",
+          "OrderClaim",
+          "ProgressRead",
+          "PullRequestLink",
+          "PullRequests",
+          "RecordPullRequest",
+          "RejectedHeadVerdict",
+          "HeadVerdict",
+          "HeadReviewed",
+          "QualifiedHeadVerdict",
+          "ReviewedHeadVerdict",
+          "StoredHeadReview",
+          "UnquotedHeadReview",
+          "AbandonedHeadVerdict",
+          "StrikeReason",
+          "SupersededHeadVerdict",
+          "UnderReviewHeadVerdict",
+          "UnmergedListedPullRequest",
+          "VerdictReason",
+          "WithdrawTodo"
+        ]
+      },
+      {
+        "path": "tests/test_head_review.py",
+        "line": 1482,
+        "names": [
+          "FailedCheckMergeBlock"
+        ]
+      },
+      {
+        "path": "tests/test_held_problem_orders.py",
+        "line": 23,
+        "names": [
+          "DeliveredProblemOrder",
+          "MergedListedPullRequest",
+          "OrderMessage",
+          "PullRequestCommit",
+          "DeliveryReport",
+          "PullRequestLink",
+          "SelectedClaimReviewer",
+          "StrikeTodo",
+          "TeammateOccupied"
+        ]
+      },
+      {
+        "path": "tests/test_holder_consent.py",
+        "line": 21,
+        "names": [
+          "AssignTodo",
+          "HolderConsentRequired",
+          "ReleaseTodo",
+          "StrikeReason"
+        ]
+      },
+      {
+        "path": "tests/test_holder_standing_rules.py",
+        "line": 24,
+        "names": [
+          "DoneTodoState"
+        ]
+      },
+      {
+        "path": "tests/test_holder_standing_rules.py",
+        "line": 78,
+        "names": [
+          "ClaimOrder",
+          "DraftListedPullRequest",
+          "CorrectLinkTodo",
+          "CorrectMergedLinkTodo",
+          "MergedLink",
+          "PullRequestLink",
+          "ReleaseTodo",
+          "ResumeClaimOrder",
+          "StrikeReason",
+          "ExpectedProblem",
+          "OrderClaim",
+          "OrderMessage",
+          "PendingProblemOrder",
+          "ProgressRead"
+        ]
+      },
+      {
+        "path": "tests/test_holder_standing_rules.py",
+        "line": 1212,
+        "names": [
+          "ReleaseTodo",
+          "StrikeReason",
+          "WithdrawTodo"
+        ]
+      },
+      {
+        "path": "tests/test_integration.py",
+        "line": 24,
+        "names": [
+          "DraftListedPullRequest",
+          "MergedListedPullRequest",
+          "PullRequestCommit",
+          "QualifiedHeadVerdict",
+          "ReviewedHeadVerdict",
+          "TodoError",
+          "UnmergedListedPullRequest",
+          "VerdictReason"
+        ]
+      },
+      {
+        "path": "tests/test_judge_dropped.py",
+        "line": 17,
+        "names": [
+          "DroppedVerdict",
+          "FixScope",
+          "FixShape",
+          "RewrittenVerdict"
+        ]
+      },
+      {
+        "path": "tests/test_judge_edit_ownership.py",
+        "line": 20,
+        "names": [
+          "AcceptedVerdict",
+          "Assignment",
+          "SendBackVerdict",
+          "StrikeReason",
+          "Todo"
+        ]
+      },
+      {
+        "path": "tests/test_judge_edit_ownership.py",
+        "line": 107,
+        "names": [
+          "VerdictReason"
+        ]
+      },
+      {
+        "path": "tests/test_module_layers_clients.py",
+        "line": 18,
+        "names": [
+          "DraftListedPullRequest"
+        ]
+      },
+      {
+        "path": "tests/test_order_claims.py",
+        "line": 52,
+        "names": [
+          "TriageScope",
+          "SelectedClaimReviewer",
+          "ExpectedProblem",
+          "CheckedProblemOrder",
+          "ClaimedProblemOrder",
+          "ClaimOrder",
+          "CorrectCheckTodo",
+          "DeliveredProblemOrder",
+          "DeliveryReport",
+          "DoneTodoState",
+          "FailedCheckStrike",
+          "OrderClaim",
+          "OrderMessage",
+          "PendingProblemOrder",
+          "PullRequestLink",
+          "ReleaseTodo",
+          "SendBackVerdict",
+          "StrikeReason",
+          "StrikeTodo",
+          "Todo",
+          "ClaimPublicationUnavailable",
+          "ResumeClaimOrder"
+        ]
+      },
+      {
+        "path": "tests/test_order_completion.py",
+        "line": 21,
+        "names": [
+          "DeliveredProblemOrder",
+          "DoneTodoState",
+          "InstalledMergedProblemOrder",
+          "MergedProblemOrder",
+          "OperationDelivery",
+          "ProgressRead",
+          "ProblemOrder",
+          "PullRequestLink",
+          "Todo",
+          "ReportDelivery",
+          "ReportedProblemOrder",
+          "TriageScope"
+        ]
+      },
+      {
+        "path": "tests/test_order_progress.py",
+        "line": 27,
+        "names": [
+          "EditingProgress",
+          "NoCommitProgress",
+          "OrderProgress",
+          "PresentCheckout",
+          "ProgressRead",
+          "ProgressSource"
+        ]
+      },
+      {
+        "path": "tests/test_order_review.py",
+        "line": 8,
+        "names": [
+          "MeasuredReview",
+          "TodoStore"
+        ]
+      },
+      {
+        "path": "tests/test_order_scopes.py",
+        "line": 12,
+        "names": [
+          "PullRequestHeadRevision"
+        ]
+      },
+      {
+        "path": "tests/test_order_scopes.py",
+        "line": 27,
+        "names": [
+          "CommitDelivery",
+          "DoneTodoState",
+          "FixShape",
+          "OrderScope",
+          "PendingProblemOrder",
+          "ReportDelivery",
+          "ReportedProblemOrder",
+          "TodoStore",
+          "TriageScope"
+        ]
+      },
+      {
+        "path": "tests/test_order_story.py",
+        "line": 35,
+        "names": [
+          "AcceptedVerdict",
+          "DoneTodoState",
+          "EditSendBackVerdict",
+          "JudgedCall",
+          "OrderMessage",
+          "OrderVerdict",
+          "ReleaseTodo",
+          "SendBackVerdict",
+          "StrikeReason",
+          "StrikeTodo",
+          "UnorderedProblemOrder",
+          "WithdrawTodo"
+        ]
+      },
+      {
+        "path": "tests/test_order_text.py",
+        "line": 7,
+        "names": [
+          "BluntText",
+          "FairText",
+          "HierarchyText",
+          "OrderText",
+          "PlainText",
+          "StrikeReason"
+        ]
+      },
+      {
+        "path": "tests/test_owner_requests.py",
+        "line": 27,
+        "names": [
+          "ClaimOrder",
+          "OrderClaim",
+          "PendingProblemOrder",
+          "PullRequestLink",
+          "TodoStore",
+          "TriageScope",
+          "WithdrawTodo"
+        ]
+      },
+      {
+        "path": "tests/test_phase_task_dependencies.py",
+        "line": 9,
+        "names": [
+          "UnorderedProblemOrder"
+        ]
+      },
+      {
+        "path": "tests/test_plan_stalled.py",
+        "line": 12,
+        "names": [
+          "ReleaseTodo",
+          "StoredOrderStory",
+          "StrikeReason"
+        ]
+      },
+      {
+        "path": "tests/test_proof_build.py",
+        "line": 38,
+        "names": [
+          "CommitDelivery",
+          "DoneTodoState",
+          "FileDeliveryEvidence",
+          "MergedListedPullRequest",
+          "OpenTodoState",
+          "OperationDelivery",
+          "PendingProblemOrder",
+          "ProgressRead",
+          "PullRequestCommit",
+          "PullRequestLink",
+          "Todo",
+          "UnmergedListedPullRequest"
+        ]
+      },
+      {
+        "path": "tests/test_publication_rules.py",
+        "line": 26,
+        "names": [
+          "ClosedListedPullRequest",
+          "MergedListedPullRequest",
+          "NoHeadOrder",
+          "ProgressRead",
+          "PullRequestCommit",
+          "ReviewedHeadVerdict",
+          "SupersededHeadVerdict",
+          "VerdictReason"
+        ]
+      },
+      {
+        "path": "tests/test_queue_bypass_hook.py",
+        "line": 16,
+        "names": [
+          "QualifiedHeadVerdict",
+          "ReviewedHeadVerdict",
+          "RejectedHeadVerdict"
+        ]
+      },
+      {
+        "path": "tests/test_reconcile_stores.py",
+        "line": 454,
+        "names": [
+          "StoredClosedRepository",
+          "TodoStore"
+        ]
+      },
+      {
+        "path": "tests/test_recorded_board_health.py",
+        "line": 20,
+        "names": [
+          "ProgressRead"
+        ]
+      },
+      {
+        "path": "tests/test_repository_name.py",
+        "line": 9,
+        "names": [
+          "PullRequests",
+          "UnmergedListedPullRequest"
+        ]
+      },
+      {
+        "path": "tests/test_schema_report.py",
+        "line": 11,
+        "names": [
+          "Todo"
+        ]
+      },
+      {
+        "path": "tests/test_slop_owner_line.py",
+        "line": 17,
+        "names": [
+          "CommitDelivery",
+          "MergedListedPullRequest",
+          "PullRequestCommit",
+          "PullRequestLink"
+        ]
+      },
+      {
+        "path": "tests/test_source_revision.py",
+        "line": 11,
+        "names": [
+          "PullRequestHeadRevision"
+        ]
+      },
+      {
+        "path": "tests/test_source_revision.py",
+        "line": 21,
+        "names": [
+          "FixScope",
+          "FixShape",
+          "LocatedProblemFinding"
+        ]
+      },
+      {
+        "path": "tests/test_standing_rules.py",
+        "line": 15,
+        "names": [
+          "DirectiveText"
+        ]
+      },
+      {
+        "path": "tests/test_storage_rules.py",
+        "line": 53,
+        "names": [
+          "AssignedBoundaryRead",
+          "EditWorkplaces",
+          "PendingProblemOrder",
+          "PullRequestLink"
+        ]
+      },
+      {
+        "path": "tests/test_storage_violations.py",
+        "line": 26,
+        "names": [
+          "PendingProblemOrder",
+          "PresentCheckout",
+          "ProgressRead"
+        ]
+      },
+      {
+        "path": "tests/test_store_guards.py",
+        "line": 19,
+        "names": [
+          "TodoStore"
+        ]
+      },
+      {
+        "path": "tests/test_strike_releases.py",
+        "line": 7,
+        "names": [
+          "ReleaseTodo",
+          "StoredOrderStory",
+          "StrikeReason",
+          "TodoStore"
+        ]
+      },
+      {
+        "path": "tests/test_team_hud_projection.py",
+        "line": 18,
+        "names": [
+          "OpenPrProgress"
+        ]
+      },
+      {
+        "path": "tests/test_team_notifications.py",
+        "line": 35,
+        "names": [
+          "ProgressRead",
+          "TeammateOccupied"
+        ]
+      },
+      {
+        "path": "tests/test_team_problem_orders.py",
+        "line": 16,
+        "names": [
+          "OrderDelivery",
+          "RecordedCommitDelivery"
+        ]
+      },
+      {
+        "path": "tests/test_team_replay.py",
+        "line": 49,
+        "names": [
+          "ClaimOrder",
+          "DraftListedPullRequest",
+          "OperationDelivery",
+          "OrderClaim",
+          "OrderMessage",
+          "PendingProblemOrder",
+          "ProgressRead",
+          "PullRequestLink",
+          "Todo",
+          "UnmergedListedPullRequest"
+        ]
+      },
+      {
+        "path": "tests/test_team_run_rules.py",
+        "line": 12,
+        "names": [
+          "Todo",
+          "TodoStore"
+        ]
+      },
+      {
+        "path": "tests/test_team_skill_hook.py",
+        "line": 46,
+        "names": [
+          "ProgressRead",
+          "ReviewedHeadVerdict"
+        ]
+      },
+      {
+        "path": "tests/test_todo_stories.py",
+        "line": 27,
+        "names": [
+          "AcceptedVerdict",
+          "Assignment",
+          "CheckedProblemOrder",
+          "DroppedVerdict",
+          "EditSendBackVerdict",
+          "FailedCheckStrike",
+          "OrderMessage",
+          "PeerAcceptedVerdict",
+          "ReleaseTodo",
+          "RewrittenVerdict",
+          "SendBackStrike",
+          "SendBackVerdict",
+          "StoredOrderStory",
+          "StrikeReason",
+          "StrikeTodo",
+          "SupersededVerdict",
+          "WaivedVerdict",
+          "Todo",
+          "TodoCommand",
+          "VoidStrikeTodo",
+          "WordingCorrection"
+        ]
+      },
+      {
+        "path": "tests/test_todos.py",
+        "line": 54,
+        "names": [
+          "StoredOrderStory",
+          "Assignment",
+          "ChangeTodoState",
+          "ExpectedProblem",
+          "ClaimOrder",
+          "ClosedListedPullRequest",
+          "CommitDelivery",
+          "OrderClaim",
+          "OrderMessage",
+          "DeliverTodo",
+          "DoneTodoState",
+          "DraftListedPullRequest",
+          "MergedListedPullRequest",
+          "MergedProgress",
+          "NotWorkMaintainer",
+          "OperationDelivery",
+          "PendingProblemOrder",
+          "ProgressRead",
+          "PullRequestCommit",
+          "PullRequestLink",
+          "PullRequestSource",
+          "PullRequests",
+          "RecordPullRequest",
+          "ReleaseTodo",
+          "StrikeReason",
+          "Todo",
+          "TodoCommand",
+          "TodoState",
+          "TodoStore",
+          "UnmergedListedPullRequest",
+          "WithdrawTodo"
+        ]
+      },
+      {
+        "path": "tests/test_todos.py",
+        "line": 90,
+        "names": [
+          "FoldedProblemOrder",
+          "UnorderedProblemOrder"
+        ]
+      },
+      {
+        "path": "tests/test_unit_state.py",
+        "line": 32,
+        "names": [
+          "DeliverTodo",
+          "OperationDelivery",
+          "ProgressRead",
+          "UnreadProgress"
+        ]
+      },
+      {
+        "path": "tests/test_unowned_checkout_work.py",
+        "line": 44,
+        "names": [
+          "Assignment",
+          "ExpectedProblem",
+          "PendingProblemOrder",
+          "ProgressRead",
+          "ReleaseTodo",
+          "StrikeReason",
+          "StrikeTodo",
+          "Todo",
+          "VoidStrikeTodo"
+        ]
+      },
+      {
+        "path": "tests/test_watch_git_preparation.py",
+        "line": 36,
+        "names": [
+          "DraftPullRequest",
+          "UnmergedPullRequest"
+        ]
+      },
+      {
+        "path": "tools/cutover/carry_attempt_resolutions.py",
+        "line": 27,
+        "names": [
+          "Todo",
+          "TodoStore"
+        ]
+      },
+      {
+        "path": "tools/cutover/carry_order_corrections.py",
+        "line": 21,
+        "names": [
+          "CheckedProblemOrder",
+          "CorrectCheckTodo",
+          "Todo",
+          "TodoStore"
+        ]
+      },
+      {
+        "path": "tools/cutover/carry_strike_releases.py",
+        "line": 16,
+        "names": [
+          "ReleaseTodo",
+          "StoredOrderStory",
+          "TodoCommand",
+          "TodoStore"
+        ]
+      },
+      {
+        "path": "tools/cutover/carry_team_vocabulary.py",
+        "line": 28,
+        "names": [
+          "HuntRecord",
+          "OwnerRequest",
+          "TodoStore"
+        ]
+      },
+      {
+        "path": "tools/cutover/carry_todo_stories.py",
+        "line": 17,
+        "names": [
+          "CheckedProblemOrder",
+          "OrderMessage",
+          "StoredOrderStory",
+          "Todo",
+          "TodoCommand",
+          "TodoStore"
+        ]
+      }
+    ],
+    "agent_comms.tools": [
+      {
+        "path": "src/agent_comms/cli_verbs/tool.py",
+        "line": 12,
+        "names": [
+          "ToolReplyResult"
+        ]
+      },
+      {
+        "path": "src/agent_comms/cli_verbs/tool.py",
+        "line": 13,
+        "names": [
+          "invoke_tool"
+        ]
+      },
+      {
+        "path": "src/agent_comms/connector.py",
+        "line": 91,
+        "names": [
+          "CommsSendTool",
+          "SendTool"
+        ]
+      },
+      {
+        "path": "src/agent_comms/execution/owned_turn.py",
+        "line": 67,
+        "names": [
+          "CommsSetGoalTool"
+        ]
+      },
+      {
+        "path": "src/agent_comms/host_services/connector.py",
+        "line": 30,
+        "names": [
+          "CommsChannelsTool"
+        ]
+      },
+      {
+        "path": "src/agent_comms/inbox_watch.py",
+        "line": 50,
+        "names": [
+          "CommsInboxTool"
+        ]
+      },
+      {
+        "path": "src/agent_comms/tool_declaration.py",
+        "line": 139,
+        "module_alias": "tools"
+      },
+      {
+        "path": "tests/test_catalog_channel_names.py",
+        "line": 19,
+        "names": [
+          "ServedCommsReferenceNamesTool"
+        ]
+      },
+      {
+        "path": "tests/test_channels.py",
+        "line": 45,
+        "names": [
+          "invoke_tool"
+        ]
+      },
+      {
+        "path": "tests/test_channels.py",
+        "line": 228,
+        "names": [
+          "CommsTagsTool"
+        ]
+      },
+      {
+        "path": "tests/test_chokehold_release.py",
+        "line": 13,
+        "names": [
+          "invoke_tool"
+        ]
+      },
+      {
+        "path": "tests/test_connector.py",
+        "line": 72,
+        "names": [
+          "ChannelListing",
+          "CommsChannelsTool",
+          "CommsPinChannelTool",
+          "CommsSendTool",
+          "CommsUserSendTool",
+          "ServedCommsUserSendTool",
+          "invoke_tool"
+        ]
+      },
+      {
+        "path": "tests/test_connector.py",
+        "line": 1192,
+        "names": [
+          "CommsConversationPageTool"
+        ]
+      },
+      {
+        "path": "tests/test_connector.py",
+        "line": 1218,
+        "names": [
+          "CommsConversationRevisionTool",
+          "CommsLatestSequenceTool"
+        ]
+      },
+      {
+        "path": "tests/test_connector.py",
+        "line": 1247,
+        "names": [
+          "CommsInboxTool"
+        ]
+      },
+      {
+        "path": "tests/test_connector.py",
+        "line": 1264,
+        "names": [
+          "CommsSendTool"
+        ]
+      },
+      {
+        "path": "tests/test_connector.py",
+        "line": 1287,
+        "names": [
+          "CommsExportWireTool"
+        ]
+      },
+      {
+        "path": "tests/test_conversation_history_tool.py",
+        "line": 8,
+        "names": [
+          "invoke_tool"
+        ]
+      },
+      {
+        "path": "tests/test_goal_block_reason.py",
+        "line": 25,
+        "names": [
+          "CommsGoalTool"
+        ]
+      },
+      {
+        "path": "tests/test_goal_execution.py",
+        "line": 48,
+        "names": [
+          "CommsGoalHistoryTool"
+        ]
+      },
+      {
+        "path": "tests/test_goal_history.py",
+        "line": 35,
+        "names": [
+          "CommsGoalHistoryTool"
+        ]
+      },
+      {
+        "path": "tests/test_goal_input_review.py",
+        "line": 26,
+        "names": [
+          "CommsGoalTool",
+          "CommsInboxTool"
+        ]
+      },
+      {
+        "path": "tests/test_goal_mentions.py",
+        "line": 29,
+        "names": [
+          "invoke_tool"
+        ]
+      },
+      {
+        "path": "tests/test_goal_owner_pause.py",
+        "line": 16,
+        "names": [
+          "CommsGoalTool",
+          "CommsResumeGoalTool"
+        ]
+      },
+      {
+        "path": "tests/test_goal_reply_lock_scope.py",
+        "line": 34,
+        "names": [
+          "CommsGoalTool"
+        ]
+      },
+      {
+        "path": "tests/test_goal_resume.py",
+        "line": 35,
+        "names": [
+          "invoke_tool"
+        ]
+      },
+      {
+        "path": "tests/test_held_problem_orders.py",
+        "line": 31,
+        "names": [
+          "CommsChannelsTool"
+        ]
+      },
+      {
+        "path": "tests/test_host_logs.py",
+        "line": 8,
+        "names": [
+          "CommsHostLogTool"
+        ]
+      },
+      {
+        "path": "tests/test_importing.py",
+        "line": 4,
+        "names": [
+          "CommsImportedSourceTool"
+        ]
+      },
+      {
+        "path": "tests/test_inbox_watch.py",
+        "line": 47,
+        "names": [
+          "CommsInboxTool"
+        ]
+      },
+      {
+        "path": "tests/test_mentions.py",
+        "line": 181,
+        "names": [
+          "invoke_tool"
+        ]
+      },
+      {
+        "path": "tests/test_mentions.py",
+        "line": 212,
+        "names": [
+          "invoke_tool"
+        ]
+      },
+      {
+        "path": "tests/test_mentions.py",
+        "line": 232,
+        "names": [
+          "invoke_tool"
+        ]
+      },
+      {
+        "path": "tests/test_native_tool_catalog.py",
+        "line": 17,
+        "names": [
+          "CommsDiscoverTool",
+          "NamedToolLookup",
+          "SearchToolLookup"
+        ]
+      },
+      {
+        "path": "tests/test_native_tool_declarations.py",
+        "line": 158,
+        "names": [
+          "CommsSendTool"
+        ]
+      },
+      {
+        "path": "tests/test_notification_read_state.py",
+        "line": 35,
+        "names": [
+          "CommsMessageOutcomesTool"
+        ]
+      },
+      {
+        "path": "tests/test_order_claims.py",
+        "line": 77,
+        "names": [
+          "CommsHistoryTool"
+        ]
+      },
+      {
+        "path": "tests/test_outbound_transcript_source.py",
+        "line": 27,
+        "names": [
+          "invoke_tool"
+        ]
+      },
+      {
+        "path": "tests/test_owner_directives.py",
+        "line": 13,
+        "names": [
+          "invoke_tool"
+        ]
+      },
+      {
+        "path": "tests/test_owner_process.py",
+        "line": 123,
+        "names": [
+          "CommsResourcesTool"
+        ]
+      },
+      {
+        "path": "tests/test_owner_requests.py",
+        "line": 37,
+        "names": [
+          "CommsSendTool"
+        ]
+      },
+      {
+        "path": "tests/test_peer_goal_control.py",
+        "line": 15,
+        "names": [
+          "invoke_tool"
+        ]
+      },
+      {
+        "path": "tests/test_relationships.py",
+        "line": 19,
+        "names": [
+          "invoke_tool"
+        ]
+      },
+      {
+        "path": "tests/test_remote_core_connection.py",
+        "line": 18,
+        "names": [
+          "CommsChannelsTool"
+        ]
+      },
+      {
+        "path": "tests/test_remote_tool_replies_decode.py",
+        "line": 13,
+        "names": [
+          "ChannelOrderSet",
+          "CommsArchiveTool",
+          "CommsAuthoredTaskTool",
+          "CommsDecisionTool",
+          "CommsSortChannelsTool",
+          "CommsSortChannelTool",
+          "CommsUserSendTool",
+          "TaskPublished"
+        ]
+      },
+      {
+        "path": "tests/test_report_goal_evidence.py",
+        "line": 18,
+        "names": [
+          "CommsGoalTool"
+        ]
+      },
+      {
+        "path": "tests/test_start.py",
+        "line": 17,
+        "names": [
+          "invoke_tool"
+        ]
+      },
+      {
+        "path": "tests/test_target_menu_codec.py",
+        "line": 82,
+        "names": [
+          "CommsTargetActionsTool",
+          "CommsTargetEditTool",
+          "TargetActionsRead"
+        ]
+      },
+      {
+        "path": "tests/test_target_menu_codec.py",
+        "line": 103,
+        "names": [
+          "CommsPrepareTargetActionTool",
+          "CommsTargetActionsTool"
+        ]
+      },
+      {
+        "path": "tests/test_task_decisions.py",
+        "line": 23,
+        "names": [
+          "invoke_tool"
+        ]
+      },
+      {
+        "path": "tests/test_team_notifications.py",
+        "line": 41,
+        "names": [
+          "invoke_tool"
+        ]
+      },
+      {
+        "path": "tests/test_team_skill_hook.py",
+        "line": 455,
+        "names": [
+          "CommsSendTool"
+        ]
+      },
+      {
+        "path": "tests/test_team_skill_hook.py",
+        "line": 494,
+        "names": [
+          "CommsSendTool"
+        ]
+      },
+      {
+        "path": "tests/test_thread_names.py",
+        "line": 84,
+        "names": [
+          "CommsRegistryTool"
+        ]
+      },
+      {
+        "path": "tests/test_thread_names.py",
+        "line": 109,
+        "names": [
+          "CommsChannelTool"
+        ]
+      },
+      {
+        "path": "tests/test_thread_names.py",
+        "line": 123,
+        "names": [
+          "CommsSessionThreadTool"
+        ]
+      },
+      {
+        "path": "tests/test_thread_names.py",
+        "line": 141,
+        "names": [
+          "CommsThreadConfigurationTool"
+        ]
+      },
+      {
+        "path": "tests/test_thread_names.py",
+        "line": 155,
+        "names": [
+          "CommsRetiredViewsTool"
+        ]
+      },
+      {
+        "path": "tests/test_thread_names.py",
+        "line": 187,
+        "names": [
+          "CommsSetRelationshipOrderTool",
+          "CommsWireRevisionTool",
+          "CommsThreadRelationshipsTool",
+          "RelationshipOrdered"
+        ]
+      },
+      {
+        "path": "tests/test_thread_names.py",
+        "line": 224,
+        "names": [
+          "CommsContextInspectionTool",
+          "CommsOwnerRequestTool",
+          "ContextInspectionRead"
+        ]
+      },
+      {
+        "path": "tests/test_thread_names.py",
+        "line": 243,
+        "names": [
+          "CommsHistoricalThreadsTool",
+          "HistoricalThreadsRead"
+        ]
+      },
+      {
+        "path": "tests/test_thread_names.py",
+        "line": 258,
+        "names": [
+          "CommsRegistrySliceTool"
+        ]
+      },
+      {
+        "path": "tests/test_thread_status.py",
+        "line": 209,
+        "names": [
+          "invoke_tool"
+        ]
+      },
+      {
+        "path": "tests/test_thread_status.py",
+        "line": 240,
+        "names": [
+          "CommsStartTool"
+        ]
+      },
+      {
+        "path": "tests/test_thread_unread.py",
+        "line": 228,
+        "names": [
+          "CommsMarkThreadViewReadTool"
+        ]
+      },
+      {
+        "path": "tests/test_tool_diffs.py",
+        "line": 59,
+        "names": [
+          "invoke_tool"
+        ]
+      },
+      {
+        "path": "tests/test_tool_output.py",
+        "line": 24,
+        "names": [
+          "invoke_tool"
+        ]
+      },
+      {
+        "path": "tests/test_tools.py",
+        "line": 15,
+        "names": [
+          "invoke_tool"
+        ]
+      },
+      {
+        "path": "tests/test_transcript_pages.py",
+        "line": 31,
+        "names": [
+          "invoke_tool"
+        ]
+      },
+      {
+        "path": "tests/test_turn_goal_permission.py",
+        "line": 12,
+        "names": [
+          "GoalSet"
+        ]
+      }
+    ],
+    "agent_comms.standing_rules": [
+      {
+        "path": "src/agent_comms/behaviour_patterns.py",
+        "line": 32,
+        "names": [
+          "BoardDisagrees",
+          "StandingRule"
+        ]
+      },
+      {
+        "path": "src/agent_comms/heartbeat_frame.py",
+        "line": 18,
+        "names": [
+          "OwedAnswer",
+          "StandingRule"
+        ]
+      },
+      {
+        "path": "src/agent_comms/task_attachments/team_pings.py",
+        "line": 32,
+        "names": [
+          "ServicePassFailing",
+          "StandingRule"
+        ]
+      },
+      {
+        "path": "src/agent_comms/team/judge.py",
+        "line": 58,
+        "names": [
+          "HeadReviewRule",
+          "StandingRule"
+        ]
+      },
+      {
+        "path": "src/agent_comms/team/order.py",
+        "line": 87,
+        "names": [
+          "ClearingVerb",
+          "HuntDue",
+          "OwedAnswer"
+        ]
+      },
+      {
+        "path": "src/agent_comms/team/publication_rules.py",
+        "line": 14,
+        "names": [
+          "DatedStandingRule",
+          "HeadLine",
+          "HeldBranch",
+          "HeldBranchRule",
+          "UndatedStandingRule"
+        ]
+      },
+      {
+        "path": "src/agent_comms/team/spinning.py",
+        "line": 8,
+        "names": [
+          "HeldBranch",
+          "HeldBranchRule"
+        ]
+      },
+      {
+        "path": "src/agent_comms/team/standing.py",
+        "line": 54,
+        "names": [
+          "CoreActsStandingRule",
+          "DatedStandingRule",
+          "IndependentStandingRule",
+          "OrderHeadReviewCommands",
+          "OwedAnswer",
+          "ReasonedStandingRule",
+          "StandingRule",
+          "FamilyScan",
+          "UndatedStandingRule"
+        ]
+      },
+      {
+        "path": "src/agent_comms/team/teammate_talk.py",
+        "line": 19,
+        "names": [
+          "FamilyScan",
+          "HolderLine",
+          "UndatedStandingRule"
+        ]
+      },
+      {
+        "path": "src/agent_comms/team/vibe_check.py",
+        "line": 36,
+        "names": [
+          "BlocksRelease",
+          "Degradation",
+          "Sign",
+          "IndependentStandingRule",
+          "OwedAnswer",
+          "ReviewTimerUp",
+          "FamilyScan",
+          "UndatedStandingRule"
+        ]
+      },
+      {
+        "path": "src/agent_comms/team_heartbeat.py",
+        "line": 26,
+        "names": [
+          "ServicePassFailing",
+          "StandingRule"
+        ]
+      },
+      {
+        "path": "src/agent_comms/ui_model/teammate_state.py",
+        "line": 33,
+        "names": [
+          "FamilyScan",
+          "UndatedStandingRule"
+        ]
+      },
+      {
+        "path": "tests/test_board_verbs.py",
+        "line": 22,
+        "names": [
+          "HeadReviewTimerUp",
+          "LinkedUnreviewedHead",
+          "OrderlessUnreviewedHead",
+          "ReviewTimerUp",
+          "StandingRule"
+        ]
+      },
+      {
+        "path": "tests/test_board_verbs.py",
+        "line": 307,
+        "names": [
+          "OrderlessUnreviewedHead"
+        ]
+      },
+      {
+        "path": "tests/test_branch_sync_notice.py",
+        "line": 9,
+        "names": [
+          "BranchBehindMain"
+        ]
+      },
+      {
+        "path": "tests/test_carry_team_observations.py",
+        "line": 18,
+        "names": [
+          "ServicePassFailing"
+        ]
+      },
+      {
+        "path": "tests/test_claude_automatic_reply.py",
+        "line": 22,
+        "names": [
+          "DirectiveUnacted"
+        ]
+      },
+      {
+        "path": "tests/test_connector.py",
+        "line": 57,
+        "names": [
+          "ServicePassFailing"
+        ]
+      },
+      {
+        "path": "tests/test_field_codec_comparison.py",
+        "line": 11,
+        "names": [
+          "StandingRule"
+        ]
+      },
+      {
+        "path": "tests/test_fork_record_authority.py",
+        "line": 19,
+        "names": [
+          "DirectiveUnacted"
+        ]
+      },
+      {
+        "path": "tests/test_head_review.py",
+        "line": 32,
+        "names": [
+          "HeadReviewTimerUp",
+          "IdlePullRequest",
+          "OrderlessPullRequest",
+          "OrderlessUnreviewedHead",
+          "LinkedUnreviewedHead",
+          "ReviewTimerUp",
+          "StuckMerge"
+        ]
+      },
+      {
+        "path": "tests/test_head_review.py",
+        "line": 1481,
+        "names": [
+          "ChurningPullRequest"
+        ]
+      },
+      {
+        "path": "tests/test_holder_standing_rules.py",
+        "line": 73,
+        "names": [
+          "OwedAnswer",
+          "StandingRule"
+        ]
+      },
+      {
+        "path": "tests/test_order_claims.py",
+        "line": 21,
+        "names": [
+          "OwedAnswer"
+        ]
+      },
+      {
+        "path": "tests/test_owner_requests.py",
+        "line": 16,
+        "names": [
+          "DirectiveUnacted"
+        ]
+      },
+      {
+        "path": "tests/test_storage_rules.py",
+        "line": 30,
+        "names": [
+          "StorageHomeMissing"
+        ]
+      },
+      {
+        "path": "tests/test_storage_violations.py",
+        "line": 22,
+        "names": [
+          "StorageHomeMissing",
+          "StorageViolation"
+        ]
+      },
+      {
+        "path": "tests/test_team_gate_lines.py",
+        "line": 8,
+        "names": [
+          "OrderlessUnreviewedHead"
+        ]
+      },
+      {
+        "path": "tests/test_team_hud_projection.py",
+        "line": 15,
+        "names": [
+          "ServicePassFailing"
+        ]
+      },
+      {
+        "path": "tests/test_team_notifications.py",
+        "line": 45,
+        "names": [
+          "ReviewTimerUp",
+          "ServicePassFailing",
+          "StandingRule",
+          "UndatedStandingRule"
+        ]
+      },
+      {
+        "path": "tests/test_team_notifications.py",
+        "line": 901,
+        "names": [
+          "OrderlessUnreviewedHead"
+        ]
+      },
+      {
+        "path": "tests/test_team_replay.py",
+        "line": 36,
+        "names": [
+          "BranchBehindMain",
+          "UnparsedBranch",
+          "BranchGrowth",
+          "ConflictingBranches",
+          "DeliveredHeadReview",
+          "HeldBranchRule",
+          "LostTools",
+          "StandingRule"
+        ]
+      },
+      {
+        "path": "tests/test_team_skill_hook.py",
+        "line": 39,
+        "names": [
+          "DirectiveUnacted",
+          "OrderlessUnreviewedHead",
+          "RetiredStandingRule",
+          "ReviewTimerUp"
+        ]
+      },
+      {
+        "path": "tests/test_todos.py",
+        "line": 28,
+        "names": [
+          "OwedAnswer",
+          "StandingRule"
+        ]
+      },
+      {
+        "path": "tests/test_unit_state.py",
+        "line": 25,
+        "names": [
+          "ReviewTimerUp"
+        ]
+      },
+      {
+        "path": "tests/test_unowned_checkout_work.py",
+        "line": 39,
+        "names": [
+          "RepeatedTodoChange",
+          "ServicePassFailing",
+          "StaleTodoDecision",
+          "StandingRule"
+        ]
+      }
+    ]
+  }
+}
