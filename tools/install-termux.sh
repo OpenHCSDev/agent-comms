@@ -14,7 +14,8 @@ exec > >(tee -a "$installation/install.log") 2>&1
 trap 'printf "\nInstallation stopped. Log: %s/install.log\n" "$installation" >&2' ERR
 
 printf 'Installing Toad Comms and its build dependencies…\n'
-pkg update -y
+# Termux supports complete package upgrades, not mixed library/consumer versions.
+pkg upgrade -y
 # psutil and Pillow need Termux's Android patches, not desktop Linux wheels.
 pkg install -y python python-pip uv git openssh clang make cmake ninja rust \
     pkg-config libffi openssl libjpeg-turbo zlib python-psutil python-pillow
