@@ -21,7 +21,7 @@ from multiprocessing.connection import Connection
 from yarl import URL
 
 from .transport.mcp import CancelledMessage, JsonRpcId, StreamedLine, ToolsCallMessage, ToolsCallReply
-from .connector_profile import HttpsMcpEndpoint, UiConnectionProfile, UiCredential
+from .connector_profile import OBSERVE_PATH, HttpsMcpEndpoint, UiConnectionProfile, UiCredential
 from .transport.progress import WireExportCancelled
 from .nominal.field_codec import FieldCodec, RpcCallId
 from .transport.request import ConnectionDropped, CoreAccess, ObservedRequest, RequestPoster, ToolRequest
@@ -77,7 +77,10 @@ class ConnectorObservationPeer(ObservationPeer):
     loop, so the UI's loop is never borrowed; the frames are declared records both ways."""
 
     def __init__(self, access: ConnectorClient) -> None:
-        self.url = access.endpoint.url.with_path("/observe")
+        self.url = access.endpoint.url.with_path(OBSERVE_PATH)
+        # The profile's route owns how its endpoint is reached, for this socket as
+        # much as for the calls: aiohttp resolves the name itself otherwise.
+        self.route = access.route
         viewer, relay = socket.socketpair()
         self.connection = ViewerEnd(viewer.detach())
         self.ending: RelayEnding = ConnectorClosed()
@@ -106,7 +109,7 @@ class ConnectorObservationPeer(ObservationPeer):
 
     async def carry(self, local: Connection, access: ConnectorClient) -> None:
         try:
-            async with aiohttp.ClientSession() as session, session.ws_connect(
+            async with self.route.socket_session() as session, session.ws_connect(
                 self.url, headers={"Authorization": f"Bearer {access.credential.token}"},
                 ssl=access.tls,
             ) as remote:

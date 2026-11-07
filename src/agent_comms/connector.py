@@ -64,7 +64,9 @@ from agent_comms.channel_targets import NamedTarget
 from agent_comms.owner_requests import NewestOpenRequest, RequestSelection
 from .host_services import HostService
 from .connector_caller import CALLER, ConnectorCaller, ConnectorTool, GrantRefusedError
-from .connector_profile import HttpsMcpEndpoint, UiConnectionProfile, UiGrantId, UiGrantSummary
+from .connector_profile import (
+    MCP_PATH, OBSERVE_PATH, HttpsMcpEndpoint, UiConnectionProfile, UiGrantId, UiGrantSummary,
+)
 from .served_endpoints import OfferedByTailnet, ServedEndpoints
 from .registry.registry_store import RegistryStore
 from .connector_store import (
@@ -110,10 +112,6 @@ from .transport.request import tool_field
 
 LOOPBACK = "127.0.0.1"
 PORT = 18766
-MCP_PATH = "/mcp"
-"""Where this connector serves MCP: its route, the resource its metadata names, and the
-endpoint a profile points at are one fact, and a profile minted for the bare origin posts
-to / and is answered 404 (2026-11-07)."""
 
 
 class SystemdSite(web.TCPSite):
@@ -449,7 +447,7 @@ class Connector(ConnectorService, McpServer):
                 web.post(ApprovalLink.route, self.confirm),
                 web.post("/token", self.token),
                 web.post(MCP_PATH, self.mcp),
-                web.get("/observe", self.observe),
+                web.get(OBSERVE_PATH, self.observe),
                 web.get("/watch/{ticket}", self.inbox_watch),
             ]
         )
