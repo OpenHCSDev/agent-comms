@@ -118,3 +118,66 @@ async def test_a_message_on_the_bus_reaches_the_observer(tmp_path, comms: Comms)
         f"the sidebar it settled with: {settled.revision}")
     assert told.revision != settled.revision, "and the revision it carries is the new one"
     assert told.request == wanted, "and it is still the interest the UI asked for"
+
+
+async def test_an_observer_that_reconnects_sees_what_changed_while_it_was_gone(
+    tmp_path, comms: Comms,
+) -> None:
+    """Slice2's disconnect and reconnect: a UI whose socket drops and comes back sees the
+    bus as it is now, not as it was when it left.
+
+    Two measured facts shape this. A sidebar keeps answering, so settling waits out a
+    window rather than waiting for quiet, which is a loop with no end. And the signal is
+    the bus unread the frame's own snapshot carries: a revision moves on its own
+    (`WireRevision.expiry_tick`), and a row's `unread` counts transcript reads, which a
+    message on the bus never touches.
+    """
+    prepare_native_comms(comms)
+    comms.registry.declare(NativeThread("alice", frozenset({"api"}), Checkout(tmp_path)))
+    store = ConnectorStore.at(tmp_path / "auth")
+    namespace = comms.registry.store.privacy().namespace
+    credential = store.update(lambda grants: grants.ui_issued(namespace, 60, UiReadAccess))
+    connector = Connector(store, "http://127.0.0.1:18766", comms.root)
+    worktree = Checkout(comms.root.parent)
+    wanted = ObserveSidebar(worktree, True, True)
+    frame = FieldCodec.compact(FieldCodec.encode_document(wanted, ObservationRequest)).encode()
+    reader = comms.messaging.user_identity(worktree).name
+
+    async def sidebar(viewer) -> SidebarResult:
+        """The sidebar this viewer holds after its staged reads: every frame within one
+        window, keeping the last, so what is compared is what a UI ends up showing."""
+        answered: SidebarResult | None = None
+        try:
+            async with asyncio.timeout(20):
+                while True:
+                    message = await viewer.receive()
+                    assert message.type is WSMsgType.BINARY, message
+                    result = FieldCodec.decode_document(
+                        ServiceResult, FieldCodec.parse(message.data.decode()))
+                    if isinstance(result, SidebarResult):
+                        answered = result
+        except TimeoutError:
+            assert answered is not None, "the observer was told nothing in its window"
+            return answered
+
+    async with TestServer(connector.application()) as server, TestClient(server) as client:
+        headers = {"Authorization": f"Bearer {credential.token}"}
+        async with client.ws_connect("/observe", headers=headers) as viewer:
+            await viewer.send_bytes(frame)
+            before = await sidebar(viewer)
+
+        # The socket is gone, and the bus moves on without it.
+        comms.messaging.send("alice", reader, "CHANGED_WHILE_DISCONNECTED")
+
+        async with client.ws_connect("/observe", headers=headers) as viewer:
+            await viewer.send_bytes(frame)
+            after = await sidebar(viewer)
+
+    def unread(result: SidebarResult) -> int:
+        return result.snapshot.unread["alice"].count
+
+    assert unread(after) > unread(before), (
+        "a reconnected observer was answered as the bus was when its socket dropped, so a "
+        f"UI that reconnects would miss every message it was away for: alice's conversation "
+        f"held {unread(before)} unread before and {unread(after)} after")
+    assert after.request == wanted, "and it is still the interest the UI asked for"
