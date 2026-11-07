@@ -28,7 +28,7 @@ from agent_comms.work_branches import WorkBranches
 from agent_comms.owner_requests import NewestOpenRequest
 from agent_comms.order_runs import ApplicationOrderRun
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tools import CommsChannelsTool
+from agent_comms.transport.tools.channels import CommsChannelsTool
 from agent_comms.order_tools import CommsOrderDeliverTool, CommsTodoCreateTool
 
 

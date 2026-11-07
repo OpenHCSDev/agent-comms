@@ -27,7 +27,7 @@ from ..nominal.field_codec import Argument, FieldCodec, MalformedRecord, PathTex
 from ..launch_root import LaunchRoot
 from ..recorded_bus import RecordedBusIdentity
 from ..transport.mcp import ToolsCallMessage, ToolsCallReply
-from ..tools import CommsChannelsTool
+from ..transport.tools.channels import CommsChannelsTool
 from . import ServiceNotServingError, SystemdUserService
 
 

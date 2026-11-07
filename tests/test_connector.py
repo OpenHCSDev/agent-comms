@@ -69,7 +69,8 @@ from agent_comms.storage.maintenance_barrier import (
     ReadyPhase,
 )
 from agent_comms.storage.store_files import ExclusiveLock, StoreGuard, _store_lock
-from agent_comms.tools import ChannelListing, CommsChannelsTool, CommsPinChannelTool, CommsUserSendTool, ServedCommsUserSendTool, invoke_tool
+from agent_comms.transport.tools.channels import ChannelListing, CommsChannelsTool
+from agent_comms.tools import CommsPinChannelTool, CommsUserSendTool, ServedCommsUserSendTool, invoke_tool
 from agent_comms.transport.tools.send import CommsSendTool
 from agent_comms.tool_caller import HumanCaller, NoThreadCaller, ThreadCaller
 from agent_comms.thread_identity import UserThreadRole

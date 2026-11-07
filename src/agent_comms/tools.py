@@ -60,7 +60,7 @@ from .agent_inbox import InboxWait, NoWait, TakenInputPosition, TakenInputStart
 
 # The goal tools are declared in transport/tools/goals.py; importing them here assembles
 # them into the served surface that invoke_tool dispatches over.
-from .transport.tools import goals, inbox, send
+from .transport.tools import channels, goals, inbox, send
 from .tool_request import ServedRequest, HumanToolRequest, ObservedToolRequest, LiveOwnerTool, PublishingTool, PublishingToolRequest, ReadTool, ThreadReadTool, ThreadContextAction, ThreadToolRequest, CoreRead, NativeToolRequest
 from .transport.request import ListedNames, OmittedNames, SubjectBinding, tool_field
 from .tool_declaration import NativeRequestTools
@@ -216,11 +216,6 @@ class ThreadTags(ToolResult):
     tags: tuple[str, ...]
 
 
-@dataclass(frozen=True)
-class ChannelListing(ToolResult):
-    channels: tuple[ChannelView, ...]
-    views: tuple[SavedView, ...]
-    order: type[ChannelSort]
 
 
 @dataclass(frozen=True)
@@ -749,15 +744,6 @@ class CommsThreadTagsTool(NativeToolRequest):
         return ThreadTags(thread.name, tuple(sorted(thread.tags)))
 
 
-@dataclass(frozen=True, kw_only=True)
-class CommsChannelsTool(ReadTool, NativeToolRequest):
-    label = "List channels"
-    description = "List named tag views and their current member threads; #any includes everyone."
-
-    def apply(self, comms: Comms, caller: ToolCaller) -> ChannelListing:
-        catalog = comms.channels.catalog.read()
-        return ChannelListing(comms.views.channel_views(), tuple(catalog.saved_views.values()),
-                              catalog.list_order)
 
 
 class ServedCommsConversationPageTool(CoreRead[MessagePage], CommsConversationPageTool):
@@ -833,7 +819,7 @@ class CommsDeleteViewTool(NativeToolRequest):
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ChannelListing:
         DeleteViewCliCommand(name=self.name).apply(comms)
-        return CommsChannelsTool().apply(comms, caller)
+        return channels.CommsChannelsTool().apply(comms, caller)
 
 
 class ServedCommsSortChannelTool(NativeToolRequest, CommsSortChannelTool):
