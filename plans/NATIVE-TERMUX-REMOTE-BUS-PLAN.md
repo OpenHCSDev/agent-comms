@@ -271,8 +271,24 @@ traps cost an hour there, for whoever writes the rest:
   fresh connection's first frame differs for that reason alone: measured as
   `ReplyUnread '(0)'` against `UnobservedUnread ''`. Settle both sides.
 
-The reconnect demonstration is not written, and not for want of plumbing: a content
-signal that moves is the open question. A DM between two other threads moves no row the
-reader sees, and sending to the reader left `threads["alice"].unread` at `'(0)'` through
-a settled reconnect, so what that presentation counts needs reading before it is asserted
-on. No test was kept for it; a vacuous one is worse than none.
+The content signal is settled: `snapshot.unread[partner]` is what a message to the
+reader moves (`ExactUnread(0)` to `ExactUnread(1)`, measured), `channel_unread[name]` is
+what a channel post moves, and a row's own `unread` counts transcript reads, which bus
+messages never touch (`history_views.viewer_snapshot` fills `thread_unread` from
+`transcript_reads.counts`). That is why asserting on a row's badge failed honestly.
+
+**The reconnect demonstration then hung, and that looks like a defect rather than a test
+artifact.** Written against that signal - settle, close the socket, send to the reader,
+reconnect with the same grant, settle again - the second connection is never answered.
+A worker thread sits in `multiprocessing.connection.recv_bytes` (faulthandler, 45 s):
+the first viewer's relay is still blocked reading its service's pipe, because closing a
+websocket does not interrupt that blocking read, so `ObservationRelay.carry`'s `finally`
+never runs and its service is never retired. `ObservationRelay` itself is sound - it
+closes and kills a service that will not exit - and never gets the chance. What the
+second connection then waits for was not traced: a new relay and process are started per
+request, so the suspicion is a per-viewer claim the stuck service still holds.
+
+No test was kept: a hanging test is worse than none, and a vacuous one is worse than
+that. Whoever takes this starts at `connector.ObservationRelay.carry` and
+`relay_frames`, and the question is what ends a blocking relay read when its viewer
+leaves.
