@@ -3,7 +3,7 @@
 Paste into Termux:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/OpenHCSDev/agent-comms/main/tools/install-termux.sh | bash
+apt update && apt full-upgrade -y && apt install -y curl && curl -fsSL https://raw.githubusercontent.com/OpenHCSDev/agent-comms/main/tools/install-termux.sh | bash
 ```
 
 Then open it:
@@ -12,7 +12,7 @@ Then open it:
 toad-comms
 ```
 
-The installer installs the native Android dependencies and the maintained Toad
+The installer upgrades Termux's package set, then installs the native Android dependencies and the maintained Toad
 stack into `~/.local/share/toad-comms`. It does not install a Linux container,
 replace system Python, start agents, configure SSH hosts, or change Tailscale.
 Native dependencies may take several minutes to compile on the first install.
