@@ -839,9 +839,11 @@ class GrantUiVerb(ConnectorRootOptions, declared_name="grant-ui"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class OfferUiVerb(ConnectorRootOptions, declared_name="offer-ui"):
+class OfferUiVerb(ConnectorVerb, declared_name="offer-ui"):
     help = "Hand a UI profile to a caller that reached this machine's tailnet-only endpoint"
 
+    # No --root: the machine being asked knows which one it serves, and a caller across the
+    # tailnet cannot name a path in someone else's home without restating it.
     port: Annotated[
         int, Argument(flags=("--port",), options={
             "help": "The connector port whose served endpoints decide this"}),
@@ -870,7 +872,7 @@ class OfferUiVerb(ConnectorRootOptions, declared_name="offer-ui"):
             return refusal
         match offer:
             case OfferedByTailnet(endpoint=served):
-                namespace = RegistryStore.at(self.root).privacy().namespace
+                namespace = RegistryStore.at(CommsRoute.current().root).privacy().namespace
                 profile = ctx.offer_ui_profile(
                     namespace, HttpsMcpEndpoint(URL(served.target.url)), self.seconds, self.access)
                 print(FieldCodec.compact(FieldCodec.encode(profile), allow_nan=False))
