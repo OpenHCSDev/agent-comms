@@ -161,8 +161,10 @@ class ThreadConnection(threading.local):
     """This thread's HTTPS connection to one connector, kept open between its calls; a closed one
     reopens on its next request."""
 
-    def __init__(self, endpoint: HttpsMcpEndpoint, context: ssl.SSLContext, timeout: float) -> None:
-        self.connection = endpoint.connection(context, timeout)
+    def __init__(self, profile: UiConnectionProfile, context: ssl.SSLContext, timeout: float) -> None:
+        # The profile's route owns how its endpoint is reached: a tailnet-only endpoint is
+        # dialed at the address its holder reached it on (connector_profile.EndpointRoute).
+        self.connection = profile.connection(context, timeout)
 
 
 class RemoteCoreAccess(UiConnectionProfile, CoreAccess, ConnectorClient, RequestPoster):
@@ -181,7 +183,7 @@ class RemoteCoreAccess(UiConnectionProfile, CoreAccess, ConnectorClient, Request
 
     @cached_property
     def connections(self) -> ThreadConnection:
-        return ThreadConnection(self.endpoint, self.tls, self.timeout_seconds)
+        return ThreadConnection(self, self.tls, self.timeout_seconds)
 
     def post[R: ToolResult](self, request: ToolRequest[R]) -> dict[str, JsonValue]:
         """One posted tools/call and its reply; a dropped connection is the request's to answer."""

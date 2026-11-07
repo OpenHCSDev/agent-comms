@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import http.client
 import os
+import socket
 import re
 import ssl
+from abc import abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Self
@@ -13,8 +15,8 @@ from typing import Annotated, Self
 from yarl import URL
 
 from .nominal.field_codec import (
-    FieldCodec, Id128, MalformedRecord, NominalSpelling, NominalText, PathText,
-    RootId, SingleFieldValue, TextRepresentation,
+    FieldCodec, Id128, MalformedRecord, NominalSpelling, NominalText, NullMember, PathText,
+    RootId, SingleFieldValue, TaggedRecordMember, TaggedUnion, TextRepresentation,
 )
 from .storage.private_path import PrivateDirectoryRole, PrivateFileRole
 from .storage.store_files import ExclusiveDirectoryAtomicFile
@@ -70,6 +72,60 @@ class HttpsMcpEndpoint(SingleFieldValue):
         raise MalformedRecord(f"The remote MCP endpoint {self.url} names no host.")
 
 
+class DialedConnection(http.client.HTTPSConnection):
+    """Dials one address while verifying the certificate of the name it was given.
+
+    `http.client` resolves the host it verifies, which is the same name: on a tailnet whose
+    DNS this machine does not accept, that name resolves to tailscale's public ingress and
+    the tailnet-only port there answers nothing (TLS EOF, measured 2026-11-07).
+    """
+
+    def __init__(self, host: str, address: str, port: int | None, **options) -> None:
+        super().__init__(host, port, **options)
+        self.address = address
+
+    def connect(self) -> None:
+        raw = socket.create_connection((self.address, self.port), self.timeout,
+                                       self.source_address)
+        self.sock = self._context.wrap_socket(raw, server_hostname=self.host)
+
+
+class EndpointRoute(TaggedUnion, affix="Route"):
+    """How this machine reaches a declared endpoint. The endpoint says where a bus is; this
+    says how to get there from here, which is the client's fact and not the bus's."""
+
+    @abstractmethod
+    def connection(self, endpoint: HttpsMcpEndpoint, context: ssl.SSLContext,
+                   timeout: float) -> http.client.HTTPSConnection:
+        """A connection to that endpoint by this route."""
+
+
+@dataclass(frozen=True)
+class ResolvedRoute(NullMember, EndpointRoute):
+    """Resolve the endpoint's own name, which is what a public endpoint needs and what every
+    profile did before an endpoint could be tailnet-only."""
+
+    def connection(self, endpoint: HttpsMcpEndpoint, context: ssl.SSLContext,
+                   timeout: float) -> http.client.HTTPSConnection:
+        return endpoint.connection(context, timeout)
+
+
+@dataclass(frozen=True)
+class ReachedRoute(TaggedRecordMember, EndpointRoute):
+    """Dial this address and verify the endpoint's name against its certificate: the address
+    is how the asking machine reached the peer, recorded by the machine that knows it."""
+
+    address: str
+
+    def connection(self, endpoint: HttpsMcpEndpoint, context: ssl.SSLContext,
+                   timeout: float) -> http.client.HTTPSConnection:
+        match endpoint.url.host:
+            case str() as host:
+                return DialedConnection(host, self.address, endpoint.url.port,
+                                        context=context, timeout=timeout)
+        raise MalformedRecord(f"The remote MCP endpoint {endpoint.url} names no host.")
+
+
 @dataclass(frozen=True)
 class UiCredential:
     """The one returned secret and immutable issuance facts, not client-side authority."""
@@ -86,6 +142,12 @@ class UiConnectionProfile:
 
     endpoint: HttpsMcpEndpoint
     credential: UiCredential
+    route: EndpointRoute = ResolvedRoute()
+    """How this machine reaches that endpoint; resolving its name unless told otherwise."""
+
+    def connection(self, context: ssl.SSLContext, timeout: float) -> http.client.HTTPSConnection:
+        """A connection to this profile's bus, by the route it was held with."""
+        return self.route.connection(self.endpoint, context, timeout)
 
     def write_new(self, path: Path) -> Path:
         """Publish privately and atomically; never replace an existing credential."""
