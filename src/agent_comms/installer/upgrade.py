@@ -149,6 +149,9 @@ from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.repo import Checkout, Repo
 from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
+from agent_comms.installer.runtime_retention import (
+    RetirementOutcome, RuntimeRetention, SweptRetirement,
+)
 from agent_comms.runtime_processes import RuntimeProcesses
 from agent_comms.storage_rules import StorageRule
 
@@ -463,6 +466,11 @@ class InstalledUpgrade(RehearsedUpgrade, Extendable):
     """The harnesses registered on the bus the target now reads."""
     processes: RuntimeProcesses = field(kw_only=True, default=RuntimeProcesses(()))
     """Applications still running an outgoing runtime; reported, never signalled."""
+    retirement: RetirementOutcome = field(
+        kw_only=True, default=SweptRetirement((), (), 0))
+    """The built runtimes this install took back, from the same scan that reported those
+    applications: the builds are per (commit, lock) and immutable, so without this every
+    install left one behind for good."""
     bridge_resumes: tuple[BridgeResume, ...] = field(kw_only=True, default=())
 
     finished: ClassVar[str] = "Install finished"
@@ -473,6 +481,7 @@ class InstalledUpgrade(RehearsedUpgrade, Extendable):
 
     def lines(self) -> tuple[str, ...]:
         return (*super().lines(), *self.live_lines(), *self.processes.lines(),
+                self.retirement.line(),
                 *(line for outcome in self.bridge_resumes for line in outcome.lines()))
 
 
@@ -952,6 +961,12 @@ class Install[Rehearsed: Rehearsal](ABC):
                 installed_harnesses = harnesses(self.staged)
                 with ProcessScanPhase().running(self.staged.commands.clock):
                     processes = RuntimeProcesses.observe(self.staged.runtime)
+                    # The same reading decides both questions: who is still on an old
+                    # runtime, and which built runtimes nobody is on at all.
+                    retirement = RuntimeRetention.after_install(
+                        self.staged.runtime, self.installed.runtime, processes, self.root,
+                        self.spill_dir,
+                    ).retire()
             finally:
                 # Includes rollback, a failed pause, and failures after the live run.
                 with ConfirmBridgePhase().running(self.staged.commands.clock):
@@ -960,7 +975,7 @@ class Install[Rehearsed: Rehearsal](ABC):
                 rehearsed.source, rehearsed.target, rehearsed.root, rehearsed.pending,
                 rehearsed.rehearsal, live_run, installed_harnesses,
                 phases=self.staged.commands.clock.phases, processes=processes,
-                bridge_resumes=tuple(bridges.outcomes))
+                retirement=retirement, bridge_resumes=tuple(bridges.outcomes))
             return (finished.extended(UnresumedUpgrade)
                     if bridges.failures else finished)
 

@@ -257,6 +257,23 @@ class StoreBackup:
         return tuple(backup for backup in backups if backup.restoring.exists())
 
     @classmethod
+    def retained(cls, root: Path, spill_dir: Path) -> tuple[StoreBackup, ...]:
+        """Every backup still on disk for ``root``, whether or not a restore began.
+
+        `retain` keeps the last `kept`, and a failed install's history can leave more. Each
+        of them can still be restored, so each still holds whatever its restoration would
+        need — which is how a runtime retirement learns that `current` and the outgoing
+        runtime are not the only ones a rollback can reach for.
+        """
+        if not spill_dir.is_dir():
+            return ()
+        return tuple(
+            cls(root, active_route_path(), spill_dir / name.value)
+            for name in sorted(BackupName.matching(
+                root, (path.name for path in spill_dir.iterdir() if path.is_dir())))
+        )
+
+    @classmethod
     def complete_interrupted(
         cls, root: Path, spill_dir: Path,
         rebuild: Callable[[MaintenanceState], MaintenanceState],
