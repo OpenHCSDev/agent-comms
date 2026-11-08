@@ -12,7 +12,10 @@ from agent_comms.errors import UnregisteredThreadError
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.owner_connection import OwnerConnection
-from agent_comms.owner_launch import ReadOwnerLaunchRuntimeRequest, RetainedOwnerLaunch
+from agent_comms.transport.owner_requests import (
+    ReadOwnerLaunchRuntimeRequest,
+    RetainedOwnerLaunch,
+)
 from agent_comms.pi_rule_gate import PiRedeal
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread

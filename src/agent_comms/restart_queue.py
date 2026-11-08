@@ -37,7 +37,7 @@ from .storage.locked_store import RuntimeFile
 from .storage.maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError, MaintenanceHolder
 from .native_arguments import GivenBinary, NativeArguments
 from .owner_cutover import PreserveOwnerRuntime
-from .owner_launch import RetainedOwnerLaunch
+from .transport.owner_requests import RetainedOwnerLaunch
 from .execution.owner_lifecycle import OwnerRestartSelection
 from .owner_restart import OwnerRestartRequest, StoppedOwnerFailure
 from .storage.private_path import PrivateDirectoryRole

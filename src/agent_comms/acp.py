@@ -80,7 +80,7 @@ from .nominal.field_codec import AcpSessionId, AcpSessionIdText, ClaimId, FieldC
 from .image_inputs import prompt_images
 from .execution.input_drain import InputDrain
 from .config_options import ConfigOptions
-from .owner_launch import RetainedOwnerLaunch
+from .transport.owner_requests import RetainedOwnerLaunch
 from .input_effects import InputEffects
 from .launch_root import LaunchRoot, started
 from .message_bus import MessageBus
