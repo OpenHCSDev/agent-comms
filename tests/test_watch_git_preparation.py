@@ -34,7 +34,8 @@ from git_shutdown_fixture import HeldGitHTTP, held_commit
 from agent_comms.nominal_census import NominalCensus
 from agent_comms.phase_evidence import BusStorageAbsent, CommitMerged, EvidenceFound, EvidenceUnread, MainTree, PathsAbsent, PhaseEvidence
 from agent_comms.repo import Checkout, GitCommandError, Repo, UnavailableCommitError
-from agent_comms.todos import DraftPullRequest, UnmergedPullRequest
+from agent_comms.todos import CitedEvidence, DraftPullRequest, UnmergedPullRequest
+from agent_comms.change_report import BranchHeadRevision, CommitRevision, FileLine, OrderRoots
 from agent_comms.work_branches import SourceGrowth, WorkBranchError, WorkBranches
 from source_revision_fixture import SourceRepository
 from team_heartbeat_fixture import RetainedNominalPlanReadings
@@ -417,6 +418,46 @@ def test_promised_content_is_unreadable_not_absent_and_never_lazily_acquired(
     expected_reader = WorkBranches(source.checkout)
     expected_reader.prepare_pull_request(review_base, head)
     assert request.change_identity(review_reader, review_base) == request.change_identity(expected_reader, review_base)
+    citation_case = GitPreparation.create(source, tmp_path / "citation-promisor", "--no-checkout", "--filter=blob:none")
+    for blob in objects:
+        assert GitLaunch._run(citation_case.repository.checkout, "--no-lazy-fetch", "cat-file", "-e", blob).returncode != 0
+    cited = CitedEvidence(evidence=(FileLine("src/added.py", 1),))
+    cited.require_cited(OrderRoots(citation_case.repository.checkout, source.project), CommitRevision(head))
+    assert Repo.git(citation_case.repository.checkout, "show", f"{head}:src/added.py") == expected
+    readonly_case = GitPreparation.create(source, tmp_path / "readonly-promisor", "--no-checkout", "--filter=blob:none")
+    before_read = readonly_case.snapshot()
+    with pytest.raises(GitCommandError):
+        CommitRevision(head).lines(readonly_case.repository.checkout, "src/added.py")
+    assert readonly_case.snapshot() == before_read
+
+
+def test_full_parent_does_not_lazily_fetch_a_partial_pinned_module(tmp_path: Path) -> None:
+    contents = "pinned = 1\n"
+    child = SourceRepository.create(tmp_path / "child", baseline_files={Path("module.py"): contents})
+    child.git(child.remote_path, "config", "uploadpack.allowFilter", "true")
+    child.git(child.remote_path, "config", "uploadpack.allowAnySHA1InWant", "true")
+    name = "pinned"
+    parent = SourceRepository.create(tmp_path / "parent", baseline_files={
+        Path(".gitmodules"): f'[submodule "{name}"]\n\tpath = {name}\n\turl = {child.remote_path}\n',
+    })
+    parent.git(parent.checkout, "update-index", "--add", "--cacheinfo", f"160000,{child.main_commit},{name}")
+    head = parent.commit_change("Pin source module", ".gitmodules")
+    module, = Checkout(parent.checkout).submodules()
+    module.store.parent.mkdir(parents=True, exist_ok=True)
+    case = GitPreparation.create(child, module.store, "--bare", "--filter=blob:none")
+    blob = Repo.tree_objects(child.checkout, child.main_commit, ("module.py",))["module.py"]
+    assert GitLaunch._run(module.store, "--git-dir", ".", "--no-lazy-fetch", "cat-file", "-e", blob).returncode != 0
+    before = case.snapshot()
+    revision = BranchHeadRevision(head)
+    file = f"{name}/module.py"
+    with pytest.raises(GitCommandError):
+        revision.lines(parent.checkout, file)
+    assert case.snapshot() == before
+    cited = CitedEvidence(evidence=(FileLine(file, 1),))
+    cited.require_cited(parent.roots, revision)
+    prepared = case.snapshot()
+    assert revision.lines(parent.checkout, file) == tuple(contents.splitlines())
+    assert case.snapshot() == prepared
 
 
 @pytest.mark.parametrize("method", ("GET", "POST"))
