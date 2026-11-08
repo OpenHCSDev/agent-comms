@@ -288,6 +288,8 @@ class Connector(ConnectorService, McpServer):
 
     heartbeat_seconds: ClassVar[float] = 25.0
     """How often a watch socket is pinged; a client that misses the pong is dropped."""
+    stack_frames: ClassVar[int] = 6
+    """How deep a still-running task's stack is reported; the innermost frames name its phase."""
     helper_start: ClassVar[HelperStart] = SpawnedHelper()
     """How a remote viewer's observation process starts."""
 
@@ -361,13 +363,38 @@ class Connector(ConnectorService, McpServer):
                          thread, viewer.close_code, viewer.exception())
         return viewer
 
-    def log_pending(self) -> None:
+    def still_running(self) -> str:
+        """Every task this process has not finished, and where each one is sitting.
+
+        The collections below name the work they own, and on 2026-11-08 that was not enough:
+        a POST /mcp stayed open 6883 seconds and the stop reported "pending tools: none",
+        because the handler that never finished is a request task and neither self.calls nor
+        self.watch_tasks holds one. The event loop already tracks every task, so this asks
+        the loop rather than adding a third registry. Each line's innermost frame is the
+        phase the task is stuck in, which is the one fact a journal line cannot carry: a
+        completed access line is only printed once the handler ends.
+        """
+        running = []
+        for task in sorted(asyncio.all_tasks(), key=lambda pending: pending.get_name()):
+            if task.done():
+                continue
+            frames = task.get_stack(limit=self.stack_frames)
+            where = " <- ".join(
+                f"{frame.f_code.co_name} at {frame.f_code.co_filename}:{frame.f_lineno}"
+                for frame in reversed(frames)
+            )
+            running.append(f"  {task.get_name()}: {where or 'awaiting, no python frame'}")
+        return "\n".join(running) or "  none"
+
+    def log_pending(self, reason: str = "stopping") -> None:
         """The existing task owners name pending work; idle watches may also be listed."""
-        logging.info("Connector stopping; pending tools: %s; pending watches: %s",
+        logging.info("Connector %s; pending tools: %s; pending watches: %s\nstill running:\n%s",
+                     reason,
                      ", ".join(tool.declared_name for task, tool in self.calls.items()
                                if not task.done()) or "none",
                      ", ".join(sorted(task.get_name() for task in self.watch_tasks
-                                      if not task.done())) or "none")
+                                      if not task.done())) or "none",
+                     self.still_running())
 
     async def call(
         self, tool: type[ServedRequest] | type[ConnectorTool],
@@ -819,6 +846,11 @@ class ServeVerb(ConnectorOptions):
         loop = asyncio.get_running_loop()
         for signum in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(signum, stopped.set)
+        # A stuck handler has to be named while it is still stuck, and nothing here can be
+        # read after the fact: the access line prints only once the handler ends, and py-spy
+        # cannot attach because this process is systemd's child, not the asking session's
+        # (kernel.yama.ptrace_scope is 1 on this host). So it answers for itself on request.
+        loop.add_signal_handler(signal.SIGUSR1, connector.log_pending, "asked what it is doing")
         try:
             await SystemdSite(runner, LOOPBACK, self.port).start()
             await stopped.wait()
