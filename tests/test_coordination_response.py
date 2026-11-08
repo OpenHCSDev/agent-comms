@@ -41,7 +41,7 @@ from agent_comms.obligation_states import PendingResponse, PublishedResponse, Pu
 from agent_comms.owner_fence import OwnerFence, prepare_fence_token
 from agent_comms.publisher import ParticipantPublisher
 from agent_comms.registry.registration import Registration
-from agent_comms.selected_source_batch import SelectedSource
+from agent_comms.execution.selected.source_batch import SelectedSource
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.typed_table import TypedTable
 from bus_record_fixture import prepare_native_comms

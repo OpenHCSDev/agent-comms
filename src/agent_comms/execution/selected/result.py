@@ -1,20 +1,24 @@
-"""A settled selected result owns auxiliary cursor projection and failure notices."""
-
 from __future__ import annotations
 
-from typing import Annotated
 from dataclasses import dataclass
+from typing import Annotated
 
+from agent_comms.assignment_states import AssignmentState
+from agent_comms.coordination.tables.publications import PublicationEvidence
+from agent_comms.diagnostics import record_terminal_failure
+from agent_comms.execution.turn_failure import BackendFailed
+from agent_comms.execution.turn_outcome import TurnOutcome
+from agent_comms.messages import (
+    AlertKind,
+    NoticeRole,
+)
 from agent_comms.nominal import field_codec
-
-from .assignment_states import AssignmentState
-from .coordination.tables.publications import PublicationEvidence
-from .diagnostics import record_terminal_failure
-from .nominal.field_codec import AssignmentId, FieldCodec, InputId
-from .messages import AlertKind, NoticeRole
-from .send_result import SendResult
-from .execution.turn_failure import BackendFailed
-from .execution.turn_outcome import TurnOutcome
+from agent_comms.nominal.field_codec import (
+    AssignmentId,
+    FieldCodec,
+    InputId,
+)
+from agent_comms.send_result import SendResult
 
 
 @dataclass(frozen=True, slots=True)

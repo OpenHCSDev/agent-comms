@@ -40,7 +40,7 @@ from agent_comms.native_input_proof import NativeContextProof
 from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
 from agent_comms.storage.private_path import FileIdentity
 from agent_comms.proven_source_coverage import InjectedInput, NoInjectedInput, ProvenSourceCoverage, SourcePrefix
-from agent_comms.selected_triage import (
+from agent_comms.execution.selected.triage import (
     AbsentTriageDecisionRecord,
     DecidedTriageRecord,
     FullSelectedTriage,

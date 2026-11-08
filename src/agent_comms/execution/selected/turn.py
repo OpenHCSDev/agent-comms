@@ -1,47 +1,65 @@
-"""Selected triage and full attempts consume actual reservation and lifecycle owners."""
-
 from __future__ import annotations
 
 from contextlib import suppress
-from dataclasses import dataclass, replace
+from dataclasses import (
+    dataclass,
+    replace,
+)
 from functools import partial
 
-from .attempt_start import AttemptStart
-from .assignment_states import CompletedAssignment
-from .channel_coding_tools import SelectedCodingToolOwner
-from .coordination.errors import CoordinationError, IdentityConflict, StaleFence
-from .coordination.coordinator import Coordination
-from .coordination.tables.assignments import WakeAssignment
-from .coordination.tables.executions import WireOrigin
-from .coordination.snapshot import RecoverySnapshot
-from .coordination.tables.responses import ResponseObligation
-from .durable_turn import DurableTurn
-from .envelope_claim_transitions import WakeClaim
-from .optional_awareness_projection import OptionalAwarenessProjection
-from .native_failures import NativePiUnavailable
-from .native_pi import NativeTurnResult
-from .owner_fence import prepare_fence_token
-from .private_send_stage import FullNativeSend, TriageNativeSend
-from .selected_actions import BatchSelectedAction, NoSelectedTools, SelectedAction
-from .selected_participant import SelectedParticipant
-from .selected_request import SelectedRequest
-from .selected_result import CoordinatedTurn
-from .selected_session import SelectedSession
-from .selected_triage import RejectedTriageOutcome, SelectedTriageOutcome
-from .wake_candidate_index import WakeCandidateIndex
-from .context_segments.wake import SelectedWakeSegment
-from .context_segments.selected import SelectedTriageSegment, SelectedWorkSegment
-from .execution.turn_context import (
+from agent_comms.assignment_states import CompletedAssignment
+from agent_comms.attempt_start import AttemptStart
+from agent_comms.channel_coding_tools import SelectedCodingToolOwner
+from agent_comms.context_segments.selected import (
+    SelectedTriageSegment,
+    SelectedWorkSegment,
+)
+from agent_comms.context_segments.wake import SelectedWakeSegment
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.errors import (
+    CoordinationError,
+    IdentityConflict,
+    StaleFence,
+)
+from agent_comms.coordination.snapshot import RecoverySnapshot
+from agent_comms.coordination.tables.assignments import WakeAssignment
+from agent_comms.coordination.tables.executions import WireOrigin
+from agent_comms.coordination.tables.responses import ResponseObligation
+from agent_comms.durable_turn import DurableTurn
+from agent_comms.envelope_claim_transitions import WakeClaim
+from agent_comms.execution.turn_context import (
     RecordedContextTurn,
     RenderedInput,
     TurnContext,
 )
-from .execution.turn_goal_account import VerifiedGoalSettlement
-from .execution.turn_phase import (
+from agent_comms.execution.turn_goal_account import VerifiedGoalSettlement
+from agent_comms.execution.turn_phase import (
     PreparingPhase,
     PromptAcceptancePhase,
     PublishingPhase,
 )
+from agent_comms.native_failures import NativePiUnavailable
+from agent_comms.native_pi import NativeTurnResult
+from agent_comms.optional_awareness_projection import OptionalAwarenessProjection
+from agent_comms.owner_fence import prepare_fence_token
+from agent_comms.private_send_stage import (
+    FullNativeSend,
+    TriageNativeSend,
+)
+from agent_comms.selected_actions import (
+    BatchSelectedAction,
+    NoSelectedTools,
+    SelectedAction,
+)
+from agent_comms.execution.selected.participant import SelectedParticipant
+from agent_comms.execution.selected.request import SelectedRequest
+from agent_comms.execution.selected.result import CoordinatedTurn
+from agent_comms.execution.selected.session import SelectedSession
+from agent_comms.execution.selected.triage import (
+    RejectedTriageOutcome,
+    SelectedTriageOutcome,
+)
+from agent_comms.wake_candidate_index import WakeCandidateIndex
 
 
 @dataclass(frozen=True)

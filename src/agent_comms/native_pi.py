@@ -37,7 +37,7 @@ from .pi_vocabulary import NoThinkingOverride, ThinkingChoice
 from .native_evidence_read import NativeInputUncommitted
 
 from .native_entries import NO_EVIDENCE_READ, NoEvidenceRead
-from .selected_session import SelectedSession
+from agent_comms.execution.selected.session import SelectedSession
 if TYPE_CHECKING:
     from . import pi_events as pi
     from .native_entries import NativeEvidenceRead

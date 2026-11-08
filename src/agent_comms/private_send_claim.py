@@ -54,8 +54,8 @@ if TYPE_CHECKING:
     from .execution.input_drain import InputDrain
     from .coordinated_runtime import SelectedExecution
 from .private_send_stage import NativeSendStage
-from .selected_participant import SelectedParticipant
-from .selected_session import SelectedSession
+from agent_comms.execution.selected.participant import SelectedParticipant
+from agent_comms.execution.selected.session import SelectedSession
 from .transport.project_request import ProjectRuntimeRequest
 
 

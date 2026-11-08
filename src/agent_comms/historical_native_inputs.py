@@ -38,7 +38,7 @@ from .native_input_record import (
 from .native_input_proof import NativeContextProof
 from .native_prompt_binding import expected_prompt_bindings, expected_prompt_matches_journal
 from .native_runtime_input import NativeRuntimeInput
-from .selected_triage import SelectedTriage
+from agent_comms.execution.selected.triage import SelectedTriage
 from .storage.typed_table import TypedRow
 
 

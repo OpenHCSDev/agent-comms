@@ -50,7 +50,7 @@ if TYPE_CHECKING:
     from ..planning.goals import GoalDeclaration
     from ..agent_backend import RuntimeLocation
     from ..planning.goal_management import Goals
-    from ..selected_participant import SelectedParticipant
+    from agent_comms.execution.selected.participant import SelectedParticipant
 
 _DEFAULT_PRESENCE = ProcessThreadStatus()
 

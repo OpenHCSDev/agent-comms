@@ -30,7 +30,7 @@ from agent_comms.coordination.tables.executions import WireOrigin
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.optional_awareness_projection import OptionalAwarenessProjection
 from agent_comms.registry.registration import Registration
-from agent_comms.selected_source_batch import SelectedSource
+from agent_comms.execution.selected.source_batch import SelectedSource
 from agent_comms.registry.threads import Thread, NativeThread
 from agent_comms.wake_candidate_index import (
     WakeCandidateIndex,

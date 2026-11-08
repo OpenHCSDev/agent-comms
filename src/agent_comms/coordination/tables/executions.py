@@ -64,7 +64,7 @@ from agent_comms.wake_candidate_index import ProjectionUnavailableError
 if TYPE_CHECKING:
     from agent_comms.coordination.tables.assignments import WakeAssignment
     from agent_comms.coordination.tables.responses import ResponseObligation
-    from agent_comms.selected_source_batch import SelectedSource
+    from agent_comms.execution.selected.source_batch import SelectedSource
 
 
 class ExecutionProvenance(DeclaredFamily, affix="Origin"):

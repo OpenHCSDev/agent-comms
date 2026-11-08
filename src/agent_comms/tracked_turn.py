@@ -41,7 +41,7 @@ from .native_tool_call import NativeToolMode
 from .pi_rpc import PiRpcChannel
 from .pi_vocabulary import NoThinkingOverride, ThinkingChoice
 from .request_progress import NO_REQUEST_OBSERVER, RequestObserver
-from .selected_session import SelectedSession
+from agent_comms.execution.selected.session import SelectedSession
 from .tool_denial import SelectedToolDenied
 from .execution.turn_context import InputContributionCoordinates
 from .execution.turn_watchdog import (

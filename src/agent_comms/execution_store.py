@@ -31,7 +31,7 @@ from agent_comms.obligation_states import (
 from agent_comms.recovery_reader import RecoveryReader
 
 if TYPE_CHECKING:
-    from agent_comms.selected_source_batch import SelectedSource
+    from agent_comms.execution.selected.source_batch import SelectedSource
 
 
 class ExecutionStore(RecoveryReader):
