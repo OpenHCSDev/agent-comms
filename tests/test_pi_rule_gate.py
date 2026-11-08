@@ -4,13 +4,15 @@ in full and written the audit, through the same deal the Claude Code hooks judge
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import replace
 
 import pytest
 
 from agent_comms.rule_deal import (
     Asked, AuditDue, CompactionDealMode, FullDealMode, MeantAnswer, MeantRecord, OffDealMode,
-    OwnerWordsAnswer, SessionAudit, StartedDeal, StartupDealMode, Unaudited, Unmeant, Unread,
+    Owed, OwnerWordsAnswer, SessionAudit, StartedDeal, StartupDealMode, Unaudited, Unmeant,
+    Unread,
 )
 from agent_comms.rule_probes import Probe
 from agent_comms.nominal.field_codec import FieldCodec, MessageId
@@ -137,8 +139,8 @@ def test_a_compacted_pi_thread_reads_every_dealt_rule_then_writes_its_audit(
     bash.judge_under(peer_deal)
     call("read", {"path": "notes.md"}).judge_under(peer_deal)
     events.CompactionEnd().deal_rules(peer_deal)  # the next compaction
-    with pytest.raises(RulesUnread, match="Tristan: hey, your tools are locked"):
-        bash.judge_under(peer_deal)
+    with pytest.raises(RulesUnread, match=re.escape(Owed.nudges[0])):
+        bash.judge_under(peer_deal)  # a re-deal refuses again, in the gate's own first line
 
 
 def refused(deal: PiRedeal) -> bool:
