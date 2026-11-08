@@ -815,8 +815,35 @@ class StopTeamHud(TaggedRecordMember, ObservationRequest):
         service.interest.remove(TeamHudReading)
 
 
+class RetainedTeamFrames:
+    """Before this reading prepares a board, the page sees the heartbeat's retained frames."""
+
+    def observed(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:
+        yield UnreadableHistory.outcome(
+            lambda: TeamHudObserved(revision, TeamFrame.read_all(comms.root)),
+        ).answer(
+            lambda observed: observed,
+            lambda error: ObservationPending(),  # Keep the interest until its source can be read.
+            lambda error: TeamHudUnreadable(revision, error),
+            lambda error: ObservationPending(),  # Bounds-free: only a frame replaced under both reads.
+        )
+
+
+@dataclass(frozen=True)
+class PreparedTeamBoard(RetainedTeamFrames):
+    """The board this reading derived: the page sees it until the next one is prepared."""
+
+    huds: tuple[TeamHud, ...]
+
+    def observed(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:
+        yield TeamHudObserved(revision, self.huds)
+
+
 class TeamHudReading(TeamBoardRead, ReadingObservation[ObserveTeamHud]):
-    """Serve held frames immediately; prepare changed stores outside the service loop."""
+    """Serve held frames immediately; prepare changed stores outside the service loop.
+
+    The prepared board is this view's own: it is held here and published, never written back
+    into the heartbeat's retained frames, which have one writer."""
 
     view = TeamFramesView()
 
@@ -824,6 +851,7 @@ class TeamHudReading(TeamBoardRead, ReadingObservation[ObserveTeamHud]):
         super().__init__(request=request)
         self.preparation: set[asyncio.Task[None]] = set()
         self.prepared_revision: ReadState = NoRevision()
+        self.board: RetainedTeamFrames = RetainedTeamFrames()
 
     def close(self) -> None:
         super().close()
@@ -841,7 +869,7 @@ class TeamHudReading(TeamBoardRead, ReadingObservation[ObserveTeamHud]):
         task.add_done_callback(self.preparation.discard)
 
     async def prepare(self, service: ObservationService) -> None:
-        """Only the short retained-frame publication joins shutdown; preparation can retire.
+        """Preparation can retire with the service; it publishes only to this view.
 
         The board is read through the stored-read owner ``read`` uses: a deferred or reloading
         read prepares again on the next look, an unreadable one reaches the page, and any other
@@ -859,10 +887,7 @@ class TeamHudReading(TeamBoardRead, ReadingObservation[ObserveTeamHud]):
 
     async def publish(self, service: ObservationService,
                       board: tuple[TeamPlan, tuple[TeamHud, ...]]) -> None:
-        plan, huds = board
-        await service.comms.bus.when_open(partial(
-            self.enter_phase, service.comms.root,
-            partial(TeamFrame.replace_all, service.comms.root, plan, huds)))
+        self.board = PreparedTeamBoard(board[1])
         service.interest.prepared(self, service)
 
     async def unreadable(self, service: ObservationService, cause: UnreadableHistory) -> None:
@@ -873,14 +898,7 @@ class TeamHudReading(TeamBoardRead, ReadingObservation[ObserveTeamHud]):
         self.prepared_revision = NoRevision()
 
     def read(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:
-        yield UnreadableHistory.outcome(
-            lambda: TeamHudObserved(revision, TeamFrame.read_all(comms.root)),
-        ).answer(
-            lambda observed: observed,
-            lambda error: ObservationPending(),  # Keep the interest until its source can be read.
-            lambda error: TeamHudUnreadable(revision, error),
-            lambda error: ObservationPending(),  # Bounds-free: only a frame replaced under both reads.
-        )
+        return self.board.observed(comms, revision)
 
 
 @dataclass(frozen=True)

@@ -111,7 +111,9 @@ async def test_live_observer_serves_while_preparation_blocks_then_updates_withou
                 ready = await receive(client, TeamHudObserved)
                 while not ready.huds:
                     ready = await receive(client, TeamHudObserved)
-            assert TeamFrame.read_all(held_bus.root) == ready.huds
+            # The prepared board is the observer's view: the heartbeat's retained frames have
+            # one writer, and no heartbeat ran here.
+            assert TeamFrame.read_all(held_bus.root) == ()
             assert ServicePassStore.at(held_bus.root).read() == before_passes
             assert len(builds) == 1
 
