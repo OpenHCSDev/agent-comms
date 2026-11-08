@@ -34,8 +34,8 @@ from .storage.locked_store import DocumentChange
 from .storage.maintenance_barrier import CarriedDocument
 from .storage.private_path import ObservedPath
 from .storage.store_files import DependentStateTier, SingleFileStore
-from .thread_identity import RecordedThreadIncarnation
-from .thread_owned_state import ThreadOwnedState
+from .registry.thread_identity import RecordedThreadIncarnation
+from .registry.thread_owned_state import ThreadOwnedState
 
 if TYPE_CHECKING:
     from .bus_publication import Delivered

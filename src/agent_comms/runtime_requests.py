@@ -52,7 +52,7 @@ from .bus_read import (
     OwnerReadRuntimeRequest,
     OwnerScopedRead,
 )
-from .thread_identity import ThreadIncarnation
+from .registry.thread_identity import ThreadIncarnation
 from .transport.runtime_requests import (
     CancelRuntimeRequest,
     ClearQueueRuntimeRequest,
@@ -98,7 +98,7 @@ from .coordination.errors import Refused
 from .owner_connection import socket_path
 from .owner_protocol import ClientLine, OwnerAnnouncement, OwnerFailure, OwnerReady
 from .pi_payloads import NativeContextData
-from .thread_presentation import LiveThreadOwnerBinding
+from .registry.thread_presentation import LiveThreadOwnerBinding
 from .tool_result import (
     DeclaredReply,
     ToolResult,

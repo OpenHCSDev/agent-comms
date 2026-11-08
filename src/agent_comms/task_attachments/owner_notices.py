@@ -18,7 +18,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.messages import ConversationRole, EscalationPosition, Message, MessageRole, NoticeRole
 from agent_comms.projection_source import ProducedRow
 from agent_comms.task_sources import TaskAttachment
-from agent_comms.thread_identity import ThreadIncarnation
+from ..registry.thread_identity import ThreadIncarnation
 
 if TYPE_CHECKING:
     from agent_comms.bus import BusReader

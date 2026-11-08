@@ -21,7 +21,7 @@ from .coordination.coordinator import Coordination
 from .nominal.field_codec import AcpSessionId, FieldCodec
 from .native_failures import NativePiUnavailable
 from .registry.threads import ChosenModel, NextTurnConfiguration, Thread
-from .thread_model import CatalogSelection
+from .registry.thread_model import CatalogSelection
 from .watched import FileSource
 
 if TYPE_CHECKING:

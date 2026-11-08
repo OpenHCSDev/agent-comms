@@ -1,14 +1,15 @@
-"""Publish the native tool catalog from a current registry declaration."""
-
 from pathlib import Path
 
-from .cli_result import ThreadToolCatalogResult
-from .nominal.field_codec import FieldCodec
-from .launch_root import LaunchRoot
-from .registry.registry_store import RegistryStore
-from .storage.store_files import AtomicFile
-from .registry.threads import Thread, ThreadCatalogFile
-from .tool_declaration import NativeRequestTools
+from .registry_store import RegistryStore
+from .threads import (
+    Thread,
+    ThreadCatalogFile,
+)
+from ..cli_result import ThreadToolCatalogResult
+from ..launch_root import LaunchRoot
+from ..nominal.field_codec import FieldCodec
+from ..storage.store_files import AtomicFile
+from ..tool_declaration import NativeRequestTools
 
 
 class ThreadCatalog(ThreadCatalogFile):

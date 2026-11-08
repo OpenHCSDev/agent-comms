@@ -15,7 +15,10 @@ from agent_comms.pi_wire import PiPayload
 from agent_comms.pi_payloads import AssistantMessage, MissingData, MissingToolResult, ProvidedToolResult, ReportedModel, StateData, TextContent, ToolCallContent, UnknownData, UnreportedModel, UnreportedUsage
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.execution.turn_usage import UsageAccount
-from agent_comms.thread_model import DeclaredModel, UndeclaredModel
+from agent_comms.registry.thread_model import (
+    DeclaredModel,
+    UndeclaredModel,
+)
 
 
 def decode(record):

@@ -38,7 +38,7 @@ from agent_comms.nominal.field_codec import AcpSessionId, RootId
 from agent_comms.owner_protocol import OwnerAnnouncement, OwnerReady, OwnerResult, OwnerUpdate
 from agent_comms.runtime import RuntimeConnection, present_session
 from agent_comms.storage.private_path import PrivateSocketRole
-from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.native_arguments import GivenBinary
 from delivery_owner_fixture import canonical_agent
@@ -180,7 +180,7 @@ def test_owner_cursor_scope_rebases_only_attachment_session_alias():
         decode_updates,
         encode_updates,
     )
-    from agent_comms.thread_identity import ClaimedIdentity
+    from agent_comms.registry.thread_identity import ClaimedIdentity
 
     fact = CursorAdvancedUpdate(
         CursorEnvelope(

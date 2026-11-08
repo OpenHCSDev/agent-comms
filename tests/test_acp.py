@@ -38,7 +38,7 @@ from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, TurnId
 from agent_comms.native_arguments import GivenArguments
 from agent_comms.pi_counts import PiCount
 from agent_comms.read_basis import NamedViewer
-from agent_comms.thread_model import DeclaredModel
+from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import NativeThread
 from agent_comms.ui_model.observation import ReadTranscript, SubscribeTranscript
 from conftest import installed_comms

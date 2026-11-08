@@ -9,7 +9,7 @@ from agent_comms_project import AgentCommsProject
 from nominal_refactor_advisor import audit
 
 from agent_comms.channel_coding_tools import CodingToolRequest
-from agent_comms.thread_identity import UnobservedTools
+from agent_comms.registry.thread_identity import UnobservedTools
 from agent_comms.input_key import BusInputKey
 from agent_comms.cli_bridges.claude_protocol import ClaudeHeader
 from agent_comms.nominal.field_codec import FieldCodec

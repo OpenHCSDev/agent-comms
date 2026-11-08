@@ -98,7 +98,7 @@ from ..registry.threads import Thread
 from ..reported_turn import ReportedTurnState
 from ..repository_name import RepositoryName
 from ..transport.runtime_request import AttachedRuntimeRequest
-from ..thread_identity import (
+from ..registry.thread_identity import (
     CoreWatcherIncarnation,
     ThreadIncarnation,
 )

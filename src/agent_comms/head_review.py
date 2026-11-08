@@ -24,7 +24,7 @@ from .projects.git_errors import GitCommandError
 from .projects.repo import Repo
 from .projects.checkouts import Checkout
 from .repository_name import RepositoryName
-from .thread_identity import ThreadIncarnation
+from .registry.thread_identity import ThreadIncarnation
 from .work_branches import WorkBranches
 
 if TYPE_CHECKING:

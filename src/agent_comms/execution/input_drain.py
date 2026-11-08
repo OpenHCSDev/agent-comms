@@ -73,7 +73,10 @@ from ..transport.owner_requests import (
     StopOwnerRuntimeRequest,
 )
 from .session_lifecycle import SessionLifecycle
-from ..thread_identity import ClaimedIdentity, OwnerIdentity
+from ..registry.thread_identity import (
+    ClaimedIdentity,
+    OwnerIdentity,
+)
 from ..registry.threads import NativeThread, Thread
 from .turn_context import (
     TurnContext,

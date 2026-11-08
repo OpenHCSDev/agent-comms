@@ -22,7 +22,7 @@ from agent_comms.planning.goal_actions import OrderGoalAction
 from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.owner_requests import OwnerRequestId
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 
 
 def test_source_creation_does_not_reuse_a_retired_directory(tmp_path):

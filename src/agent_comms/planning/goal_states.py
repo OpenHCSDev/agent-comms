@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from .goal_presentation import GoalExecution
     from .goals import Goal
     from ..registry.threads import Thread
-    from ..thread_identity import ThreadIncarnation
+    from ..registry.thread_identity import ThreadIncarnation
 
 
 @dataclass(frozen=True)

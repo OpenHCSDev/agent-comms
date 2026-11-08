@@ -57,8 +57,11 @@ from .pi_vocabulary import (
 )
 from .recorded_time import EventMilliseconds, EventTime, UnrecordedEventTime
 from .send_result import CorrectionResult, CorrectionUnreported
-from .thread_identity import ThreadIncarnation
-from .thread_model import ThreadModel, UndeclaredModel
+from .registry.thread_identity import ThreadIncarnation
+from .registry.thread_model import (
+    ThreadModel,
+    UndeclaredModel,
+)
 from .tool_declaration import ToolDeclaration
 from .tool_result import DeclaredReply
 from .execution.turn_context import (

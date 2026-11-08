@@ -13,8 +13,11 @@ from agent_comms.mentions import MentionCandidate, ThreadMention
 from agent_comms.messages import Message, AlertKind, InfoKind
 from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, MentionedPolicy
 from agent_comms.routing import ScheduledTurn
-from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
-from agent_comms.thread_model import DeclaredModel
+from agent_comms.registry.thread_identity import (
+    AgentThreadRole,
+    UserThreadRole,
+)
+from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import NativeThread
 
 

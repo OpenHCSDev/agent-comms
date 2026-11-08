@@ -5,7 +5,7 @@ from typing import ClassVar
 
 from .cli_options import JsonFlagRecord
 from .pi_vocabulary import HighThinkingLevel, ThinkingLevelField
-from .thread_model import DeclaredModel
+from .registry.thread_model import DeclaredModel
 
 
 @dataclass(frozen=True)

@@ -20,7 +20,7 @@ from .native_input_record import NativeInputReference
 from .native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
 from .private_send_rules import RunningTurnRegistryCheck
 from .proven_source_coverage import SourceCoverage, SourcePrefix
-from .thread_identity import GenerationCounter
+from .registry.thread_identity import GenerationCounter
 
 if TYPE_CHECKING:
     from sqlite3 import Connection

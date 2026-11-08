@@ -17,7 +17,7 @@ from agent_comms.planning.goal_actions import SetGoalAction
 from agent_comms.native_input_owner import RegistryOwner
 from agent_comms.execution.owned_turn import OwnedTurn
 from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.thread_model import DeclaredModel
+from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import ChosenModel, NextTurnConfiguration, NativeThread
 from agent_comms.execution.turn_input_source import NoTurnAcceptance
 from agent_comms.execution.turn_lease import NoTurnLease

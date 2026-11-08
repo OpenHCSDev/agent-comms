@@ -19,7 +19,7 @@ from .planning.goals import (
     NoGoal,
 )
 from .participant_store import ParticipantStore
-from .thread_status import ThreadStatus
+from .registry.thread_status import ThreadStatus
 from .registry.threads import Thread
 
 if TYPE_CHECKING:

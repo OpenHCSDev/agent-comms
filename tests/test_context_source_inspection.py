@@ -20,8 +20,11 @@ from agent_comms.transport.runtime_requests import (
     ContextCoreRuntimeRequest,
     ContextCoreSourceRuntimeRequest,
 )
-from agent_comms.thread_identity import TurnIdentity
-from agent_comms.thread_identity import RecordedThreadIncarnation, ReportedTools
+from agent_comms.registry.thread_identity import TurnIdentity
+from agent_comms.registry.thread_identity import (
+    RecordedThreadIncarnation,
+    ReportedTools,
+)
 from agent_comms.execution.turn_context import (
     ObservedDispatchRequest,
     UnobservedDispatchRequest,

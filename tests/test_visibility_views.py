@@ -6,8 +6,11 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.registry.registry_document import RosterVisibility
-from agent_comms.thread_identity import UserThreadRole
-from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
+from agent_comms.registry.thread_identity import UserThreadRole
+from agent_comms.registry.thread_status import (
+    ArchivedThreadStatus,
+    StoppedThreadStatus,
+)
 from agent_comms.registry.threads import NativeThread
 
 

@@ -20,10 +20,13 @@ from ..projects.checkouts import (
     LaunchCheckout,
 )
 from agent_comms.pi_vocabulary import ThinkingLevelField
-from agent_comms.thread_management import InheritedTags
-from agent_comms.thread_management import NewThreadSpec
-from agent_comms.thread_management import TagChoice
-from agent_comms.thread_model import CatalogSelection, ThreadModel
+from ..registry.thread_management import InheritedTags
+from ..registry.thread_management import NewThreadSpec
+from ..registry.thread_management import TagChoice
+from ..registry.thread_model import (
+    CatalogSelection,
+    ThreadModel,
+)
 from pathlib import Path
 from dataclasses import dataclass
 from dataclasses import fields

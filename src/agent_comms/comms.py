@@ -36,9 +36,9 @@ from .registry.registration import Registration
 from .storage.private_path import FileRevision
 from .registry.registry_document import RegistrySnapshot, UnreadRegistry
 from .route_client import ActivityClient
-from .thread_configuration import ThreadConfiguration
-from .thread_identity import ThreadIncarnation
-from .thread_management import ThreadManagement
+from .registry.thread_configuration import ThreadConfiguration
+from .registry.thread_identity import ThreadIncarnation
+from .registry.thread_management import ThreadManagement
 from .transcript_sources import TranscriptSource
 from .transcripts import Transcripts
 from .watched import FileSource

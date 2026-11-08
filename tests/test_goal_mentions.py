@@ -32,7 +32,7 @@ from agent_comms.planning.goals import (
     SelfMentionBinding,
     UnknownMentionBinding,
 )
-from agent_comms.thread_identity import UserThreadRole
+from agent_comms.registry.thread_identity import UserThreadRole
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.registry.threads import NativeThread
 from agent_comms.planning.goal_scope import OneGoal

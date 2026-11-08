@@ -59,7 +59,7 @@ from ..registry.threads import (
     Thread,
 )
 from ..service_passes import ServiceReading
-from ..thread_identity import ThreadIncarnation
+from ..registry.thread_identity import ThreadIncarnation
 from ..tool_declaration import EditCall
 from ..tool_result import ToolResult
 from ..transcript_events import (

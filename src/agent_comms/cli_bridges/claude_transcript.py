@@ -11,7 +11,11 @@ from typing import BinaryIO, ClassVar, Literal, Self
 
 from agent_comms.nominal.field_codec import StoredSessionId
 from agent_comms.runtime_updates import RuntimeUpdate, SessionFacts
-from agent_comms.thread_text import NamedSession, NoThreadText, ThreadText
+from ..registry.thread_text import (
+    NamedSession,
+    NoThreadText,
+    ThreadText,
+)
 
 from ..session_receipts import SessionReceipts
 from ..cli_protocol import TaggedWire

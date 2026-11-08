@@ -16,8 +16,8 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import TurnId, GoalId
 from agent_comms.planning.goals import Goal
 from agent_comms.storage.store_files import SharedLock, store_lock_path
-from agent_comms.thread_identity import UserThreadRole
-from agent_comms.thread_text import GivenThreadText
+from agent_comms.registry.thread_identity import UserThreadRole
+from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.execution.turn_lease import RecordedGeneration
 from agent_comms.execution.turn_phase import PreparingPhase
 from agent_comms.registry.threads import NativeThread

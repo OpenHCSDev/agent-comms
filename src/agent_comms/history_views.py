@@ -28,13 +28,16 @@ from .registry.registry_document import DEFAULT_ROSTER, RegistrySnapshot, Roster
 from .retained_task_facts import RetainedTaskFacts
 from .shared_ledger import LedgerDocument
 from .registry.threads import ConversationPreparation, Thread, current_thread
-from .thread_identity import ThreadIncarnation
+from .registry.thread_identity import ThreadIncarnation
 from .sent_message import AssignedSourceIdentity
 from .view_unread import transcript_read_state
 
 if TYPE_CHECKING:
     from .registry_provenance import DeletedThread
-from agent_comms.thread_presentation import NoThreadPresentation, ThreadPresentation
+from .registry.thread_presentation import (
+    NoThreadPresentation,
+    ThreadPresentation,
+)
 
 from .agent_activity import AgentActivity
 from .channel_management import ChannelManagement

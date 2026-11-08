@@ -28,7 +28,7 @@ from .nominal.field_codec import (
 )
 from .message_reference import MessageReference
 from .recorded_bus import RecordedBusIdentity
-from .thread_identity import ThreadIncarnation
+from .registry.thread_identity import ThreadIncarnation
 
 
 class ConsumptionEvidence(ABC):

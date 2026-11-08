@@ -63,11 +63,15 @@ from ..restart_refusals import (
     OwnerSelectionChangedRefusal,
 )
 from ..restart_scope import AllOwners, RestartScope
-from ..thread_identity import (
+from ..registry.thread_identity import (
     ClaimedIdentity,
     OwnerIdentity,
 )
-from ..thread_text import GivenThreadText, NoThreadText, ThreadText
+from ..registry.thread_text import (
+    GivenThreadText,
+    NoThreadText,
+    ThreadText,
+)
 from ..registry.threads import NativeThread, Thread
 
 if TYPE_CHECKING:

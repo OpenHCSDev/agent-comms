@@ -1,36 +1,63 @@
-"""Thread presence, lifecycle decisions and their display/control projections."""
-
 from __future__ import annotations
 
 import time
 from abc import abstractmethod
 from collections.abc import Callable
-from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, ClassVar, Self
+from dataclasses import (
+    dataclass,
+    replace,
+)
+from typing import (
+    ClassVar,
+    Self,
+    TYPE_CHECKING,
+)
 
-from .child_process import ProcessIdentity, ProcessState
-from .nominal.declared_family import DeclaredFamily
-from .errors import RelationViolationError, ThreadNotStoppedError, ThreadNotVisibleError
-from .nominal.field_codec import FieldCodec, TextRepresentation
-from .lifecycle_capability import LifecycleCapability
-from .thread_presentation import InactiveThreadPresentationStatus, LiveThreadOwnerBinding, ThreadOwnerBinding, UnavailableThreadOwnerBinding
-from .thread_presentation import ThreadPresentation
-from .execution.turn_lease import (
+from ..child_process import (
+    ProcessIdentity,
+    ProcessState,
+)
+from ..errors import (
+    RelationViolationError,
+    ThreadNotStoppedError,
+    ThreadNotVisibleError,
+)
+from ..execution.turn_lease import (
     FinishedTurnFence,
     NoFinishedTurn,
 )
+from ..lifecycle_capability import LifecycleCapability
+from ..nominal.declared_family import DeclaredFamily
+from ..nominal.field_codec import (
+    FieldCodec,
+    TextRepresentation,
+)
+from .thread_presentation import (
+    InactiveThreadPresentationStatus,
+    LiveThreadOwnerBinding,
+    ThreadOwnerBinding,
+    ThreadPresentation,
+    UnavailableThreadOwnerBinding,
+)
 
 if TYPE_CHECKING:
-    from .activity import ObservedActivity
-    from .message_reference import MessageReference
-    from .messaging import Messaging
-    from .execution.turn_item import SourceTurn
-    from .registry.registry_document import RegistryEntry, RegistrySnapshot, RosterVisibility
-    from .thread_identity import GenerationCounter, OwnerIdentity
-    from .registry.threads import Thread
-    from .execution.turn_lease import (
-    TurnCompletion,
-    TurnLeaseFence,
+    from .registry_document import (
+        RegistryEntry,
+        RegistrySnapshot,
+        RosterVisibility,
+    )
+    from .threads import Thread
+    from ..activity import ObservedActivity
+    from ..execution.turn_item import SourceTurn
+    from ..execution.turn_lease import (
+        TurnCompletion,
+        TurnLeaseFence,
+    )
+    from ..message_reference import MessageReference
+    from ..messaging import Messaging
+    from .thread_identity import (
+    GenerationCounter,
+    OwnerIdentity,
 )
 
 

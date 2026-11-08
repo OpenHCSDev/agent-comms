@@ -126,7 +126,7 @@ def test_original_proxy_decodes_typed_goal_control_at_json_boundary():
     from agent_comms.transport.runtime_request import RuntimeRequest
     from agent_comms.owner_connection import CapturedOwner
     from agent_comms.transport.runtime_requests import UpdateGoalRuntimeRequest
-    from agent_comms.thread_identity import RecordedThreadIncarnation
+    from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 
     worker = RecordedThreadIncarnation("worker", 12.5)
     payload = UpdateGoalRuntimeRequest.proxy_payload(worker, None, {

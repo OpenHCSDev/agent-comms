@@ -59,7 +59,7 @@ from ..native_turn_context import ContextObserved
 from ..nominal.field_codec import AcpSessionId
 from ..publication_measurements import PublicationMeasurements
 from ..send_result import SendResult
-from ..thread_identity import ClaimedIdentity
+from ..registry.thread_identity import ClaimedIdentity
 from ..transcript_updates import TurnTranscriptUpdate
 
 if TYPE_CHECKING:

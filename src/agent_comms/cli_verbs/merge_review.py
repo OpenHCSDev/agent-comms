@@ -11,7 +11,7 @@ from agent_comms.nominal.field_codec import Argument, MalformedRecord
 from agent_comms.head_review import PullRequestHead
 from agent_comms.repository_name import RepositoryName
 from agent_comms.registry.registry_document import RegistrySnapshot
-from agent_comms.thread_identity import RecordedThreadIncarnation
+from ..registry.thread_identity import RecordedThreadIncarnation
 from agent_comms_hooks import ToolRefusedError
 from agent_comms_hooks.queue_bypass import QueueBypass, QueueBypassGuard
 

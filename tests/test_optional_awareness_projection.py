@@ -36,7 +36,7 @@ from agent_comms.wake_candidate_index import (
     WakeCandidateIndex,
     ProjectionUnavailableError,
 )
-from agent_comms.thread_model import DeclaredModel
+from agent_comms.registry.thread_model import DeclaredModel
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="private cohort requires POSIX")
 

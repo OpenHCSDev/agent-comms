@@ -28,7 +28,10 @@ from agent_comms.revision_views import (
     ActivityView, NotificationEvidenceView, NotificationsView, RegistrationsView,
     SidebarView, StatusView, StoresView,
 )
-from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
+from agent_comms.registry.thread_identity import (
+    AgentThreadRole,
+    UserThreadRole,
+)
 from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_declaration import NativeRequestTools
 from agent_comms.transport.request import ToolRequest
@@ -36,7 +39,7 @@ from agent_comms.acp_extension import GoalSnapshotReply, TranscriptSnapshotUpdat
 from agent_comms.bus_read import OwnerScopedRead
 from agent_comms.team_hud_records import TeammateDetail
 from agent_comms.nominal.field_codec import OrderId
-from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.transcripts import EarlierThan, NativeTranscriptCursor
 from agent_comms.transport.tools.served import CommsMessageOutcomesTool
 from agent_comms.ui_model.observation import (

@@ -56,8 +56,12 @@ from ..projects.checkouts import (
 from ..session_file import NoSessionFile, SessionFile
 from ..storage.locked_store import DurableFile, PatternFile
 from ..task_sources import TaskScope
-from ..thread_creation import CreationSeconds, CreationTime, GeneratedCreationTime
-from ..thread_identity import (
+from .thread_creation import (
+    CreationSeconds,
+    CreationTime,
+    GeneratedCreationTime,
+)
+from .thread_identity import (
     AgentThreadRole,
     ObservedTurn,
     OfferedTools,
@@ -68,7 +72,7 @@ from ..thread_identity import (
     TurnIdentity,
     UnobservedTools,
 )
-from ..thread_model import (
+from .thread_model import (
     CatalogSelection,
     DeclaredModel,
     ModelSelection,
@@ -77,18 +81,26 @@ from ..thread_model import (
     UndeclaredModel,
     UnselectedModel,
 )
-from ..thread_presentation import (
+from .thread_presentation import (
     ThreadOwnerBinding,
     ThreadPresentation,
     UnavailableThreadOwnerBinding,
 )
-from ..thread_status import ServiceThreadStatus, ThreadStatus
-from ..thread_storage import (
+from .thread_status import (
+    ServiceThreadStatus,
+    ThreadStatus,
+)
+from .thread_storage import (
     AssignedStorageRoots,
     ThreadStorage,
     UnassignedThreadStorage,
 )
-from ..thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
+from .thread_text import (
+    NoParent,
+    NoThreadText,
+    ThreadParent,
+    ThreadText,
+)
 from ..execution.turn_lease import (
     FinishedTurn,
     NoTurnRecord,

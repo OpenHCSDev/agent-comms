@@ -35,7 +35,10 @@ from agent_comms.install_choices import LiveMode, RehearsalMode
 from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime
 from agent_comms.root_runtime import RootRuntimeStore
 from agent_comms.registry.threads import ExternalThread, ServiceThread, NativeThread
-from agent_comms.thread_identity import ServiceThreadRole, UserThreadRole
+from agent_comms.registry.thread_identity import (
+    ServiceThreadRole,
+    UserThreadRole,
+)
 from agent_comms.errors import RelationViolationError, ThreadNotStoppedError
 from cli_command import core
 from conftest import declare_test_bus

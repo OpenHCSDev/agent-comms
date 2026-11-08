@@ -25,8 +25,11 @@ from .transcript_events import (
     ToolStartTranscript,
     TranscriptEvent,
 )
-from .thread_text import NoThreadText, ThreadText
-from .thread_identity import OfferedTools
+from .registry.thread_text import (
+    NoThreadText,
+    ThreadText,
+)
+from .registry.thread_identity import OfferedTools
 from .execution.turn_phase import (
     IdlePhase,
     ModelWaitPhase,
@@ -43,7 +46,7 @@ if TYPE_CHECKING:
     from .cli_bridges.shared import TranscriptBridge
     from .importing import ImportBuffer
     from .comms import Comms
-    from .thread_status import ThreadStatus
+    from .registry.thread_status import ThreadStatus
 
 
 @dataclass

@@ -8,7 +8,7 @@ import pytest
 from agent_comms.nominal.field_codec import MalformedRecord
 from agent_comms.registry.registration import Registration
 from agent_comms.storage.store_files import AtomicFile
-from agent_comms.thread_status import StoppedThreadStatus
+from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.threads import Thread, NativeThread
 
 
@@ -151,7 +151,7 @@ def test_assigning_and_removing_thread_rows_changes_only_the_written_rows(thread
     from dataclasses import replace
     from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.registry.registry_document import ThreadRows
-    from agent_comms.thread_text import GivenThreadText
+    from agent_comms.registry.thread_text import GivenThreadText
 
     wire = thread_rows_wire
     rows = ThreadRows.from_wire(wire)
@@ -187,7 +187,7 @@ def test_a_changed_revision_is_checked_as_a_whole(tmp_path):
 
 
 def test_a_reused_revision_still_finds_its_user_thread(tmp_path):
-    from agent_comms.thread_identity import UserThreadRole
+    from agent_comms.registry.thread_identity import UserThreadRole
 
     path = tmp_path / "registry.json"
     writer = Registration(path)

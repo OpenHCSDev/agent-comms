@@ -38,7 +38,10 @@ from transcript_record_fixture import transcript_record
 from agent_comms.historical_views import HistoricalDisplay
 from agent_comms.read_basis import ReadCursor
 from agent_comms.read_ledger import ReadLedger
-from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
+from agent_comms.registry.thread_identity import (
+    AgentThreadRole,
+    UserThreadRole,
+)
 from agent_comms.wake_policy import FullWake
 from agent_comms.registry.threads import ExternalThread, NativeThread
 

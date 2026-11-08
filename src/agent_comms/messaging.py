@@ -13,7 +13,7 @@ from .change_report import NoChangeReport, ReportEvidence
 from .channel_targets import CommandTarget, IncarnationThreadTarget, NamedTarget
 from .nominal.field_codec import ThreadLookup
 from .planning.orders import TodoStore
-from .thread_identity import ThreadIncarnation
+from .registry.thread_identity import ThreadIncarnation
 from .errors import (
     CommittedMessageError,
     RelationViolationError,

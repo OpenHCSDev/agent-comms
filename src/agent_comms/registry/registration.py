@@ -14,7 +14,7 @@ from ..child_process import NoProcess, ProcessIdentity
 from ..errors import RelationViolationError
 from ..nominal.field_codec import ThreadLookup, TurnId
 from ..repository_name import RepositoryName
-from ..thread_identity import ThreadIncarnation
+from .thread_identity import ThreadIncarnation
 from ..planning.goal_history import (
     GoalHistoryEntry,
     GoalHistoryStore,
@@ -30,14 +30,20 @@ from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from ..routing import NoTurnRouting, Routing
 from ..projects.storage_rules import StorageRule
 from .threads import ExternalThread, SubagentThread, Thread, NativeThread
-from ..thread_identity import GenerationCounter, UserThreadRole
-from ..thread_status import (
+from .thread_identity import (
+    GenerationCounter,
+    UserThreadRole,
+)
+from .thread_status import (
     ConnectedThreadStatus,
     NoBridgeThreadStatus,
     ProcessThreadStatus,
     ThreadStatus,
 )
-from ..thread_text import ForkedParent, SubagentRole
+from .thread_text import (
+    ForkedParent,
+    SubagentRole,
+)
 from ..projects.repo import Repo
 from ..projects.checkouts import (
     Checkout,

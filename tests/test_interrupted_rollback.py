@@ -23,7 +23,7 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.storage.locked_store import LiveFilesRequest, RegistryFile
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.registry.registry_store import RegistryStore
-from agent_comms.thread_text import GivenThreadText
+from agent_comms.registry.thread_text import GivenThreadText
 from bus_record_fixture import prepare_native_comms
 from agent_comms.registry.threads import NativeThread
 

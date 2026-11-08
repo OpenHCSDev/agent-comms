@@ -28,10 +28,17 @@ from agent_comms.private_registry_guard import PrivateRegistryGuard
 from agent_comms.registry.registry_document import RegistryDocument
 from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoStore
 from agent_comms.shared_ledger import SharedLedger
-from agent_comms.thread_status import DeletingThreadStatus, HeartbeatThreadStatus, StoppedThreadStatus
+from agent_comms.registry.thread_status import (
+    DeletingThreadStatus,
+    HeartbeatThreadStatus,
+    StoppedThreadStatus,
+)
 from agent_comms.registry.threads import current_thread, NativeThread
-from agent_comms.thread_text import ForkedParent, GivenThreadText
-from agent_comms.thread_model import DeclaredModel
+from agent_comms.registry.thread_text import (
+    ForkedParent,
+    GivenThreadText,
+)
+from agent_comms.registry.thread_model import DeclaredModel
 
 
 @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")

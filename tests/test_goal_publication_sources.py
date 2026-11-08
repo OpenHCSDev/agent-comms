@@ -33,7 +33,7 @@ from agent_comms.storage.locked_store import GoalWakeFile, RegistryFile
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_document import RegistryDocument
 from agent_comms.registry.threads import ExternalThread, NativeThread
-from agent_comms.thread_text import GivenThreadText
+from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.execution.turn_phase import (
     IdlePhase,
     ToolRunningPhase,

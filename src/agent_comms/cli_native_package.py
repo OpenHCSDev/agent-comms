@@ -22,7 +22,7 @@ from agent_comms.native_package import (
     share_native_resources,
     write_native_manifest,
 )
-from agent_comms.thread_storage import StoragePath
+from .registry.thread_storage import StoragePath
 from agent_comms.deal_prompt import DealPrompt
 
 

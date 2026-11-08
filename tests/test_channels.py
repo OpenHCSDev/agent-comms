@@ -39,10 +39,17 @@ from agent_comms.nominal.field_codec import FieldCodec, TurnId
 from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.registry.registry_document import RosterVisibility
 from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.thread_management import ForkSpec, GivenTags
-from agent_comms.thread_model import DeclaredModel
-from agent_comms.thread_status import ArchivedThreadStatus, RunningThreadStatus, StoppedThreadStatus
-from agent_comms.thread_text import GivenThreadText
+from agent_comms.registry.thread_management import (
+    ForkSpec,
+    GivenTags,
+)
+from agent_comms.registry.thread_model import DeclaredModel
+from agent_comms.registry.thread_status import (
+    ArchivedThreadStatus,
+    RunningThreadStatus,
+    StoppedThreadStatus,
+)
+from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.transport.tools.served import invoke_tool
@@ -367,7 +374,7 @@ def test_all_implicit_tag_introduction_paths_honor_name_reservations(tmp_path, s
     import json
 
     from agent_comms.cli_bridges.history import OfflineHistory
-    from agent_comms.thread_text import AnySession
+    from agent_comms.registry.thread_text import AnySession
     from agent_comms.harness_install import OpenCodeHarness
 
     comms = setup_wire(tmp_path)

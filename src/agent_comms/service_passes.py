@@ -14,7 +14,10 @@ from .nominal.field_codec import WireExclude, WireTransient, projected
 from .tool_result import ToolResult
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .storage.store_files import DependentStateTier, SingleFileStore
-from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+from .registry.thread_identity import (
+    RecordedThreadIncarnation,
+    ThreadIncarnation,
+)
 from .watched import Watched
 
 

@@ -1,5 +1,3 @@
-"""Thread registration and cross-store identity transactions."""
-
 from __future__ import annotations
 
 import asyncio
@@ -7,44 +5,70 @@ import re
 from abc import abstractmethod
 from collections.abc import Sequence
 from contextlib import ExitStack
-from dataclasses import dataclass, field, replace
+from dataclasses import (
+    dataclass,
+    field,
+    replace,
+)
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Self
+from typing import (
+    Self,
+    TYPE_CHECKING,
+)
 
-from agent_comms.coordination.errors import CoordinationError
 from agent_comms_hooks.process_claim import (
     ClaimHeldError,
     ProcessSingleton,
 )
 
-from .channel_targets import DeclaredTag
-from .child_process import NO_PROCESS, ProcessIdentity, ProcessState
-from .cli_result import CliResult
-from .planning.goal_waits import GoalWaits
-from .native_entries import ImportedSessionWriter
-from .storage.locked_store import PatternFile, RuntimeFile
-from .registry.registration import Registration
-from .relationships import RelationshipStore
-from .projects.checkouts import (
-    Checkout,
-    LaunchCheckout,
+from .registration import Registration
+from .threads import (
+    ExternalThread,
+    KeptModel,
+    ModelChoice,
+    NativeThread,
+    NextTurnConfiguration,
+    Thread,
 )
-from .registry.threads import ExternalThread, NativeThread, KeptModel, ModelChoice, NextTurnConfiguration, Thread
-from .thread_status import StoppedThreadStatus
-from .view_unread import transcript_read_state
-
-if TYPE_CHECKING:
-    from .registry.registry_store import RegistryEdit
-    from .cli_bridges.history import History
-    from .tool_caller import ThreadCaller
-from .agent_activity import AgentActivity
-from .agent_backend import RuntimeLocation
-from .catalog_store import ChannelCatalog
-from .collaboration_ledger import CollaborationLedger
-from .config_options import RunningSelection
-from .errors import RelationViolationError
-from .nominal.field_codec import (
+from ..agent_activity import AgentActivity
+from ..agent_backend import RuntimeLocation
+from ..catalog_store import ChannelCatalog
+from ..channel_targets import DeclaredTag
+from ..child_process import (
+    NO_PROCESS,
+    ProcessIdentity,
+    ProcessState,
+)
+from ..cli_result import CliResult
+from ..collaboration_ledger import CollaborationLedger
+from ..config_options import RunningSelection
+from ..coordination.errors import CoordinationError
+from ..errors import RelationViolationError
+from ..execution.owner_lifecycle import (
+    LaunchInput,
+    OwnerLifecycle,
+    TaskLaunchInput,
+)
+from ..heartbeat_delivery import HeartbeatDelivery
+from ..importing import (
+    ImportLimits,
+    ImportedConversation,
+    ThreadImported,
+)
+from ..launch_runtime import (
+    LaunchRuntime,
+    TagListText,
+)
+from ..message_bus import MessageBus
+from ..native_arguments import (
+    ConfiguredBinary,
+    NativeArguments,
+)
+from ..native_entries import ImportedSessionWriter
+from ..native_session_reopen import PiSessionId
+from ..native_settings import NativeThreadDefaults
+from ..nominal.field_codec import (
     DeclaredWireType,
     FieldCodec,
     NullMember,
@@ -52,24 +76,49 @@ from .nominal.field_codec import (
     SingleFieldValue,
     SubclassUnion,
 )
-from .importing import ImportLimits, ImportedConversation, ThreadImported
-from .launch_runtime import LaunchRuntime, TagListText
-from .message_bus import MessageBus
-from .native_arguments import ConfiguredBinary, NativeArguments
-from .native_settings import NativeThreadDefaults
-from .execution.owner_lifecycle import LaunchInput, OwnerLifecycle, TaskLaunchInput
-from .pi_vocabulary import NoThinkingOverride, ThinkingChoice, ThinkingLevelField
-from .registry_provenance import RegistryNames
-from .session_file import RegistrySessionLocation
-from .thread_identity import AgentThreadRole, ThreadIncarnation, ThreadRole
-from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
-from .thread_owned_state import ThreadOwnedState
-from .thread_text import ForkedParent, GivenThreadText, ThreadText
+from ..pi_vocabulary import (
+    NoThinkingOverride,
+    ThinkingChoice,
+    ThinkingLevelField,
+)
+from ..planning.goal_waits import GoalWaits
+from ..projects.checkouts import (
+    Checkout,
+    LaunchCheckout,
+)
+from ..registry_provenance import RegistryNames
+from ..relationships import RelationshipStore
+from ..session_file import RegistrySessionLocation
+from ..storage.locked_store import (
+    PatternFile,
+    RuntimeFile,
+)
 from .thread_catalog import ThreadCatalog
-from .heartbeat_delivery import HeartbeatDelivery
-from .tool_declaration import NativeRequestTools
-from .native_session_reopen import PiSessionId
-from .tool_result import ToolResult
+from .thread_identity import (
+    AgentThreadRole,
+    ThreadIncarnation,
+    ThreadRole,
+)
+from .thread_model import (
+    DeclaredModel,
+    ThreadModel,
+    UndeclaredModel,
+)
+from .thread_owned_state import ThreadOwnedState
+from .thread_status import StoppedThreadStatus
+from .thread_text import (
+    ForkedParent,
+    GivenThreadText,
+    ThreadText,
+)
+from ..tool_declaration import NativeRequestTools
+from ..tool_result import ToolResult
+from ..view_unread import transcript_read_state
+
+if TYPE_CHECKING:
+    from .registry_store import RegistryEdit
+    from ..cli_bridges.history import History
+    from ..tool_caller import ThreadCaller
 
 
 @dataclass(frozen=True, slots=True)
@@ -636,4 +685,3 @@ class ThreadManagement:
             child, resolved_bin, initial_input=spec.task, launch_runtime=runtime,
         ) as owner:
             return owner
-

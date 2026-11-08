@@ -56,9 +56,13 @@ from agent_comms.runtime_updates import (
     TurnEnded,
     TurnStarted,
 )
-from agent_comms.thread_identity import OfferedTools, ToolName, UnobservedTools
-from agent_comms.thread_model import ThreadModel
-from agent_comms.thread_text import ThreadText
+from ..registry.thread_identity import (
+    OfferedTools,
+    ToolName,
+    UnobservedTools,
+)
+from ..registry.thread_model import ThreadModel
+from ..registry.thread_text import ThreadText
 from agent_comms.tool_calls import CliToolArguments, ToolCall
 from agent_comms.tool_declaration import one_line
 from agent_comms.transcript_events import (

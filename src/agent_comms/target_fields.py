@@ -9,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from dataclasses import replace
 from agent_comms.config_options import CatalogChoice, CatalogConfigOption, ConfigOptions
-from agent_comms.thread_model import CatalogSelection
+from .registry.thread_model import CatalogSelection
 
 
 @dataclass(frozen=True)

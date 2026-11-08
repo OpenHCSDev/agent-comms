@@ -8,7 +8,10 @@ from pathlib import Path
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import UnreadRegistry
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.thread_text import ForkedParent, GivenThreadText
+from agent_comms.registry.thread_text import (
+    ForkedParent,
+    GivenThreadText,
+)
 from agent_comms.registry.threads import NativeThread
 
 
@@ -93,7 +96,7 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 from agent_comms.registry.registration import Registration
-from agent_comms.thread_text import GivenThreadText
+from agent_comms.registry.thread_text import GivenThreadText
 registry = Registration(Path(sys.argv[1]))
 registry.register(replace(registry.require(sys.argv[2]), title=GivenThreadText(sys.argv[3])))
 """

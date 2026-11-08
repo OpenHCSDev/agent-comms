@@ -3,7 +3,7 @@ from __future__ import annotations
 from agent_comms.cli_command import CliCommand
 from agent_comms.cli_commands import NameArgument
 from agent_comms.comms import Comms
-from agent_comms.thread_management import ThreadDeleted
+from ..registry.thread_management import ThreadDeleted
 from dataclasses import dataclass
 
 

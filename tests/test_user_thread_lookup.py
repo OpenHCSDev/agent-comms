@@ -9,8 +9,8 @@ from dataclasses import replace
 from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.registry.registry_document import NoUserThread, RegistryDocument
-from agent_comms.thread_identity import UserThreadRole
-from agent_comms.thread_text import GivenThreadText
+from agent_comms.registry.thread_identity import UserThreadRole
+from agent_comms.registry.thread_text import GivenThreadText
 from conftest import installed_comms
 from agent_comms.registry.threads import NativeThread
 

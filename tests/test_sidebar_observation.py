@@ -16,10 +16,13 @@ from agent_comms.display_references import (
     ChannelDisplayReference, CurrentDisplayReferences, DisplayReference, DisplayReferences,
     HistoricalDisplayReference, RetiredThreadReference, ThreadDisplayReference,
 )
-from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.historical_views import HistorySource
 from agent_comms.registry.registry_document import HistoricalRootPurpose, ThreadRows
-from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
+from agent_comms.registry.thread_status import (
+    RunningThreadStatus,
+    StoppedThreadStatus,
+)
 from agent_comms.ui_model.sidebar import ChannelRowModel, SidebarModel
 from agent_comms.ui_model.unread import ExactUnread, UnobservedUnread
 from agent_comms.registry.threads import NativeThread

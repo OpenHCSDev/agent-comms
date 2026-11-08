@@ -42,7 +42,7 @@ from ..planning.goal_scope import (
 )
 from ..projects.checkouts import Checkout
 from ..registry.threads import Thread
-from ..thread_identity import ThreadIncarnation
+from ..registry.thread_identity import ThreadIncarnation
 from ..working_memory_labels import (
     ClassifierVersion,
     ModelLabel,

@@ -58,7 +58,7 @@ from agent_comms_hooks import ToolRefusedError
 if TYPE_CHECKING:
     from agent_comms.active_route import CommsRoute
     from agent_comms.registry.threads import Thread
-    from agent_comms.thread_status import ThreadStatus
+    from .registry.thread_status import ThreadStatus
 
 
 class ChannelBound(TargetBound):

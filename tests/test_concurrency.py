@@ -21,7 +21,7 @@ from agent_comms.message_page import PageBounds
 from agent_comms.pi_counts import PiCount
 from bus_history import read_history
 from conftest import installed_comms
-from agent_comms.thread_model import DeclaredModel
+from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import NativeThread
 
 

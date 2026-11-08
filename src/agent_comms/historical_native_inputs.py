@@ -24,7 +24,7 @@ from .message_reference import MessageReference
 from .native_entries import NativeEvidenceScope
 from .native_transcript import NativeTranscript
 from .private_registry_guard import RegistryPrivacy
-from .thread_identity import ThreadIncarnation
+from .registry.thread_identity import ThreadIncarnation
 from agent_comms.native_runtime_input import NativeRuntimeTable
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import AssignmentId, InputId, MessageId, WireName, RootId, ThreadLookup

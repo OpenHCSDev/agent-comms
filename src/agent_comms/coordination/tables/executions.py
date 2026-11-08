@@ -35,7 +35,11 @@ from agent_comms.nominal.field_codec import (
     ThreadLookup,
 )
 from agent_comms.reason_codes import ReasonCode
-from agent_comms.thread_text import AbsentText, GivenText, TextChoice
+from ...registry.thread_text import (
+    AbsentText,
+    GivenText,
+    TextChoice,
+)
 from agent_comms.storage.typed_table import (
     AccumulatingBits,
     Column,

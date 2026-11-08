@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
 from .nominal.declared_family import UnknownFamilyMember
-from .thread_identity import OfferedTools
+from .registry.thread_identity import OfferedTools
 from .nominal.field_codec import (
     FieldCodec,
     NullMember,

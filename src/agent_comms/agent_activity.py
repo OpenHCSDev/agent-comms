@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from .message_notification import MessageNotification
     from .registry.registration import Registration
     from .registry.registry_document import RegistrySnapshot
-    from .thread_status import ThreadStatus
+    from .registry.thread_status import ThreadStatus
 from .activity import (
     Activity,
     ActivityCapture,
@@ -39,7 +39,10 @@ from .nominal.field_codec import ThreadLookup, TurnId
 from .frozen_recipient import FrozenRecipient
 from .routing import NoTurnRouting, Routing
 from .runtime_info import RuntimeInfo, RuntimeInfoStore
-from .thread_identity import OwnerIdentity, ThreadIncarnation
+from .registry.thread_identity import (
+    OwnerIdentity,
+    ThreadIncarnation,
+)
 from .registry.threads import Thread
 from .execution.turn_lease import (
     NoFinishedTurn,

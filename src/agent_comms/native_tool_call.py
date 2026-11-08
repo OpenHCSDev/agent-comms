@@ -16,7 +16,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Never
 
 from .nominal.declared_family import UnknownFamilyMember
-from .thread_identity import OfferedTools, UnobservedTools
+from .registry.thread_identity import (
+    OfferedTools,
+    UnobservedTools,
+)
 from .nominal.field_codec import (
     FieldCodec,
     InputId,

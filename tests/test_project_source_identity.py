@@ -6,7 +6,7 @@ import pytest
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.thread_text import GivenThreadText
+from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
 
 

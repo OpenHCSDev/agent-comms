@@ -77,10 +77,14 @@ from ..execution.turn_item import (
 )
 from agent_comms.send_result import SendResult
 from agent_comms.registry.threads import ExternalThread
-from agent_comms.thread_identity import ThreadIncarnation
+from ..registry.thread_identity import ThreadIncarnation
 from agent_comms.task_attachments.team_pings import TeamUpdate
-from agent_comms.thread_status import ThreadStatus
-from agent_comms.thread_text import AbsentText, GivenText, TextChoice
+from ..registry.thread_status import ThreadStatus
+from ..registry.thread_text import (
+    AbsentText,
+    GivenText,
+    TextChoice,
+)
 from ..projects.checkouts import Checkout
 from agent_comms.storage.typed_table import (
     DurableTables,
@@ -120,7 +124,10 @@ from .monitor import (
 import secrets
 from agent_comms.nominal.field_codec import MalformedRecord
 from agent_comms.messages import Message
-from agent_comms.thread_status import ConnectedThreadStatus, PausedBridgeThreadStatus
+from ..registry.thread_status import (
+    ConnectedThreadStatus,
+    PausedBridgeThreadStatus,
+)
 from .monitor import PeerGone, RequestFailure, SessionReady, SessionRefused, SessionReply
 if TYPE_CHECKING:
     from agent_comms.assignment_store import AssignmentStore

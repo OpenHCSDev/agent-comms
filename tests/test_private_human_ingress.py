@@ -32,7 +32,10 @@ from agent_comms.message_reference import MessageReference
 from agent_comms.messages import InfoKind, Message
 from agent_comms.read_basis import NamedViewer
 from agent_comms.task_sources import TaskAttachment
-from agent_comms.thread_identity import RecordedThreadIncarnation, UserThreadRole
+from agent_comms.registry.thread_identity import (
+    RecordedThreadIncarnation,
+    UserThreadRole,
+)
 from bus_record_fixture import prepare_native_comms
 from agent_comms.registry.threads import NativeThread
 

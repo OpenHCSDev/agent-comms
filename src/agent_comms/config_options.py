@@ -27,7 +27,10 @@ from .pi_vocabulary import ServiceTier, ThinkingChoice
 from .coordination.coordinator import Coordination
 from .nominal.field_codec import FieldCodec
 from .registry.threads import ChosenServiceTier, NextTurnConfiguration, Thread
-from .thread_model import CatalogSelection, ThreadModel
+from .registry.thread_model import (
+    CatalogSelection,
+    ThreadModel,
+)
 from .pi_commands import (
     GetAvailableModels,
     GetAvailableThinkingLevels,

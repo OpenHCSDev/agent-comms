@@ -20,7 +20,10 @@ from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.storage.store_files import LendingConnection
 from agent_comms.registry.threads import NativeThread
-from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
+from agent_comms.registry.thread_identity import (
+    AgentThreadRole,
+    UserThreadRole,
+)
 
 
 def rename_during_count(root: Path, start: Event, done: Event) -> None:

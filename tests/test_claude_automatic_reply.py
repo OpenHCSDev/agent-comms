@@ -20,7 +20,7 @@ from agent_comms.comms import Comms
 from agent_comms.coordination.errors import CoordinationBeginUnavailable
 from agent_comms.connector import ConnectorSendTool
 from agent_comms.connector_caller import DirectorCaller
-from agent_comms.thread_status import StoppedThreadStatus
+from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.threads import NativeThread
 from agent_comms.harness_delivery_states import DeliveredOutcome
 from agent_comms.messages import AckKind, AlertKind, HandoffKind, InfoKind, Message, MessageKind, NoticeRole, QuestionKind

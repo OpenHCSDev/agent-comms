@@ -12,7 +12,7 @@ from .execution.turn_inbox import TurnInbox
 from .coordination.coordinator import Coordination
 from .queued_input import DeliveredInput, InputHandoffRefused
 from .owned_send import OwnedSend
-from .thread_identity import ClaimedIdentity
+from .registry.thread_identity import ClaimedIdentity
 from .execution.turn_input_source import AcceptedFollowingInput
 from .registry.threads import Thread
 from .execution.input_drain import InputDrain

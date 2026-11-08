@@ -10,7 +10,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.registry.threads import NativeThread
-from agent_comms.thread_management import ThreadTitleResult
+from agent_comms.registry.thread_management import ThreadTitleResult
 from agent_comms.tool_caller import ThreadCaller
 
 

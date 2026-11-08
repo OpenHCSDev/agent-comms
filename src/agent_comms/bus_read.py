@@ -25,7 +25,7 @@ from .transport.runtime_request import AttachedResultRuntimeRequest
 from .read_basis import NoDisplaySelection, ReadAuthority
 from .registry.registry_document import RegistrySnapshot
 from .registry.registry_store import RegistryCut
-from .thread_identity import ThreadIncarnation
+from .registry.thread_identity import ThreadIncarnation
 from .registry.threads import Thread
 from .tool_declaration import ToolDeclaration
 from .tool_request import ThreadReadTool

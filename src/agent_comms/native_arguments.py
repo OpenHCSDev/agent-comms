@@ -19,7 +19,7 @@ from .launch_runtime import LaunchRuntime
 
 if TYPE_CHECKING:
     from .execution.owner_lifecycle import OwnerLifecycle
-    from .thread_model import ThreadModel
+    from .registry.thread_model import ThreadModel
 from .pi_vocabulary import (
     NoThinkingOverride,
     ThinkingChoice,

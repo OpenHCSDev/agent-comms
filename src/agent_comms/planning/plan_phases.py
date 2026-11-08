@@ -48,7 +48,7 @@ from ..phase_tasks import (
 from ..pi_events import PiEvent
 from ..private_registry_guard import RegistryPrivacy
 from ..storage.store_files import SqliteStore
-from ..thread_identity import BirthlessIncarnation
+from ..registry.thread_identity import BirthlessIncarnation
 from ..tool_calls import CliToolArguments
 
 if TYPE_CHECKING:

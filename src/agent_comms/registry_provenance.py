@@ -19,7 +19,7 @@ from .errors import RelationViolationError, UnregisteredThreadError
 from .messages import PublicSender
 from .frozen_recipient import FrozenRecipient
 from .routing import DeliveryScope
-from .thread_identity import ThreadIncarnation
+from .registry.thread_identity import ThreadIncarnation
 from .registry.threads import Thread, ThreadProvenance
 
 Member = TypeVar("Member", bound=ThreadProvenance, covariant=True)

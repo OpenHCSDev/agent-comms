@@ -20,7 +20,7 @@ from .nominal.field_codec import (
 )
 from .native_session_reopen import NativeSessionIdentity
 from .registry.registration import Registration
-from .thread_identity import ThreadIncarnation
+from .registry.thread_identity import ThreadIncarnation
 from .execution.turn_context import (
     ContextEntryManifest,
     ContextEntryReference,

@@ -33,7 +33,7 @@ from .notification_assignment import NotificationAssignment
 from agent_comms.message_notification import NotificationWindow
 from .notification_evidence import OwnerOutcomes
 from .message_notification import MessageNotification
-from .thread_presentation import ThreadPresentation
+from .registry.thread_presentation import ThreadPresentation
 from .storage.private_path import FileIdentity, FileObservation, FileRevision, MissingFile
 from .private_registry_guard import RegistryPrivacy
 from .recorded_bus import RecordedBusIdentity
@@ -71,8 +71,11 @@ if TYPE_CHECKING:
     from .coordination.database import InvalidStore, MissingStore
     from .registry.registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
-    from .thread_identity import ThreadIncarnation
-    from .thread_text import ThreadParent, ThreadText
+    from .registry.thread_identity import ThreadIncarnation
+    from .registry.thread_text import (
+    ThreadParent,
+    ThreadText,
+)
     from .view_unread import TranscriptReadState
 
 _LOG = logging.getLogger(__name__)

@@ -28,7 +28,7 @@ from ..native_arguments import (
 from ..nominal.field_codec import FieldCodec
 from ..owner_connection import OwnerConnection
 from ..registry.registry_document import RegistrySnapshot
-from ..thread_identity import (
+from ..registry.thread_identity import (
     ClaimedIdentity,
     OwnerIdentity,
 )

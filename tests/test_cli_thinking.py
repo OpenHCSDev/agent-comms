@@ -3,7 +3,10 @@
 
 from agent_comms.native_arguments import ConfiguredBinary, GivenArguments, InheritedArguments, NativeArguments
 from agent_comms.pi_vocabulary import OffThinkingLevel
-from agent_comms.thread_model import DeclaredModel, ThreadModel
+from agent_comms.registry.thread_model import (
+    DeclaredModel,
+    ThreadModel,
+)
 
 
 def test_native_arguments_configured_has_one_default(monkeypatch):

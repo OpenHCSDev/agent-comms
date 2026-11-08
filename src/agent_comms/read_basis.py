@@ -43,7 +43,10 @@ from .storage.bound_set import BoundSet
 from .storage.private_path import FileObservation, MissingFile
 from .projection_source import ProjectionSource
 from .recorded_bus import RecordedBus, RecordedBusIdentity
-from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+from .registry.thread_identity import (
+    RecordedThreadIncarnation,
+    ThreadIncarnation,
+)
 
 
 class DisplayViewer(SubclassUnion, affix="Viewer"):

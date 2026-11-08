@@ -36,7 +36,7 @@ from agent_comms.runtime_server import (
     SocketClient,
 )
 from .owner_connection import OwnerConnection
-from .thread_identity import OwnerIdentity
+from .registry.thread_identity import OwnerIdentity
 from .tool_result import DeclaredReply
 from .tool_result import ToolResult
 from .registry.registry_store import RegistryReadCounts

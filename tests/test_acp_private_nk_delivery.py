@@ -15,7 +15,7 @@ from agent_comms.coordination.errors import PublicationActivationBlocked
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.thread_model import DeclaredModel
+from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import NativeThread
 from bus_record_fixture import prepare_native_comms
 from test_coordinated_runtime import tmp_path as private_root_fixture

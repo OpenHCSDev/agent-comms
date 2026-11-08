@@ -36,7 +36,7 @@ from agent_comms.selected_claim import (
     write_selected_claimed_file,
 )
 from agent_comms.selected_source_batch import SelectedSource
-from agent_comms.thread_identity import TurnIdentity
+from agent_comms.registry.thread_identity import TurnIdentity
 from agent_comms.registry.threads import NativeThread
 from agent_comms.execution.turn_context import (
     ContextManifest,

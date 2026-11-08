@@ -10,7 +10,7 @@ from ...acp_extension import GoalSnapshotReply, TranscriptSnapshotUpdate
 from ...input_disposition import DeliveryOverview
 from ...nominal.field_codec import OrderId
 from ...team_hud_records import TeammateDetail
-from ...thread_identity import ThreadIncarnation
+from ...registry.thread_identity import ThreadIncarnation
 from ...transcripts import (
     AtFrontier, LatestPage, LivePageSource, PageLimit, PagePosition, PageSource,
 )

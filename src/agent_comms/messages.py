@@ -62,7 +62,10 @@ from .message_reference import MessageReference
 from .page_traversal import LiveCursor, PageCursor
 from .recorded_time import Timestamped
 from .task_sources import Decision, NoTaskAttachment, TaskAttachment
-from .thread_identity import AgentThreadRole, ThreadRole
+from .registry.thread_identity import (
+    AgentThreadRole,
+    ThreadRole,
+)
 from .ui_model.message_category import InboundCategory, MessageCategory, OtherCategory
 from .wake_policy import BoundedTriageWake, PassiveWake
 

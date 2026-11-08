@@ -47,7 +47,7 @@ from .projects.repository_sources import (
 )
 from .projects.storage_projection import StorageProjection
 from .shell_effects import AcquireRepositoryStorageEffect, CreateCheckoutStorageEffect, RemoveCheckoutStorageEffect
-from .thread_model import ThreadModel
+from .registry.thread_model import ThreadModel
 from .registry.threads import Thread
 from .head_review import PullRequestHead
 from .execution.turn_context import (
