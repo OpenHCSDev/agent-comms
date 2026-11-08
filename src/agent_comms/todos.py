@@ -314,8 +314,81 @@ class OrderCompletion(DeclaredFamily, affix="Delivery"):
         return DeliverTodo(todo.revision, actor, delivery, order_id, verified_claims=verified)
 
 
+class OrderCheckChange(ABC):
+    """A prepared criterion change owns whether its source evidence can survive."""
+
+    @abstractmethod
+    def replaced(self, order: OpenProblemOrder, correction: CorrectCheckTodo) -> OpenProblemOrder: ...
+
+
+class UnpreparedOrderCheck(OrderCheckChange):
+    def replaced(self, order: OpenProblemOrder, correction: CorrectCheckTodo) -> OpenProblemOrder:
+        raise TodoError("Prepare the corrected order check before applying it.")
+
+
+class PreservedOrderCheck(OrderCheckChange):
+    def replaced(self, order: OpenProblemOrder, correction: CorrectCheckTodo) -> OpenProblemOrder:
+        return replace(order, check=correction.check)
+
+
+@dataclass(frozen=True)
+class ReopenedOrderCheck(OrderCheckChange):
+    publications: tuple[MergedLink, ...]
+
+    def replaced(self, order: OpenProblemOrder, correction: CorrectCheckTodo) -> OpenProblemOrder:
+        superseded = {publication.link for publication in self.publications}
+        retained = tuple(CorrectMergedLinkTodo(
+            expected_revision=correction.expected_revision, actor=correction.actor,
+            previous=publication, at=correction.at,
+            reason="The prior publication no longer proves this corrected criterion; its source is retained here.",
+        ) for publication in self.publications)
+        return order.copy_as(
+            PendingProblemOrder, check=correction.check,
+            pull_requests=tuple(link for link in order.pull_requests if link not in superseded),
+            corrections=(*order.corrections, *retained),
+        )
+
+
+class CheckCorrectionSource:
+    """Unverified work and report-only answers carry no completed source claim to revoke."""
+
+    async def check_correction(
+        self, order: CheckedProblemOrder, check: OrderCheck, checkout_base: Path,
+    ) -> OrderCheckChange:
+        return PreservedOrderCheck()
+
+
+class RevalidatedCheckSource(CheckCorrectionSource, ABC):
+    @abstractmethod
+    async def source_check(self, check: OrderCheck, checkout_base: Path) -> ChildResult: ...
+
+    def superseded_links(self, order: CheckedProblemOrder) -> tuple[MergedLink, ...]:
+        return ()
+
+    async def check_correction(
+        self, order: CheckedProblemOrder, check: OrderCheck, checkout_base: Path,
+    ) -> OrderCheckChange:
+        try:
+            check.result.require(await self.source_check(check, checkout_base))
+        except OrderCheckFailedError:
+            return ReopenedOrderCheck(self.superseded_links(order))
+        return PreservedOrderCheck()
+
+
+class CommittedCheckSource(RevalidatedCheckSource):
+    @property
+    @abstractmethod
+    def check_commit(self) -> str: ...
+
+    async def source_check(self, check: OrderCheck, checkout_base: Path) -> ChildResult:
+        return await asyncio.to_thread(check.at, self.check_commit, check.directory, checkout_base)
+
+    def publication_links(self, order: CheckedProblemOrder) -> tuple[MergedLink, ...]:
+        return tuple(MergedLink(link, self.check_commit) for link in order.pull_requests)
+
+
 @dataclass(frozen=True, kw_only=True)
-class OrderDelivery(OrderCompletion, StoryEvent, declared_name=None):
+class OrderDelivery(CheckCorrectionSource, OrderCompletion, StoryEvent, declared_name=None):
     at: EventTime = field(default_factory=UnrecordedEventTime)
 
     def preparation_problems(self, todo: Todo) -> dict[str, str]:
@@ -380,7 +453,7 @@ class OrderDelivery(OrderCompletion, StoryEvent, declared_name=None):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CheckedDelivery(EvidenceRequirements, OrderDelivery, declared_name=None):
+class CheckedDelivery(RevalidatedCheckSource, EvidenceRequirements, OrderDelivery, declared_name=None):
     """Implementation deliveries share source checks and installed-build evidence."""
 
     evidence: Annotated[DeliveryEvidence, WireOmitDefault()] = field(
@@ -415,7 +488,7 @@ class CheckedDelivery(EvidenceRequirements, OrderDelivery, declared_name=None):
         order = todo.order.checked()
         check = order.check
         for each in (check, *order.deletes.checks):
-            each.result.require(await self.checked(each, registry.storage_rule.checkout_base))
+            each.result.require(await self.source_check(each, registry.storage_rule.checkout_base))
         revision = self.source_revision()
         for line in order.created:
             try:
@@ -433,14 +506,11 @@ class CheckedDelivery(EvidenceRequirements, OrderDelivery, declared_name=None):
         return MainRevision()
 
     @abstractmethod
-    async def checked(self, check: OrderCheck, checkout_base: Path) -> ChildResult: ...
-
-    @abstractmethod
     async def delivery_time(self, check): ...
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommitSourceDelivery(BranchPointCheck, CheckedDelivery, declared_name=None):
+class CommitSourceDelivery(CommittedCheckSource, BranchPointCheck, CheckedDelivery, declared_name=None):
     """Shared checked-tree behavior; each wire member owns its delivered source identity."""
     commit: str
 
@@ -481,8 +551,14 @@ class CommitSourceDelivery(BranchPointCheck, CheckedDelivery, declared_name=None
     def source_revision(self) -> SourceRevision:
         return CommitRevision(self.commit)
 
-    async def checked(self, check: OrderCheck, checkout_base: Path) -> ChildResult:
-        return await asyncio.to_thread(check.at, self.commit, check.directory, checkout_base)
+    @property
+    def check_commit(self) -> str:
+        return self.commit
+
+    def superseded_links(self, order: CheckedProblemOrder) -> tuple[MergedLink, ...]:
+        return tuple(publication
+                     for _commit in self.merged_commits(Repo.of(order.check.directory))
+                     for publication in self.publication_links(order))
 
     async def delivery_time(self, check: OrderCheck) -> EventTime:
         return EventTime.capture(float(
@@ -560,6 +636,11 @@ class CommitDelivery(CommitSourceDelivery, declared_name="delivered_commit"):
 class DeliveryMerge(DeclaredFamily, affix="DeliveryMerge"):
     """The integration observed when Core checked a commit delivery; never a claim of install."""
 
+    def superseded_links(
+        self, source: CommittedCheckSource, order: CheckedProblemOrder,
+    ) -> tuple[MergedLink, ...]:
+        return source.publication_links(order)
+
     @property
     @abstractmethod
     def line(self) -> str: ...
@@ -586,6 +667,11 @@ class BranchDeliveryMerge(DeliveryMerge):
 class UnmergedDeliveryMerge(DeliveryMerge):
     branches: tuple[str, ...]
 
+    def superseded_links(
+        self, source: CommittedCheckSource, order: CheckedProblemOrder,
+    ) -> tuple[MergedLink, ...]:
+        return ()
+
     @property
     def line(self) -> str:
         return f"not merged; linked branches: {', '.join(self.branches)}"
@@ -594,6 +680,9 @@ class UnmergedDeliveryMerge(DeliveryMerge):
 @dataclass(frozen=True, kw_only=True)
 class CheckedCommitDelivery(CommitDelivery):
     merge: DeliveryMerge
+
+    def superseded_links(self, order: CheckedProblemOrder) -> tuple[MergedLink, ...]:
+        return self.merge.superseded_links(self, order)
 
     @property
     def line(self) -> str:
@@ -609,7 +698,7 @@ class OperationDelivery(WorkingEvidence, FreshMainCheck, CheckedDelivery):
     def line(self) -> str:
         return "operation checked"
 
-    async def checked(self, check: OrderCheck, checkout_base: Path) -> ChildResult:
+    async def source_check(self, check: OrderCheck, checkout_base: Path) -> ChildResult:
         return await check.run()
 
     async def delivery_time(self, check):
@@ -2630,7 +2719,7 @@ class FixScope(OrderScope[CheckedDelivery]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CheckedProblemOrder(ProblemOrder, declared_name=None):
+class CheckedProblemOrder(CheckCorrectionSource, ProblemOrder, declared_name=None):
     """A checked order keeps its actual body, check and source location."""
 
     def require_linkable(self) -> None:
@@ -2695,6 +2784,13 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
 
     def checked(self) -> CheckedProblemOrder:
         return self
+
+    @property
+    def correction_source(self) -> CheckCorrectionSource:
+        return self
+
+    async def corrected_check(self, check: OrderCheck, checkout_base: Path) -> OrderCheckChange:
+        return await self.correction_source.check_correction(self, check, checkout_base)
 
     @cached_property
     def cited_revision(self) -> SourceRevision:
@@ -2970,9 +3066,16 @@ class AwaitingInstallationProblemOrder(OpenProblemOrder, declared_name=None):
 
 
 @dataclass(frozen=True, kw_only=True)
-class MergedProblemOrder(AwaitingInstallationProblemOrder):
+class MergedProblemOrder(CommittedCheckSource, AwaitingInstallationProblemOrder):
     """The checked order installed by a merge, with its actual merge identity."""
     sha: str
+
+    @property
+    def check_commit(self) -> str:
+        return self.sha
+
+    def superseded_links(self, order: CheckedProblemOrder) -> tuple[MergedLink, ...]:
+        return self.publication_links(order)
 
     def check_base(self, repo: Path) -> str:
         return f'{self.sha}^1'
@@ -3349,6 +3452,10 @@ class ReviewingProblemOrder(ClaimedProblemOrder):
 @dataclass(frozen=True, kw_only=True)
 class DeliveredProblemOrder(AwaitingInstallationProblemOrder):
     delivery: OrderDelivery
+
+    @property
+    def correction_source(self) -> CheckCorrectionSource:
+        return self.delivery
 
     def check_base(self, repo: Path) -> str:
         return self.delivery.check_base(repo)
@@ -5381,7 +5488,8 @@ class CorrectOrderTodo(TodoOperation, declared_name=None):
     def corrected(self, order: OpenProblemOrder) -> OpenProblemOrder:
         if self.previous != self.part(order):
             raise TodoError("The corrected part changed since it was read; read it again.")
-        return replace(self.replaced(order), corrections=(*order.corrections, self))
+        replaced = self.replaced(order)
+        return replace(replaced, corrections=(*replaced.corrections, self))
 
     @abstractmethod
     def part(self, order: OpenProblemOrder) -> object:
@@ -5397,20 +5505,24 @@ class CorrectCheckTodo(CorrectOrderTodo):
     """The teammate replaces a wrong check of an open order."""
     previous: OrderCheck
     check: OrderCheck
+    preparation: Annotated[OrderCheckChange, WireTransient()] = field(
+        default_factory=UnpreparedOrderCheck, kw_only=True, compare=False, repr=False,
+    )
 
     def prepare(self, goals: Goals, current: Todo) -> Self:
         self.check.require_directory()
-        current.order.checked().require_check_acceptance(
-            self.check, goals.registry.storage_rule.checkout_base
-        )
-        return super().prepare(goals, current)
+        checkout_base = goals.registry.storage_rule.checkout_base
+        order = current.order.checked()
+        order.require_check_acceptance(self.check, checkout_base)
+        prepared = asyncio.run(order.corrected_check(self.check, checkout_base))
+        return replace(super().prepare(goals, current), preparation=prepared)
 
     def part(self, order: OpenProblemOrder) -> OrderCheck:
         return order.check
 
     def replaced(self, order: OpenProblemOrder) -> OpenProblemOrder:
         self.check.require_writable()
-        return replace(order, check=self.check)
+        return self.preparation.replaced(order, self)
 
 
 @dataclass(frozen=True)
@@ -5428,10 +5540,11 @@ class CorrectRunTodo(CorrectOrderTodo):
 
 @dataclass(frozen=True)
 class CorrectMergedLinkTodo(CorrectOrderTodo):
-    """The teammate takes back a merge recorded through a pull request that never held this
-    order's work, such as a merged prerequisite. The order is pending again under its own id,
-    check, run, edits and times; only that link leaves it. Any other linked pull request stays,
-    so a merge of real work on it is read again from the forge, never dropped."""
+    """Withdraw a publication that no longer establishes this order's completion.
+
+    This includes an unrelated prerequisite and a source superseded by a corrected criterion.
+    Its merge identity remains in the correction; the order keeps its own id, check, run,
+    edits and times. Other linked pull requests stay available to the forge observer."""
     previous: MergedLink
 
     def part(self, order: OpenProblemOrder) -> MergedLink:
