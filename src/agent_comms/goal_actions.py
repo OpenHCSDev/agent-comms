@@ -306,7 +306,7 @@ class ActiveGoalAction(
 
     def before_transition(self, goal: Goal, ctx: GoalActionContext) -> None:
         generation = ctx.goals.open_goal_store().require_generation(goal.id)
-        generation.lifecycle.resume_status(generation, goal, ctx)
+        generation.lifecycle.resume_status(ctx.thread.executing)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -330,7 +330,7 @@ class CompliedGoalAction(TransitionGoalAction, OwnerInvocable):
         generation = store.require_generation(goal.id)
         generation.lifecycle.continue_work(store, generation, ComplianceDecision(self.witness))
         resumed = store.require_generation(goal.id)
-        resumed.lifecycle.resume_status(resumed, goal, ctx)
+        resumed.lifecycle.resume_status(ctx.thread.executing)
 
 
 @dataclass(frozen=True, kw_only=True)

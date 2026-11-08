@@ -23,7 +23,7 @@ from agent_comms.owner_requests import NoRequestRevision, RequestRevision
 from .child_process import Platform
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import FieldCodec, HistoryExclude, MalformedRecord
-from .goal_failure_observation import FailedTurnEvidence
+from .goal_ledger import FailedTurnEvidence
 from .goal_scope import GoalScope
 from .goals import GoalDeclaration, NoGoal
 from .storage.locked_store import DurableFile

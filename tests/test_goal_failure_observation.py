@@ -9,7 +9,8 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import StaleAttemptError, UnresolvedAttemptError
-from agent_comms.goal_attempts import AttemptRecord, FailedTurnObservation, Generation, GoalAttemptStore
+from agent_comms.goal_attempts import GoalAttemptStore
+from agent_comms.goal_ledger import AttemptRecord, FailedTurnObservation, Generation
 from agent_comms.goal_failure_observation import NoFailedTurnEvidence
 from agent_comms.goal_generation import BlockedGeneration
 from agent_comms.goals import Goal

@@ -18,7 +18,7 @@ from agent_comms.goal_actions import (
     SetGoalAction,
     StandbyGoalAction,
 )
-from agent_comms.goal_attempts import GoalWorkDecision
+from agent_comms.goal_ledger import GoalWorkDecision
 from agent_comms.goal_generation import ReadyGeneration
 from agent_comms.goal_history import GoalHistoryEntry
 from agent_comms.goal_states import BlockedGoal, GoalState, UnrecordedBlockGoal

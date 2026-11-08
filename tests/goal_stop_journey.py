@@ -11,10 +11,10 @@ from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.comms import wire
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_states import ActiveGoal
-from agent_comms.goal_attempts import AttemptRecord
+from agent_comms.goal_ledger import AttemptRecord
 from agent_comms.goal_attempt_phase import FailedAttempt, SucceededAttempt
 from agent_comms.goal_generation import ReadyGeneration
-from agent_comms.goal_failure_observation import FailedTurnEvidence
+from agent_comms.goal_ledger import FailedTurnEvidence
 from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.native_arguments import GivenArguments
 from native_backend_fixture import native_backend_fixture, wait_for

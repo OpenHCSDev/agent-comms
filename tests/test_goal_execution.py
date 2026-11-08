@@ -25,7 +25,7 @@ from agent_comms.goal_actions import (
     RetryGoalAction,
     SetGoalAction,
 )
-from agent_comms.goal_failure_observation import FailedTurnEvidence
+from agent_comms.goal_ledger import FailedTurnEvidence
 from agent_comms.goal_history import RecordedGoalHistory
 from agent_comms.goal_presentation import (
     AttemptFailedExecution,

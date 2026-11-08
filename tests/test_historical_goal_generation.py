@@ -17,7 +17,8 @@ from agent_comms.goal_actions import (
     ActiveGoalAction, GoalPrecondition, ModelInvocable, OwnerInvocable,
     RetryGoalAction, RuntimeInvocable,
 )
-from agent_comms.goal_attempts import GoalAttemptStore, MissingGoalGenerationError
+from agent_comms.goal_attempts import GoalAttemptStore
+from agent_comms.goal_ledger import MissingGoalGenerationError
 from agent_comms.goal_generation import ReadyGeneration
 from agent_comms.goal_states import BlockedGoal
 from agent_comms.goals import Goal

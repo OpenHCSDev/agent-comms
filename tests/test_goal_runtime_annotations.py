@@ -1,6 +1,7 @@
 """Goal publication callbacks remain inspectable by runtime consumers."""
 
 from collections.abc import Callable
+from inspect import isfunction
 from types import NoneType
 from typing import get_args, get_type_hints
 
@@ -8,7 +9,11 @@ import pytest
 
 from agent_comms.context_segments.wake_values import WakeWorkContext
 from agent_comms.display_order import ChannelSort, ThreadSort
-from agent_comms.goal_attempts import FailedTurnObservation, LaunchPermit
+from agent_comms.goal_attempts import LaunchPermit
+from agent_comms.goal_attempt_phase import GoalAttemptPhase
+from agent_comms.goal_generation import GenerationState
+from agent_comms.goal_ledger import FailedTurnEvidence, FailedTurnObservation, Generation
+from agent_comms.goal_failure_observation import NoFailedTurnEvidence
 from agent_comms.goal_turn_permit import GoalTurnPermit
 from agent_comms.goal_actions import GoalAction, StandbyGoalAction
 from agent_comms.goal_records import GoalRecords
@@ -111,3 +116,29 @@ def test_failed_attempt_reads_original_identity_contracts(callback: Callable[...
 def test_attempt_context_callback_preserves_its_result_type() -> None:
     hints = get_type_hints(LaunchPermit.add_context)
     assert get_args(hints["context"])[-1] is hints["return"]
+
+
+@pytest.mark.parametrize("reading", (NoFailedTurnEvidence, FailedTurnEvidence))
+def test_failure_projection_contract_preserves_its_result(reading: type) -> None:
+    hints = get_type_hints(reading.execution)
+    assert get_args(hints["source"])[0] is hints["return"]
+
+
+def test_generation_failure_read_names_its_stored_row() -> None:
+    assert get_args(get_type_hints(Generation.failure_evidence)["return"]) == (FailedTurnEvidence,)
+
+
+@pytest.mark.parametrize(
+    "state",
+    (GenerationState, *GenerationState.members_with(GenerationState),
+     GoalAttemptPhase, *GoalAttemptPhase.members_with(GoalAttemptPhase)),
+)
+def test_lifecycle_method_annotations_resolve(state: type) -> None:
+    for name, member in vars(state).items():
+        match member:
+            case classmethod(__func__=callback) | staticmethod(__func__=callback):
+                pass
+            case _:
+                callback = member
+        if isfunction(callback) and callback.__annotations__:
+            assert get_type_hints(callback), f"{state.__name__}.{name}"

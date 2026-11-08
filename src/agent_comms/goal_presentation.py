@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import NullMember, WireValue, GoalId
-from .goal_failure_observation import FailedTurnEvidence
+from .goal_ledger import FailedTurnEvidence
 from .goal_states import PauseSource
 from .goals import Goal, GoalCheckpoint, GoalDeclaration
 from .lifecycle_capability import Active

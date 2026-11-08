@@ -18,7 +18,8 @@ from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.runtime_updates import ThreadOutput
 from agent_comms.nominal.field_codec import AcpSessionId, TurnId
 from agent_comms.goal_actions import EditGoalAction, SetGoalAction, StandbyGoalAction
-from agent_comms.goal_attempts import Generation, GoalAttemptStore, StorageUncertainError
+from agent_comms.goal_attempts import GoalAttemptStore
+from agent_comms.goal_ledger import Generation, StorageUncertainError
 from agent_comms.goal_presentation import StandbyExecution
 from agent_comms.planning.goal_waits import GoalWaits
 from agent_comms.storage.locked_store import GoalWakeFile, RegistryFile
