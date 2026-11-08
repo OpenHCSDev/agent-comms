@@ -3355,7 +3355,21 @@ class DeliveredProblemOrder(AwaitingInstallationProblemOrder):
 
     @property
     def line(self) -> str:
-        return f"Delivered: {self.delivery.line}, waiting on install"
+        """Without a build to ask, this says what was delivered and claims nothing about
+        whether it is installed; ``installed_line`` is the reading that knows."""
+        return f"Delivered: {self.delivery.line}"
+
+    def installed_line(self, installed: InstalledBuild) -> str:
+        """The installed build, not this order, says whether the install is still owed.
+
+        Both halves already had owners and this line used neither: the delivery owns which
+        commits it installs (OrderDelivery.installation_commits) and each CommitInstallation
+        member owns the words for its answer (merged_state). Spelling "waiting on install"
+        here instead told Tristan's board that P42 and P48 awaited an install whose commits
+        were already in the running build."""
+        answer = installed.containing(
+            self.delivery.installation_commits, self.check.directory)
+        return f"{self.line}, {answer.merged_state}"
 
     def delivery_rates(self) -> Iterator[tuple[str, float]]:
         yield self.id, (

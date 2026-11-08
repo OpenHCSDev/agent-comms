@@ -36,8 +36,10 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import GitCommandError, Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.todos import (
+    CheckedCommitDelivery,
     CommitDelivery,
     DoneTodoState,
+    MainDeliveryMerge,
     FileDeliveryEvidence,
     MergedListedPullRequest,
     OpenTodoState,
@@ -485,3 +487,37 @@ def test_a_one_minute_old_merge_is_due_and_names_its_request_without_launching(
     assert InstallLogs(bus.root).units() == ()
 
 
+
+
+def test_a_delivered_order_asks_the_build_whether_its_install_is_still_owed(
+    proof_build_checkouts, comms, tmp_path,
+):
+    """P42 and P48 sat on Tristan's board reading "waiting on install" while their delivered
+    commits were already in the running build. DeliveredProblemOrder.line spelled that phrase
+    as a literal and inherited the default installed_line, which ignores the build, so the
+    board asserted an install state nobody had asked about. Both halves already had owners:
+    OrderDelivery.installation_commits knows which commits a delivery installs, and each
+    CommitInstallation member owns the words for its answer. This is the merged order's
+    control one member over, for the delivered member."""
+    from test_todos import order
+
+    graph = next(graph for graph in proof_build_checkouts
+                 if graph.repository.github == CorePackage.repository)
+    delivery = CheckedCommitDelivery(
+        commit=graph.newer, delivered_commit=graph.newer,
+        merge=MainDeliveryMerge(), at=RecordedEventTime(1000),
+    )
+    delivered = order(graph.repository).delivered(delivery)
+    assert delivery.installation_commits == (graph.newer,)
+
+    # Says what was delivered and claims nothing it has no build to know.
+    assert "install" not in delivered.line
+
+    assert delivered.installed_line(RecordedBuildIdentity.installed()).endswith(
+        "waiting on install")
+
+    resolution = RuntimeResolution.at(LaunchRuntime.installed().prefix)
+    resolution.model_copy(update={"core_commit": graph.newer}).save(
+        LaunchRuntime.installed().prefix)
+
+    assert delivered.installed_line(RecordedBuildIdentity.installed()).endswith("installed")
