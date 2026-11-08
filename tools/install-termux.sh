@@ -46,6 +46,9 @@ export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-1}"
 # Resolution and pip use separate source trees; share compiled Rust dependencies.
 export CARGO_TARGET_DIR="$installation/cargo-target"
 export PIP_CACHE_DIR="$installation/pip-cache"
+mkdir -p "$installation/wheels"
+# Retained native builds use normal wheel tags; incompatible ABIs are not selected.
+export PIP_FIND_LINKS="$installation/wheels https://github.com/OpenHCSDev/agent-comms/releases/expanded_assets/termux-wheels"
 # The Termux community index supplies Android wheels absent from desktop PyPI.
 termux_wheels=https://termux-user-repository.github.io/pypi/
 export PIP_EXTRA_INDEX_URL="$termux_wheels"
