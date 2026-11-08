@@ -1,4 +1,6 @@
 """The declared session type checks owner permission when handling an ACP load."""
+
+from __future__ import annotations
 from abc import abstractmethod
 from collections.abc import Awaitable, Callable
 from functools import partial
