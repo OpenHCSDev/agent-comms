@@ -1296,13 +1296,23 @@ class SidebarResult(PublishState, Observed, declared_name=None):
     def accepted_by(self, previous: PublishState) -> bool:
         return not previous.same_observation(self)
 
+
+class ReplaceableSidebar(SidebarResult, declared_name=None):
+    """A sidebar result a complete state for the same request may stand in for.
+
+    Declared on the members rather than on every sidebar result: SidebarUnreadable is a
+    failure, and a later state saying rows are fine does not say the read failed, so it
+    must cross the wire on its own. Inheriting this permission from the shared parent gave
+    it away silently, which is what a default-false member on ServiceResult exists to stop.
+    """
+
     def superseded_by_sidebar(self, request: ObserveSidebar) -> bool:
         """Only by a state for the same request: another selection is another question."""
         return self.request == request
 
 
 @dataclass(frozen=True)
-class SidebarPreparing(SidebarResult, WaitingSidebar):
+class SidebarPreparing(ReplaceableSidebar, WaitingSidebar):
     """The first answer explains the unfinished read without replacing real rows."""
 
     cause: DeferredRead | ReloadRequired
@@ -1315,7 +1325,7 @@ class SidebarPreparing(SidebarResult, WaitingSidebar):
 
 
 @dataclass(frozen=True)
-class SidebarObserved(SidebarResult):
+class SidebarObserved(ReplaceableSidebar):
     snapshot: CoordinationSnapshot
     derived: tuple[dict[str, ChannelRowModel], dict[str, ThreadRowModel]]
 

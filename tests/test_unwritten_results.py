@@ -16,6 +16,8 @@ from agent_comms.ui_model.observation import (
     ObserveSidebar,
     SidebarObserved,
     SidebarPreparing,
+    SidebarUnreadable,
+    UnreadableHistory,
     UnwrittenResults,
     ViewsRetired,
 )
@@ -85,3 +87,22 @@ def test_nothing_is_passed_over_an_ordered_event(comms):
     assert len(unwritten.queued) == 3
     assert unwritten.queued[0] is first
     assert unwritten.queued[1] is retirement
+
+
+def test_a_complete_state_does_not_replace_an_unwritten_failure(comms):
+    """A failure is not superseded by a later success for the same request.
+
+    SidebarUnreadable says the read failed; a complete state says the rows are fine. It
+    does not say the read failed, so the failure crosses the wire on its own. It inherited
+    the permission from the shared sidebar parent until codex-latency read the pair.
+    """
+    request = ObserveSidebar(Checkout(comms.root), True, False)
+    unwritten = UnwrittenResults()
+
+    failure = SidebarUnreadable(comms.views.revision(), request,
+                                  error=UnreadableHistory('gone', 'unreadable'))
+    unwritten.offer(failure)
+    unwritten.offer(sidebar(comms, request))
+
+    assert len(unwritten.queued) == 2
+    assert unwritten.queued[0] is failure
