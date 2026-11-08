@@ -14,8 +14,8 @@ from typing import ClassVar, Literal, Self, get_args
 from urllib.parse import urlencode
 
 from .connector_caller import (
-    CALLER, ConnectorCaller, ForkingCaller, GrantRefusedError, ScopedUiCaller,
-    UiCaller, UiReadCaller,
+    CALLER, ConnectorCaller, ForkingCaller, GrantRefusedError, ReadOnlyConnectorCaller,
+    ScopedUiCaller, UiCaller, UiReadCaller,
 )
 from .connector_profile import (
     MCP_PATH, BearerSecret, HttpsMcpEndpoint, UiConnectionProfile, UiCredential, UiGrantId,
@@ -188,10 +188,23 @@ class IssuedAccess(ExpiringDirectorAccess):
 
 
 @dataclass(frozen=True)
-class ServiceAccess(ExpiringDirectorAccess):
-    """A temporary local service proof, not a registered OAuth client identity."""
+class TemporaryServiceAccess(ExpiringGrant, ConnectorAccess, declared_name=None):
+    """A local proof's purpose and lifetime, independent of its caller permissions."""
 
     purpose: str
+
+
+@dataclass(frozen=True)
+class ServiceAccess(TemporaryServiceAccess, ExpiringDirectorAccess):
+    """A temporary Director grant used by owner-operated service consumers."""
+
+
+@dataclass(frozen=True)
+class ReadServiceAccess(TemporaryServiceAccess):
+    """A local service read needs no registered colleague or write permission."""
+
+    def authorized_caller(self) -> ConnectorCaller:
+        return ReadOnlyConnectorCaller()
 
 
 @dataclass(frozen=True)
@@ -583,10 +596,12 @@ class ConnectorStore(SingleFileStore, CarriedDocument[ConnectorGrants], Connecto
         self.update(lambda grants: DocumentChange.to(grants.ui_revoked(grant_id)))
 
     @contextmanager
-    def granted(self, purpose: str) -> Iterator[str]:
+    def granted(
+        self, purpose: str, grant_type: type[TemporaryServiceAccess] = ServiceAccess,
+    ) -> Iterator[str]:
         """A local service token, revoked when its proof is done; purpose is not a client ID."""
         token = secrets.token_urlsafe(32)
-        held = ServiceAccess(purpose, expires_at=time.time() + CODE_SECONDS)
+        held = grant_type(purpose, expires_at=time.time() + CODE_SECONDS)
         key = digest(token)
         self.update(lambda grants: DocumentChange.to(replace(grants, access=grants.access | {key: held})))
         try:
