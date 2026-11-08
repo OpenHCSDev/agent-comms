@@ -13,14 +13,14 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 from agent_comms_hooks import ToolRefusedError
 from pydantic import JsonValue
 
-from .bus import Bus
+from .messaging.bus import Bus
 from .context_store import ContextStore
 from .nominal.declared_family import DeclaredFamily
 from .external_transcript import ExternalTranscript, StoreRead
 from .nominal.field_codec import FieldCodec, WireExclude, WireTransient, projected
 from .held_orders import HeldOrders, LiveHold
 from .historical_native_inputs import HistoricalNativeAnswers
-from .message_reference import MessageReference
+from .messaging.message_reference import MessageReference
 from .planning.orders import (
     EditWorkplaces,
     NoCommitProgress,

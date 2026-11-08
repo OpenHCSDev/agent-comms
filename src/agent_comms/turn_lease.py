@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .activity import ObservedActivity
-from .channel_targets import CommandTarget
+from .messaging.channel_targets import CommandTarget
 from .child_process import ProcessIdentity, ProcessState
 from .coordination.session import NativeCapture
 from .errors import RelationViolationError
@@ -30,7 +30,7 @@ from .storage.locked_store import (
     DocumentBytes, DocumentChange, DocumentTransactions, DurableFile, LockedFile,
     PatternFile,
 )
-from .message_reference import MessageReference
+from .messaging.message_reference import MessageReference
 from .reported_turn import NoReportedTurn, ReportedTurn, ReportedTurnState
 from .routing import NoTurnRouting, Routing
 from .storage.store_files import DependentStateTier, SingleFileStore
@@ -46,7 +46,7 @@ from .turn_phase import IdlePhase, PreparingPhase, TurnPhase
 if TYPE_CHECKING:
     from agent_comms.goal_management import GoalExecutionSource
     from .goal_presentation import GoalExecution
-    from .messaging import Messaging
+    from .messaging.sending import Messaging
     from .registry.registry_document import RegistrySnapshot
     from .registry.registry_store import RegistryStore
     from .registry.threads import Thread

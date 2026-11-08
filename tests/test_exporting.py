@@ -9,7 +9,11 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.channels import AnyOfMatch, ViewPredicate, ParticipantsView
+from agent_comms.messaging.channels import (
+    AnyOfMatch,
+    ViewPredicate,
+    ParticipantsView,
+)
 from agent_comms.cli import CliInvocation
 from agent_comms.comms import Comms
 from agent_comms.errors import ExportDestinationExists, RelationViolationError
@@ -28,10 +32,17 @@ from agent_comms.exporting import (
     WireExportLimit,
     WireTranscriptExporter,
 )
-from agent_comms.bus import Bus, ClaimRecord
+from agent_comms.messaging.bus import (
+    Bus,
+    ClaimRecord,
+)
 from agent_comms.envelope_claim_transitions import UnscopedClaims
 from agent_comms.nominal.field_codec import ClaimId
-from agent_comms.messages import ClaimNoticeKind, Message, InfoKind
+from agent_comms.messaging.messages import (
+    ClaimNoticeKind,
+    Message,
+    InfoKind,
+)
 from agent_comms.registry.threads import NativeThread
 
 

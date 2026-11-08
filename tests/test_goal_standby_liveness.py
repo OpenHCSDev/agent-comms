@@ -2,7 +2,10 @@
 
 
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.messages import ConversationRole, NoticeRole
+from agent_comms.messaging.messages import (
+    ConversationRole,
+    NoticeRole,
+)
 import os
 from dataclasses import replace
 

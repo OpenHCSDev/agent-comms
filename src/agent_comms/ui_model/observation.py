@@ -46,7 +46,11 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.active_route import CommsRoute
 from agent_comms.activity import ObservedActivity
-from agent_comms.bus_read import CapturesTranscriptPage, OwnerScopedRead, UiRead
+from ..messaging.bus_read import (
+    CapturesTranscriptPage,
+    OwnerScopedRead,
+    UiRead,
+)
 from agent_comms.child_process import HelperStart, SpawnedHelper, join_retirement
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
@@ -63,12 +67,12 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.history_views import RetiredViews
 from agent_comms.input_disposition import DeliveryOverview
 from agent_comms.launch_root import started
-from agent_comms.message_notification import (
+from ..messaging.message_notification import (
     MessageNotification,
     NotificationPass,
     NotificationWindow,
 )
-from agent_comms.message_reference import MessageReference
+from ..messaging.message_reference import MessageReference
 from agent_comms.nominal.field_codec import (
     DeclaredError,
     FieldCodec,
@@ -84,7 +88,10 @@ from agent_comms.notification_read import (
 )
 from agent_comms.notification_reads import NotificationRead
 from agent_comms.presentation import CoordinationSnapshot, NoRevision, ReadState, WireRevision
-from agent_comms.read_basis import DisplayCut, NoDisplaySelection
+from ..messaging.read_basis import (
+    DisplayCut,
+    NoDisplaySelection,
+)
 from agent_comms.registry.registry_document import (
     RegistrySnapshot,
     RosterVisibility,

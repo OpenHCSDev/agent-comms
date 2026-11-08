@@ -10,9 +10,15 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.bus import Bus, ClaimRecord, KeyedPrivateRecord, PublicRecord, RecordBuilder
-from agent_comms.bus_publication import HumanOrigin
-from agent_comms.bus_tables import MessageIdentitySource
+from agent_comms.messaging.bus import (
+    Bus,
+    ClaimRecord,
+    KeyedPrivateRecord,
+    RecordBuilder,
+)
+from agent_comms.messaging.messages import PublicRecord
+from agent_comms.messaging.bus_publication import HumanOrigin
+from agent_comms.messaging.bus_tables import MessageIdentitySource
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.envelope_claim_transitions import (
@@ -28,7 +34,7 @@ from agent_comms.envelope_claim_transitions import (
 from agent_comms.errors import CommittedMessageError
 from agent_comms.nominal.field_codec import ClaimId, InputId, TurnId
 from agent_comms.storage.locked_store import RegistryFile, StoreCommittedError
-from agent_comms.messages import (
+from agent_comms.messaging.messages import (
     BusCapability,
     BusProjectionTables,
     BusRow,

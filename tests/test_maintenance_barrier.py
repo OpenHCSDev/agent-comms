@@ -350,7 +350,7 @@ def test_phase_change_waits_for_final_native_write_lock(tmp_path: Path) -> None:
 def test_activity_updates_runtime_state_without_publication_while_draining(tmp_path: Path, capsys) -> None:
     """Derived activity remains writable; maintenance still holds new bus publication."""
     from agent_comms.activity import ActivityState, ActivityStore
-    from agent_comms.bus import Bus
+    from agent_comms.messaging.bus import Bus
     from agent_comms.cli import CliInvocation
 
     def cli(*argv: str) -> tuple[int, str]:

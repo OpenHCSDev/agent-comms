@@ -7,7 +7,7 @@ from functools import partial
 from pathlib import Path
 from typing import AsyncIterator
 
-from agent_comms.bus import Bus
+from ..messaging.bus import Bus
 from agent_comms.storage.private_path import FileRevision
 from agent_comms.runtime_updates import RuntimeUpdate
 from agent_comms.watched import FileSource

@@ -27,7 +27,10 @@ from agent_comms.assignment_states import (
     FullPendingAssignment,
 )
 from agent_comms.cohort_schema import AcceptanceFrontier, ClaimBatchAcknowledgements, CohortDeliveries
-from agent_comms.messages import InfoKind, Message
+from agent_comms.messaging.messages import (
+    InfoKind,
+    Message,
+)
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination.cohort import (
     pending_sealed_assignments,
@@ -46,7 +49,7 @@ from agent_comms.exporting import (
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.thread_status import ArchivedThreadStatus
 from agent_comms.wake_policy import BoundedTriageWake, FullWake, MessageAudience
-from agent_comms.message_page import PageBounds
+from agent_comms.messaging.message_page import PageBounds
 from agent_comms.registry.threads import NativeThread
 
 pytestmark = pytest.mark.skipif(
@@ -233,7 +236,7 @@ def test_no_wake_observer_cannot_gain_legacy_claim_after_seal(tmp_path: Path) ->
     comms, store, root_id, lookups = _root(tmp_path)
     from agent_comms.audience_manifest import freeze_audience
     from agent_comms.frozen_recipient import FrozenRecipient
-    from agent_comms.bus import PrivateRecord
+    from agent_comms.messaging.bus import PrivateRecord
     from agent_comms.mentions import ThreadMention
     from agent_comms.wake import OrdinaryControl
     from agent_comms.wake_policy import NoWakeDecision, WakeDecision

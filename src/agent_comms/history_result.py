@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from .cli_result import CliResult
 from .nominal.field_codec import FieldCodec
-from .messages import Message
+from .messaging.messages import Message
 from .tool_result import ToolResult
 
 if TYPE_CHECKING:

@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from agent_comms.bus import Bus
+from agent_comms.messaging.bus import Bus
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import FieldCodec

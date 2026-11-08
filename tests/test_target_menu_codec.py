@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.channel_targets import (
+from agent_comms.messaging.channel_targets import (
     ChannelSelection,
     CommandTarget,
     NoChannel,
@@ -52,7 +52,7 @@ def test_a_prepared_action_offers_the_choices_it_was_prepared_with():
 
 def test_every_action_result_crosses_by_shape_and_keeps_its_cli_form():
     from agent_comms.channel_management import TagChangeResult
-    from agent_comms.channels import Channel
+    from agent_comms.messaging.channels import Channel
     from agent_comms.cli_commands import (
         TagRenamedResult, TargetReadResult, ThreadArchivedResult, ThreadPinnedResult,
         ThreadStoppedResult, ThreadTagsResult, ViewDeletedResult,
@@ -74,7 +74,7 @@ def test_every_action_result_crosses_by_shape_and_keeps_its_cli_form():
 def test_a_ui_lists_and_applies_a_menu_action_through_core(tmp_path):
     """A channel's menu and its edit go through the same core.call a remote UI sends, and both
     answers arrive as themselves."""
-    from agent_comms.channels import Channel
+    from agent_comms.messaging.channels import Channel
     from agent_comms.cli_result import TargetEditResult
     from agent_comms.cli_verbs.read_target import ReadTargetCliCommand
     from agent_comms.comms import wire

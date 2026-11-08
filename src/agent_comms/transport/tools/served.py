@@ -69,16 +69,16 @@ from ..request import (
     tool_field,
 )
 from ...acp_extension import CoordinationChangedUpdate
-from ...bus_identity import BusIdentityStore
+from ...messaging.bus_identity import BusIdentityStore
 from ...channel_management import (
     ListTagEdit,
     TagEdit,
 )
-from ...channel_targets import (
+from ...messaging.channel_targets import (
     ChannelTarget,
     CommandTarget,
 )
-from ...channels import (
+from ...messaging.channels import (
     Channel,
     SavedView,
     ViewMatch,
@@ -127,10 +127,10 @@ from ...importing import (
     ThreadImported,
 )
 from ...input_origin import HumanInputOrigin
-from ...message_notification import MessageNotification
-from ...message_page import MessagePage
-from ...message_reference import MessageReference
-from ...messages import (
+from ...messaging.message_notification import MessageNotification
+from ...messaging.message_page import MessagePage
+from ...messaging.message_reference import MessageReference
+from ...messaging.messages import (
     Message,
     NoticeRole,
 )

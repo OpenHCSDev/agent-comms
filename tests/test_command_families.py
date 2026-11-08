@@ -13,7 +13,7 @@ from agent_comms.history_result import (
     DmHistoryPageResult,
     EverythingHistoryPageResult,
 )
-from agent_comms.messages import InfoKind
+from agent_comms.messaging.messages import InfoKind
 from agent_comms.native_arguments import (
     ConfiguredBinary,
     GivenArguments,

@@ -31,11 +31,11 @@ from aiohttp import (
 from aiohttp.helpers import get_env_proxy_for_url
 from yarl import URL
 
-from agent_comms.bus import Bus
-from agent_comms.bus_publication import Delivered
+from ..messaging.bus import Bus
+from ..messaging.bus_publication import Delivered
 from agent_comms.harness_delivery_states import PrintLedgerId
 from agent_comms.launch_runtime import RunningSource
-from agent_comms.message_reference import MessageReference
+from ..messaging.message_reference import MessageReference
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.watched import FileSource
 

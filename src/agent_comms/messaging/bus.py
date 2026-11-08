@@ -1,72 +1,117 @@
-"""Append-only database history and capability-declared record queries."""
-
 from __future__ import annotations
 
-from agent_comms.activity_clocks import ActivityClocks, ChannelActivity
 import sqlite3
 from abc import ABC
-from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
-from contextlib import ExitStack, closing, contextmanager
-from dataclasses import dataclass, field, replace
+from collections.abc import (
+    Callable,
+    Generator,
+    Iterable,
+    Iterator,
+    Mapping,
+)
+from contextlib import (
+    ExitStack,
+    closing,
+    contextmanager,
+)
+from dataclasses import (
+    dataclass,
+    field,
+    replace,
+)
 from itertools import islice
 from pathlib import Path
-from typing import TYPE_CHECKING, Self
+from typing import (
+    Self,
+    TYPE_CHECKING,
+)
 
-from agent_comms.bus_activity_index import BusActivityIndex
-from agent_comms.bus_display_index import BusDisplayIndex
-from agent_comms.bus_publication import Delivered, KeyedPublication
-from agent_comms.channel_targets import NamedTarget
-from agent_comms.bus_route_counts import RouteCounts
-from agent_comms.bus_tables import (
+from .channel_targets import NamedTarget
+from .message_reference import MessageReference
+from .messages import (
+    Addressed,
+    BusCapability,
+    BusRecord,
+    BusRow,
+    ClaimMessage,
+    ClaimOperations,
+    Claimed,
+    HeldResources,
+    Message,
+    MessageInput,
+    MessageKind,
+    PublicRecord,
+    StoredWireHistory,
+)
+from .read_basis import (
+    CursorRow,
+    ReadCursor,
+    RepliesDisplayScope,
+    UnreadQuery,
+)
+from ..activity_clocks import (
+    ActivityClocks,
+    ChannelActivity,
+)
+from .bus_activity_index import BusActivityIndex
+from .bus_display_index import BusDisplayIndex
+from .bus_publication import (
+    Delivered,
+    KeyedPublication,
+)
+from .bus_route_counts import RouteCounts
+from .bus_tables import (
     AnsweredSource,
-    RecordedAnswers,
     BusSchema,
     DirectReplySource,
     MessageIdentitySource,
     ParticipantSource,
     ReceivedSource,
+    RecordedAnswers,
     SentSource,
 )
-from agent_comms.messages import (
-    Addressed,
-    MessageInput,
-    BusRow,
-    BusCapability,
-    ClaimOperations,
-    HeldResources,
-    BusRecord,
-    Claimed,
-    ClaimMessage,
-    Message,
-    StoredWireHistory,
-    MessageKind,
-    PublicRecord,
-)
-from agent_comms.envelope_claim_transitions import (
+from ..envelope_claim_transitions import (
     ClaimOwner,
     ClaimProjection,
     ClaimTransition,
     RecordedScope,
     ResourceClaim,
 )
-from agent_comms.errors import CommittedMessageError, RelationViolationError, UnclaimedError
-from agent_comms.nominal.field_codec import ClaimId, FieldCodec, MessageId, ThreadLookup
-from agent_comms.storage.locked_store import (
-    BusFile, CompleteInputReader, FileStore, SQLiteReader, StoreCommittedError,
+from ..errors import (
+    CommittedMessageError,
+    RelationViolationError,
+    UnclaimedError,
 )
-from agent_comms.message_reference import MessageReference
-from agent_comms.storage.private_path import FileIdentity, PresentPath
-from agent_comms.read_basis import CursorRow
-from agent_comms.read_basis import ReadCursor, RepliesDisplayScope, UnreadQuery
-from agent_comms.storage.typed_table import (
-    CarriedWriter, PracticeRebuild, ReconciledFile, SchemaRebuild,
-    SQLiteDatabase, WalStore,
+from ..nominal.field_codec import (
+    ClaimId,
+    FieldCodec,
+    MessageId,
+    ThreadLookup,
 )
-from agent_comms.watched import Watched
+from ..storage.locked_store import (
+    BusFile,
+    CompleteInputReader,
+    FileStore,
+    SQLiteReader,
+    StoreCommittedError,
+)
+from ..storage.private_path import (
+    FileIdentity,
+    PresentPath,
+)
+from ..storage.typed_table import (
+    CarriedWriter,
+    PracticeRebuild,
+    ReconciledFile,
+    SQLiteDatabase,
+    SchemaRebuild,
+    WalStore,
+)
+from ..watched import Watched
 
 if TYPE_CHECKING:
     from .read_selection import DisplayUnreadSelection
-    from agent_comms.registry.registry_document import RegistrySnapshot
+    from ..registry.registry_document import RegistrySnapshot
 
 
 class ClaimRecord(PublicRecord, ClaimMessage):

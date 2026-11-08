@@ -22,7 +22,7 @@ from agent_comms.harness_delivery_states import (
 )
 from agent_comms.harness_install import HarnessSession
 from agent_comms.input_origin import HarnessAttemptOrigin
-from agent_comms.message_reference import MessageReference
+from ...messaging.message_reference import MessageReference
 from agent_comms.storage.typed_table import (
     LOCAL_TABLE_SOURCE, AttachedPracticeRebuild, Column, ForeignKey, FrozenColumn,
     ImmutableRows, Index, NoDelete, RetainsChildren, TableSchema, TableSource,

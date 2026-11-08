@@ -49,7 +49,7 @@ from agent_comms.harness_delivery_states import (
 )
 from agent_comms.agent_inbox import TakenInputStart
 from agent_comms.errors import RelationViolationError
-from agent_comms.read_ledger import ReadLedger
+from agent_comms.messaging.read_ledger import ReadLedger
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
@@ -58,15 +58,24 @@ from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.assignment_states import DeferredAssignment, DeliveredAssignment
 from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import FieldCodec, InputId
-from agent_comms.message_reference import BridgeStart, MessageReference
+from agent_comms.messaging.message_reference import (
+    BridgeStart,
+    MessageReference,
+)
 from agent_comms.runtime_updates import (
     AllTurnsEnded, FinishedItem, FinishedTurn, HiddenItem, RuntimeUpdate,
 )
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.external_transcript import ExternalTurnInput
 from agent_comms.registry.threads import ExternalThread, NativeThread
-from agent_comms.messages import AlertKind, InfoKind, Message, NoticeRole, QuestionKind
-from agent_comms.channel_targets import ThreadTarget
+from agent_comms.messaging.messages import (
+    AlertKind,
+    InfoKind,
+    Message,
+    NoticeRole,
+    QuestionKind,
+)
+from agent_comms.messaging.channel_targets import ThreadTarget
 from agent_comms.diagnostics import record_terminal_failure
 from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.turn_failure import BackendFailed

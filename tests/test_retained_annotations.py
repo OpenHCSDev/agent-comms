@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.bus import Bus
+from agent_comms.messaging.bus import Bus
 from agent_comms.comms import wire
 from agent_comms.context_store import (
     UNREAD_CONTEXT, CapturedContext, ContextManifestReference, ContextStore,
@@ -20,7 +20,7 @@ from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.probes.inputs import SelectedInputsProbe
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.field_codec import MessageId, TurnId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.task_sources import AnnotationDisclosureGrant, ProjectTaskScope

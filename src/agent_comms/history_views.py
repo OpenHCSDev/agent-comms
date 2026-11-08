@@ -38,25 +38,38 @@ from agent_comms.thread_presentation import NoThreadPresentation, ThreadPresenta
 
 from .agent_activity import AgentActivity
 from .channel_management import ChannelManagement
-from .channel_targets import ChannelTarget, CommandTarget, ThreadTarget
-from .channels import ChannelMemberIndex
+from .messaging.channel_targets import (
+    ChannelTarget,
+    CommandTarget,
+    ThreadTarget,
+)
+from .messaging.channels import ChannelMemberIndex
 from .collaboration_ledger import CollaborationLedger
 from .errors import UnknownChannelError
 from .exporting import WireExportBoundary, WireExportFormat, WireExportLimit, WireExportProvenance, WireExportScope, WireTranscriptExporter
 from .transport.progress import WireExportObserver
 from .goal_management import Goals
 from .historical_views import ChannelDisplayHistory, ChannelHistory, DMDisplayHistory, DMHistory, HistorySource
-from .message_bus import MessageBus
-from .message_page import NEWEST_PAGE, MessagePage, PageBounds
-from .message_reference import MessageReference
-from .messages import Message
-from .messaging import Messaging
-from agent_comms.message_notification import NotificationWindow
+from .messaging.message_bus import MessageBus
+from .messaging.message_page import (
+    NEWEST_PAGE,
+    MessagePage,
+    PageBounds,
+)
+from .messaging.message_reference import MessageReference
+from .messaging.messages import Message
+from .messaging.sending import Messaging
+from .messaging.message_notification import NotificationWindow
 from .notification_evidence import FirstRecipient, OutcomeViewer, RecipientCursor, RecipientLimit
 from .page_traversal import LiveCursor
-from .message_notification import MessageNotification
+from .messaging.message_notification import MessageNotification
 from .presentation import BusPresentation, ChannelView, CoordinationSnapshot, CountedRead, InboxRead, NoRevision, ReadState, ThreadRecord, ThreadView, WireRevision
-from .read_basis import AnonymousViewer, DisplayViewer, DMDisplayBasis, NamedViewer
+from .messaging.read_basis import (
+    AnonymousViewer,
+    DisplayViewer,
+    DMDisplayBasis,
+    NamedViewer,
+)
 from .transcripts import TranscriptCursor, Transcripts
 
 _LOG = logging.getLogger(__name__)

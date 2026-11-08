@@ -5,7 +5,7 @@ from collections.abc import Mapping
 
 from .exporting import WireExportFormat
 from .nominal.field_codec import FieldCodec
-from .messages import Message
+from .messaging.messages import Message
 from .context_segments.retained import RetainedSegment
 
 

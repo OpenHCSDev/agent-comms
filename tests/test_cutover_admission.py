@@ -3,9 +3,9 @@
 
 import pytest
 
-from agent_comms.bus import Bus
+from agent_comms.messaging.bus import Bus
 from agent_comms.comms import wire
-from agent_comms.channels import AnyChannel
+from agent_comms.messaging.channels import AnyChannel
 from agent_comms.errors import RelationViolationError
 from test_private_human_ingress import _root
 

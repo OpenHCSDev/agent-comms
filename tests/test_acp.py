@@ -27,8 +27,8 @@ from agent_comms.acp_extension import (
     decode_updates,
 )
 from agent_comms.activity import ActivityState
-from agent_comms.channel_targets import CommandTarget
-from agent_comms.channels import AnyChannel
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.channels import AnyChannel
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.context_reading import ContextUsage, UnmeasuredContext
@@ -37,7 +37,7 @@ from agent_comms.coordination.errors import Refused
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, TurnId
 from agent_comms.native_arguments import GivenArguments
 from agent_comms.pi_counts import PiCount
-from agent_comms.read_basis import NamedViewer
+from agent_comms.messaging.read_basis import NamedViewer
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.registry.threads import NativeThread
 from agent_comms.ui_model.observation import ReadTranscript, SubscribeTranscript

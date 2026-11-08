@@ -10,12 +10,12 @@ from .input_disposition import InputDispositions
 
 from .input_key import InputKey
 
-from .channel_targets import CommandTarget
+from .messaging.channel_targets import CommandTarget
 from .input_attempt import StoredInput
 
 if TYPE_CHECKING:
     from .input_disposition import InputDocument
-    from .messages import Message
+    from .messaging.messages import Message
     from .registry.threads import Thread
 
 

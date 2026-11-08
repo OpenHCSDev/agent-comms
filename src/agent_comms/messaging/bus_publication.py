@@ -1,45 +1,61 @@
-"""Declared delivery and publication capabilities for SQLite bus records."""
-
 from __future__ import annotations
 
+import json
+import sqlite3
+from abc import (
+    ABC,
+    abstractmethod,
+)
+from dataclasses import dataclass
+from typing import (
+    ClassVar,
+    Self,
+    TYPE_CHECKING,
+)
+
+from .channel_targets import ThreadTarget
+from .messages import (
+    BusRecord,
+    BusRow,
+    Message,
+)
+from ..audience_manifest import AudiencedMessage
 from .bus_tables import (
     AwaitingAnswerSource,
     MessageIdentitySource,
     ReceivedSource,
     SentSource,
 )
-
-from .class_fact import ClassFact
-from .projection_source import ProducedRow
-import json
-import sqlite3
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar, Self
-
-from agent_comms.audience_manifest import AudiencedMessage
-from agent_comms.messages import BusRow, BusRecord, Message
-from agent_comms.errors import (
+from ..class_fact import ClassFact
+from ..errors import (
     CommittedMessageError,
     HumanSendRefusedError,
     RelationViolationError,
 )
-from agent_comms.response_acknowledgement import (
-    KeyedResponseAcknowledgement,
+from ..nominal.field_codec import (
+    FieldCodec,
+    MessageId,
+    ThreadLookup,
 )
-from agent_comms.storage.typed_table import Column, Generated, sql_literal
-
-from .nominal.field_codec import FieldCodec, MessageId, ThreadLookup
-from .projects.checkouts import Checkout
-from .wake_policy import RecipientDecision
-from .channel_targets import ThreadTarget
+from ..projection_source import ProducedRow
+from ..projects.checkouts import Checkout
+from ..response_acknowledgement import KeyedResponseAcknowledgement
+from ..storage.typed_table import (
+    Column,
+    Generated,
+    sql_literal,
+)
+from ..wake_policy import RecipientDecision
 
 if TYPE_CHECKING:
-    from agent_comms.bus import Bus, BusReader, RecordBuilder
-
-    from .goal_management import Goals
-    from .registry.registry_document import RegistrySnapshot
-    from .registry.threads import Thread
+    from .bus import (
+        Bus,
+        BusReader,
+        RecordBuilder,
+    )
+    from ..goal_management import Goals
+    from ..registry.registry_document import RegistrySnapshot
+    from ..registry.threads import Thread
 
 
 class Delivered(BusRecord, AudiencedMessage, declared_name=None):

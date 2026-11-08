@@ -16,7 +16,10 @@ from agent_comms.nominal.field_codec import (
     AttemptId, BoundedText, FieldCodec, GitCommitText, GoalId, Id128Text, MalformedRecord, NoAttemptId, NullMember,
 )
 from agent_comms.storage.store_files import DEFAULT_STORE_CONTENTION
-from agent_comms.messages import InfoKind, MessageKind
+from agent_comms.messaging.messages import (
+    InfoKind,
+    MessageKind,
+)
 from agent_comms.storage.typed_table import (
     Column,
     DurableTables,

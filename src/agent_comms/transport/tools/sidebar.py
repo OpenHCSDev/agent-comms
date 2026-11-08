@@ -9,10 +9,15 @@ from typing import Annotated
 
 from pydantic import JsonValue
 
-from agent_comms.channel_targets import ChannelSelection, CommandTarget, NamedTarget, NoChannel
+from ...messaging.channel_targets import (
+    ChannelSelection,
+    CommandTarget,
+    NamedTarget,
+    NoChannel,
+)
 
 from ...acp_extension import CoordinationChangedUpdate
-from ...channels import Channel
+from ...messaging.channels import Channel
 from ...child_process import ProcessIdentity
 from ...cli_command import PreparedTargetAction, TargetAction, TargetEdit
 from ...cli_result import TargetEditResult
@@ -38,7 +43,11 @@ from ...historical_views import (
 from ...history_views import RetiredViews
 from ...importing import ThreadImported
 from ...input_origin import HumanInputOrigin
-from ...message_page import NEWEST_PAGE, MessagePage, PageBounds
+from ...messaging.message_page import (
+    NEWEST_PAGE,
+    MessagePage,
+    PageBounds,
+)
 from ...nominal.declared_family import DeclaredFamily
 from ...nominal.field_codec import ThreadLookup, WireName
 from ...page_traversal import LatestSequence

@@ -20,7 +20,7 @@ from agent_comms.lifecycle_capability import Unresolved
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_key import InputKey
 from agent_comms.input_origin import WireInputOrigin
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.native_input_proof import NativeContextJournal, NativeContextProof
 from agent_comms.native_tool_call import OwnerToolConnection

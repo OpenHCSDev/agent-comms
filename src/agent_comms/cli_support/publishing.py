@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from agent_comms.bus_write import HeldBusWrite
+from ..messaging.bus_write import HeldBusWrite
 from agent_comms.cli_command import CliCommand
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import Comms

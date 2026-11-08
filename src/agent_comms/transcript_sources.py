@@ -20,7 +20,7 @@ from .native_entries import TranscriptProjection
 if TYPE_CHECKING:
     from .context_store import ContextStore
     from .external_transcript import ExternalPageRow
-    from .message_reference import MessageReference
+    from .messaging.message_reference import MessageReference
     from .native_entries import TranscriptProjection
     from .native_output import NativeRecordLocation
     from .native_transcript import NativeRecord, NativeTranscript, SessionCut
@@ -31,8 +31,8 @@ if TYPE_CHECKING:
     from .turn_context import SegmentManifest
     from .turn_digests import TurnBound
 
-from .bus import Bus
-from .bus_publication import Delivered
+from .messaging.bus import Bus
+from .messaging.bus_publication import Delivered
 from .coordination.errors import StaleRevision, TranscriptChanged
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import FieldCodec, MalformedRecord, NullMember

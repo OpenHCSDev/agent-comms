@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.messaging.channel_targets import CommandTarget
 
 
 from bus_history import read_history

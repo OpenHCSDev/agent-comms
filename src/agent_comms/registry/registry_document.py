@@ -23,8 +23,15 @@ from ..activity import ActivityCapture, ObservedActivity
 from ..agent_activity import AgentActivity
 from ..catalog_document import CatalogAccess
 from ..change_report import CitationProject
-from ..channel_targets import TeammatesTag, ResolvedTarget, SurroundingChannel
-from ..channels import Channel, ChannelMemberIndex
+from ..messaging.channel_targets import (
+    TeammatesTag,
+    ResolvedTarget,
+    SurroundingChannel,
+)
+from ..messaging.channels import (
+    Channel,
+    ChannelMemberIndex,
+)
 from ..child_process import ProcessIdentity
 from ..nominal.declared_family import DeclaredFamily
 from ..errors import OutsideRegistrySlice, RelationViolationError, UnregisteredThreadError
@@ -111,7 +118,7 @@ from ..turn_lease import (
 )
 
 if TYPE_CHECKING:
-    from ..bus_publication import Delivered
+    from ..messaging.bus_publication import Delivered
     from ..cli_command import CliCommand
     from ..comms import Comms
 

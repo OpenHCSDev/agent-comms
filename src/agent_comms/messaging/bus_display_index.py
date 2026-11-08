@@ -1,12 +1,14 @@
-"""Participant activity maxima share the bus append transaction."""
 from __future__ import annotations
 
-from .activity_clocks import ChannelActivity
-from dataclasses import dataclass, field
+from dataclasses import (
+    dataclass,
+    field,
+)
 from typing import Annotated
 
 from .bus_activity_index import ActivityMaximum
-from .storage.typed_table import Column
+from ..activity_clocks import ChannelActivity
+from ..storage.typed_table import Column
 
 
 @dataclass(frozen=True)

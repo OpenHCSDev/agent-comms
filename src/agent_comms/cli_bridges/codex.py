@@ -14,7 +14,7 @@ from typing import AsyncIterator, ClassVar, Self
 import aiohttp
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.messages import Message
+from ..messaging.messages import Message
 from agent_comms.send_result import SendResult
 from agent_comms.cli_protocol import EarlierItems
 from agent_comms.harness_delivery_states import AcceptedOutcome, Outcome

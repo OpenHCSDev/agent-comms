@@ -1,22 +1,38 @@
-"""Bus position and content identity are one reference; neither alone is proof."""
-
 from __future__ import annotations
 
-
-from .class_fact import ClassFact
-from .projection_source import ProducedRow, ProjectionSource
 from abc import abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .nominal.field_codec import FieldCodec, MalformedRecord, MessageId, NullMember, RecordMember, SingleFieldValue, SubclassUnion
-from .page_traversal import LiveCursor, NewestCursor, PageCursor, PageTraversal
-from .storage.typed_table import TypedRow
+from ..class_fact import ClassFact
+from ..nominal.field_codec import (
+    FieldCodec,
+    MalformedRecord,
+    MessageId,
+    NullMember,
+    RecordMember,
+    SingleFieldValue,
+    SubclassUnion,
+)
+from ..page_traversal import (
+    LiveCursor,
+    NewestCursor,
+    PageCursor,
+    PageTraversal,
+)
+from ..projection_source import (
+    ProducedRow,
+    ProjectionSource,
+)
+from ..storage.typed_table import TypedRow
 
 if TYPE_CHECKING:
     from .read_basis import ReadCursor
-    from .read_ledger import ReadDocument, ReadLedger
-    from .registry.registry_document import RegistrySnapshot
+    from .read_ledger import (
+    ReadDocument,
+    ReadLedger,
+)
+    from ..registry.registry_document import RegistrySnapshot
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,7 +40,10 @@ class MessageReference(TypedRow, ProjectionSource):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .bus_tables import MessageIdentitySource, AnsweredSource
+        from .bus_tables import (
+    MessageIdentitySource,
+    AnsweredSource,
+)
         return (MessageIdentitySource, AnsweredSource)
 
     seq: int
@@ -109,6 +128,7 @@ class BridgeStart(RecordMember, AfterMessageStart, BridgePosition):
 @dataclass(frozen=True, slots=True)
 class BridgeBeginning(RecordMember, StreamBeginning, BridgePosition):
     """An empty bus starts the bridge stream before its first message."""
+
 
 @dataclass(frozen=True, slots=True)
 class FirstUnreadStart(NullMember, StreamBeginning):

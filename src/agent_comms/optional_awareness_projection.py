@@ -25,7 +25,7 @@ from agent_comms.coordination.tables.executions import ExecutionRecord
 from agent_comms.coordination.tables.participants import OwnerGenerations
 from agent_comms.coordination.tables.responses import ResponseObligation
 
-from .bus_publication import Delivered
+from .messaging.bus_publication import Delivered
 from .child_process import ProcessIdentity
 from .cohort_schema import (
     AwarenessClaimGenerations,
@@ -44,7 +44,7 @@ from .context_segments.optional_awareness import (
 from .coordination.cohort import _claim_record
 from .errors import RelationViolationError
 from .nominal.field_codec import FieldCodec, RootId, ThreadLookup
-from .message_reference import MessageReference
+from .messaging.message_reference import MessageReference
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import RegistryPrivacy
 from .registry.registration import Registration

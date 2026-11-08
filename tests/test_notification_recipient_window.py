@@ -7,7 +7,7 @@ from __future__ import annotations
 from pathlib import Path
 import pytest
 
-from agent_comms.bus_publication import Delivered
+from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.comms import Comms
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
@@ -16,8 +16,8 @@ from agent_comms.harness_delivery_states import PersistedOutcome
 from agent_comms.notification_assignment import AssignmentSource, NotificationAssignment, NotificationSelection
 from agent_comms.notification_progress import AnsweredResponse
 from agent_comms.notification_evidence import AfterRecipient, AllOutcomes, OwnerOutcomes, RecipientLimit
-from agent_comms.message_notification import MessageNotification
-from agent_comms.read_ledger import ReadLedger
+from agent_comms.messaging.message_notification import MessageNotification
+from agent_comms.messaging.read_ledger import ReadLedger
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.notification_reads import LiveNotificationRead

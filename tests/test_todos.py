@@ -42,7 +42,7 @@ from agent_comms.planning.pull_requests import (
     PullRequestLink,
 )
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.bus import Bus
+from agent_comms.messaging.bus import Bus
 
 import argparse
 import asyncio

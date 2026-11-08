@@ -4,7 +4,7 @@
 from agent_comms.notification_progress import AssignmentResponse, AnsweredResponse, UnansweredResponse
 from agent_comms.notification_evidence import AllOutcomes
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.bus import Bus
+from agent_comms.messaging.bus import Bus
 from bus_record_fixture import prepare_native_comms
 
 from conftest import publish_initial
@@ -21,7 +21,7 @@ from agent_comms.assignment_states import (
     EngagedAssignment,
     IgnoredAssignment,
 )
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.comms import wire
 from agent_comms.coordination.database import CoordinationStore
@@ -36,8 +36,8 @@ from agent_comms.coordination.errors import DMScopeChanged, SchemaVersionError
 from agent_comms.nominal.field_codec import InputId, MessageId, TurnId
 from transcript_record_fixture import transcript_record
 from agent_comms.historical_views import HistoricalDisplay
-from agent_comms.read_basis import ReadCursor
-from agent_comms.read_ledger import ReadLedger
+from agent_comms.messaging.read_basis import ReadCursor
+from agent_comms.messaging.read_ledger import ReadLedger
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
 from agent_comms.wake_policy import FullWake
 from agent_comms.registry.threads import ExternalThread, NativeThread
@@ -221,7 +221,7 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
 def test_sent_recipient_progresses_through_durable_consumption_and_answer(archived_notification):
     old, _live, _source, messages, root_id = archived_notification
     recipient, = old.bus.bus.delivery(messages[0].seq).recipients
-    from agent_comms.message_reference import MessageReference
+    from agent_comms.messaging.message_reference import MessageReference
     from agent_comms.notification_assignment import AssignmentActivity
     from agent_comms.activity import ActivityState, ObservedActivity, ReadyDrainReadiness
     from agent_comms.agent_activity import LiveRecipientActivity

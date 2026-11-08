@@ -1,13 +1,25 @@
 from dataclasses import replace
 
 from agent_comms.frozen_recipient import FrozenRecipient
-from agent_comms.bus import Bus, DisplayUnread
+from agent_comms.messaging.bus import (
+    Bus,
+    DisplayUnread,
+)
 from agent_comms.nominal.field_codec import ThreadLookup
-from agent_comms.messages import InfoKind, Message, PublicRecord
+from agent_comms.messaging.messages import (
+    InfoKind,
+    Message,
+    PublicRecord,
+)
 from agent_comms.notification_progress import UnrecordedProgress
-from agent_comms.message_notification import MessageNotification
-from agent_comms.read_selection import DisplayUnreadSelection
-from agent_comms.read_basis import ChannelConversation, ChannelDisplayScope, DisplayedConversation, ReadCursor
+from agent_comms.messaging.message_notification import MessageNotification
+from agent_comms.messaging.read_selection import DisplayUnreadSelection
+from agent_comms.messaging.read_basis import (
+    ChannelConversation,
+    ChannelDisplayScope,
+    DisplayedConversation,
+    ReadCursor,
+)
 from agent_comms.registry_provenance import RegistryProvenance
 from agent_comms.transcripts import NotifiedThreadPresentation
 from agent_comms.thread_presentation import WorkingThreadPresentationStatus

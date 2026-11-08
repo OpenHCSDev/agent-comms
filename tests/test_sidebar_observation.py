@@ -9,7 +9,10 @@ from dataclasses import fields, replace
 
 import pytest
 
-from agent_comms.channel_targets import IncarnationThreadTarget, ThreadTarget
+from agent_comms.messaging.channel_targets import (
+    IncarnationThreadTarget,
+    ThreadTarget,
+)
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import MalformedRecord
 from agent_comms.display_references import (

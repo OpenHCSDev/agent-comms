@@ -19,7 +19,7 @@ from agent_comms.task_attachments.team_pings import (
 from agent_comms.team_service import TeamService
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.heartbeat_subjects import TeamHistory
-from agent_comms.message_bus import PreparedWatchPass
+from .messaging.message_bus import PreparedWatchPass
 from agent_comms.watch_phase import WatchPhase
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal_census import NominalPlanReadings

@@ -17,7 +17,7 @@ from .coordination.errors import Refused
 
 from .active_route import CommsRoute, resolve_comms_route
 from .launch_root import LaunchRoot
-from .bus import Bus
+from .messaging.bus import Bus
 from .nominal.declared_family import DeclaredFamily
 from .launch_runtime import LaunchRuntime, ThreadLaunch
 from .owner_launch import RetainedOwnerLaunch

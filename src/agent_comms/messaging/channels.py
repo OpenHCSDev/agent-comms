@@ -1,30 +1,55 @@
-"""Persistent tag vocabulary and named tag views, shared by every adapter."""
-
 from __future__ import annotations
 
 import time
 from abc import abstractmethod
 from collections import defaultdict
-from collections.abc import Iterable, Iterator
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from collections.abc import (
+    Iterable,
+    Iterator,
+)
+from dataclasses import (
+    dataclass,
+    field,
+)
+from typing import (
+    Annotated,
+    ClassVar,
+    TYPE_CHECKING,
+)
 
-from .channel_targets import ChannelTarget, Tag
-from .cli_result import CliResult
-from .display_order import CreatedThreadSort, ThreadSort
-from .errors import RelationViolationError
-from .history_result import ChannelHistoryPageResult, EverythingHistoryPageResult, HistoryPageResult
+from .channel_targets import (
+    ChannelTarget,
+    Tag,
+)
 from .messages import MembershipTransition
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import CatalogExclude, FieldCodec
-from .projection_source import ProjectionSource
-from .read_basis import AllChannelDisplayScope, ChannelDisplayScope, MemberActivityDisplayScope
-from .tool_result import ToolResult
+from .read_basis import (
+    AllChannelDisplayScope,
+    ChannelDisplayScope,
+    MemberActivityDisplayScope,
+)
+from ..cli_result import CliResult
+from ..display_order import (
+    CreatedThreadSort,
+    ThreadSort,
+)
+from ..errors import RelationViolationError
+from ..history_result import (
+    ChannelHistoryPageResult,
+    EverythingHistoryPageResult,
+    HistoryPageResult,
+)
+from ..nominal.declared_family import DeclaredFamily
+from ..nominal.field_codec import (
+    CatalogExclude,
+    FieldCodec,
+)
+from ..projection_source import ProjectionSource
+from ..tool_result import ToolResult
 
 if TYPE_CHECKING:
-    from .registry.registry_document import RosterVisibility
-    from .registry.threads import Thread
-    from .registry_provenance import RegistryProvenance
+    from ..registry.registry_document import RosterVisibility
+    from ..registry.threads import Thread
+    from ..registry_provenance import RegistryProvenance
 
 
 class ChannelMemberIndex(dict[str, tuple["Thread", ...]]):

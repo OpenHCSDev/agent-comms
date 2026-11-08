@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from agent_comms.cli_command import TargetActionCommand
-from agent_comms.channel_targets import CommandTarget
+from ..messaging.channel_targets import CommandTarget
 from agent_comms.cli_command import CliCommand
 from agent_comms.cli_commands import TargetCatalogResult
 from agent_comms.cli_support.target_arguments import TargetArguments

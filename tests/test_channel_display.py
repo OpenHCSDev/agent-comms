@@ -8,13 +8,24 @@ from threading import Thread as WorkerThread
 
 import pytest
 
-from agent_comms.channel_targets import CommandTarget, ThreadTarget
-from agent_comms.channels import AnyOfMatch, ViewPredicate, ActivityView
+from agent_comms.messaging.channel_targets import (
+    CommandTarget,
+    ThreadTarget,
+)
+from agent_comms.messaging.channels import (
+    AnyOfMatch,
+    ViewPredicate,
+    ActivityView,
+)
 from agent_comms.comms import wire
 from agent_comms.coordination.errors import DMPaintedBoundChanged, DMScopeChanged
-from agent_comms.message_page import PageBounds
+from agent_comms.messaging.message_page import PageBounds
 from agent_comms.page_traversal import LiveCursor, NewerTraversal
-from agent_comms.read_basis import ChannelDisplayScope, DMDisplayScope, NamedViewer
+from agent_comms.messaging.read_basis import (
+    ChannelDisplayScope,
+    DMDisplayScope,
+    NamedViewer,
+)
 from bus_record_fixture import prepare_native_comms
 from agent_comms.registry.threads import NativeThread
 

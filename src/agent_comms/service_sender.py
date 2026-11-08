@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar
 
-from .bus_publication import ServiceOrigin
+from .messaging.bus_publication import ServiceOrigin
 from .registry.threads import ServiceThread
 from .projects.checkouts import Checkout
 from .thread_identity import ServiceThreadRole

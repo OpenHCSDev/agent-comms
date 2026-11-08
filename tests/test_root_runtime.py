@@ -17,7 +17,7 @@ from agent_comms.storage.maintenance_barrier import (
     NoMaintenanceTarget,
 )
 from agent_comms.root_runtime import ForeignRuntimeError, RootRuntime, RootRuntimeStore
-from agent_comms.bus import Bus
+from agent_comms.messaging.bus import Bus
 
 
 def test_root_runtime_attachment_family(tmp_path):

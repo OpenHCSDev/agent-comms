@@ -34,7 +34,7 @@ from .errors import RelationViolationError
 from .nominal.field_codec import AcpSessionId, InputId, GoalId, RootId
 from .goals import GoalDeclaration, NoGoal
 from .coordination.tables.assignments import WakeAssignment
-from .messages import Message
+from .messaging.messages import Message
 from .image_input import ImageInput
 from .input_attempt import InputAttempt, ReservedInput
 from .input_key import AcpInputKey, InputKey
@@ -54,10 +54,10 @@ from agent_comms.turn_input_source import TurnAcceptance
 if TYPE_CHECKING:
     from .acp_extension import QueueItem, QueueScope
     from .turn_inbox import InputContent, TurnInbox
-    from .bus_publication import Delivered
+    from .messaging.bus_publication import Delivered
     from .comms import Comms
     from .execution.input_drain import DrainedSession, InputDrain
-    from .message_bus import MessageBus
+    from .messaging.message_bus import MessageBus
     from .registry.registry_document import RegistryEntry, RegistrySnapshot
     from .turn_input_source import TurnInputSource
     from .turn_runner import TurnRunner

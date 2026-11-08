@@ -16,7 +16,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from .bus import Bus
+from .messaging.bus import Bus
 from .child_process import Platform
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError

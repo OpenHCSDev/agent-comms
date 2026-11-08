@@ -8,7 +8,7 @@ from dataclasses import replace
 import agent_comms.restart_queue as queue
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.bus import Bus
+from agent_comms.messaging.bus import Bus
 from agent_comms.nominal.field_codec import FieldCodec, RestartId
 from agent_comms.watched import FileSource
 from restart_fixture import dead_owner_restart

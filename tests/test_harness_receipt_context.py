@@ -6,7 +6,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.cli_bridges.claude import ClaudeBridge
-from agent_comms.bus import Bus
+from agent_comms.messaging.bus import Bus
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
 from agent_comms.input_attempt import ReservedInput

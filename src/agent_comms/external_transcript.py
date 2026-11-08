@@ -27,7 +27,7 @@ from .nominal.field_codec import (
     ToolCallId,
 )
 from .storage.locked_store import RegistryFile
-from .message_reference import MessageReference
+from .messaging.message_reference import MessageReference
 from .native_runtime_input import NativeRuntimeInput
 from .native_tools import MutatingPathTool
 from .native_transcript import RecordsCut

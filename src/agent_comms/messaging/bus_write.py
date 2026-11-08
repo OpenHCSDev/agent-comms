@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from typing import TYPE_CHECKING
-import asyncio
 
 if TYPE_CHECKING:
-    from agent_comms.comms import Comms
+    from ..comms import Comms
 
 
 class HeldBusWrite:

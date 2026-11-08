@@ -21,7 +21,7 @@ from agent_comms.nominal.field_codec import GoalId
 from agent_comms.nominal import field_codec
 
 from . import presentation
-from .channel_targets import CommandTarget
+from .messaging.channel_targets import CommandTarget
 from .command import Command
 from .nominal.declared_family import DeclaredFamily
 from .display_order import CreatedThreadSort, LastActivityThreadSort, ThreadSort
@@ -29,7 +29,11 @@ from .errors import RelationViolationError, UnregisteredThreadError
 from .goals import Goal, GoalMentionBinding
 from .storage.locked_store import DocumentChange
 from .storage.maintenance_barrier import CarriedDocument
-from .messages import Message, MessageInput, MessageRole
+from .messaging.messages import (
+    Message,
+    MessageInput,
+    MessageRole,
+)
 from .peer_relevance import (
     ChannelmateRelevance,
     CollaboratorRelevance,
@@ -46,7 +50,7 @@ from .registry.threads import Thread
 
 if TYPE_CHECKING:
     from .history_views import HistoryViews
-    from .message_bus import MessageBus
+    from .messaging.message_bus import MessageBus
     from .registry.registration import Registration
 
 

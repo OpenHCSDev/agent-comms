@@ -55,7 +55,7 @@ from .planning.orders import (
 )
 from .registry.registry_document import RegistryDocument, RegistrySnapshot
 from .thread_identity import ThreadIncarnation
-from .messages import Message
+from .messaging.messages import Message
 from .turn_lease import TurnDeclaration
 from .goal_presentation import GoalExecution, GoalPublicationSnapshot, GoalSnapshot, IdleGoalExecution
 from .goals import Goal, GoalDeclaration

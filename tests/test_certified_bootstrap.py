@@ -1,13 +1,13 @@
 """Fresh roots refuse unproven source coverage and unconfigured native owners."""
 
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.messaging.channel_targets import CommandTarget
 
 import pytest
 
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
-from agent_comms.channels import AnyChannel
+from agent_comms.messaging.channels import AnyChannel
 from conftest import accept_initial
 from agent_comms.coordination.errors import IdentityConflict, PublicationActivationBlocked
 from agent_comms.proven_source_coverage import SourceCoverage

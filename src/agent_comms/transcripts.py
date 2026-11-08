@@ -14,8 +14,8 @@ from typing import TYPE_CHECKING, Annotated, Callable, ClassVar, NoReturn
 
 from .history_view import HistoryView, OwnHistory
 from .agent_backend import RuntimeLocation
-from .bus import Bus
-from .bus_publication import Delivered
+from .messaging.bus import Bus
+from .messaging.bus_publication import Delivered
 from .coordination.database import CoordinationStore
 from .coordination.errors import CoordinationReadUnavailable, ReloadRequired, StaleRevision, TranscriptChanged
 from .nominal.declared_family import DeclaredFamily
@@ -24,15 +24,15 @@ from .external_transcript import ExternalTranscript
 from .nominal.field_codec import ContentExclude, FieldCodec, WireName, projected
 from .historical_views import HistorySource
 from .page_traversal import HistorySourceKey
-from .message_bus import MessageBus
-from .message_reference import MessageReference
+from .messaging.message_bus import MessageBus
+from .messaging.message_reference import MessageReference
 from .native_runtime_input import PublishedReplyRevision
 from .native_transcript import NativeTranscript, RecordsCut, SessionCut
 from .native_output import NativeRecordLocation
 from .notification_assignment import NotificationAssignment
-from agent_comms.message_notification import NotificationWindow
+from .messaging.message_notification import NotificationWindow
 from .notification_evidence import OwnerOutcomes
-from .message_notification import MessageNotification
+from .messaging.message_notification import MessageNotification
 from .thread_presentation import ThreadPresentation
 from .storage.private_path import FileIdentity, FileObservation, FileRevision, MissingFile
 from .private_registry_guard import RegistryPrivacy

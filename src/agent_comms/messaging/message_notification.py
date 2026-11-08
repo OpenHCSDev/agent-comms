@@ -1,43 +1,73 @@
-"""One recipient's durable assignment display and the windows that hold them."""
-
 from __future__ import annotations
 
-from agent_comms.notification_assignment import NotificationSelection
-from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field, replace
+from abc import abstractmethod
+from collections.abc import (
+    Callable,
+    Iterable,
+    Iterator,
+    Mapping,
+    Sequence,
+)
+from dataclasses import (
+    dataclass,
+    field,
+    replace,
+)
 from datetime import datetime
 from functools import cached_property
+from itertools import batched
 from pathlib import Path
-from .agent_activity import AgentActivity, RecordedRecipientActivity
-from .read_ledger import ReadDocument, ReadLedger
-from .registry.registry_document import RegistrySnapshot
-from .frozen_recipient import FrozenRecipient
-from .channel_targets import CommandTarget
-from .nominal.field_codec import MessageId, TaggedUnion, TaggedRecordMember, ThreadLookup
-from .message_reference import MessageReference
-from .notification_assignment import AssignmentSource, NotificationAssignment
-from agent_comms.notification_progress import AssignmentResponse
-from agent_comms.notification_assignment import NotificationAssignmentRead, NotificationReadMark
-from .notification_evidence import FirstRecipient, OutcomeViewer, RecipientCursor, RecipientLimit
-from .notification_progress import DeliveryProgress, HumanReadProgress
-from .thread_identity import ThreadIncarnation
-from .transcript_sources import AssignedTranscriptSource
 from typing import TYPE_CHECKING
 
-from abc import abstractmethod
-from collections.abc import Iterator
-from itertools import batched
-from typing import ClassVar
-from .revision_views import NotificationEvidenceView
+from .channel_targets import CommandTarget
+from .message_reference import MessageReference
 from .messages import Message
+from .read_ledger import (
+    ReadDocument,
+    ReadLedger,
+)
+from ..agent_activity import (
+    AgentActivity,
+    RecordedRecipientActivity,
+)
+from ..frozen_recipient import FrozenRecipient
+from ..nominal.field_codec import (
+    MessageId,
+    TaggedRecordMember,
+    TaggedUnion,
+    ThreadLookup,
+)
+from ..notification_assignment import (
+    AssignmentSource,
+    NotificationAssignment,
+    NotificationAssignmentRead,
+    NotificationReadMark,
+    NotificationSelection,
+)
+from ..notification_evidence import (
+    FirstRecipient,
+    OutcomeViewer,
+    RecipientCursor,
+    RecipientLimit,
+)
+from ..notification_progress import (
+    AssignmentResponse,
+    DeliveryProgress,
+    HumanReadProgress,
+)
+from ..registry.registry_document import RegistrySnapshot
+from ..revision_views import NotificationEvidenceView
+from ..thread_identity import ThreadIncarnation
+from ..transcript_sources import AssignedTranscriptSource
+
 if TYPE_CHECKING:
-    from .agent_activity import RecipientActivity
+    from ..agent_activity import RecipientActivity
     from .bus import Bus
     from .bus_publication import Delivered
-    from .registry.registration import Registration
-    from .registry_provenance import RegistryProvenance
-    from .comms import Comms
-    from .presentation import WireRevision
+    from ..comms import Comms
+    from ..presentation import WireRevision
+    from ..registry.registration import Registration
+    from ..registry_provenance import RegistryProvenance
 
 
 @dataclass(frozen=True)

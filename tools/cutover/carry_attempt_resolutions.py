@@ -18,8 +18,8 @@ from agent_comms.attempt_resolution import (
     VerifiedTurnDecision,
     WorkDecision,
 )
-from agent_comms.bus import Bus
-from agent_comms.bus_tables import MessageIdentitySource
+from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.bus_tables import MessageIdentitySource
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, MessageId, OrderId, RetryDecisionId, TurnId
 from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore, GoalWorkDecision
 from agent_comms.installer.probes.carry import Carried, Carry

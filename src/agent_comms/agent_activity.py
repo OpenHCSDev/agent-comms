@@ -16,9 +16,9 @@ from .notification_progress import TakenProgress, WorkingTakenProgress
 if TYPE_CHECKING:
     from .agent_backend import AgentBackend
     from .agent_events import RuntimeInfoObservation
-    from .bus_publication import Delivered
+    from .messaging.bus_publication import Delivered
     from .notification_progress import AssignmentProgress, DeliveryProgress
-    from .message_notification import MessageNotification
+    from .messaging.message_notification import MessageNotification
     from .registry.registration import Registration
     from .registry.registry_document import RegistrySnapshot
     from .thread_status import ThreadStatus

@@ -4,7 +4,7 @@ from agent_comms.active_route import ActiveRoute
 from agent_comms.active_route import CommsRoute
 from agent_comms.active_route import active_route_path
 from agent_comms.active_route import route_new_bus
-from agent_comms.bus import Bus
+from ..messaging.bus import Bus
 from agent_comms.cli_command import CliCommand
 from agent_comms.cli_commands import RouteReplacedResult
 from agent_comms.comms import Comms

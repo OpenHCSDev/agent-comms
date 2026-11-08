@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from agent_comms.channel_targets import SurroundingChannel
+from ..messaging.channel_targets import SurroundingChannel
 
 from abc import abstractmethod
 from agent_comms.catalog_document import CatalogAccess

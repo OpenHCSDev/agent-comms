@@ -31,13 +31,13 @@ if TYPE_CHECKING:
 
     from .agent_activity import RecipientActivity
     from .frozen_recipient import FrozenRecipient
-    from .bus_publication import Delivered
+    from .messaging.bus_publication import Delivered
     from .coordination.tables.assignments import WakeAssignment
     from .coordination.tables.responses import ResponseObligation
     from .historical_native_inputs import FailedTriageHistoricalNativeInput, HistoricalNativeInput
     from .native_input_record import TriageNativeExecution
     from .notification_assignment import AssignmentActivity
-    from .message_notification import MessageNotification
+    from .messaging.message_notification import MessageNotification
 
 
 @dataclass(frozen=True)
@@ -151,7 +151,7 @@ class AssignmentState(CoordinatorVocabulary, LifecycleState, affix="Assignment")
         updated_at_ms: int = 0,
         triage_inflight: bool = False,
     ) -> MessageNotification:
-        from .message_notification import MessageNotification
+        from .messaging.message_notification import MessageNotification
 
         return MessageNotification(
             recipient,

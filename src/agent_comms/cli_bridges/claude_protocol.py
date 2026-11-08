@@ -35,7 +35,7 @@ from agent_comms.nominal.field_codec import (
     ToolCallId,
     TranscriptRecordId,
 )
-from agent_comms.message_reference import MessageReference
+from ..messaging.message_reference import MessageReference
 from agent_comms.pi_counts import PiCount, PiCountWire
 from agent_comms.recorded_time import EventTime
 from agent_comms.runtime_updates import (

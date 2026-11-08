@@ -16,7 +16,7 @@ from agent_comms.goal_actions import SetGoalAction
 from agent_comms.planning.goal_waits import RecordedGoalWait
 from agent_comms.input_attempt import BoundUnknownInput
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.message_page import PageBounds
+from agent_comms.messaging.message_page import PageBounds
 from agent_comms.reported_turn import ReportedTurn
 from agent_comms.text_digest import TextDigest
 from agent_comms.registry.threads import NativeThread

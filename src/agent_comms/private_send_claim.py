@@ -26,7 +26,7 @@ from .diagnostics import (
 from .following_inputs import FollowingInputs
 from .goal_turn_permit import NoLaunchPermit
 from .storage.maintenance_barrier import MaintenanceBarrier
-from .message_bus import MessageBus
+from .messaging.message_bus import MessageBus
 from .native_arguments import SelectedModel
 from .native_input_owner import ParticipantOwner, RegistryOwner
 from .native_entries import NativeEvidenceScope

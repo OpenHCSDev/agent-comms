@@ -129,8 +129,8 @@ from ..build_identity import (
     RecordedBuildIdentity,
     UnrecordedBuildIdentity,
 )
-from ..bus import BusReader
-from ..bus_publication import AgentOrigin
+from ..messaging.bus import BusReader
+from ..messaging.bus_publication import AgentOrigin
 from ..change_report import (
     CitationProject,
     CitedRevisions,
@@ -146,7 +146,7 @@ from ..change_report import (
     SourceText,
     WorkingTree,
 )
-from ..channel_targets import (
+from ..messaging.channel_targets import (
     CommandTarget,
     CommsTag,
     IncarnationThreadTarget,
@@ -186,8 +186,8 @@ from ..lifecycle_capability import (
     LifecycleCapability,
     Pending,
 )
-from ..message_reference import MessageReference
-from ..messages import (
+from ..messaging.message_reference import MessageReference
+from ..messaging.messages import (
     InfoKind,
     Message,
 )

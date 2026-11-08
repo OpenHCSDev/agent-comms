@@ -1,16 +1,18 @@
-"""Activity maxima derived in the transaction that appends their original message."""
 from __future__ import annotations
 
 import sqlite3
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import (
+    dataclass,
+    field,
+)
 from typing import Annotated
 
-from .class_fact import ClassFact
-from .projection_source import ProducedRow
-from . import activity_clocks
 from .messages import BusProjectionTables
-from .storage.typed_table import Column
+from .. import activity_clocks
+from ..class_fact import ClassFact
+from ..projection_source import ProducedRow
+from ..storage.typed_table import Column
 
 
 class ActivityMaximum(BusProjectionTables, declared_name=None):

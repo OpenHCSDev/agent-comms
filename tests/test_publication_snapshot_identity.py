@@ -3,7 +3,11 @@
 from dataclasses import replace
 
 from agent_comms.mentions import ThreadMention
-from agent_comms.messages import InfoKind, Message, MessageKind
+from agent_comms.messaging.messages import (
+    InfoKind,
+    Message,
+    MessageKind,
+)
 from agent_comms.thread_identity import UserThreadRole
 
 

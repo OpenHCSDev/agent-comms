@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from agent_comms.channel_targets import DeclaredTag
+from ..messaging.channel_targets import DeclaredTag
 from agent_comms.cli_verbs.new import NewThreadCliCommand
 from agent_comms.cli_support.thread_bound import ThreadBoundCliCommand
 from agent_comms.comms import Comms

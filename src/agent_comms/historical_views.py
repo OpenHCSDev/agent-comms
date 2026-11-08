@@ -15,10 +15,13 @@ from typing import TYPE_CHECKING
 
 from .projects.checkouts import Checkout
 
-from .bus import Bus
+from .messaging.bus import Bus
 from .catalog_store import ChannelCatalog
-from .channel_targets import NamedTarget, ThreadTarget
-from .channels import Channel
+from .messaging.channel_targets import (
+    NamedTarget,
+    ThreadTarget,
+)
+from .messaging.channels import Channel
 from .child_process import Platform
 from .coordination.errors import HistoricalSourceChanged
 from .errors import UnregisteredThreadError
@@ -28,22 +31,26 @@ from .nominal.field_codec import (
 from .storage.locked_store import DocumentChange, RegistryFile, RootFile
 from .storage.maintenance_barrier import CarriedDocument
 from .tool_result import ToolResult
-from .message_page import (
+from .messaging.message_page import (
     NEWEST_PAGE,
     ConversationMessagePageRequest,
     MessagePage,
     MessagePageRequest,
     PageBounds,
 )
-from .message_reference import MessageReference
-from .messages import CarriesEnvelope, Message, MessageHistory
-from agent_comms.message_notification import NotificationWindow
+from .messaging.message_reference import MessageReference
+from .messaging.messages import (
+    CarriesEnvelope,
+    Message,
+    MessageHistory,
+)
+from .messaging.message_notification import NotificationWindow
 from .notification_evidence import FirstRecipient, OutcomeViewer, RecipientCursor, RecipientLimit
 from .page_traversal import HistoryCursor, HistorySourceKey, OlderTraversal
-from .message_notification import MessageNotification
+from .messaging.message_notification import MessageNotification
 from .presentation import WireRevision
 from .storage.private_path import FileObservation, FileRevision, ObservedPath, PrivateDirectoryRole
-from .read_basis import (
+from .messaging.read_basis import (
     AnonymousViewer,
     ChannelDisplayIdentity,
     ChannelDisplayScope,
@@ -58,7 +65,7 @@ from .read_basis import (
     NamedViewer,
     NoDisplaySelection,
 )
-from .read_ledger import ReadLedger
+from .messaging.read_ledger import ReadLedger
 from .recorded_bus import RecordedBusIdentity
 from .registry.registration import Registration
 from .registry.registry_document import RegistrySnapshot
@@ -73,7 +80,7 @@ from .transcript_routes import TranscriptRoutes
 from collections.abc import Collection
 from typing import Self
 from .coordination.errors import DMScopeChanged
-from agent_comms.read_basis import SelectedDisplay
+from .messaging.read_basis import SelectedDisplay
 if TYPE_CHECKING:
     from .catalog_document import CatalogDocument
     from .history_views import HistoryViews

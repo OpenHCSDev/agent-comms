@@ -16,7 +16,7 @@ from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
 from .agent_activity import UnavailableRecipientActivity
 from agent_comms_hooks import ToolRefusedError
 from .errors import RelationViolationError, UnregisteredThreadError
-from .messages import PublicSender
+from .messaging.messages import PublicSender
 from .frozen_recipient import FrozenRecipient
 from .routing import DeliveryScope
 from .thread_identity import ThreadIncarnation

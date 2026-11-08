@@ -2,7 +2,7 @@
 from agent_comms.projects.checkouts import Checkout
 from dataclasses import replace
 
-from agent_comms.read_basis import NamedViewer
+from agent_comms.messaging.read_basis import NamedViewer
 from test_read_ledger import prepared
 
 

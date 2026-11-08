@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Self
 from agent_comms_hooks.skill import DeckReader, RulesOnly
 
 from .coordination.coordinator import Coordination
-from .bus_publication import Delivered
+from .messaging.bus_publication import Delivered
 from .comms import Comms
 from .nominal.field_codec import ThreadLookup
 from .rule_deal import (

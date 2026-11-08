@@ -6,12 +6,12 @@ from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated
 
-from .channel_targets import CommandTarget
+from .messaging.channel_targets import CommandTarget
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .nominal.field_codec import FieldCodec, ThreadLookup, TurnId, WireOmitDefault
 from .goals import GoalDeclaration, GoalRevision
-from .message_reference import MessageReference
+from .messaging.message_reference import MessageReference
 from .owner_requests import OwnerRequestId, RequestDirective
 from .projection_source import ProjectionSource
 from .projects.checkouts import Checkout
@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from typing import Self
 
-    from .bus import BusReader
+    from .messaging.bus import BusReader
     from .cli_bridges.shared import CliBridge
     from .context_segments.wake import MessageDelivery
     from .harness_delivery_states import Outcome
@@ -37,7 +37,7 @@ if TYPE_CHECKING:
     from .goal_management import Goals
     from .input_attempt import StoredInput
     from .input_disposition import InputDispositions
-    from .messages import Message
+    from .messaging.messages import Message
     from .registry.registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
     from .retained_task_facts import RetainedTaskFacts

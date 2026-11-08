@@ -21,12 +21,12 @@ from .input_attempt import (
     ReservedInput,
 )
 from .input_disposition import InputDispositions
-from .message_bus import MessageBus
+from .messaging.message_bus import MessageBus
 from .registry.threads import Thread
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .messages import Message
+    from .messaging.messages import Message
 
 
 class GoalRecords(GoalWaitRecovery):

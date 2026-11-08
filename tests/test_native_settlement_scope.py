@@ -6,7 +6,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.attempt_states import SucceededAttempt
-from agent_comms.bus import Bus
+from agent_comms.messaging.bus import Bus
 from agent_comms.child_process import NoProcess
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.coordination.coordinator import StandaloneCoordination

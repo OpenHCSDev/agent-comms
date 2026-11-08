@@ -17,7 +17,7 @@ from agent_comms.activity import ActivityState
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.message_page import PageBounds
+from agent_comms.messaging.message_page import PageBounds
 from agent_comms.pi_counts import PiCount
 from bus_history import read_history
 from conftest import installed_comms

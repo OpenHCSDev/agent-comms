@@ -4,11 +4,18 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.bus import PublicRecord
+from agent_comms.messaging.messages import PublicRecord
 from agent_comms.mentions import ThreadMention
-from agent_comms.messages import InfoKind, Message, NoticeRole
-from agent_comms.read_basis import (
-    AllChannelDisplayScope, ChannelDisplayScope, ListedDeliveries, MemberActivityDisplayScope,
+from agent_comms.messaging.messages import (
+    InfoKind,
+    Message,
+    NoticeRole,
+)
+from agent_comms.messaging.read_basis import (
+    AllChannelDisplayScope,
+    ChannelDisplayScope,
+    ListedDeliveries,
+    MemberActivityDisplayScope,
 )
 from agent_comms.thread_identity import UserThreadRole
 

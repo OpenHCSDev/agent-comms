@@ -17,7 +17,7 @@ from agent_comms.projects.checkouts import (
     Checkout,
     RepositoryReads,
 )
-from agent_comms.bus import Bus
+from agent_comms.messaging.bus import Bus
 
 import asyncio
 import json

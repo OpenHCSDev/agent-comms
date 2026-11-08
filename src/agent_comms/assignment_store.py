@@ -10,7 +10,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import replace
 
 from agent_comms.assignment_states import AssignmentState, DeferredAssignment
-from agent_comms.message_reference import MessageReference
+from .messaging.message_reference import MessageReference
 from agent_comms.coordination.errors import (
     IdentityConflict,
     StaleRevision,

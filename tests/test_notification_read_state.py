@@ -7,14 +7,17 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.message_notification import NotificationPass
+from agent_comms.messaging.message_notification import NotificationPass
 
-from agent_comms.bus_read import BusRead, UiRead
+from agent_comms.messaging.bus_read import (
+    BusRead,
+    UiRead,
+)
 from agent_comms.comms import Comms
 from agent_comms.coordination.errors import ReloadRequired
 from agent_comms.nominal.field_codec import FieldCodec, MessageId
 from agent_comms.history_views import HistoryViews
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.notification_read import NotificationsRead, UnreadableNotificationsRead
 from agent_comms.notification_reads import (
     LiveNotificationRead, NotificationRead, RecordedNotificationRead,
@@ -33,7 +36,7 @@ from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_declaration import NativeRequestTools
 from agent_comms.transport.request import ToolRequest
 from agent_comms.acp_extension import GoalSnapshotReply, TranscriptSnapshotUpdate
-from agent_comms.bus_read import OwnerScopedRead
+from agent_comms.messaging.bus_read import OwnerScopedRead
 from agent_comms.team_hud_records import TeammateDetail
 from agent_comms.nominal.field_codec import OrderId
 from agent_comms.thread_identity import RecordedThreadIncarnation

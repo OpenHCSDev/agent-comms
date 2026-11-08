@@ -15,17 +15,31 @@ from typing import TYPE_CHECKING
 
 from agent_comms.audience_manifest import freeze_audience
 from agent_comms.frozen_recipient import FrozenRecipient
-from agent_comms.bus import Bus, BusReader, BusSnapshot, ClaimRecord, PrivateRecord, RecordBuilder
-from agent_comms.bus_publication import InitialOrigin
+from .messaging.bus import (
+    Bus,
+    BusReader,
+    BusSnapshot,
+    ClaimRecord,
+    PrivateRecord,
+    RecordBuilder,
+)
+from .messaging.bus_publication import InitialOrigin
 from agent_comms.change_report import OrderRoots
 from agent_comms.coordination.tables.publications import (
     PublicationIntents,
 )
 from agent_comms.nominal.field_codec import ClaimId
-from agent_comms.messages import BusRecord, ClaimNoticeKind, Message
+from .messaging.messages import (
+    BusRecord,
+    ClaimNoticeKind,
+    Message,
+)
 from agent_comms.response_acknowledgement import canonical_publication_key
 
-from .channel_targets import CommandTarget, NamedTarget
+from .messaging.channel_targets import (
+    CommandTarget,
+    NamedTarget,
+)
 from .coordination.database import CoordinationStore
 from .coordination.coordinator import Coordination
 from .envelope_claim_transitions import (
@@ -53,7 +67,7 @@ if TYPE_CHECKING:
 
 from .catalog_document import CatalogDocument
 from .catalog_store import ChannelCatalog
-from .channels import Channel
+from .messaging.channels import Channel
 
 
 @dataclass(eq=False, repr=False)

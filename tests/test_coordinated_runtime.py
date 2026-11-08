@@ -136,7 +136,7 @@ def test_channel_wake_frame_carries_declared_goal_state(tmp_path: Path) -> None:
 
 
 def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> None:
-    from agent_comms.message_notification import MessageNotification
+    from agent_comms.messaging.message_notification import MessageNotification
 
     root, _root_id, _comms, initial, people = _root(tmp_path)
     with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -157,7 +157,7 @@ def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> No
 
 
 def test_selected_and_following_use_the_original_question_contract(tmp_path: Path) -> None:
-    from agent_comms.channel_targets import CommandTarget
+    from agent_comms.messaging.channel_targets import CommandTarget
     from agent_comms.task_attachments.owner_notices import MeantNotice
     from agent_comms.thread_identity import UserThreadRole
 

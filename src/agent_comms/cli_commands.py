@@ -31,7 +31,7 @@ from .goals import Goal
 from .lifecycle_capability import Complete
 from .importing import ThreadImported
 from .input_origin import InputProvenance
-from .message_reference import MessageReference
+from .messaging.message_reference import MessageReference
 from .execution.owner_lifecycle import OwnerRestartResult
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
 from .planning.orders import Todo

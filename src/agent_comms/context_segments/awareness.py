@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 
 from ..nominal.field_codec import FieldCodec
-from ..message_reference import MessageReference
+from ..messaging.message_reference import MessageReference
 from ..turn_context import InstructionSegment, WireProvenance
 
 

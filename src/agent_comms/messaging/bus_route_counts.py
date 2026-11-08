@@ -1,26 +1,50 @@
-"""Current delivery counts query derived rows in the bus's own read snapshot."""
 from __future__ import annotations
 
 import json
 import sqlite3
-from abc import ABC, abstractmethod
-from collections.abc import Iterable, Mapping
+from abc import (
+    ABC,
+    abstractmethod,
+)
+from collections.abc import (
+    Iterable,
+    Mapping,
+)
 from contextlib import AbstractContextManager
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self
+from dataclasses import (
+    dataclass,
+    field,
+)
+from typing import (
+    Annotated,
+    ClassVar,
+    Self,
+    TYPE_CHECKING,
+)
 
-from .bus_tables import ReceivedSource
-from .class_fact import ClassFact
-from .nominal.field_codec import ThreadLookup
-from .messages import BusProjectionTables, BusRow, MessageInput, PublicRecord, PublicSender
-from .projection_source import ProducedRow
+from .messages import (
+    BusProjectionTables,
+    BusRow,
+    MessageInput,
+    PublicRecord,
+    PublicSender,
+)
 from .read_basis import ReadCursor
-from .routing import DeliveryScope
-from .storage.typed_table import Column, ExpressionIndex, Index, TypedRow
+from .bus_tables import ReceivedSource
+from ..class_fact import ClassFact
+from ..nominal.field_codec import ThreadLookup
+from ..projection_source import ProducedRow
+from ..routing import DeliveryScope
+from ..storage.typed_table import (
+    Column,
+    ExpressionIndex,
+    Index,
+    TypedRow,
+)
 
 if TYPE_CHECKING:
     from .bus_publication import Delivered
-    from .page_traversal import PageTraversal
+    from ..page_traversal import PageTraversal
 
 
 @dataclass(frozen=True)

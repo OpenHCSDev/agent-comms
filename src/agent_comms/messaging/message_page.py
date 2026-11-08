@@ -1,19 +1,36 @@
-"""Message page: declaration and persistence owners."""
-
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import (
+    ABC,
+    abstractmethod,
+)
 from collections import deque
-from dataclasses import dataclass, field, replace
+from dataclasses import (
+    dataclass,
+    field,
+    replace,
+)
 from typing import ClassVar
 
-from .messages import Message, MessageKind
-from .page_traversal import OlderTraversal, PageCursor, PageTraversal
-from .read_basis import (
-    DisplayBasis, SelectedDisplay, NoDisplaySelection, MessageDisplayScope, ListedDeliveries,
+from .messages import (
+    Message,
+    MessageKind,
 )
 from .bus import BusReader
-from .tool_result import ToolResult
+from ..page_traversal import (
+    OlderTraversal,
+    PageCursor,
+    PageTraversal,
+)
+from .read_basis import (
+    DisplayBasis,
+    ListedDeliveries,
+    MessageDisplayScope,
+    NoDisplaySelection,
+    SelectedDisplay,
+)
+from ..tool_result import ToolResult
+
 
 @dataclass(frozen=True, slots=True)
 class MessagePage(ToolResult):

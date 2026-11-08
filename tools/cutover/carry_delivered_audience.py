@@ -7,13 +7,13 @@ from typing import ClassVar
 
 from agent_comms.audience_manifest import AUDIENCE_VERSION, Audience, AudiencedMessage
 from agent_comms.frozen_recipient import FrozenRecipient
-from agent_comms.bus import Bus
-from agent_comms.bus_publication import Delivered
+from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import FieldCodec, MessageId, ThreadLookup
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.storage.locked_store import RootFile
-from agent_comms.messages import Message
+from agent_comms.messaging.messages import Message
 from agent_comms.storage.typed_table import TypedRow
 
 

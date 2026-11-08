@@ -7,7 +7,7 @@ from typing import Self
 
 from agent_comms.catalog_document import CatalogAccess
 from agent_comms.registry.registry_document import ResolvedChannel
-from agent_comms.channels import Channel
+from ..messaging.channels import Channel
 from agent_comms.cli_support.named import NamedCliCommand
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument

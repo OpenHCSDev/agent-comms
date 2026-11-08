@@ -18,7 +18,7 @@ from agent_comms_hooks.process_claim import (
     ProcessSingleton,
 )
 
-from .channel_targets import DeclaredTag
+from .messaging.channel_targets import DeclaredTag
 from .child_process import NO_PROCESS, ProcessIdentity, ProcessState
 from .cli_result import CliResult
 from .planning.goal_waits import GoalWaits
@@ -54,7 +54,7 @@ from .nominal.field_codec import (
 )
 from .importing import ImportLimits, ImportedConversation, ThreadImported
 from .launch_runtime import LaunchRuntime, TagListText
-from .message_bus import MessageBus
+from .messaging.message_bus import MessageBus
 from .native_arguments import ConfiguredBinary, NativeArguments
 from .native_settings import NativeThreadDefaults
 from .execution.owner_lifecycle import LaunchInput, OwnerLifecycle, TaskLaunchInput

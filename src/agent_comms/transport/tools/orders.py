@@ -25,13 +25,13 @@ from ...acp_extension import (
     TurnChangedUpdate,
     UpdateMetadata,
 )
-from ...bus_read import (
+from ...messaging.bus_read import (
     CapturesTranscriptPage,
     OwnerLiveRead,
     OwnerScopedRead,
     UiRead,
 )
-from ...channel_targets import CommsTag
+from ...messaging.channel_targets import CommsTag
 from ...comms import Comms
 from ...coordination.coordinator import Coordination
 from ...goal_actions import (
@@ -98,7 +98,7 @@ from ...planning.orders import (
 from ...planning.pull_requests import PullRequestLink
 from ...problem_number import ProblemNumber
 from ...progress_claims import ProgressClaim
-from ...read_basis import ReadAuthority
+from ...messaging.read_basis import ReadAuthority
 from ...runtime_server import AttachedRuntimeRequestContext
 from ...send_result import MessagePublished
 from ...service_passes import ServicePassStore

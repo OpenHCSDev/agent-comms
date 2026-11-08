@@ -3,7 +3,7 @@ from __future__ import annotations
 from agent_comms.cli_command import TargetActionCommand
 from ..projects.checkouts import Checkout
 
-from agent_comms.channel_targets import SurroundingChannel
+from ..messaging.channel_targets import SurroundingChannel
 
 from agent_comms.catalog_document import CatalogAccess
 from agent_comms.registry.registry_document import ResolvedChannel

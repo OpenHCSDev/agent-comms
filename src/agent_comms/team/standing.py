@@ -12,11 +12,11 @@ from functools import partial
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.build_identity import InstalledBuild, RecordedBuildIdentity, RepositoryCommit
-from agent_comms.bus import BusReader
+from ..messaging.bus import BusReader
 from agent_comms import team
 from agent_comms.team.questions import UnansweredTeammateAsks
 from agent_comms.team_service import TeamService
-from agent_comms.channel_targets import ThreadTarget
+from ..messaging.channel_targets import ThreadTarget
 from agent_comms.task_attachments.owner_notices import OrderNotice, TeamNotice
 from agent_comms.comms import Comms
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -40,8 +40,8 @@ from agent_comms.installer.request import InstallRequest
 from agent_comms.installer.interpreter_operation import InstallPhase, LauncherPhase
 from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.installer.upgrade import RehearsedUpgrade
-from agent_comms.message_bus import WatchPass
-from agent_comms.messages import Message
+from ..messaging.message_bus import WatchPass
+from ..messaging.messages import Message
 from agent_comms.owner_requests import OwnerRequestId
 from agent_comms.plan_reading import PlanReading
 from agent_comms.plan_phases import PlanPhase

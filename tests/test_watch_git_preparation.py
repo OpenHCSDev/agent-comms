@@ -27,7 +27,7 @@ from agent_comms.native_build_inputs import (
 )
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.comms import Comms
-from agent_comms.message_bus import Watch
+from agent_comms.messaging.message_bus import Watch
 from agent_comms.head_review import OpenPullRequestHead
 from agent_comms.planning.orders import (
     CitedEvidence,

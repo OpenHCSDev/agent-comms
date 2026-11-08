@@ -1,31 +1,55 @@
-"""A9: immutable evidence for exactly the messages a client displays.
-
-This is a value contract, not an assertion that fetching a page paints it. A
-client acknowledges it only after paint. DM participant identity deliberately
-uses ThreadIncarnation; process and turn generations do not alter provenance.
-"""
-
 from __future__ import annotations
 
 import asyncio
 import json
-from abc import ABC, abstractmethod
-from bisect import bisect_left, bisect_right
-from collections.abc import Collection, Iterable, Mapping
-from dataclasses import dataclass, field, replace
+from abc import (
+    ABC,
+    abstractmethod,
+)
+from bisect import (
+    bisect_left,
+    bisect_right,
+)
+from collections.abc import (
+    Collection,
+    Iterable,
+    Mapping,
+)
+from dataclasses import (
+    dataclass,
+    field,
+    replace,
+)
 from itertools import product
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, NoReturn, Self, TextIO
+from typing import (
+    Annotated,
+    ClassVar,
+    NoReturn,
+    Self,
+    TYPE_CHECKING,
+    TextIO,
+)
 
-from .projects.checkouts import Checkout
-
-from .activity_clocks import ChannelActivity
-from .channel_targets import CommandTarget, ThreadTarget
-from .coordination.errors import DMPaintedBoundChanged, DMScopeChanged
-from .nominal.declared_family import DeclaredFamily
-from .errors import RelationViolationError, UnregisteredThreadError
-from .nominal.field_codec import (
-    TaggedUnion,
+from .message_reference import MessageReference
+from .messages import MessageInput
+from ..activity_clocks import ChannelActivity
+from .channel_targets import (
+    CommandTarget,
+    ThreadTarget,
+)
+from ..coordination.errors import (
+    DMPaintedBoundChanged,
+    DMScopeChanged,
+)
+from ..errors import (
+    RelationViolationError,
+    UnregisteredThreadError,
+)
+from ..launch_runtime import CallingThreadUnavailable
+from ..mentions import ThreadMention
+from ..nominal.declared_family import DeclaredFamily
+from ..nominal.field_codec import (
     CapabilityUnion,
     FieldCodec,
     NullMember,
@@ -33,17 +57,67 @@ from .nominal.field_codec import (
     SingleFieldValue,
     SubclassUnion,
     TaggedRecordMember,
+    TaggedUnion,
 )
-from .launch_runtime import CallingThreadUnavailable
-from .mentions import ThreadMention
-from .message_reference import MessageReference
-from .messages import MessageInput
-from .notification_evidence import AllOutcomes, DisplayOutcomes, OutcomeViewer
-from .storage.bound_set import BoundSet
-from .storage.private_path import FileObservation, MissingFile
-from .projection_source import ProjectionSource
-from .recorded_bus import RecordedBus, RecordedBusIdentity
-from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+from ..notification_evidence import (
+    AllOutcomes,
+    DisplayOutcomes,
+    OutcomeViewer,
+)
+from ..projection_source import ProjectionSource
+from ..projects.checkouts import Checkout
+from ..recorded_bus import (
+    RecordedBus,
+    RecordedBusIdentity,
+)
+from ..storage.bound_set import BoundSet
+from ..storage.private_path import (
+    FileObservation,
+    MissingFile,
+)
+from ..thread_identity import (
+    RecordedThreadIncarnation,
+    ThreadIncarnation,
+)
+
+if TYPE_CHECKING:
+    import sqlite3
+
+    from .message_bus import MessageBus
+    from .message_page import (
+        MessagePage,
+        PageBounds,
+    )
+    from .messages import (
+        Message,
+        MessageKind,
+    )
+    from .bus import (
+    Bus,
+    BusReader,
+    BusSnapshot,
+)
+    from .channels import TagChannel
+    from ..historical_views import (
+        DMHistory,
+        HistoricalSelection,
+        HistorySource,
+    )
+    from ..history_views import HistoryViews
+    from ..presentation import BusPresentation
+    from ..private_registry_guard import RegistryPrivacy
+    from .read_ledger import (
+    ReadDocument,
+    ReadLedger,
+)
+    from .read_selection import CapturedSelection
+    from ..registry.registration import Registration
+    from ..registry.registry_document import (
+        RegistrySnapshot,
+        UserThreadLookup,
+    )
+    from ..registry.threads import Thread
+    from ..registry_provenance import RegistryProvenance
 
 
 class DisplayViewer(SubclassUnion, affix="Viewer"):
@@ -293,7 +367,7 @@ class ChannelSelection(TaggedRecordMember, SelectedDisplay):
         return self.scope.identity(self.history_revision)
 
     def acknowledge(self, views: HistoryViews, page: MessagePage, *, worktree: Checkout) -> None:
-        from .presentation import ReadThrough
+        from ..presentation import ReadThrough
 
         views.presentation.mark_channel_read(
             self.scope.channel, viewer=views.messaging.user_identity(worktree).name,
@@ -339,28 +413,6 @@ class LineOutput:
     def flush(self) -> None:
         self.pending = None
         self.stream.flush()
-
-
-
-if TYPE_CHECKING:
-    from .read_selection import CapturedSelection
-    from agent_comms.historical_views import HistoricalSelection
-    import sqlite3
-
-    from .bus import Bus, BusReader, BusSnapshot
-    from .channels import TagChannel
-    from .historical_views import DMHistory, HistorySource
-    from .history_views import HistoryViews
-    from .message_bus import MessageBus
-    from .message_page import MessagePage, PageBounds
-    from .messages import Message, MessageKind
-    from .presentation import BusPresentation
-    from .private_registry_guard import RegistryPrivacy
-    from .read_ledger import ReadDocument, ReadLedger
-    from .registry.registration import Registration
-    from .registry.registry_document import RegistrySnapshot, UserThreadLookup
-    from .registry_provenance import RegistryProvenance
-    from .registry.threads import Thread
 
 
 @dataclass(frozen=True, slots=True)
@@ -1262,5 +1314,3 @@ class UnreadQuery:
         return replace(self, lower_bound=max(self.lower_bound, floor),
                        predicate=f"({self.predicate}) AND {targets.within('target')}",
                        parameters=(*self.parameters, *targets.parameters))
-
-

@@ -31,7 +31,7 @@ from ..owner_connection import OwnerConnection
 from ..owner_launch import RetainedOwnerLaunch, StartOwnerRuntimeRequest, StopOwnerRuntimeRequest
 from ..owner_release import OwnerReleaseStore
 from ..root_runtime import RootRuntimeStore
-from ..channel_targets import ThreadTarget
+from ..messaging.channel_targets import ThreadTarget
 from ..task_attachments.owner_notices import RestartNotice
 from ..diagnostics import OwnerProcessOutput
 from ..errors import RelationViolationError
@@ -41,7 +41,7 @@ from ..nominal.field_codec import InputId, RecordMember
 from ..input_disposition import InputDispositions
 from ..launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime, RestartEnvironment, SetVariable, ThreadLaunch
 from ..storage.maintenance_barrier import MaintenanceBarrier
-from ..message_bus import MessageBus
+from ..messaging.message_bus import MessageBus
 from ..native_arguments import (
     ConfiguredBinary,
     InheritedArguments,
@@ -68,7 +68,7 @@ from ..registry.threads import NativeThread, Thread
 
 if TYPE_CHECKING:
     from ..goal_management import Goals
-    from ..messaging import Messaging
+    from ..messaging.sending import Messaging
 
 _LOG = logging.getLogger(__name__)
 

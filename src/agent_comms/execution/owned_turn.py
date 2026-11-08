@@ -33,7 +33,7 @@ from ..image_input import ImageInput
 from ..input_attempt import ReservedInput
 from ..input_key import InputKey
 from ..input_origin import WireInputOrigin
-from ..messages import Message
+from ..messaging.messages import Message
 from ..native_failures import NativeRequestFailure
 from ..native_input_owner import RegistryOwner
 from ..native_tool_call import NativeToolMode

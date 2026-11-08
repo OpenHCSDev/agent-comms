@@ -14,7 +14,7 @@ from agent_comms.child_process import NoProcess
 from agent_comms.cli import CliInvocation
 from agent_comms.comms import Comms, wire
 from agent_comms.errors import UnreceivedAnswerError
-from agent_comms.messaging import TeamReceipts
+from agent_comms.messaging.sending import TeamReceipts
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript, UserTranscript
 from agent_comms.native_entries import NativeEntry

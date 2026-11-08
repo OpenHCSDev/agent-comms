@@ -1,8 +1,8 @@
 
 from agent_comms.projects.checkouts import Checkout
 from bus_history import read_history
-from agent_comms.channel_targets import CommandTarget
-from agent_comms.messages import NoticeRole
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.messages import NoticeRole
 import pytest
 from agent_comms.tool_caller import NoThreadCaller
 
@@ -10,7 +10,11 @@ from agent_comms.mentions import MentionQuery
 from agent_comms.comms import wire
 from conftest import installed_comms
 from agent_comms.mentions import MentionCandidate, ThreadMention
-from agent_comms.messages import Message, AlertKind, InfoKind
+from agent_comms.messaging.messages import (
+    Message,
+    AlertKind,
+    InfoKind,
+)
 from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, MentionedPolicy
 from agent_comms.routing import ScheduledTurn
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
@@ -162,7 +166,7 @@ def test_completion_uses_the_model_syntax_at_the_cursor():
 
 
 def test_failed_delivery_posts_a_non_waking_notice_to_the_origin(tmp_path):
-    from agent_comms.messages import AlertKind
+    from agent_comms.messaging.messages import AlertKind
 
     comms = installed_comms(tmp_path)
     for name in ("sender", "owner"):

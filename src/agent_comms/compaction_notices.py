@@ -6,8 +6,11 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import ClassVar
 
-from .channel_targets import CommsTag
-from .messages import MessageRole, NoticeRole
+from .messaging.channel_targets import CommsTag
+from .messaging.messages import (
+    MessageRole,
+    NoticeRole,
+)
 from .recorded_time import RecordedEventTime
 from .thread_identity import RecordedThreadIncarnation
 

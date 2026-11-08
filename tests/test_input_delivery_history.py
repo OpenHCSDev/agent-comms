@@ -1,6 +1,6 @@
 """Current owner queues scope notices without altering durable input evidence."""
 
-from agent_comms.bus_read import OwnerScopedRead
+from agent_comms.messaging.bus_read import OwnerScopedRead
 from agent_comms.projects.checkouts import Checkout
 import asyncio
 from dataclasses import replace
@@ -13,7 +13,10 @@ from agent_comms.acp_extension import (
     GoalSnapshotReply, QueuePromptRequest, TurnChangedUpdate, UpdateMetadata, encode_request,
 )
 from agent_comms.child_process import NoProcess, ProcessIdentity
-from agent_comms.bus_read import BusRead, OwnerScopedRead
+from agent_comms.messaging.bus_read import (
+    BusRead,
+    OwnerScopedRead,
+)
 from agent_comms.errors import RelationViolationError
 from agent_comms.input_key import AcpInputKey, BusInputKey
 from agent_comms.comms import Comms, wire

@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from .head_review import PullRequestHead
-from .message_bus import JoinedWatch
+from .messaging.message_bus import JoinedWatch
 from .planning.orders import (
     PullRequests,
     StoredClosedHead,

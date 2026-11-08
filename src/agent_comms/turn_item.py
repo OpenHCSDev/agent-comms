@@ -11,10 +11,10 @@ from .errors import RelationViolationError
 from .nominal.field_codec import Id128, NominalSpelling, NominalText, NullMember, RecordMember, SubclassUnion
 
 if TYPE_CHECKING:
-    from .channel_targets import NamedTarget
+    from .messaging.channel_targets import NamedTarget
     from .coordination.session import NativeCapture
     from .external_transcript import ExternalTranscript
-    from .message_reference import MessageReference
+    from .messaging.message_reference import MessageReference
     from .routing import Routing
     from .transcript_routes import _SessionRoutes
 

@@ -36,11 +36,20 @@ from functools import partial
 import pytest
 
 from agent_comms import agent_events as events
-from agent_comms.bus_publication import AgentOrigin, HumanOrigin
-from agent_comms.channel_targets import CommandTarget, ThreadTarget
+from agent_comms.messaging.bus_publication import (
+    AgentOrigin,
+    HumanOrigin,
+)
+from agent_comms.messaging.channel_targets import (
+    CommandTarget,
+    ThreadTarget,
+)
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.channel_targets import TeammatesTag, CommsTag
-from agent_comms.messaging import TeamReceipts
+from agent_comms.messaging.channel_targets import (
+    TeammatesTag,
+    CommsTag,
+)
+from agent_comms.messaging.sending import TeamReceipts
 from agent_comms.team.standing_rules import (
     OwedAnswer,
     StandingRule,
@@ -89,14 +98,23 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_key import AcpInputKey
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.launch_root import LaunchRoot
-from agent_comms.message_page import MessagePageRequest
-from agent_comms.message_reference import MessageReference
-from agent_comms.messages import ConversationRole, InfoKind, Message, NoticeRole, QuestionKind
+from agent_comms.messaging.message_page import MessagePageRequest
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import (
+    ConversationRole,
+    InfoKind,
+    Message,
+    NoticeRole,
+    QuestionKind,
+)
 from agent_comms.native_arguments import GivenBinary
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.order_story import TeamStory
 from agent_comms.owner_requests import NewestOpenRequest, RequestDirective
-from agent_comms.read_basis import DMDisplayScope, RepliesDisplayScope
+from agent_comms.messaging.read_basis import (
+    DMDisplayScope,
+    RepliesDisplayScope,
+)
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.service_passes import ServicePassStore

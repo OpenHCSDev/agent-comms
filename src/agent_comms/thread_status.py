@@ -22,8 +22,8 @@ from .turn_lease import (
 
 if TYPE_CHECKING:
     from .activity import ObservedActivity
-    from .message_reference import MessageReference
-    from .messaging import Messaging
+    from .messaging.message_reference import MessageReference
+    from .messaging.sending import Messaging
     from .turn_item import SourceTurn
     from .registry.registry_document import RegistryEntry, RegistrySnapshot, RosterVisibility
     from .thread_identity import GenerationCounter, OwnerIdentity

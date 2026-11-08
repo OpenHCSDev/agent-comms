@@ -5,10 +5,13 @@ from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.controller import CancelledOutcome, Controller, PermissionOutcome, SessionUpdateSink
 
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.messaging.channel_targets import CommandTarget
 
 from agent_comms.lifecycle_capability import Unresolved
-from agent_comms.messages import Message, NoticeRole
+from agent_comms.messaging.messages import (
+    Message,
+    NoticeRole,
+)
 from contextlib import ExitStack
 
 from dataclasses import replace
@@ -24,7 +27,7 @@ from agent_comms.goals import AbsentGoalCheckpoint, Goal, GoalRevision, NoGoal, 
 from agent_comms.input_attempt import ReservedInput
 from agent_comms.input_key import AcpInputKey
 from agent_comms.input_origin import HumanInputOrigin, UnattributedInputOrigin, WireInputOrigin
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.queued_input import QueuedInput
 from agent_comms.retained_task_facts import CurrentHumanInputTaskFact, HumanInputTaskFact, InputTaskFact
 from test_acp_queue_contract import _owner

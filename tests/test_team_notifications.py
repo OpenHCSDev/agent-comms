@@ -13,7 +13,7 @@ from multiprocessing import Pipe
 import pytest
 
 
-from agent_comms.bus_read import UiRead
+from agent_comms.messaging.bus_read import UiRead
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.cli_verbs.fork import ForkCliCommand
 from agent_comms.heartbeat_delivery import OffHeartbeatDelivery, OnHeartbeatDelivery
@@ -37,8 +37,8 @@ from agent_comms.team.vibe_check import OverloadDegradation
 from agent_comms.task_attachments.team_pings import TeamDecisions, TeamUpdateNotice, TeamUpdate, TeamUpdateStore, PublishedFacts, RulePing
 from agent_comms.errors import HumanSendRefusedError, RelationViolationError, UnregisteredThreadError
 from agent_comms.launch_root import LaunchRoot
-from agent_comms.message_page import MessagePageRequest
-from agent_comms.read_basis import DMDisplayScope
+from agent_comms.messaging.message_page import MessagePageRequest
+from agent_comms.messaging.read_basis import DMDisplayScope
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.ui_model import observation
@@ -57,9 +57,19 @@ from agent_comms.ui_model.teammate_state import (
 from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms_hooks.watch import WatchRecord
 from agent_comms.wake_policy import PassiveWake
-from agent_comms.bus_publication import AgentOrigin, HumanOrigin
-from agent_comms.channel_targets import TeammatesTag, ThreadTarget
-from agent_comms.messages import ConversationRole, InfoKind, Message
+from agent_comms.messaging.bus_publication import (
+    AgentOrigin,
+    HumanOrigin,
+)
+from agent_comms.messaging.channel_targets import (
+    TeammatesTag,
+    ThreadTarget,
+)
+from agent_comms.messaging.messages import (
+    ConversationRole,
+    InfoKind,
+    Message,
+)
 from agent_comms.transcript_events import IncomingTranscript
 from agent_comms.ui_model.message_category import HeartbeatCategory, InboundCategory, all_categories
 from agent_comms.projects.checkouts import (

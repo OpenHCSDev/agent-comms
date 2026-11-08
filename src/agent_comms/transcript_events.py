@@ -25,9 +25,9 @@ from .nominal.field_codec import (
     WireOmitDefault,
     projected,
 )
-from .message_reference import MessageReference
+from .messaging.message_reference import MessageReference
 from .pi_wire import PiOmitted, ReportedInputId
-from .messages import Message
+from .messaging.messages import Message
 from .recorded_time import EventTime, UnrecordedEventTime
 from .routing import MessageRoute, NoTurnRouting, Routing, TurnRouting
 from .tool_results import SENT_MESSAGE_MIME, NoSentMessage, NoToolDiff, ToolDiff, ToolText

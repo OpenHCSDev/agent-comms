@@ -38,8 +38,14 @@ from agent_comms.coordination.tables.publications import (
 from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.response_acknowledgement import canonical_publication_key
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.message_bus import MessageBus
-from agent_comms.messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole
+from ..messaging.message_bus import MessageBus
+from ..messaging.messages import (
+    ConversationRole,
+    InfoKind,
+    Message,
+    MessageKind,
+    MessageRole,
+)
 from agent_comms.native_input_owner import RegistryOwner
 from agent_comms.obligation_states import PublishedResponse, PublishingResponse
 from agent_comms.owner_fence import OwnerFence

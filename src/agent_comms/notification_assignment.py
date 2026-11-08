@@ -11,7 +11,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, NoReturn
 
 from .frozen_recipient import FrozenRecipient
-from .bus import Bus
+from .messaging.bus import Bus
 from .coordination.database import CoordinationStore, StoreFile
 from .coordination.tables.assignments import WakeAssignment
 from .coordination.tables.executions import CurrentExecutions
@@ -20,7 +20,7 @@ from .coordination.tables.publications import PublicationEvidence
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import FieldCodec, ThreadLookup, boundary_decoder
 from .input_disposition import InputDispositions
-from .message_reference import MessageReference
+from .messaging.message_reference import MessageReference
 from agent_comms.notification_progress import AssignmentResponse, UnansweredResponse
 from .notification_evidence import ConsumptionEvidence
 from .notification_progress import (
@@ -38,12 +38,12 @@ from dataclasses import field
 from functools import cached_property
 from .thread_identity import ThreadIncarnation
 from agent_comms.notification_evidence import FirstRecipient, OutcomeViewer, RecipientCursor, RecipientLimit
-from .bus_publication import Delivered
+from .messaging.bus_publication import Delivered
 if TYPE_CHECKING:
 
     from .agent_activity import RecipientActivity
     from .coordination.database import InvalidStore, MissingStore
-    from .message_notification import MessageNotification
+    from .messaging.message_notification import MessageNotification
     from .private_registry_guard import RegistryPrivacy
     from .notification_progress import DeliveryProgress
 

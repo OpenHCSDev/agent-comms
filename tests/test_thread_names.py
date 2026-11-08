@@ -103,7 +103,7 @@ def test_a_remote_ui_reads_the_registry_with_its_renames(tmp_path):
 def test_a_ui_reads_whether_a_channel_takes_input_through_core(tmp_path):
     """A channel answers as its own family member across the codec, so a remote composer reads
     the same read_only a local one does."""
-    from agent_comms.channels import Channel
+    from agent_comms.messaging.channels import Channel
     from agent_comms.core_access import LocalCoreAccess
     from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.transport.tools.sidebar import CommsChannelTool

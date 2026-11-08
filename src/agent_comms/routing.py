@@ -12,24 +12,27 @@ from dataclasses import dataclass, replace
 from typing import Annotated, TYPE_CHECKING
 
 
-from .channel_targets import CommandTarget
+from .messaging.channel_targets import CommandTarget
 from .projects.checkouts import Checkout
 from .nominal.field_codec import (
     ThreadLookup, FieldCodec, NullMember, PresentMember, RecordMember, SubclassUnion, WireOmitDefault,
 )
 from .goal_scope import AllGoals, GoalScope
-from .message_reference import MessageReference
-from .messages import PublicSender
-from .read_basis import DMDisplayScope, MessageDisplayScope
+from .messaging.message_reference import MessageReference
+from .messaging.messages import PublicSender
+from .messaging.read_basis import (
+    DMDisplayScope,
+    MessageDisplayScope,
+)
 from .response_policy import NO_ALIASES
 
 if TYPE_CHECKING:
-    from .bus_publication import Delivered
+    from .messaging.bus_publication import Delivered
     from .catalog_document import CatalogDocument
     from .registry_provenance import RegistryProvenance
     from .thread_identity import ThreadIncarnation
     from .input_disposition import InputDispositions
-    from .messages import Message
+    from .messaging.messages import Message
     from .registry.threads import Thread
     from .transcript_routes import NoSentInputText, SentInputText
 

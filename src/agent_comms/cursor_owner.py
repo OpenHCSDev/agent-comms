@@ -14,7 +14,7 @@ from .acp_extension import CursorObservation, EmptyCursorObservation, VerifiedCu
 from .coordination.database import CoordinationStore
 from .coordination.errors import IdentityConflict, StaleFence
 from .coordination.coordinator import Coordination
-from .message_bus import MessageBus
+from .messaging.message_bus import MessageBus
 from .native_input_owner import ParticipantOwner, RegistryOwner
 from .native_input_record import NativeInputReference
 from .native_runtime_input import CurrentNativeCursor, NativeRuntimeInput

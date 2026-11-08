@@ -1,49 +1,75 @@
-"""Messages: declaration and persistence owners."""
-
 from __future__ import annotations
 
-from agent_comms.nominal.field_codec import WireExclude
-
-from .transport.progress import InterruptibleRead
-from .input_key import InputKey
-
-from .class_fact import ClassFact
-from .projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
-from .turn_origin import TurnOrigin
 import builtins
 import re
 import sqlite3
 import time
-from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from contextlib import closing, contextmanager
-from dataclasses import Field, dataclass, field, fields, make_dataclass, replace
+from abc import (
+    ABC,
+    abstractmethod,
+)
+from collections.abc import (
+    Callable,
+    Iterable,
+    Iterator,
+    Mapping,
+    Sequence,
+)
+from contextlib import (
+    closing,
+    contextmanager,
+)
+from dataclasses import (
+    Field,
+    dataclass,
+    field,
+    fields,
+    make_dataclass,
+    replace,
+)
 from functools import cache
 from inspect import get_annotations
-from itertools import accumulate, batched
+from itertools import (
+    accumulate,
+    batched,
+)
 from typing import (
-    TYPE_CHECKING, Annotated, ClassVar, Self, Type, cast, dataclass_transform,
+    Annotated,
+    ClassVar,
+    Self,
+    TYPE_CHECKING,
+    Type,
+    cast,
+    dataclass_transform,
     get_origin,
 )
 
-from agent_comms.response_policy import (
-    NO_ALIASES, InformationalPolicy, ResponseEligibility, ResponsePolicy,
+from ..change_report import (
+    NoChangeReport,
+    ReportEvidence,
+    SourceRoots,
 )
-from agent_comms.storage.typed_table import (
-    AppendOnlyTables, Column, DerivedTables, DurableTables, ForeignKey, Index,
-    LOCAL_TABLE_SOURCE, ProducedTable, SharedFileTables, TableReference, TableSource, TypedRow, TypedTable,
+from .channel_targets import (
+    CommandTarget,
+    ThreadTarget,
 )
-
-from .change_report import NoChangeReport, ReportEvidence, SourceRoots
-from .channel_targets import CommandTarget, ThreadTarget
-from .coordination.errors import IdentityConflict
-from .nominal.declared_family import DeclaredFamily
-from .envelope_claim_transitions import (
-    ClaimOwner, ClaimProducer, ClaimProjection, ClaimTransition, ClaimTransitionError, ResourceClaim,
+from ..class_fact import ClassFact
+from ..coordination.errors import IdentityConflict
+from ..envelope_claim_transitions import (
+    ClaimOwner,
+    ClaimProducer,
+    ClaimProjection,
+    ClaimTransition,
+    ClaimTransitionError,
+    ResourceClaim,
     UnclaimedResource,
 )
-from .errors import RelationViolationError
-from .nominal.field_codec import (
+from ..errors import RelationViolationError
+from ..input_key import InputKey
+from ..mentions import ThreadMention
+from .message_reference import MessageReference
+from ..nominal.declared_family import DeclaredFamily
+from ..nominal.field_codec import (
     ClaimId,
     FieldCodec,
     InlineRecord,
@@ -51,27 +77,71 @@ from .nominal.field_codec import (
     NullMember,
     PublicationExclude,
     ThreadLookup,
+    WireExclude,
     WireName,
     WireOmitDefault,
     WireOrder,
     compile_decoder,
     projected,
 )
-from .mentions import ThreadMention
-from .message_reference import MessageReference
-from .page_traversal import LiveCursor, PageCursor
-from .recorded_time import Timestamped
-from .task_sources import Decision, NoTaskAttachment, TaskAttachment
-from .thread_identity import AgentThreadRole, ThreadRole
-from .ui_model.message_category import InboundCategory, MessageCategory, OtherCategory
-from .wake_policy import BoundedTriageWake, PassiveWake
+from ..page_traversal import (
+    LiveCursor,
+    PageCursor,
+)
+from ..projection_source import (
+    ProducedRow,
+    ProjectionOutputs,
+    ProjectionSource,
+)
+from ..recorded_time import Timestamped
+from ..response_policy import (
+    InformationalPolicy,
+    NO_ALIASES,
+    ResponseEligibility,
+    ResponsePolicy,
+)
+from ..storage.typed_table import (
+    AppendOnlyTables,
+    Column,
+    DerivedTables,
+    DurableTables,
+    ForeignKey,
+    Index,
+    LOCAL_TABLE_SOURCE,
+    ProducedTable,
+    SharedFileTables,
+    TableReference,
+    TableSource,
+    TypedRow,
+    TypedTable,
+)
+from ..task_sources import (
+    Decision,
+    NoTaskAttachment,
+    TaskAttachment,
+)
+from ..thread_identity import (
+    AgentThreadRole,
+    ThreadRole,
+)
+from ..transport.progress import InterruptibleRead
+from ..turn_origin import TurnOrigin
+from ..ui_model.message_category import (
+    InboundCategory,
+    MessageCategory,
+    OtherCategory,
+)
+from ..wake_policy import (
+    BoundedTriageWake,
+    PassiveWake,
+)
 
 if TYPE_CHECKING:
     from .bus_publication import Delivered
-    from .input_disposition import InputDispositions
-    from .display_references import ReferenceContext
-    from .retained_task_facts import ExactTaskFact
-    from .registry.threads import Thread
+    from ..display_references import ReferenceContext
+    from ..input_disposition import InputDispositions
+    from ..registry.threads import Thread
+    from ..retained_task_facts import ExactTaskFact
 
 
 class BusTables(TypedTable, AppendOnlyTables, SharedFileTables, DurableTables, declared_name=None):
@@ -530,7 +600,10 @@ class MessageRoutes(ProjectionOutputs):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .bus_route_counts import BusRouteCounts, BusRouteKeys
+        from .bus_route_counts import (
+    BusRouteCounts,
+    BusRouteKeys,
+)
         from .bus_tables import AwaitingAnswerSource
         return (BusRouteCounts, BusRouteKeys, AwaitingAnswerSource)
 
@@ -538,7 +611,10 @@ class MessageRoutes(ProjectionOutputs):
 
     @classmethod
     def route_rows(cls, message):
-        from .bus_route_counts import BusRouteCounts, BusRouteKeys
+        from .bus_route_counts import (
+    BusRouteCounts,
+    BusRouteKeys,
+)
 
         return (BusRouteCounts.from_message(message), BusRouteKeys.from_message(message))
 
@@ -1189,10 +1265,19 @@ class BusRecord(CarriesEnvelope, Message, DeclaredFamily, affix="Record"):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .bus_activity_index import BusActivityIndex, SentActivity
+        from .bus_activity_index import (
+    BusActivityIndex,
+    SentActivity,
+)
         from .bus_display_index import BusDisplayIndex
-        from .bus_route_counts import BusRouteCounts, BusRouteKeys
-        from .bus_tables import MessageIdentitySource, AnsweredSource
+        from .bus_route_counts import (
+    BusRouteCounts,
+    BusRouteKeys,
+)
+        from .bus_tables import (
+    MessageIdentitySource,
+    AnsweredSource,
+)
         # Task rows are written by the record that carries the task, so the record kinds own
         # them too: that is what lets a carry replay old records into a new task row.
         return tuple(dict.fromkeys((
@@ -1205,7 +1290,10 @@ class BusRecord(CarriesEnvelope, Message, DeclaredFamily, affix="Record"):
     def projections(self):
         from .bus_activity_index import BusActivityIndex
         from .bus_display_index import BusDisplayIndex
-        from .bus_tables import AnsweredSource, MessageIdentitySource
+        from .bus_tables import (
+    AnsweredSource,
+    MessageIdentitySource,
+)
 
         yield from super().projections()
         yield BusActivityIndex.from_message(self, target=self.target)
@@ -1338,7 +1426,7 @@ class ClaimMessage(Claimed, Message):
         return Message.from_message(self, type=ClaimHistoryKind)
 
     def retained_task_facts(self) -> Iterator[ExactTaskFact]:
-        from .retained_task_facts import ClaimTaskFact
+        from ..retained_task_facts import ClaimTaskFact
         yield from super().retained_task_facts()
         yield ClaimTaskFact(ClaimMessage.of(self, self.claim_transition))
 

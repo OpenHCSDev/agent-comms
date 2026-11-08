@@ -10,7 +10,7 @@ from functools import cached_property, partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
-from agent_comms.bus import StoredBusReader
+from ..messaging.bus import StoredBusReader
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import (
     CoordinationReadUnavailable,
@@ -25,7 +25,7 @@ from agent_comms.storage.store_files import (
 if TYPE_CHECKING:
     from ..attempt_states import TerminalAttempt
     from .snapshot import RecoverySnapshot
-    from ..message_bus import MessageBus
+    from ..messaging.message_bus import MessageBus
     from ..registry.registry_store import RegistryCut
     from ..registry.registry_document import RegistrySnapshot
     from ..private_registry_guard import RegistryPrivacy
@@ -179,7 +179,7 @@ class NativeCoordinationSession(CoordinationSession):
     @cached_property
     def bus(self) -> MessageBus:
         """Create native bus owners only when this session first needs a boundary."""
-        import agent_comms.message_bus as message_bus, agent_comms.publisher as publisher, \
+        import agent_comms.messaging.message_bus as message_bus, agent_comms.publisher as publisher, \
             agent_comms.registry.registration as registration
 
         return message_bus.MessageBus(

@@ -22,7 +22,7 @@ from agent_comms.active_route import (
     ActiveRouteFile,
     active_route_path,
 )
-from agent_comms.bus import Bus
+from agent_comms.messaging.bus import Bus
 from agent_comms.native_build_inputs import DetachedChildStdio
 from agent_comms.child_process import SpawnedProcess
 from agent_comms.comms import Comms, wire
@@ -311,7 +311,7 @@ def test_preparation_lends_no_route_lock_and_commits_only_its_current_directory(
                     sys.executable, "-c",
                     "from pathlib import Path; import sys; "
                     "from agent_comms.active_route import ActiveRoute, route_new_bus; "
-                    "from agent_comms.bus import Bus; "
+                    "from agent_comms.messaging.bus import Bus; "
                     "from agent_comms.recorded_bus import RecordedBusIdentity; "
                     "root=Path(sys.argv[1]); "
                     "print(route_new_bus(ActiveRoute(root, "

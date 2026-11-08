@@ -10,7 +10,7 @@ from .coordination.vocabulary import CoordinatorVocabulary
 from .nominal.field_codec import MessageId, NullMember
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Deferred, Failed, Pending, Successful, Terminal
-from .message_reference import MessageReference
+from .messaging.message_reference import MessageReference
 from .reason_codes import NoReasonCode
 
 if TYPE_CHECKING:

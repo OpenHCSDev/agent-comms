@@ -1,48 +1,93 @@
-"""Named destinations own route behavior; strings are decoded at the boundary."""
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, ClassVar
+from abc import (
+    ABC,
+    abstractmethod,
+)
+from collections.abc import (
+    Callable,
+    Iterable,
+)
+from dataclasses import (
+    dataclass,
+    field,
+)
+from typing import (
+    ClassVar,
+    TYPE_CHECKING,
+)
 
-from .activity_clocks import ActivityClocks
-from .class_fact import ClassFact
-from .cli_result import CliResult
-from .nominal.declared_family import DeclaredFamily
-from .frozen_recipient import FrozenRecipient
-from .errors import HumanSendRefusedError, RelationViolationError, UnregisteredThreadError
-from .nominal.field_codec import NullMember, SingleFieldValue, SubclassUnion
-from .projection_source import ProducedRow, ProjectionSource
-from .projects.checkouts import Checkout
-from .response_policy import DirectPolicy, MentionedPolicy
-from .thread_identity import ThreadIncarnation
-from .storage.typed_table import sql_literal
-from .wake_policy import BoundedTriageWake, FullWake, MessageAudience, WakePolicy
+from ..activity_clocks import ActivityClocks
+from ..class_fact import ClassFact
+from ..cli_result import CliResult
+from ..errors import (
+    HumanSendRefusedError,
+    RelationViolationError,
+    UnregisteredThreadError,
+)
+from ..frozen_recipient import FrozenRecipient
+from ..nominal.declared_family import DeclaredFamily
+from ..nominal.field_codec import (
+    NullMember,
+    SingleFieldValue,
+    SubclassUnion,
+)
+from ..projection_source import (
+    ProducedRow,
+    ProjectionSource,
+)
+from ..projects.checkouts import Checkout
+from ..response_policy import (
+    DirectPolicy,
+    MentionedPolicy,
+)
+from ..storage.typed_table import sql_literal
+from ..thread_identity import ThreadIncarnation
+from ..wake_policy import (
+    BoundedTriageWake,
+    FullWake,
+    MessageAudience,
+    WakePolicy,
+)
 
 if TYPE_CHECKING:
-    from .history_result import HistoryPageResult
-    from .audience_manifest import AudiencedMessage
-    from .catalog_document import CatalogAccess, CatalogDocument
-    from .channels import Channel
-    from .cli_command import CliCommand
-    from .comms import Comms
-    from .goal_management import Goals
-    from .historical_views import ChannelHistory, ConversationHistoryView, DMHistory, HistoryView
-    from .history_views import HistoryViews
-    from .messages import Message, MessageInput
+    from .messages import (
+        Message,
+        MessageInput,
+    )
     from .read_basis import (
         ChannelConversation,
         Conversation,
-        DisplayViewer,
         DMConversation,
         DMDisplayScope,
+        DisplayViewer,
         MessageDisplayScope,
     )
-    from .registry.registry_document import RegistrySnapshot, ResolvedChannel, ResolvedThread
-    from .registry_provenance import RegistryProvenance
-    from .response_policy import ResponsePolicy
-    from .registry.threads import Thread
+    from ..audience_manifest import AudiencedMessage
+    from ..catalog_document import (
+        CatalogAccess,
+        CatalogDocument,
+    )
+    from .channels import Channel
+    from ..cli_command import CliCommand
+    from ..comms import Comms
+    from ..goal_management import Goals
+    from ..historical_views import (
+        ChannelHistory,
+        ConversationHistoryView,
+        DMHistory,
+        HistoryView,
+    )
+    from ..history_result import HistoryPageResult
+    from ..history_views import HistoryViews
+    from ..registry.registry_document import (
+        RegistrySnapshot,
+        ResolvedChannel,
+        ResolvedThread,
+    )
+    from ..registry.threads import Thread
+    from ..registry_provenance import RegistryProvenance
+    from ..response_policy import ResponsePolicy
 
 
 class ChannelSelection(SubclassUnion, affix="Channel"):
@@ -627,7 +672,7 @@ class ChannelTarget(NamedTarget):
                      and channel.matches(thread.tags))
 
     def mark_view_read(self, views: HistoryViews, worktree: Checkout) -> None:
-        from .presentation import ReadAll
+        from ..presentation import ReadAll
 
         views.presentation.mark_channel_read(
             self.name, viewer=views.messaging.user_identity(worktree).name, mark=ReadAll(),

@@ -17,7 +17,7 @@ from .thread_identity import RecordedThreadIncarnation
 from .thread_presentation import ThreadPresentation
 
 if TYPE_CHECKING:
-    from .bus_publication import Delivered
+    from .messaging.bus_publication import Delivered
     from .goal_actions import GoalAction
 
 

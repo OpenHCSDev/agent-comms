@@ -175,7 +175,10 @@ def test_hidden_page_items_keep_import_events_but_own_no_visible_events(tmp_path
 async def test_draining_server_gets_the_same_turn_after_reconnecting(tmp_path):
     """Codex refuses a turn while draining and asks for it again; the input is delivered, not lost."""
     from agent_comms.harness_delivery_states import AcceptedOutcome
-    from agent_comms.messages import InfoKind, Message
+    from agent_comms.messaging.messages import (
+    InfoKind,
+    Message,
+)
 
     turns = []
 

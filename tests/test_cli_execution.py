@@ -12,7 +12,7 @@ from contextlib import redirect_stdout
 
 import pytest
 
-from agent_comms.bus import Bus
+from agent_comms.messaging.bus import Bus
 from agent_comms.cli import CliInvocation
 from agent_comms.cli_bridges.shared import Send
 from agent_comms.cli_command import CliCommand

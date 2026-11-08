@@ -42,7 +42,7 @@ from agent_comms.comms import Comms, wire
 from agent_comms.coordination.errors import DeferredRead
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
-from agent_comms.messaging import TeamReceipts
+from ..messaging.sending import TeamReceipts
 from agent_comms.nominal.field_codec import (
     Argument,
     FieldCodec,
@@ -59,12 +59,12 @@ from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
 from agent_comms.goals import CheckCommand, CheckResult, CountCheckResult, OrderCheck
 from agent_comms.held_orders import HeldOrders
 from agent_comms.storage.maintenance_barrier import MaintenanceHeldError
-from agent_comms.message_reference import MessageReference
-from agent_comms.messages import Message
+from ..messaging.message_reference import MessageReference
+from ..messaging.messages import Message
 from agent_comms.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
 from agent_comms.plan_phases import OrderPhase, PlanPhase
 from agent_comms.notification_evidence import AllOutcomes
-from agent_comms.message_notification import MessageNotification
+from ..messaging.message_notification import MessageNotification
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.registry_document import RegisteredTeamProject
 from ..projects.repo import Repo

@@ -11,7 +11,10 @@ from collections.abc import Callable
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
 
-from agent_comms.read_ledger import NoReadNotice, ReadNotice
+from ..messaging.read_ledger import (
+    NoReadNotice,
+    ReadNotice,
+)
 from typing import NoReturn
 
 from agent_comms.display_order import ChannelSort, NameChannelSort, ThreadSort

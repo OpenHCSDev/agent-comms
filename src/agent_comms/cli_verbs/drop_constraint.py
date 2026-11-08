@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from agent_comms.channel_targets import CommandTarget
+from ..messaging.channel_targets import CommandTarget
 from agent_comms.cli_command import CliCommand
 from agent_comms.cli_commands import ConstraintDroppedResult
 from agent_comms.cli_commands import WorktreeArgument
@@ -9,7 +9,7 @@ from agent_comms.cli_result import CliResult
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument
 from agent_comms.nominal.field_codec import Normalize
-from agent_comms.message_reference import MessageReference
+from ..messaging.message_reference import MessageReference
 from agent_comms.task_sources import CorrectionTaskChange, UserTaskDrop
 from dataclasses import dataclass
 from typing import Annotated

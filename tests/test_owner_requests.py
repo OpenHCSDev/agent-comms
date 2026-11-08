@@ -7,7 +7,7 @@ import pytest
 
 from agent_comms.nominal.field_codec import GoalId
 from agent_comms.change_report import FileLine, MainRevision
-from agent_comms.channel_targets import TeammatesTag
+from agent_comms.messaging.channel_targets import TeammatesTag
 from agent_comms.planning.orders import (
     ClaimOrder,
     OrderClaim,

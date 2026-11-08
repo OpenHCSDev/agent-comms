@@ -35,16 +35,23 @@ import pytest
 # First: importing it removes the caller's repository from the environment before any git runs.
 import fixture_git  # noqa: F401
 import goal_owner_fixture
-from agent_comms.bus import Bus, BusRecord
-from agent_comms.bus_publication import AgentOrigin
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.messages import BusRecord
+from agent_comms.messaging.bus_publication import AgentOrigin
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.comms import Comms, wire
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.maintenance_barrier import (
     MaintenanceBarrier, MaintenanceClaimHolder, MaintenanceHolder, MaintenanceOperator,
 )
-from agent_comms.message_bus import MessageBus
-from agent_comms.messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole
+from agent_comms.messaging.message_bus import MessageBus
+from agent_comms.messaging.messages import (
+    ConversationRole,
+    InfoKind,
+    Message,
+    MessageKind,
+    MessageRole,
+)
 from agent_comms.native_package import pinned_location, pinned_native_package
 from agent_comms.native_tool_transport import ToolListener
 from agent_comms.pi_durable_backend import PiDurableBackend

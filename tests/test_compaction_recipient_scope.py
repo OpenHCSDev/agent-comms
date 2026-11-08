@@ -1,9 +1,9 @@
 """Retained source applicability follows the original frozen recipient birth."""
 
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.messaging.channel_targets import CommandTarget
 
-from agent_comms.messages import NoticeRole
+from agent_comms.messaging.messages import NoticeRole
 from dataclasses import replace
 
 from agent_comms.comms import wire

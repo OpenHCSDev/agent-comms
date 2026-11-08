@@ -38,7 +38,7 @@ from .goal_history import RecordedGoalHistory
 from .goal_scope import AllGoals, OneGoal
 from .goals import Goal
 from .manual_compaction_bridge import compact_context
-from .bus_read import OwnerScopedRead
+from .messaging.bus_read import OwnerScopedRead
 from .transport.tools.reads import OwnerGoalRead
 from .transport.tools.sidebar import ClearQueueQueueAction, QueueAction, SendNowQueueAction
 from .ui_model.observation import SubscribeTranscript

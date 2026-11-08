@@ -48,7 +48,7 @@ from yarl import URL
 
 
 from .declared_verb import DeclaredVerb
-from .bus_identity import BusIdentityStore
+from .messaging.bus_identity import BusIdentityStore
 from .command import Command
 from .launch_root import started
 from .child_process import GitChildren, HelperStart, OwnedGitOpening, SpawnedHelper, join_retirement
@@ -65,7 +65,7 @@ from .nominal.field_codec import (
     Argument, FieldCodec, GitCommitText, MalformedRecord, PathText, WireTransient, boundary_decoder,
 )
 from .transport.progress import CancellableWireExport, WireExportObserver
-from agent_comms.channel_targets import NamedTarget
+from .messaging.channel_targets import NamedTarget
 from agent_comms.owner_requests import NewestOpenRequest, RequestSelection
 from .host_services import HostService
 from .connector_caller import CALLER, ConnectorCaller, ConnectorTool, GrantRefusedError
@@ -81,11 +81,11 @@ from .connector_store import (
     RegisteredClient, TrustedBrowser, UiGrantAccess, UiReadAccess, digest,
 )
 from .storage.locked_store import DocumentChange
-from .messages import QuestionKind
+from .messaging.messages import QuestionKind
 from .team.standing import UnownedOrderWatch
 from .team_heartbeat import TeamHeartbeat
 from .closed_pull_requests import ClosedPullRequestWatch
-from .message_bus import Watch
+from .messaging.message_bus import Watch
 from .coordination.coordinator import Coordination
 from .service_passes import ServicePassStore
 from .tool_result import ToolResult

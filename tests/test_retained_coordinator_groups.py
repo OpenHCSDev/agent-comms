@@ -23,7 +23,7 @@ from agent_comms.coordination.tables.participants import OwnerGenerations, Parti
 from agent_comms.coordination.tables.recovery import RecoveryAudit
 from agent_comms.coordination.coordinator import StandaloneCoordination
 from agent_comms.harness_delivery_states import EmittedOutcome, ReceivingMonitor
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.native_input_record import FullNativeExecution, TriageNativeExecution
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.nominal.field_codec import AssignmentId, MessageId, ThreadLookup, TranscriptRecordIdText

@@ -20,7 +20,7 @@ from agent_comms.coordination.coordinator import Coordination
 from .cohort_schema import CohortTable
 from .coordination.database import CoordinationStore
 from .coordination.session import ReadNativeCoordinationSession
-from .message_reference import MessageReference
+from .messaging.message_reference import MessageReference
 from .native_entries import NativeEvidenceScope
 from .native_transcript import NativeTranscript
 from .private_registry_guard import RegistryPrivacy

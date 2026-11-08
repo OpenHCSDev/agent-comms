@@ -7,9 +7,12 @@ from abc import ABC, abstractmethod
 import time
 from dataclasses import dataclass, field, replace
 
-from . import channels
-from .channel_targets import ChannelTarget, DeclaredTag, Tag
-from .channels import (
+from .messaging.channel_targets import (
+    ChannelTarget,
+    DeclaredTag,
+    Tag,
+)
+from .messaging.channels import (
     BuiltinChannelView,
     Channel,
     Channels,
@@ -20,6 +23,7 @@ from .channels import (
 )
 from .display_order import ChannelSort, CreatedThreadSort, NameChannelSort, ThreadSort
 from .errors import RelationViolationError, UnknownChannelError
+from .messaging.channels import RetiredTagChannel
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,7 +229,7 @@ class CatalogDocument(CatalogPreferences):
             return preference.channel(TagChannel, target, frozenset({tag}))
         if target in activity.channels:
             preference = self.preferences.get(target, ChannelPreferences())
-            return preference.channel(channels.RetiredTagChannel, target, frozenset({tag}))
+            return preference.channel(RetiredTagChannel, target, frozenset({tag}))
         raise UnknownChannelError(f"Unknown channel: {target!r}")
 
     def targets_for(self, tags: frozenset[str]) -> frozenset[str]:

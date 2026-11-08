@@ -13,7 +13,7 @@ from agent_comms.nominal.field_codec import RootId, ThreadLookup
 from .cohort_schema import AcceptanceFrontier, CohortDeliveries, CohortTable
 from .coordination.cohort import AcceptedCohort
 from .errors import RelationViolationError
-from .message_bus import MessageBus
+from .messaging.message_bus import MessageBus
 
 
 async def _accept_visible_deliveries(

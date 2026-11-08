@@ -1,9 +1,10 @@
-"""Delivery and history over the canonical sequence-keyed bus."""
-
 from __future__ import annotations
 
 import inspect
-from abc import ABC, abstractmethod
+from abc import (
+    ABC,
+    abstractmethod,
+)
 from collections.abc import (
     Awaitable,
     Callable,
@@ -12,57 +13,77 @@ from collections.abc import (
     Mapping,
     Sequence,
 )
-from contextlib import AbstractContextManager, aclosing, contextmanager
+from contextlib import (
+    AbstractContextManager,
+    aclosing,
+    contextmanager,
+)
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_comms.activity_clocks import ActivityClocks
-from agent_comms.agent_inbox import TakenInputCursor
-from agent_comms.bus import Bus, BusSnapshot
-from agent_comms.bus_route_counts import HeldUnseenCounts
-from agent_comms.catalog_document import CatalogAccess
-from agent_comms.catalog_store import ChannelCatalog
-from agent_comms.channel_targets import ChannelTarget, NamedTarget
-from agent_comms.channels import AnyChannel, Channel
-from agent_comms.child_process import AsyncWork
-from agent_comms.context_segments.awareness import AwarenessSegment
-from agent_comms.coordination.coordinator import Coordination
-from agent_comms.historical_views import HistoryArchive
-from agent_comms.message_page import DisplayedMessagePage, InboxPage, MessagePageRequest, PageBounds
-from agent_comms.message_reference import (
+from ..activity_clocks import ActivityClocks
+from ..agent_inbox import TakenInputCursor
+from .bus import (
+    Bus,
+    BusSnapshot,
+)
+from .bus_route_counts import HeldUnseenCounts
+from ..catalog_document import CatalogAccess
+from ..catalog_store import ChannelCatalog
+from .channel_targets import (
+    ChannelTarget,
+    NamedTarget,
+)
+from .channels import (
+    AnyChannel,
+    Channel,
+)
+from ..child_process import AsyncWork
+from ..context_segments.awareness import AwarenessSegment
+from ..coordination.coordinator import Coordination
+from ..historical_views import HistoryArchive
+from .message_page import (
+    DisplayedMessagePage,
+    InboxPage,
+    MessagePageRequest,
+    PageBounds,
+)
+from .message_reference import (
     FirstUnreadStart,
     InboxStart,
     NewestUnreadStart,
 )
-from agent_comms.watch_phase import WatchPhase
-from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.peer_relevance import Prioritized
-from agent_comms.publisher import Publisher
-from agent_comms.read_basis import (
+from ..nominal.declared_family import DeclaredFamily
+from ..peer_relevance import Prioritized
+from ..publisher import Publisher
+from .read_basis import (
     AnonymousViewer,
     DisplayViewer,
     ListedDeliveries,
     NamedViewer,
     ReadCursor,
 )
-from agent_comms.read_ledger import ReadDocument, ReadLedger
-from agent_comms.read_selection import CapturedSelection
-from agent_comms.registry.registry_document import RegistrySnapshot
-from agent_comms.routing import DeliveryScope
-from agent_comms.storage.maintenance_barrier import (
+from .read_ledger import (
+    ReadDocument,
+    ReadLedger,
+)
+from .read_selection import CapturedSelection
+from ..registry.registry_document import RegistrySnapshot
+from ..routing import DeliveryScope
+from ..storage.maintenance_barrier import (
     MaintenanceBarrier,
     MaintenanceHeldError,
 )
-
-from .watched import FileSource
+from ..watch_phase import WatchPhase
+from ..watched import FileSource
 
 if TYPE_CHECKING:
-    from agent_comms.comms import Comms
-    from agent_comms.registry.registration import Registration
-    from agent_comms.registry.threads import Thread
-    from agent_comms.relationships import PeerRelation
+    from ..comms import Comms
+    from ..registry.registration import Registration
+    from ..registry.threads import Thread
+    from ..relationships import PeerRelation
 
 
 class Watch(AsyncWork, WatchPhase, DeclaredFamily, ABC):

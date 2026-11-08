@@ -30,7 +30,7 @@ from ..working_memory_annotations import WorkingMemoryAnnotations
 
 if TYPE_CHECKING:
     from ..comms import Comms
-    from agent_comms.message_bus import Watch
+    from ..messaging.message_bus import Watch
     from agent_comms.service_passes import ServicePassStore
 
 Result = TypeVar("Result")

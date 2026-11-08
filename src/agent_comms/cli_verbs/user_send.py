@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from agent_comms.channel_targets import CommandTarget
+from ..messaging.channel_targets import CommandTarget
 from agent_comms.cli_commands import UserMessageSentResult
 from agent_comms.cli_commands import WorktreeArgument
 from agent_comms.cli_result import CliResult

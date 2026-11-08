@@ -11,8 +11,8 @@ from .projection_source import ProducedRow, ProjectionSource
 from .storage.typed_table import TypedRow
 
 if TYPE_CHECKING:
-    from .channels import Channel
-    from .messages import Message
+    from .messaging.channels import Channel
+    from .messaging.messages import Message
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,8 +20,8 @@ class ChannelActivity(TypedRow, ProjectionSource):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .bus_activity_index import BusActivityIndex
-        from .bus_display_index import BusDisplayIndex
+        from .messaging.bus_activity_index import BusActivityIndex
+        from .messaging.bus_display_index import BusDisplayIndex
         return (BusActivityIndex, BusDisplayIndex)
 
     last_message: float = 0

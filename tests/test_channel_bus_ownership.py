@@ -5,7 +5,7 @@ from agent_comms.projects.checkouts import Checkout
 from contextlib import AsyncExitStack
 from dataclasses import replace
 
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.messaging.channel_targets import CommandTarget
 from conftest import accept_initial
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.notification_progress import SentProgress
@@ -44,7 +44,7 @@ def test_channel_observer_keeps_bounded_pointers_after_ui_ack(tmp_path):  # noqa
     import json
 
     from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.message_reference import MessageReference
+    from agent_comms.messaging.message_reference import MessageReference
 
     root, root_id, comms, initial, _people = _root(tmp_path, mentioned=True)
     observer = comms.registry.require("alpha")

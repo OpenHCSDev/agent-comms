@@ -12,7 +12,7 @@ from agent_comms.comms import wire
 from agent_comms.coordination.session import NativeCapture
 from agent_comms.envelope_claim_transitions import NativeClaim, WakeClaims
 from agent_comms.nominal.field_codec import ClaimId, InputId, TurnId
-from agent_comms.messages import ClaimNoticeKind
+from agent_comms.messaging.messages import ClaimNoticeKind
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.registry.threads import NativeThread
 

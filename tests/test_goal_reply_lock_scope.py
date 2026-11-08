@@ -9,10 +9,10 @@ from functools import partial
 
 import pytest
 
-from agent_comms.bus import Bus
+from agent_comms.messaging.bus import Bus
 from agent_comms.input_key import BusInputKey
-from agent_comms.bus_publication import Delivered
-from agent_comms.bus_tables import ReceivedSource
+from agent_comms.messaging.bus_publication import Delivered
+from agent_comms.messaging.bus_tables import ReceivedSource
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.coordination.errors import StaleFence
 from agent_comms.nominal.field_codec import GoalWaitId, TurnId
@@ -26,7 +26,10 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.planning.goal_waits import GoalWaitReview, NoGoalWait, RecordedGoalWait
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.messages import ConversationRole, NoticeRole
+from agent_comms.messaging.messages import (
+    ConversationRole,
+    NoticeRole,
+)
 from agent_comms.storage.store_files import store_lock_path
 from agent_comms.thread_text import GivenThreadText
 from agent_comms.thread_status import StoppedThreadStatus

@@ -58,7 +58,7 @@ import pytest
 
 
 from agent_comms.change_report import FileLine, NamedRepository
-from agent_comms.channel_targets import TeammatesTag
+from agent_comms.messaging.channel_targets import TeammatesTag
 from agent_comms.team.order import TeamContext, OrderFile
 from agent_comms.team.standing import Unjudged
 from agent_comms.team_heartbeat import TeamObservation

@@ -11,7 +11,7 @@ from agent_comms.audience_manifest import AudiencedMessage, freeze_audience
 from agent_comms.frozen_recipient import FrozenRecipient
 from agent_comms.nominal.field_codec import ThreadLookup
 from agent_comms.mentions import ThreadMention
-from agent_comms.messages import (
+from agent_comms.messaging.messages import (
     AckKind,
     HandoffKind,
     InfoKind,

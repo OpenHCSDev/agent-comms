@@ -65,7 +65,7 @@ from .acp_failure import NativeTurnError
 from .acp_request_consumer import AcpRequestConsumer
 from .active_route import ActiveRoute
 from .agent_backend import CompactionOutcome
-from .channel_targets import NamedTarget
+from .messaging.channel_targets import NamedTarget
 from .cohort_foreground import _accept_visible_deliveries
 from .comms import Comms, wire
 from .controller import (
@@ -83,7 +83,7 @@ from .config_options import ConfigOptions
 from .owner_launch import RetainedOwnerLaunch
 from .input_effects import InputEffects
 from .launch_root import LaunchRoot, started
-from .message_bus import MessageBus
+from .messaging.message_bus import MessageBus
 from .publisher import ResponseWrites
 from .queued_input import DeliveredInput
 from .runtime_server import RuntimeServer

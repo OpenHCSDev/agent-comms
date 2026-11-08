@@ -1,5 +1,5 @@
 """Only a turn's opening DMs receive its final; channels always require explicit sends."""
-from agent_comms.bus_tables import AuthoredAnswers
+from agent_comms.messaging.bus_tables import AuthoredAnswers
 
 import json
 import sqlite3
@@ -23,8 +23,20 @@ from agent_comms.connector_caller import DirectorCaller
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.registry.threads import NativeThread
 from agent_comms.harness_delivery_states import DeliveredOutcome
-from agent_comms.messages import AckKind, AlertKind, HandoffKind, InfoKind, Message, MessageKind, NoticeRole, QuestionKind
-from agent_comms.channel_targets import TeammatesTag, ThreadTarget
+from agent_comms.messaging.messages import (
+    AckKind,
+    AlertKind,
+    HandoffKind,
+    InfoKind,
+    Message,
+    MessageKind,
+    NoticeRole,
+    QuestionKind,
+)
+from agent_comms.messaging.channel_targets import (
+    TeammatesTag,
+    ThreadTarget,
+)
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.turn_digests import LastTurns
 from agent_comms.registry.registration import Registration

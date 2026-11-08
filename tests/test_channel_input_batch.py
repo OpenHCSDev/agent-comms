@@ -9,7 +9,10 @@ from agent_comms.channel_input_batch import InputBatch
 from agent_comms.nominal.field_codec import InputId
 from agent_comms.input_key import AcpInputKey
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.messages import Message, InfoKind
+from agent_comms.messaging.messages import (
+    Message,
+    InfoKind,
+)
 from stored_inputs import stored_inputs
 from agent_comms.registry.threads import NativeThread
 

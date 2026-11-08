@@ -3,8 +3,8 @@
 from agent_comms.notification_assignment import NotificationSelection
 from agent_comms.notification_evidence import AllOutcomes, OwnerOutcomes
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.channel_targets import CommandTarget
-from agent_comms.messages import Message
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.messages import Message
 
 import sqlite3
 import sys
@@ -12,7 +12,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.channels import AnyChannel
+from agent_comms.messaging.channels import AnyChannel
 from agent_comms.comms import wire
 from agent_comms.coordination.errors import ReloadRequired, StaleRevision
 from agent_comms.coordination.coordinator import Coordination

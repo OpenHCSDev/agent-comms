@@ -8,7 +8,7 @@ from threading import Event
 
 import pytest
 
-from agent_comms.bus import Bus
+from agent_comms.messaging.bus import Bus
 from agent_comms.comms import Comms, wire
 from agent_comms.cli import build_parser
 from agent_comms.context_store import ContextStore

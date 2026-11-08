@@ -11,9 +11,9 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from agent_comms.nominal import field_codec
 
-from .bus import Bus
-from .bus_tables import MessageIdentitySource
-from .channel_targets import CommandTarget
+from .messaging.bus import Bus
+from .messaging.bus_tables import MessageIdentitySource
+from .messaging.channel_targets import CommandTarget
 from .coordination.database import CoordinationStore, ReadableStore
 from .coordination.tables.harness_deliveries import HarnessDelivery
 from .errors import RelationViolationError
@@ -34,8 +34,8 @@ from .input_key import InputKey, InputKeyText, TurnInputKey
 from .input_origin import HarnessAttemptOrigin, InputOrigin, UnattributedInputOrigin
 from .lifecycle_capability import Unresolved
 from .storage.locked_store import CompleteInputReader, DocumentChange, PublishedProperty
-from .message_reference import MessageReference
-from .messages import MessageInput
+from .messaging.message_reference import MessageReference
+from .messaging.messages import MessageInput
 from .native_input_proof import NativeContextProof
 from .reported_turn import ReportedTurnState
 from .tool_result import ToolResult
@@ -52,7 +52,7 @@ from .storage.typed_table import (
 )
 
 if TYPE_CHECKING:
-    from .bus import BusReader
+    from .messaging.bus import BusReader
     from .channel_input_batch import SingleInputBatch
     from .private_registry_guard import RegistryPrivacy
     from .registry.registry_document import RegistryEntry, RegistrySnapshot

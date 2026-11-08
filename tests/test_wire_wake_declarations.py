@@ -3,7 +3,7 @@
 import asyncio
 from contextlib import aclosing
 
-from agent_comms.bus import Bus
+from agent_comms.messaging.bus import Bus
 from agent_comms.storage.locked_store import DurableFile, WireWakeFile
 from agent_comms.storage.store_files import store_lock_path
 

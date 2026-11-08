@@ -11,7 +11,10 @@ from .assignment_states import AssignmentState
 from .coordination.tables.publications import PublicationEvidence
 from .diagnostics import record_terminal_failure
 from .nominal.field_codec import AssignmentId, FieldCodec, InputId
-from .messages import AlertKind, NoticeRole
+from .messaging.messages import (
+    AlertKind,
+    NoticeRole,
+)
 from .send_result import SendResult
 from .turn_failure import BackendFailed
 from .turn_outcome import TurnOutcome

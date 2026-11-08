@@ -18,7 +18,7 @@ from .errors import RelationViolationError
 from .nominal.field_codec import AcpSessionId, InputId, TurnId
 from .input_attempt import InputAlreadyCleared, MissingInput
 from .input_key import InputKey
-from .messages import Message
+from .messaging.messages import Message
 from .ordinary_turn_rules import UnboundOrdinaryInputRule, UnconsumedDependencyRule
 from .reservation_rules import ReservationViolationError
 from .routing import NoTurnRouting, TurnRouting

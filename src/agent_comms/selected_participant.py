@@ -30,18 +30,21 @@ from .coordination.coordinator import Coordination
 from .cursor_publication import CursorDelivery
 from .errors import RelationViolationError
 from .nominal.field_codec import TurnId, RootId, ThreadLookup
-from .message_bus import MessageBus
-from .message_reference import MessageReference
+from .messaging.message_bus import MessageBus
+from .messaging.message_reference import MessageReference
 from .native_arguments import SelectedModel
 from .native_attestation import ObservedAttestation
 from .native_input_owner import ParticipantOwner, RegistryOwner
 from .notification_assignment import NotificationAssignment
-from agent_comms.message_notification import NotificationWindow
+from .messaging.message_notification import NotificationWindow
 from agent_comms.notification_assignment import NotificationAssignmentRead
 from .participant_store import ParticipantSnapshot
 from .pi_events import TurnContextObserved
 from .notification_evidence import OwnerOutcomes
-from .message_notification import MessageNotification, SentMessageOutcome
+from .messaging.message_notification import (
+    MessageNotification,
+    SentMessageOutcome,
+)
 from .publisher import ParticipantPublisher
 from .selected_source_batch import SelectedSource, SelectedSourceBatch
 from .turn_phase import PreparingPhase, TurnPhase

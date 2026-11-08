@@ -39,8 +39,11 @@ from .response_policy import CollectivePolicy, InformationalPolicy, ResponsePoli
 
 if TYPE_CHECKING:
     from .child_process import ProcessIdentity
-    from .messages import Message
-    from .read_ledger import ReadDocument, ReadLedger
+    from .messaging.messages import Message
+    from .messaging.read_ledger import (
+    ReadDocument,
+    ReadLedger,
+)
     from .registry.threads import Thread
     from .registry_provenance import RegistryProvenance
 
@@ -628,8 +631,8 @@ class ThreadRole(DeclaredFamily, ProjectionSource, affix="ThreadRole"):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .bus_activity_index import BusActivityIndex
-        from .bus_display_index import BusDisplayIndex
+        from .messaging.bus_activity_index import BusActivityIndex
+        from .messaging.bus_display_index import BusDisplayIndex
         return (BusActivityIndex, BusDisplayIndex)
 
 

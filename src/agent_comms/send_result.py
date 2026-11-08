@@ -7,7 +7,7 @@ from typing import Annotated, Literal
 
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import MessageId, WireName
-from .messages import Message
+from .messaging.messages import Message
 from .tool_result import ToolResult
 from .transcript_events import SentTranscript
 

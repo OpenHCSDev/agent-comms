@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.attempt_recovery import RecoveryMonitorCapability, VerifiedOwnerLoss
-from agent_comms.bus import Bus
+from agent_comms.messaging.bus import Bus
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.storage.private_path import FileRevision
 from agent_comms.cli import CliInvocation
