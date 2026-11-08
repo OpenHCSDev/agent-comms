@@ -36,7 +36,7 @@ from agent_comms.message_reference import (
     InboxStart,
     NewestUnreadStart,
 )
-from agent_comms.native_build_inputs import GitLaunch
+from agent_comms.watch_phase import WatchPhase
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.peer_relevance import Prioritized
 from agent_comms.publisher import Publisher
@@ -52,7 +52,6 @@ from agent_comms.read_selection import CapturedSelection
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.routing import DeliveryScope
 from agent_comms.storage.maintenance_barrier import (
-    FreshIngress,
     MaintenanceBarrier,
     MaintenanceHeldError,
 )
@@ -66,7 +65,7 @@ if TYPE_CHECKING:
     from agent_comms.relationships import PeerRelation
 
 
-class Watch(AsyncWork, FreshIngress, DeclaredFamily, ABC):
+class Watch(AsyncWork, WatchPhase, DeclaredFamily, ABC):
     """Observe, then apply the result while the bus is open.
 
     A hold is waited out on the service's own loop, where its stop cancels the wait. Waiting
@@ -76,12 +75,6 @@ class Watch(AsyncWork, FreshIngress, DeclaredFamily, ABC):
 
     @abstractmethod
     async def run(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None: ...
-
-    def enter_phase[Result](self, comms: Comms, operation: Callable[[], Result]) -> Result:
-        """Refuse a new watch phase before its effects, without borrowing a store lock."""
-        GitLaunch.enter_phase()
-        self.require_entry_open(comms.root)
-        return operation()
 
     def failed(self, opened_wire: Callable[[], AbstractContextManager[Comms]],
                error: Exception) -> None:
@@ -94,7 +87,7 @@ class JoinedWatch(Watch):
     async def run(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
         with opened_wire() as comms:
             await comms.bus.when_open(partial(
-                self.enter_phase, comms, partial(self.watch_pass, opened_wire)))
+                self.enter_phase, comms.root, partial(self.watch_pass, opened_wire)))
 
     @abstractmethod
     def watch_pass(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None: ...
@@ -106,11 +99,11 @@ class PreparedWatchPass[Prepared, Observed](Watch):
     async def run(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
         with opened_wire() as comms:
             prepared = await comms.bus.when_open(partial(
-                self.enter_phase, comms, partial(self.prepare, comms)))
+                self.enter_phase, comms.root, partial(self.prepare, comms)))
             observed = await self.run_async(partial(
-                self.enter_phase, comms, partial(self.observe, comms, prepared)))
+                self.enter_phase, comms.root, partial(self.observe, comms, prepared)))
             await comms.bus.when_open(partial(
-                self.enter_phase, comms, partial(self.pass_body, comms, observed)))
+                self.enter_phase, comms.root, partial(self.pass_body, comms, observed)))
 
     @abstractmethod
     def prepare(self, comms: Comms) -> Prepared: ...

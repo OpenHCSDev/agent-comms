@@ -96,6 +96,9 @@ async def test_completed_thread_read_waits_for_changed_revision(comms):
 
 
 class CountReads:
+    def after_read(self, service):
+        """This family test counts revision-driven reads, not asynchronous preparation."""
+
     def read(self, comms, revision):
         self.visits += 1
         yield ObservationPending()
@@ -103,7 +106,7 @@ class CountReads:
 
 @pytest.mark.parametrize('member,interest,own_field,unrelated_field', [
     (SidebarReading, ObserveSidebar(Checkout(Path('worktree')), True, True), 'bus_seq', 'team_frames'),
-    (TeamHudReading, ObserveTeamHud(), 'team_frames', 'bus_seq'),
+    (TeamHudReading, ObserveTeamHud(), 'team_frames', 'external_transcripts'),
     (NotificationReading, ObserveNotifications(frozenset()), 'reads', 'team_frames'),
     (ThreadReading, ObserveThreads(frozenset()), 'bus_seq', 'team_frames'),
 ])
@@ -113,7 +116,8 @@ async def test_reading_family_only_advances_for_its_declared_view(
     marker = tmp_path / 'changed-source'
     marker.write_text('changed')
     file_revision = FileRevision.capture(marker).revisions()
-    changes = {'bus_seq': 1, 'team_frames': file_revision, 'reads': file_revision}
+    changes = {'bus_seq': 1, 'team_frames': file_revision, 'reads': file_revision,
+               'external_transcripts': file_revision}
     counted = type(f'Counted{member.__name__}', (CountReads, member), {})
     reading = counted(interest)
     reading.visits = 0

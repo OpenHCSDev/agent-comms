@@ -60,8 +60,12 @@ class NotificationEvidenceView(RevisionView):
     """Assignment and human read evidence, independent of timed status refreshes."""
 
 
-class TeamFramesView(RevisionView, declared_name="team_frames"):
-    """The heartbeat's newest frame per teammate; nothing else feeds the team page."""
+class TeamBoardView(StatusSourced, RevisionView):
+    """Store changes requiring board preparation, excluding its own publications and clock."""
+
+
+class TeamFramesView(TeamBoardView, declared_name="team_frames"):
+    """The retained board and the source revisions that require its next preparation."""
 
 
 class BusSourceView(RevisionView):
