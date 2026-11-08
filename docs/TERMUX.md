@@ -20,7 +20,10 @@ including Maturin and Pydantic Core. Maturin must have a compatible binary wheel
 the installer does not silently compile that build tool. Other dependencies without
 a matching wheel may still compile. Termux resolves current compatible releases and
 tracked branches from the stack's declared constraints rather than retaining older
-desktop lock selections. Cargo uses one build job by default and keeps
+desktop lock selections. uv resolves the entire dependency graph; pip installs that
+export without resolving it again, then checks the installed dependencies.
+Previous generated native locks are retained before updating the source checkout.
+Cargo uses one build job by default and keeps
 a shared build cache for dependency resolution and installation.
 Build tools remain installed. The source, virtual environment, Cargo target cache
 and pip wheel cache remain under `~/.local/share/toad-comms`; uv also retains its

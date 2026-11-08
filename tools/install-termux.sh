@@ -21,10 +21,18 @@ pkg install -y python python-pip uv git openssh clang make cmake ninja rust \
     pkg-config libffi openssl libjpeg-turbo zlib python-psutil python-pillow python-numpy
 
 if [[ -d "$source/.git" ]]; then
-    # uv owns the generated lock; never discard edits to the source or a conflicting lock.
+    # uv owns the generated lock; source edits are never discarded.
     if ! git -C "$source" diff --quiet HEAD -- . ':!stack/uv.lock'; then
         printf 'Source has local edits: %s. Keeping them; installation stopped.\n' "$source" >&2
         exit 1
+    fi
+    if ! git -C "$source" diff --quiet HEAD -- stack/uv.lock; then
+        # Keep the previous native resolution before restoring the tracked input for Git.
+        # Otherwise a later main changing uv.lock cannot fast-forward this checkout.
+        previous_lock="$(mktemp "$installation/uv.lock.XXXXXXXX")"
+        cp "$source/stack/uv.lock" "$previous_lock"
+        git -C "$source" restore --source=HEAD -- stack/uv.lock
+        printf 'Previous native lock retained: %s\n' "$previous_lock"
     fi
     git -C "$source" fetch origin main
     git -C "$source" merge --ff-only FETCH_HEAD
@@ -52,7 +60,9 @@ uv export --project . --python "$PREFIX/bin/python" --no-managed-python \
     --index "$termux_wheels" --index-strategy unsafe-best-match \
     --no-build-package maturin \
     --upgrade --output-file "$installation/requirements.txt" >/dev/null
-.venv/bin/python -m pip install --prefer-binary -r "$installation/requirements.txt"
+# uv resolved the complete graph, including source overrides. pip installs that answer;
+# resolving again treats a branch URL and its selected commit as competing dependencies.
+.venv/bin/python -m pip install --no-deps --prefer-binary -r "$installation/requirements.txt"
 .venv/bin/python -m pip check
 .venv/bin/python -c 'import toad.cli; print("Toad imports successfully.")'
 
