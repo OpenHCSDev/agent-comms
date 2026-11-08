@@ -350,7 +350,7 @@ class BusDeliveryReadersPhase(VirtualBusPhase):
         (
             "src/agent_comms/wake_candidate_index.py",
             "src/agent_comms/notification_assignment.py",
-            "src/agent_comms/read_ledger.py",
+            "src/agent_comms/messaging/read_ledger.py",
             "src/agent_comms/cursor_publication.py",
             "src/agent_comms/planning/goal_waits.py",
         ),
@@ -371,7 +371,7 @@ class BusHistoryReadersPhase(VirtualBusPhase):
             "src/agent_comms/active_route.py",
             "src/agent_comms/acp.py",
             "src/agent_comms/comms.py",
-            "src/agent_comms/message_bus.py",
+            "src/agent_comms/messaging/message_bus.py",
             "scripts/attach_historical_views.py",
         ),
     )
@@ -908,7 +908,7 @@ class RecordsPhase(RemainingSlopPhase):
             PatternAbsent(
                 r"^\s*nonlocal\b",
                 (
-                    "src/agent_comms/read_ledger.py",
+                    "src/agent_comms/messaging/read_ledger.py",
                     "src/agent_comms/relationships.py",
                     "src/agent_comms/shared_ledger.py",
                     "src/agent_comms/input_disposition.py",

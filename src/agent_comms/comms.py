@@ -22,12 +22,12 @@ from .errors import UnregisteredThreadError
 from .planning.goal_management import Goals
 from .history_views import HistoryViews
 from .storage.maintenance_barrier import MaintenanceBarrier
-from .message_bus import MessageBus
-from .message_page import InboxPage
+from .messaging.message_bus import MessageBus
+from .messaging.message_page import InboxPage
 from .message_reference import InboxStart
 from .agent_inbox import TakenInputStart
 from .messages import Message
-from .messaging import Messaging
+from .messaging.sending import Messaging
 from .execution.owner_lifecycle import OwnerLifecycle
 from .publisher import OwnerPublisher
 from .relationships import ThreadRelationships

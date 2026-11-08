@@ -12,7 +12,11 @@ from agent_comms.agent_inbox import InboxWait, NoWait, TakenInputPosition, Taken
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.channels import AnyChannel
 from agent_comms.input_attempt import UnresolvedInputReference
-from agent_comms.message_page import DisplayedMessagePage, InboxPage, PageBounds
+from ...messaging.message_page import (
+    DisplayedMessagePage,
+    InboxPage,
+    PageBounds,
+)
 from agent_comms.messages import Message
 from agent_comms.nominal.field_codec import GoalId, NullMember, WireOmitDefault
 from agent_comms.planning.goal_waits import NoStandbyReview, StandbyReview

@@ -28,7 +28,7 @@ from .nominal.field_codec import (
 from .storage.locked_store import DocumentChange, RegistryFile, RootFile
 from .storage.maintenance_barrier import CarriedDocument
 from .tool_result import ToolResult
-from .message_page import (
+from .messaging.message_page import (
     NEWEST_PAGE,
     ConversationMessagePageRequest,
     MessagePage,
@@ -58,7 +58,7 @@ from .read_basis import (
     NamedViewer,
     NoDisplaySelection,
 )
-from .read_ledger import ReadLedger
+from .messaging.read_ledger import ReadLedger
 from .recorded_bus import RecordedBusIdentity
 from .registry.registration import Registration
 from .registry.registry_document import RegistrySnapshot

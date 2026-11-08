@@ -45,7 +45,7 @@ from ..nominal.field_codec import InputId, RecordMember
 from ..input_disposition import InputDispositions
 from ..launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime, RestartEnvironment, SetVariable, ThreadLaunch
 from ..storage.maintenance_barrier import MaintenanceBarrier
-from ..message_bus import MessageBus
+from ..messaging.message_bus import MessageBus
 from ..native_arguments import (
     ConfiguredBinary,
     InheritedArguments,
@@ -72,7 +72,7 @@ from ..registry.threads import NativeThread, Thread
 
 if TYPE_CHECKING:
     from ..planning.goal_management import Goals
-    from ..messaging import Messaging
+    from ..messaging.sending import Messaging
 
 _LOG = logging.getLogger(__name__)
 

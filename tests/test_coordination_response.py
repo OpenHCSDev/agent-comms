@@ -33,7 +33,7 @@ from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.nominal.field_codec import AssignmentId, InputId, RootId, ThreadLookup, TurnId
 from agent_comms.lifecycle_capability import Active, Complete
-from agent_comms.message_bus import MessageBus
+from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.assignment_states import CompletedAssignment
 from agent_comms.coordination.results import AlreadyApplied
 from agent_comms.execution_states import CompletedExecution

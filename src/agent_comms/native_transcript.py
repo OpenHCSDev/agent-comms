@@ -19,7 +19,7 @@ from .native_input_proof import NativeContextJournal, NativeContextProof, Native
 if TYPE_CHECKING:
     from .native_output import NativeRecordLocation
     from .rule_deal import Speaking, Voice
-    from .read_ledger import ReadLedger
+    from .messaging.read_ledger import ReadLedger
     from .thread_identity import RecordedThreadIncarnation
 
 from agent_comms.native_session_files import NativeSessionFiles

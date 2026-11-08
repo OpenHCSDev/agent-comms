@@ -18,7 +18,7 @@ from .agent_events import RuntimeInfoObservation
 from .cli_protocol import EarlierItems
 from .external_transcript import ExternalPage, ExternalTranscript
 from .message_reference import MessageReference
-from .messaging import Messaging
+from .messaging.sending import Messaging
 from .recorded_time import EventTime, UnrecordedEventTime
 from .transcript_events import (
     LiveTextTranscript,

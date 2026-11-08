@@ -27,7 +27,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDispositions, InputDocument
 from agent_comms.input_key import BusInputKey
-from agent_comms.bus_read import OwnerReadRuntimeRequest
+from agent_comms.messaging.bus_read import OwnerReadRuntimeRequest
 from agent_comms.transport.tools.orders import ServedInputDeliveryRead
 from agent_comms.transport.tools.reads import InputDeliveryRead
 from agent_comms.transport.runtime_request import RuntimeRequest

@@ -26,7 +26,10 @@ from agent_comms.coordination.tables.executions import WireOrigin
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim, WakeClaim
 from agent_comms.nominal.field_codec import ClaimId, TurnId
-from agent_comms.message_page import ConversationMessagePageRequest, MessagePageRequest
+from agent_comms.messaging.message_page import (
+    ConversationMessagePageRequest,
+    MessagePageRequest,
+)
 from agent_comms.messages import ClaimMessage, ClaimNoticeKind
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.read_basis import AllChannelDisplayScope, DMDisplayScope

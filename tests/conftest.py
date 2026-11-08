@@ -43,7 +43,7 @@ from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.maintenance_barrier import (
     MaintenanceBarrier, MaintenanceClaimHolder, MaintenanceHolder, MaintenanceOperator,
 )
-from agent_comms.message_bus import MessageBus
+from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole
 from agent_comms.native_package import pinned_location, pinned_native_package
 from agent_comms.native_tool_transport import ToolListener

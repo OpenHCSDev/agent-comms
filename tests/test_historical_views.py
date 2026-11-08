@@ -21,12 +21,15 @@ from agent_comms.nominal.field_codec import InputId
 from agent_comms.execution.turn_item import FreshNativeId
 from agent_comms.historical_views import HistoricalMessage, HistoryArchive, HistorySource
 from agent_comms.installer.backup import bus_files
-from agent_comms.message_page import MessagePageRequest, PageBounds
+from agent_comms.messaging.message_page import (
+    MessagePageRequest,
+    PageBounds,
+)
 from agent_comms.messages import Message
 from agent_comms.page_traversal import HistoryCursor
 from agent_comms.historical_views import HistoricalSelection
 from agent_comms.read_basis import AllChannelDisplayScope, ChannelConversation, ChannelSelection, ConversationCursor, DMSelection, NamedViewer, ReadCursor
-from agent_comms.read_ledger import ReadLedger
+from agent_comms.messaging.read_ledger import ReadLedger
 from agent_comms.routing import MessageRoute, TurnRouting
 from agent_comms.transcript_routes import DisplayText
 from agent_comms.session_file import RegistrySessionLocation

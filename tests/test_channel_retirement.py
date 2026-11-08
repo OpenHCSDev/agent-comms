@@ -13,7 +13,7 @@ from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.channels import AnyOfMatch, ViewPredicate, ActivityView, ParticipantsView
 from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.message_page import PageBounds
+from agent_comms.messaging.message_page import PageBounds
 from agent_comms.messages import InfoKind, Membership, Message
 from agent_comms.page_traversal import LiveCursor
 from bus_history import read_history

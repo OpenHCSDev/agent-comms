@@ -18,7 +18,7 @@ class ActivityMaximum(BusProjectionTables, declared_name=None):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .bus_display_index import BusDisplayIndex
+        from .messaging.bus_display_index import BusDisplayIndex
 
         return (BusActivityIndex, SentActivity, BusDisplayIndex)
 

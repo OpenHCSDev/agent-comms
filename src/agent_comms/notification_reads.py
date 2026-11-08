@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
-from .bus_read import UiRead
+from .messaging.bus_read import UiRead
 from .comms import Comms
 from .historical_views import HistorySource
 from .page_traversal import HistorySourceKey

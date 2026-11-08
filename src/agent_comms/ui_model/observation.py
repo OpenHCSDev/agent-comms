@@ -46,7 +46,11 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.active_route import CommsRoute
 from agent_comms.activity import ObservedActivity
-from agent_comms.bus_read import CapturesTranscriptPage, OwnerScopedRead, UiRead
+from ..messaging.bus_read import (
+    CapturesTranscriptPage,
+    OwnerScopedRead,
+    UiRead,
+)
 from agent_comms.child_process import HelperStart, SpawnedHelper, join_retirement
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination

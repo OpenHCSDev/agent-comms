@@ -30,7 +30,7 @@ from .coordination.coordinator import Coordination
 from .cursor_publication import CursorDelivery
 from .errors import RelationViolationError
 from .nominal.field_codec import TurnId, RootId, ThreadLookup
-from .message_bus import MessageBus
+from .messaging.message_bus import MessageBus
 from .message_reference import MessageReference
 from .native_arguments import SelectedModel
 from .native_attestation import ObservedAttestation

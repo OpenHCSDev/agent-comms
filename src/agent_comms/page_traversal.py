@@ -19,7 +19,10 @@ from .nominal.field_codec import (
 
 if TYPE_CHECKING:
     from .bus import BusReader
-    from .message_page import MessagePage, PageWindow
+    from .messaging.message_page import (
+        MessagePage,
+        PageWindow,
+    )
     from .messages import Message, MessageKind
     from .read_basis import MessageDisplayScope
 

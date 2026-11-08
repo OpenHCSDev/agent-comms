@@ -12,7 +12,10 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordination.errors import DMPaintedBoundChanged, ReadAgain
 from agent_comms.nominal.field_codec import FieldCodec, TurnId
-from agent_comms.message_page import MessagePageRequest, PageBounds
+from agent_comms.messaging.message_page import (
+    MessagePageRequest,
+    PageBounds,
+)
 from agent_comms.page_traversal import PageCursor
 from agent_comms.presentation import ReadThrough
 from agent_comms.read_basis import (
@@ -23,7 +26,7 @@ from agent_comms.read_basis import (
     NoDisplaySelection,
     ReadCursor,
 )
-from agent_comms.read_ledger import (
+from agent_comms.messaging.read_ledger import (
     NoReadNotice,
     PendingReadNotice,
     ReadDocument,
@@ -326,7 +329,7 @@ def test_all_read_uses_one_watermark_without_sparse_sequences(tmp_path):
 def test_recorded_bus_identity_is_one_member(tmp_path):
     from agent_comms.coordination.errors import DMScopeChanged
     from agent_comms.storage.private_path import FileIdentity, ObservedPath
-    from agent_comms.read_ledger import ReadDocument
+    from agent_comms.messaging.read_ledger import ReadDocument
     from agent_comms.recorded_bus import NoRecordedBus, RecordedBus
 
     comms = prepared(tmp_path)

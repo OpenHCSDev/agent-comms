@@ -46,11 +46,15 @@ from .exporting import WireExportBoundary, WireExportFormat, WireExportLimit, Wi
 from .transport.progress import WireExportObserver
 from .planning.goal_management import Goals
 from .historical_views import ChannelDisplayHistory, ChannelHistory, DMDisplayHistory, DMHistory, HistorySource
-from .message_bus import MessageBus
-from .message_page import NEWEST_PAGE, MessagePage, PageBounds
+from .messaging.message_bus import MessageBus
+from .messaging.message_page import (
+    NEWEST_PAGE,
+    MessagePage,
+    PageBounds,
+)
 from .message_reference import MessageReference
 from .messages import Message
-from .messaging import Messaging
+from .messaging.sending import Messaging
 from agent_comms.message_notification import NotificationWindow
 from .notification_evidence import FirstRecipient, OutcomeViewer, RecipientCursor, RecipientLimit
 from .page_traversal import LiveCursor

@@ -3,7 +3,10 @@
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.channels import AnyChannel
 from agent_comms.comms import Comms
-from agent_comms.message_page import NEWEST_PAGE, PageBounds
+from agent_comms.messaging.message_page import (
+    NEWEST_PAGE,
+    PageBounds,
+)
 from agent_comms.messages import Message
 
 

@@ -1,7 +1,7 @@
 """The claude.ai connector: OAuth in front of an MCP transport over the ToolRequest family."""
 
 
-from agent_comms.bus_read import UiRead
+from agent_comms.messaging.bus_read import UiRead
 from agent_comms.team.standing_rules import ServicePassFailing
 from agent_comms.transcripts import EarlierThan
 from agent_comms.projects.checkouts import Checkout
@@ -52,7 +52,7 @@ from agent_comms.transport.tools.sidebar import (
     CommsUserSendTool,
     ServedRoot,
 )
-from agent_comms.bus_identity import BusIdentityStore
+from agent_comms.messaging.bus_identity import BusIdentityStore
 from agent_comms.connector_caller import (
     CALLER, GrantRefusedError, ReadOnlyConnectorCaller, ScopedUiCaller, UiCaller, UiReadCaller,
 )
@@ -68,7 +68,7 @@ from agent_comms.connector_store import (
 from agent_comms.coordination.errors import TranscriptChanged
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.storage.locked_store import DocumentChange
-from agent_comms.message_bus import WatchPass
+from agent_comms.execution.watch_passes import WatchPass
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, RecordProblems, RootId
 from agent_comms.host_services.connector import ConnectorService
@@ -1298,7 +1298,7 @@ def test_every_session_is_told_how_to_take_its_own_name() -> None:
 
 async def test_connector_reports_the_root_its_core_serves(client, comms):
     """A remote UI keys its observation by the served root, read through the same tools/call."""
-    from agent_comms.bus_identity import BusIdentityStore
+    from agent_comms.messaging.bus_identity import BusIdentityStore
 
     minted = BusIdentityStore.minted_for(comms.root.resolve())
     headers = {"Authorization": f"Bearer {await approved_token(client, comms)}"}
@@ -1321,7 +1321,7 @@ async def test_two_buses_at_one_path_do_not_answer_as_one_bus(tmp_path):
     On 2026-11-07 a session read another machine's bus through a second connector and took
     that bus's thread of its own name for itself; nothing it could ask disagreed.
     """
-    from agent_comms.bus_identity import BusIdentityStore
+    from agent_comms.messaging.bus_identity import BusIdentityStore
 
     one, other = tmp_path / "one", tmp_path / "other"
     for root in (one, other):
@@ -1342,7 +1342,7 @@ async def test_two_buses_at_one_path_do_not_answer_as_one_bus(tmp_path):
 async def test_a_connector_names_its_bus_at_the_handshake(client, comms):
     """A client that learns which bus it reached from a tool call learns it after reading
     something. The one thing that differs between two connectors is said before anything."""
-    from agent_comms.bus_identity import BusIdentityStore
+    from agent_comms.messaging.bus_identity import BusIdentityStore
 
     minted = BusIdentityStore.minted_for(comms.root.resolve())
     headers = {"Authorization": f"Bearer {await approved_token(client, comms)}"}

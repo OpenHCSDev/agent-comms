@@ -83,7 +83,7 @@ from .config_options import ConfigOptions
 from .transport.owner_requests import RetainedOwnerLaunch
 from .input_effects import InputEffects
 from .launch_root import LaunchRoot, started
-from .message_bus import MessageBus
+from .messaging.message_bus import MessageBus
 from .publisher import ResponseWrites
 from .queued_input import DeliveredInput
 from .runtime_server import RuntimeServer

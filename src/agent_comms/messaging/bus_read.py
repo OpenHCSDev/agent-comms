@@ -1,37 +1,43 @@
-"""Read operations share their declaration; callers supply the read authority."""
-
 from __future__ import annotations
 
 import asyncio
-from abc import ABC, abstractmethod
+from abc import (
+    ABC,
+    abstractmethod,
+)
 from dataclasses import dataclass
 from functools import partial
 from typing import cast
 
-
-from .comms import Comms
-from .coordination.errors import StaleFence
-from .coordination.coordinator import Coordination
-from .errors import UnregisteredThreadError
-from .nominal.field_codec import FieldCodec
-from .owner_connection import (
+from ..acp_extension import TranscriptSnapshotUpdate
+from ..comms import Comms
+from ..coordination.coordinator import Coordination
+from ..coordination.errors import StaleFence
+from ..errors import UnregisteredThreadError
+from ..nominal.field_codec import FieldCodec
+from ..owner_connection import (
     OwnerConnection,
     OwnerIdentityChangedError,
     OwnerReading,
     OwnerReplyConnection,
 )
-from .storage.private_path import FileRevision, ObservedPath
-from .transport.runtime_request import AttachedResultRuntimeRequest
-from .read_basis import NoDisplaySelection, ReadAuthority
-from .registry.registry_document import RegistrySnapshot
-from .registry.registry_store import RegistryCut
-from .thread_identity import ThreadIncarnation
-from .registry.threads import Thread
-from .tool_declaration import ToolDeclaration
-from .tool_request import ThreadReadTool
-from .tool_result import ToolResult
-from .acp_extension import TranscriptSnapshotUpdate
-from .transcripts import TranscriptRead
+from ..read_basis import (
+    NoDisplaySelection,
+    ReadAuthority,
+)
+from ..registry.registry_document import RegistrySnapshot
+from ..registry.registry_store import RegistryCut
+from ..registry.threads import Thread
+from ..storage.private_path import (
+    FileRevision,
+    ObservedPath,
+)
+from ..thread_identity import ThreadIncarnation
+from ..tool_declaration import ToolDeclaration
+from ..tool_request import ThreadReadTool
+from ..tool_result import ToolResult
+from ..transcripts import TranscriptRead
+from ..transport.runtime_request import AttachedResultRuntimeRequest
 
 
 class BusRead[Result](ToolDeclaration, ABC):

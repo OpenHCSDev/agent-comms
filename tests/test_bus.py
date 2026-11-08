@@ -22,7 +22,7 @@ from agent_comms.bus import (
     PrivateRecord,
     PublicRecord,
 )
-from agent_comms.bus_route_counts import BusRouteCounts
+from agent_comms.messaging.bus_route_counts import BusRouteCounts
 from agent_comms.bus_publication import Delivered, HumanOrigin, KeyedPublication
 from agent_comms.bus_tables import AnsweredSource, BusSchema, MessageIdentitySource
 from agent_comms.task_attachments.team_pings import TeamUpdateNotice, TeamUpdate

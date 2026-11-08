@@ -1,37 +1,65 @@
-"""Guarded message publication and durable human sender identity."""
-
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import (
+    ABC,
+    abstractmethod,
+)
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-from .bus_publication import AgentOrigin, AutomatedOrigin, HumanOrigin, InitialOrigin
-from .change_report import NoChangeReport, ReportEvidence
-from .channel_targets import CommandTarget, IncarnationThreadTarget, NamedTarget
-from .nominal.field_codec import ThreadLookup
-from .planning.orders import TodoStore
-from .thread_identity import ThreadIncarnation
-from .errors import (
+from ..bus_publication import (
+    AgentOrigin,
+    AutomatedOrigin,
+    HumanOrigin,
+    InitialOrigin,
+)
+from ..change_report import (
+    NoChangeReport,
+    ReportEvidence,
+)
+from ..channel_targets import (
+    CommandTarget,
+    IncarnationThreadTarget,
+    NamedTarget,
+)
+from ..coordination.session import NativeCapture
+from ..errors import (
     CommittedMessageError,
     RelationViolationError,
+    TodoError,
     UnreceivedAnswerError,
     UnregisteredThreadError,
 )
-from .message_bus import MessageBus
-from .message_reference import MessageReference
-from .coordination.session import NativeCapture
-from .external_transcript import ExternalTranscript
-from .execution.turn_item import (
+from ..execution.turn_context import ContextSegment
+from ..execution.turn_item import (
     NoSourceTurn,
     SourceTurn,
 )
-from .messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole, NoticeRole
-from .registry.registration import Registration
-from .send_result import CorrectionComplete, CorrectionFailed, CorrectionResult, SendResult
-from .task_sources import (
+from ..external_transcript import ExternalTranscript
+from .message_bus import MessageBus
+from ..message_reference import MessageReference
+from ..messages import (
+    ConversationRole,
+    InfoKind,
+    Message,
+    MessageKind,
+    MessageRole,
+    NoticeRole,
+)
+from ..nominal.field_codec import ThreadLookup
+from ..planning.goal_management import Goals
+from ..planning.orders import TodoStore
+from ..projects.checkouts import Checkout
+from ..registry.registration import Registration
+from ..registry.threads import Thread
+from ..send_result import (
+    CorrectionComplete,
+    CorrectionFailed,
+    CorrectionResult,
+    SendResult,
+)
+from ..task_sources import (
     CurrentTaskScopeSelection,
     HumanConstraintPin,
     NativeInputConstraintPin,
@@ -41,14 +69,9 @@ from .task_sources import (
     TaskChange,
     TaskScopeSelection,
 )
-from .projects.checkouts import Checkout
-from .registry.threads import Thread
-from .working_memory_policy import AnnotationDisclosureGrant
-from .execution.turn_context import ContextSegment
+from ..thread_identity import ThreadIncarnation
+from ..working_memory_policy import AnnotationDisclosureGrant
 
-if TYPE_CHECKING:
-    from .planning.goal_management import Goals
-from .errors import TodoError
 
 
 class AnswerAuthority(ABC):

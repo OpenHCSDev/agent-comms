@@ -38,7 +38,11 @@ from ...historical_views import (
 from ...history_views import RetiredViews
 from ...importing import ThreadImported
 from ...input_origin import HumanInputOrigin
-from ...message_page import NEWEST_PAGE, MessagePage, PageBounds
+from ...messaging.message_page import (
+    NEWEST_PAGE,
+    MessagePage,
+    PageBounds,
+)
 from ...nominal.declared_family import DeclaredFamily
 from ...nominal.field_codec import ThreadLookup, WireName
 from ...page_traversal import LatestSequence

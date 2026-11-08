@@ -9,7 +9,10 @@ from datetime import datetime
 from functools import cached_property
 from pathlib import Path
 from .agent_activity import AgentActivity, RecordedRecipientActivity
-from .read_ledger import ReadDocument, ReadLedger
+from .messaging.read_ledger import (
+    ReadDocument,
+    ReadLedger,
+)
 from .registry.registry_document import RegistrySnapshot
 from .frozen_recipient import FrozenRecipient
 from .channel_targets import CommandTarget

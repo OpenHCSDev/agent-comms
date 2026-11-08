@@ -29,7 +29,7 @@ from ...runtime_requests import (
     OwnedRead,
     OwnerLiveRead,
 )
-from ...bus_read import (
+from ...messaging.bus_read import (
     CapturesTranscriptPage,
     OwnerScopedRead,
     UiRead,

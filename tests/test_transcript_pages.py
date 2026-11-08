@@ -5,7 +5,7 @@ from agent_comms.transcripts import (
     Through,
     WireTranscriptCursor,
 )
-from agent_comms.bus_read import UiRead
+from agent_comms.messaging.bus_read import UiRead
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.transport.tools.served import invoke_tool
 from conftest import installed_comms, transcript_records

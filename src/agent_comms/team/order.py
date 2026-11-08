@@ -42,7 +42,7 @@ from agent_comms.comms import Comms, wire
 from agent_comms.coordination.errors import DeferredRead
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
-from agent_comms.messaging import TeamReceipts
+from ..messaging.sending import TeamReceipts
 from agent_comms.nominal.field_codec import (
     Argument,
     FieldCodec,

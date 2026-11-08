@@ -47,7 +47,7 @@ from .nominal.field_codec import (
 from .planning.goal_history import RecordedGoalHistory
 from .planning.goals import Goal
 from .manual_compaction_bridge import compact_context
-from .bus_read import (
+from .messaging.bus_read import (
     OwnerReadRuntimeRequest,
     OwnerScopedRead,
 )

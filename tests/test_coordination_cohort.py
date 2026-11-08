@@ -46,7 +46,7 @@ from agent_comms.exporting import (
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.thread_status import ArchivedThreadStatus
 from agent_comms.wake_policy import BoundedTriageWake, FullWake, MessageAudience
-from agent_comms.message_page import PageBounds
+from agent_comms.messaging.message_page import PageBounds
 from agent_comms.registry.threads import NativeThread
 
 pytestmark = pytest.mark.skipif(

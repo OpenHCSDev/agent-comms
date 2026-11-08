@@ -21,13 +21,13 @@ from agent_comms.native_runtime_input import NativeRuntimeTable
 from .frozen_recipient import FrozenRecipient
 from .bus import Bus
 from .bus_publication import Delivered
-from .bus_source_page import CoveragePage
+from .messaging.bus_source_page import CoveragePage
 from .cohort_schema import ClaimBatchAcknowledgements, CohortTable
 from .coordination.cohort import AcceptedCohort, _claim_record
 from .coordination.session import NativeCapture
 from .nominal.field_codec import FieldCodec, RootId, ThreadLookup
 from .historical_native_inputs import HistoricalNativeInput, read_historical_native_inputs
-from .message_bus import MessageBus
+from .messaging.message_bus import MessageBus
 from .native_input_record import NumberNativeColumn, TextNativeColumn, UnrecordedNativeColumn
 from .native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
 from .storage.private_path import FileIdentity, ObservedPath, PresentPath

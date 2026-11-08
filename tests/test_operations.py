@@ -26,7 +26,7 @@ from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.history_views import CallingThreadTarget, NamedThreadTarget
 from agent_comms.launch_runtime import CallingThreadUnavailable, ThreadLaunch
-from agent_comms.message_page import PageBounds
+from agent_comms.messaging.message_page import PageBounds
 from agent_comms.messages import QuestionKind
 from agent_comms.pi_counts import PiCount
 from agent_comms.pi_vocabulary import HighThinkingLevel

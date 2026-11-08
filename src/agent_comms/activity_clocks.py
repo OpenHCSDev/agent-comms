@@ -21,7 +21,7 @@ class ChannelActivity(TypedRow, ProjectionSource):
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
         from .bus_activity_index import BusActivityIndex
-        from .bus_display_index import BusDisplayIndex
+        from .messaging.bus_display_index import BusDisplayIndex
         return (BusActivityIndex, BusDisplayIndex)
 
     last_message: float = 0

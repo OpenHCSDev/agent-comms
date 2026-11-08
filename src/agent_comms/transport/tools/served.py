@@ -69,7 +69,7 @@ from ..request import (
     tool_field,
 )
 from ...acp_extension import CoordinationChangedUpdate
-from ...bus_identity import BusIdentityStore
+from ...messaging.bus_identity import BusIdentityStore
 from ...channel_management import (
     ListTagEdit,
     TagEdit,
@@ -128,7 +128,7 @@ from ...importing import (
 )
 from ...input_origin import HumanInputOrigin
 from ...message_notification import MessageNotification
-from ...message_page import MessagePage
+from ...messaging.message_page import MessagePage
 from ...message_reference import MessageReference
 from ...messages import (
     Message,

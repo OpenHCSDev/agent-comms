@@ -40,7 +40,7 @@ from agent_comms.bus_publication import AgentOrigin, HumanOrigin
 from agent_comms.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.channel_targets import TeammatesTag, CommsTag
-from agent_comms.messaging import TeamReceipts
+from agent_comms.messaging.sending import TeamReceipts
 from agent_comms.team.standing_rules import (
     OwedAnswer,
     StandingRule,
@@ -93,7 +93,7 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_key import AcpInputKey
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.launch_root import LaunchRoot
-from agent_comms.message_page import MessagePageRequest
+from agent_comms.messaging.message_page import MessagePageRequest
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import ConversationRole, InfoKind, Message, NoticeRole, QuestionKind
 from agent_comms.native_arguments import GivenBinary

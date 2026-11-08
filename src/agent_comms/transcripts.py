@@ -24,7 +24,7 @@ from .external_transcript import ExternalTranscript
 from .nominal.field_codec import ContentExclude, FieldCodec, WireName, projected
 from .historical_views import HistorySource
 from .page_traversal import HistorySourceKey
-from .message_bus import MessageBus
+from .messaging.message_bus import MessageBus
 from .message_reference import MessageReference
 from .native_runtime_input import PublishedReplyRevision
 from .native_transcript import NativeTranscript, RecordsCut, SessionCut

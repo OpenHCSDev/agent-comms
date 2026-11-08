@@ -17,7 +17,7 @@ from .cli_result import TargetEditResult
 from .nominal.field_codec import RecordMember
 from .nominal.declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
-from .message_bus import MessageBus
+from .messaging.message_bus import MessageBus
 from .messages import InfoKind, MembershipConversationRole, Message
 from .registry.registration import Registration
 from .thread_identity import ThreadIncarnation

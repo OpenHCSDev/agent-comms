@@ -72,7 +72,7 @@ if TYPE_CHECKING:
     from .bus_publication import Delivered
     from .comms import Comms
     from .execution.input_drain import DrainedSession, InputDrain
-    from .message_bus import MessageBus
+    from .messaging.message_bus import MessageBus
     from .registry.registry_document import RegistryEntry, RegistrySnapshot
     from .execution.turn_input_source import TurnInputSource
     from .execution.turn_runner import TurnRunner

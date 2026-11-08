@@ -1021,7 +1021,7 @@ def test_record_reports_missing_unknown_and_malformed_siblings_together() -> Non
 
 
 def test_declaration_bug_passes_through_a_data_boundary_as_type_error() -> None:
-    from agent_comms.bus_source_page import SourcePage
+    from agent_comms.messaging.bus_source_page import SourcePage
 
     @dataclass(frozen=True, kw_only=True)
     class TwoRepresentations(SourcePage):
@@ -1032,7 +1032,7 @@ def test_declaration_bug_passes_through_a_data_boundary_as_type_error() -> None:
 
 
 def test_identity_and_digest_text_is_one_rule_at_every_reader(tmp_path: Path) -> None:
-    from agent_comms.bus_source_page import AddressedPage
+    from agent_comms.messaging.bus_source_page import AddressedPage
     from agent_comms.private_registry_guard import PrivateRegistryGuard
     from agent_comms.text_digest import TextDigest
 

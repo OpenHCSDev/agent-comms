@@ -12,7 +12,7 @@ from typing import Annotated
 
 from agent_comms.nominal import field_codec
 from agent_comms.team.order import Team, TeamVerb, Reasoned
-from agent_comms.bus_write import HeldBusWrite
+from ..messaging.bus_write import HeldBusWrite
 from agent_comms.owner_requests import OwnerRequestId
 
 

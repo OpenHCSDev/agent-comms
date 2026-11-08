@@ -49,7 +49,7 @@ from .registry.threads import Thread
 
 if TYPE_CHECKING:
     from .history_views import HistoryViews
-    from .message_bus import MessageBus
+    from .messaging.message_bus import MessageBus
     from .registry.registration import Registration
 
 

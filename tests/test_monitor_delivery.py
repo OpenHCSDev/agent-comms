@@ -49,7 +49,7 @@ from agent_comms.harness_delivery_states import (
 )
 from agent_comms.agent_inbox import TakenInputStart
 from agent_comms.errors import RelationViolationError
-from agent_comms.read_ledger import ReadLedger
+from agent_comms.messaging.read_ledger import ReadLedger
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery, HarnessObservedPart

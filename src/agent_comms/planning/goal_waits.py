@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     from .goal_management import GoalExecutionSource
     from ..agent_activity import AgentActivity
     from ..registry.registration import Registration
-    from ..message_bus import MessageBus
+    from ..messaging.message_bus import MessageBus
     from ..message_reference import MessageReference
     from ..native_input_owner import RegistryOwner
     from ..registry.registry_store import RegistryEdit

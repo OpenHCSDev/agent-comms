@@ -13,10 +13,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
 from agent_comms.bus_activity_index import BusActivityIndex
-from agent_comms.bus_display_index import BusDisplayIndex
+from .messaging.bus_display_index import BusDisplayIndex
 from agent_comms.bus_publication import Delivered, KeyedPublication
 from agent_comms.channel_targets import NamedTarget
-from agent_comms.bus_route_counts import RouteCounts
+from .messaging.bus_route_counts import RouteCounts
 from agent_comms.bus_tables import (
     AnsweredSource,
     RecordedAnswers,
@@ -65,7 +65,7 @@ from agent_comms.storage.typed_table import (
 from agent_comms.watched import Watched
 
 if TYPE_CHECKING:
-    from .read_selection import DisplayUnreadSelection
+    from .messaging.read_selection import DisplayUnreadSelection
     from agent_comms.registry.registry_document import RegistrySnapshot
 
 

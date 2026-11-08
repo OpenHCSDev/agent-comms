@@ -21,7 +21,7 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.owner_connection import OwnerIdentityChangedError
 from agent_comms.message_reference import MessageReference
 from agent_comms.runtime_requests import OwnerLiveRead
-from agent_comms.bus_read import (
+from agent_comms.messaging.bus_read import (
     BusRead,
     OwnerScopedRead,
 )

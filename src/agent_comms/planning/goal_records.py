@@ -20,7 +20,7 @@ from .goal_attempts import (
 from .goal_presentation import GoalWaitTarget
 from ..input_attempt import ReservedInput
 from ..input_disposition import InputDispositions
-from ..message_bus import MessageBus
+from ..messaging.message_bus import MessageBus
 from ..nominal.field_codec import GoalId
 from ..registry.registration import Registration
 from ..registry.threads import Thread

@@ -80,7 +80,7 @@ from .turn_phase import (
 )
 
 if TYPE_CHECKING:
-    from ..messaging import Messaging
+    from ..messaging.sending import Messaging
     from ..planning.goal_management import GoalExecutionSource
     from ..planning.goal_presentation import GoalExecution
     from ..registry.registry_document import RegistrySnapshot

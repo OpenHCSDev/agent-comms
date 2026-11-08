@@ -343,7 +343,7 @@ class LineOutput:
 
 
 if TYPE_CHECKING:
-    from .read_selection import CapturedSelection
+    from .messaging.read_selection import CapturedSelection
     from agent_comms.historical_views import HistoricalSelection
     import sqlite3
 
@@ -351,12 +351,18 @@ if TYPE_CHECKING:
     from .channels import TagChannel
     from .historical_views import DMHistory, HistorySource
     from .history_views import HistoryViews
-    from .message_bus import MessageBus
-    from .message_page import MessagePage, PageBounds
+    from .messaging.message_bus import MessageBus
+    from .messaging.message_page import (
+        MessagePage,
+        PageBounds,
+    )
     from .messages import Message, MessageKind
     from .presentation import BusPresentation
     from .private_registry_guard import RegistryPrivacy
-    from .read_ledger import ReadDocument, ReadLedger
+    from .messaging.read_ledger import (
+        ReadDocument,
+        ReadLedger,
+    )
     from .registry.registration import Registration
     from .registry.registry_document import RegistrySnapshot, UserThreadLookup
     from .registry_provenance import RegistryProvenance

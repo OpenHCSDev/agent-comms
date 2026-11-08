@@ -48,7 +48,7 @@ from yarl import URL
 
 
 from .declared_verb import DeclaredVerb
-from .bus_identity import BusIdentityStore
+from .messaging.bus_identity import BusIdentityStore
 from .command import Command
 from .launch_root import started
 from .child_process import GitChildren, HelperStart, OwnedGitOpening, SpawnedHelper, join_retirement
@@ -85,7 +85,7 @@ from .messages import QuestionKind
 from .team.standing import UnownedOrderWatch
 from .team_heartbeat import TeamHeartbeat
 from .closed_pull_requests import ClosedPullRequestWatch
-from .message_bus import Watch
+from .execution.watch_passes import Watch
 from .coordination.coordinator import Coordination
 from .service_passes import ServicePassStore
 from .tool_result import ToolResult

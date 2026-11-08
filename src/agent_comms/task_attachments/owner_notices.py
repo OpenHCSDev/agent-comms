@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from agent_comms.context_segments.wake import MessageDelivery
     from ..execution.turn_context import ContextSegment
     from agent_comms.comms import Comms
-    from agent_comms.messaging import Messaging
+    from ..messaging.sending import Messaging
     from agent_comms.registry.registry_document import RegistrySnapshot
     from agent_comms.storage.typed_table import TypedTable
 

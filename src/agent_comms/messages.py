@@ -530,7 +530,10 @@ class MessageRoutes(ProjectionOutputs):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .bus_route_counts import BusRouteCounts, BusRouteKeys
+        from .messaging.bus_route_counts import (
+            BusRouteCounts,
+            BusRouteKeys,
+        )
         from .bus_tables import AwaitingAnswerSource
         return (BusRouteCounts, BusRouteKeys, AwaitingAnswerSource)
 
@@ -538,7 +541,10 @@ class MessageRoutes(ProjectionOutputs):
 
     @classmethod
     def route_rows(cls, message):
-        from .bus_route_counts import BusRouteCounts, BusRouteKeys
+        from .messaging.bus_route_counts import (
+            BusRouteCounts,
+            BusRouteKeys,
+        )
 
         return (BusRouteCounts.from_message(message), BusRouteKeys.from_message(message))
 
@@ -1190,8 +1196,11 @@ class BusRecord(CarriesEnvelope, Message, DeclaredFamily, affix="Record"):
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
         from .bus_activity_index import BusActivityIndex, SentActivity
-        from .bus_display_index import BusDisplayIndex
-        from .bus_route_counts import BusRouteCounts, BusRouteKeys
+        from .messaging.bus_display_index import BusDisplayIndex
+        from .messaging.bus_route_counts import (
+            BusRouteCounts,
+            BusRouteKeys,
+        )
         from .bus_tables import MessageIdentitySource, AnsweredSource
         # Task rows are written by the record that carries the task, so the record kinds own
         # them too: that is what lets a carry replay old records into a new task row.
@@ -1204,7 +1213,7 @@ class BusRecord(CarriesEnvelope, Message, DeclaredFamily, affix="Record"):
 
     def projections(self):
         from .bus_activity_index import BusActivityIndex
-        from .bus_display_index import BusDisplayIndex
+        from .messaging.bus_display_index import BusDisplayIndex
         from .bus_tables import AnsweredSource, MessageIdentitySource
 
         yield from super().projections()

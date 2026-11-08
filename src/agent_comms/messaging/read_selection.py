@@ -1,22 +1,27 @@
-"""What one local presentation captured from the registry, catalog and read documents."""
-
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from .read_basis import ChannelDisplayScope, DisplayViewer, ReadCursor, UnreadQuery
-from .activity_clocks import ActivityClocks
-from typing import TYPE_CHECKING
 
-from .registry_provenance import RegistryProvenance
-from .registry.registry_document import RegistrySnapshot
-from .read_ledger import ReadDocument, ReadLedger
-from .catalog_document import CatalogDocument
-if TYPE_CHECKING:
-    from .bus import BusSnapshot
-    from .catalog_store import ChannelCatalog
-    from .channels import Channels
-    from .registry.registration import Registration
+from .read_ledger import (
+    ReadDocument,
+    ReadLedger,
+)
+from ..activity_clocks import ActivityClocks
+from ..bus import BusSnapshot
+from ..catalog_document import CatalogDocument
+from ..catalog_store import ChannelCatalog
+from ..channels import Channels
+from ..read_basis import (
+    ChannelDisplayScope,
+    DisplayViewer,
+    ReadCursor,
+    UnreadQuery,
+)
+from ..registry.registration import Registration
+from ..registry.registry_document import RegistrySnapshot
+from ..registry_provenance import RegistryProvenance
+
 
 
 @dataclass(frozen=True, slots=True)

@@ -6,7 +6,7 @@ from agent_comms.cli_command import CliCommand
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument
 from agent_comms.history_result import DmHistoryPageResult, HistoryPageResult
-from agent_comms.message_page import PageBounds
+from ..messaging.message_page import PageBounds
 from agent_comms.page_traversal import NewestCursor
 from agent_comms.page_traversal import PageCursor
 from agent_comms.read_basis import AnonymousViewer

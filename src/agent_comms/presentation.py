@@ -45,7 +45,7 @@ from .planning.goal_presentation import GoalExecution
 from .planning.goal_waits import GoalWaits
 from .storage.locked_store import GoalWakeFile
 from .mentions import MentionCandidate
-from .message_page import (
+from .messaging.message_page import (
     NEWEST_PAGE,
     MessagePage,
     PageBounds,
@@ -54,9 +54,12 @@ from .message_reference import MessageReference
 from .notification_assignment import NotificationAssignment
 from agent_comms.message_notification import NotificationPass
 from .storage.private_path import FileRevision
-from .read_selection import CapturedSelection
+from .messaging.read_selection import CapturedSelection
 from .read_basis import AnonymousViewer, ChannelDisplayScope, DisplayViewer, NamedViewer
-from .read_ledger import NoReadNotice, ReadNotice
+from .messaging.read_ledger import (
+    NoReadNotice,
+    ReadNotice,
+)
 from .recorded_bus import NoRecordedBus, RecordedBusIdentity
 from .registry.registry_document import DEFAULT_ROSTER, RosterVisibility
 from .revision_views import (
@@ -92,7 +95,7 @@ if TYPE_CHECKING:
     from .comms import Comms
     from .planning.goal_management import Goals
     from .history_views import HistoryViews
-    from .message_bus import MessageBus
+    from .messaging.message_bus import MessageBus
     from .pi_counts import PiCount
     from .registry.registration import Registration
     from .registry.registry_document import RegistrySnapshot

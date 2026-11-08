@@ -40,7 +40,7 @@ from agent_comms.installer.request import InstallRequest
 from agent_comms.installer.interpreter_operation import InstallPhase, LauncherPhase
 from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.installer.upgrade import RehearsedUpgrade
-from agent_comms.message_bus import WatchPass
+from ..execution.watch_passes import WatchPass
 from agent_comms.messages import Message
 from agent_comms.owner_requests import OwnerRequestId
 from agent_comms.plan_reading import PlanReading

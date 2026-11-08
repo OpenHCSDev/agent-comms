@@ -17,7 +17,7 @@ from agent_comms.notification_assignment import AssignmentSource, NotificationAs
 from agent_comms.notification_progress import AnsweredResponse
 from agent_comms.notification_evidence import AfterRecipient, AllOutcomes, OwnerOutcomes, RecipientLimit
 from agent_comms.message_notification import MessageNotification
-from agent_comms.read_ledger import ReadLedger
+from agent_comms.messaging.read_ledger import ReadLedger
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.notification_reads import LiveNotificationRead

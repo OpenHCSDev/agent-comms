@@ -54,7 +54,7 @@ from .nominal.field_codec import (
 )
 from .importing import ImportLimits, ImportedConversation, ThreadImported
 from .launch_runtime import LaunchRuntime, TagListText
-from .message_bus import MessageBus
+from .messaging.message_bus import MessageBus
 from .native_arguments import ConfiguredBinary, NativeArguments
 from .native_settings import NativeThreadDefaults
 from .execution.owner_lifecycle import LaunchInput, OwnerLifecycle, TaskLaunchInput

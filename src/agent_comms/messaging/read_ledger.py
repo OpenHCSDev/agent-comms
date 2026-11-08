@@ -1,49 +1,63 @@
-"""The sole human read authority, keyed by viewer and stable conversation.
-
-Sparse paint remains exact: the cursor compresses only a proved contiguous
-prefix and retains out-of-order reads as exceptions. Conversation and source
-identity still determine whether those reads apply.
-"""
-
 from __future__ import annotations
 
 import json
 from abc import abstractmethod
-from collections.abc import Callable, Iterator, Sequence
-from dataclasses import dataclass, field, replace
+from collections.abc import (
+    Callable,
+    Iterator,
+    Sequence,
+)
+from dataclasses import (
+    dataclass,
+    field,
+    replace,
+)
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-from .bus import Bus, BusReader
-from .channel_targets import CommandTarget
-from .coordination.errors import DMScopeChanged
-from .nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
-from .nominal.sealed import Sealed
-from .read_basis import (
+from ..bus import (
+    Bus,
+    BusReader,
+)
+from ..bus_publication import Delivered
+from ..channel_targets import CommandTarget
+from ..coordination.errors import DMScopeChanged
+from ..messages import Message
+from ..nominal.field_codec import (
+    FieldCodec,
+    NullMember,
+    SingleFieldValue,
+    SubclassUnion,
+)
+from ..nominal.sealed import Sealed
+from ..read_basis import (
     AllConversation,
     ChannelConversation,
     Conversation,
     ConversationCursor,
+    DMConversation,
     DisplayBasis,
     DisplayedConversation,
-    DMConversation,
+    MessageDisplayScope,
     ReadCursor,
 )
-from .recorded_bus import NoRecordedBus, RecordedBus, RecordedBusIdentity
-from .storage.locked_store import DocumentChange
-from .storage.maintenance_barrier import CarriedDocument
-from .storage.private_path import ObservedPath
-from .storage.store_files import DependentStateTier, SingleFileStore
-from .thread_identity import RecordedThreadIncarnation
-from .thread_owned_state import ThreadOwnedState
+from ..recorded_bus import (
+    NoRecordedBus,
+    RecordedBus,
+    RecordedBusIdentity,
+)
+from ..registry.registry_document import RegistrySnapshot
+from ..registry.threads import Thread
+from ..registry_provenance import RegistryProvenance
+from ..storage.locked_store import DocumentChange
+from ..storage.maintenance_barrier import CarriedDocument
+from ..storage.private_path import ObservedPath
+from ..storage.store_files import (
+    DependentStateTier,
+    SingleFileStore,
+)
+from ..thread_identity import RecordedThreadIncarnation
+from ..thread_owned_state import ThreadOwnedState
 
-if TYPE_CHECKING:
-    from .bus_publication import Delivered
-    from .messages import Message
-    from .read_basis import MessageDisplayScope
-    from .registry.registry_document import RegistrySnapshot
-    from .registry.threads import Thread
-    from .registry_provenance import RegistryProvenance
 
 
 class ReadNotice(SubclassUnion, affix="ReadNotice"):

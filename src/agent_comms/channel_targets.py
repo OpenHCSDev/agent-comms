@@ -134,7 +134,7 @@ class CommandTarget(DeclaredFamily, ProjectionSource, affix="Target"):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .bus_display_index import BusDisplayIndex
+        from .messaging.bus_display_index import BusDisplayIndex
         from .bus_tables import AwaitingAnswerSource
         return (BusDisplayIndex, AwaitingAnswerSource)
 
