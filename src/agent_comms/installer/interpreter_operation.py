@@ -265,6 +265,10 @@ class ProcessScanPhase(InstallPhase):
     """Read the process table to report applications using older runtimes."""
 
 
+class RuntimeRetirementPhase(InstallPhase):
+    """Delete the built runtimes the process scan found nothing on."""
+
+
 class PublicationPhase(InstallPhase):
     """Publish the route, runtime or install result through its existing owner."""
 
