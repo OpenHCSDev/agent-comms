@@ -87,7 +87,7 @@ class WorkingThreadPresentationStatus(ThreadPresentationStatus):
         summary = activity.title()
         if detail := " ".join(detail.split()):
             summary += f" · {detail}"
-        return ThreadPresentation(title, "⌛", summary, status=self)
+        return ThreadPresentation(title, "", summary, status=self)
 
 
 @dataclass(frozen=True, slots=True)

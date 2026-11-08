@@ -83,7 +83,7 @@ def test_attention_preserves_the_original_member_and_fields(original):
 def test_status_renders_attention_without_hiding_work(status):
     status = status.with_attention("Inbox unavailable", "Original failure")
     shown = status.activity_presentation("worker", "working", "Running tool")
-    assert shown.marker == ("⌛" if status.working else "!")
+    assert shown.label == ("worker" if status.working else "! worker")
     assert shown.summary == ("Working · Running tool" if status.working else "Inbox unavailable")
     row = ThreadStatusModel.known("worker", shown)
     assert row.lines == (("Working · Running tool", "Inbox unavailable", "Original failure")
