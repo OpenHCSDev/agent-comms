@@ -138,14 +138,15 @@ def refuse(text, *families):
 # nothing the teammate approves, delivers or orders may add or keep one. The cure is the hierarchy, never a
 # route: fold the false owner into the real one, or compose the providers as parents.
 FORWARDER = re.compile(
-    r"^\+\s*(?:def \w+\([^)]*\)(?:\s*->[^:]+)?:\s*return self\.\w+\.\w+(?:\([^()]*\))?\s*$"  # one-line def returning self.x.y(...)
-    r"|\w+\s*=\s*property\(lambda \w+:\s*\w+\.\w+\.\w+\)"  # attr = property(lambda s: s._a.attr)
+    r"^\+[ \t]*(?:def \w+\([^)\n]*\)(?:[ \t]*->[^:\n]+)?:[ \t]*return self\.\w+\.\w+(?:\([^()\n]*\))?[ \t]*$"
+    r"|\w+[ \t]*=[ \t]*property\(lambda \w+:[ \t]*\w+\.\w+\.\w+\)"
     r"|def __getattr__\(self)",
     re.M,
 )
 FORWARD_BODY = re.compile(
-    r"^\+(\s*)def (\w+)\(self[^)]*\)[^:]*:\s*\n\+\1\s+return self\.\w+\.\2\b", re.M
-)  # def x(self): / return self._a.x(...)
+    r"^\+([ \t]*)def (\w+)\(self(?:[^)\n]|\n\+)*\)"
+    r"(?:[^:\n]|\n\+)*:[ \t]*\n\+\1[ \t]+return self\.\w+\.\2\b", re.M
+)  # Every consumed continuation belongs to an added line, never diff context.
 
 
 @dataclass(frozen=True)

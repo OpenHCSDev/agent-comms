@@ -46,6 +46,27 @@ def test_override_scan_excludes_nested_and_qualified_names():
     assert forwarders_added('+    def answer(self): return self.peer.answer()\n', (source,))
 
 
+@pytest.mark.parametrize(('diff', 'expected'), [
+    ('+\n \n     def owns_projection(self, projection) -> bool:\n'
+     '         return self.filter.owns_projection(projection)\n', False),
+    ('+ \t\n     def answer(self): return self.peer.answer()\n', False),
+    ('+\n     answer = property(lambda self: self.peer.answer)\n', False),
+    ('+    def answer(self): return self.peer.answer()\n', True),
+    ('+    def answer(self):\n+        return self.peer.answer()\n', True),
+    ('+    answer = property(lambda self: self.peer.answer)\n', True),
+    ('+    def __getattr__(self, name): return self.peer.lookup(name)\n', True),
+    ('+    def answer(self): return self.state.answer(self)\n', False),
+    ('+    def answer(self,\n         value): return self.peer.answer(value)\n', False),
+    ('+    def answer(self) ->\n         bool: return self.peer.answer()\n', False),
+    ('+    def answer(self,\n         value):\n+        return self.peer.answer(value)\n', False),
+    ('+    def answer(self) ->\n         bool:\n+        return self.peer.answer()\n', False),
+    ('+    def answer(self,\n+               value):\n+        return self.peer.answer(value)\n', True),
+    ('+    def answer(self) ->\n+            bool:\n+        return self.peer.answer()\n', True),
+])
+def test_forwarder_scan_distinguishes_added_source_from_context(diff: str, expected: bool):
+    assert bool(forwarders_added(diff)) is expected
+
+
 def test_problem_and_send_share_field_refusals_and_record_only_valid_documents(pr_team):
     ctx = pr_team.model_copy(update={
         'repos': (*pr_team.repos, Repo.of(Path(__file__).resolve().parents[1])),
