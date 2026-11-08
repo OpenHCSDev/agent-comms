@@ -56,7 +56,6 @@ from .ui_model.goal import GoalDisplay, GoalExecutionDisplay
 
 if TYPE_CHECKING:
     from .registry.threads import Thread
-    from .task_sources import TaskScope
     from .turn_context import TurnContext
 
 if TYPE_CHECKING:
@@ -599,7 +598,9 @@ class GoalDeclaration(
     def authority(self) -> GoalTurnAuthority: ...
 
     @abstractmethod
-    def task_scope(self, scope: TaskScope) -> TaskScope: ...
+    def task_scope[Scope](
+        self, scope: Scope, scoped: Callable[[GoalRevision], Scope],
+    ) -> Scope: ...
 
     @abstractmethod
     def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext: ...
@@ -730,7 +731,9 @@ class NoGoal(NullMember, GoalDeclaration):
     def authority(self) -> NoGoalAuthority:
         return NoGoalAuthority()
 
-    def task_scope(self, scope: TaskScope) -> TaskScope:
+    def task_scope[Scope](
+        self, scope: Scope, scoped: Callable[[GoalRevision], Scope],
+    ) -> Scope:
         return scope
 
     def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext:
@@ -813,8 +816,10 @@ class Goal(RecordMember, GoalDeclaration):
     def authority(self) -> GoalAuthority:
         return GoalAuthority(self.id, self.state)
 
-    def task_scope(self, scope: TaskScope) -> TaskScope:
-        return scope.with_goal(self.revision_key)
+    def task_scope[Scope](
+        self, scope: Scope, scoped: Callable[[GoalRevision], Scope],
+    ) -> Scope:
+        return scoped(self.revision_key)
 
     def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext:
         return context.prepend_goal(owner, self, goals)

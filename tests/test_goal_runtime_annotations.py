@@ -2,7 +2,7 @@
 
 from collections.abc import Callable
 from types import NoneType
-from typing import get_type_hints
+from typing import get_args, get_type_hints
 
 import pytest
 
@@ -36,3 +36,10 @@ def test_goal_publication_callback_annotations_resolve(
 @pytest.mark.parametrize("callback", (GoalAction.prepare, StandbyGoalAction.prepare))
 def test_goal_preparation_uses_its_record_owner(callback: Callable[..., object]) -> None:
     assert get_type_hints(callback)["goals"] is GoalRecords
+
+
+@pytest.mark.parametrize("declaration", (GoalDeclaration, *GoalDeclaration.__subclasses__()))
+def test_goal_scope_callback_keeps_its_scope_type(declaration: type[GoalDeclaration]) -> None:
+    hints = get_type_hints(declaration.task_scope)
+    assert hints["scope"] is hints["return"]
+    assert get_args(hints["scoped"])[1] is hints["return"]
