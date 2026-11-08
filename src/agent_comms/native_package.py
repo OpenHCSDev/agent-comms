@@ -298,7 +298,8 @@ def share_native_resources(root: Path, deployments: Path) -> dict[str, int]:
             # The build owns this unpublished path. Create the replacement first;
             # failure cannot discard its independent compiled resource.
             replacement = path.with_name(path.name + ".sharing")
-            os.link(source, replacement, follow_symlinks=False)
+            if not Platform.current().share_file(source, replacement):
+                continue
             try:
                 if replacement.read_bytes() != path.read_bytes():
                     raise NativePackageError("Native resource changed while sharing")
@@ -544,4 +545,3 @@ class VerifiedNativePackage:
         if PrivateDirectoryRole.violation(root.parents[2].lstat()) is not None:
             raise NativePackageError("Disposable native Pi root must be owner-only")
         return cls(root)
-

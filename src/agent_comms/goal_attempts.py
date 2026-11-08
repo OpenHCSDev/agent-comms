@@ -806,12 +806,12 @@ class GoalAttemptStore(GoalAttemptFile, DrainSettledFile, StoreWriter, Reconcile
             # Publish only the complete schema; a concurrent initializer may win.
             # The staging descriptor is closed before its inode becomes shared.
             with suppress(FileExistsError):
-                os.link(staging, path, follow_symlinks=False)
+                Platform.current().publish_new_file(staging, path)
             Platform.current().sync_directory(directory)
         except (sqlite3.Error, OSError) as error:
             raise StorageUncertainError("Goal attempt initialization is uncertain.") from error
         finally:
-            staging.unlink()
+            staging.unlink(missing_ok=True)
         return cls(path)
 
     @property

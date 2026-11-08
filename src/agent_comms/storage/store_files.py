@@ -844,8 +844,8 @@ class AtomicFile:
     def _replace(self, staged: Path) -> None:
         os.replace(staged, self.path)
 
-    def _link(self, staged: Path) -> None:
-        os.link(staged, self.path)
+    def _create_new(self, staged: Path) -> None:
+        Platform.current().publish_new_file(staged, self.path)
 
     def _sync_directory(self) -> None:
         Platform.current().sync_directory(self.path.parent)
@@ -861,7 +861,7 @@ class ExclusiveAtomicFile(AtomicFile):
     """Create a new name atomically, refusing an existing destination."""
 
     def _install(self, staged: Path) -> None:
-        self._link(staged)
+        self._create_new(staged)
         self._discard(staged)
 
 
@@ -889,10 +889,10 @@ class DirectoryAtomicFile(AtomicFile):
         os.replace(staged.name, self.path.name,
                    src_dir_fd=self.directory, dst_dir_fd=self.directory)
 
-    def _link(self, staged: Path) -> None:
+    def _create_new(self, staged: Path) -> None:
         self._require_directory()
-        os.link(staged.name, self.path.name, src_dir_fd=self.directory,
-                dst_dir_fd=self.directory, follow_symlinks=False)
+        Platform.current().publish_new_file(staged.name, self.path.name, src_dir_fd=self.directory,
+                                            dst_dir_fd=self.directory)
 
     def _require_directory(self) -> None:
         OwnedDirectoryRole.held(self.directory, self.path.parent,
