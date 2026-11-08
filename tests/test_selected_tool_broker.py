@@ -41,6 +41,7 @@ from agent_comms.repo import Checkout
 from agent_comms.storage_room import NoRoomNeeded
 from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_denial import SelectedToolDenied
+from agent_comms.thread_identity import UnobservedTools
 
 
 @pytest.fixture
@@ -71,6 +72,7 @@ def test_duplicate_call_id_in_one_tool_round_is_named_decode_failure(
 ) -> None:
     class Owner:
         input_id = secrets.token_hex(16)
+        offered = UnobservedTools()
 
         async def allow(self, round_number, call) -> None:
             raise AssertionError("invalid round must not allow a call")
@@ -131,6 +133,8 @@ async def test_prebegin_busy_keeps_native_socket_for_the_next_fresh_call(
     input_id = InputId.mint()
 
     class SlotOwner:
+        offered = UnobservedTools()
+
         async def allow(self, turn, round_number, call):
             await Coordination.run_async(
                 path,

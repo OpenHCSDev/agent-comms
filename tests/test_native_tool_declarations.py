@@ -10,6 +10,7 @@ import pytest
 from acp.schema import ToolCallStart
 
 import agent_comms.agent_events as events
+from agent_comms.thread_identity import UnobservedTools
 from agent_comms.acp import SdkSessionConnection
 from agent_comms.agent_event_updates import AcpEventConsumer
 from agent_comms.comms import wire
@@ -56,14 +57,16 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
             {"query": "new declaration"},
         )
         with pytest.raises(ValueError):
-            CodingTool.from_call("inspect_fixture", {"query": "new declaration"}, call_id="case")
+            CodingTool.from_call("inspect_fixture", {"query": "new declaration"}, call_id="case",
+                                offered=UnobservedTools())
         case = FieldCodec.decode(ToolCallId, "case")
         examples = (ReadTool(call_id=case, path="file"), BashTool(call_id=case, command="pwd"),
             EditTool(call_id=case, path="file", edits=(ReplacementEdit("before", "after"),)),
             WriteTool(call_id=case, path="file", content="value"))
         assert {type(tool) for tool in examples} == set(CodingTool.members_with(CodingTool))
         for tool in examples:
-            call = type(tool).from_call(tool.declared_name, tool.arguments, call_id=case)
+            call = type(tool).from_call(tool.declared_name, tool.arguments, call_id=case,
+                                        offered=UnobservedTools())
             assert type(call) is type(tool)
             event = events.ToolStart.from_call("case", tool.declared_name, call.arguments)
             assert event.kind is tool.declared_action() and event.args == tool.arguments
@@ -96,7 +99,7 @@ async def test_pattern_search_metadata_reaches_official_acp(acp_tools, name, lab
         "search", f"{label} shared preview", arguments,
     )
     with pytest.raises(ValueError):
-        CodingTool.from_call(name, arguments, call_id="pattern-case")
+        CodingTool.from_call(name, arguments, call_id="pattern-case", offered=UnobservedTools())
 
 
 @pytest.mark.parametrize("name,label,kind", [
