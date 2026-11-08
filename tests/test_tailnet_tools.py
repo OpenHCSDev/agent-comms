@@ -10,7 +10,8 @@ from agent_comms.connector_caller import UiCaller, UiReadCaller
 from agent_comms.core_access import LocalCoreAccess
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.tailnet_buses import (
-    PeerBus, PeerHoldsBus, PeerOffline, PeerUnreachable, PeerWithoutBus, TailnetBuses, TailnetPeer,
+    PeerBus, PeerHoldsBus, PeerOffline, PeerUnreachable, PeerWithoutBus, ProbedPeer,
+    TailnetBuses, TailnetPeer,
 )
 from agent_comms.tailnet_profiles import AskedPeer, PeerRefusedProfile, TailnetProfiles
 from agent_comms.tool_request import ServedRequest
@@ -27,7 +28,9 @@ def test_every_discovery_outcome_crosses_the_existing_wire():
     # Membership, including future members, belongs to PeerBus, not a union at the RPC.
     outcomes = (BUS, PeerOffline(PEER), PeerUnreachable(PEER, "SSH refused"),
                 PeerWithoutBus(PEER, "CLI absent"))
-    assert {type(entry) for entry in outcomes} == set(PeerBus.members_with(PeerBus))
+    # Every member a probe can REPORT, asked of the family. A machine a person typed in
+    # is a PeerBus and not a discovery outcome, so it is not named here as an exception.
+    assert {type(entry) for entry in outcomes} == set(PeerBus.members_with(ProbedPeer))
     result = TailnetBusesRead(outcomes)
     assert FieldCodec.decode(TailnetBusesRead, FieldCodec.encode(result)) == result
 
@@ -79,3 +82,31 @@ def test_ssh_diagnostics_do_not_become_part_of_a_successful_json_answer(monkeypa
     monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: subprocess.CompletedProcess(
         args[0], 0, answer, "Warning: Permanently added host to known hosts.\n"))
     assert TailnetBuses.probe(PEER) == PeerHoldsBus(PEER, 1)
+
+
+def test_a_typed_address_must_name_a_peer_core_already_reports():
+    """Typing adds a bus Core's tailnet reports and discovery did not offer, never an
+    arbitrary ssh destination.
+
+    The guard this holds was already in ServedCommsTailnetProfileTool - "a remote caller
+    cannot turn a discovered row into arbitrary host-side SSH" - and adding a typed row is
+    exactly what it exists to stop, so each member says which peer it means among Core's
+    own and one guard covers both kinds.
+    """
+    from agent_comms.tailnet_buses import NamedHost
+
+    peers = (PEER,)
+    # Either spelling Tailscale itself uses resolves to the peer, not to the text.
+    assert NamedHost.typed(PEER.name).on_tailnet(peers) == PEER
+    assert NamedHost.typed(PEER.address).on_tailnet(peers) == PEER
+    assert NamedHost.typed(f"  {PEER.name} ").on_tailnet(peers) == PEER
+
+    for elsewhere in ("evil.example", "10.0.0.1", "localhost", ""):
+        with pytest.raises(ValueError, match="not a peer on Core's tailnet"):
+            NamedHost.typed(elsewhere).on_tailnet(peers)
+
+    # A discovered row is checked the same way, so a stale one cannot be replayed - and
+    # it says its own case, because that row WAS a peer when the probe saw it.
+    assert BUS.on_tailnet(peers) == PEER
+    with pytest.raises(ValueError, match="no longer a peer on Core's tailnet"):
+        PeerHoldsBus(TailnetPeer("ghost", "1.2.3.4", True), 1).on_tailnet(peers)

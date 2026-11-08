@@ -52,6 +52,17 @@ class TailnetPeer:
         return next((address for address in addresses if ":" not in address), "")
 
 
+class ProbedPeer:
+    """A member a tailnet probe can report.
+
+    Every peer the probe sees becomes one of these, which is why "every outcome crosses
+    the wire" is answerable by asking the family rather than by a roster someone keeps in
+    step. A machine a person typed in is a PeerBus and is not one of these: no probe
+    produces it, so it is not a discovery outcome and a test about discovery should not
+    have to name it as an exception (MEMB-2).
+    """
+
+
 class PeerBus(DeclaredFamily, ABC, affix="Peer"):
     """What a probe found on one peer.
 
@@ -67,9 +78,24 @@ class PeerBus(DeclaredFamily, ABC, affix="Peer"):
     def label(self) -> str:
         """How a picker names this peer in one line."""
 
+    def on_tailnet(self, peers: tuple[TailnetPeer, ...]) -> TailnetPeer:
+        """This row's peer, proven to be one Core's own tailnet reports.
+
+        Core ssh's to whatever this returns, so nothing else may decide it. A row the
+        probe itself produced names a peer it already saw; a row a person typed has to be
+        matched against the list here, because otherwise a caller - including a remote one
+        over the connector - could name any host on Core's network and have Core ssh to
+        it. The guard was already in ServedCommsTailnetProfileTool and it is the reason
+        this is a resolution rather than a widening.
+        """
+        if self.peer not in peers:
+            # Its own case, in its own words: this row WAS a peer when the probe saw it.
+            raise ValueError("This bus is no longer a peer on Core's tailnet; discover again.")
+        return self.peer
+
 
 @dataclass(frozen=True)
-class PeerHoldsBus(PeerBus):
+class PeerHoldsBus(ProbedPeer, PeerBus):
     """Its CLI answered with its registry, so there is a bus here to open."""
 
     peer: TailnetPeer
@@ -81,7 +107,48 @@ class PeerHoldsBus(PeerBus):
 
 
 @dataclass(frozen=True)
-class PeerWithoutBus(PeerBus):
+class NamedHost(PeerBus):
+    """A machine a person typed in, rather than one tailscale reported.
+
+    Tristan: let a bus be added by hand - type an address, save it, and be able to remove
+    saved ones again. Nobody has asked this host anything yet, so it claims no thread
+    count: a PeerHoldsBus means "its CLI answered with its registry", and building one of
+    those for a host nobody has spoken to would put a lie in the data and render it as
+    "myhost · 0 threads". It is openable because asking is the whole point, and the host
+    says no for itself through its own ProfileOffer.
+    """
+
+    peer: TailnetPeer
+    openable = True
+
+    def label(self) -> str:
+        return self.peer.name
+
+    def on_tailnet(self, peers: tuple[TailnetPeer, ...]) -> TailnetPeer:
+        """The peer this typed text names, by Tailscale's own name or address.
+
+        Typing adds a bus Core's tailnet reports and discovery did not offer - a machine
+        whose CLI answered nothing, say - not an arbitrary host. The text is matched; it
+        never becomes an ssh destination on its own.
+        """
+        typed = self.peer.name
+        for peer in peers:
+            if typed in (peer.name, peer.address):
+                return peer
+        raise ValueError(f"{typed} is not a peer on Core's tailnet; check the name or address.")
+
+    @classmethod
+    def typed(cls, address: str) -> NamedHost:
+        """What a person typed, taken as both the name and the address to reach it on.
+
+        A typed host has no separate name until its own connector answers with one, and
+        inventing one here would be a second place deciding what this machine is called.
+        """
+        return cls(TailnetPeer(address.strip(), address.strip(), True))
+
+
+@dataclass(frozen=True)
+class PeerWithoutBus(ProbedPeer, PeerBus):
     """Reachable, and its CLI is not installed or answered nothing we can read."""
 
     peer: TailnetPeer
@@ -92,7 +159,7 @@ class PeerWithoutBus(PeerBus):
 
 
 @dataclass(frozen=True)
-class PeerUnreachable(PeerBus):
+class PeerUnreachable(ProbedPeer, PeerBus):
     """Tailscale says it is up, and ssh did not get there."""
 
     peer: TailnetPeer
@@ -103,7 +170,7 @@ class PeerUnreachable(PeerBus):
 
 
 @dataclass(frozen=True)
-class PeerOffline(PeerBus):
+class PeerOffline(ProbedPeer, PeerBus):
     """Tailscale says it is down, so nothing is asked of it."""
 
     peer: TailnetPeer
