@@ -14,6 +14,7 @@ from pathlib import Path
 
 from agent_comms.child_process import ResidentManager
 from agent_comms.build_artifact import BuildArtifact
+from agent_comms.installer.building_runtime import BuildingRuntime
 from agent_comms.installer.carry import STEPS
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.declared_uv import DeclaredUv
@@ -122,16 +123,24 @@ class RuntimeStack(Extendable):
             return built
 
     def sync(self) -> None:
-        """Install the lock's packages into this runtime's prefix; a failed sync leaves none."""
+        """Install the lock's packages into this runtime's prefix; a failed sync leaves none.
+
+        A sync that succeeds claims the prefix for this process, because completion happens
+        in the image this one execs into and nothing else spans the two.
+        """
         prefix = self.runtime.prefix
         prefix.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        # Claimed before the directory exists, because uv owns what is in it from the
+        # moment it starts and a kill during the sync strands exactly as much as a kill
+        # after it. The claim covers the construction from its first durable byte.
+        BuildingRuntime.claim(prefix)
         prefix.mkdir(mode=0o700, exist_ok=True)
         try:
             self.commands.run(self.uv, "sync", "--project", "stack", "--locked",
                               "--no-editable", cwd=self.checkout,
                               env={**self.environment(), "UV_PROJECT_ENVIRONMENT": str(prefix)})
         except BaseException:
-            shutil.rmtree(prefix)
+            BuildingRuntime.discard(prefix)
             raise
 
     def complete(self) -> None:

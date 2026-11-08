@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 from urllib.parse import parse_qsl, urlsplit
 from zipfile import ZipFile
 
+from agent_comms.installer.building_runtime import BuildingRuntime
 from metaclass_registry.mro_dispatch import MroDispatch, handles
 from packaging.markers import Marker, default_environment
 from packaging.requirements import Requirement
@@ -907,10 +908,12 @@ class UnbuiltRuntime:
         return False
 
     def reclaimable(self) -> bool:
-        """A prefix with no recorded resolution is a build in flight, or one whose
-        completion was never proven. A retirement that took it would pull the floor out
-        from under a running install; leaving it costs one directory."""
-        return False
+        """A prefix with no recorded resolution is in flight or abandoned, and its claim
+        says which: the install that synced it recorded itself, and that identity survives
+        the exec into the runtime where completion happens. A claim whose process is gone
+        was left by an install that is no longer here. A prefix with no claim at all
+        predates this and is unknown, which is not the same as abandoned."""
+        return BuildingRuntime.abandoned(self.prefix)
 
     def prepare(self, stack: RuntimeStack, core: str) -> None:
         stack.sync()
@@ -927,8 +930,9 @@ class UnbuiltRuntime:
             stack.observe_resolution(core).save(self.prefix)
             stack.imports()
         except BaseException:
-            shutil.rmtree(self.prefix)
+            BuildingRuntime.discard(self.prefix)
             raise
+        BuildingRuntime.release(self.prefix)
 
 
 class RuntimeResolution(BaseModel):
