@@ -1,26 +1,23 @@
 """Real turn acquisition and terminal handling share the execution owner."""
 
 from agent_comms.repo import Checkout
-from agent_comms.native_arguments import GivenBinary
-from agent_comms.native_package import VerifiedNativePackage
 import os
 import signal
 import sqlite3
 import subprocess
 import sys
-from collections.abc import AsyncIterator, Callable
-from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontextmanager, closing
+from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager, closing
 from dataclasses import fields
-from functools import partial
+from goal_owner_fixture import GoalTurnOwners
 
 import pytest
 
 from agent_comms import agent_events as events
-from agent_comms.acp import CommsAgent
 from agent_comms.acp_failure import NativeTurnError
 from agent_comms.child_process import ChildOutcome, ProcessIdentity
 from agent_comms.comms import Comms, wire
-from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, GoalId
+from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     GoalAction,
@@ -51,7 +48,6 @@ from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_caller import ToolCaller
 from agent_comms.transport.tools.goals import CommsGoalHistoryTool
 from agent_comms.turn_failure import NativeChildSignaled
-from agent_comms.turn_input_source import NoTurnAcceptance
 
 
 @pytest.fixture
@@ -107,33 +103,9 @@ async def test_execution_owns_toggle_dispatch_and_unavailability(
 
 @pytest.fixture
 async def turn_on(
-    execution_bus: Comms, native_runtime_package: VerifiedNativePackage,
-) -> AsyncIterator[Callable[..., AbstractAsyncContextManager[OwnedTurn]]]:
-    """One real owner serves this test's turns and shuts down once at its end."""
-    agent = CommsAgent(
-        execution_bus, GivenBinary(str(native_runtime_package.cli)), auto_wake=False,
-    )
-    session = AcpSessionId("goal-execution-session")
-    try:
-        await agent.sessions.bind_owned(execution_bus.registry.require("worker"), session)
-        yield partial(acquired_turn, agent, session)
-    finally:
-        await agent.shutdown()
-
-
-@asynccontextmanager
-async def acquired_turn(
-    agent: CommsAgent, session: AcpSessionId, comms: Comms, *, original_owner_input: bool = False,
-) -> AsyncIterator[OwnedTurn]:
-    owner = comms.registry.require("worker")
-    turn = OwnedTurn(
-        agent.turns, session, owner.name, "Continue original work",
-        original_owner_input=original_owner_input, original_goal_id=owner.goal.require().id,
-        acceptance=NoTurnAcceptance(),
-    )
-    async with AsyncExitStack() as resources, AsyncExitStack() as permits:
-        assert await turn.acquire(resources, permits)
-        yield turn
+    execution_bus: Comms, goal_turn_owners: GoalTurnOwners,
+) -> Callable[..., AbstractAsyncContextManager[OwnedTurn]]:
+    return await goal_turn_owners.for_bus(execution_bus)
 
 
 def failure_count(comms):
