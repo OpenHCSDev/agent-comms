@@ -294,7 +294,10 @@ class ProblemGoals(ABC):
     root: Path
     registry: Registration
     bus: PublishedBus
-    todos: TodoStore
+
+    @property
+    @abstractmethod
+    def todos(self) -> TodoStore: ...
 
     @abstractmethod
     def change_problem(

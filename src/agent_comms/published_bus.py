@@ -9,7 +9,7 @@ from .bus import Bus, BusSnapshot
 from .catalog_document import CatalogAccess
 from .catalog_store import ChannelCatalog
 from .channel_targets import ChannelTarget
-from .channels import Channel
+from .channels import Channel, Channels
 from .publisher import Publisher
 from .read_basis import AnonymousViewer, DisplayViewer
 from .read_ledger import ReadLedger
@@ -39,7 +39,7 @@ class PublishedBus[Writes: Publisher]:
         name = ChannelTarget.normalize_name(target)
         return catalog.require_channel(name, self.bus.channel_clocks(name))
 
-    def channel_declarations(self):
+    def channel_declarations(self) -> Channels:
         with self.opened_activity() as activity:
             return self._channels.read().views(activity)
 

@@ -25,7 +25,7 @@ from agent_comms.storage.store_files import (
 if TYPE_CHECKING:
     from ..attempt_states import TerminalAttempt
     from .snapshot import RecoverySnapshot
-    from ..message_bus import MessageBus
+    from ..published_bus import PublishedBus
     from ..registry.registry_store import RegistryCut
     from ..registry.registry_document import RegistrySnapshot
     from ..private_registry_guard import RegistryPrivacy
@@ -50,7 +50,7 @@ class CoordinationCapture:
 class NativeCapture(CoordinationCapture, ExitStack, StoredBusReader):
     """Copy a native decision's registry cut, then release it before decoding."""
 
-    def __init__(self, bus: MessageBus) -> None:
+    def __init__(self, bus: PublishedBus) -> None:
         super().__init__()
         self.bus = bus
         self.measurements = PublicationMeasurements()
@@ -95,7 +95,7 @@ class NativeCapture(CoordinationCapture, ExitStack, StoredBusReader):
 class OwnerRecoveryCapture(NativeCapture):
     """A released owner's recovery decides from these owners' own entries alone."""
 
-    def __init__(self, bus: MessageBus, owners: frozenset[str]) -> None:
+    def __init__(self, bus: PublishedBus, owners: frozenset[str]) -> None:
         super().__init__(bus)
         self.owners = owners
 
@@ -124,16 +124,16 @@ class CoordinationSession(CoordinationStore):
             raise ValueError("coordinator clock must return a nonnegative integer millisecond")
         return max(now, floor)
 
-    def capture(self, bus: MessageBus) -> NativeCapture:
+    def capture(self, bus: PublishedBus) -> NativeCapture:
         """Return a detached read, never a publication permission."""
         return self._boundary(bus, NativeCapture)
 
-    def owner_recovery(self, bus: MessageBus, owners: frozenset[str]) -> OwnerRecoveryCapture:
+    def owner_recovery(self, bus: PublishedBus, owners: frozenset[str]) -> OwnerRecoveryCapture:
         """Return a detached read fenced on the recovered owners' entries only."""
         return self._boundary(bus, partial(OwnerRecoveryCapture, owners=owners))
 
     def _boundary[Boundary: NativeCapture](
-        self, bus: MessageBus, boundary_type: type[Boundary],
+        self, bus: PublishedBus, boundary_type: Callable[[PublishedBus], Boundary],
     ) -> Boundary:
         if bus.bus.path.parent.resolve() != self.path.parent.resolve():
             raise IntegrityViolationError("native boundary belongs to another coordinator")
@@ -177,7 +177,7 @@ class NativeCoordinationSession(CoordinationSession):
     """Native sessions declare their bus boundary, independent of file existence."""
 
     @cached_property
-    def bus(self) -> MessageBus:
+    def bus(self) -> PublishedBus:
         """Create native bus owners only when this session first needs a boundary."""
         import agent_comms.message_bus as message_bus, agent_comms.publisher as publisher, \
             agent_comms.registry.registration as registration
@@ -188,7 +188,7 @@ class NativeCoordinationSession(CoordinationSession):
             publisher.ClaimWrites,
         )
 
-    def committing(self, bus: MessageBus) -> NativeCommit:
+    def committing(self, bus: PublishedBus) -> NativeCommit:
         return self._boundary(bus, NativeCommit)
 
     @contextmanager

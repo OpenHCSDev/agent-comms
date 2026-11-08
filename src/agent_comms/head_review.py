@@ -27,8 +27,7 @@ from .work_branches import WorkBranches
 
 if TYPE_CHECKING:
     from .team.order import TeamContext
-    from .goal_management import Goals
-    from .todos import HeadReviewRecord, HeadVerdict, Todo
+    from .todos import HeadReviewRecord, HeadVerdict, ProblemGoals, Todo
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -910,7 +909,7 @@ class HeadReviewRelation(DeclaredFamily):
 class HeadReviewOrder(HeadReviewRelation, declared_name=None):
     """The input that authorizes a head review's optional order change."""
 
-    def prepared(self, goals: Goals, problems: dict[str, str]) -> tuple[HeadReviewOrder, ...]:
+    def prepared(self, goals: ProblemGoals, problems: dict[str, str]) -> tuple[HeadReviewOrder, ...]:
         """A resolved relationship can authenticate; a refused selection contributes errors."""
         return (self,)
 
@@ -920,14 +919,14 @@ class HeadReviewOrder(HeadReviewRelation, declared_name=None):
         return tuple(todo for todo in todos if todo.order.holds_head(request))
 
     def require_reviewer(
-        self, goals: Goals, request: PullRequestHead, actor: ThreadIncarnation
+        self, goals: ProblemGoals, request: PullRequestHead, actor: ThreadIncarnation
     ) -> None:
         snapshot = goals.registry.snapshot()
         snapshot.team_project.require_scope(snapshot, actor, request.repo)
 
     @abstractmethod
     def record_review(
-        self, goals: Goals, request: PullRequestHead, verdict: HeadVerdict, actor: ThreadIncarnation
+        self, goals: ProblemGoals, request: PullRequestHead, verdict: HeadVerdict, actor: ThreadIncarnation
     ) -> HeadReviewRecord: ...
 
 
@@ -1045,7 +1044,7 @@ class PromotedHeadReview(MergeHeadReview):
         return f"Explicitly promoted by {reviewer} on {subject}"
 
     def require_sources(
-        self, goals: Goals, request: PullRequestHead, reviewer: ThreadIncarnation
+        self, goals: ProblemGoals, request: PullRequestHead, reviewer: ThreadIncarnation
     ) -> None:
         snapshot = goals.registry.snapshot()
         project = snapshot.team_project.require_scope(snapshot, reviewer, request.repo)
