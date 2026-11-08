@@ -16,6 +16,33 @@ from agent_comms.coordination.errors import (
 )
 
 from agent_comms.change_report import FileLine
+from agent_comms.planning.order_words import (
+    DeliveryReport,
+    StrikeReason,
+)
+from agent_comms.planning.orders import (
+    CheckedProblemOrder,
+    ClaimOrder,
+    ClaimPublicationUnavailable,
+    ClaimedProblemOrder,
+    CorrectCheckTodo,
+    DeliveredProblemOrder,
+    DoneTodoState,
+    FailedCheckStrike,
+    OrderClaim,
+    OrderMessage,
+    PendingProblemOrder,
+    ReleaseTodo,
+    ResumeClaimOrder,
+    SelectedClaimReviewer,
+    SendBackVerdict,
+    StrikeTodo,
+    Todo,
+    TodoConflict,
+    TriageScope,
+)
+from agent_comms.planning.problem_findings import ExpectedProblem
+from agent_comms.planning.pull_requests import PullRequestLink
 from agent_comms.team.order import OrderFile, TeamContext, main
 from agent_comms.team.standing import DeliveryAwaitingJudgement, Scrutinize
 from agent_comms.errors import (
@@ -43,31 +70,6 @@ from agent_comms.slop import (
     Slop,
 )
 from agent_comms.team.standing_rules import OwedAnswer
-from agent_comms.todos import (
-    CheckedProblemOrder,
-    ClaimOrder,
-    ClaimPublicationUnavailable,
-    ClaimedProblemOrder,
-    CorrectCheckTodo,
-    DeliveredProblemOrder,
-    DeliveryReport,
-    DoneTodoState,
-    ExpectedProblem,
-    FailedCheckStrike,
-    OrderClaim,
-    OrderMessage,
-    PendingProblemOrder,
-    PullRequestLink,
-    ReleaseTodo,
-    ResumeClaimOrder,
-    SelectedClaimReviewer,
-    SendBackVerdict,
-    StrikeReason,
-    StrikeTodo,
-    Todo,
-    TodoConflict,
-    TriageScope,
-)
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.transport.tools.orders import (
     CommsOrderDeliverTool,

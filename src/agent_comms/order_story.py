@@ -14,7 +14,10 @@ from .tool_result import ToolResult
 
 if TYPE_CHECKING:
     from .held_orders import HeldOrders
-    from .todos import StrikeTodo, Todo
+    from .planning.orders import (
+        StrikeTodo,
+        Todo,
+    )
 
 
 @dataclass(frozen=True)

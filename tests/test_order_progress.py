@@ -2,6 +2,14 @@
 The colleague's review timer comes back every window until delivery, and the holder never sees it."""
 
 
+from agent_comms.planning.orders import (
+    EditingProgress,
+    NoCommitProgress,
+    OrderProgress,
+    PresentCheckout,
+    ProgressRead,
+    ProgressSource,
+)
 from agent_comms.repo import Checkout
 import asyncio
 import json
@@ -24,14 +32,6 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import CommitsNaming, EveryCommit, GitCommandError
 from agent_comms.repository_name import RepositoryName
 from agent_comms.registry.threads import NativeThread
-from agent_comms.todos import (
-    EditingProgress,
-    NoCommitProgress,
-    OrderProgress,
-    PresentCheckout,
-    ProgressRead,
-    ProgressSource,
-)
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.ui_model.teammate_state import Unreadable
 from agent_comms.work_branches import WorkBranchError, WorkBranches

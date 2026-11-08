@@ -18,7 +18,11 @@ from agent_comms.repository_name import RepositoryName
 
 if TYPE_CHECKING:
     from agent_comms.order_runs import OrderRun
-    from agent_comms.todos import MergedProblemOrder, Todo
+
+    from .planning.orders import (
+        MergedProblemOrder,
+        Todo,
+    )
 
 
 class ProofBuildMismatchError(ValueError):

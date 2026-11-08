@@ -9,6 +9,11 @@ from typing import Self
 
 import pytest
 
+from agent_comms.planning.orders import (
+    DraftListedPullRequest,
+    PullRequests,
+    RecordPullRequest,
+)
 from agent_comms.team.order import Team, TeamContext
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import CreateProblemGoalAction
@@ -17,7 +22,6 @@ from agent_comms.integration import IntegrationCheckout, IntegrationRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
-from agent_comms.todos import DraftListedPullRequest, PullRequests, RecordPullRequest
 from agent_comms.tool_caller import PeerCaller
 from agent_comms.transport.tools.orders import CommsTodoCreateTool
 from fixture_git import ENVIRONMENT

@@ -1,7 +1,7 @@
 """The send declaration: how a caller addresses a thread or channel and what it publishes.
 
 `SendTool` is the whole behaviour; `CommsSendTool` adds only the native call, so the pair is one
-owner. Serving it for external callers stays in ``agent_comms.tools``.
+owner. Serving it for external callers stays in ``agent_comms.transport.tools.served``.
 """
 
 from __future__ import annotations

@@ -3,6 +3,31 @@
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.hook_forks import SessionSubagents
 from agent_comms.cli_bridges.session_watch import WatchClaim
+from agent_comms.planning.order_words import StrikeReason
+from agent_comms.planning.orders import (
+    Assignment,
+    DraftListedPullRequest,
+    EditWorkplaces,
+    FixScope,
+    IncomingWork,
+    MergedProgress,
+    NoCommitProgress,
+    PendingProblemOrder,
+    ProblemAllocation,
+    ProgressRead,
+    PullRequests,
+    ReleaseTodo,
+    SupersededVerdict,
+    Todo,
+    TodoConflict,
+)
+from agent_comms.planning.problem_findings import (
+    ExpectedProblem,
+    FixShape,
+    LocatedProblemFinding,
+    UnlocatedProblemFinding,
+)
+from agent_comms.planning.pull_requests import PullRequestLink
 from agent_comms.transport.tools.orders import (
     CommsHudTool,
     CommsTeamLoadTool,
@@ -58,10 +83,6 @@ from agent_comms.native_transcript import NativeTranscript
 from agent_comms.repository_name import RepositoryName
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.storage_rules import StorageRule
-from agent_comms.todos import (
-    EditWorkplaces,
-    TodoConflict,
-)
 from agent_comms.turn_digests import OrderEditsRead, OrderEditCountRead, TurnsSince
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.storage.maintenance_barrier import (
@@ -77,25 +98,6 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
 from agent_comms.thread_text import ForkedParent, SubagentRole
-from agent_comms.todos import (
-    Assignment,
-    DraftListedPullRequest,
-    ExpectedProblem,
-    FixScope,
-    FixShape,
-    IncomingWork,
-    LocatedProblemFinding,
-    PendingProblemOrder,
-    ProblemAllocation,
-    ProgressRead,
-    PullRequests,
-    PullRequestLink,
-    ReleaseTodo,
-    StrikeReason,
-    SupersededVerdict,
-    Todo,
-    UnlocatedProblemFinding,
-)
 from agent_comms.tool_caller import ForkCaller, SubagentCaller
 from agent_comms.activity import ActivityState
 from agent_comms.tool_declaration import ToolDeclaration
@@ -108,7 +110,6 @@ from cli_command import team
 from source_revision_fixture import SourceRepository
 from agent_comms.goal_actions import ReissuedOrderGoalAction
 from agent_comms.thread_identity import CoreWatcherIncarnation
-from agent_comms.todos import MergedProgress, NoCommitProgress
 
 
 @pytest.fixture

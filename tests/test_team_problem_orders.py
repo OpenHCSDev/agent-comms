@@ -5,6 +5,10 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.planning.orders import (
+    OrderDelivery,
+    RecordedCommitDelivery,
+)
 from test_todos import order as checked_order
 from source_revision_fixture import SourceRepository
 
@@ -13,10 +17,6 @@ from agent_comms.child_process import BoundedRun
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.goals import CountCheckResult
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
-from agent_comms.todos import (
-    OrderDelivery,
-    RecordedCommitDelivery,
-)
 from agent_comms.slop import DeclarationDerivation, ExistingLine, Slop
 
 

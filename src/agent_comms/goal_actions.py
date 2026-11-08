@@ -24,10 +24,6 @@ from agent_comms.goals import (
 
 from .nominal.field_codec import FieldCodec
 from .input_key import InputKey, InputKeyText
-from agent_comms.todos import (
-    ExpectedProblem, PendingProblemOrder, RecordOrderHeadVerdict, SendBackVerdict, Todo,
-    TodoCommand, TodoOperation,
-)
 
 from .change_report import FileLine, NoSourceReference
 from .child_process import ProcessIdentity
@@ -52,6 +48,15 @@ from .goal_states import (
 from .planning.goal_waits import GoalInputReview, GoalWaits, RecordedGoalWait
 from .lifecycle_capability import Settled
 from .owner_requests import OwnerRequestId
+from .planning.orders import (
+    PendingProblemOrder,
+    RecordOrderHeadVerdict,
+    SendBackVerdict,
+    Todo,
+    TodoCommand,
+    TodoOperation,
+)
+from .planning.problem_findings import ExpectedProblem
 from .progress_claims import ProgressClaim
 from .recorded_time import EventTime
 from .change_report import CitationProject

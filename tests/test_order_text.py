@@ -2,9 +2,16 @@
 import pytest
 from dataclasses import replace
 
+from agent_comms.planning.order_words import (
+    BluntText,
+    FairText,
+    HierarchyText,
+    OrderText,
+    PlainText,
+    StrikeReason,
+)
 from test_todos import order as checked_order
 from agent_comms.team.order import OrderFile
-from agent_comms.todos import BluntText, FairText, HierarchyText, OrderText, PlainText, StrikeReason
 
 TEN = "the teammate pushed a commit that deleted the store test file"
 

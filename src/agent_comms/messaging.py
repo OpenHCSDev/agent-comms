@@ -12,6 +12,7 @@ from .bus_publication import AgentOrigin, AutomatedOrigin, HumanOrigin, InitialO
 from .change_report import NoChangeReport, ReportEvidence
 from .channel_targets import CommandTarget, IncarnationThreadTarget, NamedTarget
 from .nominal.field_codec import ThreadLookup
+from .planning.orders import TodoStore
 from .thread_identity import ThreadIncarnation
 from .errors import (
     CommittedMessageError,
@@ -45,7 +46,6 @@ from .turn_context import ContextSegment
 if TYPE_CHECKING:
     from .goal_management import Goals
 from .errors import TodoError
-from .todos import TodoStore
 
 
 class AnswerAuthority(ABC):

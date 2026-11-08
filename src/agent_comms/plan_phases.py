@@ -28,7 +28,8 @@ from agent_comms.planning.phase_artifacts import RecordedArtifact
 
 if TYPE_CHECKING:
     from agent_comms.plan_reading import PlanReading
-    from agent_comms.todos import Todo
+
+    from .planning.orders import Todo
 
 
 class Plan(DeclaredFamily, affix="Plan"):
@@ -223,7 +224,7 @@ class ReviewQueuePhase(TeamNativePhase):
 
     after = (RecordPlanePhase,)
     evidence = AllEvidence((
-        ClassDeclared("HeadReviewRecord", ("src/agent_comms/todos.py",)),
+        ClassDeclared("HeadReviewRecord", ("src/agent_comms/planning/orders.py",)),
         ClassDeclared(QueueBypassGuard.__name__, ("src/agent_comms_hooks/queue_bypass.py",)),
     ))
 
@@ -259,8 +260,8 @@ class StoryPhase(TeamNativePhase):
     after = (RecordPlanePhase,)
     evidence = AllEvidence(
         (
-            ClassDeclared("CommsOrderStoryTool", ("src/agent_comms/order_tools.py",)),
-            ClassDeclared("CommsTeamStoryTool", ("src/agent_comms/order_tools.py",)),
+            ClassDeclared("CommsOrderStoryTool", ("src/agent_comms/transport/tools/orders.py",)),
+            ClassDeclared("CommsTeamStoryTool", ("src/agent_comms/transport/tools/orders.py",)),
             PatternAbsent(r"^def roast\b", (TEAM_PACKAGE + "judge.py",)),
         )
     )

@@ -17,6 +17,11 @@ from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.goals import OrderCheck
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.order_runs import MechanicalOrderRun
+from agent_comms.planning.orders import (
+    PendingProblemOrder,
+    TodoConflict,
+    WithdrawTodo,
+)
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.repo import Checkout, CheckoutHoldsWorkError, DetachedStart, GitCommandError, LaunchCheckout, NewBranchStart, Repo, RepositoryReads, ScratchCheckout
@@ -26,11 +31,6 @@ from agent_comms.tool_denial import StorageDenied
 from agent_comms.thread_creation import RecordedCreationTime
 from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.todos import (
-    PendingProblemOrder,
-    TodoConflict,
-    WithdrawTodo,
-)
 from cli_command import core, core_process
 import fixture_git
 from order_scope_fixture import FIX_SCOPE

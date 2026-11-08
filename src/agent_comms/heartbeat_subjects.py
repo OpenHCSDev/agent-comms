@@ -23,7 +23,12 @@ from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.service_passes import ServicePasses, ServicePassStore
 from agent_comms.team_service import TeamService
 from agent_comms.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
-from agent_comms.todos import HeadVerdict, StoredHeadReview
+
+from .planning.orders import (
+    HeadVerdict,
+    StoredHeadReview,
+)
+
 
 if TYPE_CHECKING:
     from agent_comms.plan_phases import OrderPhase

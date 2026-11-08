@@ -1,6 +1,20 @@
 """Native stories retain their append-only events across a copied bus and resend."""
 
 
+from agent_comms.planning.order_words import StrikeReason
+from agent_comms.planning.orders import (
+    AcceptedVerdict,
+    DoneTodoState,
+    EditSendBackVerdict,
+    JudgedCall,
+    OrderMessage,
+    OrderVerdict,
+    ReleaseTodo,
+    SendBackVerdict,
+    StrikeTodo,
+    UnorderedProblemOrder,
+    WithdrawTodo,
+)
 from agent_comms.repo import Checkout
 import time
 from dataclasses import replace
@@ -23,20 +37,6 @@ from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.repository_name import RepositoryName
 from agent_comms.registry.threads import NativeThread
-from agent_comms.todos import (
-    AcceptedVerdict,
-    DoneTodoState,
-    EditSendBackVerdict,
-    JudgedCall,
-    OrderMessage,
-    OrderVerdict,
-    ReleaseTodo,
-    SendBackVerdict,
-    StrikeReason,
-    StrikeTodo,
-    UnorderedProblemOrder,
-    WithdrawTodo,
-)
 from agent_comms.tool_caller import PeerCaller, NoThreadCaller, ThreadCaller
 from agent_comms.transport.tools.orders import (
     CommsChangeProblemTool,

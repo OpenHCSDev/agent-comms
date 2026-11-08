@@ -451,7 +451,10 @@ def test_an_opening_refuses_a_drifted_store_and_reconcile_stores_carries_it(priv
 def test_a_dropped_closed_scan_column_is_named_by_the_refusal_and_carried(tmp_path):
     """Install of #3458: the closed scan stopped storing `oldest`. The refusal names the
     table and both shapes, and the reconcile drops the declared column, keeping the row."""
-    from agent_comms.todos import StoredClosedRepository, TodoStore
+    from agent_comms.planning.orders import (
+    StoredClosedRepository,
+    TodoStore,
+)
 
     with TodoStore(tmp_path).writing():
         pass

@@ -16,23 +16,23 @@ import pytest
 import tomli_w
 
 from agent_comms import integration
+from agent_comms.errors import TodoError
+from agent_comms.planning.order_words import VerdictReason
+from agent_comms.planning.orders import (
+    DraftListedPullRequest,
+    MergedListedPullRequest,
+    QualifiedHeadVerdict,
+    ReviewedHeadVerdict,
+    TodoConflict,
+    UnmergedListedPullRequest,
+)
+from agent_comms.planning.pull_requests import PullRequestCommit
 from agent_comms.team.order import Team
 from agent_comms.transport.tools.orders import CommsTodoCreateTool
 from agent_comms_hooks import ToolRefusedError
 from agent_comms.head_review import BaseSide, CombinedInput, HeadReview, HeadSide, IntegrationInput, MergeHeadReview, PromotedHeadReview, PullRequestHead, ResolvedIntegrationSource
 from agent_comms.repository_name import RepositoryName
 from agent_comms.repo import GitCommandError, Repo, UnavailableCommitError
-from agent_comms.todos import (
-    DraftListedPullRequest,
-    MergedListedPullRequest,
-    PullRequestCommit,
-    QualifiedHeadVerdict,
-    ReviewedHeadVerdict,
-    TodoConflict,
-    TodoError,
-    UnmergedListedPullRequest,
-    VerdictReason,
-)
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.test_lease import TestLease

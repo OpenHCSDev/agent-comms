@@ -5,6 +5,10 @@ import json
 import sqlite3
 from contextlib import closing
 
+from agent_comms.planning.orders import (
+    OwnerRequest,
+    TodoStore,
+)
 from cutover.carry_team_vocabulary import (
     TeamVocabulary,
     TeamVocabularyFiles,
@@ -23,7 +27,6 @@ from agent_comms.storage.store_files import store_lock_path
 from agent_comms.task_attachments.team_pings import TeamUpdate, TeamUpdateNotice, TeamUpdateStore
 from agent_comms.team.vibe_check import OverloadDegradation
 from agent_comms.team_hud import CodexUsage, TeamFrame, TeamHud, TeamPlan, UnreadableUsage
-from agent_comms.todos import OwnerRequest, TodoStore
 from conftest import maintenance_held
 from test_reconcile_stores import reconcile
 

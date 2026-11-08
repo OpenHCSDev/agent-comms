@@ -33,7 +33,6 @@ from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.threads import Thread
 from agent_comms.task_attachments.owner_notices import ChokeholdNotice, EscalationNotice, VibeCheckNotice
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.todos import OwnerRequest, Todo
 from agent_comms.tool_result import ToolResult
 from agent_comms.ui_model.teammate_state import TeammateState
 
@@ -47,6 +46,10 @@ from .standing_rules import (
     ReviewTimerUp,
     Sign,
     UndatedStandingRule,
+)
+from ..planning.orders import (
+    OwnerRequest,
+    Todo,
 )
 
 

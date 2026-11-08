@@ -9,6 +9,10 @@ import threading
 
 import pytest
 
+from agent_comms.planning.orders import (
+    ProgressRead,
+    TodoStore,
+)
 from agent_comms.team.standing_rules import StandingRule
 from test_holder_standing_rules import held_bus  # noqa: F401
 
@@ -23,7 +27,6 @@ from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.team_frame_file import TeamPlanFile
 from agent_comms.team_heartbeat import TeamBoardRead, TeamHeartbeat, TeamObservation
 from agent_comms.team_hud import CodexUsage, TeamFrame, TeamPlan, UnreadableUsage
-from agent_comms.todos import ProgressRead, TodoStore
 from agent_comms.ui_model.observation import (
     ObservationService, ObserveTeamHud, ObserveThreads, StopTeamHud,
     TeamHudObserved, TeamHudUnreadable, ThreadsObserved,

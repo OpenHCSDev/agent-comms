@@ -18,6 +18,15 @@ from _pytest.config import get_config
 from .active_route import resolve_comms_route
 from .build_identity import RepositoryCommit
 from .child_process import STOP_GRACE_SECONDS, ResidentManager, SpawnedProcess
+from .planning.order_words import VerdictReason
+from .planning.orders import (
+    CarriedHeadVerdict,
+    PullRequests,
+    RecordPullRequest,
+    StoredHeadReview,
+    Todo,
+)
+from .planning.pull_requests import PullRequestLink
 from .team.order import TeamContext
 from .nominal.declared_family import DeclaredFamily
 from agent_comms_hooks import ToolRefusedError
@@ -57,7 +66,6 @@ from .repo import DetachedStart, GitCommandError, Repo, RepositoryReads
 from .repository_name import RepositoryName
 from .systemd_unit import AgentsSlice
 from .test_lease import LeaseStart, TestLease
-from .todos import CarriedHeadVerdict, PullRequestLink, PullRequests, RecordPullRequest, StoredHeadReview, Todo, VerdictReason
 from .tool_caller import PeerCaller
 from .work_branches import WorkBranches
 

@@ -7,6 +7,7 @@ import os
 import sys
 import tomllib
 
+from agent_comms.planning.orders import DraftListedPullRequest
 from packaging.requirements import Requirement
 import pytest
 import tomli_w
@@ -19,7 +20,6 @@ from agent_comms.integration import CiRunner
 from agent_comms.installer.runtime_resolution import CorePackage, GitSource, PrivateUvProject, ResolvedLock, StackSources
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.repository_name import RepositoryName
-from agent_comms.todos import DraftListedPullRequest
 from checker_stack import CheckerStack
 from github_fixture import GitHubFixture
 from integration_source_fixture import MutualSources

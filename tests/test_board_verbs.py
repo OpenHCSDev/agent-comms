@@ -8,6 +8,30 @@ from inspect import isabstract
 
 import pytest
 
+from agent_comms.planning.order_words import (
+    StrikeReason,
+    VerdictReason,
+)
+from agent_comms.planning.orders import (
+    Assignment,
+    ClaimOrder,
+    DeliveredProblemOrder,
+    NoHeadOrder,
+    OrderClaim,
+    OrderHeadReview,
+    OrderHeadReviewRecord,
+    OrderMessage,
+    ProgressRead,
+    RecordOrderHeadVerdict,
+    RecordPullRequest,
+    ReleaseTodo,
+    ReviewedHeadVerdict,
+    SendBackStrike,
+    StoredHeadReview,
+    TodoStore,
+    UnderReviewHeadVerdict,
+)
+from agent_comms.planning.pull_requests import PullRequestLink
 from agent_comms.team import judge, order
 from agent_comms.errors import TodoError
 from agent_comms.registry.threads import ForkThread, ExternalThread
@@ -27,11 +51,6 @@ from agent_comms.tool_caller import ForkCaller, PeerCaller, ThreadCaller
 from agent_comms_hooks import ToolRefusedError
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.task_attachments.team_pings import RulePing
-from agent_comms.todos import (
-    Assignment, ClaimOrder, DeliveredProblemOrder, NoHeadOrder, OrderHeadReview, OrderClaim,
-    OrderHeadReviewRecord, OrderMessage, ProgressRead, RecordOrderHeadVerdict, RecordPullRequest, ReleaseTodo,
-    PullRequestLink, ReviewedHeadVerdict, SendBackStrike, StoredHeadReview, StrikeReason, TodoStore, UnderReviewHeadVerdict, VerdictReason,
-)
 
 from test_held_problem_orders import merge_two_commit_fix
 from test_team_notifications import beat, notifications

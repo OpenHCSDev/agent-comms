@@ -17,6 +17,18 @@ from typing import ClassVar
 
 import pytest
 
+from agent_comms.planning.orders import (
+    ClaimOrder,
+    DraftListedPullRequest,
+    OperationDelivery,
+    OrderClaim,
+    OrderMessage,
+    PendingProblemOrder,
+    ProgressRead,
+    Todo,
+    UnmergedListedPullRequest,
+)
+from agent_comms.planning.pull_requests import PullRequestLink
 from agent_comms.team.publication_rules import EmptyPullRequest, UnpushedBranch
 from agent_comms.team.spinning import SpinningTeammate, StaleUncommittedEdits
 from agent_comms.team.standing_rules import (
@@ -46,18 +58,6 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.thread_identity import ReportedTools, ToolName
 from agent_comms.thread_text import ForkedParent
 from agent_comms.registry.threads import Thread, NativeThread
-from agent_comms.todos import (
-    ClaimOrder,
-    DraftListedPullRequest,
-    OperationDelivery,
-    OrderClaim,
-    OrderMessage,
-    PendingProblemOrder,
-    ProgressRead,
-    PullRequestLink,
-    Todo,
-    UnmergedListedPullRequest,
-)
 from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.ui_model.teammate_state import Unreadable

@@ -7,6 +7,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.planning.orders import ProgressRead
 from agent_comms.team_heartbeat import TeamHeartbeat, TeamObservation
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.team_hud import TeamFrame
@@ -22,7 +23,6 @@ from agent_comms.storage.locked_store import DocumentChange
 from agent_comms.transport.tools.reads import TeammateRead
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.service_passes import ServicePassStore
-from agent_comms.todos import ProgressRead
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.ui_model.observation import ReadOperation
 from agent_comms.ui_model.teammate_state import TeammateState

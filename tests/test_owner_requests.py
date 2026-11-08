@@ -8,6 +8,15 @@ import pytest
 from agent_comms.nominal.field_codec import GoalId
 from agent_comms.change_report import FileLine, MainRevision
 from agent_comms.channel_targets import TeammatesTag
+from agent_comms.planning.orders import (
+    ClaimOrder,
+    OrderClaim,
+    PendingProblemOrder,
+    TodoStore,
+    TriageScope,
+    WithdrawTodo,
+)
+from agent_comms.planning.pull_requests import PullRequestLink
 from agent_comms.team.order import Team
 from agent_comms.team.standing import RequestStalled
 from agent_comms.team.request import main as request_main
@@ -24,15 +33,6 @@ from agent_comms.repo import Checkout, Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.team.standing_rules import DirectiveUnacted
 from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.todos import (
-    ClaimOrder,
-    OrderClaim,
-    PendingProblemOrder,
-    PullRequestLink,
-    TodoStore,
-    TriageScope,
-    WithdrawTodo,
-)
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.transport.tools.send import CommsSendTool
 from agent_comms.registry.threads import NativeThread

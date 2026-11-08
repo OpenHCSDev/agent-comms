@@ -24,13 +24,18 @@ from agent_comms.order_story import OrderStory
 from agent_comms.plan_phases import Plan, PlanPhase
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.todos import OrderProgress, ProgressPoint, PullRequest
 from agent_comms.tool_result import ToolResult
 from agent_comms.ui_model.hud_groups import (
     HudGroup, HudUnavailableGroup, PhasesDoneByPlanGroup, PlanPhasesGroup,
     ProblemsGroup, UrgentGroup,
 )
 from agent_comms.ui_model.teammate_state import TeammateClock, TeammateState
+
+from .planning.orders import (
+    OrderProgress,
+    PullRequest,
+)
+from .planning.progress_readings import ProgressPoint
 
 
 @dataclass(frozen=True)

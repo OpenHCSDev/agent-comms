@@ -16,6 +16,12 @@ from typing import ClassVar
 from agent_comms.team.standing import PlanIdle, PlanStalled
 
 from .child_process import CountPrinted, NoIntegerPrinted
+from .planning.order_words import PlainText
+from .planning.orders import (
+    Todo,
+    TodoStore,
+    VoidStrikeTodo,
+)
 from .team.order import CheckRequest
 from .nominal.declared_family import DeclaredFamily
 from .pattern_sources import (
@@ -33,7 +39,6 @@ from .team.standing_rules import (
     BoardDisagrees,
     StandingRule,
 )
-from .todos import PlainText, Todo, TodoStore, VoidStrikeTodo
 
 POSTMORTEM = "https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md"
 

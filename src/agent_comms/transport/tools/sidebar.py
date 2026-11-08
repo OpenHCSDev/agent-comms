@@ -1,5 +1,5 @@
 """The requests a display sends to Core: their fields, wire names and results. Serving them
-is in agent_comms.tools, which only the server imports."""
+is in agent_comms.transport.tools.served, which only the server imports."""
 
 from __future__ import annotations
 

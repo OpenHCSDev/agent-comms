@@ -1,4 +1,8 @@
 import sys
+
+from agent_comms.planning.orders import Todo
+
+
 """The CLI reports stored declarations without changing existing databases."""
 from contextlib import closing
 from dataclasses import MISSING, fields
@@ -8,7 +12,6 @@ import sqlite3
 from agent_comms.cli import CliInvocation
 from agent_comms.cli_verbs.schema_report import SchemaReportCliCommand
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.todos import Todo
 from agent_comms.storage.typed_table import SQLiteSchemaObject, SQLiteSchemaDifference
 from bus_record_fixture import context_comms
 

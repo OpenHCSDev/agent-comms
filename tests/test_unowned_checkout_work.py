@@ -1,6 +1,18 @@
 """Checkout allocation and unpublished-file protection at their storage owner."""
 
 
+from agent_comms.planning.order_words import StrikeReason
+from agent_comms.planning.orders import (
+    Assignment,
+    PendingProblemOrder,
+    ProgressRead,
+    ReleaseTodo,
+    StrikeTodo,
+    Todo,
+    TodoConflict,
+    VoidStrikeTodo,
+)
+from agent_comms.planning.problem_findings import ExpectedProblem
 from agent_comms.repo import Checkout, RepositoryReads
 from agent_comms.bus import Bus
 
@@ -44,18 +56,6 @@ from agent_comms.storage_rules import StorageRule
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.errors import TodoError
-from agent_comms.todos import (
-    Assignment,
-    ExpectedProblem,
-    PendingProblemOrder,
-    ProgressRead,
-    ReleaseTodo,
-    StrikeReason,
-    StrikeTodo,
-    Todo,
-    TodoConflict,
-    VoidStrikeTodo,
-)
 from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.ui_model.teammate_state import TeammateState, Unreadable

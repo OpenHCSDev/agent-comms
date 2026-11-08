@@ -1,93 +1,173 @@
-"""A durable todo owns its one assignment; it does not start an agent.
-
-This is an opt-in post-PR1 primitive. An ACP/fork adapter must verify current
-thread identities and reserve a todo BEFORE spawning a worker. File claims,
-collaboration edges and thread goals remain separate authorities.
-"""
-
 from __future__ import annotations
 
 import asyncio
-import calendar
 import json
 import re
 import sqlite3
 import subprocess
 import sys
 import time
-from abc import ABC, abstractmethod
-from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
+from abc import (
+    ABC,
+    abstractmethod,
+)
+from collections.abc import (
+    Callable,
+    Collection,
+    Iterable,
+    Iterator,
+    Mapping,
+    Sequence,
+)
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from contextvars import copy_context
-from dataclasses import dataclass, field, fields, replace
-from datetime import UTC, datetime
-from functools import cached_property, partial
-from itertools import batched, islice
+from dataclasses import (
+    dataclass,
+    field,
+    fields,
+    replace,
+)
+from datetime import (
+    UTC,
+    datetime,
+)
+from functools import (
+    cached_property,
+    partial,
+)
+from itertools import (
+    batched,
+    islice,
+)
 from math import ceil
 from pathlib import Path
-from subprocess import TimeoutExpired
 from statistics import median
-from types import MappingProxyType, get_original_bases
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self, cast, get_args, get_origin
+from subprocess import TimeoutExpired
+from types import (
+    MappingProxyType,
+    get_original_bases,
+)
+from typing import (
+    Annotated,
+    ClassVar,
+    Self,
+    TYPE_CHECKING,
+    cast,
+    get_args,
+    get_origin,
+)
 
-from agent_comms.build_identity import (
+from agent_comms_hooks import ToolRefusedError
+
+from .delivery_evidence import (
+    BranchPointCheck,
+    DeliveryEvidence,
+    EvidenceRequirements,
+    FileDeliveryEvidence,
+    FreshMainCheck,
+    NoDeliveryEvidence,
+    SOURCE_READ_FAILURES,
+    TodoProblems,
+    WorkingEvidence,
+)
+from .order_words import (
+    DirectiveText,
+    GrowthReason,
+    OrderCorrectionReason,
+    PlainText,
+    StrikeReason,
+    VerdictReason,
+)
+from .problem_findings import (
+    ExpectedProblem,
+    FixShape,
+    NoOrderDeletion,
+    NoSuccessor,
+    OrderDeletion,
+    ProblemFinding,
+    Successor,
+    UnlocatedProblemFinding,
+)
+from .progress_readings import (
+    DistanceReading,
+    DistanceReadings,
+    Moving,
+    ProgressPoint,
+)
+from .pull_requests import (
+    BehindMergeBlock,
+    BranchDeliveryMerge,
+    ConflictMergeBlock,
+    DeliveryMerge,
+    FailedCheckMergeBlock,
+    MainDeliveryMerge,
+    MergeBlock,
+    MergedLink,
+    MissingReviewMergeBlock,
+    PendingCheckMergeBlock,
+    PullRequestCommit,
+    PullRequestHeadRevision,
+    PullRequestLink,
+    PullRequestUpdatePage,
+    RefusedCarryMergeBlock,
+    UnmergedDeliveryMerge,
+    WaitingMergeBlock,
+    _github_time,
+)
+from .todo_refusals import (
+    ForeignRequest,
+    HolderConsentRequired,
+    SharedWorktreeRefusal,
+    TeammateOccupied,
+    TodoStoreUnwritable,
+)
+from ..build_identity import (
     BuildIdentity,
     CommitInstallation,
     InstalledBuild,
     RecordedBuildIdentity,
     UnrecordedBuildIdentity,
 )
-from agent_comms.bus import BusReader
-from agent_comms.bus_publication import AgentOrigin
-from agent_comms.change_report import CitedRevisions, CommitRevision, Declaration, FileLine, MainRevision, NoSourceReference, SourceReference, SourceRevision, SourceRoots, SourceText, WorkingTree
-from agent_comms.channel_targets import (
+from ..bus import BusReader
+from ..bus_publication import AgentOrigin
+from ..change_report import (
+    CitationProject,
+    CitedRevisions,
+    CommitRevision,
+    Declaration,
+    FileLine,
+    MainRevision,
+    NoSourceReference,
+    OrderRoots,
+    SourceReference,
+    SourceRevision,
+    SourceRoots,
+    SourceText,
+    WorkingTree,
+)
+from ..channel_targets import (
     CommandTarget,
     CommsTag,
     IncarnationThreadTarget,
     NamedTarget,
 )
-from agent_comms.child_process import (
-    CheckPrinted,
+from ..child_process import (
     ChildResult,
-    NoIntegerPrinted,
     OrderCheckFailedError,
 )
-from agent_comms.command import Command
-from agent_comms.registry.registration import Registration
-from agent_comms.team.rule_file import RuleFile
-from agent_comms.coordination.session import NativeCapture
-from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.errors import (
+from ..command import Command
+from ..coordination.session import NativeCapture
+from ..errors import (
     MissingSourceLine,
-    RejectedEnforcementError,
     TodoError,
 )
-from agent_comms.nominal.field_codec import (
-    DefaultNonNull,
-    Description,
-    DisclosedRecord,
-    DisclosureIdentity,
-    FieldCodec,
-    GitCommitText,
-    GoalId,
-    HuntId,
-    MalformedRecord,
-    MessageId,
-    NullMember,
-    OrderId,
-    RecordProblems,
-    SingleFieldValue,
-    SubclassUnion,
-    ThreadLookup,
-    ToolCallId,
-    WireOmitDefault,
-    WireTransient,
-    WireValue,
-    boundary_decoder,
+from ..goal_scope import OneGoal
+from ..goals import (
+    CheckedCommit,
+    OrderCheck,
 )
-from agent_comms.goals import CheckedCommit, OrderCheck
-from agent_comms.head_review import (
+from ..head_review import (
     HeadReview,
     HeadReviewOrder,
     HeadReviewRelation,
@@ -101,13 +181,44 @@ from agent_comms.head_review import (
     UnpromotedHeadReview,
     UntouchedMergeArm,
 )
-from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.lifecycle_capability import LifecycleCapability, Pending
-from agent_comms.message_reference import MessageReference
-from agent_comms.messages import InfoKind, Message
-from agent_comms.order_runs import OrderRun
-from agent_comms.order_story import ProblemStory, StoryEvent, StoryLine, StorySource
-from agent_comms.owner_requests import (
+from ..launch_runtime import LaunchRuntime
+from ..lifecycle_capability import (
+    LifecycleCapability,
+    Pending,
+)
+from ..message_reference import MessageReference
+from ..messages import (
+    InfoKind,
+    Message,
+)
+from ..nominal.declared_family import DeclaredFamily
+from ..nominal.field_codec import (
+    DefaultNonNull,
+    Description,
+    DisclosedRecord,
+    FieldCodec,
+    GitCommitText,
+    GoalId,
+    HuntId,
+    MalformedRecord,
+    MessageId,
+    NullMember,
+    OrderId,
+    RecordProblems,
+    ThreadLookup,
+    ToolCallId,
+    WireOmitDefault,
+    WireTransient,
+    boundary_decoder,
+)
+from ..order_runs import OrderRun
+from ..order_story import (
+    ProblemStory,
+    StoryEvent,
+    StoryLine,
+    StorySource,
+)
+from ..owner_requests import (
     OpenRequestState,
     OwnerRequestId,
     RequestAtRevision,
@@ -116,30 +227,44 @@ from agent_comms.owner_requests import (
     RequestSelection,
     RequestState,
 )
-from agent_comms.plan_phases import OrderPhase, UnplannedPhase
-from agent_comms.problem_number import ProblemNumber
-from agent_comms.progress_claims import MergedClaim, ProgressClaim, WorkingClaim
-from agent_comms.recorded_time import (
+from ..plan_phases import (
+    OrderPhase,
+    UnplannedPhase,
+)
+from ..problem_number import ProblemNumber
+from ..progress_claims import (
+    MergedClaim,
+    ProgressClaim,
+    WorkingClaim,
+)
+from ..recorded_time import (
     EventTime,
     RecordedEventTime,
     UnrecordedEventTime,
 )
-from agent_comms.registry.registry_store import RegistryStore
-from agent_comms.repo import (
-    Checkout, CommitFilter, CommitsNaming, EveryCommit, FailedGitCommand, GitCommandError, Repo,
-    RepositoryReads, SourceReadFailure,
+from ..registry.registration import Registration
+from ..registry.registry_document import (
+    RegistrySnapshot,
+    TeamProject,
 )
-from agent_comms.repository_name import RepositoryName
-from agent_comms.slop import DeclarationDerivation, Slop
-from agent_comms.storage_rules import CheckoutAllocation, StorageRule
-from agent_comms.thread_identity import (
-    CoreWatcherIncarnation,
-    RecordedThreadIncarnation,
-    ThreadIncarnation,
+from ..registry.registry_store import RegistryStore
+from ..registry.threads import Thread
+from ..repo import (
+    Checkout,
+    CommitFilter,
+    CommitsNaming,
+    EveryCommit,
+    FailedGitCommand,
+    Repo,
+    RepositoryReads,
+    SourceReadFailure,
 )
-from agent_comms.registry.threads import Thread
-from agent_comms.tool_result import ToolResult
-from agent_comms.storage.typed_table import (
+from ..repository_name import RepositoryName
+from ..slop import (
+    DeclarationDerivation,
+    Slop,
+)
+from ..storage.typed_table import (
     CapturedRows,
     Column,
     DurableStore,
@@ -157,129 +282,37 @@ from agent_comms.storage.typed_table import (
     TypedRow,
     TypedTable,
 )
-from agent_comms.work_branches import (
+from ..storage_rules import (
+    CheckoutAllocation,
+    StorageRule,
+)
+from ..team.rule_file import RuleFile
+from ..thread_identity import (
+    CoreWatcherIncarnation,
+    RecordedThreadIncarnation,
+    ThreadIncarnation,
+)
+from ..tool_result import ToolResult
+from ..work_branches import (
     BranchComparison,
     BranchDifference,
     CommitBase,
-    PageInfo,
     SourceGrowth,
     WorkBranchError,
     WorkBranches,
 )
-from agent_comms_hooks import ToolRefusedError
-
-from .goal_scope import OneGoal
-
-from agent_comms.change_report import CitationProject, FetchedRevision, OrderRoots
-from agent_comms.registry.registry_document import (
-    RegistrySnapshot,
-    TeamProject,
-)
-
-# What reading one source checkout or its listing can raise: one source's failure is data.
-SOURCE_READ_FAILURES = (OSError, SourceReadFailure, TimeoutExpired)
 
 if TYPE_CHECKING:
-    from agent_comms.held_orders import LiveHold
-    from agent_comms.team.order import (
+    from ..comms import Comms
+    from ..goal_management import Goals
+    from ..held_orders import LiveHold
+    from ..team.order import (
+        OrderFile,
+        OrderedProblems,
+        Reassignment,
         Team,
         TeamContext,
-        OrderedProblems,
-        OrderFile,
-        Reassignment,
     )
-    from agent_comms.comms import Comms
-    from agent_comms.goal_management import Goals
-
-
-@dataclass(frozen=True)
-class PullRequestHeadRevision(FetchedRevision):
-    link: PullRequestLink
-
-    @property
-    def reference(self) -> str:
-        return f'refs/agent-comms/cited/{self.link.number}'
-
-    @property
-    def fetch_refspec(self) -> str:
-        return f'+pull/{self.link.number}/head:{self.reference}'
-
-
-@dataclass(frozen=True)
-class DeliveryEvidence(DeclaredFamily, affix="DeliveryEvidence"):
-    def artifact(self) -> str:
-        raise TodoError("No application evidence was supplied at delivery; pass --artifact FILE.")
-
-    def require_run(self, run: OrderRun) -> None:
-        run.require_artifact("")
-
-
-@dataclass(frozen=True)
-class NoDeliveryEvidence(DeliveryEvidence):
-    pass
-
-
-@dataclass(frozen=True)
-class FileDeliveryEvidence(DeliveryEvidence):
-    path: str
-
-    def artifact(self) -> str:
-        if not Path(self.path).is_file():
-            raise TodoError("Delivery evidence must name an existing file.")
-        return self.path
-
-    def require_run(self, run: OrderRun) -> None:
-        run.require_artifact(self.path)
-
-
-class TodoProblems(RecordProblems, TodoError):
-    """Every refusal of one todo request, collected before anything is read back or written."""
-
-
-class EvidenceRequirements:
-    """Shared evidence checks for a source request and its resolved delivery."""
-
-    def evidence_problems(self, evidence: DeliveryEvidence, run: OrderRun) -> dict[str, str]:
-        problems: dict[str, str] = {}
-        with RecordProblems.collecting(
-            problems, '--seen.run', 'supply --seen FILE with the application evidence'):
-            evidence.require_run(run)
-        return problems
-
-
-class WorkingEvidence(EvidenceRequirements):
-    """An operation's working claim always needs a real artifact, even for a mechanical run."""
-
-    def evidence_problems(self, evidence: DeliveryEvidence, run: OrderRun) -> dict[str, str]:
-        problems = super().evidence_problems(evidence, run)
-        with RecordProblems.collecting(
-            problems, '--seen.working', 'supply --seen FILE or --screenshot FILE for the working claim'):
-            evidence.artifact()
-        return problems
-
-
-class FreshMainCheck:
-    """Undelivered work is checked against fetched main, independent of the local branch."""
-
-    def check_base(self, repo: Path) -> str:
-        return f"{Repo.remote}/{WorkBranches.main}"
-
-
-class BranchPointCheck:
-    """Delivered work is checked against the main commit it was built on, never main since:
-    once the fix merges, current main passes, which proves nothing about the check."""
-
-    @property
-    @abstractmethod
-    def work_commit(self) -> str: ...
-
-    def check_base(self, repo: Path) -> str:
-        main = f"{Repo.remote}/{WorkBranches.main}"
-        line = set(Repo.git(repo, "rev-list", "--first-parent", main).split())
-        for commit in Repo.git(repo, "rev-list", "--first-parent", f"{self.work_commit}^1").split():
-            if commit in line:
-                return commit
-        raise TodoError(f"{self.work_commit} was not built on {WorkBranches.main}.")
 
 
 class OrderCompletion(DeclaredFamily, affix="Delivery"):
@@ -558,40 +591,6 @@ class CommitDelivery(CommitSourceDelivery, declared_name="delivered_commit"):
         return UnmergedDeliveryMerge(sources)
 
 
-class DeliveryMerge(DeclaredFamily, affix="DeliveryMerge"):
-    """The integration observed when Core checked a commit delivery; never a claim of install."""
-
-    @property
-    @abstractmethod
-    def line(self) -> str: ...
-
-
-@dataclass(frozen=True)
-class MainDeliveryMerge(DeliveryMerge):
-    @property
-    def line(self) -> str:
-        return f"merged to {WorkBranches.main}"
-
-
-@dataclass(frozen=True)
-class BranchDeliveryMerge(DeliveryMerge):
-    branch: str
-    commit: str
-
-    @property
-    def line(self) -> str:
-        return f"merged to {self.branch} as {self.commit}"
-
-
-@dataclass(frozen=True)
-class UnmergedDeliveryMerge(DeliveryMerge):
-    branches: tuple[str, ...]
-
-    @property
-    def line(self) -> str:
-        return f"not merged; linked branches: {', '.join(self.branches)}"
-
-
 @dataclass(frozen=True, kw_only=True)
 class CheckedCommitDelivery(CommitDelivery):
     merge: DeliveryMerge
@@ -636,48 +635,6 @@ class ReportDelivery(OrderDelivery):
         verified_claims: dict[ProgressClaim, tuple[str, ...]],
     ) -> ReportDelivery:
         return replace(self, at=EventTime.capture(time.time()))
-
-
-@dataclass(frozen=True)
-class PullRequestLink:
-    """The GitHub identity recorded by the order that delivers it."""
-    repo: RepositoryName
-    number: int
-
-    def __post_init__(self) -> None:
-        if FieldCodec.decode(int, self.number) <= 0:
-            raise TodoError("A pull request number must be positive.")
-
-    @property
-    def url(self) -> str:
-        return f"https://github.com/{self.repo.to_wire()}/pull/{self.number}"
-
-    @staticmethod
-    def _reported_number(repo: RepositoryName, reference: str) -> int:
-        result = subprocess.run(
-            ("gh", "pr", "view", reference, "-R", repo.to_wire(),
-             "--json", "number", "--jq", ".number"),
-            capture_output=True, text=True, timeout=60, check=True)
-        return FieldCodec.decode(int, FieldCodec.parse(result.stdout))
-
-    @classmethod
-    def created(cls, repo: RepositoryName, reference: str) -> Self:
-        """GitHub resolves its opaque creation result; we never parse its URL."""
-        return cls(repo, cls._reported_number(repo, reference))
-
-    @classmethod
-    def existing(cls, repo: RepositoryName, number: int) -> Self:
-        link = cls(repo, number)
-        if cls._reported_number(repo, str(number)) != number:
-            raise TodoError(f"GitHub did not report pull request {number} in {repo.to_wire()}.")
-        return link
-
-
-@dataclass(frozen=True)
-class MergedLink:
-    """A pull request an order links and the merge commit the order recorded for it."""
-    link: PullRequestLink
-    sha: str
 
 
 class OrderLinks:
@@ -794,119 +751,6 @@ class MergedPullRequest(PullRequest):
             return ()
         return (MainDeliveryMerge() if self.base == WorkBranches.main
                 else BranchDeliveryMerge(self.base, self.merge),)
-
-
-def _github_time(text: str) -> float:
-    return calendar.timegm(time.strptime(text, "%Y-%m-%dT%H:%M:%SZ"))
-
-
-@dataclass(frozen=True)
-class PullRequestCommit:
-    """GitHub's mergeCommit object on a merged request."""
-    oid: str
-
-
-@dataclass(frozen=True)
-class MergeBlock(DeclaredFamily, affix="MergeBlock"):
-    """Why GitHub will not merge a head, decoded once from the forge row."""
-    at: str
-
-    @cached_property
-    def since(self) -> float:
-        return _github_time(self.at)
-
-    @abstractmethod
-    def what(self) -> str: ...
-
-    @abstractmethod
-    def remedy(self) -> str: ...
-
-    def red(self) -> bool:
-        """A failed required check, as opposed to one still pending or a merge state."""
-        return False
-
-
-@dataclass(frozen=True)
-class FailedCheckMergeBlock(MergeBlock):
-    """A required check concluded red on the head."""
-    name: str
-
-    def red(self) -> bool:
-        return True
-
-    def what(self) -> str:
-        return f"required check {self.name} failed"
-
-    def remedy(self) -> str:
-        return f"fix {self.name} at its owner"
-
-
-@dataclass(frozen=True)
-class ConflictMergeBlock(MergeBlock):
-    """The head conflicts with its base; no check can turn it green."""
-
-    def what(self) -> str:
-        return "conflicts with its base"
-
-    def remedy(self) -> str:
-        return "merge main into it"
-
-
-@dataclass(frozen=True)
-class PendingCheckMergeBlock(MergeBlock):
-    name: str
-
-    def what(self) -> str:
-        return f'required check {self.name} has not finished'
-
-    def remedy(self) -> str:
-        return f'inspect {self.name} at its owner'
-
-
-@dataclass(frozen=True)
-class MissingReviewMergeBlock(MergeBlock):
-    def what(self) -> str:
-        return 'BLOCKED: no successful agent-comms/review on this head'
-
-    def remedy(self) -> str:
-        return 'judge HEAD'
-
-
-@dataclass(frozen=True)
-class RefusedCarryMergeBlock(MergeBlock):
-    """The forge refused the carried review status on this head; only this head pays for it."""
-    refusal: str
-
-    def what(self) -> str:
-        return f"carried review status refused: {self.refusal}"
-
-    def remedy(self) -> str:
-        return "restore the repository's write access or drop it from the teammate's repos"
-
-
-@dataclass(frozen=True)
-class BehindMergeBlock(MergeBlock):
-    def what(self) -> str:
-        return 'BEHIND: head is behind its base'
-
-    def remedy(self) -> str:
-        return 'queue'
-
-
-@dataclass(frozen=True)
-class WaitingMergeBlock(MergeBlock):
-    """The grace period belongs to the cause, not to a second standing rule."""
-    seconds: ClassVar[int] = 3 * 60
-
-    @cached_property
-    def since(self) -> float:
-        return super().since + self.seconds
-
-    def what(self) -> str:
-        return 'required checks finished but the armed head has not merged'
-
-    def remedy(self) -> str:
-        return 'queue'
 
 
 @dataclass(frozen=True)
@@ -1042,19 +886,6 @@ class MergedListedPullRequest(ListedPullRequest):
                                  orders, base=self.base,
                                  merge=self.merge.oid, merged_at=_github_time(self.merged),
                                  problems=problems, status_contexts=self.status_contexts)
-
-
-@dataclass(frozen=True)
-class PullRequestUpdate:
-    number: int
-    updated: str
-
-
-@dataclass(frozen=True)
-class PullRequestUpdatePage:
-    """Changed identities; the existing query decoder still owns PR state."""
-    rows: tuple[PullRequestUpdate, ...]
-    page_info: PageInfo
 
 
 class PullRequests(RepositoryReads):
@@ -1286,105 +1117,6 @@ class PullRequests(RepositoryReads):
                 listed.stderr.strip() or f"GitHub order lookup in {repo.to_wire()} failed.")
         return tuple(FieldCodec.decode(
             dict[str, ListedPullRequest], FieldCodec.parse(listed.stdout)).values())
-
-
-@dataclass(frozen=True)
-class ProgressPoint(DisclosedRecord):
-    """A revision and its time in the order's progress; Git rows use committer time."""
-    sha: Annotated[str, DisclosureIdentity()]
-    at: float
-    format: ClassVar[str] = "%H %ct"
-
-    @classmethod
-    def listed(cls, line: str) -> ProgressPoint:
-        sha, at = line.split()
-        return cls(sha, float(at))
-
-
-@dataclass(frozen=True)
-class DistanceReading(DisclosedRecord):
-    at: float
-    distance: CheckPrinted
-    command: str = ""
-
-
-@dataclass(frozen=True)
-class DistanceReadings(DisclosedRecord):
-    """The order's last two distance readings, oldest first: its base at the order, then its
-    newest commit. Fewer than two read, or a last reading at done, project nothing."""
-    readings: tuple[DistanceReading, ...] = ()
-    window: ClassVar[int] = 2
-
-    @property
-    def trend(self) -> DistanceTrend:
-        """A missing count diagnoses the check; only measured counts project a finish."""
-        if not self.readings:
-            return UnreadTrend()
-        return self.readings[-1].distance.project(
-            self.counted_trend, lambda printed: UncountedTrend(printed, self.readings[-1].command))
-
-    def counted_trend(self, final: int) -> DistanceTrend:
-        last = self.readings[-self.window:]
-        if len(last) < self.window or not final:
-            return UnreadTrend()
-        first, latest = last
-
-        def compared(previous: int) -> DistanceTrend:
-            if final >= previous:
-                return FlatTrend(final, latest.at)
-            rate = (previous - final) / max(latest.at - first.at, 1.0)
-            return MovingTrend(final, latest.at + final / rate)
-
-        return first.distance.project(compared, lambda printed: UnreadTrend())
-
-
-class DistanceTrend(DeclaredFamily, affix="Trend"):
-    """What the order's distance readings say about its finish."""
-
-    @property
-    @abstractmethod
-    def projection(self) -> str: ...
-
-
-@dataclass(frozen=True)
-class MovingTrend(DistanceTrend):
-    distance: int
-    done: float
-
-    @property
-    def projection(self) -> str:
-        return f"; distance {self.distance}, projected done {RecordedEventTime(self.done).clock()}"
-
-
-@dataclass(frozen=True)
-class FlatTrend(DistanceTrend):
-    """The distance did not fall from the reading before ``since``."""
-
-    distance: int
-    since: float
-
-    @property
-    def projection(self) -> str:
-        return f"; distance {self.distance}, not falling"
-
-
-@dataclass(frozen=True)
-class UncountedTrend(DistanceTrend):
-    printed: NoIntegerPrinted
-    command: str
-
-    @property
-    def projection(self) -> str:
-        return self.printed.progress(self.command)
-
-
-@dataclass(frozen=True)
-class UnreadTrend(DistanceTrend):
-    """Fewer than two readings, or the last one at done: nothing to project from."""
-
-    @property
-    def projection(self) -> str:
-        return ""
 
 
 @dataclass(frozen=True)
@@ -1847,16 +1579,6 @@ class FoundProgress(OrderProgress):
 
 
 @dataclass(frozen=True)
-class Moving:
-    """Work whose last edit, commit, push or PR change was observed at ``at``."""
-    at: float = field(kw_only=True)
-    readings: DistanceReadings = field(default=DistanceReadings(), kw_only=True, compare=False)
-
-    def distance_readings(self) -> DistanceReadings:
-        return self.readings
-
-
-@dataclass(frozen=True)
 class NoCommitProgress(OrderProgress):
     def missing_merges(self, source: ProgressSource) -> tuple[MergedProgress, ...]:
         return tuple(MergedProgress.found(source))
@@ -1983,334 +1705,6 @@ class EditingProgress(Moving, NoCommitProgress, FoundProgress):
         return (self.at,) if self.at < timestamp else ()
 
 
-@dataclass(frozen=True)
-class OrderWords(WireValue):
-    """Text the teammate writes; quoted, backticked, indented and path-like spans are someone else's words."""
-
-    # A path/file match starts at a token boundary or immediately after a
-    # quoted span. Retrying its greedy prefix at every character is quadratic
-    # for long ordinary words with no slash or filename suffix.
-    CITED: ClassVar[re.Pattern] = re.compile(
-        r'(?m)^ {4}.*$|`[^`\n]*`|"[^"\n]*"|“[^”\n]*”|'
-        r'(?:(?<!\S)|(?<=[`"”]))(?:\S*/\S*|\S+\.(?:py|md|jsonl?|txt|png|toml|ts|log|patch)\b)|'
-        r'\b\w+_\w+\b|\b[A-Z][a-z0-9]+[A-Z]\w*\b')  # identifiers are code, not prose
-    REFUSED: ClassVar[re.Pattern]
-    refusal: ClassVar[str]
-    least_words: ClassVar[int] = 1
-    text: str
-
-    def __post_init__(self) -> None:
-        for refused in self.wording_refusal(self.text):
-            raise ToolRefusedError(refused)
-
-    def to_wire(self) -> str:
-        return self.text
-
-    @classmethod
-    def from_wire(cls, data: object) -> Self:
-        if not isinstance(data, str):
-            raise MalformedRecord(f"Expected {cls.__name__}, received {type(data).__name__}")
-        with MalformedRecord.refusing(f"Invalid {cls.__name__}"):
-            return cls(data)
-
-    @classmethod
-    def schema(cls) -> dict[str, object]:
-        return FieldCodec.value_schema(str)
-
-    @classmethod
-    def refused(cls, text: str) -> str | None:
-        """The writer's check: it may print a note, which a decoded record never does."""
-        cls.flag(text)
-        return next(iter(cls.wording_refusal(text)), None)
-
-    @classmethod
-    def wording_refusal(cls, text: str) -> tuple[str, ...]:
-        """The refusal this text earns, or none: what a decoded record checks, silently."""
-        found = cls.found(text)
-        if len(text.split()) < cls.least_words or cls.refuses(found):
-            return (cls.refusal.format(cls.least_words, found),)
-        return ()
-
-    @staticmethod
-    def refuses(found: list[str]) -> bool:
-        return bool(found)
-
-    @classmethod
-    def flag(cls, text: str) -> None:
-        """A family that refuses has no note to print; one that only flags overrides this."""
-
-    @classmethod
-    def found(cls, text: str) -> list[str]:
-        return sorted({m.group(0).lower() for m in cls.REFUSED.finditer(cls.CITED.sub(' ', text))})
-
-
-class DirectiveWords(OrderWords):
-    """A wording check every text sent to units passes; each check declares itself one."""
-
-
-class PlainText(DirectiveWords):
-    """Prose in the words the user uses: no word that hides what happened."""
-
-    REFUSED = re.compile(r'\b(custody|admission|admit\w*|receipt\w*|checkpoint\w*|provenance|authority|authorities|witness\w*|lattice|surface|disposition\w*|invariant\w*|semantic\w*|ownership|lifecycle|acceptance|canonical|retained|borrow(?:ed|er|ers)?|bounded|certif\w*|recertif\w*|candidate|fence\w*|sidecar\w*|substrate|installed-path|source[- ]paired|exact[- ]head|integration owner|separately owned|follow-?up|remaining scope|not claimed|remains held|load[- ]bearing|cutover|carr(?:y|ies) across|declared dependency|qualifying)\b', re.I)
-    refusal = "Jargon {1} hides what happened; say it plainly."
-
-    @staticmethod
-    def refuses(found: list[str]) -> bool:
-        """Flags, never blocks: a wording slip costs a note, not a resend."""
-        return False
-
-    @classmethod
-    def flag(cls, text: str) -> None:
-        """The note goes to whoever writes the text, at the write; decoding a record never prints it."""
-        if found := cls.found(text):
-            print(f"Flag: jargon {', '.join(found)} hides what happened; say it plainly.", file=sys.stderr)
-
-
-class VerdictReason(PlainText):
-    """Why a reviewer decided a head, in words that stand on the public record."""
-
-    refusal = "Say why in {}+ words; jargon {} hides what happened."
-    least_words = 6
-
-
-class GrowthReason(PlainText):
-    """Why each growing source file needs its new lines, naming every one of them."""
-
-    refusal = "Say why the source grows in {}+ words; jargon {} hides what happened."
-    least_words = 12
-    option: ClassVar[str] = '--growth'
-
-    @classmethod
-    def every(cls, texts: tuple[str, ...]) -> GrowthReason:
-        """One reason per repeated --growth, each held to the word minimum, on one record."""
-        return cls("; ".join(cls(text).text for text in texts))
-
-    def names(self, path: str) -> bool:
-        """One whole word of the reason is the file's path or its file name."""
-        words = {word.strip(".,;:()`'\"") for word in self.text.split()}
-        return bool({path, Path(path).name} & words)
-
-
-class OrderCorrectionReason(PlainText):
-    """Why the recorded part of an order was wrong, in enough words to stand on the record."""
-
-    refusal = (
-        "Say what was wrong with the recorded order in {}+ words; jargon {} hides what happened."
-    )
-    least_words = 8
-
-
-class StrikeReason(VerdictReason):
-    """What a unit did, plainly, in enough words to stand on the public record. A unit's
-    wording is answered by a correction, never a strike: a reason whose every quoted span
-    is jargon is about wording alone."""
-
-    refusal = "Say what the teammate did plainly in {}+ words; jargon {} hides what happened."
-    least_words = 10
-
-    @classmethod
-    def wording_refusal(cls, text: str) -> tuple[str, ...]:
-        cited = [span.group(0).strip('`"“” ') for span in cls.CITED.finditer(text)]
-        if cited and all(PlainText.found(span) for span in cited):
-            return (f"{cited} is the teammate's wording; send it a correction, not a strike.",)
-        return super().wording_refusal(text)
-
-
-class OrderText(OrderWords):
-    """An order states the edit; it never hands the decision back or asks permission."""
-
-    REFUSED = re.compile(r"\b(please|could you|would you|can you|if possible|consider|maybe|perhaps|when you get a chance|"
-                         r"feel free|if you (think|agree|want)|thoughts\??|what do you think|thanks|thank you|sorry|"
-                         r"no rush|optional(ly)?|up to you|might want|suggest)\b", re.I)
-    refusal = "Soft wording {1}: state the edit, do not ask."
-
-
-class BluntWords:
-    """The words that name witnessed incompetence, and the refusal a text lacking them gets."""
-
-    WORDS: ClassVar[tuple[str, ...]] = (
-        "stupid", "slop", "bullshit", "useless", "wrong", "lazy", "garbage", "nonsense", "incompetent", "incompetently",
-        "incompetence", "sloppy", "theater", "dumb", "worthless", "broke", "broken", "pointless", "waste")
-    REFUSED: ClassVar[re.Pattern] = re.compile(rf"\b({'|'.join(WORDS)})\b", re.I)
-    refusal: ClassVar[str] = "Not blunt: name what was stupid/slop/wrong and why, or pass --clean if nothing was."
-
-
-class BluntText(BluntWords, OrderWords):
-    """Witnessed incompetence is named as such: the text must call something stupid, slop or wrong."""
-
-    @staticmethod
-    def refuses(found: list[str]) -> bool:
-        return not found
-
-    @classmethod
-    def wording_refusal(cls, text: str) -> tuple[str, ...]:
-        """The refusal names every word that passes, so the next try is the last."""
-        return tuple(f"{refusal} Any one of these words passes: {', '.join(cls.WORDS)}."
-                     for refusal in super().wording_refusal(text))
-
-
-class DeliveryReport(BluntText):
-    """A unit's delivery names the slop it killed or the broken thing it fixed, in the owner's
-    voice; a status memo with no verdict in it is half a report."""
-
-    refusal: ClassVar[str] = (
-        "Flat report refused: name the slop you killed or the broken thing you fixed, with "
-        "file:line, in the owner's voice (blunt, colorful, deadpan, and funny: land one joke on the code). A report with no opinion "
-        "in it is half a report."
-    )
-
-
-class FairText(DirectiveWords):
-    """The OOPSLA paper proves multiple parents derive every required pair with nothing outside, which composition and
-    forwarding supply outside (Fig 3, Thm 4.6): faulting inheritance itself is dogma, not a restated fact.
-    Only explanatory prose is checked; code and banned-action fields are not prose."""
-
-    REFUSED = re.compile(r"composition over inheritance|(prefer|favou?r|use) composition|inherits (two|both|multiple|several|\d+)\b"
-                         r"|multiple (inheritance|parents) (is (bad|wrong|dangerous|confusing|fragile|slop)|causes|creates|smells|complicates)"
-                         r"|diamond problem|fragile base|(avoid|no|stop using|drop) (inheritance|mixins?|multiple (parents|inheritance))"
-                         r"|too many (parents|base classes|mixins)|deep (inheritance|hierarch)|mixing (of )?\w+ and \w+"
-                         r"|inheritance (abuse|soup|hell|is wrong)", re.I)
-    refusal = ("{1} faults inheritance itself. Cite an NRA pattern ID, "
-               "name the restated fact and the declaration that derives it.")
-
-
-class HierarchyText(DirectiveWords):
-    """A forwarder restates an implementation pair: explanatory prose must fix the
-    hierarchy rather than preserve a forwarding route."""
-
-    REFUSED = re.compile(r"(leave|keep|retain|preserve)[^.\n]{0,60}\bforward|forwarders? (stay|remain)|reach(es|ing)? through", re.I)
-    refusal = ("{1} keeps a forwarder or bans fixing the hierarchy: fold the false owner into the real one or compose "
-               "providers as parents, and delete every route.")
-
-
-class DirectiveText:
-    """What the teammate and the owner's voice send units: order send, order say and the
-    connector's send refuse a text failing any of these."""
-
-    @staticmethod
-    def checks() -> tuple[type[DirectiveWords], ...]:
-        return tuple(DirectiveWords.__subclasses__())
-
-    @classmethod
-    def refused(cls, text: str) -> tuple[str, ...]:
-        return tuple(refused for family in cls.checks() if (refused := family.refused(text)))
-
-    @classmethod
-    def require(cls, text: str) -> None:
-        if refused := cls.refused(text):
-            raise ToolRefusedError("Directive refused, nothing sent: " + " ".join(refused))
-
-
-class OrderDeletion(DeclaredFamily, affix="Deletion"):
-    """The deletion an order declares, decoded as its own fields."""
-
-    label: ClassVar[str] = "Deletes:"
-    checks: ClassVar[tuple[OrderCheck, ...]] = ()
-
-    @property
-    def modules(self) -> tuple[str, ...]:
-        return ()
-
-    def instructions(self) -> tuple[str, ...]:
-        return ()
-
-
-@dataclass(frozen=True)
-class NoOrderDeletion(OrderDeletion):
-    pass
-
-
-@dataclass(frozen=True)
-class ModuleDeletion(OrderDeletion):
-    modules: tuple[str, ...] = ()
-
-    def instructions(self) -> tuple[str, ...]:
-        return (f"{self.label} {', '.join(self.modules)}",)
-
-
-@dataclass(frozen=True)
-class FamilyDeletion(OrderDeletion):
-    """Completion counts the whole family on the delivered commit, so a site renamed or wrapped
-    instead of deleted still counts, and only zero passes."""
-
-    family: str
-    site: FileLine
-    count: OrderCheck
-
-    @property
-    def checks(self) -> tuple[OrderCheck, ...]:
-        return (self.count,)
-
-    def instructions(self) -> tuple[str, ...]:
-        return (f"{self.label} {self.family} at {self.site.to_wire()} :: {self.count.directory} :: "
-                f"{self.count.command}",)
-
-
-@dataclass(frozen=True)
-class ProblemFinding(DeclaredFamily, affix="ProblemFinding"):
-    def source_locations(self) -> tuple[FileLine, ...]:
-        return ()
-
-    def require_references(self, roots: SourceRoots, revision: SourceRevision) -> None:
-        """An unlocated finding has no source reference to validate."""
-
-    def in_declarations(self, declarations: tuple[Declaration, ...], root: Path) -> bool:
-        return False
-
-    def instructions(self) -> tuple[str, ...]:
-        return ()
-
-    def place(self) -> str:
-        return "-"
-
-
-@dataclass(frozen=True)
-class UnlocatedProblemFinding(ProblemFinding):
-    pass
-
-
-@dataclass(frozen=True)
-class LocatedProblemFinding(ProblemFinding):
-    where: FileLine
-
-    def source_locations(self) -> tuple[FileLine, ...]:
-        return (self.where,)
-
-    def require_references(self, roots: SourceRoots, revision: SourceRevision) -> None:
-        self.where.require_exists(roots, revision)
-
-    def in_declarations(self, declarations: tuple[Declaration, ...], root: Path) -> bool:
-        return any(declaration.holds(self.where, root) for declaration in declarations)
-
-    def instructions(self) -> tuple[str, ...]:
-        return (f"Where: {self.place()}",)
-
-    def place(self) -> str:
-        return self.where.to_wire()
-
-
-@dataclass(frozen=True, kw_only=True)
-class Successor(SubclassUnion, affix="Successor"):
-    """The problem that already owns a withdrawn order's fix, or none."""
-
-    @abstractmethod
-    def withdrawal_note(self) -> str: ...
-
-
-@dataclass(frozen=True, slots=True)
-class SupersedingProblem(SingleFieldValue, Successor):
-    problem: str
-
-    def withdrawal_note(self) -> str:
-        return f" (superseded by {self.problem})"
-
-
-@dataclass(frozen=True, slots=True)
-class NoSuccessor(NullMember, Successor):
-    def withdrawal_note(self) -> str:
-        return ""
-
-
 @dataclass(frozen=True, kw_only=True)
 class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="ProblemOrder"):
     """A problem's order state; an unassigned finding is not a fabricated order."""
@@ -2429,6 +1823,7 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
             raise TodoError("The problem has open orders; link or drop them first.")
         return FoldedProblemOrder(original=self, into=into, why=why)
 
+
 @dataclass(frozen=True, kw_only=True)
 class UnorderedProblemOrder(ProblemOrder):
 
@@ -2463,22 +1858,6 @@ class FoldedProblemOrder(ProblemOrder):
 
     def story(self) -> tuple[StoryLine, ...]:
         return self.original.story()
-
-
-@dataclass(frozen=True)
-class FixShape:
-    """The parent declarations owning a fix and the related member declarations."""
-
-    parents: tuple[FileLine, ...]
-    members: tuple[FileLine, ...]
-
-    def __post_init__(self) -> None:
-        if not self.parents:
-            raise TodoError("scope.shape.parents must name at least one parent class declaration")
-
-    def require_references(self, roots: SourceRoots, revision: SourceRevision) -> None:
-        for location in (*self.parents, *self.members):
-            location.require_class(roots, revision)
 
 
 class DeliverySource(EvidenceRequirements, DeclaredFamily, affix="DeliverySource"):
@@ -3589,55 +2968,6 @@ class HuntRecord(TodoStoreRows, TypedTable):
     hunt: Hunt
 
 
-class TodoRefusal(TodoError, RejectedEnforcementError):
-    """A todo refusal a standing rule reports as not applied, in the refusal's own words."""
-
-    def explanation(self) -> str:
-        return str(self)
-
-
-class SharedWorktreeRefusal(TodoRefusal):
-    """Two different order holders cannot write into the same physical worktree."""
-
-    reason: ClassVar[str] = 'the proposed holder shares an occupied edit boundary'
-
-    def __init__(self, problem: str, holding_problem: str, holder: ThreadIncarnation,
-                 holding_holder: ThreadIncarnation, worktree: Path) -> None:
-        self.problem = problem
-        self.holding_problem = holding_problem
-        self.holder = holder
-        self.holding_holder = holding_holder
-        self.worktree = worktree
-        super().__init__(
-            f"{problem} for {holder.name} shares worktree {worktree} with "
-            f"{holding_problem} held by {holding_holder.name}."
-        )
-
-
-class TeammateOccupied(TodoRefusal):  # noqa: N818 - domain refusal
-    """The unit holds an open order the incoming work does not own; a standing rule that
-    restores work to it reports this refusal instead of applying."""
-
-    reason: ClassVar[str] = "the teammate already holds other work"
-
-
-class ForeignRequest(TodoRefusal):  # noqa: N818 - domain refusal
-    """An owner request answers only its own teammates; a standing rule that restores work
-    serving another teammate's request reports this refusal instead of ending the pass."""
-
-    reason: ClassVar[str] = "the order serves another teammate's request"
-
-
-class HolderConsentRequired(TodoRefusal):
-    """Maintenance authority cannot replace an exact holder's consent."""
-
-    reason: ClassVar[str] = "the current holder has not approved this work change"
-
-
-class TodoStoreUnwritable(TodoError):  # noqa: N818 - domain-specific storage failure
-    """The todo store could not complete its write; its original cause is preserved."""
-
-
 class ClaimPublicationUnavailable(TodoError):  # noqa: N818 - domain-specific refusal outcome
     """The Todo saved a delivery claim and its publication could not be completed; the bus
     may or may not already hold the original."""
@@ -3946,7 +3276,7 @@ class Assignment(TodoHolder):
 
     def record_review(self, goals: Goals, current: Todo,
                       operation: RecordOrderHeadVerdict) -> None:
-        from .goal_actions import GoalPrecondition, HeadReviewedOrderGoalAction
+        from ..goal_actions import GoalPrecondition, HeadReviewedOrderGoalAction
 
         goals.update_goal(self.owner, HeadReviewedOrderGoalAction(
             expect=GoalPrecondition(goal_id=OneGoal(self.generation)),
@@ -4036,7 +3366,6 @@ class DoneTodoState(TodoState):
                        revision=current.revision + 1)
 
 
-# Todo stores these commands, so it is declared after them; the alias reads it lazily.
 type DirectedTodo = Todo
 
 
@@ -4097,13 +3426,6 @@ class TodoCommand(Command[DirectedTodo, DirectedTodo], DeclaredFamily, StorySour
 
     @abstractmethod
     def changed(self, current: Todo) -> Todo: ...
-
-
-@dataclass(frozen=True)
-class ExpectedProblem:
-    """An open problem an order assigns, at the Todo revision its sender read."""
-    problem: Annotated[str, Description("Open problem ID")]
-    expected_revision: Annotated[int, Description("Its Todo revision the sender read")]
 
 
 @dataclass(frozen=True)
@@ -6310,6 +5632,7 @@ class StoredOrderStory(TodoStoreRows, NoUpdate, NoDelete, TypedTable):
         """)
         return StoryFacts.capture(db.execute(query, problems))
 
+
 @dataclass(frozen=True)
 class MaintainsWork(TodoCommand, declared_name=None):
     """Shared maintenance of a problem: the actor must work within the problem's request."""
@@ -6408,7 +5731,6 @@ class LinkTodo(MaintainsWork, ReleasesHold):
                       *source.history.events(source.id, OrderMessage)):
             StoredOrderStory.insert_values(db, problem=current.id, event=event)
         return result
-
 
 
 class TodoHistory:

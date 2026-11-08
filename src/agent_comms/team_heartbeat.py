@@ -25,9 +25,12 @@ from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal_census import NominalPlanReadings
 from agent_comms.plan_reading import PlanReadings, RetainedPlanReadings
 from agent_comms.service_passes import TeamPass, ServicePassStore
-from agent_comms.todos import ProgressRead, Todo
 from agent_comms.ui_model.teammate_state import TeammateState
 
+from .planning.orders import (
+    ProgressRead,
+    Todo,
+)
 from .team.standing_rules import (
     HeartbeatFrame,
     ServicePassFailing,

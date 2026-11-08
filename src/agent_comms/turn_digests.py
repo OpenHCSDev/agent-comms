@@ -21,14 +21,19 @@ from .nominal.field_codec import FieldCodec, WireExclude, WireTransient, project
 from .held_orders import HeldOrders, LiveHold
 from .historical_native_inputs import HistoricalNativeAnswers
 from .message_reference import MessageReference
+from .planning.orders import (
+    EditWorkplaces,
+    NoCommitProgress,
+    OrderProgress,
+    ProgressRead,
+    Todo,
+    TodoStore,
+)
 from .private_registry_guard import RegistryPrivacy
 from .order_work import OrderWork
 from .problem_number import ProblemNumber
 from .registry.threads import ConversationPreparation, Thread
 from .thread_identity import ThreadIncarnation
-from .todos import (
-    EditWorkplaces, NoCommitProgress, OrderProgress, ProgressRead, Todo, TodoStore,
-)
 from .tool_declaration import EditCall
 from .tool_result import ToolResult
 from .service_passes import ServiceReading

@@ -65,6 +65,37 @@ from ...order_story import (
 )
 from ...order_work import OrderWork
 from ...plan_phases import OrderPhase
+from ...planning.delivery_evidence import TodoProblems
+from ...planning.order_words import (
+    DeliveryReport,
+    PlainText,
+    StrikeReason,
+)
+from ...planning.orders import (
+    AssignedClaimReviewer,
+    ClaimOrder,
+    ClaimReviewer,
+    CorrectCheckTodo,
+    CorrectRunTodo,
+    HeadReviewed,
+    HeadVerdict,
+    InstallTodo,
+    JudgedCall,
+    MeasuredReview,
+    NoHeadOrder,
+    OrderClaim,
+    OrderCompletion,
+    OrderProgress,
+    ProgressRead,
+    ProgressSource,
+    ResumeClaimOrder,
+    ServeTodo,
+    Todo,
+    TodoOperation,
+    ToolCallVerdict,
+    WaivedVerdict,
+)
+from ...planning.pull_requests import PullRequestLink
 from ...problem_number import ProblemNumber
 from ...progress_claims import ProgressClaim
 from ...read_basis import ReadAuthority
@@ -82,35 +113,6 @@ from ...team_hud_records import (
     TeammateDetail,
 )
 from ...thread_identity import ThreadIncarnation
-from ...todos import (
-    AssignedClaimReviewer,
-    ClaimOrder,
-    ClaimReviewer,
-    CorrectCheckTodo,
-    CorrectRunTodo,
-    DeliveryReport,
-    HeadReviewed,
-    HeadVerdict,
-    InstallTodo,
-    JudgedCall,
-    MeasuredReview,
-    NoHeadOrder,
-    OrderClaim,
-    OrderCompletion,
-    OrderProgress,
-    PlainText,
-    ProgressRead,
-    ProgressSource,
-    PullRequestLink,
-    ResumeClaimOrder,
-    ServeTodo,
-    StrikeReason,
-    Todo,
-    TodoOperation,
-    TodoProblems,
-    ToolCallVerdict,
-    WaivedVerdict,
-)
 from ...tool_caller import (
     ThreadCaller,
     ToolCaller,

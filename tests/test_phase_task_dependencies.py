@@ -6,10 +6,10 @@ import sys
 
 import pytest
 
-from agent_comms.todos import UnorderedProblemOrder
+from agent_comms.planning.orders import UnorderedProblemOrder
 
 
-@pytest.mark.parametrize("module", ("plan_phases", "work_dispatch", "goal_actions", "todos"))
+@pytest.mark.parametrize("module", ("plan_phases", "work_dispatch", "goal_actions", "planning.orders"))
 def test_import_order_does_not_reintroduce_dispatch_cycle(module):
     checkout = Path(__file__).resolve().parents[1]
     result = subprocess.run(
