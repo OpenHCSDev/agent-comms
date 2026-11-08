@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
@@ -1172,6 +1173,13 @@ class SubtypeHeader(WireHeader):
 class SystemEvent(TaggedWire, ABC, affix=""):
     header = SubtypeHeader
 
+    @classmethod
+    def undeclared_tag(cls, tag: str) -> str:
+        """Claude Code extends this family without telling us, so a subtype this build does
+        not declare reads as the unmodelled notice rather than refusing the record."""
+        logging.info('Claude Code wrote system subtype %r, which this build does not model', tag)
+        return UnmodelledSystemEvent.declared_name
+
     def ends_turn(self) -> bool:
         return False
 
@@ -1265,6 +1273,21 @@ class ApiError(SystemEvent, declared_name='api_error'):
     """Claude Code's notice that it is retrying a failed API request (a 529 overload, say). It
     delivers nothing and ends no turn; undeclared, its first record stopped claude-b-ui's watch
     on 2026-11-06 at 19:53Z."""
+
+
+class UnmodelledSystemEvent(SystemEvent, declared_name='unmodelled'):
+    """A notice from a newer Claude Code than this build models.
+
+    Claude Code owns this vocabulary and adds to it whenever it likes, and twice in two days
+    an undeclared subtype took a whole session's delivery down rather than costing one unread
+    notice: api_error stopped claude-b-ui's watch on 2026-11-06, and model_refusal_fallback
+    stopped this bridge on 2026-11-08 on every single reconnect. A notice nobody acts on must
+    not be able to do that, so SystemEvent answers TaggedWire.undeclared_tag with this member.
+
+    It inherits every default: delivers nothing, ends no turn, begins no history. A subtype we
+    do want behaviour from is still declared on its own, and until someone declares it this
+    one keeps the session alive instead of waiting for a release.
+    """
 
 
 class SystemRecord(ClaudeRecord, declared_name='system'):

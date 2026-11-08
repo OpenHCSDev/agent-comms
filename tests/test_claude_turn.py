@@ -11,8 +11,8 @@ from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase
 from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
 from agent_comms.cli_bridges.claude_protocol import (
-    CatchUp, ClaudeSession, ClaudeToolDraft, KnownTurn, Live, ReadResultObserved, RedactedThinking,
-    TimedRecord, ToolUse, UserRecord,
+    ApiError, CatchUp, ClaudeSession, ClaudeToolDraft, KnownTurn, Live, ReadResultObserved,
+    RedactedThinking, TimedRecord, ToolUse, UnmodelledSystemEvent, UserRecord,
 )
 from agent_comms.recorded_time import EventTime
 from agent_comms.runtime_updates import ActiveItem, FinishedItem, StartedItem
@@ -145,3 +145,30 @@ def test_a_retry_notice_reads_as_a_system_event_that_ends_no_turn(notice):
     assert not record.ends_turn()
     assert record.updates(session) == ()
     assert session.turn == KnownTurn(running)
+
+def test_a_subtype_this_build_never_heard_of_keeps_the_session_alive():
+    """Claude Code owns this vocabulary and extends it without warning. Twice in two days an
+    undeclared subtype took a whole session's delivery down instead of costing one unread
+    notice: api_error stopped claude-b-ui's watch on 2026-11-06, and model_refusal_fallback
+    stopped claude-laptop's bridge on 2026-11-08 on every reconnect.
+    """
+    running = NativeTurnId(transcript_record('prompt'))
+    session = ClaudeSession(phase=Live(), turn=KnownTurn(running))
+    unheard = dict(
+        type='system', subtype='a_subtype_claude_adds_next_week', level='info',
+        uuid=transcript_record('unheard'), timestamp='2026-11-08T00:00:00.000Z',
+        sessionId='session', content='something a newer build explains',
+    )
+    record = ClaudeJsonLines().decode_line(json.dumps(unheard).encode(), 0)
+
+    assert isinstance(record.subtype, UnmodelledSystemEvent)
+    assert not record.ends_turn()
+    assert record.updates(session) == ()
+    assert session.turn == KnownTurn(running), 'an unmodelled notice moves nothing'
+
+    # A subtype we do model still answers for itself, so this is a floor and not a funnel.
+    declared = dict(unheard, subtype='api_error', uuid=transcript_record('declared'))
+    assert type(ClaudeJsonLines().decode_line(
+        json.dumps(declared).encode(), 1).subtype) is ApiError
+
+
