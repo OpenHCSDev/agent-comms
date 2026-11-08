@@ -7,7 +7,7 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from sqlite3 import Connection
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import Annotated, ClassVar
 
 from ..bus import BusReader
 from ..bus_publication import Delivered
@@ -30,13 +30,12 @@ from ..storage.typed_table import (
     StoreRows, TypedTable,
 )
 
-if TYPE_CHECKING:
-    from ..agent_activity import AgentActivity
-    from ..registry.registration import Registration
-    from ..message_bus import MessageBus
-    from ..message_reference import MessageReference
-    from ..native_input_owner import RegistryOwner
-    from ..registry.registry_store import RegistryEdit
+from ..agent_activity import AgentActivity
+from ..registry.registration import Registration
+from ..published_bus import PublishedBus
+from ..message_reference import MessageReference
+from ..native_input_owner import RegistryOwner
+from ..registry.registry_store import RegistryEdit
 
 
 class GoalWait(ABC):
@@ -371,7 +370,7 @@ class GoalWaitRecovery:
     """Release and consume dependency waits against their original goal and input state."""
 
     registry: Registration
-    bus: MessageBus
+    bus: PublishedBus
     agents: AgentActivity
     waits: GoalWaits
 

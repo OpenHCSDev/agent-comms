@@ -17,13 +17,10 @@ from dataclasses import dataclass
 from functools import cached_property, partial
 from pathlib import Path
 
-from agent_comms.activity_clocks import ActivityClocks
 from agent_comms.agent_inbox import TakenInputCursor
 from agent_comms.bus import Bus, BusSnapshot
 from agent_comms.bus_route_counts import HeldUnseenCounts
-from agent_comms.catalog_document import CatalogAccess
-from agent_comms.catalog_store import ChannelCatalog
-from agent_comms.channel_targets import ChannelTarget, NamedTarget
+from agent_comms.channel_targets import NamedTarget
 from agent_comms.channels import AnyChannel, Channel
 from agent_comms.child_process import AsyncWork
 from agent_comms.context_segments.awareness import AwarenessSegment
@@ -41,13 +38,11 @@ from agent_comms.peer_relevance import Prioritized
 from agent_comms.publisher import Publisher
 from agent_comms.published_bus import PublishedBus
 from agent_comms.read_basis import (
-    AnonymousViewer,
-    DisplayViewer,
     ListedDeliveries,
     NamedViewer,
     ReadCursor,
 )
-from agent_comms.read_ledger import ReadDocument, ReadLedger
+from agent_comms.read_ledger import ReadDocument
 from agent_comms.read_selection import CapturedSelection
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.routing import DeliveryScope
