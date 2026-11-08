@@ -590,10 +590,14 @@ def test_failure_packet_follows_the_team_rename_alias(notification_bus):
 def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_bus):
     """Ready and done-but-held phases colleague; finished phases are one count per plan."""
     from agent_comms.team_hud_records import TeamPhase
-    from agent_comms.plan_phases import (
-        BusInterfacePhase, DesignReconciledPhase, OneOrderOwnerPhase, RecordPlanePhase,
-        RetainedStorePhase, ReviewQueuePhase,
-    )
+    from agent_comms.planning.plan_phases import (
+    BusInterfacePhase,
+    DesignReconciledPhase,
+    OneOrderOwnerPhase,
+    RecordPlanePhase,
+    RetainedStorePhase,
+    ReviewQueuePhase,
+)
 
     comms = notification_bus
     colleague = comms.registry.require("colleague").incarnation

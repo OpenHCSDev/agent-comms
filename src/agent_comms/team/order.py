@@ -70,7 +70,10 @@ from agent_comms.storage.maintenance_barrier import MaintenanceHeldError
 from ..messaging.message_reference import MessageReference
 from ..messaging.messages import Message
 from agent_comms.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
-from agent_comms.plan_phases import OrderPhase, PlanPhase
+from ..planning.plan_phases import (
+    OrderPhase,
+    PlanPhase,
+)
 from agent_comms.notification_evidence import AllOutcomes
 from ..messaging.message_notification import MessageNotification
 from agent_comms.recorded_time import RecordedEventTime

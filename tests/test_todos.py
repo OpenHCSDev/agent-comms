@@ -80,7 +80,7 @@ from agent_comms.installer.practice import PracticeCopy
 from agent_comms.storage.locked_store import RootFile
 from agent_comms.installer.runtime_resolution import CorePackage, TextualPackage, ToadPackage
 from agent_comms.owner_requests import NewestOpenRequest
-from agent_comms.plan_phases import PlanPhase
+from agent_comms.planning.plan_phases import PlanPhase
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun, OrderRun
 from agent_comms.recorded_time import RecordedEventTime
@@ -94,7 +94,10 @@ from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.errors import TodoError
 from agent_comms.work_branches import WorkBranches
 from source_revision_fixture import SourceRepository
-from agent_comms.plan_phases import RetainedStorePhase, UnplannedPhase
+from agent_comms.planning.plan_phases import (
+    RetainedStorePhase,
+    UnplannedPhase,
+)
 from agent_comms.team.standing import ReassignedWheelSpin
 from agent_comms.planning.goals import (
     GoalChangedError,

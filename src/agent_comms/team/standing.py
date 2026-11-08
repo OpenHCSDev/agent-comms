@@ -44,7 +44,7 @@ from ..messaging.message_bus import WatchPass
 from ..messaging.messages import Message
 from agent_comms.owner_requests import OwnerRequestId
 from agent_comms.plan_reading import PlanReading
-from agent_comms.plan_phases import PlanPhase
+from ..planning.plan_phases import PlanPhase
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.registry_document import DEFAULT_ROSTER, RegistrySnapshot
 from ..projects.repo import Repo

@@ -7,7 +7,7 @@ from abc import ABC
 from collections.abc import Mapping
 from graphlib import TopologicalSorter
 from itertools import groupby
-from typing import Annotated, ClassVar, Self, Union
+from typing import Annotated, ClassVar, Never, Self, Union
 
 from pydantic import (
     Discriminator,
@@ -21,6 +21,7 @@ from pydantic_core import CoreSchema
 from typing_extensions import TypeForm
 
 from .coordination.errors import CoordinationReadUnavailable
+from .errors import RelationViolationError
 from .nominal.declared_family import UnknownFamilyMember
 from .external_transcript import RequestedEarlierPage
 from .nominal.field_codec import TimestampText
@@ -144,6 +145,15 @@ class CoreError(WatchLine, declared_name=None):
     error: str
 
     @classmethod
+    def decoded(cls, text: str) -> CoreError:
+        """Read the declared error family once at a reply boundary."""
+        return WireModel.adapter(cls.declared_union()).validate_json(text)
+
+    def raise_error(self) -> Never:
+        """Keep the failure's declared recovery contract across the wire."""
+        raise self.exception_type(self.error)
+
+    @classmethod
     def from_exception(cls, error: BaseException) -> CoreError:
         members = {member.exception_type: member for member in cls.members_with(cls)}
         message = str(error)
@@ -169,6 +179,10 @@ class HeldCoreError(CoreError, declared_name="held"):
 
 class FailedCoreError(CoreError, declared_name="failed"):
     exception_type = BaseException
+
+    def raise_error(self) -> Never:
+        """An unspecified Core failure remains a failed call, never a deferral."""
+        raise RelationViolationError(self.error)
 
 
 class EarlierItems(WatchLine, TurnItem, declared_name="earlier-items"):

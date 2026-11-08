@@ -1,35 +1,59 @@
-"""The owner's plans and their phases: each phase declares its plan, the phases it waits
-for, and the evidence on main that proves it done.
-
-This family is the one owner of every plan's order and dependencies; each plan document
-points here. An order names the phase it serves through ``ProblemOrder.phase``; an order
-outside every plan serves ``UnplannedPhase``. A phase is done only when its declared
-evidence holds on the plan repository's ``origin/main``; accepting a task proves nothing.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, ClassVar
+from typing import (
+    ClassVar,
+    TYPE_CHECKING,
+)
 
-from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.storage.store_files import SqliteStore
-from agent_comms.installer.probes.carry import Carry
-from agent_comms.pi_events import PiEvent
-from agent_comms.private_registry_guard import RegistryPrivacy
-from agent_comms.thread_identity import BirthlessIncarnation
-from agent_comms.tool_calls import CliToolArguments
 from agent_comms_hooks.process_claim import ProcessSingleton
 from agent_comms_hooks.queue_bypass import QueueBypassGuard
-from agent_comms.nominal.field_codec import Id128, MessageId, NominalSpelling, NominalText
-from agent_comms.phase_evidence import AllEvidence, AuditPatternPresent, BusStorageAbsent, ClassFlagsAbsent, QualifiedName, ClassDeclared, ClassRostersAbsent, CommitMerged, FunctionDeclared, NoAbsenceProbes, NoExactCopies, NoGodFunction, OwnClassChecksAbsent, ParentsShared, ParityEvidence, PathsAbsent, DocumentPatternPresent, PatternAbsent, PatternPresent, PhaseEvidence, RestatedMembersAbsent
-from agent_comms.phase_tasks import PhaseTask, UnspecifiedPhaseTask
-from agent_comms.planning.phase_artifacts import RecordedArtifact
+
+from .phase_artifacts import RecordedArtifact
+from ..installer.probes.carry import Carry
+from ..nominal.declared_family import DeclaredFamily
+from ..nominal.field_codec import (
+    Id128,
+    MessageId,
+    NominalSpelling,
+    NominalText,
+)
+from ..phase_evidence import (
+    AllEvidence,
+    AuditPatternPresent,
+    BusStorageAbsent,
+    ClassDeclared,
+    ClassFlagsAbsent,
+    ClassRostersAbsent,
+    CommitMerged,
+    DocumentPatternPresent,
+    FunctionDeclared,
+    NoAbsenceProbes,
+    NoExactCopies,
+    NoGodFunction,
+    OwnClassChecksAbsent,
+    ParentsShared,
+    ParityEvidence,
+    PathsAbsent,
+    PatternAbsent,
+    PatternPresent,
+    PhaseEvidence,
+    QualifiedName,
+    RestatedMembersAbsent,
+)
+from ..phase_tasks import (
+    PhaseTask,
+    UnspecifiedPhaseTask,
+)
+from ..pi_events import PiEvent
+from ..private_registry_guard import RegistryPrivacy
+from ..storage.store_files import SqliteStore
+from ..thread_identity import BirthlessIncarnation
+from ..tool_calls import CliToolArguments
 
 if TYPE_CHECKING:
-    from agent_comms.plan_reading import PlanReading
-
-    from .planning.orders import Todo
+    from .orders import Todo
+    from ..plan_reading import PlanReading
 
 
 class Plan(DeclaredFamily, affix="Plan"):
@@ -313,7 +337,7 @@ class BusWriterPhase(VirtualBusPhase):
     after = (BusInterfacePhase,)
     evidence = PatternAbsent(
         "[a]ppend_private_unlocked",
-        ("src/agent_comms/bus_publication.py", "src/agent_comms/publisher.py"),
+        ("src/agent_comms/messaging/bus_publication.py", "src/agent_comms/publisher.py"),
     )
 
 
@@ -326,7 +350,7 @@ class BusDeliveryReadersPhase(VirtualBusPhase):
         (
             "src/agent_comms/wake_candidate_index.py",
             "src/agent_comms/notification_assignment.py",
-            "src/agent_comms/read_ledger.py",
+            "src/agent_comms/messaging/read_ledger.py",
             "src/agent_comms/cursor_publication.py",
             "src/agent_comms/planning/goal_waits.py",
         ),
@@ -347,7 +371,7 @@ class BusHistoryReadersPhase(VirtualBusPhase):
             "src/agent_comms/active_route.py",
             "src/agent_comms/acp.py",
             "src/agent_comms/comms.py",
-            "src/agent_comms/message_bus.py",
+            "src/agent_comms/messaging/message_bus.py",
             "scripts/attach_historical_views.py",
         ),
     )
@@ -395,10 +419,16 @@ class BusDeletionPhase(VirtualBusPhase):
 
 
 FLAG = r"(: ClassVar\[bool\])? = (True|False)$"
+
+
 LIFECYCLE_FLAGS = (
     "terminal|failed|successful|pending|active|executing|unresolved|deferred|complete|completed"
 )
+
+
 CODEC_FLAGS = "accepts_null|opaque|external_json_shape|strict_fields|accepts_prompt"
+
+
 SMALL_FAMILY_FLAGS = "multiple_targets|preengagement_target|notification_changed|input_uncertain"
 
 
@@ -878,7 +908,7 @@ class RecordsPhase(RemainingSlopPhase):
             PatternAbsent(
                 r"^\s*nonlocal\b",
                 (
-                    "src/agent_comms/read_ledger.py",
+                    "src/agent_comms/messaging/read_ledger.py",
                     "src/agent_comms/relationships.py",
                     "src/agent_comms/shared_ledger.py",
                     "src/agent_comms/input_disposition.py",
@@ -1058,7 +1088,7 @@ class RamBudgetPhase(OwnerAsksPhase):
 class UnflattenModulesPhase(OwnerAsksPhase):
     """The package structure for the flat modules of ``src/agent_comms`` is a declared plan."""
 
-    evidence = ClassDeclared(PackageStructurePlan.__name__, ("src/agent_comms/plan_phases.py",))
+    evidence = ClassDeclared(PackageStructurePlan.__name__, ("src/agent_comms/planning/plan_phases.py",))
 
 
 class PackageStructurePhase(PlanPhase, declared_name=None):
@@ -1218,4 +1248,4 @@ class PhaseEvidenceClosurePhase(ModuleOwnershipPhase):
     """
 
     after = (ModuleSlopPhase,)
-    evidence = PatternAbsent(r"^    evidence = PathsAbsent\(", ("src/agent_comms/plan_phases.py",))
+    evidence = PatternAbsent(r"^    evidence = PathsAbsent\(", ("src/agent_comms/planning/plan_phases.py",))
