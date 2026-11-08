@@ -22,6 +22,7 @@ from agent_comms.owner_protocol import OwnerFailure, OwnerLine
 from agent_comms.storage.private_path import PrivateSocketRole
 from agent_comms.owner_connection import socket_path
 from agent_comms.runtime_requests import GoalHistoryRuntimeRequest
+from served_requests import served
 from agent_comms.registry.threads import NativeThread
 
 
@@ -100,7 +101,7 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
         assert snapshot.canonical_name(retired.name) == retired.name
         assert comms.registry.canonical_name(retired.name) == retired.name
         with pytest.raises(UnregisteredThreadError):
-            GoalHistoryRuntimeRequest(thread=retired.name).require_owner(comms.registry.entry(retired.name).entry)
+            served(GoalHistoryRuntimeRequest(thread=retired.name)).require_owner(comms.registry.entry(retired.name).entry)
 
         # Use the original production publisher before another independent read.
         # The failed prompt is never resent or turned into a binding.
@@ -162,13 +163,13 @@ def test_a_captured_owner_binds_only_its_birth_after_its_name_is_reused_in_proce
 
     comms.registry.rename("bound-owner", "renamed-owner")
     renamed = comms.registry.entry("renamed-owner").entry
-    GoalHistoryRuntimeRequest(thread="renamed-owner", captured=CapturedOwner(captured)).require_owner(renamed)
+    served(GoalHistoryRuntimeRequest(thread="renamed-owner", captured=CapturedOwner(captured))).require_owner(renamed)
 
     comms.registry.remove("renamed-owner")
     comms.registry.declare(NativeThread("renamed-owner", frozenset(), Checkout(project), process_identity=here))
     replacement = comms.registry.entry("renamed-owner").entry
     assert replacement.thread.incarnation != captured
     with pytest.raises(RelationViolationError, match="incarnation changed"):
-        GoalHistoryRuntimeRequest(thread="renamed-owner", captured=CapturedOwner(captured)).require_owner(replacement)
-    assert GoalHistoryRuntimeRequest(thread="renamed-owner", captured=AnyOwner()).require_owner(replacement) \
+        served(GoalHistoryRuntimeRequest(thread="renamed-owner", captured=CapturedOwner(captured))).require_owner(replacement)
+    assert served(GoalHistoryRuntimeRequest(thread="renamed-owner", captured=AnyOwner())).require_owner(replacement) \
         == replacement.thread

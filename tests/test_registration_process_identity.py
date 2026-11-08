@@ -13,6 +13,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import TurnId
 from agent_comms.registry.registry_document import RegistryDocument
 from agent_comms.runtime_requests import ProjectRuntimeRequest
+from served_requests import served
 from agent_comms.registry.threads import ExternalThread, ForkThread, NativeThread
 from agent_comms.storage.maintenance_barrier import (
     InstallingPhase, MaintenanceHeldError, MaintenanceOperator, PausedPhase,
@@ -170,9 +171,9 @@ def test_project_request_entry_retains_original_birth_across_rename(tmp_path):
     comms = wire(tmp_path)
     owner = NativeThread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(owner)
-    request = ProjectRuntimeRequest.for_native(
+    request = served(ProjectRuntimeRequest.for_native(
         comms.registry.snapshot(), comms.registry.require("owner")
-    )
+    ))
     assert request.require_original(comms.registry.entry("owner").entry).name == "owner"
     comms.registry.rename("owner", "renamed")
     current = comms.registry.entry("renamed").entry

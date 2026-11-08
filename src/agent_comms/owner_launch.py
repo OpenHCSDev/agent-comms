@@ -208,6 +208,12 @@ class StopOwnerRuntimeRequest(ResultRuntimeRequest[RuntimeRequestContext]):
     owner: OwnerIdentity
     claim: ClaimedIdentity
 
+    async def retire(self, sessions: SessionLifecycle, state: OwnerSession) -> OwnerRetiredReply:
+        if state.owner.incarnation != self.owner.incarnation or state.owner.generation >= self.owner.generation:
+            raise RelationViolationError("Stop request does not fence this original session")
+        await sessions.retire_owner(state, self.owner, self.claim)
+        return OwnerRetiredReply(state.owner)
+
 
 class ServedStopOwnerRuntimeRequest(
     ServedResultRuntimeRequest[RuntimeRequestContext],
@@ -236,9 +242,3 @@ class ServedStopOwnerRuntimeRequest(
         session = next(agent.sessions.fenced_sessions(owner.incarnation), AcpSessionId(owner.name))
         return await agent.inputs.state(session).retire_for_stop(
             ctx.server.agent.sessions, self)
-
-    async def retire(self, sessions: SessionLifecycle, state: OwnerSession) -> OwnerRetiredReply:
-        if state.owner.incarnation != self.owner.incarnation or state.owner.generation >= self.owner.generation:
-            raise RelationViolationError("Stop request does not fence this original session")
-        await sessions.retire_owner(state, self.owner, self.claim)
-        return OwnerRetiredReply(state.owner)

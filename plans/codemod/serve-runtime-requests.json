@@ -407,8 +407,7 @@
          "member_names": [
           "require_owner",
           "bind",
-          "result",
-          "retire"
+          "result"
          ]
         },
         {

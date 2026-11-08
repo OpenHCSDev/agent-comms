@@ -8,7 +8,7 @@ commands do not own coordination, backend or identity lifecycles.
 from __future__ import annotations
 
 from .controller import NO_CONTROLLER
-from .repo import Checkout
+from .projects.checkouts import Checkout
 
 import json
 from abc import abstractmethod
