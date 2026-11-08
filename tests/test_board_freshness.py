@@ -214,8 +214,17 @@ def test_a_pass_that_throws_leaves_the_boards_it_could_not_replace(held_bus, acc
     with pytest.raises(RuntimeError, match="promisor remote"):
         asyncio.run(TeamHeartbeat().run(lambda: nullcontext(held_bus)))
 
-    assert on_disk() == retained, (
-        "a failing merge check replaced Tristan's boards and plan with its own empty fragment"
+    # What the pass may not do is unlink a board or replace the plan. A board it finished
+    # before the merge check threw is complete (pass_body builds every board before
+    # reconcile reads git) and is kept, newer, by retention.keep; so frames are compared by
+    # presence and the plan, which keep never writes, by its bytes.
+    after = on_disk()
+    plan = TeamPlanFile.path_in(held_bus.root)
+    assert after.keys() == retained.keys(), (
+        "a failing merge check unlinked boards Tristan's reads still need"
+    )
+    assert after.get(plan) == retained.get(plan), (
+        "a failing merge check replaced Tristan's plan with its own empty fragment"
     )
 
     # The other half, so the fix cannot degrade into never retaining at all: a pass that
