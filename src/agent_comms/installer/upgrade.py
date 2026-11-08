@@ -86,6 +86,7 @@ from agent_comms.installer.interpreter_operation import (
     PracticePhase,
     PreparePhase,
     ProcessScanPhase,
+    RuntimeRetirementPhase,
     ReadBackVerifyPhase,
     ReleaseBridgePhase,
     RestoredCheckoutPreparePhase,
@@ -961,8 +962,9 @@ class Install[Rehearsed: Rehearsal](ABC):
                 installed_harnesses = harnesses(self.staged)
                 with ProcessScanPhase().running(self.staged.commands.clock):
                     processes = RuntimeProcesses.observe(self.staged.runtime)
-                    # The same reading decides both questions: who is still on an old
-                    # runtime, and which built runtimes nobody is on at all.
+                # The same reading decides both questions: who is still on an old
+                # runtime, and which built runtimes nobody is on at all.
+                with RuntimeRetirementPhase().running(self.staged.commands.clock):
                     retirement = RuntimeRetention.after_install(
                         self.staged.runtime, self.installed.runtime, processes, self.root,
                         self.spill_dir,
