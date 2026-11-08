@@ -7,7 +7,7 @@ import sys
 
 def _priority_after_lowering(start: int) -> int:
     script = (
-        "import os; from agent_comms.worker import lower_priority; "
+        "import os; from agent_comms.execution.worker import lower_priority; "
         "lower_priority(); print(os.getpriority(os.PRIO_PROCESS, 0))"
     )
     result = subprocess.run(
@@ -18,7 +18,7 @@ def _priority_after_lowering(start: int) -> int:
 
 
 def test_owner_lowers_its_priority_to_background():
-    from agent_comms.worker import OWNER_NICENESS
+    from agent_comms.execution.worker import OWNER_NICENESS
 
     assert _priority_after_lowering(0) == OWNER_NICENESS
 

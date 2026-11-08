@@ -7,14 +7,20 @@ import signal
 import sys
 from contextlib import suppress
 
-from .acp import CommsAgent
-from .active_route import ActiveRoute
-from .comms import Comms, wire
-from .coordination.database import CoordinationStore
-from .coordination.coordinator import Coordination
-from .launch_root import LaunchRoot, started
-from .owner_connection import socket_path
-from .root_runtime import RootRuntimeStore
+from ..acp import CommsAgent
+from ..active_route import ActiveRoute
+from ..comms import (
+    Comms,
+    wire,
+)
+from ..coordination.coordinator import Coordination
+from ..coordination.database import CoordinationStore
+from ..launch_root import (
+    LaunchRoot,
+    started,
+)
+from ..owner_connection import socket_path
+from ..root_runtime import RootRuntimeStore
 
 
 async def run() -> None:
