@@ -20,6 +20,7 @@ import asyncio
 import itertools
 import os
 import signal
+import select
 import socket
 import struct
 import sys
@@ -1113,6 +1114,27 @@ class ServiceResult(TaggedUnion, affix=""):
     def retire_request(self, service: ObservationService, request: ReadRequest) -> None:
         service.pending.pop(request.request_id)
 
+    def replaces(self, pending: ServiceResult) -> bool:
+        """Whether writing this one instead of ``pending`` would lose the viewer nothing.
+
+        No, unless a member says otherwise. A result is written unless its own declaration
+        claims to answer everything an unwritten predecessor would have, so a member added
+        without thinking about this is never silently dropped.
+
+        Only an unwritten result can be replaced, and only by one that answers the same
+        question: a lifecycle event, a failure and a read's answer each say something no
+        later state repeats.
+        """
+        return False
+
+    def superseded_by_sidebar(self, request: ObserveSidebar) -> bool:
+        """Whether a complete sidebar state for ``request`` would say everything this says.
+
+        Asked of the unwritten result rather than decided about it, so the pair is settled
+        by the two declarations and nothing keeps a list of which kinds may be dropped.
+        """
+        return False
+
     @abstractmethod
     async def received(self, process: ObservationProcess, observed: Callable[[Observed], None]) -> None: ...
 
@@ -1274,6 +1296,10 @@ class SidebarResult(PublishState, Observed, declared_name=None):
     def accepted_by(self, previous: PublishState) -> bool:
         return not previous.same_observation(self)
 
+    def superseded_by_sidebar(self, request: ObserveSidebar) -> bool:
+        """Only by a state for the same request: another selection is another question."""
+        return self.request == request
+
 
 @dataclass(frozen=True)
 class SidebarPreparing(SidebarResult, WaitingSidebar):
@@ -1295,6 +1321,17 @@ class SidebarObserved(SidebarResult):
 
     def advance(self, reading: SidebarReading) -> None:
         reading.stage.advance(reading, self.snapshot)
+
+    def replaces(self, pending: ServiceResult) -> bool:
+        """A complete sidebar state answers everything an unwritten one for the same
+        request would have, so the intermediate never needs to be written, carried,
+        decoded or delivered. The viewer keeps whole snapshots rather than deltas, which
+        is what makes the earlier one disposable rather than merely stale.
+
+        A preparing result does not claim this: it explains an unfinished read and would
+        lose the rows a complete one already holds.
+        """
+        return pending.superseded_by_sidebar(self.request)
 
 
 @dataclass(frozen=True)
@@ -1547,6 +1584,29 @@ class ObserverProcessDied(ObserverDied):
                 return "closed its pipe and has not exited"
 
 
+class UnwrittenResults:
+    """What a service has produced and not yet handed to its connection, in order.
+
+    Only the last of them is offered for replacement. Anything already behind an ordered
+    event stays behind it, so a lifecycle event, a failure or a read's answer can never be
+    passed, reordered or dropped by a snapshot that arrives after it — and the rule needs
+    no list of which kinds those are, because each result answers for itself.
+    """
+
+    def __init__(self) -> None:
+        self.queued: list[ServiceResult] = []
+
+    def offer(self, result: ServiceResult) -> None:
+        if self.queued and result.replaces(self.queued[-1]):
+            self.queued[-1] = result
+            return
+        self.queued.append(result)
+
+    def next_result(self) -> tuple[ServiceResult, ...]:
+        """The next result to write, or nothing left to write."""
+        return (self.queued.pop(0),) if self.queued else ()
+
+
 class ObservationService:
     """The child process side: one Comms service, the UI's interest, and what was sent."""
 
@@ -1564,6 +1624,8 @@ class ObservationService:
         # Owner reads being asked, until answered or cancelled.
         self.owner_reads: dict[int, asyncio.Future] = {}
         self.tasks = asyncio.TaskGroup()
+        # Replies produced but not yet handed to the connection, in order.
+        self.unwritten = UnwrittenResults()
         self.closed = False
 
     def retire(self) -> None:
@@ -1577,13 +1639,48 @@ class ObservationService:
         self.changed.set()
 
     def send(self, result: ServiceResult) -> None:
-        """Every ordinary reply shares the peer's lifetime, not just received EOF."""
+        """Queue a reply for this service's one writer; every reply shares the peer's
+        lifetime, not just received EOF.
+
+        Queued rather than written here because writing blocked this service's event loop
+        whenever the viewer was behind, and because a result produced while the writer is
+        busy can replace an unwritten one it answers for. On a phone profiled while
+        scrolling, decoding pushed observation frames was 37.8% of the UI process's worker
+        threads; the ones a later snapshot had already superseded cost bytes, a parse, a
+        construction and a delivery each, for nothing.
+        """
         if self.closed:
             return
-        try:
-            self.connection.send(result)
-        except BrokenPipeError:
-            self.retire()
+        self.unwritten.offer(result)
+        self.write_unwritten()
+
+    def accepts_write(self) -> bool:
+        """Whether the connection will take a result now without this service waiting."""
+        return bool(select.select((), (self.connection.fileno(),), (), 0)[1])
+
+    def write_unwritten(self) -> None:
+        """Hand the connection what it will take now; keep the rest until it will.
+
+        There is no delay and nothing waits to see whether a better result arrives: while
+        the connection accepts, every queued result goes immediately and in order, so a
+        viewer that keeps up sees exactly what it saw before. The queue only holds
+        anything while the viewer is behind, and that is the whole of the window in which
+        one result can replace another.
+        """
+        loop = asyncio.get_running_loop()
+        while self.unwritten.queued and not self.closed:
+            if not self.accepts_write():
+                # Nothing is dropped for being unwritten; it waits here, where a later
+                # result answering the same question can take its place.
+                loop.add_writer(self.connection.fileno(), self.write_unwritten)
+                return
+            written = self.unwritten.next_result()
+            try:
+                self.connection.send(written[0])
+            except BrokenPipeError:
+                self.retire()
+                return
+        loop.remove_writer(self.connection.fileno())
 
     def receive(self) -> None:
         if self.closed:
@@ -1667,6 +1764,7 @@ class ObservationService:
             finally:
                 self.retire()
                 loop.remove_reader(self.connection.fileno())
+                loop.remove_writer(self.connection.fileno())
                 watching.cancel()
                 expiring.cancel()
                 retrying.cancel()
