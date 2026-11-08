@@ -91,6 +91,9 @@ class BoardRetention(DeclaredFamily, affix="Retention"):
     def retain(self, comms: Comms, plan: TeamPlan, huds: tuple[TeamHud, ...]) -> None:
         """A preparation returns its result without publishing from a droppable read."""
 
+    def keep(self, comms: Comms, huds: tuple[TeamHud, ...]) -> None:
+        """A pass that threw keeps the boards it finished; a display keeps nothing."""
+
     def completed(self, comms: Comms, teammates: tuple[ThreadIncarnation, ...]) -> None:
         """A read never advances the service completion clock."""
 
@@ -127,6 +130,9 @@ class HeartbeatRetention(BoardRetention):
 
     def retain(self, comms, plan, huds):
         TeamFrame.replace_all(comms.root, plan, huds)
+
+    def keep(self, comms, huds):
+        TeamFrame.write_all(comms.root, huds)
 
     def completed(self, comms, teammates):
         ServicePassStore.at(comms.root).heartbeat_passed(
@@ -224,6 +230,11 @@ class TeamBoardRead(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
             # patch-id, the first reconcile raised with huds empty, and retaining that empty
             # fragment deleted every board. Tristan's read said "frame missing" for 8 hours.
             retention.retain(comms, plan, tuple(huds.values()))
+        except BaseException:
+            # A pass that threw still keeps every board it finished, and unlinks none: a
+            # refused publication rolls back the publication, not the frame it was about.
+            retention.keep(comms, tuple(huds.values()))
+            raise
         finally:
             # Passes already completed stay completed, whether or not a later one raised.
             retention.completed(comms, tuple(completed))
