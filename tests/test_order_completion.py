@@ -4,16 +4,17 @@ import subprocess
 import sys
 import time
 from dataclasses import replace
-from pathlib import Path
 
 import pytest
 
 from agent_comms.build_identity import RecordedBuildIdentity
 from agent_comms.planning.orders import (
+    CorrectCheckTodo,
     DeliveredProblemOrder,
     DoneTodoState,
     InstalledMergedProblemOrder,
     MergedProblemOrder,
+    PendingProblemOrder,
     OperationDelivery,
     ProblemOrder,
     ProgressRead,
@@ -29,7 +30,9 @@ from agent_comms.planning.goals import (
     CountCheckResult,
     OrderCheck,
 )
-from agent_comms.nominal.field_codec import RecordProblems
+from agent_comms.nominal.field_codec import FieldCodec, RecordProblems
+from agent_comms.errors import TodoError
+from test_proof_build import ProofBuildCheckout
 from team_heartbeat_fixture import capture_frame
 from agent_comms.projects.checkouts import (
     Checkout,
@@ -78,6 +81,77 @@ class TestOrderCompletion:
 
         assert orders(awaiting, delivered) == [('P1',)]
         assert orders(awaiting, delivered, writing) == []
+
+    @pytest.fixture
+    def passed_merged_order(
+        self, held_team: Team, proof_build_checkouts: tuple[ProofBuildCheckout, ...],
+    ) -> Todo:
+        repo = held_team.repos[0]
+        graph = next(item for item in proof_build_checkouts
+                     if item.repository.github == repo.github)
+        current = held_team.comms.goals.todos.get('P1')
+        check = OrderCheck(repo.checkout,
+                           "git log -1 --format=%s | grep -c 'proof 0'",
+                           CountCheckResult(0))
+        check.result.require(check.at(
+            graph.installed, repo.checkout,
+            held_team.comms.registry.storage_rule.checkout_base))
+        return self.record(held_team, replace(
+            current.order, check=check,
+            pull_requests=(PullRequestLink(repo.github, 1),)).merged(graph.installed))
+
+    @pytest.mark.parametrize('commands', ((), (('done', 'worker', 'P1'),)))
+    @pytest.mark.parametrize('command', (
+        'printf 1',
+        "if git log -1 --format=%s | grep -q 'proof 0'; "
+        "then printf 1; else printf unproved; fi",
+    ))
+    def test_failed_corrected_source_returns_to_work(
+        self, held_team: Team, passed_merged_order: Todo,
+        commands: tuple[tuple[str, ...], ...], command: str,
+    ) -> None:
+        ctx = held_team
+        for completion in commands:
+            main(list(completion), ctx)
+        before = ctx.comms.goals.todos.get(passed_merged_order.id)
+        repo = ctx.repos[0]
+        main(['check', 'P1', '--check', f'{repo.checkout} :: {command} -> 0',
+              '--why', 'The corrected criterion must hold on the recorded source too'], ctx)
+        after = ctx.comms.goals.todos.get(before.id)
+        assert isinstance(after.order, PendingProblemOrder)
+        assert not after.order.closed_by_merge(
+            after, ProgressRead(), ctx.comms.registry.storage_rule.checkout_base)
+        original = passed_merged_order.order.checked()
+        retained_source = original.merged_link(original.pull_requests[0])
+        assert after.order.corrections[-2].previous == retained_source
+        assert (after.order.id, after.assignment, after.review_at, after.strike_count) == (
+            before.order.id, before.assignment, before.review_at, before.strike_count)
+        assert after.order.check.command == command
+        correction = after.order.corrections[-1]
+        assert correction.previous == before.order.check
+        wire = FieldCodec.encode(correction)
+        decoded = FieldCodec.decode(CorrectCheckTodo, wire)
+        assert decoded == correction
+        with pytest.raises(TodoError, match='Prepare the corrected order check'):
+            decoded.replaced(before.order)
+
+    def test_valid_delivered_correction_keeps_the_delivery(
+        self, held_team: Team, passed_merged_order: Todo,
+    ) -> None:
+        ctx = held_team
+        main(['done', 'worker', 'P1'], ctx)
+        before = ctx.comms.goals.todos.get(passed_merged_order.id)
+        assert isinstance(before.order, DeliveredProblemOrder)
+        repo = ctx.repos[0]
+        command = "git log -1 --format=%s | grep -c 'proof 0$'"
+        main(['check', 'P1', '--check', f'{repo.checkout} :: {command} -> 0',
+              '--why', 'The corrected criterion still holds on the delivered source'], ctx)
+        after = ctx.comms.goals.todos.get(before.id)
+        assert isinstance(after.order, DeliveredProblemOrder)
+        assert after.order.delivery == before.order.delivery
+        assert (after.order.id, after.assignment, after.review_at, after.strike_count) == (
+            before.order.id, before.assignment, before.review_at, before.strike_count)
+        assert after.order.check.command == command
 
     def test_merged_correction_and_done_use_the_current_check(
         self, held_team, proof_build_checkouts,

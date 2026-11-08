@@ -38,6 +38,10 @@ class PullRequestHeadRevision(FetchedRevision):
 class DeliveryMerge(DeclaredFamily, affix="DeliveryMerge"):
     """The integration observed when Core checked a commit delivery; never a claim of install."""
 
+    def superseded_links(self, publications: tuple[MergedLink, ...]) -> tuple[MergedLink, ...]:
+        """Merged publications stop proving a corrected criterion together."""
+        return publications
+
     @property
     @abstractmethod
     def line(self) -> str: ...
@@ -63,6 +67,9 @@ class BranchDeliveryMerge(DeliveryMerge):
 @dataclass(frozen=True)
 class UnmergedDeliveryMerge(DeliveryMerge):
     branches: tuple[str, ...]
+
+    def superseded_links(self, publications: tuple[MergedLink, ...]) -> tuple[MergedLink, ...]:
+        return ()
 
     @property
     def line(self) -> str:
