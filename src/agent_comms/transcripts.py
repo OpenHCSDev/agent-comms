@@ -21,13 +21,17 @@ from .coordination.errors import CoordinationReadUnavailable, ReloadRequired, St
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .external_transcript import ExternalTranscript
-from .nominal.field_codec import ContentExclude, FieldCodec, WireName, projected
+from .nominal.field_codec import ContentExclude, FieldCodec, MalformedRecord, WireName, projected
 from .historical_views import HistorySource
 from .page_traversal import HistorySourceKey
 from .messaging.message_bus import MessageBus
 from .message_reference import MessageReference
 from .native_runtime_input import PublishedReplyRevision
+from .native_entries import NativeEvidenceScope
+from .native_input_owner import RegistryOwner
+from .native_session_files import NativeSessionFiles
 from .native_transcript import NativeTranscript, RecordsCut, SessionCut
+from .input_disposition import InputDispositions
 from .native_output import NativeRecordLocation
 from .notification_assignment import NotificationAssignment
 from agent_comms.message_notification import NotificationWindow
@@ -993,7 +997,68 @@ class Transcripts:
         self, *, lease: TurnLeaseFence, checkpoint: TranscriptCursor,
         routing: TurnRouting, published: tuple[MessageReference, ...],
     ) -> None:
-        """Publish original native/wire relations before this exact turn retires."""
-        self.routes.record_turn_publication(
-            self.registry, self.bus.bus, lease, checkpoint, routing, published
-        )
+        """Join a completed native producer to its original committed wire rows.
+
+        Finish reading native history before locking the sources. Existing wire,
+        registry and input owners remain held until durable annotations commit.
+        A partial successful send subset remains published if a later send fails.
+        """
+        if not routing.requires_annotation(published):
+            return
+        initial = self.registry.snapshot()
+        incarnation = lease.identity.incarnation.resolved(initial)
+        thread = RegistryOwner.capture_local(initial, incarnation.name).thread
+        if thread.turn_lease != lease:
+            raise RelationViolationError("Native publication has no current original turn")
+        path = Path(thread.runtime.path)
+        revision = FileRevision.capture(path).require(
+            RelationViolationError("Native publication has no retained session"))
+        reader = NativeTranscript(path)
+        floor = checkpoint.offset if thread.runtime.read_key == checkpoint.session_file else 0
+        try:
+            final, user = reader.publication_input(
+                after=floor, through=revision.size,
+                files=NativeSessionFiles.for_identity(NativeEvidenceScope.locate_session(str(path)),
+                                                      root=self.bus.bus.path.parent, owner=incarnation),
+            )
+        except MalformedRecord as error:
+            raise RelationViolationError("Native publication evidence is invalid") from error
+        ids = routing.annotation_ids(reader, checkpoint, thread.runtime, final.end)
+        inputs = InputDispositions(self.bus.bus.path.parent)
+        lookup = incarnation.lookup
+        with self.bus.bus.reading() as source, self.registry.store.current_snapshot() as cut:
+            snapshot = cut.snapshot
+            incarnation = lease.identity.incarnation.resolved(snapshot)
+            current = RegistryOwner.capture_local(snapshot, incarnation.name).thread
+            if current.turn_lease != lease:
+                raise RelationViolationError("Native publication turn lease changed")
+            if (
+                current.runtime.read_key != thread.runtime.read_key
+                or FileRevision.capture(path) != revision
+            ):
+                raise RelationViolationError("Native publication session changed")
+            if not inputs.in_turn(lease.turn_id).started_for_native(
+                lease, user.require_input_id(), user.message.text, snapshot=snapshot
+            ):
+                raise RelationViolationError("Native publication has no original STARTED input")
+            references = tuple(dict.fromkeys((*routing.requests, *published)))
+            originals = (
+                source.conversation(
+                    lookup,
+                    sequences=tuple(ref.seq for ref in references),
+                    limit=len(references),
+                    descending=False,
+                )
+                if references
+                else ()
+            )
+            if {item.message.reference for item in originals} != set(references) or len(
+                set(published)
+            ) != len(published):
+                raise RelationViolationError("Publication is not its original seq/id relation")
+            routing.require_publications(
+                tuple(item for item in originals if item.message.reference in published), lookup
+            )
+            self.routes.record_publication(
+                thread.runtime.read_key, ids, final.entry.id, routing, published
+            )
