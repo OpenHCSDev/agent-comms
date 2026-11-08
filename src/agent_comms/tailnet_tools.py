@@ -1,5 +1,7 @@
 """Core owns network access; the terminal owns the profiles it holds."""
 
+from dataclasses import replace
+
 from agent_comms.comms import Comms
 from agent_comms.tailnet_buses import TailnetBuses
 from agent_comms.tailnet_profiles import AskedPeer, TailnetProfiles
@@ -17,7 +19,12 @@ class ServedCommsTailnetBusesTool(CoreRead[TailnetBusesRead], CommsTailnetBusesT
 
 class ServedCommsTailnetProfileTool(HumanToolRequest[AskedPeer], CommsTailnetProfileTool):
     def answered(self, comms: Comms) -> AskedPeer:
-        # A remote caller cannot turn a discovered row into arbitrary host-side SSH.
-        if self.found.peer not in TailnetBuses.peers():
-            raise ValueError("This bus is no longer a peer on Core's tailnet; discover again.")
-        return TailnetProfiles.ask(self.found, self.previous)
+        """Core ssh's to a peer its own tailnet reports, whoever named it and however.
+
+        A remote caller cannot turn a row into arbitrary host-side SSH, and a typed
+        address is a row: each member says which peer it means among these, so one guard
+        covers a discovered row and a hand-typed one without the caller choosing which
+        check applies to it.
+        """
+        found = replace(self.found, peer=self.found.on_tailnet(TailnetBuses.peers()))
+        return TailnetProfiles.ask(found, self.previous)

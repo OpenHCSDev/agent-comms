@@ -24,7 +24,7 @@ from agent_comms.connector_store import (
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.tool_result import ToolResult
-from agent_comms.tailnet_buses import PeerHoldsBus, TailnetBuses
+from agent_comms.tailnet_buses import PeerBus, TailnetBuses
 
 
 class AskedPeer(ToolResult, DeclaredFamily, ABC, affix="Peer"):
@@ -35,7 +35,7 @@ class AskedPeer(ToolResult, DeclaredFamily, ABC, affix="Peer"):
     different words.
     """
 
-    found: PeerHoldsBus
+    found: PeerBus
 
     def hold(self) -> AskedPeer:
         """A refusal has nothing to persist on the receiving terminal."""
@@ -60,7 +60,7 @@ class AvailablePeerProfile(AskedPeer, declared_name=None):
 class HoldingPeerProfile(AvailablePeerProfile):
     """It handed over a profile, now held here: this bus can be opened."""
 
-    found: PeerHoldsBus
+    found: PeerBus
     path: Path
 
 
@@ -68,7 +68,7 @@ class HoldingPeerProfile(AvailablePeerProfile):
 class OfferedPeerProfile(AvailablePeerProfile):
     """Core obtained the profile; only the receiving terminal holds its file."""
 
-    found: PeerHoldsBus
+    found: PeerBus
     profile: UiConnectionProfile
 
     def hold(self) -> HoldingPeerProfile:
@@ -84,7 +84,7 @@ class PeerRefusedProfile(AskedPeer):
     """Its CLI answered, and said no: its own words say what to do about it, which is
     usually serving the endpoint to the tailnet or minting by hand."""
 
-    found: PeerHoldsBus
+    found: PeerBus
     refusal: str
 
     def reason(self) -> str:
@@ -96,7 +96,7 @@ class PeerAnsweredNothing(AskedPeer):
     """ssh got nowhere, or what came back was not a profile: an older install on the peer
     has no offer-ui, and a password prompt nobody can answer is a failure here too."""
 
-    found: PeerHoldsBus
+    found: PeerBus
     refusal: str
 
     def reason(self) -> str:
@@ -109,13 +109,13 @@ class TailnetProfiles(TailnetBuses):
     connector_cli: str = f"{TailnetBuses.remote_cli}-connector"
 
     @classmethod
-    def ask_command(cls, found: PeerHoldsBus) -> tuple[str, ...]:
+    def ask_command(cls, found: PeerBus) -> tuple[str, ...]:
         """Its own connector decides: this says nothing about the peer's root or endpoint,
         because the machine being asked owns both."""
         return (*cls.probe_command(found.peer)[:-1], f"{cls.connector_cli} offer-ui --access {UiAccess.declared_name}")
 
     @classmethod
-    def asked(cls, found: PeerHoldsBus, status: int, output: str) -> AskedPeer:
+    def asked(cls, found: PeerBus, status: int, output: str) -> AskedPeer:
         """One peer's reply, decoded into the member that says what it means.
 
         A refusal is the verb's own sentence on a zero status (a `CliResult` refusal is an
@@ -133,13 +133,13 @@ class TailnetProfiles(TailnetBuses):
         return OfferedPeerProfile(found, profile)
 
     @classmethod
-    def revoke_command(cls, found: PeerHoldsBus, grant: UiGrantId) -> tuple[str, ...]:
+    def revoke_command(cls, found: PeerBus, grant: UiGrantId) -> tuple[str, ...]:
         """Tell the peer to end a grant this machine no longer holds."""
         return (*cls.probe_command(found.peer)[:-1],
                 f"{cls.connector_cli} revoke-ui --grant {grant}")
 
     @classmethod
-    def held_grants(cls, found: PeerHoldsBus) -> tuple[UiGrantId, ...]:
+    def held_grants(cls, found: PeerBus) -> tuple[UiGrantId, ...]:
         """The recipient names only the grant it is replacing, never a Core-side path."""
         path = cls.path_for(found)
         match HeldUiProfiles.entry(path, time.time()):
@@ -149,11 +149,11 @@ class TailnetProfiles(TailnetBuses):
                 return ()
 
     @staticmethod
-    def path_for(found: PeerHoldsBus) -> Path:
+    def path_for(found: PeerBus) -> Path:
         return HeldUiProfiles.directory() / f"{found.peer.name}.json"
 
     @classmethod
-    def hold(cls, found: PeerHoldsBus, profile: UiConnectionProfile) -> Path:
+    def hold(cls, found: PeerBus, profile: UiConnectionProfile) -> Path:
         """Write it where this machine keeps the profiles it holds, one file per peer: this
         machine asked, so it owns which profile it keeps for that bus, and asking again
         replaces the last one rather than stacking another row beside it.
@@ -169,7 +169,7 @@ class TailnetProfiles(TailnetBuses):
         return reached.write_new(path)
 
     @classmethod
-    def ask(cls, found: PeerHoldsBus, previous: tuple[UiGrantId, ...] = ()) -> AskedPeer:
+    def ask(cls, found: PeerBus, previous: tuple[UiGrantId, ...] = ()) -> AskedPeer:
         """Ask on Core's host; the profile value crosses back to its recipient."""
         status, output = cls.run(cls.ask_command(found))
         answer = cls.asked(found, status, output)
