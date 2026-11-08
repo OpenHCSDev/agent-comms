@@ -24,6 +24,7 @@ from agent_comms.registry.threads import Thread
 from agent_comms.relationships import RelationshipSource, ThreadRelationships
 from agent_comms.thread_presentation import ThreadOwnerBinding
 from agent_comms.thread_identity import TurnFence
+from agent_comms.turn_failure import NativePiTerminalFailure, RetryableProviderFailure, TurnFailure
 
 
 @pytest.mark.parametrize(
@@ -131,7 +132,8 @@ def test_generation_failure_read_names_its_stored_row() -> None:
 @pytest.mark.parametrize(
     "state",
     (GenerationState, *GenerationState.members_with(GenerationState),
-     GoalAttemptPhase, *GoalAttemptPhase.members_with(GoalAttemptPhase)),
+     GoalAttemptPhase, *GoalAttemptPhase.members_with(GoalAttemptPhase),
+     TurnFailure, *TurnFailure.members_with(TurnFailure), RetryableProviderFailure),
 )
 def test_lifecycle_method_annotations_resolve(state: type) -> None:
     for name, member in vars(state).items():
@@ -142,3 +144,9 @@ def test_lifecycle_method_annotations_resolve(state: type) -> None:
                 callback = member
         if isfunction(callback) and callback.__annotations__:
             assert get_type_hints(callback), f"{state.__name__}.{name}"
+
+
+def test_native_terminal_failure_keeps_its_original_proof_type() -> None:
+    hints = get_type_hints(NativePiTerminalFailure.__init__)
+    assert hints["context"] is NativePiTerminalFailure.__type_params__[0]
+    assert hints["failure"] is TurnFailure

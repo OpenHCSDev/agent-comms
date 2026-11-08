@@ -10,7 +10,7 @@ from functools import partial
 from .coordination.errors import StaleFence
 from .coordination.coordinator import Coordination
 from .drain_failures import UNAVAILABLE_DRAIN_ERRORS
-from .native_pi import NativePiTerminalFailure
+from .turn_failure import NativePiTerminalFailure
 from .native_failures import NativeRequestFailure
 from .private_send_claim import PrivateSendClaim
 from .selected_participant import SelectedParticipant
