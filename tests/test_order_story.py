@@ -30,7 +30,10 @@ from agent_comms.nominal.field_codec import (
     OrderId,
     ToolCallId,
 )
-from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
+from agent_comms.planning.goal_actions import (
+    CreateProblemGoalAction,
+    OrderGoalAction,
+)
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.order_story import TeamStory, OrderStory
 from agent_comms.recorded_time import EventTime, RecordedEventTime

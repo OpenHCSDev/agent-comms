@@ -24,8 +24,8 @@ from agent_comms.input_attempt import (
     UnresolvedInputReference,
 )
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.goal_actions import SetGoalAction
-from agent_comms.goals import NoGoal
+from agent_comms.planning.goal_actions import SetGoalAction
+from agent_comms.planning.goals import NoGoal
 from agent_comms.transport.tools.orders import (
     ServedInputDeliveryRead,
     ServedOwnerGoalRead,

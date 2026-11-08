@@ -1,12 +1,17 @@
-"""Which goals a read or check covers: every goal of the thread, or one goal by its ID."""
-
 from __future__ import annotations
 
 from collections.abc import Collection
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, TypedDict
+from typing import (
+    TYPE_CHECKING,
+    TypedDict,
+)
 
-from .nominal.field_codec import GoalId, NullMember, SingleFieldValue
+from ..nominal.field_codec import (
+    GoalId,
+    NullMember,
+    SingleFieldValue,
+)
 
 if TYPE_CHECKING:
     from .goal_history import RecordedGoalRevision

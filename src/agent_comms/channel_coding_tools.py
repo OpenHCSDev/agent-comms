@@ -50,7 +50,7 @@ from .turn_goal_permission import TurnGoalPermission
 from .reservation_rules import ReservationRule, ReservationViolationError
 from .turn_input_source import TurnInputSource
 from .reservation_rules import RuleCheck
-from .goals import GoalDeclaration
+from .planning.goals import GoalDeclaration
 from .planning.goal_waits import GoalWait
 if TYPE_CHECKING:
     from .backend import TurnSession

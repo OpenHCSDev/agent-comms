@@ -34,7 +34,7 @@ if TYPE_CHECKING:
     from .comms import Comms
     from .controller import Controller
     from .planning.goal_waits import GoalWait
-    from .goals import GoalDeclaration
+    from .planning.goals import GoalDeclaration
     from .input_disposition import InputDispositions
     from .execution.input_drain import DrainedSession, InputDrain
     from .owned_send import OwnedSend

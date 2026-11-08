@@ -55,8 +55,16 @@ from agent_comms.nominal.field_codec import (
     SubclassUnion,
     boundary_decoder,
 )
-from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
-from agent_comms.goals import CheckCommand, CheckResult, CountCheckResult, OrderCheck
+from ..planning.goal_actions import (
+    CreateProblemGoalAction,
+    OrderGoalAction,
+)
+from ..planning.goals import (
+    CheckCommand,
+    CheckResult,
+    CountCheckResult,
+    OrderCheck,
+)
 from agent_comms.held_orders import HeldOrders
 from agent_comms.storage.maintenance_barrier import MaintenanceHeldError
 from agent_comms.message_reference import MessageReference

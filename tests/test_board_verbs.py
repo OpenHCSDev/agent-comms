@@ -37,7 +37,7 @@ from agent_comms.errors import TodoError
 from agent_comms.registry.threads import ForkThread, ExternalThread
 from agent_comms.team.standing import DeliveryAwaitingJudgement
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
-from agent_comms.goal_actions import SetGoalAction
+from agent_comms.planning.goal_actions import SetGoalAction
 from agent_comms.team.standing_rules import (
     HeadReviewTimerUp,
     LinkedUnreviewedHead,

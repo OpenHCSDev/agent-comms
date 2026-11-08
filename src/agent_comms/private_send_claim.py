@@ -24,7 +24,7 @@ from .diagnostics import (
     record_request_progress,
 )
 from .following_inputs import FollowingInputs
-from .goal_turn_permit import NoLaunchPermit
+from .execution.goal_turn_permit import NoLaunchPermit
 from .storage.maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .native_arguments import SelectedModel

@@ -11,10 +11,17 @@ import pytest
 from acp.schema import SessionNotification
 
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, InputId
-from agent_comms.goal_attempts import GoalAttemptStore
-from agent_comms.goal_generation import BlockedGeneration, ReadyGeneration, ReservedGeneration
-from agent_comms.goals import Goal
-from agent_comms.goal_states import ActiveGoal, PausedGoal
+from agent_comms.planning.goal_attempts import GoalAttemptStore
+from agent_comms.planning.goal_generation import (
+    BlockedGeneration,
+    ReadyGeneration,
+    ReservedGeneration,
+)
+from agent_comms.planning.goals import Goal
+from agent_comms.planning.goal_states import (
+    ActiveGoal,
+    PausedGoal,
+)
 from agent_comms.input_attempt import StartedInput
 from compaction_loopback import LoopbackProvider
 from native_backend_fixture import native_backend_fixture

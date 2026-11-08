@@ -28,14 +28,14 @@ from order_scope_fixture import FIX_SCOPE
 from test_todos import order
 from source_revision_fixture import SourceRepository
 from agent_comms.change_report import FileLine
-from agent_comms.goals import OrderCheck
+from agent_comms.planning.goals import OrderCheck
 from agent_comms.registry.registry_document import NoTeamProject, RegisteredTeamProject
 from agent_comms.errors import MissingSourceLine
 from agent_comms.check_root import CheckRoot
 from agent_comms.team.order import OrderFile
 from cli_command import core
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
-from agent_comms.goal_actions import CreateProblemGoalAction
+from agent_comms.planning.goal_actions import CreateProblemGoalAction
 from agent_comms.held_orders import HeldOrders
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName

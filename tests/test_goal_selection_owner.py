@@ -6,17 +6,17 @@ import os
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.goal_actions import (
+from agent_comms.planning.goal_actions import (
     ActiveGoalAction,
     GoalPrecondition,
     OwnerInvocable,
     PausedGoalAction,
     SetGoalAction,
 )
-from agent_comms.goal_states import ActiveGoal
+from agent_comms.planning.goal_states import ActiveGoal
 from goal_owner_fixture import canonical_goal_wire
 from agent_comms.registry.threads import NativeThread
-from agent_comms.goal_scope import OneGoal
+from agent_comms.planning.goal_scope import OneGoal
 
 
 def test_owner_pause_refuses_review_and_active_precondition(tmp_path):

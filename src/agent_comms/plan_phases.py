@@ -742,8 +742,8 @@ class PlatformFactsPhase(RemainingSlopPhase):
     evidence = PatternAbsent(
         r"\bos\.name\b",
         (
-            "src/agent_comms/goal_history.py",
-            "src/agent_comms/goal_attempts.py",
+            "src/agent_comms/planning/goal_history.py",
+            "src/agent_comms/planning/goal_attempts.py",
             "src/agent_comms/coordination/database.py",
             "src/agent_comms/storage/maintenance_barrier.py",
         ),

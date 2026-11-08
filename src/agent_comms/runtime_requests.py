@@ -33,10 +33,13 @@ from .annotation_correction import CorrectsAnnotation
 from .context_store import ContextManifestReference
 from .coordination.coordinator import Coordination
 from .nominal.field_codec import FieldCodec, WireName, WireValue, GoalId
-from .goal_actions import GoalAction
-from .goal_history import RecordedGoalHistory
-from .goal_scope import AllGoals, OneGoal
-from .goals import Goal
+from .planning.goal_actions import GoalAction
+from .planning.goal_history import RecordedGoalHistory
+from .planning.goal_scope import (
+    AllGoals,
+    OneGoal,
+)
+from .planning.goals import Goal
 from .manual_compaction_bridge import compact_context
 from .bus_read import OwnerScopedRead
 from .transport.tools.reads import OwnerGoalRead

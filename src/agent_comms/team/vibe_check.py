@@ -21,7 +21,7 @@ from agent_comms.team.package import TeamPackage
 from agent_comms.team_service import TeamService
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import projected
-from agent_comms.goal_actions import (
+from ..planning.goal_actions import (
     ChokeholdPausedGoalAction,
     CompliedGoalAction,
     OwnerInvocable,

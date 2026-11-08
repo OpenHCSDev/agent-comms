@@ -27,7 +27,7 @@ from .turn_goal_permission import GoalPermission, OwnerGoalPermission
 from .registry.threads import NativeThread, Thread
 
 if TYPE_CHECKING:
-    from .goals import Goal
+    from .planning.goals import Goal
     from .registry.registration import Registration
     from .registry.registry_document import RegistrySnapshot
     from .turn_lease import TurnLeaseFence

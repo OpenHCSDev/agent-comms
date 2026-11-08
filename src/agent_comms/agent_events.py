@@ -55,14 +55,14 @@ from .turn_failure import NoTurnFailure, TurnFailure
 from .turn_goal_account import OriginGoalSettlement, VerifiedGoalSettlement
 from .turn_item import UsageChargeId
 from .turn_terminal import FailedGoalTurn
-from .goal_presentation import GoalSnapshot
+from .planning.goal_presentation import GoalSnapshot
 from .transcript_events import SentTranscript
 
 if TYPE_CHECKING:
     from .acp_extension import AgentCommsUpdate, TextNoticeUpdate
     from .agent_event_updates import AcpEventConsumer
     from .comms import Comms
-    from .goal_presentation import GoalPublicationSnapshot
+    from .planning.goal_presentation import GoalPublicationSnapshot
     from .input_disposition import InputDocument
     from .execution.input_drain import InputDrain
     from .rule_deal import Redeals

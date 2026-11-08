@@ -37,7 +37,7 @@ from .channel_targets import ThreadTarget
 if TYPE_CHECKING:
     from agent_comms.bus import Bus, BusReader, RecordBuilder
 
-    from .goal_management import Goals
+    from .planning.goal_management import Goals
     from .registry.registry_document import RegistrySnapshot
     from .registry.threads import Thread
 

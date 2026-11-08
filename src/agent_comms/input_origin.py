@@ -12,7 +12,7 @@ from .bus_publication import HumanOrigin
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .nominal.field_codec import RootId
-from .goals import GoalCheckpoint
+from .planning.goals import GoalCheckpoint
 from .harness_install import HarnessSession
 from .input_key import InputKey, InputKeyText
 from .message_reference import MessageReference

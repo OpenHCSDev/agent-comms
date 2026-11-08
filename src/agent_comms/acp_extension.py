@@ -45,7 +45,10 @@ from .nominal.field_codec import (
     WireOmitDefault,
     RootId,
 )
-from .goal_presentation import GoalSnapshot, GoalExecution
+from .planning.goal_presentation import (
+    GoalSnapshot,
+    GoalExecution,
+)
 from .input_attempt import InputAttempt
 from .input_origin import InputOrigin, UnattributedInputOrigin
 from .native_runtime_input import CurrentNativeCursor

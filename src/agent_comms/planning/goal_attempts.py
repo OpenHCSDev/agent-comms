@@ -1,17 +1,5 @@
-"""Durable reservation fence for autonomous goal attempts.
-
-The ACP owner reserves and claims each autonomous launch before starting Pi,
-then binds verified goal progress to the claimed attempt before advancing a
-generation. A crash leaves reserved/claimed work unresolved; ordinary resume
-cannot turn that state into another model call.
-
-The ledger stores provider-reported usage and requires ACP to verify native
-response and registry outcomes before recording success.
-"""
-
 from __future__ import annotations
 
-from . import errors
 import hashlib
 import hmac
 import json
@@ -20,52 +8,31 @@ import secrets
 import sqlite3
 import tempfile
 from abc import abstractmethod
-from collections.abc import Callable, Iterator
-from contextlib import closing, contextmanager, suppress
-from dataclasses import dataclass, field
+from collections.abc import (
+    Callable,
+    Iterator,
+)
+from contextlib import (
+    closing,
+    contextmanager,
+    suppress,
+)
+from dataclasses import (
+    dataclass,
+    field,
+)
 from decimal import Decimal
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self, TypeVar
+from typing import (
+    Annotated,
+    ClassVar,
+    Self,
+    TYPE_CHECKING,
+    TypeVar,
+)
 
-from agent_comms.goal_turn_permit import GoalTurnPermit
-
-from .child_process import Platform
-from .turn_item import UsageChargeId
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import (
-    AttemptId,
-    AttemptToken,
-    FieldCodec,
-    GoalId,
-    MalformedRecord,
-    NoAttemptId,
-)
-from .goal_attempt_identity import FailureNotObserved, GoalAttemptIdentity
-from .goal_attempt_phase import (
-    ClaimedAttempt,
-    FailedAttempt,
-    GoalAttemptPhase,
-    ReadyAttempt,
-    ReservedAttempt,
-    ResolvedAttempt,
-    SucceededAttempt,
-)
-from .goal_failure_observation import FailedTurnEvidence, GoalFailureEvidence, GoalLedgerTable, NoFailedTurnEvidence, record_observation
-from .goal_generation import (
-    BlockedGeneration,
-    CancelledGeneration,
-    CompletedGeneration,
-    GenerationState,
-    ReadyGeneration,
-    ReservedGeneration,
-)
-from .lifecycle_capability import Failed
-from .storage.locked_store import FileStore, GoalWakeFile, SQLiteReader
-from .storage.maintenance_barrier import DrainSettledFile
-from .pi_counts import PiCount, UnreportedCount
-from agent_comms.pi_wire import PiUsage
-from .storage.store_files import AtomicFile
-from .attempt_resolution import (
+from .. import errors
+from ..attempt_resolution import (
     AttemptResolution,
     DecidedResolution,
     GoalCleared,
@@ -75,10 +42,67 @@ from .attempt_resolution import (
     UnverifiedLaunchRetired,
     WorkDecision,
 )
-from .storage.typed_table import (
-    LOCAL_TABLE_SOURCE,
+from ..child_process import Platform
+from .goal_attempt_identity import (
+    FailureNotObserved,
+    GoalAttemptIdentity,
+)
+from .goal_attempt_phase import (
+    ClaimedAttempt,
+    FailedAttempt,
+    GoalAttemptPhase,
+    ReadyAttempt,
+    ReservedAttempt,
+    ResolvedAttempt,
+    SucceededAttempt,
+)
+from .goal_failure_observation import (
+    FailedTurnEvidence,
+    GoalFailureEvidence,
+    GoalLedgerTable,
+    NoFailedTurnEvidence,
+    record_observation,
+)
+from .goal_generation import (
+    BlockedGeneration,
+    CancelledGeneration,
+    CompletedGeneration,
+    GenerationState,
+    ReadyGeneration,
+    ReservedGeneration,
+)
+from ..execution.goal_turn_permit import GoalTurnPermit
+from ..lifecycle_capability import Failed
+from ..nominal.declared_family import DeclaredFamily
+from ..nominal.field_codec import (
+    AttemptId,
+    AttemptToken,
+    FieldCodec,
+    GoalId,
+    MalformedRecord,
+    NoAttemptId,
+    TurnId,
+)
+from ..pi_counts import (
+    PiCount,
+    UnreportedCount,
+)
+from ..pi_wire import PiUsage
+from ..reservation_rules import (
+    ReservationRule,
+    RuleCheck,
+)
+from ..storage.locked_store import (
+    FileStore,
+    GoalWakeFile,
+    SQLiteReader,
+)
+from ..storage.maintenance_barrier import DrainSettledFile
+from ..storage.store_files import AtomicFile
+from ..storage.typed_table import (
     Column,
     Generated,
+    LOCAL_TABLE_SOURCE,
     ReconciledFile,
     RowNotFoundError,
     SQLiteJournalMode,
@@ -87,17 +111,16 @@ from .storage.typed_table import (
     TableSource,
     TypedTable,
 )
+from ..turn_failure import TurnFailure
+from ..turn_item import UsageChargeId
 
-from .reservation_rules import ReservationRule, RuleCheck
-from .turn_failure import TurnFailure
-from .nominal.field_codec import TurnId
 if TYPE_CHECKING:
-    from .goal_scope import GoalScope
     from .goal_management import Goals
-    from .registry.threads import Thread
-    from .turn_context import TurnContext
+    from .goal_scope import GoalScope
     from .goals import Goal
-    from .turn_lease import TurnLeaseFence
+    from ..registry.threads import Thread
+    from ..turn_context import TurnContext
+    from ..turn_lease import TurnLeaseFence
 
 
 @dataclass(frozen=True)

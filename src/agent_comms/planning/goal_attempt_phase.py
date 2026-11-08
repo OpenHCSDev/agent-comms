@@ -1,16 +1,23 @@
-"""Attempt transitions, distinct from a goal generation and from launch authority."""
-
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import (
+    ABC,
+    abstractmethod,
+)
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar
+from typing import (
+    ClassVar,
+    TYPE_CHECKING,
+)
 
-from .attempt_resolution import AttemptResolution
-from .nominal.declared_family import DeclaredFamily
-from .errors import UnresolvedAttemptError
-from .lifecycle import LifecycleState
-from .lifecycle_capability import Failed, Terminal
+from ..attempt_resolution import AttemptResolution
+from ..errors import UnresolvedAttemptError
+from ..lifecycle import LifecycleState
+from ..lifecycle_capability import (
+    Failed,
+    Terminal,
+)
+from ..nominal.declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
     import sqlite3

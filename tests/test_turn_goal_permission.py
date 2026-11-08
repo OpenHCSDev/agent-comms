@@ -5,8 +5,16 @@ import pytest
 
 from agent_comms.channel_coding_tools import OrdinaryGoalRule
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
-from agent_comms.goal_states import BlockedGoal, CompletedGoal, PausedGoal
-from agent_comms.goals import Goal, NoGoal, ProblemGoalOrder
+from agent_comms.planning.goal_states import (
+    BlockedGoal,
+    CompletedGoal,
+    PausedGoal,
+)
+from agent_comms.planning.goals import (
+    Goal,
+    NoGoal,
+    ProblemGoalOrder,
+)
 from agent_comms.native_tools import CoordinationCall, ReadTool
 from agent_comms.pi_payloads import ProvidedToolResult
 from agent_comms.transport.tools.goals import GoalSet

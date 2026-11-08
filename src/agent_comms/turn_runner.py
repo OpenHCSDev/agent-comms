@@ -31,12 +31,12 @@ from .coordination.coordinator import Coordination
 from .nominal.field_codec import AcpSessionId, GoalId, InputId, TurnId
 from .errors import RelationViolationError
 from .following_inputs import OwnerFollowingInputs
-from .goal_actions import (
+from .planning.goal_actions import (
     GoalPrecondition,
     OwnerInvocable,
     PausedGoalAction,
 )
-from .goal_scheduler import GoalScheduler
+from .execution.goal_scheduler import GoalScheduler
 from .image_input import ImageInput
 from .input_origin import InputOrigin, UnattributedInputOrigin
 from .messages import Message
@@ -59,7 +59,7 @@ from .turn_effects import TurnEffects
 from .turn_lease import TurnLeaseFence, TurnState
 from .turn_input_source import InputDependency, NoInputDependency, TurnAcceptance
 from .turn_phase import CancellingPhase, TurnPhase
-from .goal_scope import OneGoal
+from .planning.goal_scope import OneGoal
 
 from dataclasses import dataclass
 from .reservation_rules import ReservationRule, ReservationViolationError

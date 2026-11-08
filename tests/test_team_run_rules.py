@@ -5,7 +5,7 @@ import time
 import pytest
 
 from agent_comms.change_report import FileLine
-from agent_comms.goal_actions import OrderGoalAction
+from agent_comms.planning.goal_actions import OrderGoalAction
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId
 from agent_comms.planning.orders import (
     Todo,

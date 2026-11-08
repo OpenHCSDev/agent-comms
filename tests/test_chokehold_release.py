@@ -7,7 +7,11 @@ from types import SimpleNamespace
 from agent_comms.projects.checkouts import Checkout
 
 from agent_comms.team.vibe_check import Chokehold, ChokeholdAnswer
-from agent_comms.goal_actions import ChokeholdPausedGoalAction, OwnerInvocable, PausedGoalAction
+from agent_comms.planning.goal_actions import (
+    ChokeholdPausedGoalAction,
+    OwnerInvocable,
+    PausedGoalAction,
+)
 from agent_comms.task_attachments.owner_notices import ChokeholdNotice
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.registry.threads import NativeThread
@@ -82,7 +86,10 @@ def test_a_chokehold_leaves_an_owner_pause_alone(comms, monkeypatch):
 def test_any_teammate_can_pull_the_emergency_release(comms, monkeypatch):
     """The andon cord: an ordinary teammate's pull resumes the goals a chokehold paused,
     leaves an owner pause alone, and posts the pull under its own name."""
-    from agent_comms.goal_states import ActiveGoal, OwnerPause
+    from agent_comms.planning.goal_states import (
+    ActiveGoal,
+    OwnerPause,
+)
 
     _teammate(comms, monkeypatch, "choked")
     _teammate(comms, monkeypatch, "owner-paused")

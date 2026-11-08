@@ -1,18 +1,17 @@
-"""Private goal generation lifecycle; SQL fences and identities stay in their store."""
-
 from __future__ import annotations
-
-from sqlite3 import Connection
 
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar
+from sqlite3 import Connection
+from typing import (
+    ClassVar,
+    TYPE_CHECKING,
+)
 
-from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
-
-from .nominal.declared_family import DeclaredFamily
-from .errors import GoalRefused, UnresolvedAttemptError
-from .nominal.field_codec import AttemptId, NoAttemptId
+from ..errors import (
+    GoalRefused,
+    UnresolvedAttemptError,
+)
 from .goal_attempt_phase import (
     FailedAttempt,
     GoalAttemptPhase,
@@ -23,19 +22,37 @@ from .goal_presentation import (
     CompletedExecution,
     RunnableExecution,
 )
-from .lifecycle import LifecycleState
-from .lifecycle_capability import Complete, Failed, Terminal
+from ..execution.goal_turn_permit import (
+    GoalTurnPermit,
+    NoLaunchPermit,
+)
+from ..lifecycle import LifecycleState
+from ..lifecycle_capability import (
+    Complete,
+    Failed,
+    Terminal,
+)
+from ..nominal.declared_family import DeclaredFamily
+from ..nominal.field_codec import (
+    AttemptId,
+    NoAttemptId,
+)
 
 if TYPE_CHECKING:
-    from .attempt_resolution import WorkDecision
     from .goal_actions import GoalActionContext
-    from .goal_attempts import Generation, GoalAttemptStore
+    from .goal_attempts import (
+        Generation,
+        GoalAttemptStore,
+    )
+    from .goal_management import (
+        GoalExecutionSource,
+        Goals,
+    )
+    from ..attempt_resolution import WorkDecision
     from .goal_failure_observation import GoalFailureEvidence
-    from .goal_management import Goals
-    from agent_comms.goal_management import GoalExecutionSource
     from .goal_presentation import GoalExecution
     from .goals import Goal
-    from .registry.threads import NativeThread
+    from ..registry.threads import NativeThread
 
 
 @dataclass(frozen=True)

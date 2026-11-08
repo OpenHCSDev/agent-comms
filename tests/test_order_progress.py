@@ -26,7 +26,7 @@ from agent_comms.team_hud import TeamFrame
 from agent_comms.transport.tools.orders import CommsTodoCreateTool
 from team_heartbeat_fixture import ObservedHeartbeat, current_hud, observe_team
 from agent_comms.comms import wire
-from agent_comms.goal_actions import CreateProblemGoalAction
+from agent_comms.planning.goal_actions import CreateProblemGoalAction
 from agent_comms.launch_runtime import LaunchRoot
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.projects.git_errors import GitCommandError

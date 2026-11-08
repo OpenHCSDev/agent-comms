@@ -17,7 +17,10 @@ from pydantic import JsonValue
 from .annotation_disclosure import PublicInstructionAnnotations, WithheldAnnotations
 from .cli_result import CliResult
 from .errors import RelationViolationError
-from .goals import Goal, NoGoal
+from .planning.goals import (
+    Goal,
+    NoGoal,
+)
 from .message_reference import MessageReference
 from .native_session_reopen import NativeSessionIdentity
 from .nominal.declared_family import DeclaredFamily

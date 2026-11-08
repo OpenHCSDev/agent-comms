@@ -15,7 +15,7 @@ from ..change_report import (
     SourceRoots,
 )
 from ..errors import TodoError
-from ..goals import OrderCheck
+from .goals import OrderCheck
 from ..nominal.declared_family import DeclaredFamily
 from ..nominal.field_codec import (
     Description,

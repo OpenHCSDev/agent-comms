@@ -9,10 +9,15 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import StaleAttemptError, UnresolvedAttemptError
-from agent_comms.goal_attempts import AttemptRecord, FailedTurnObservation, Generation, GoalAttemptStore
-from agent_comms.goal_failure_observation import NoFailedTurnEvidence
-from agent_comms.goal_generation import BlockedGeneration
-from agent_comms.goals import Goal
+from agent_comms.planning.goal_attempts import (
+    AttemptRecord,
+    FailedTurnObservation,
+    Generation,
+    GoalAttemptStore,
+)
+from agent_comms.planning.goal_failure_observation import NoFailedTurnEvidence
+from agent_comms.planning.goal_generation import BlockedGeneration
+from agent_comms.planning.goals import Goal
 from agent_comms.nominal.field_codec import GoalId, TurnId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.thread_identity import RecordedThreadIncarnation, TurnIdentity

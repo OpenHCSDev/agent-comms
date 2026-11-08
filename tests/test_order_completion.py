@@ -25,7 +25,10 @@ from agent_comms.planning.orders import (
 from agent_comms.planning.pull_requests import PullRequestLink
 from agent_comms.team.order import Team, main
 from agent_comms.team.standing import HolderGone
-from agent_comms.goals import CountCheckResult, OrderCheck
+from agent_comms.planning.goals import (
+    CountCheckResult,
+    OrderCheck,
+)
 from agent_comms.nominal.field_codec import RecordProblems
 from team_heartbeat_fixture import capture_frame
 from agent_comms.projects.checkouts import (

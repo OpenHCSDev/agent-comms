@@ -56,8 +56,11 @@ from agent_comms.nominal.field_codec import (
     RecordProblems,
     ToolCallId,
 )
-from agent_comms.goal_actions import SetGoalAction
-from agent_comms.goals import OrderCheck, ProblemGoalOrder
+from agent_comms.planning.goal_actions import SetGoalAction
+from agent_comms.planning.goals import (
+    OrderCheck,
+    ProblemGoalOrder,
+)
 from agent_comms.messages import HandoffKind, Message, QuestionKind
 from agent_comms.order_runs import ApplicationOrderRun
 from agent_comms.storage.locked_store import SQLiteFile

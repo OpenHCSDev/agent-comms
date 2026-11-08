@@ -19,7 +19,7 @@ from agent_comms.cli_bridges.hook_requests import HookReply, StopRequest
 from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms_hooks.watch import WatchRecord
 from agent_comms.comms import Comms
-from agent_comms.goal_actions import SetGoalAction
+from agent_comms.planning.goal_actions import SetGoalAction
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import ExternalThread
 from agent_comms.transcript_events import AssistantTranscript

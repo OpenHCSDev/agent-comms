@@ -13,8 +13,8 @@ from agent_comms.comms import wire
 from conftest import installed_comms
 from agent_comms.nominal.field_codec import FieldCodec, InputId, MalformedRecord, TurnId
 from agent_comms.input_key import AcpInputKey, BusInputKey, InputKeyText
-from agent_comms.goal_presentation import GoalExecution
-from agent_comms.goal_actions import (
+from agent_comms.planning.goal_presentation import GoalExecution
+from agent_comms.planning.goal_actions import (
     ActiveGoalAction,
     GoalPrecondition,
     OwnerInvocable,
@@ -29,7 +29,7 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.read_basis import NamedViewer
 from stored_inputs import stored_inputs
 from agent_comms.registry.threads import NativeThread
-from agent_comms.goal_scope import OneGoal
+from agent_comms.planning.goal_scope import OneGoal
 
 
 OWNER_INPUT_KEY = AcpInputKey(InputId.mint())

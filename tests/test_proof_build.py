@@ -41,8 +41,11 @@ from agent_comms.team.order import Team
 from agent_comms.team.standing import InstallDue
 from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
-from agent_comms.goal_actions import CreateProblemGoalAction
-from agent_comms.goals import CountCheckResult, OrderCheck
+from agent_comms.planning.goal_actions import CreateProblemGoalAction
+from agent_comms.planning.goals import (
+    CountCheckResult,
+    OrderCheck,
+)
 from agent_comms.held_orders import HeldOrders
 from agent_comms.installer.probes.interpreter import RecordedInterpreterBuild
 from agent_comms.installer.probes.packages import ArchiveRecord, CommitRecord, GitRecord, PackageRecord

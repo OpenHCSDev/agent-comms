@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from .channels import Channel
     from .cli_command import CliCommand
     from .comms import Comms
-    from .goal_management import Goals
+    from .planning.goal_management import Goals
     from .historical_views import ChannelHistory, ConversationHistoryView, DMHistory, HistoryView
     from .history_views import HistoryViews
     from .messages import Message, MessageInput
