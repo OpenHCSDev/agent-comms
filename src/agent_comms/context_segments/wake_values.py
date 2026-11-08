@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Annotated
 
@@ -32,3 +33,8 @@ class WakeWorkContext(RecordMember):
     tags: tuple[str, ...]
     original_assignment: ThreadText
     current_goal: WakeGoalValue
+
+
+class WakeWorkSource[Owner](ABC):
+    @abstractmethod
+    def wake_context(self, owner: Owner) -> WakeWorkContext: ...

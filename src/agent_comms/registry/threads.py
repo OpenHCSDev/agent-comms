@@ -15,7 +15,8 @@ from ..activity import ObservedActivity
 from ..agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
 from ..channel_targets import DeclaredTag, Tag
 from ..child_process import NoProcess, ProcessIdentity, ProcessState
-from ..context_segments.wake_values import WakeWorkContext
+from ..context_segments.wake_values import WakeWorkContext, WakeWorkSource
+from ..goal_mutation import GoalFork
 from ..errors import RelationViolationError
 from ..goals import (
     GoalDeclaration,
@@ -96,7 +97,6 @@ from ..turn_lease import (
 )
 
 if TYPE_CHECKING:
-    from ..goal_management import Goals
     from ..storage_rules import StorageRule
     from .registry_document import RegistrySnapshot
 
@@ -674,7 +674,7 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread")
     def task_scope(self) -> TaskScope:
         return TaskScope.for_goal(self.worktree, self.goal)
 
-    def wake_context(self, goals: Goals) -> WakeWorkContext:
+    def wake_context(self, goals: WakeWorkSource[Thread]) -> WakeWorkContext:
         return goals.wake_context(self)
 
     def continuation_goal(self, original: Thread) -> GoalDeclaration:
@@ -920,7 +920,9 @@ class SubagentThread(ExternalThread, declared_name="subagent_execution"):
         return replace(child, tags=DeclaredTag.for_child(parent.tags))
 
     @classmethod
-    def child_goal(cls, goals: Goals, parent: Thread) -> Callable[[Thread], GoalDeclaration]:
+    def child_goal(
+        cls, goals: GoalFork[Thread, GoalDeclaration], parent: Thread,
+    ) -> Callable[[Thread], GoalDeclaration]:
         return lambda prepared: prepared.goal
 
 
@@ -944,7 +946,9 @@ class ForkThread(NoChannelInbox, SubagentThread, declared_name="fork_execution")
         return replace(child, tags=parent.tags)
 
     @classmethod
-    def child_goal(cls, goals: Goals, parent: Thread) -> Callable[[Thread], GoalDeclaration]:
+    def child_goal(
+        cls, goals: GoalFork[Thread, GoalDeclaration], parent: Thread,
+    ) -> Callable[[Thread], GoalDeclaration]:
         return lambda prepared: goals.fork_goal(parent, prepared)
 
 

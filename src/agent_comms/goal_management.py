@@ -21,7 +21,10 @@ from .agent_activity import AgentActivity
 from .coordination.errors import StaleFence
 from .errors import BirthChangedError, RelationViolationError, UnregisteredThreadError
 from .goal_records import GoalRecords
-from .context_segments.wake_values import NoWakeGoalContext, WakeGoalContext, WakeWorkContext
+from .context_segments.wake_values import (
+    NoWakeGoalContext, WakeGoalContext, WakeWorkContext, WakeWorkSource,
+)
+from .goal_mutation import GoalFork
 from .goal_actions import (
     GoalAction,
     GoalActionContext,
@@ -136,7 +139,7 @@ class BornGoalTarget(GoalTarget):
         return thread
 
 
-class Goals(GoalRecords):
+class Goals(GoalRecords, WakeWorkSource[Thread], GoalFork[Thread, GoalDeclaration]):
     def fork_goal(self, parent: Thread, child: Thread) -> Goal:
         """Create a teammate's child goal from its parent's active work."""
         text = ('\n'.join(goal.text for goal in parent.goal.active())

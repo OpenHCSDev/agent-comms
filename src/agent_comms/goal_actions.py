@@ -36,6 +36,7 @@ from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .goal_mentions import bind_goal_mentions
 from .goal_records import GoalRecords
+from .goal_mutation import GoalMutation
 from .goal_scope import AllGoals, OneGoal
 from .goal_states import (
     ActiveGoal,
@@ -173,7 +174,8 @@ class GoalPublicationContext(GoalActionContext):
 
 @dataclass(frozen=True, kw_only=True)
 class GoalAction[Result: GoalDeclaration](
-    DeclaredFamily, Command[GoalPublicationContext, Result], affix="GoalAction"
+    DeclaredFamily, Command[GoalPublicationContext, Result],
+    GoalMutation[Goal, GoalActionContext, Result], affix="GoalAction"
 ):
     expect: GoalPrecondition = GoalPrecondition()
     preserve_wait: ClassVar[bool] = False

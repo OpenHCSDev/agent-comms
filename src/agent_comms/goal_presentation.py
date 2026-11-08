@@ -15,6 +15,7 @@ from .goals import Goal, GoalCheckpoint, GoalDeclaration
 from .lifecycle_capability import Active
 from .thread_identity import RecordedThreadIncarnation
 from .thread_presentation import ThreadPresentation
+from .ui_model.goal import GoalExecutionDisplay
 
 if TYPE_CHECKING:
     from .bus_publication import Delivered
@@ -40,7 +41,7 @@ class GoalWaitTarget(WireValue):
         return RecordedThreadIncarnation.schema()
 
 
-class GoalExecution(DeclaredFamily, affix="Execution"):
+class GoalExecution(DeclaredFamily, GoalExecutionDisplay[Goal], affix="Execution"):
     """The complete execution family consumed by commands, views and the teammate."""
 
     toggle_label: ClassVar[str] = "Pause"

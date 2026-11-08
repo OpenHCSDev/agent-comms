@@ -29,6 +29,7 @@ from .child_process import (
 )
 from .errors import GoalRefused, RejectedEnforcementError, RelationViolationError
 from .goal_authority import GoalAuthority, GoalTurnAuthority, NoGoalAuthority
+from .goal_mutation import GoalMutation
 from .goal_states import ActiveGoal, GoalState
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import (
@@ -49,11 +50,9 @@ from .shell_effects import shell_storage_effects
 from .text_digest import TextDigest
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .turn_goal_permission import ContinuationGoalPermission, GoalPermission, InactiveGoalPermission
-from .ui_model.goal import GoalDisplay
+from .ui_model.goal import GoalDisplay, GoalExecutionDisplay
 
 if TYPE_CHECKING:
-    from .goal_actions import GoalAction, GoalActionContext
-    from .goal_presentation import GoalExecution
     from .planning.goal_waits import GoalWaits
     from .registry.threads import Thread
     from .task_sources import TaskScope
@@ -67,7 +66,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class GoalUnavailable(GoalDisplay):
+class GoalUnavailable(GoalDisplay["GoalDeclaration", "Goal"]):
     last_confirmed: GoalDeclaration
 
     can_control: ClassVar[bool] = False
@@ -78,10 +77,10 @@ class GoalUnavailable(GoalDisplay):
 
     visible: ClassVar[bool] = True
 
-    def standby(self, execution: GoalExecution) -> bool:
+    def standby(self, execution: GoalExecutionDisplay[Goal]) -> bool:
         return False
 
-    def heading(self, execution: GoalExecution) -> str:
+    def heading(self, execution: GoalExecutionDisplay[Goal]) -> str:
         return self.last_confirmed.unavailable_heading
 
 
@@ -572,7 +571,10 @@ class GoalPeerChange:
     progress: str
 
 
-class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalDeclaration"]):
+class GoalDeclaration(
+    GoalDisplay["GoalDeclaration", "Goal"], SubclassUnion,
+    RegistrationInheritance["GoalDeclaration"],
+):
     """The recorded goal state, including a thread with no goal."""
 
     @classmethod
@@ -586,7 +588,9 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
     def __iter__(self) -> Iterator[Goal]: ...
 
     @abstractmethod
-    def apply_action[R: GoalDeclaration](self, action: GoalAction[R], ctx: GoalActionContext) -> R: ...
+    def apply_action[Context, R: GoalDeclaration](
+        self, action: GoalMutation[Goal, Context, R], ctx: Context,
+    ) -> R: ...
 
     @abstractmethod
     def following_permission(self) -> GoalPermission: ...
@@ -692,7 +696,9 @@ class NoGoal(NullMember, GoalDeclaration):
     def __iter__(self) -> Iterator[Goal]:
         return iter(())
 
-    def apply_action[R: GoalDeclaration](self, action: GoalAction[R], ctx: GoalActionContext) -> R:
+    def apply_action[Context, R: GoalDeclaration](
+        self, action: GoalMutation[Goal, Context, R], ctx: Context,
+    ) -> R:
         return action.create(ctx)
 
     def registration_value(self, previous: GoalDeclaration) -> GoalDeclaration:
@@ -735,10 +741,10 @@ class NoGoal(NullMember, GoalDeclaration):
     objective: ClassVar[str] = ""
     progress: ClassVar[str] = ""
 
-    def standby(self, execution: GoalExecution) -> bool:
+    def standby(self, execution: GoalExecutionDisplay[Goal]) -> bool:
         return False
 
-    def heading(self, execution: GoalExecution) -> str:
+    def heading(self, execution: GoalExecutionDisplay[Goal]) -> str:
         return "No current goal"
 
 
@@ -764,7 +770,9 @@ class Goal(RecordMember, GoalDeclaration):
     def __iter__(self) -> Iterator[Goal]:
         yield self
 
-    def apply_action[R: GoalDeclaration](self, action: GoalAction[R], ctx: GoalActionContext) -> R:
+    def apply_action[Context, R: GoalDeclaration](
+        self, action: GoalMutation[Goal, Context, R], ctx: Context,
+    ) -> R:
         return action.change(self, ctx)
 
     def registration_value(self, previous: GoalDeclaration) -> GoalDeclaration:
@@ -822,16 +830,16 @@ class Goal(RecordMember, GoalDeclaration):
     def objective(self) -> str:
         return self.text
 
-    def details_heading(self, execution: GoalExecution) -> str:
+    def details_heading(self, execution: GoalExecutionDisplay[Goal]) -> str:
         return execution.details_heading(self.heading(execution))
 
     can_control: ClassVar[bool] = True
     visible: ClassVar[bool] = True
 
-    def standby(self, execution: GoalExecution) -> bool:
+    def standby(self, execution: GoalExecutionDisplay[Goal]) -> bool:
         return execution.waiting_for(self)
 
-    def heading(self, execution: GoalExecution) -> str:
+    def heading(self, execution: GoalExecutionDisplay[Goal]) -> str:
         return execution.heading(self.revision)
 
     unavailable_heading: ClassVar[str] = "Goal state unavailable · last confirmed snapshot"
