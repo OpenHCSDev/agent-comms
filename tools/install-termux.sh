@@ -17,7 +17,7 @@ printf 'Installing Toad Comms and its build dependencies…\n'
 # Termux supports complete package upgrades, not mixed library/consumer versions.
 pkg upgrade -y
 # Use Termux's patched native modules and numerical libraries.
-pkg install -y python python-pip uv git openssh clang make cmake ninja rust \
+pkg install -y python python-pip uv git openssh neovim clang make cmake ninja rust \
     pkg-config libffi openssl libjpeg-turbo zlib python-psutil python-pillow python-numpy
 
 if [[ -d "$source/.git" ]]; then
