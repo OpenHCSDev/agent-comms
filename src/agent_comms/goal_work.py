@@ -5,7 +5,7 @@ from typing import Protocol, Self
 
 from .child_process import ProcessState
 from .nominal.field_codec import GoalId
-from .repo import Checkout
+from .projects.checkouts import Checkout
 from .thread_identity import ObservedTurn, ThreadIncarnation
 
 

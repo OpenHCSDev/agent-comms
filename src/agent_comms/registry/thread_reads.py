@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Protocol, Self
 
-from ..repo import RepositoryReads
+from ..projects.checkouts import RepositoryReads
 from ..thread_presentation import ThreadOwnerBinding
 
 

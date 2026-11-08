@@ -24,7 +24,7 @@ from .goals import Goal
 from .lifecycle_capability import Failed
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import AttemptId, AttemptToken, GoalId, MalformedRecord, NoAttemptId, TurnId
-from .repo import Checkout
+from .projects.checkouts import Checkout
 from .storage.typed_table import (
     LOCAL_TABLE_SOURCE, Column, DurableTables, Generated, RowNotFoundError,
     ForeignKey, TableReference, TableSource, TextStorage, TypedTable,
