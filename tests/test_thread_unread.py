@@ -12,7 +12,15 @@ from agent_comms.comms import wire
 from conftest import installed_comms
 from agent_comms.storage.private_path import FileRevision
 from agent_comms.registry.registry_document import DEFAULT_ROSTER
-from agent_comms.ui_model.unread import CappedReplyUnread, EmptyCappedReplyUnread, ReplyUnread
+from agent_comms.ui_model.unread import (
+    CappedReplyUnread,
+    EmptyCappedReplyUnread,
+    ExactUnread,
+    IndexingUnread,
+    ReplyUnread,
+    UnobservedUnread,
+    UnreadPresentation,
+)
 from agent_comms.view_unread import (
     CappedCount,
     Counted,
@@ -63,12 +71,28 @@ def test_count_coverage_is_preserved_when_sources_are_combined(left, right, expe
     assert left + right == right + left == expected
 
 
-@pytest.mark.parametrize('count,label', [(0, ''), (1, '(1+)'), (32, '(32+)')])
-def test_capped_labels_never_claim_at_least_zero(count, label):
+@pytest.mark.parametrize('count,detail', [
+    (0, ''), (1, 'at least 1 unread replies'), (32, 'at least 32 unread replies')])
+def test_capped_rows_mark_unread_without_claiming_at_least_zero(count, detail):
+    """A row marks that something is unread; the number stays in the tooltip."""
     shown = CappedReplyUnread.for_count(count)
-    assert shown.label == label
+    assert shown.badge == (UnreadPresentation.mark if count else '')
     assert shown.highlighted == bool(count)
-    assert ReplyUnread(count).label == f'({count})'
+    assert shown.detail == detail
+    assert ReplyUnread(count).detail == f'{count} unread replies'
+
+
+@pytest.mark.parametrize('unread', [
+    ExactUnread(3), ReplyUnread(3), CappedReplyUnread(3), IndexingUnread()])
+def test_no_row_badge_says_how_many_are_unread(unread):
+    """2026-11-08: every badge printed a count, which a 40-column phone cannot spare."""
+    assert unread.badge and not any(character.isdigit() for character in unread.badge)
+
+
+@pytest.mark.parametrize('unread', [
+    ExactUnread(0), EmptyCappedReplyUnread(), UnobservedUnread()])
+def test_a_read_row_marks_nothing(unread):
+    assert unread.badge == ''
 
 
 def test_prepare_caps_records_not_replies_and_detects_replacement(tmp_path):
