@@ -361,7 +361,7 @@ class FileLine(WireValue, SourceReference):
         return (root / self.file).resolve() == (root / other.file).resolve()
 
     def declaration(self, root: Path) -> Declaration:
-        """The innermost class or def holding this line; its whole file at module level."""
+        """The enclosing Python declaration or Markdown rule block, otherwise the file."""
         text = (root / self.file).read_text()
         at = replace(self, file=str((root / self.file).resolve()))
         declarations = [Declaration(replace(at, line=1), range(1, text.count("\n") + 2), self.file)]
@@ -372,6 +372,26 @@ class FileLine(WireValue, SourceReference):
                              if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
                              for end in (cast(int, node.end_lineno),)
                              if node.lineno <= self.line <= end)
+        elif self.file.endswith(".md"):
+            lines = text.splitlines()
+            starts: list[tuple[int, str]] = []
+            fence = ""
+            for number, line in enumerate(lines, 1):
+                if fence:
+                    closing = re.fullmatch(r" {0,3}(`+|~+)\s*", line)
+                    if closing and closing[1].startswith(fence):
+                        fence = ""
+                    continue
+                fenced = re.match(r"^ {0,3}(`{3,}|~{3,})(.*)$", line)
+                if fenced:
+                    fence = fenced[1]
+                    continue
+                title = re.match(r"^- \*\*(.+?)\*\*|^#{1,6}\s+(.+)", line)
+                if title:
+                    starts.append((number, title[1] or title[2]))
+            for (start, name), (stop, _) in zip(starts, (*starts[1:], (len(lines) + 1, ""))):
+                if start <= self.line < stop:
+                    declarations.append(Declaration(replace(at, line=start), range(start, stop), name))
         return min(declarations, key=lambda declaration: len(declaration.lines))
 
     def require_exists(self, roots: SourceRoots, revision: SourceText) -> None:
