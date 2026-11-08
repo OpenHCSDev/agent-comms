@@ -41,7 +41,7 @@ from .selected_session import SelectedSession
 if TYPE_CHECKING:
     from . import pi_events as pi
     from .native_entries import NativeEvidenceRead
-    from .turn_failure import TurnFailure
+    from .execution.turn_failure import TurnFailure
 
 CAPABILITY = "pi-native-input-v1-live-only"
 

@@ -31,7 +31,7 @@ from .native_failures import NativePiUnavailable
 from .native_integer import PositiveNativeIntegerBounds
 from .native_session_reopen import PiSessionId
 from .storage.private_path import FileIdentity, PrivateFileRole
-from .turn_item import FreshNativeId
+from .execution.turn_item import FreshNativeId
 from .storage.typed_table import (
     Column,
     DurableTables,

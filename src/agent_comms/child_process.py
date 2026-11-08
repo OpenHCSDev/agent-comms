@@ -75,7 +75,7 @@ if TYPE_CHECKING:
     from .thread_presentation import ThreadOwnerBinding
     from .thread_presentation import ThreadPresentation
     from .thread_status import ActiveThreadPresence, ThreadStatus
-    from .turn_lease import ActiveTurn
+    from .execution.turn_lease import ActiveTurn
 
 STOP_GRACE_SECONDS = 2.0
 

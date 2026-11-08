@@ -30,7 +30,7 @@ from agent_comms.notification_progress import HumanReadProgress
 from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_text import GivenThreadText
-from agent_comms.turn_context import TurnContext
+from agent_comms.execution.turn_context import TurnContext
 from bus_history import read_history
 from bus_record_fixture import prepare_native_comms
 from conftest import publish_initial

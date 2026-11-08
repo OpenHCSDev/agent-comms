@@ -23,7 +23,7 @@ from agent_comms.comms import wire
 from agent_comms.display_order import LastActivityThreadSort
 from agent_comms.errors import RelationViolationError
 from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
-from agent_comms.turn_lease import NoTurnRecord
+from agent_comms.execution.turn_lease import NoTurnRecord
 from agent_comms.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
 

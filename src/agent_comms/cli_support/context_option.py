@@ -8,7 +8,7 @@ from typing import ClassVar, Self
 from agent_comms.cli_verbs.context import ContextCliCommand
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import Comms
-from agent_comms.turn_context import ContextManifest
+from ..execution.turn_context import ContextManifest
 from collections.abc import Iterator
 
 class ContextOptionCliCommand(ContextCliCommand):

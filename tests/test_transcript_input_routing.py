@@ -15,7 +15,10 @@ from agent_comms.native_entries import TranscriptProjection
 from agent_comms.native_transcript import NativeTranscript
 from agent_comms.transcript_events import UserTranscript
 from agent_comms.transcript_routes import DisplayText, SentInputText
-from agent_comms.turn_item import FreshNativeId, FreshNativeIdText
+from agent_comms.execution.turn_item import (
+    FreshNativeId,
+    FreshNativeIdText,
+)
 
 
 def append_input(path, native_id, text, *, role="user"):

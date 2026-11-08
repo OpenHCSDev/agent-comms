@@ -19,7 +19,7 @@ from .pi_wire import PiOmitted, ReportedInputId
 from .storage.private_path import FileObservation, FileRevision
 from .routing import NoTurnRouting, Routing, TurnRouting
 from .text_digest import TextDigest
-from .turn_item import FreshNativeId
+from .execution.turn_item import FreshNativeId
 from .transcript_events import ContextTranscript, TranscriptEvent
 from .storage.typed_table import Column, DurableStore, StoreRows, TextStorage, WithoutRowid
 

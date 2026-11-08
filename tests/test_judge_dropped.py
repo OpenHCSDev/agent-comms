@@ -22,7 +22,10 @@ from agent_comms.nominal.field_codec import (
 from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.transcript_events import ToolStartTranscript
-from agent_comms.turn_item import NativeItemId, NativeTurnId
+from agent_comms.execution.turn_item import (
+    NativeItemId,
+    NativeTurnId,
+)
 from source_revision_fixture import SourceRepository
 
 pytest_plugins = ("test_held_problem_orders",)

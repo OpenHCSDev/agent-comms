@@ -22,7 +22,7 @@ from .nominal.field_codec import (
 if TYPE_CHECKING:
     from .agent_events import AgentEvent
     from .backend import TurnSession
-    from .turn_usage import UsageAccount
+    from .execution.turn_usage import UsageAccount
 
 
 class PiCountWire(AcceptsNull):

@@ -1,45 +1,92 @@
-"""Original and follow-up inputs own their captured goal/wait and display semantics."""
-
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import (
+    ABC,
+    abstractmethod,
+)
 from collections.abc import Iterator
-from contextlib import ExitStack, contextmanager
-from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, ClassVar
+from contextlib import (
+    ExitStack,
+    contextmanager,
+)
+from dataclasses import (
+    dataclass,
+    replace,
+)
+from typing import (
+    ClassVar,
+    TYPE_CHECKING,
+)
 
-from agent_comms.turn_goal_permission import TurnGoalPermission
+from .turn_goal_permission import TurnGoalPermission
+from .turn_inbox import (
+    BusyInputPolicy,
+    SteerInputPolicy,
+)
+from .. import input_attempt
+from ..acp_extension import (
+    InputStartedUpdate,
+    NoQueueScope,
+    UnidentifiedInputStarted,
+)
+from ..channel_input_batch import (
+    InputBatch,
+    SingleInputBatch,
+)
+from ..errors import RelationViolationError
+from ..input_attempt import (
+    InputAlreadyCleared,
+    MissingInput,
+)
+from ..input_key import InputKey
+from ..messages import Message
+from ..nominal.field_codec import (
+    AcpSessionId,
+    InputId,
+    TurnId,
+)
+from ..ordinary_turn_rules import (
+    UnboundOrdinaryInputRule,
+    UnconsumedDependencyRule,
+)
+from ..registry.registry_document import RegistrySnapshot
+from ..registry.threads import Thread
+from ..reservation_rules import (
+    ReservationRule,
+    ReservationViolationError,
+    RuleCheck,
+)
+from ..routing import (
+    NoTurnRouting,
+    TurnRouting,
+)
+from ..send_outcome import (
+    DeferredSend,
+    GrantedSend,
+    RefusedSend,
+    SendOutcome,
+)
+from ..started_input import StartedInput
+from ..transcript_routes import (
+    DisplayText,
+    NoDisplayText,
+    SentInputText,
+)
 
-from . import input_attempt
-from .acp_extension import InputStartedUpdate, NoQueueScope, UnidentifiedInputStarted
-from .turn_inbox import BusyInputPolicy, SteerInputPolicy
-from .channel_input_batch import InputBatch, SingleInputBatch
-from .errors import RelationViolationError
-from .nominal.field_codec import AcpSessionId, InputId, TurnId
-from .input_attempt import InputAlreadyCleared, MissingInput
-from .input_key import InputKey
-from .messages import Message
-from .ordinary_turn_rules import UnboundOrdinaryInputRule, UnconsumedDependencyRule
-from .reservation_rules import ReservationViolationError
-from .routing import NoTurnRouting, TurnRouting
-from .send_outcome import DeferredSend, GrantedSend, RefusedSend, SendOutcome
-from .started_input import StartedInput
-from .transcript_routes import DisplayText, NoDisplayText, SentInputText
-
-from .reservation_rules import ReservationRule, RuleCheck
-from .registry.registry_document import RegistrySnapshot
-from .registry.threads import Thread
 if TYPE_CHECKING:
-    from .acp_extension import QueueScope
-    from .comms import Comms
-    from .controller import Controller
-    from .planning.goal_waits import GoalWait
-    from .planning.goals import GoalDeclaration
-    from .input_disposition import InputDispositions
-    from .execution.input_drain import DrainedSession, InputDrain
-    from .owned_send import OwnedSend
-    from .runtime_server import RuntimeServer
-    from .thread_identity import RecordedThreadIncarnation
+    from .input_drain import (
+        DrainedSession,
+        InputDrain,
+    )
+    from ..acp_extension import QueueScope
+    from ..comms import Comms
+    from ..controller import Controller
+    from ..input_disposition import InputDispositions
+    from ..owned_send import OwnedSend
+    from ..planning.goal_waits import GoalWait
+    from ..planning.goals import GoalDeclaration
+    from ..runtime_server import RuntimeServer
+    from ..thread_identity import RecordedThreadIncarnation
 
 
 @dataclass(frozen=True, kw_only=True)

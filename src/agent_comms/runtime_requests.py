@@ -61,7 +61,7 @@ from .thread_identity import ThreadIncarnation
 from .registry.threads import Thread
 from .thread_presentation import LiveThreadOwnerBinding
 from .tool_result import DeclaredReply
-from .turn_context import (
+from .execution.turn_context import (
     ContextManifest,
     ContextSourceText,
     DispatchRequest,

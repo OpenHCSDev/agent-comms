@@ -121,7 +121,7 @@ from ..team_service import TeamService
 from ..text_digest import TextDigest
 from ..thread_identity import ThreadIncarnation
 from ..transcript_events import TurnDigest
-from ..turn_digests import (
+from ..execution.turn_digests import (
     LastTurns,
     OrderEditCountRead,
     RecentTurnsSince,

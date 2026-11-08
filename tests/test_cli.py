@@ -51,7 +51,11 @@ from agent_comms.pi_vocabulary import ServiceTier
 from agent_comms.restart_scope import OneOwner
 from agent_comms.thread_identity import TurnIdentity, UserThreadRole
 from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus, RunningThreadStatus
-from agent_comms.turn_lease import ActiveTurn, RecordedGeneration, StoredTurnRecord
+from agent_comms.execution.turn_lease import (
+    ActiveTurn,
+    RecordedGeneration,
+    StoredTurnRecord,
+)
 from agent_comms.ui_model.unread import ReplyUnread
 from agent_comms.wake_policy import BoundedTriageWake, PassiveWake
 from dataclasses import replace

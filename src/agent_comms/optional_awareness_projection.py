@@ -50,7 +50,12 @@ from .private_registry_guard import RegistryPrivacy
 from .registry.registration import Registration
 from .storage.store_files import StoreBusy
 from .registry.threads import NativeThread, Thread
-from .turn_context import ContextSegment, InstructionFile, ResourceProvenance, WireProvenance
+from .execution.turn_context import (
+    ContextSegment,
+    InstructionFile,
+    ResourceProvenance,
+    WireProvenance,
+)
 from .storage.typed_table import TypedRow
 from .wake_candidate_index import ProjectionUnavailableError, WakeCandidateIndex
 

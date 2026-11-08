@@ -1,19 +1,20 @@
-"""Backend input records, busy policies and the inbox that owns queued work."""
-
 from __future__ import annotations
 
 import asyncio
-from abc import ABC, abstractmethod
+from abc import (
+    ABC,
+    abstractmethod,
+)
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import InputId
-from .image_input import ImageInput
-from .pi_vocabulary import ThinkingLevelField
-from .thread_model import ThreadModel
 from .turn_context import InputContributionCoordinates
+from ..image_input import ImageInput
+from ..nominal.declared_family import DeclaredFamily
+from ..nominal.field_codec import InputId
+from ..pi_vocabulary import ThinkingLevelField
+from ..thread_model import ThreadModel
 
 
 class BusyInputPolicy(DeclaredFamily, affix="InputPolicy"):

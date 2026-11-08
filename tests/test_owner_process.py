@@ -20,7 +20,7 @@ import pytest
 
 import agent_comms_hooks
 from agent_comms import native_package
-from agent_comms.turn_failure import FailedTurnResolution
+from agent_comms.execution.turn_failure import FailedTurnResolution
 from agent_comms.child_process import NoProcess, ObservedProcess, SpawnedProcess
 from agent_comms.comms import wire
 from agent_comms.config_options import ThinkingLevelConfigOption
@@ -37,7 +37,7 @@ from agent_comms.session_file import NoSessionFile
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
-from agent_comms.turn_failure import BackendFailed
+from agent_comms.execution.turn_failure import BackendFailed
 from delivery_owner_fixture import canonical_agent
 import fixture_git
 from native_backend_fixture import native_backend_fixture

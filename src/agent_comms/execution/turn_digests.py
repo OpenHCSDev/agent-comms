@@ -1,27 +1,50 @@
-"""One ordered turn answer, produced by the existing record owners."""
-
 from __future__ import annotations
 
-from agent_comms.nominal.field_codec import ActivityExclude
-
 from abc import abstractmethod
-from collections.abc import Callable, Iterable, Iterator, Mapping
-from dataclasses import dataclass, field, replace
+from collections.abc import (
+    Callable,
+    Iterable,
+    Iterator,
+    Mapping,
+)
+from dataclasses import (
+    dataclass,
+    field,
+    replace,
+)
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self
+from typing import (
+    Annotated,
+    ClassVar,
+    Self,
+    TYPE_CHECKING,
+)
 
 from agent_comms_hooks import ToolRefusedError
 from pydantic import JsonValue
 
-from .bus import Bus
-from .context_store import ContextStore
-from .nominal.declared_family import DeclaredFamily
-from .external_transcript import ExternalTranscript, StoreRead
-from .nominal.field_codec import FieldCodec, WireExclude, WireTransient, projected
-from .held_orders import HeldOrders, LiveHold
-from .historical_native_inputs import HistoricalNativeAnswers
-from .message_reference import MessageReference
-from .planning.orders import (
+from ..bus import Bus
+from ..context_store import ContextStore
+from ..external_transcript import (
+    ExternalTranscript,
+    StoreRead,
+)
+from ..held_orders import (
+    HeldOrders,
+    LiveHold,
+)
+from ..historical_native_inputs import HistoricalNativeAnswers
+from ..message_reference import MessageReference
+from ..nominal.declared_family import DeclaredFamily
+from ..nominal.field_codec import (
+    ActivityExclude,
+    FieldCodec,
+    WireExclude,
+    WireTransient,
+    projected,
+)
+from ..order_work import OrderWork
+from ..planning.orders import (
     EditWorkplaces,
     NoCommitProgress,
     OrderProgress,
@@ -29,21 +52,26 @@ from .planning.orders import (
     Todo,
     TodoStore,
 )
-from .private_registry_guard import RegistryPrivacy
-from .order_work import OrderWork
-from .problem_number import ProblemNumber
-from .registry.threads import ConversationPreparation, Thread
-from .thread_identity import ThreadIncarnation
-from .tool_declaration import EditCall
-from .tool_result import ToolResult
-from .service_passes import ServiceReading
-from .transcript_events import IncomingTranscript, TurnDigest
+from ..private_registry_guard import RegistryPrivacy
+from ..problem_number import ProblemNumber
+from ..registry.threads import (
+    ConversationPreparation,
+    Thread,
+)
+from ..service_passes import ServiceReading
+from ..thread_identity import ThreadIncarnation
+from ..tool_declaration import EditCall
+from ..tool_result import ToolResult
+from ..transcript_events import (
+    IncomingTranscript,
+    TurnDigest,
+)
 from .turn_item import NativeTurnId
-from .work_branches import WorkBranchError
+from ..work_branches import WorkBranchError
 
 if TYPE_CHECKING:
-    from .comms import Comms
-    from .transcript_sources import TranscriptSource
+    from ..comms import Comms
+    from ..transcript_sources import TranscriptSource
 
 
 class TurnView(DeclaredFamily, affix="TurnView"):
@@ -360,8 +388,6 @@ class OrderEditRead[Result](OrderRead[Result]):
                  for event in turn.events
                  for edit in event.edit_calls(self.thread.name, self.todo.id, since)}
         return self.owned(reversed(edits.values()))
-
-
 
 
 class OrderEditsRead(OrderEditRead[tuple[EditCall, ...]]):

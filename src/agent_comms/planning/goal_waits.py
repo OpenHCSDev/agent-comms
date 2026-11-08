@@ -30,7 +30,10 @@ from ..thread_identity import RecordedThreadIncarnation
 from ..thread_owned_state import ThreadOwnedState
 from ..registry.registry_document import RegistrySnapshot
 from ..registry.threads import Thread
-from ..turn_lease import TurnCompletion, TurnLease
+from ..execution.turn_lease import (
+    TurnCompletion,
+    TurnLease,
+)
 from ..storage.typed_table import (
     Column, DurableStore, ForeignKey, FULL_SCHEMA_REBUILD, Index, SchemaRebuild,
     StoreRows, TypedTable,

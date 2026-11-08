@@ -93,8 +93,8 @@ from .selected_write_plan import SelectedWritePlans
 from .session_effects import SessionEffects
 from .execution.session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
 from .registry.threads import Thread
-from .turn_effects import TurnEffects
-from .turn_runner import TurnRunner
+from .execution.turn_effects import TurnEffects
+from .execution.turn_runner import TurnRunner
 from .working_memory_policy import AnnotationPolicy
 from .working_memory_worker import AnnotationWorker
 
@@ -110,7 +110,7 @@ if TYPE_CHECKING:
     from .coordination.tables.assignments import WakeAssignment
 
 from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary
-from .turn_runner import RELAY_PREFIX
+from .execution.turn_runner import RELAY_PREFIX
 
 
 @dataclass

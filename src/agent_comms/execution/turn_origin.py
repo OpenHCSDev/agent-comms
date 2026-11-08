@@ -1,15 +1,17 @@
-"""The common contract of message-driven and autonomous turn origins."""
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import (
+    ABC,
+    abstractmethod,
+)
 from typing import TYPE_CHECKING
 
-from .input_key import InputKey
+from ..input_key import InputKey
 
 if TYPE_CHECKING:
-    from .input_disposition import InputDispositions
-    from .messages import Message
-    from .registry.threads import Thread
+    from ..input_disposition import InputDispositions
+    from ..messages import Message
+    from ..registry.threads import Thread
 
 
 class TurnOrigin(ABC):
@@ -34,4 +36,3 @@ class TurnOrigin(ABC):
 
     @abstractmethod
     def bus_keys(self, dispositions: InputDispositions, owner: Thread) -> tuple[InputKey, ...]: ...
-

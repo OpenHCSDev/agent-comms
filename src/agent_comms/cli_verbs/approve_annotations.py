@@ -5,7 +5,7 @@ from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import Message
-from agent_comms.turn_context import ContextSegment
+from ..execution.turn_context import ContextSegment
 from dataclasses import dataclass
 from typing import Annotated
 import json

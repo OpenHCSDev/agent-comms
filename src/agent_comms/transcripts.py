@@ -57,8 +57,13 @@ from .transcript_sources import (
     TranscriptTraversal,
     WireFrontier,
 )
-from .turn_digests import InputAnswerRead, ThreadTurns, TurnBound, TurnDigestRead
-from .turn_lease import TurnLeaseFence
+from .execution.turn_digests import (
+    InputAnswerRead,
+    ThreadTurns,
+    TurnBound,
+    TurnDigestRead,
+)
+from .execution.turn_lease import TurnLeaseFence
 
 if TYPE_CHECKING:
     from sqlite3 import Connection

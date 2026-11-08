@@ -26,7 +26,10 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
-from agent_comms.turn_item import FreshNativeId, NativeItemId
+from agent_comms.execution.turn_item import (
+    FreshNativeId,
+    NativeItemId,
+)
 from conftest import transcript_records
 
 STAMPED = 1790812800.0  # "2026-10-01T00:00:00.000Z", the time every fixture row records

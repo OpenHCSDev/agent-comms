@@ -248,7 +248,7 @@ from ...tool_request import (
     ThreadToolRequest,
 )
 from ...tool_result import ToolResult
-from ...turn_context import (
+from ...execution.turn_context import (
     ContextManifest,
     ContextSourceText,
     SegmentManifest,

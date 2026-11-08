@@ -15,7 +15,7 @@ from .cli_result import CliResult
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import FieldCodec
 from .thread_identity import ThreadIncarnation
-from .turn_context import ContextSpan
+from .execution.turn_context import ContextSpan
 from .working_memory_questions import OtherSpan, SpanAnswer, SpanQuestion
 
 

@@ -1,5 +1,3 @@
-"""The Core result shared by native turns, compaction and queued wake work."""
-
 from abc import ABC
 
 

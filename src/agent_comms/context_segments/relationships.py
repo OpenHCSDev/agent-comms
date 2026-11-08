@@ -6,7 +6,10 @@ from dataclasses import dataclass
 
 from ..nominal.field_codec import FieldCodec
 from ..relationships import RelationRecord
-from ..turn_context import InstructionSegment, OwnerProvenance
+from ..execution.turn_context import (
+    InstructionSegment,
+    OwnerProvenance,
+)
 
 
 @dataclass(frozen=True, kw_only=True)

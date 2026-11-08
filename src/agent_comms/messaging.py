@@ -24,7 +24,10 @@ from .message_bus import MessageBus
 from .message_reference import MessageReference
 from .coordination.session import NativeCapture
 from .external_transcript import ExternalTranscript
-from .turn_item import NoSourceTurn, SourceTurn
+from .execution.turn_item import (
+    NoSourceTurn,
+    SourceTurn,
+)
 from .messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole, NoticeRole
 from .registry.registration import Registration
 from .send_result import CorrectionComplete, CorrectionFailed, CorrectionResult, SendResult
@@ -41,7 +44,7 @@ from .task_sources import (
 from .projects.checkouts import Checkout
 from .registry.threads import Thread
 from .working_memory_policy import AnnotationDisclosureGrant
-from .turn_context import ContextSegment
+from .execution.turn_context import ContextSegment
 
 if TYPE_CHECKING:
     from .planning.goal_management import Goals

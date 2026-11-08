@@ -27,9 +27,15 @@ from agent_comms.pi_wire import PiDiagnostic, PiPayload
 from agent_comms.pi_wire import UnknownPayload
 from agent_comms.pi_payloads import ContentDelta, NativeToolDetails, PiContent, PiDelta, PiMessage, PiResponseData, SessionSwitchData, StateData, TextContent, UnknownContent, UnknownData
 from agent_comms.pi_vocabulary import CompactionReason, PiStopReason
-from agent_comms.turn_output import TurnOutput
-from agent_comms.turn_phase import ModelWaitPhase, PromptAcceptancePhase
-from agent_comms.turn_watchdog import ModelWait, ProgressWatchdog
+from agent_comms.execution.turn_output import TurnOutput
+from agent_comms.execution.turn_phase import (
+    ModelWaitPhase,
+    PromptAcceptancePhase,
+)
+from agent_comms.execution.turn_watchdog import (
+    ModelWait,
+    ProgressWatchdog,
+)
 
 
 class CapabilityRepresentation(DeclaredFamily, FieldRepresentation, affix="Representation"):

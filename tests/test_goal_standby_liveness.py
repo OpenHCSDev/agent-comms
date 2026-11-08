@@ -8,7 +8,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.turn_lease import NoFinishedTurn
+from agent_comms.execution.turn_lease import NoFinishedTurn
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire

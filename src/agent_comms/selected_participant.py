@@ -14,7 +14,7 @@ from metaclass_registry.mro_dispatch import (
     handles,
 )
 
-from agent_comms.turn_phase import NativePhaseChanged
+from .execution.turn_phase import NativePhaseChanged
 from .agent_events import CompactionEvent
 from .cohort_schema import CohortTable
 from .comms import Comms
@@ -44,8 +44,14 @@ from .notification_evidence import OwnerOutcomes
 from .message_notification import MessageNotification, SentMessageOutcome
 from .publisher import ParticipantPublisher
 from .selected_source_batch import SelectedSource, SelectedSourceBatch
-from .turn_phase import PreparingPhase, TurnPhase
-from .turn_goal_permission import OwnerGoalPermission, TurnGoalPermission
+from .execution.turn_phase import (
+    PreparingPhase,
+    TurnPhase,
+)
+from .execution.turn_goal_permission import (
+    OwnerGoalPermission,
+    TurnGoalPermission,
+)
 
 
 class NoLivePublication(MroDispatch):

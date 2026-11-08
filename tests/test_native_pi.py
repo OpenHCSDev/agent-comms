@@ -24,7 +24,7 @@ from agent_comms.native_pi import (
 )
 from agent_comms.native_session_files import NativeSessionFiles
 from agent_comms.native_session_reopen import NativeSessionIdentity, PiSessionId
-from agent_comms.turn_item import FreshNativeId
+from agent_comms.execution.turn_item import FreshNativeId
 from agent_comms.native_startup import NATIVE_STARTUP_POLICY
 from agent_comms.native_transcript import NativeTranscript
 from agent_comms.selected_actions import NoSelectedTools
@@ -210,10 +210,13 @@ def test_missing_native_model_fails_before_any_session_side_effect(tmp_path, pro
 ])
 async def test_failed_stop_reason_records_failure_with_its_terminal(stop_reason, detail):
     from agent_comms.pi_events import PiEvent
-    from agent_comms.turn_failure import ModelRequestFailed
-    from agent_comms.turn_output import TurnOutput
-    from agent_comms.turn_usage import UsageAccount
-    from agent_comms.turn_watchdog import DEFAULT_MODEL_WAIT, ProgressWatchdog
+    from agent_comms.execution.turn_failure import ModelRequestFailed
+    from agent_comms.execution.turn_output import TurnOutput
+    from agent_comms.execution.turn_usage import UsageAccount
+    from agent_comms.execution.turn_watchdog import (
+    DEFAULT_MODEL_WAIT,
+    ProgressWatchdog,
+)
 
     event = PiEvent.from_wire({'type':'message_end','message':{
         'role':'assistant','content':[],'stopReason':stop_reason,
@@ -231,7 +234,7 @@ async def test_failed_stop_reason_records_failure_with_its_terminal(stop_reason,
 
 
 def test_provider_failure_notice_does_not_broadcast_untrusted_error_body(tmp_path):
-    from agent_comms.turn_failure import ModelRequestFailed
+    from agent_comms.execution.turn_failure import ModelRequestFailed
 
     files = _evidence(tmp_path)
     session = files.session

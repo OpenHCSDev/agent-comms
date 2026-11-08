@@ -12,7 +12,7 @@ from agent_comms.cli_bridges.claude_protocol import ToolUse
 from agent_comms.cli_bridges.opencode_parts import ToolPart
 from agent_comms.native_tools import BashTool, EditTool, GlobTool, GrepTool, ReadTool, WriteTool
 from agent_comms.tool_calls import CliToolArguments, ToolCall
-from agent_comms.turn_item import NativeItemId
+from agent_comms.execution.turn_item import NativeItemId
 
 
 @pytest.mark.parametrize('name,arguments,tool', [

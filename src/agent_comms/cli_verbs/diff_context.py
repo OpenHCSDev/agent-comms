@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import ClassVar
 
 from agent_comms.comms import Comms
-from agent_comms.turn_context import ContextManifestChange
+from ..execution.turn_context import ContextManifestChange
 from itertools import islice
 
 from agent_comms.cli_support.context_option import ContextOptionCliCommand

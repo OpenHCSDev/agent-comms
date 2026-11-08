@@ -11,7 +11,7 @@ from metaclass_registry.mro_dispatch import (
     MroDispatch,
     handles,
 )
-from agent_comms.turn_item import PiRequestKey
+from agent_comms.execution.turn_item import PiRequestKey
 
 
 async def test_mro_specific_before_shared_and_consumer_override():
@@ -168,7 +168,7 @@ async def test_handler_can_consume_without_returning_a_publication(synchronous):
 
 
 def test_done_reports_its_failure_reason_code():
-    from agent_comms.turn_failure import AuthorityChanged
+    from agent_comms.execution.turn_failure import AuthorityChanged
 
     done = events.Done("failed", False, AuthorityChanged("failed"), {"elapsed_ms": 3})
     assert done.reason_code == "authority_changed"

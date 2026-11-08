@@ -1,19 +1,27 @@
-"""A turn always ends with a declared settlement, including an operator stop."""
-
 from __future__ import annotations
 
 import asyncio
-from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from abc import (
+    ABC,
+    abstractmethod,
+)
+from dataclasses import (
+    dataclass,
+    field,
+)
 from typing import TYPE_CHECKING
 
-from .turn_failure import BackendFailed, NoTurnFailure, TurnFailure
+from .turn_failure import (
+    BackendFailed,
+    NoTurnFailure,
+    TurnFailure,
+)
 
 if TYPE_CHECKING:
-    from .agent_events import Done
-    from .storage.maintenance_barrier import MaintenanceBarrier
-    from agent_comms.execution.owned_turn import TurnGoalAccount
+    from .owned_turn import TurnGoalAccount
     from .turn_progress import TurnProgress
+    from ..agent_events import Done
+    from ..storage.maintenance_barrier import MaintenanceBarrier
 
 
 class TurnInterruption(ABC):

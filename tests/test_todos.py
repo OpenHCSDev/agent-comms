@@ -90,7 +90,10 @@ from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.registry.threads import ExternalThread, Thread, NativeThread
 from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.transcript_events import AssistantTranscript
-from agent_comms.turn_item import NativeItemId, NativeTurnId
+from agent_comms.execution.turn_item import (
+    NativeItemId,
+    NativeTurnId,
+)
 from agent_comms.errors import TodoError
 from agent_comms.work_branches import WorkBranches
 from source_revision_fixture import SourceRepository

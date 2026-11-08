@@ -27,7 +27,12 @@ from ..cohort_schema import (
     SelectedClaim,
 )
 from ..nominal.field_codec import FieldCodec, ThreadLookup
-from ..turn_context import ContextSegment, InstructionFile, InstructionSegment, TurnContext
+from ..execution.turn_context import (
+    ContextSegment,
+    InstructionFile,
+    InstructionSegment,
+    TurnContext,
+)
 from ..wake_candidate_index import ProjectionUnavailableError
 
 

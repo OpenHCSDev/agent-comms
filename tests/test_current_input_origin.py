@@ -114,7 +114,7 @@ async def test_original_human_followup_survives_forwarding_reservation_and_nativ
     row = stored_inputs(inputs.root).lookup(key)
     assert row.origin == origin and row.source_text == command.user_text
     assert len(stored_inputs(inputs.root).rows) == 1 and comms.bus.bus.revision() == before
-    from agent_comms.turn_context import UserFollowupSegment
+    from agent_comms.execution.turn_context import UserFollowupSegment
     queued = agent.inputs.state('beta').require_inbox().get_nowait()
     assert queued.input_id == command.input_id
     assert queued.content.text == 'User follow-up:\n' + command.user_text
@@ -278,7 +278,7 @@ async def test_original_goal_checkpoint_survives_codec_and_refuses_changed_scope
 async def test_direct_human_input_pin_shares_original_source_lineage_without_replay(live_owner):
     from agent_comms.task_sources import CorrectionTaskChange, UserTaskDrop, UserTaskSupersession
     from agent_comms.retained_task_facts import RetainedTaskFacts
-    from agent_comms.turn_context import WireProvenance
+    from agent_comms.execution.turn_context import WireProvenance
 
     comms, agent = live_owner
     origin = capture(comms)

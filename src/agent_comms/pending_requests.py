@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from .pi_events import Response
 from .nominal.sealed import Sealed
-from .turn_item import PiRequestKey
+from .execution.turn_item import PiRequestKey
 
 if TYPE_CHECKING:
     from .pi_commands import PiCommand

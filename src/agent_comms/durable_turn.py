@@ -20,7 +20,7 @@ from metaclass_registry.mro_dispatch import (
 )
 
 from . import pi_events as pi
-from agent_comms.turn_phase import NativePhaseChanged
+from .execution.turn_phase import NativePhaseChanged
 from .agent_events import PromptAccepted
 from .attempt_states import (
     AttemptFailedAttempt,
@@ -38,8 +38,12 @@ from .coordination.tables.executions import ReplayAssessments
 from .coordination.coordinator import Coordination
 from .nominal.field_codec import InputId
 from .owner_fence import OwnerFence
-from .turn_failure import TurnFailure
-from .turn_phase import CompactionPhase, ModelWaitPhase, ToolRunningPhase
+from .execution.turn_failure import TurnFailure
+from .execution.turn_phase import (
+    CompactionPhase,
+    ModelWaitPhase,
+    ToolRunningPhase,
+)
 
 
 @dataclass(eq=False, repr=False)

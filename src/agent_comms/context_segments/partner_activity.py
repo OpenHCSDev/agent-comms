@@ -13,7 +13,10 @@ from ..nominal.field_codec import FieldCodec
 from ..planning.goal_history import GoalHistoryEntry
 from ..planning.goals import GoalPeerChange
 from ..peer_relevance import Informed
-from ..turn_context import InstructionSegment, OwnerProvenance
+from ..execution.turn_context import (
+    InstructionSegment,
+    OwnerProvenance,
+)
 
 
 @dataclass(frozen=True)

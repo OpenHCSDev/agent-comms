@@ -175,7 +175,7 @@ class WakePolicy(LifecycleCapability, CoordinatorVocabulary, SourceProofRequirem
 
     @classmethod
     def relevance_instruction(cls):
-        from .turn_context import InstructionFile
+        from .execution.turn_context import InstructionFile
 
         return InstructionFile.read("reply-relevance.md")
 

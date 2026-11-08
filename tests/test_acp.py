@@ -498,7 +498,7 @@ class TestActivityLayer:
     def test_emit_and_read_current(self, wired):
 
         from agent_comms.presentation import WireRevision
-        from agent_comms.turn_phase import ToolRunningPhase
+        from agent_comms.execution.turn_phase import ToolRunningPhase
 
         wired.registry.declare(NativeThread(
             "activity-owner", frozenset(), Checkout(wired.root),
@@ -560,7 +560,7 @@ class TestTargetPrefix:
         ("@fixer", ("#all", "@fixer")),
     ])
     def test_prefix_names_the_target(self, text, target):
-        from agent_comms.turn_runner import parse_target
+        from agent_comms.execution.turn_runner import parse_target
 
         assert parse_target(text) == target
 

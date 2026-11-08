@@ -100,7 +100,7 @@ from ..thread_status import (
 )
 from ..thread_text import ForkedParent, NoParent
 from .threads import Thread, ThreadWorkState
-from ..turn_lease import (
+from ..execution.turn_lease import (
     FinishedTurn,
     FinishedTurnFence,
     NoFinishedTurn,

@@ -6,7 +6,10 @@ import pytest
 
 from agent_comms import agent_events as events
 from agent_comms.agent_backend import InputStartListener, NoInputStartListener
-from agent_comms.turn_inbox import SendNow, TurnInbox
+from agent_comms.execution.turn_inbox import (
+    SendNow,
+    TurnInbox,
+)
 from agent_comms.backend import EventFinishSignal, FinishSignal, NoFinishSignal
 from agent_comms.change_report import FileLine, NoSourceReference
 from agent_comms.errors import TodoError
@@ -17,10 +20,16 @@ from agent_comms.native_session_reopen import NoSessionRetention
 from agent_comms.native_startup import MeasuredSessionLoad, SessionLoad, UnmeasuredSessionLoad
 from agent_comms.pi_commands import GetState
 from agent_comms.pi_wire import AnonymousRequest, RequestId
-from agent_comms.turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
-from agent_comms.turn_input_source import SelectedOriginalInput
-from agent_comms.turn_item import PiRequestKey
-from agent_comms.turn_stats import RequestedStats, StatsRequest
+from agent_comms.execution.turn_goal_permission import (
+    InactiveGoalPermission,
+    TurnGoalPermission,
+)
+from agent_comms.execution.turn_input_source import SelectedOriginalInput
+from agent_comms.execution.turn_item import PiRequestKey
+from agent_comms.execution.turn_stats import (
+    RequestedStats,
+    StatsRequest,
+)
 
 
 def test_drain_lifecycle_keeps_inbox_and_original_in_one_owner():

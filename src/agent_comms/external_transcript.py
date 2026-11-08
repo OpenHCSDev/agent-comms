@@ -41,7 +41,10 @@ from .transcript_events import (
     TurnDigest,
 )
 from .transcript_sources import TranscriptDraft, TranscriptRecord, TranscriptSource
-from .turn_item import NativeItemId, NativeTurnId
+from .execution.turn_item import (
+    NativeItemId,
+    NativeTurnId,
+)
 from .storage.typed_table import (
     Column,
     DurableStore,
@@ -57,7 +60,7 @@ from .storage.typed_table import (
 from .watched import FileSource, Watched
 
 if TYPE_CHECKING:
-    from .turn_digests import TurnBound
+    from .execution.turn_digests import TurnBound
 
 
 class ReplyWindow(DeclaredFamily, affix="Replies"):

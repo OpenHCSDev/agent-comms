@@ -9,7 +9,7 @@ from agent_comms.nominal.field_codec import AcpSessionId, RootId
 
 if TYPE_CHECKING:
     from .cursor_publication import CursorPublication
-    from .turn_runner import TurnRunner
+    from .execution.turn_runner import TurnRunner
 
 
 class InputEffects(ABC):

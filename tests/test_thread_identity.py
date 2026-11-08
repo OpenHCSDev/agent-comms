@@ -32,7 +32,11 @@ from agent_comms.thread_status import (
     StoppedThreadStatus,
 )
 from agent_comms.thread_text import GivenThreadText, NoThreadText
-from agent_comms.turn_lease import FinishedTurnFence, NoFinishedTurn, NoTurnLease
+from agent_comms.execution.turn_lease import (
+    FinishedTurnFence,
+    NoFinishedTurn,
+    NoTurnLease,
+)
 from bus_record_fixture import OWNER_LOOKUP
 from conftest import installed_comms
 

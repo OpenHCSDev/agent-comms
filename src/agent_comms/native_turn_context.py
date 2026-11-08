@@ -10,7 +10,7 @@ from .coordination.coordinator import Coordination
 
 from .pi_payloads import PiResponseData, StrictFields
 from .thread_identity import OfferedTools
-from .turn_context import (
+from .execution.turn_context import (
     ContextManifest,
     DispatchRequest,
     MeasuredNativeSegment,

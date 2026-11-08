@@ -25,7 +25,7 @@ from .native_tools import BashTool, EditTool, GlobTool, GrepTool, ReadTool, Writ
 from .tool_declaration import ContextRows, ReplacementEdit, ToolDeclaration
 from .tool_results import ToolDiff
 from .transcript_events import ToolEndTranscript, ToolStartTranscript
-from .turn_item import NativeItemId
+from .execution.turn_item import NativeItemId
 from .wire_models import DeclaredWireFamily, WireModel
 
 

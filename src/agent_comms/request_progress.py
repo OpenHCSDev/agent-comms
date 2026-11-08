@@ -11,7 +11,7 @@ from .child_process import ProcessIdentity
 from .pi_counts import PiCount, UnreportedCount
 from agent_comms.pi_wire import PiPayload
 from .pi_payloads import PiModel, UnreportedModel
-from .turn_item import NativeTurnIdText
+from .execution.turn_item import NativeTurnIdText
 
 
 @dataclass(frozen=True, slots=True)

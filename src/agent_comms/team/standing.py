@@ -52,7 +52,10 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.service_passes import ServicePassStore, TeamPass
 from agent_comms.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from agent_comms.registry.threads import Thread
-from agent_comms.turn_digests import TurnDigestRead, TurnsSince
+from ..execution.turn_digests import (
+    TurnDigestRead,
+    TurnsSince,
+)
 from agent_comms.ui_model.teammate_state import AwaitingTeam, TeammateState
 from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
 from agent_comms_hooks import SubagentId

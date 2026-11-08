@@ -11,11 +11,15 @@ from agent_comms.thread_identity import (
     TurnFence,
     TurnIdentity,
 )
-from agent_comms.turn_lease import (
-    ActiveTurn, FinishedTurn, NoTurn, NoTurnRecord, TurnDeclaration,
+from agent_comms.execution.turn_lease import (
+    ActiveTurn,
+    FinishedTurn,
+    NoTurn,
+    NoTurnRecord,
+    TurnDeclaration,
 )
 from agent_comms.reported_turn import NoReportedTurn
-from agent_comms.turn_phase import ToolRunningPhase
+from agent_comms.execution.turn_phase import ToolRunningPhase
 
 
 @pytest.mark.parametrize('turn', [

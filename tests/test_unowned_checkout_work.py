@@ -60,7 +60,10 @@ from agent_comms.service_passes import ServicePassStore
 from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.errors import TodoError
 from agent_comms.transcript_events import AssistantTranscript
-from agent_comms.turn_item import NativeItemId, NativeTurnId
+from agent_comms.execution.turn_item import (
+    NativeItemId,
+    NativeTurnId,
+)
 from agent_comms.ui_model.teammate_state import TeammateState, Unreadable
 from agent_comms.work_branches import UnreadableCheckoutRead, WorkBranches
 

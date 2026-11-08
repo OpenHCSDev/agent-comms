@@ -25,11 +25,17 @@ from agent_comms.nominal.field_codec import MessageId, TurnId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.task_sources import AnnotationDisclosureGrant, ProjectTaskScope
 from agent_comms.thread_identity import RecordedThreadIncarnation, TurnIdentity
-from agent_comms.turn_context import (
-    ContextManifest, ContextSpan, ContributionCoordinates, ObservedDispatchRequest,
-    RecordedContextTurn, SystemLayerSegment, ToolCatalogSegment, UnattributedProvenance,
+from agent_comms.execution.turn_context import (
+    ContextManifest,
+    ContextSpan,
+    ContributionCoordinates,
+    ObservedDispatchRequest,
+    RecordedContextTurn,
+    SystemLayerSegment,
+    ToolCatalogSegment,
+    UnattributedProvenance,
 )
-from agent_comms.turn_item import PiRequestKey
+from agent_comms.execution.turn_item import PiRequestKey
 from agent_comms.working_memory_annotations import PreviouslyRequestedAnnotation, WorkingMemoryAnnotations
 from agent_comms.working_memory_disclosure import DisclosureState
 from agent_comms.working_memory_labels import (

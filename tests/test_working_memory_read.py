@@ -4,8 +4,11 @@ import pytest
 
 from agent_comms.coordination.database import ReadableStore
 
-from agent_comms.turn_context import (
-    ContextSpan, ContributionCoordinates, FileProvenance, SystemLayerSegment,
+from agent_comms.execution.turn_context import (
+    ContextSpan,
+    ContributionCoordinates,
+    FileProvenance,
+    SystemLayerSegment,
     UnattributedProvenance,
 )
 from agent_comms.working_memory_annotations import WorkingMemoryAnnotations

@@ -1,7 +1,10 @@
 """Turns recorded before the batch reply change carry this segment kind."""
 from dataclasses import dataclass
 
-from ..turn_context import InstructionFile, ReplyRouteSegment
+from ..execution.turn_context import (
+    InstructionFile,
+    ReplyRouteSegment,
+)
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -16,7 +16,7 @@ from agent_comms.lifecycle_capability import (
 from agent_comms.obligation_states import PendingResponse, ResponseState
 from agent_comms.pi_vocabulary import PiStopReason
 from agent_comms.recovery_states import RecoveryCondition
-from agent_comms.turn_lease import TurnDeclaration
+from agent_comms.execution.turn_lease import TurnDeclaration
 from test_coordination_store import ready, started
 
 

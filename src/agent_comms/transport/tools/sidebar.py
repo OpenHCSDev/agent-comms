@@ -62,7 +62,12 @@ from ...thread_presentation import ThreadPresentation
 from ...thread_text import ExpectedSession
 from ...tool_result import ToolResult
 from ...transcripts import TranscriptCursor
-from ...turn_context import CodexRolloutProvenance, ContextSourceText, Provenance, SegmentManifest
+from ...execution.turn_context import (
+    CodexRolloutProvenance,
+    ContextSourceText,
+    Provenance,
+    SegmentManifest,
+)
 from ...working_memory_labels import ModelLabel
 from ..request import ObservedRequest, ReadRequest, ToolRequest, tool_field
 

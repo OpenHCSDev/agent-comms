@@ -517,7 +517,7 @@ class DuplicatesPhase(MultipleInheritancePhase):
                 ),
                 (
                     ("annotation_disclosure", "disclosure_for"),
-                    ("pi_payloads.py", "turn_context.py", "annotation_disclosure.py"),
+                    ("pi_payloads.py", "execution/turn_context.py", "annotation_disclosure.py"),
                 ),
             )
         )
@@ -711,7 +711,7 @@ class AbsencePhase(RemainingSlopPhase):
                 "storage/typed_table.py",
                 "backend.py",
                 "execution/input_drain.py",
-                "turn_watchdog.py",
+                "execution/turn_watchdog.py",
                 "commander/order.py",
                 "attempt_start.py",
                 "todos.py",

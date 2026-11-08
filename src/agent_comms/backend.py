@@ -44,10 +44,23 @@ from agent_comms.pi_wire import RequestId
 from . import agent_events as events
 from . import pi_commands as commands
 from . import pi_events as pi
-from . import turn_failure as failures
 from .acp_failure import UnrecordedFailureSource
 from .agent_backend import NO_INPUT_START_LISTENER, InputStartListener
-from .turn_inbox import TurnInbox, TurnInboxItem
+from .execution.turn_failure import (
+    BackendDidNotExit,
+    FollowupUnrecognized,
+    IdentityUncertain,
+    InputIdUnavailable,
+    InputMissing,
+    NativeChildSignaled,
+    NativeLaunchInvalid,
+    NativePreflightExit,
+    TurnFailure,
+)
+from .execution.turn_inbox import (
+    TurnInbox,
+    TurnInboxItem,
+)
 from .coordination.coordinator import Coordination
 from .cursor_publication import CursorDelivery
 from .extension_ui import ExtensionUiSession
@@ -71,14 +84,23 @@ from .prompt_state import PromptState, QueuedOperation, UnwrittenPrompt
 from .request_progress import NO_REQUEST_OBSERVER, RequestObserver, RequestProgress
 from .send_outcome import NO_SEND_BOUNDARY, SendBoundary
 from .tool_denial import SelectedToolDenied
-from .turn_context import InputContributionCoordinates
-from .turn_inputs import InputForwarding
-from .turn_item import PiRequestKey
-from .turn_output import TurnOutput
-from .turn_phase import NativePhaseChanged, SettlingStatsPhase, TurnPhase
-from .turn_stats import StatsRequest
-from .turn_usage import UsageAccount
-from .turn_watchdog import DEFAULT_MODEL_WAIT, ProgressWatchdog, TurnWait, TurnWaitExpired
+from .execution.turn_context import InputContributionCoordinates
+from .execution.turn_inputs import InputForwarding
+from .execution.turn_item import PiRequestKey
+from .execution.turn_output import TurnOutput
+from .execution.turn_phase import (
+    NativePhaseChanged,
+    SettlingStatsPhase,
+    TurnPhase,
+)
+from .execution.turn_stats import StatsRequest
+from .execution.turn_usage import UsageAccount
+from .execution.turn_watchdog import (
+    DEFAULT_MODEL_WAIT,
+    ProgressWatchdog,
+    TurnWait,
+    TurnWaitExpired,
+)
 
 if TYPE_CHECKING:
     from .acp_failure import ProviderRetryResult
@@ -154,8 +176,8 @@ async def stream_agent_events(
                 session_file=session_file,
             ))
         except NativePiUnavailable as error:
-            yield events.Error(text=str(error), reason_code=failures.NativeLaunchInvalid.declared_name)
-            yield events.Done(ok=False, failure=failures.NativeLaunchInvalid(str(error)), text=str(error))
+            yield events.Error(text=str(error), reason_code=NativeLaunchInvalid.declared_name)
+            yield events.Done(ok=False, failure=NativeLaunchInvalid(str(error)), text=str(error))
             return
         async with (
             launch.session.files(root).accept_input(),
@@ -283,7 +305,7 @@ class NativeSession(MroDispatch, ABC):
 
     @handles(UnwrittenPrompt)
     def refuse_original_prompt(self, item: UnwrittenPrompt) -> None:
-        self.output.record_failure(failures.InputMissing("Original input was cleared before send."))
+        self.output.record_failure(InputMissing("Original input was cleared before send."))
         self.finish_request()
         self.rejected_signal.set()
 
@@ -293,7 +315,7 @@ class NativeSession(MroDispatch, ABC):
     def accept_final_message(self, message: AssistantMessage) -> None:
         """A turn that only streams its output takes no answer from the final message."""
 
-    def accept_unfinished_message(self, failure: failures.TurnFailure) -> None:
+    def accept_unfinished_message(self, failure: TurnFailure) -> None:
         """A streaming turn reports an unfinished message through its output, not a failure."""
 
     async def assistant_started(self) -> None:
@@ -510,7 +532,7 @@ class NativeSession(MroDispatch, ABC):
                 }
                 self.output.diagnostic.update(self.watchdog.session_load.diagnostic)
                 self.output.record_failure(
-                    failures.NativePreflightExit(
+                    NativePreflightExit(
                         "Pi native input-ID capability preflight ended before attestation."
                     )
                 )
@@ -528,7 +550,7 @@ class NativeSession(MroDispatch, ABC):
         except MalformedRecord as error:
             if self.awaiting_native_attestation:
                 self.output.record_failure(
-                    failures.InputIdUnavailable(
+                    InputIdUnavailable(
                         f"Invalid Pi capability preflight response: {error}"
                     )
                 )
@@ -547,7 +569,7 @@ class NativeSession(MroDispatch, ABC):
         self.usage.invalidate()
         self.output.discard_text()
         updates = (self.context_info(),)
-        self.output.record_failure(failures.IdentityUncertain(_IDENTITY_FAILURE_TEXT))
+        self.output.record_failure(IdentityUncertain(_IDENTITY_FAILURE_TEXT))
         await self.abort_stalled_rpc()
         self.finish_request()
         return updates
@@ -584,12 +606,12 @@ class NativeSession(MroDispatch, ABC):
             outcome = await self.native.shutdown(graceful=True)
             outcome.report_shutdown(partial(
                 self.output.record_failure,
-                failures.BackendDidNotExit("agent backend did not exit"),
+                BackendDidNotExit("agent backend did not exit"),
             ))
             outcome.report_stopped(partial(
                 self.output.record_failure,
-                failures.NativeChildSignaled(f"Pi RPC child {outcome.summary}"),
-            ), failures.NativeChildSignaled.stop_exits)
+                NativeChildSignaled(f"Pi RPC child {outcome.summary}"),
+            ), NativeChildSignaled.stop_exits)
 
     async def finish_diagnostics(self) -> None:
         self.error_text = (
@@ -795,7 +817,7 @@ class TurnSession(NativeSession):
             if not self.input_start.original(self.command.input_id, self.command.message):
                 self.inputs.uncertain = True
                 self.output.record_failure(
-                    failures.InputMissing("Pi input start did not match the durable attempt.")
+                    InputMissing("Pi input start did not match the durable attempt.")
                 )
                 await self.abort_stalled_rpc()
                 self.finish_request()
@@ -810,7 +832,7 @@ class TurnSession(NativeSession):
             self.inputs.uncertain = True
             self.output.final_assistant_stop = False
             self.output.record_failure(
-                failures.FollowupUnrecognized(
+                FollowupUnrecognized(
                     "Pi RPC saw an unrecognized follow-up user message start."
                 )
             )
@@ -818,7 +840,7 @@ class TurnSession(NativeSession):
             self.inputs.uncertain = True
             self.output.final_assistant_stop = False
             self.output.record_failure(
-                failures.InputMissing("Pi RPC run ended without this prompt's user message start.")
+                InputMissing("Pi RPC run ended without this prompt's user message start.")
             )
         await self.abort_stalled_rpc()
         self.finish_request()

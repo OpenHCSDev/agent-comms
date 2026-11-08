@@ -21,14 +21,21 @@ import sqlite3
 from agent_comms.nominal.field_codec import ContextStoreId, FieldCodec, TurnId
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.thread_identity import TurnIdentity
-from agent_comms.turn_context import ObservedDispatchRequest
-from agent_comms.turn_context import (
-    ContextManifest, JournalProvenance, NativeProvenance, RecordedContextPredecessor,
-    RecordedContextTurn, RecordedSegmentManifest,
-    SegmentManifest, SystemLayerSegment, ToolCatalogSegment, TranscriptSegment,
+from agent_comms.execution.turn_context import ObservedDispatchRequest
+from agent_comms.execution.turn_context import (
+    ContextManifest,
+    JournalProvenance,
+    NativeProvenance,
+    RecordedContextPredecessor,
+    RecordedContextTurn,
+    RecordedSegmentManifest,
+    SegmentManifest,
+    SystemLayerSegment,
+    ToolCatalogSegment,
+    TranscriptSegment,
 )
 from bus_record_fixture import context_comms
-from agent_comms.turn_item import PiRequestKey
+from agent_comms.execution.turn_item import PiRequestKey
 from agent_comms.native_session_reopen import PiSessionId
 
 

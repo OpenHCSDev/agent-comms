@@ -21,7 +21,7 @@ from .presentation import SentMessageSummary, ThreadRecord
 from .registry.threads import ForkThread, SubagentThread, Thread
 from .thread_identity import ThreadIncarnation
 from .tool_result import ToolResult
-from .turn_phase import IdlePhase
+from .execution.turn_phase import IdlePhase
 
 if TYPE_CHECKING:
     from .comms import Comms

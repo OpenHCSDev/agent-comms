@@ -89,7 +89,7 @@ from ..thread_storage import (
     UnassignedThreadStorage,
 )
 from ..thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
-from ..turn_lease import (
+from ..execution.turn_lease import (
     FinishedTurn,
     NoTurnRecord,
     TurnLease,

@@ -63,7 +63,7 @@ class PiStopReason(LifecycleCapability, ExternalName, affix="StopReason"):
 
     @classmethod
     def declared_failure(cls, message):
-        from .turn_failure import ModelRequestFailed
+        from .execution.turn_failure import ModelRequestFailed
 
         text = message.error_message.value_or("").strip() or cls.tracked_failure
         return ModelRequestFailed.from_diagnostics(text, message.diagnostics)

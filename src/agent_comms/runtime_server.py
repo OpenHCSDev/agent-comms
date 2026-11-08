@@ -46,7 +46,7 @@ from .tool_result import DeclaredReply
 
 if TYPE_CHECKING:
     from .acp import AcpSelectedWriteAuthority, CommsAgent
-    from .turn_runner import TurnRunner
+    from .execution.turn_runner import TurnRunner
 
 
 _LOG = logging.getLogger(__name__)

@@ -40,7 +40,7 @@ from .thread_identity import GenerationCounter, ThreadIncarnation
 
 if TYPE_CHECKING:
     from .registry.registry_document import RegistrySnapshot
-    from .turn_lease import TurnLeaseFence
+    from .execution.turn_lease import TurnLeaseFence
 
 
 class InputAlreadyCleared(RelationViolationError):

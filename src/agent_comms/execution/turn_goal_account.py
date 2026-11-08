@@ -1,38 +1,30 @@
-"""One turn's goal grants, provider charges and terminal settlement.
-
-The existing SQLite attempt store remains the durable authority. This account
-owns only the live turn's permits and observations, never a reconstructed grant.
-"""
-
 from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from metaclass_registry.mro_dispatch import (
     MroDispatch,
     handles,
 )
 
-
-from dataclasses import dataclass
-from typing import TYPE_CHECKING
-
-
-from .nominal.field_codec import TurnId
-from .planning.goal_states import (
+from ..attempt_resolution import VerifiedTurnDecision
+from ..nominal.field_codec import TurnId
+from ..planning.goal_attempts import (
+    GoalAttemptStore,
+    LaunchPermit,
+)
+from ..planning.goal_states import (
     ActiveGoal,
     CompletedGoal,
     PausedGoal,
 )
-from .planning.goals import Goal
-from .reported_turn import ReportedTurn
-from .attempt_resolution import VerifiedTurnDecision
+from ..planning.goals import Goal
+from ..reported_turn import ReportedTurn
 
-from .planning.goal_attempts import (
-    GoalAttemptStore,
-    LaunchPermit,
-)
 if TYPE_CHECKING:
-    from .comms import Comms
-    from .registry.threads import Thread
+    from ..comms import Comms
+    from ..registry.threads import Thread
 
 
 @dataclass
@@ -83,5 +75,3 @@ class OriginGoalSettlement(VerifiedGoalSettlement):
     @property
     def completion_witness(self) -> str:
         return f"origin-completed:{self.goal.revision}"
-
-

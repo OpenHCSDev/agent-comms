@@ -1,21 +1,30 @@
-"""Native settlement stops forwarding, joins prompt replies and proves the child idle."""
-
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Collection
+from collections.abc import (
+    AsyncIterator,
+    Collection,
+)
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from . import agent_events as events
-from . import pi_commands as commands
-from . import turn_failure as failures
-from . import turn_phase as phases
-from .pending_requests import PendingRequest
+from .turn_failure import BackendFailed
+from .turn_phase import ModelWaitPhase
+from .. import (
+    agent_events as events,
+    pi_commands as commands,
+)
+from ..pending_requests import PendingRequest
 
 if TYPE_CHECKING:
-    from .backend import FinishSignal, NativeSession
-    from .turn_watchdog import ProgressWatchdog, TurnWait
+    from ..backend import (
+        FinishSignal,
+        NativeSession,
+    )
+    from .turn_watchdog import (
+    ProgressWatchdog,
+    TurnWait,
+)
 
 
 class StatsRequest:
@@ -63,7 +72,7 @@ class StatsRequest:
         pass
 
     def expired(self, session: NativeSession) -> None:
-        session.output.record_failure(failures.BackendFailed(
+        session.output.record_failure(BackendFailed(
             "Pi did not finish its native settlement snapshot."
         ))
 
@@ -125,7 +134,7 @@ class ReadingStats(RequestedStats):
             # Already-written inputs can start another native run. The next
             # agent_settled observation owns its snapshot; do not poll the model.
             session.stats = StatsRequest()
-            session.watchdog.phase = phases.ModelWaitPhase()
+            session.watchdog.phase = ModelWaitPhase()
             session.ensure_input_forwarding()
             return
         # A proved idle child cannot start an input it still owes Core.

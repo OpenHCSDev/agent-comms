@@ -24,7 +24,10 @@ from .thread_identity import (
     TurnIdentity,
     UserThreadRole,
 )
-from .turn_context import Provenance, WireProvenance
+from .execution.turn_context import (
+    Provenance,
+    WireProvenance,
+)
 from .ui_model.message_category import MessageCategory
 from .working_memory_requests import AnnotationBudgetExhausted
 
@@ -45,7 +48,7 @@ if TYPE_CHECKING:
     from .registry_provenance import RegistryProvenance
     from .retained_task_facts import RetainedTaskFacts
     from .registry.threads import Thread
-    from .turn_context import ContextSegment
+    from .execution.turn_context import ContextSegment
     from .storage.typed_table import TypedTable
 
 
@@ -700,7 +703,7 @@ class Constraint(ModelTaskDeclaration):
         return (ConstraintTaskFact(message),)
 
 
-from .turn_context import ContextSegment
+from .execution.turn_context import ContextSegment
 from .working_memory_labels import ClassifierVersion, JevClassifier
 
 

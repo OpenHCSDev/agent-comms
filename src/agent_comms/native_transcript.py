@@ -41,7 +41,10 @@ from .native_session_reopen import NativeSessionIdentity
 from .storage.private_path import FileIdentity, FileRevision, MissingFile
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .transcript_sources import TranscriptRecord, TranscriptSource
-from .turn_item import FreshNativeId, NativeItemId
+from .execution.turn_item import (
+    FreshNativeId,
+    NativeItemId,
+)
 
 
 def reverse_records(

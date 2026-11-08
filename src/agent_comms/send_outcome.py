@@ -7,13 +7,16 @@ from collections.abc import Awaitable, Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager
 from typing import TYPE_CHECKING
 
-from . import turn_failure as failures
+from .execution.turn_failure import AuthorityChanged
 from .nominal.field_codec import InputId
 
 if TYPE_CHECKING:
-    from .turn_inbox import TurnInbox, TurnInboxItem
+    from .execution.turn_inbox import (
+    TurnInbox,
+    TurnInboxItem,
+)
     from .backend import NativeSession
-    from .turn_inputs import InputForwarding
+    from .execution.turn_inputs import InputForwarding
 
 
 class SendOutcome(ABC):
@@ -74,7 +77,7 @@ class AuthorityChangedSend(SendOutcome):
               item: TurnInboxItem, write: Callable[[], None]) -> Awaitable[bool]:
         inputs.uncertain = True
         session.output.final_assistant_stop = False
-        session.output.record_failure(failures.AuthorityChanged("Input authority changed before native send."))
+        session.output.record_failure(AuthorityChanged("Input authority changed before native send."))
         return asyncio.sleep(0, result=False)
 
 

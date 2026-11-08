@@ -10,7 +10,10 @@ from .coordination.tables.assignments import WakeAssignment
 from .nominal.field_codec import AssignmentId, FieldCodec
 from .messages import InfoKind, Message
 from .native_failures import NativePiUnavailable
-from .turn_context import ReplyRouteSegment, WireProvenance
+from .execution.turn_context import (
+    ReplyRouteSegment,
+    WireProvenance,
+)
 
 
 @dataclass(frozen=True)

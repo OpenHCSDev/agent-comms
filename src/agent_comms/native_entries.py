@@ -50,7 +50,10 @@ from .routing import NoTurnRouting, Routing
 from .transcript_events import ImportedMessage, NoticeTranscript, TranscriptEvent
 from .transcript_routes import InputPresentation, NoInputDisplay, _SessionRoutes
 from .thread_model import DeclaredModel
-from .turn_item import FreshNativeId, NativeItemId
+from .execution.turn_item import (
+    FreshNativeId,
+    NativeItemId,
+)
 
 
 

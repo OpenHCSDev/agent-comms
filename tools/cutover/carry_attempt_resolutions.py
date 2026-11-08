@@ -32,7 +32,10 @@ from agent_comms.planning.orders import (
     TodoStore,
 )
 from agent_comms.storage.locked_store import RootFile
-from agent_comms.turn_failure import BackendFailed, FailedTurnResolution
+from agent_comms.execution.turn_failure import (
+    BackendFailed,
+    FailedTurnResolution,
+)
 from agent_comms.storage.typed_table import TypedRow
 
 

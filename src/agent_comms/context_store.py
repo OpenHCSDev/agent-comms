@@ -21,7 +21,7 @@ from .nominal.field_codec import (
 from .native_session_reopen import NativeSessionIdentity
 from .registry.registration import Registration
 from .thread_identity import ThreadIncarnation
-from .turn_context import (
+from .execution.turn_context import (
     ContextEntryManifest,
     ContextEntryReference,
     ContextManifest,
@@ -38,7 +38,7 @@ from .storage.typed_table import (
     AttachedPracticeRebuild, StoreRows, Column, DurableStore, Generated, Index,
     RowidSequenced, SingletonRow, TableSchema, TypedTable,
 )
-from .turn_item import NativeItemId
+from .execution.turn_item import NativeItemId
 from .native_session_reopen import PiSessionId
 
 

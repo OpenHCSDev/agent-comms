@@ -1,29 +1,33 @@
-"""Turn failure precedence, presentation and uncertain delivery in one owner."""
-
 from __future__ import annotations
 
 import signal
 from abc import abstractmethod
-from contextlib import suppress
-from dataclasses import dataclass, replace
 from collections.abc import Callable
-from typing import TYPE_CHECKING, ClassVar
+from contextlib import suppress
+from dataclasses import (
+    dataclass,
+    replace,
+)
+from typing import (
+    ClassVar,
+    TYPE_CHECKING,
+)
 
-from .attempt_resolution import RecordedResolution
-from .nominal.declared_family import DeclaredFamily
-from .errors import StaleAttemptError
-from .native_arguments import SelectedModel
-from .native_failures import NativePiUnavailable
+from ..attempt_resolution import RecordedResolution
+from ..errors import StaleAttemptError
+from ..native_arguments import SelectedModel
+from ..native_failures import NativePiUnavailable
+from ..nominal.declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
-    from .backend import NativeSession
-    from .planning.goal_attempts import (
-    GoalAttemptStore,
-    LaunchPermit,
-)
-    from .planning.goal_attempts import FailedTurnObservation
-    from .turn_output import TurnOutput
+    from ..backend import NativeSession
+    from ..planning.goal_attempts import (
+        FailedTurnObservation,
+        GoalAttemptStore,
+        LaunchPermit,
+    )
     from .turn_inputs import InputForwarding
+    from .turn_output import TurnOutput
 
 
 @dataclass(frozen=True)
@@ -55,7 +59,7 @@ class TurnFailure(DeclaredFamily):
 
     def prepare_execution_retry(self, db, execution_id: str) -> None:
         """Consume any earlier provider proof for this nonretryable failure."""
-        from .coordination.tables.executions import ReplayAssessments
+        from ..coordination.tables.executions import ReplayAssessments
 
         ReplayAssessments.revoke(db, execution_id)
 
@@ -149,7 +153,7 @@ class ModelRequestFailed(TurnFailure):
         return ProviderRetryExhausted(self.text)
 
     def raise_native(self, proof, model: SelectedModel) -> None:
-        from .native_pi import NativePiTerminalFailure
+        from ..native_pi import NativePiTerminalFailure
 
         raise NativePiTerminalFailure(self.text, proof, model, self)
 
@@ -163,7 +167,7 @@ class RetryableProviderFailure:
 
     def prepare_execution_retry(self, db, execution_id: str) -> None:
         """A provider refusal may retry only while durable output facts are absent."""
-        from .coordination.tables.executions import ReplayAssessments
+        from ..coordination.tables.executions import ReplayAssessments
 
         ReplayAssessments.authorize_if_unobserved(db, execution_id)
 

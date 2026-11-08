@@ -49,8 +49,15 @@ from agent_comms.thread_identity import ClaimedIdentity, RecordedThreadIncarnati
 from agent_comms.registry.threads import NativeThread
 from agent_comms.transcripts import NativeTranscriptCursor
 from agent_comms.storage.private_path import MissingFile
-from agent_comms.turn_context import ContextManifest, NextContextTurn
-from agent_comms.turn_lease import ActiveTurn, FinishedTurn, TurnState
+from agent_comms.execution.turn_context import (
+    ContextManifest,
+    NextContextTurn,
+)
+from agent_comms.execution.turn_lease import (
+    ActiveTurn,
+    FinishedTurn,
+    TurnState,
+)
 
 
 def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
@@ -65,7 +72,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
     from agent_comms.acp_extension import NativeOutputCommittedUpdate, NativeRoundCommittedUpdate
     from agent_comms.native_output import AssistantOutput, NativeRecordLocation
     from agent_comms.native_session_reopen import PiSessionId
-    from agent_comms.turn_item import NativeItemId
+    from agent_comms.execution.turn_item import NativeItemId
     from agent_comms.sent_message import AssignedSourceIdentity
     from agent_comms.transcripts import NativeCommittedPrefix
     from agent_comms.native_transcript import PresentSessionCut

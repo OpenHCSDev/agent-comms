@@ -32,7 +32,7 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_declaration import ReadAction
-from agent_comms.turn_item import PiRequestKey
+from agent_comms.execution.turn_item import PiRequestKey
 
 
 def decode(wire):

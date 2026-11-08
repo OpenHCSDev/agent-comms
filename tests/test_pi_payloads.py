@@ -14,7 +14,7 @@ from agent_comms.pi_events import MessageEnd, MessageUpdate, Response, UnknownPi
 from agent_comms.pi_wire import PiPayload
 from agent_comms.pi_payloads import AssistantMessage, MissingData, MissingToolResult, ProvidedToolResult, ReportedModel, StateData, TextContent, ToolCallContent, UnknownData, UnreportedModel, UnreportedUsage
 from agent_comms.pi_rpc import PiRpcChannel
-from agent_comms.turn_usage import UsageAccount
+from agent_comms.execution.turn_usage import UsageAccount
 from agent_comms.thread_model import DeclaredModel, UndeclaredModel
 
 
@@ -300,7 +300,7 @@ def test_answer_given_before_a_later_input_stands_when_that_input_ends_without_t
 
 
 def test_pi_usage_and_its_token_total_are_reported_or_not_once_decoded():
-    from agent_comms.turn_item import ProviderResponseId
+    from agent_comms.execution.turn_item import ProviderResponseId
 
     response_id = ProviderResponseId("resp-a")
     for usage in (None, {"totalTokens": 0}, {"totalTokens": 7}):

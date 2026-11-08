@@ -42,7 +42,7 @@ from ..config_options import ConfigOptions
 from ..input_key import InputKey, InputKeyText
 from ..launch_runtime import ThreadLaunch
 from ..owner_launch import RetainedOwnerLaunch
-from ..turn_input_source import NoTurnAcceptance
+from .turn_input_source import NoTurnAcceptance
 from ..session_config_options import SessionConfigOptions
 from ..coordination.coordinator import Coordination
 from ..errors import RelationViolationError

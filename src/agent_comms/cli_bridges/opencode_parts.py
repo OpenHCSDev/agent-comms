@@ -31,8 +31,15 @@ from agent_comms.transcript_events import (
     ThinkingTranscript,
     UserTranscript,
 )
-from agent_comms.turn_item import NativeItemId, NativeTurnId
-from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
+from ..execution.turn_item import (
+    NativeItemId,
+    NativeTurnId,
+)
+from ..execution.turn_phase import (
+    ModelWaitPhase,
+    ToolRunningPhase,
+    TurnPhase,
+)
 
 from ..wire_models import WireModel
 

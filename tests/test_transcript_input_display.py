@@ -17,7 +17,7 @@ from agent_comms.native_entries import TranscriptProjection
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.pi_payloads import PiMessage, UserMessage
 from agent_comms.registry.threads import NativeThread
-from agent_comms.turn_item import FreshNativeIdText
+from agent_comms.execution.turn_item import FreshNativeIdText
 from agent_comms.transcript_routes import DisplayText, InputDisplay, NoDisplayText, SentInputText
 from bus_record_fixture import FIRST_INPUT_ID, SECOND_INPUT_ID, THIRD_INPUT_ID
 

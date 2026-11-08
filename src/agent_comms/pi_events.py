@@ -8,9 +8,17 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from . import agent_events as events
-from . import turn_phase as phases
 from .acp_failure import UnrecordedFailureSource
 from .controller import ChoiceRequest, PermissionOptionId
+from .execution.turn_phase import (
+    AcceptsPrompt,
+    CompactionPhase,
+    ModelWaitPhase,
+    ProviderRetryPhase,
+    SummarizationRetryPhase,
+    ToolRunningPhase,
+    TurnPhase,
+)
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import (
     DeclaredWireType,
@@ -48,19 +56,19 @@ if TYPE_CHECKING:
 class PiEvent(OpenPayload, affix=""):
     """One declaration-owned record received by the Pi RPC channel."""
 
-    ends: ClassVar[tuple[type[phases.TurnPhase], ...]] = ()
+    ends: ClassVar[tuple[type[TurnPhase], ...]] = ()
 
-    def on(self, current: phases.TurnPhase) -> phases.TurnPhase:
+    def on(self, current: TurnPhase) -> TurnPhase:
         return self.leave(current) if self.matches_end(current) else current
 
-    def matches_end(self, current: phases.TurnPhase) -> bool:
+    def matches_end(self, current: TurnPhase) -> bool:
         return isinstance(current, self.ends)
 
-    def leave(self, current: phases.TurnPhase) -> phases.TurnPhase:
-        return phases.ModelWaitPhase()
+    def leave(self, current: TurnPhase) -> TurnPhase:
+        return ModelWaitPhase()
 
     def __init_subclass__(
-        cls, *, ends: type[phases.TurnPhase] | None = None, **kwargs,
+        cls, *, ends: type[TurnPhase] | None = None, **kwargs,
     ) -> None:
         super().__init_subclass__(**kwargs)
         if ends is not None:
@@ -123,12 +131,12 @@ class PiEvent(OpenPayload, affix=""):
 class PhaseStartEvent(PiEvent, declared_name=None):
     """An event that opens a turn phase; the phase it opens is declared by its class."""
 
-    starts: ClassVar[type[phases.TurnPhase]]
+    starts: ClassVar[type[TurnPhase]]
 
-    def on(self, current: phases.TurnPhase) -> phases.TurnPhase:
+    def on(self, current: TurnPhase) -> TurnPhase:
         return self.enter(current)
 
-    def enter(self, current: phases.TurnPhase) -> phases.TurnPhase:
+    def enter(self, current: TurnPhase) -> TurnPhase:
         return self.starts()
 
 
@@ -220,7 +228,7 @@ class ExtensionError(Opaque, NativePiEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class AgentEnd(phases.AcceptsPrompt, NativePiEvent):
+class AgentEnd(AcceptsPrompt, NativePiEvent):
     will_retry: Annotated[ReportedFlag | PiOmitted, WireName("willRetry")] = PiOmitted()
 
     @property
@@ -252,7 +260,7 @@ class AgentSettled(NativePiEvent):
             yield event
 
 
-class AgentStart(phases.AcceptsPrompt, NativePiEvent):
+class AgentStart(AcceptsPrompt, NativePiEvent):
 
     @property
     def invalidates_stop(self) -> bool:
@@ -278,7 +286,7 @@ class RetryEnd(PiEvent, declared_name=None):
 
 
 @dataclass(frozen=True, kw_only=True)
-class AutoRetryEnd(RetryEnd, NativePiEvent, ends=phases.ProviderRetryPhase):
+class AutoRetryEnd(RetryEnd, NativePiEvent, ends=ProviderRetryPhase):
     outcome: Annotated[ProviderRetryOutcome, WireName("success")]
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
@@ -327,7 +335,7 @@ class RetryAttemptEvent(NativePiEvent, declared_name=None):
 
 
 class AutoRetryStart(PhaseStartEvent, RetryAttemptEvent, DurablePiEvent):
-    starts = phases.ProviderRetryPhase
+    starts = ProviderRetryPhase
 
     def prepare_retry(self, session: TurnSession) -> None:
         session.output.final_assistant_stop = False
@@ -354,7 +362,7 @@ class ReasonedCompaction(NativePiEvent, DurablePiEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CompactionEnd(ReasonedCompaction, ends=phases.CompactionPhase):
+class CompactionEnd(ReasonedCompaction, ends=CompactionPhase):
     aborted: ReportedFlag | PiOmitted = PiOmitted()
     reason: type[CompactionReason] = UnknownCompactionReason
     result: ReportedCompaction | PiOmitted = PiOmitted()
@@ -389,9 +397,9 @@ class CompactionEnd(ReasonedCompaction, ends=phases.CompactionPhase):
 
 @dataclass(frozen=True, kw_only=True)
 class CompactionStart(PhaseStartEvent, ReasonedCompaction):
-    starts = phases.CompactionPhase
+    starts = CompactionPhase
 
-    def enter(self, current: phases.TurnPhase) -> phases.TurnPhase:
+    def enter(self, current: TurnPhase) -> TurnPhase:
         return current.compacting()
 
     reason: type[CompactionReason] = UnknownCompactionReason
@@ -668,7 +676,7 @@ class InputCommitted(NativePiEvent, NativeInputLocation):
 
 
 @dataclass(frozen=True, kw_only=True)
-class MessageEnd(phases.AcceptsPrompt, NativePiEvent, DurablePiEvent):
+class MessageEnd(AcceptsPrompt, NativePiEvent, DurablePiEvent):
     message: PiMessage = field(
         default_factory=AbsentMessage
     )
@@ -679,7 +687,7 @@ class MessageEnd(phases.AcceptsPrompt, NativePiEvent, DurablePiEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class MessageStart(phases.AcceptsPrompt, NativePiEvent, DurablePiEvent):
+class MessageStart(AcceptsPrompt, NativePiEvent, DurablePiEvent):
     message: PiMessage = field(
         default_factory=AbsentMessage
     )
@@ -697,7 +705,7 @@ class MessageStart(phases.AcceptsPrompt, NativePiEvent, DurablePiEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class MessageUpdate(phases.AcceptsPrompt, NativePiEvent, DurablePiEvent):
+class MessageUpdate(AcceptsPrompt, NativePiEvent, DurablePiEvent):
     assistant_message_event: Annotated[
         NoDelta | PiDelta, WireName("assistantMessageEvent")
     ] = NoDelta()
@@ -869,13 +877,13 @@ class SteeringInterruptStarted(NativePiEvent):
 
 
 class SummarizationRetryAttemptStart(PhaseStartEvent, RetryAttemptEvent):
-    starts = phases.SummarizationRetryPhase
+    starts = SummarizationRetryPhase
 
     pass
 
 
 @dataclass(frozen=True, kw_only=True)
-class SummarizationRetryFinished(NativePiEvent, ends=phases.SummarizationRetryPhase):
+class SummarizationRetryFinished(NativePiEvent, ends=SummarizationRetryPhase):
     result: ReportedCompaction | PiOmitted = PiOmitted()
     success: ReportedFlag | PiOmitted = PiOmitted()
 
@@ -884,7 +892,7 @@ class SummarizationRetryFinished(NativePiEvent, ends=phases.SummarizationRetryPh
 
 
 class SummarizationRetryScheduled(PhaseStartEvent, RetryAttemptEvent):
-    starts = phases.SummarizationRetryPhase
+    starts = SummarizationRetryPhase
 
     pass
 
@@ -906,13 +914,13 @@ class PiToolCallEvent:
 
 @dataclass(frozen=True, kw_only=True)
 class ToolExecutionEnd(
-    phases.AcceptsPrompt,
+    AcceptsPrompt,
     PiToolCallEvent,
     NativePiEvent,
     DurablePiEvent,
-    ends=phases.ToolRunningPhase,
+    ends=ToolRunningPhase,
 ):
-    def leave(self, current: phases.TurnPhase) -> phases.TurnPhase:
+    def leave(self, current: TurnPhase) -> TurnPhase:
         return current.tool_ended(self.tool_id)
 
     is_error: Annotated[ReportedFlag | PiOmitted, WireName("isError")] = PiOmitted()
@@ -937,15 +945,15 @@ class ToolExecutionEnd(
 
 @dataclass(frozen=True, kw_only=True)
 class ToolExecutionStart(
-    phases.AcceptsPrompt,
+    AcceptsPrompt,
     PiToolCallEvent,
     NativePiEvent,
     DurablePiEvent,
     PhaseStartEvent,
 ):
-    starts = phases.ToolRunningPhase
+    starts = ToolRunningPhase
 
-    def enter(self, current: phases.TurnPhase) -> phases.TurnPhase:
+    def enter(self, current: TurnPhase) -> TurnPhase:
         return current.tool_started(self.tool_id, self.tool_label)
 
     args: object = field(default_factory=dict)
@@ -957,7 +965,7 @@ class ToolExecutionStart(
 
 
 @dataclass(frozen=True, kw_only=True)
-class ToolExecutionUpdate(phases.AcceptsPrompt, PiToolCallEvent, NativePiEvent, DurablePiEvent):
+class ToolExecutionUpdate(AcceptsPrompt, PiToolCallEvent, NativePiEvent, DurablePiEvent):
 
     partial_result: Annotated[PiToolResult, WireName("partialResult")] = field(
         default_factory=MissingToolResult

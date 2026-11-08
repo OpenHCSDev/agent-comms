@@ -17,7 +17,10 @@ from agent_comms.planning.goal_generation import (
     ReadyGeneration,
 )
 from agent_comms.attempt_resolution import DecidedResolution, RetryDecision
-from agent_comms.turn_failure import BackendFailed, FailedTurnResolution
+from agent_comms.execution.turn_failure import (
+    BackendFailed,
+    FailedTurnResolution,
+)
 
 
 @pytest.fixture

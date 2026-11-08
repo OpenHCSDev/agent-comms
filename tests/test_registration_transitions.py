@@ -13,7 +13,10 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.registry.registration import Registration
 from agent_comms.thread_identity import ReportedTools, ToolName, UnreportedTools
 from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.turn_lease import ActiveTurn, NoFinishedTurn
+from agent_comms.execution.turn_lease import (
+    ActiveTurn,
+    NoFinishedTurn,
+)
 from agent_comms.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
 

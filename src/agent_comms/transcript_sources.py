@@ -28,8 +28,8 @@ if TYPE_CHECKING:
     from .transcript_events import TextTranscript, TranscriptEvent
     from .transcript_routes import TranscriptRoutes, _SessionRoutes
     from .transcripts import NativeTranscriptCursor, TranscriptCursor
-    from .turn_context import SegmentManifest
-    from .turn_digests import TurnBound
+    from .execution.turn_context import SegmentManifest
+    from .execution.turn_digests import TurnBound
 
 from .bus import Bus
 from .bus_publication import Delivered
@@ -49,7 +49,7 @@ from .transcript_events import (
     SentTranscript,
     TurnDigest,
 )
-from .turn_item import NativeTurnId
+from .execution.turn_item import NativeTurnId
 from .storage.typed_table import StoreWriter
 
 

@@ -29,7 +29,7 @@ from agent_comms.tool_declaration import (
     ToolDeclaration,
     UndeclaredTool,
 )
-from agent_comms.turn_item import NativeItemId
+from agent_comms.execution.turn_item import NativeItemId
 from conftest import transcript_records
 from delivery_owner_fixture import canonical_agent
 

@@ -31,7 +31,7 @@ from .thread_text import NoThreadText
 from .projects.checkouts import Checkout
 from .registry.threads import Thread
 from .transcript_routes import TranscriptRoutes
-from .turn_lease import NoTurnRecord
+from .execution.turn_lease import NoTurnRecord
 
 
 @dataclass(frozen=True)

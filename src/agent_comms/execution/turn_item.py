@@ -1,22 +1,30 @@
-"""The producer's item identity within its native turn."""
-
 from __future__ import annotations
 
 import re
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Self
+from typing import (
+    Self,
+    TYPE_CHECKING,
+)
 
-from .errors import RelationViolationError
-from .nominal.field_codec import Id128, NominalSpelling, NominalText, NullMember, RecordMember, SubclassUnion
+from ..errors import RelationViolationError
+from ..nominal.field_codec import (
+    Id128,
+    NominalSpelling,
+    NominalText,
+    NullMember,
+    RecordMember,
+    SubclassUnion,
+)
 
 if TYPE_CHECKING:
-    from .channel_targets import NamedTarget
-    from .coordination.session import NativeCapture
-    from .external_transcript import ExternalTranscript
-    from .message_reference import MessageReference
-    from .routing import Routing
-    from .transcript_routes import _SessionRoutes
+    from ..channel_targets import NamedTarget
+    from ..coordination.session import NativeCapture
+    from ..external_transcript import ExternalTranscript
+    from ..message_reference import MessageReference
+    from ..routing import Routing
+    from ..transcript_routes import _SessionRoutes
 
 
 class NativeTurnId(NominalText):

@@ -8,7 +8,10 @@ from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING
 
-from agent_comms.turn_input_source import OrdinaryOwnerCheck, RunningOrdinaryOwnerCheck
+from .execution.turn_input_source import (
+    OrdinaryOwnerCheck,
+    RunningOrdinaryOwnerCheck,
+)
 from agent_comms.ordinary_turn_rules import MissingAcceptedInputRule, MissingTurnOwnerCheck
 from agent_comms.send_outcome import AuthorityChangedSend, SendBoundary, SendOutcome
 
@@ -27,7 +30,7 @@ from .native_input_proof import NativeContextProof
 from .reservation_rules import ReservationRule, ReservationViolationError
 from .registry.threads import Thread
 from .tool_denial import SelectedToolDenied
-from .turn_input_source import (
+from .execution.turn_input_source import (
     OriginalTurnInput,
     TurnInputSource,
 )
@@ -37,7 +40,7 @@ from .planning.goal_waits import GoalWait
 from agent_comms.channel_coding_tools import OrdinaryContextCheck
 if TYPE_CHECKING:
     from .registry.registry_document import RegistrySnapshot
-    from .turn_goal_permission import TurnGoalPermission
+    from .execution.turn_goal_permission import TurnGoalPermission
 
 _LOG = logging.getLogger(__name__)
 
