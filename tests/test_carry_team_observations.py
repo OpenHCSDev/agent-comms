@@ -7,6 +7,7 @@ import time
 import pytest
 
 from agent_comms.bus import Bus
+from agent_comms.team.standing_rules import ServicePassFailing
 from agent_comms.team.vibe_check import OverloadDegradation
 from agent_comms.team_hud import TeamFrame, TeamHud, TeamPlan, CodexUsage, UnreadableUsage
 from agent_comms.comms import Comms
@@ -15,7 +16,6 @@ from agent_comms.installer.carry import CarryChain
 from agent_comms.storage.locked_store import LiveFilesRequest
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.repo import Checkout
-from agent_comms.standing_rules import ServicePassFailing
 from agent_comms.task_attachments.team_pings import (
     TeamUpdateNotice, TeamUpdate, TeamUpdateStore,
 )

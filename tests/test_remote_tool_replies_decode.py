@@ -5,20 +5,25 @@ reply, and its composer stayed held as if the send had failed."""
 
 from agent_comms.channels import Channel
 from agent_comms.cli_commands import ThreadArchivedResult
-from agent_comms.order_tools import CommsBoardTool, TeamBoard
 from agent_comms.send_result import MessagePublished
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.tool_request import HumanToolRequest, PublishingToolRequest
 from agent_comms.tool_result import ToolResult
-from agent_comms.tools import (
-    ChannelOrderSet,
+from agent_comms.transport.tools.orders import (
+    CommsBoardTool,
+    TeamBoard,
+)
+from agent_comms.transport.tools.served import (
     CommsArchiveTool,
     CommsAuthoredTaskTool,
     CommsDecisionTool,
-    CommsSortChannelsTool,
-    CommsSortChannelTool,
-    CommsUserSendTool,
     TaskPublished,
+)
+from agent_comms.transport.tools.sidebar import (
+    ChannelOrderSet,
+    CommsSortChannelTool,
+    CommsSortChannelsTool,
+    CommsUserSendTool,
 )
 
 

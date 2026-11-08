@@ -20,6 +20,7 @@ from .nominal.field_codec import (
 from .recorded_time import EventTime
 from .tool_denial import SelectedToolDenied
 from .tool_results import NoToolDiff
+from .transport import tools as tool_declarations
 
 
 class GlobalCommsExtension:
@@ -132,12 +133,8 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
 
     @classmethod
     def _member_declarations(cls):
-        # The existing request owner also acquires its order-tool declarations, and
-        # order_tools its served reads: a UI read's wire name selects its served member
-        # (TranscriptPageRead -> ServedTranscriptPageRead), which a process meets only here.
-        # Registry reads must not depend on an unrelated command import cycle.
-        from . import order_tools, tools  # noqa: F401 - acquire the declaration owners
-
+        """Acquire every tool declaration owner: the transport/tools package's modules."""
+        DeclaredFamily.discover_package(tool_declarations)
         return super()._member_declarations()
 
     @classmethod

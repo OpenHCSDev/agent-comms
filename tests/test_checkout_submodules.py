@@ -12,7 +12,6 @@ import pytest
 from agent_comms.bus import Bus
 from agent_comms.change_report import FileLine
 from agent_comms.cli_commands import OrderCheckoutGrant
-from agent_comms.errors import TodoConflict
 from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.goals import OrderCheck
@@ -27,7 +26,11 @@ from agent_comms.tool_denial import StorageDenied
 from agent_comms.thread_creation import RecordedCreationTime
 from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.todos import PendingProblemOrder, WithdrawTodo
+from agent_comms.todos import (
+    PendingProblemOrder,
+    TodoConflict,
+    WithdrawTodo,
+)
 from cli_command import core, core_process
 import fixture_git
 from order_scope_fixture import FIX_SCOPE

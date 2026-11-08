@@ -14,6 +14,7 @@ from agent_comms.comms import Comms, wire
 from agent_comms.cli_verbs.select_checkout import SelectCheckoutCliCommand
 from agent_comms.cli_verbs.goal_checkout import GoalCheckoutCliCommand
 from agent_comms.cli_commands import AddCheckoutOperation
+from agent_comms.team.standing_rules import StorageHomeMissing
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, RecordProblems
@@ -27,7 +28,6 @@ from agent_comms.shell_effects import (
     StorageDenied,
     shell_storage_effects,
 )
-from agent_comms.standing_rules import StorageHomeMissing
 from agent_comms.storage_projection import StorageProjection
 from agent_comms.storage_rules import (
     CheckoutAllocation,

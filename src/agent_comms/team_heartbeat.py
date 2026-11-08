@@ -18,7 +18,6 @@ from agent_comms.task_attachments.team_pings import (
 )
 from agent_comms.team_service import TeamService
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.heartbeat_frame import TeamInputs, HeartbeatFrame
 from agent_comms.heartbeat_subjects import TeamHistory
 from agent_comms.message_bus import PreparedWatchPass
 from agent_comms.watch_phase import WatchPhase
@@ -26,9 +25,16 @@ from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal_census import NominalPlanReadings
 from agent_comms.plan_reading import PlanReadings, RetainedPlanReadings
 from agent_comms.service_passes import TeamPass, ServicePassStore
-from agent_comms.standing_rules import ServicePassFailing, StandingRule
 from agent_comms.todos import ProgressRead, Todo
 from agent_comms.ui_model.teammate_state import TeammateState
+
+from .team.standing_rules import (
+    HeartbeatFrame,
+    ServicePassFailing,
+    StandingRule,
+    TeamInputs,
+)
+
 
 @dataclass(frozen=True)
 class TeamObservation:

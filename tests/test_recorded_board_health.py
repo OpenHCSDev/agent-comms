@@ -10,10 +10,15 @@ import pytest
 from agent_comms.team_heartbeat import TeamHeartbeat, TeamObservation
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.team_hud import TeamFrame
+from agent_comms.transport.tools.orders import (
+    CommsBoardTool,
+    CommsHudTool,
+    CommsTeamLoadTool,
+    CommsUnjudgedTool,
+)
 from agent_comms_hooks import ToolRefusedError
 from agent_comms.nominal.field_codec import ToolCallId
 from agent_comms.storage.locked_store import DocumentChange
-from agent_comms.order_tools import CommsTeamLoadTool, CommsBoardTool, CommsHudTool, CommsUnjudgedTool
 from agent_comms.transport.tools.reads import TeammateRead
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.service_passes import ServicePassStore

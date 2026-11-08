@@ -8,11 +8,11 @@ import json
 import threading
 
 import pytest
+from agent_comms.transport.tools.orders import CommsEmergencyReleaseTool
 from yarl import URL
 
 from agent_comms.connector_profile import BearerSecret, HttpsMcpEndpoint, UiCredential, UiGrantId
 from agent_comms.nominal.field_codec import RootId
-from agent_comms.order_tools import CommsEmergencyReleaseTool
 from agent_comms.remote_core import RemoteCoreAccess
 from agent_comms.transport.request import ConnectionDropped
 from agent_comms.transport.tools.channels import CommsChannelsTool

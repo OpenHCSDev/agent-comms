@@ -21,7 +21,7 @@ from agent_comms.reported_turn import ReportedTurn
 from agent_comms.text_digest import TextDigest
 from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
-from agent_comms.tools import invoke_tool
+from agent_comms.transport.tools.served import invoke_tool
 from stored_inputs import insert_inputs, stored_inputs
 
 

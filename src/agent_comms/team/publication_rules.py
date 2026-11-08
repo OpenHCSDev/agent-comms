@@ -11,17 +11,24 @@ from agent_comms.head_review import PullRequestHead
 from agent_comms.heartbeat_subjects import HeartbeatSubject, UnlandedHeadSubject
 from agent_comms.repo import UnpushedHead
 from agent_comms.repository_name import RepositoryName
-from agent_comms.standing_rules import (
-    DatedStandingRule, HeadLine, HeldBranch, HeldOrderBranchRule, UndatedStandingRule,
-)
 from agent_comms.todos import PullRequestLink
 from agent_comms.work_branches import CommitBase, WorkBranches
+
+from .standing_rules import (
+    DatedStandingRule,
+    HeadLine,
+    HeldBranch,
+    HeldOrderBranchRule,
+    UndatedStandingRule,
+)
+
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
     from agent_comms.comms import Comms
-    from agent_comms.heartbeat_frame import HeartbeatFrame
     from agent_comms.ui_model.teammate_state import TeammateState
+
+    from .standing_rules import HeartbeatFrame
 
 
 @dataclass(frozen=True)

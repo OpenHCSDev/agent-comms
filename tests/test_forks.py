@@ -3,6 +3,11 @@
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.hook_forks import SessionSubagents
 from agent_comms.cli_bridges.session_watch import WatchClaim
+from agent_comms.transport.tools.orders import (
+    CommsHudTool,
+    CommsTeamLoadTool,
+    CommsTodoListTool,
+)
 from agent_comms_hooks.watch import WatchRecord
 from agent_comms.cli_bridges.hook_requests import ReadGateRequest, SubagentStartRequest, SubagentStopRequest
 
@@ -35,7 +40,10 @@ from agent_comms.team_heartbeat import TeamObservation
 from team_heartbeat_fixture import ObservedHeartbeat, capture_frame
 from agent_comms.ui_model.teammate_state import TeammateState
 from agent_comms.comms import Comms, wire
-from agent_comms.errors import RelationViolationError, TodoConflict, TodoError
+from agent_comms.errors import (
+    RelationViolationError,
+    TodoError,
+)
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -50,7 +58,10 @@ from agent_comms.native_transcript import NativeTranscript
 from agent_comms.repository_name import RepositoryName
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.storage_rules import StorageRule
-from agent_comms.todos import EditWorkplaces
+from agent_comms.todos import (
+    EditWorkplaces,
+    TodoConflict,
+)
 from agent_comms.turn_digests import OrderEditsRead, OrderEditCountRead, TurnsSince
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.storage.maintenance_barrier import (
@@ -58,7 +69,6 @@ from agent_comms.storage.maintenance_barrier import (
     MaintenanceOperator,
 )
 from agent_comms.order_runs import MechanicalOrderRun
-from agent_comms.order_tools import CommsTeamLoadTool, CommsHudTool, CommsTodoListTool
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.slop import DeclarationDerivation, ExistingLine, Slop
@@ -245,7 +255,7 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     # A reissue records Core itself, never reconstructs a departed assigner's authority.
     reissuer = ReissuedOrderGoalAction.for_todo(saved).assigner
     assert reissuer == CoreWatcherIncarnation.watcher()
-    reissuer.require_may_change(saved)
+    saved.require_maintainer(reissuer)
     with store.snapshot() as db:
         incoming_for(saved).require_free(
             db, saved.held().owner_identity, comms.registry.snapshot())

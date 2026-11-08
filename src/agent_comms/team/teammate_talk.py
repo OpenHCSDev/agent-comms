@@ -16,18 +16,21 @@ from itertools import takewhile
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.comms import Comms
-from agent_comms.standing_rules import (
+from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.ui_model.teammate_state import TeammateObservation
+
+from .standing_rules import (
     FamilyScan,
     HolderLine,
     UndatedStandingRule,
 )
-from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.ui_model.teammate_state import TeammateObservation
+
 
 if TYPE_CHECKING:
     from agent_comms.bus_publication import Delivered
-    from agent_comms.heartbeat_frame import HeartbeatFrame
     from agent_comms.ui_model.teammate_state import TeammateState
+
+    from .standing_rules import HeartbeatFrame
 
 
 @dataclass(frozen=True)

@@ -26,7 +26,6 @@ from agent_comms.nominal.field_codec import (
     DisclosedRecord, HudExclude, PublicationExclude, WireTransient,
     projected,
 )
-from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.storage.locked_store import JsonDocument
 from agent_comms.plan_phases import Plan, PlanPhase
 from agent_comms.service_passes import BoardUnavailable, FailingPass, ServicePassStore, ServiceReading
@@ -36,6 +35,8 @@ from agent_comms.task_attachments.team_pings import (
     AlarmGroup, AlarmSection, TeamDelivery, TeamUpdate, Ping,
 )
 from agent_comms_hooks.board import BoardEntry
+
+from .team.standing_rules import HeartbeatFrame
 
 
 @dataclass(frozen=True)

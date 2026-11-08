@@ -7,7 +7,10 @@ from textwrap import shorten
 from typing import TYPE_CHECKING
 
 from agent_comms.registry.threads import Thread
-from agent_comms.todos import Todo
+from agent_comms.todos import (
+    Todo,
+    TodoStore,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -15,7 +18,6 @@ if TYPE_CHECKING:
     from agent_comms.comms import Comms
     from agent_comms.registry.registry_document import RegistrySnapshot
     from agent_comms.thread_identity import ThreadIncarnation
-    from agent_comms.todos import TodoStore
 
 
 @dataclass(frozen=True)

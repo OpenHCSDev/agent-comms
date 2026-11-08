@@ -29,13 +29,18 @@ from agent_comms.messages import (
 )
 from agent_comms.projection_source import ProducedRow
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime
-from agent_comms.standing_rules import ServicePassFailing, StandingRule
 from agent_comms.task_attachments.owner_notices import OwnerNotice
 from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.ui_model.message_category import HeartbeatCategory, MessageCategory
 from agent_comms.ui_model.teammate_state import AwaitingTeam, TeammateState
 from agent_comms_hooks.board import BoardEntry
+
+from ..team.standing_rules import (
+    ServicePassFailing,
+    StandingRule,
+)
+
 
 if TYPE_CHECKING:
     from collections.abc import Iterator

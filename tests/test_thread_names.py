@@ -81,7 +81,7 @@ def test_a_remote_ui_reads_the_registry_with_its_renames(tmp_path):
     """The registry Core answers survives the wire: a rename's alias still resolves remotely."""
     from agent_comms.core_access import LocalCoreAccess
     from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.tools import CommsRegistryTool
+    from agent_comms.transport.tools.sidebar import CommsRegistryTool
     from agent_comms.registry.registry_document import RegistrySnapshot
 
     comms = wire(tmp_path / "wire")
@@ -106,7 +106,7 @@ def test_a_ui_reads_whether_a_channel_takes_input_through_core(tmp_path):
     from agent_comms.channels import Channel
     from agent_comms.core_access import LocalCoreAccess
     from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.tools import CommsChannelTool
+    from agent_comms.transport.tools.sidebar import CommsChannelTool
 
     comms = wire(tmp_path / "wire")
     for name in ("#all", "#any"):
@@ -120,7 +120,7 @@ def test_a_ui_session_finds_its_project_thread_through_core(tmp_path):
     from agent_comms.core_access import LocalCoreAccess
     from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.registry.registry_document import FoundProjectThread, NoProjectThread
-    from agent_comms.tools import CommsSessionThreadTool
+    from agent_comms.transport.tools.sidebar import CommsSessionThreadTool
     from agent_comms.registry.registry_document import ProjectThreadSelection
 
     comms = wire(tmp_path / "wire")
@@ -138,7 +138,7 @@ def test_a_ui_reads_a_threads_configuration_through_core(tmp_path):
     """The status a DM shows is Core's configuration answer, the same across the codec."""
     from agent_comms.core_access import LocalCoreAccess
     from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.tools import CommsThreadConfigurationTool
+    from agent_comms.transport.tools.sidebar import CommsThreadConfigurationTool
     from agent_comms.acp_extension import CoordinationChangedUpdate
 
     comms = wire(tmp_path / "wire")
@@ -152,7 +152,7 @@ def test_a_ui_asks_core_which_open_views_lost_their_source(tmp_path):
     """A deleted thread and an unknown channel are retired; the answer crosses the codec."""
     from agent_comms.core_access import LocalCoreAccess
     from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.tools import CommsRetiredViewsTool
+    from agent_comms.transport.tools.sidebar import CommsRetiredViewsTool
     from agent_comms.history_views import RetiredViews
 
     comms = wire(tmp_path / "wire")
@@ -184,10 +184,12 @@ def test_a_ui_reads_and_orders_relationships_through_core(tmp_path):
     from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.presentation import WireRevision
     from agent_comms.relationships import ChildrenRelationshipGroup, ThreadCommsSnapshot
-    from agent_comms.tools import (
-        CommsSetRelationshipOrderTool, CommsWireRevisionTool, CommsThreadRelationshipsTool,
-        RelationshipOrdered,
-    )
+    from agent_comms.transport.tools.sidebar import (
+    CommsSetRelationshipOrderTool,
+    CommsWireRevisionTool,
+    CommsThreadRelationshipsTool,
+    RelationshipOrdered,
+)
 
     comms = wire(tmp_path / "wire")
     _declare(comms, "worker", str(tmp_path))
@@ -221,7 +223,11 @@ def test_a_ui_reads_a_threads_context_through_core(tmp_path):
     from agent_comms.core_access import LocalCoreAccess
     from agent_comms.nominal.field_codec import ContextStoreId, FieldCodec
     import agent_comms.runtime_requests as runtime
-    from agent_comms.tools import CommsContextInspectionTool, CommsOwnerRequestTool, ContextInspectionRead
+    from agent_comms.transport.tools.sidebar import (
+    CommsContextInspectionTool,
+    CommsOwnerRequestTool,
+    ContextInspectionRead,
+)
 
     comms = wire(tmp_path / "wire")
     _declare(comms, "worker", str(tmp_path))
@@ -240,7 +246,10 @@ def test_a_ui_lists_historical_identities_through_core(tmp_path):
     from agent_comms.core_access import LocalCoreAccess
     from agent_comms.historical_views import AllHistoricalSenders, HistoricalSenders, NamedHistoricalSender
     from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.tools import CommsHistoricalThreadsTool, HistoricalThreadsRead
+    from agent_comms.transport.tools.sidebar import (
+    CommsHistoricalThreadsTool,
+    HistoricalThreadsRead,
+)
 
     assert FieldCodec.encode(AllHistoricalSenders(), HistoricalSenders) is None
     assert FieldCodec.decode(HistoricalSenders, "alice") == NamedHistoricalSender("alice")
@@ -255,7 +264,7 @@ def test_a_ui_reads_a_renamed_thread_from_a_registry_slice(tmp_path):
     from agent_comms.core_access import LocalCoreAccess
     from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.registry.registry_document import RegistrySlice
-    from agent_comms.tools import CommsRegistrySliceTool
+    from agent_comms.transport.tools.sidebar import CommsRegistrySliceTool
 
     comms = wire(tmp_path / "wire")
     _declare(comms, "worker", str(tmp_path))

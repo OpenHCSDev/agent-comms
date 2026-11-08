@@ -9,14 +9,17 @@ from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.nominal.field_codec import Normalize
 from agent_comms.tool_caller import NoThreadCaller
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tools import ToolReplyResult
-from agent_comms.tools import invoke_tool
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 import dataclasses
 import json
 import sys
+
+from ..transport.tools.served import (
+    ToolReplyResult,
+    invoke_tool,
+)
 
 
 @dataclass(frozen=True, kw_only=True)

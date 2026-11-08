@@ -38,6 +38,7 @@ from agent_comms.build_identity import (
     RecordedBuildIdentity,
     UnrecordedBuildIdentity,
 )
+from agent_comms.bus import BusReader
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.change_report import CitedRevisions, CommitRevision, Declaration, FileLine, MainRevision, NoSourceReference, SourceReference, SourceRevision, SourceRoots, SourceText, WorkingTree
 from agent_comms.channel_targets import (
@@ -53,13 +54,13 @@ from agent_comms.child_process import (
     OrderCheckFailedError,
 )
 from agent_comms.command import Command
+from agent_comms.registry.registration import Registration
 from agent_comms.team.rule_file import RuleFile
 from agent_comms.coordination.session import NativeCapture
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.errors import (
     MissingSourceLine,
     RejectedEnforcementError,
-    TodoConflict,
     TodoError,
 )
 from agent_comms.nominal.field_codec import (
@@ -170,14 +171,16 @@ from agent_comms_hooks import ToolRefusedError
 from .goal_scope import OneGoal
 
 from agent_comms.change_report import CitationProject, FetchedRevision, OrderRoots
-from agent_comms.registry.registry_document import TeamProject
+from agent_comms.registry.registry_document import (
+    RegistrySnapshot,
+    TeamProject,
+)
 
 # What reading one source checkout or its listing can raise: one source's failure is data.
 SOURCE_READ_FAILURES = (OSError, SourceReadFailure, TimeoutExpired)
 
 if TYPE_CHECKING:
     from agent_comms.held_orders import LiveHold
-    from agent_comms.bus import BusReader
     from agent_comms.team.order import (
         Team,
         TeamContext,
@@ -187,8 +190,6 @@ if TYPE_CHECKING:
     )
     from agent_comms.comms import Comms
     from agent_comms.goal_management import Goals
-    from agent_comms.registry.registration import Registration
-    from agent_comms.registry.registry_document import RegistrySnapshot
 
 
 @dataclass(frozen=True)
@@ -4258,7 +4259,7 @@ class AssignTodo(ReleasesHold, TodoOperation):
         return super(AssignTodo, replace(self, proposed=proposed)).apply(current)
 
     def changed(self, current: Todo) -> Todo:
-        self.actor.require_may_change(current)
+        current.require_maintainer(self.actor)
         if self.order != current.order:
             self.order.require_wording()
             self.order.require_writable()
@@ -4308,7 +4309,7 @@ class StrikeTodo(CitedStrike, StoryEvent):
         return super().prepare(goals, current)
 
     def changed(self, current: Todo) -> Todo:
-        self.actor.require_may_change(current)
+        current.require_maintainer(self.actor)
         current.require_previous_assignment(self.previous)
         _text(self.reason, "Strike reason", 2000)
         StrikeReason(self.reason)
@@ -5412,7 +5413,7 @@ class RestoreHolderTodo(TodoCommand):
             store.prepared_edits())
 
     def changed(self, current: Todo) -> Todo:
-        self.actor.require_may_change(current)
+        current.require_maintainer(self.actor)
         current.state.require_open(current)
         current.require_previous_assignment(self.previous)
         restored = current.holder_state.restored(current)
@@ -6069,6 +6070,15 @@ class Todo(TodoStoreRows, TypedTable):
         )
 
 
+class TodoConflict(TodoError):
+    """The expected revision, assignee or generation is no longer current."""
+
+    def __init__(self, current: Todo) -> None:
+        self.current = current
+        owner = current.assignment.owner if current.assignment else "unassigned"
+        super().__init__(f"Todo {current.id} changed (revision {current.revision}, owner {owner}).")
+
+
 def _text(value: str, label: str, limit: int) -> str:
     if type(value) is not str or not value.strip() or len(value) > limit:
         raise TodoError(f"{label} must be nonempty and at most {limit} characters.")
@@ -6653,7 +6663,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         if (len(found) != 1
                 or found[0].holder_state.previous_assignment().owner != unit):
             raise TodoError(f'{unit} holds no order on {problem}')
-        actor.require_may_change(found[0])
+        found[0].require_maintainer(actor)
         return found[0]
 
     def drop(self, actor: ThreadIncarnation, unit: str, problem: str, by: str) -> Todo:

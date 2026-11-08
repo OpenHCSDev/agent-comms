@@ -7,6 +7,10 @@ import time
 
 import pytest
 
+from agent_comms.transport.tools.orders import (
+    CommsOrderDeliverTool,
+    CommsTodoCreateTool,
+)
 from test_todos import order, thread
 
 from agent_comms.team.order import OrderFile, main
@@ -29,7 +33,6 @@ from agent_comms.owner_requests import NewestOpenRequest
 from agent_comms.order_runs import ApplicationOrderRun
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.transport.tools.channels import CommsChannelsTool
-from agent_comms.order_tools import CommsOrderDeliverTool, CommsTodoCreateTool
 
 
 pytest_plugins = ("test_todos",)

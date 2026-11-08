@@ -4,6 +4,7 @@ from agent_comms.nominal.field_codec import HudExclude
 
 from dataclasses import replace
 
+from agent_comms.team.standing_rules import ServicePassFailing
 from agent_comms.team.vibe_check import OverloadDegradation
 from agent_comms.team_hud import TeamHud, CodexUsage, UnreadableUsage
 from agent_comms.team_hud_records import TeamOrder, Teammate, HudRecord
@@ -12,7 +13,6 @@ from agent_comms.disclosure_text import (
 )
 from agent_comms.nominal.field_codec import DisclosureIdentity, FieldCodec, OrderId
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.standing_rules import ServicePassFailing
 from agent_comms.task_attachments.team_pings import TeamDecisions, FoldedRule, RulePing
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.todos import OpenPrProgress

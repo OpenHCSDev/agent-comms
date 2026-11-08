@@ -1,7 +1,6 @@
 """Current owner queues scope notices without altering durable input evidence."""
 
 from agent_comms.bus_read import OwnerScopedRead
-from agent_comms.order_tools import ServedInputDeliveryRead, ServedOwnerGoalRead
 from agent_comms.repo import Checkout
 import asyncio
 from dataclasses import replace
@@ -27,6 +26,10 @@ from agent_comms.input_attempt import (
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import NoGoal
+from agent_comms.transport.tools.orders import (
+    ServedInputDeliveryRead,
+    ServedOwnerGoalRead,
+)
 from agent_comms.transport.tools.reads import InputDeliveryRead, OwnerGoalRead
 from agent_comms.reported_turn import ReportedTurn
 from agent_comms.registry.threads import ExternalThread, NativeThread, Thread

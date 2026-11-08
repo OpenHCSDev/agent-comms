@@ -15,13 +15,14 @@ from agent_comms.change_report import FileLine
 from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.goals import OrderCheck
+from agent_comms.team.standing_rules import (
+    StorageHomeMissing,
+    StorageViolation,
+)
 from team_heartbeat_fixture import capture_frame
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
-from agent_comms.standing_rules import (
-    StorageHomeMissing, StorageViolation,
-)
 from agent_comms.storage_rules import StorageRule, UnitStorage
 from agent_comms.todos import PendingProblemOrder, PresentCheckout, ProgressRead
 from agent_comms.ui_model.teammate_state import TeammateState

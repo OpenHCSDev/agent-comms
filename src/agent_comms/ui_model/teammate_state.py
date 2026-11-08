@@ -28,12 +28,10 @@ from agent_comms.nominal.field_codec import (
 )
 from agent_comms.goal_presentation import GoalSnapshot
 from agent_comms.heartbeat_subjects import HeartbeatSubject, TeammateSubject
-from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.messages import Message
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.repo import GitCommandError
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.standing_rules import FamilyScan, UndatedStandingRule
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.thread_status import ThreadStatus
 from agent_comms.registry.threads import Thread
@@ -46,6 +44,13 @@ from agent_comms.todos import (
 )
 from agent_comms.transcript_events import OrderCall, TurnDigest
 from agent_comms.work_branches import WorkBranchError
+
+from ..team.standing_rules import (
+    FamilyScan,
+    HeartbeatFrame,
+    UndatedStandingRule,
+)
+
 
 class TeammateClock(DisclosedRecord, DeclaredFamily, affix="Clock"):
     """When a holder last acted and last committed on its pending orders."""

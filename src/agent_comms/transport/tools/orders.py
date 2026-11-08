@@ -1,20 +1,91 @@
-"""Todo and order tools, with the result records they return."""
-
 from __future__ import annotations
 
 from abc import abstractmethod
 from collections.abc import Mapping
-from dataclasses import dataclass, field, replace
+from dataclasses import (
+    dataclass,
+    field,
+    replace,
+)
 from functools import partial
 from typing import Annotated
 
 from agent_comms_hooks import ToolRefusedError
 from pydantic import JsonValue
 
-from agent_comms.todos import (
+from .reads import (
+    InputDeliveryRead,
+    OwnerGoalRead,
+    TeammateRead,
+    TranscriptPageRead,
+)
+from ..request import tool_field
+from ...acp_extension import (
+    GoalSnapshotReply,
+    TurnChangedUpdate,
+    UpdateMetadata,
+)
+from ...bus_read import (
+    CapturesTranscriptPage,
+    OwnerLiveRead,
+    OwnerScopedRead,
+    UiRead,
+)
+from ...channel_targets import CommsTag
+from ...comms import Comms
+from ...coordination.coordinator import Coordination
+from ...goal_actions import (
+    CompliedGoalAction,
+    CreateProblemGoalAction,
+    OrderGoalAction,
+    OwnerInvocable,
+)
+from ...goals import (
+    Goal,
+    OrderCheck,
+)
+from ...head_review import (
+    HeadReviewOrder,
+    PreparedHeadReview,
+    PullRequestHead,
+)
+from ...held_orders import HeldOrders
+from ...input_attempt import UNOBSERVED_DELIVERY_SCOPE
+from ...input_disposition import DeliveryOverview
+from ...nominal.field_codec import (
+    FieldCodec,
+    MessageId,
+    OrderId,
+    RecordProblems,
+    ToolCallId,
+)
+from ...order_story import (
+    OrderStory,
+    TeamStory,
+)
+from ...order_work import OrderWork
+from ...plan_phases import OrderPhase
+from ...problem_number import ProblemNumber
+from ...progress_claims import ProgressClaim
+from ...read_basis import ReadAuthority
+from ...runtime_server import AttachedRuntimeRequestContext
+from ...send_result import MessagePublished
+from ...service_passes import ServicePassStore
+from ...team_hud import (
+    TeamFrame,
+    TeamHud,
+    TeamLoad,
+)
+from ...team_hud_records import (
+    TeamOrderDetail,
+    Teammate,
+    TeammateDetail,
+)
+from ...thread_identity import ThreadIncarnation
+from ...todos import (
     AssignedClaimReviewer,
-    ClaimReviewer,
     ClaimOrder,
+    ClaimReviewer,
     CorrectCheckTodo,
     CorrectRunTodo,
     DeliveryReport,
@@ -40,56 +111,33 @@ from agent_comms.todos import (
     ToolCallVerdict,
     WaivedVerdict,
 )
-
-from .acp_extension import (
-    GoalSnapshotReply,
-    TurnChangedUpdate,
-    UpdateMetadata,
+from ...tool_caller import (
+    ThreadCaller,
+    ToolCaller,
 )
-from .bus_read import CapturesTranscriptPage, OwnerLiveRead, OwnerScopedRead, UiRead
-from .team_hud import TeamFrame, TeamHud, TeamLoad
-from .team_hud_records import Teammate, TeamOrderDetail, TeammateDetail
-from .comms import Comms
-from .coordination.coordinator import Coordination
-from .nominal.field_codec import FieldCodec, MessageId, OrderId, RecordProblems, ToolCallId
-from .channel_targets import CommsTag
-from .goal_actions import CompliedGoalAction, CreateProblemGoalAction, OrderGoalAction, OwnerInvocable
-from .goals import Goal, OrderCheck
-from .head_review import HeadReviewOrder, PreparedHeadReview, PullRequestHead
-from .held_orders import HeldOrders
-from .input_attempt import UNOBSERVED_DELIVERY_SCOPE
-from .input_disposition import DeliveryOverview
-from .order_story import TeamStory, OrderStory
-from .order_work import OrderWork
-from agent_comms.runtime_server import AttachedRuntimeRequestContext
-from .plan_phases import OrderPhase
-from .problem_number import ProblemNumber
-from .progress_claims import ProgressClaim
-from .read_basis import ReadAuthority
-from .send_result import MessagePublished
-from .service_passes import ServicePassStore
-from .thread_identity import ThreadIncarnation
-from .tool_caller import ThreadCaller, ToolCaller
-from .tool_declaration import EditCall
-from .tool_request import PublishingToolRequest, ReadTool, ThreadReadTool, ThreadToolRequest, NativeToolRequest
-from .transport.request import tool_field
-from .transport.tools.reads import InputDeliveryRead, OwnerGoalRead, TeammateRead, TranscriptPageRead
-from .tool_result import ToolResult
-from .transcripts import (
-    TranscriptRead,
+from ...tool_declaration import EditCall
+from ...tool_request import (
+    NativeToolRequest,
+    PublishingToolRequest,
+    ReadTool,
+    ThreadReadTool,
+    ThreadToolRequest,
 )
-from .turn_digests import (
+from ...tool_result import ToolResult
+from ...transcripts import TranscriptRead
+from ...turn_digests import (
     ActivityTurnView,
     LastTurns,
     OrderEditsRead,
     ThreadTurns,
     TurnBound,
-    TurnsSince,
     TurnView,
+    TurnsSince,
     UnavailableOrderEdits,
     UnjudgedEdits,
 )
-from .work_branches import WorkBranchError
+from ...work_branches import WorkBranchError
+
 
 @dataclass(frozen=True)
 class TodoChanged(ToolResult):

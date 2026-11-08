@@ -21,7 +21,6 @@ from agent_comms.team.package import TeamPackage
 from agent_comms.team_service import TeamService
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import projected
-from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.goal_actions import (
     ChokeholdPausedGoalAction,
     CompliedGoalAction,
@@ -33,20 +32,22 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.threads import Thread
 from agent_comms.task_attachments.owner_notices import ChokeholdNotice, EscalationNotice, VibeCheckNotice
-from agent_comms.standing_rules import (
-    BlocksRelease,
-    Degradation,
-    Sign,
-    IndependentStandingRule,
-    OwedAnswer,
-    ReviewTimerUp,
-    FamilyScan,
-    UndatedStandingRule,
-)
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import OwnerRequest, Todo
 from agent_comms.tool_result import ToolResult
 from agent_comms.ui_model.teammate_state import TeammateState
+
+from .standing_rules import (
+    BlocksRelease,
+    Degradation,
+    FamilyScan,
+    HeartbeatFrame,
+    IndependentStandingRule,
+    OwedAnswer,
+    ReviewTimerUp,
+    Sign,
+    UndatedStandingRule,
+)
 
 
 class Escalation:

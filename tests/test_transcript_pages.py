@@ -7,6 +7,7 @@ from agent_comms.transcripts import (
 )
 from agent_comms.bus_read import UiRead
 from agent_comms.repo import Checkout
+from agent_comms.transport.tools.served import invoke_tool
 from conftest import installed_comms, transcript_records
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.coordination.errors import TranscriptChanged
@@ -28,7 +29,6 @@ from agent_comms.acp_extension import TranscriptSnapshotUpdate
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.transport.tools.reads import TranscriptPageRead
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tools import invoke_tool
 from agent_comms.ui_model.observation import ReadTranscript
 
 

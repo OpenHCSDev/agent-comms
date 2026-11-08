@@ -12,7 +12,7 @@ from agent_comms.presentation import SentMessageSummary
 from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.tool_declaration import NativeRequestTools
-from agent_comms.tools import invoke_tool
+from agent_comms.transport.tools.served import invoke_tool
 from agent_comms_hooks import ToolRefusedError
 
 

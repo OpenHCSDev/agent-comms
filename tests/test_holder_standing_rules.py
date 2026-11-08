@@ -21,7 +21,14 @@ from agent_comms.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.channel_targets import TeammatesTag, CommsTag
 from agent_comms.messaging import TeamReceipts
-from agent_comms.todos import DoneTodoState
+from agent_comms.team.standing_rules import (
+    OwedAnswer,
+    StandingRule,
+)
+from agent_comms.todos import (
+    DoneTodoState,
+    TodoConflict,
+)
 from agent_comms.team.order import Team, ListedProblems, OrderFile, SayVerb, SendVerb
 from agent_comms.team.questions import UnansweredTeammateAsks
 from agent_comms.team.standing import (
@@ -40,7 +47,10 @@ from agent_comms.comms import wire
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.errors import (
-    CommittedMessageError, HumanSendRefusedError, RelationViolationError, TodoConflict, TodoError,
+    CommittedMessageError,
+    HumanSendRefusedError,
+    RelationViolationError,
+    TodoError,
 )
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, InputId, MessageId, OrderId, RecordProblems, TurnId
 from agent_comms.goal_actions import (
@@ -51,6 +61,11 @@ from agent_comms.goal_actions import (
 from agent_comms.goal_presentation import RunnableExecution
 from agent_comms.goal_states import ActiveGoal
 from agent_comms.goals import CountCheckResult, OrderCheck, ProblemGoalOrder
+from agent_comms.transport.tools.orders import (
+    CommsTeamStoryTool,
+    CommsTodoListTool,
+    TodoList,
+)
 from team_heartbeat_fixture import capture_frame
 from agent_comms.held_orders import HeldOrders
 from agent_comms.heartbeat_delivery import OnHeartbeatDelivery
@@ -64,13 +79,11 @@ from agent_comms.messages import ConversationRole, InfoKind, Message, NoticeRole
 from agent_comms.native_arguments import GivenBinary
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.order_story import TeamStory
-from agent_comms.order_tools import CommsTeamStoryTool, CommsTodoListTool, TodoList
 from agent_comms.owner_requests import NewestOpenRequest, RequestDirective
 from agent_comms.read_basis import DMDisplayScope, RepliesDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.service_passes import ServicePassStore
-from agent_comms.standing_rules import OwedAnswer, StandingRule
 from agent_comms.storage.store_files import ExclusiveLock, StoreLockContention, _store_lock
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_status import StoppedThreadStatus
