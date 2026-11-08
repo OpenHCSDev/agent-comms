@@ -30,6 +30,7 @@ from .errors import RelationViolationError
 from .native_failures import NativeRequestFailure
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import AcpSessionId, FieldCodec, WireOmitDefault
+from .nominal.served_declaration import ServesDeclaration
 from .owner_connection import (
     AnyOwner, NoControllerToken, OwnerConnection, RequestedOwner, socket_path,
 )
@@ -386,7 +387,8 @@ class AttachedRuntimeRequestContext(RuntimeRequestContext):
 
 @dataclass(frozen=True, kw_only=True)
 class RuntimeRequest[Ctx: RuntimeRequestContext](
-    DeclaredFamily, Command[Ctx, Awaitable[None]], affix="RuntimeRequest"
+    DeclaredFamily,
+    affix='RuntimeRequest',
 ):
     family_discriminator: ClassVar[str] = "action"
     thread: str
@@ -400,13 +402,30 @@ class RuntimeRequest[Ctx: RuntimeRequestContext](
     ) -> dict[str, object]:
         return OwnerConnection.wire_request(cls.declared_name, owner, parameters)
 
+
+class ServedRuntimeRequest[Ctx: RuntimeRequestContext](
+    Command[Ctx, Awaitable[None]],
+    RuntimeRequest[Ctx],
+    metaclass=ServesDeclaration,
+    declared_name=None,
+):
     @abstractmethod
     async def bind(
         self, server: RuntimeServer, reader: asyncio.StreamReader, client: SocketClient,
     ) -> Ctx: ...
 
 
-class AttachedRuntimeRequest(RuntimeRequest[AttachedRuntimeRequestContext]):
+class AttachedRuntimeRequest(
+    RuntimeRequest[AttachedRuntimeRequestContext],
+    declared_name=None,
+):
+    pass
+
+
+class ServedAttachedRuntimeRequest(
+    ServedRuntimeRequest[AttachedRuntimeRequestContext],
+    AttachedRuntimeRequest,
+):
     def require_owner(self, entry: RegistryEntry) -> Thread:
         owner = entry.thread
         if not owner.process_identity.runs_here() or not entry.status.running:
@@ -425,7 +444,17 @@ class AttachedRuntimeRequest(RuntimeRequest[AttachedRuntimeRequestContext]):
         return AttachedRuntimeRequestContext(server, reader, client, owner.name, session_id)
 
 
-class ResultRuntimeRequest[Ctx: RuntimeRequestContext](RuntimeRequest[Ctx]):
+class ResultRuntimeRequest[Ctx: RuntimeRequestContext](
+    RuntimeRequest[Ctx],
+    declared_name=None,
+):
+    pass
+
+
+class ServedResultRuntimeRequest[Ctx: RuntimeRequestContext](
+    ServedRuntimeRequest[Ctx],
+    ResultRuntimeRequest[Ctx],
+):
     async def apply(self, ctx: Ctx) -> None:
         reply = await self.result(ctx)
         await ctx.send(OwnerResult(result=FieldCodec.encode(reply)))
@@ -435,6 +464,16 @@ class ResultRuntimeRequest[Ctx: RuntimeRequestContext](RuntimeRequest[Ctx]):
 
 
 class AttachedResultRuntimeRequest(
-    ResultRuntimeRequest[AttachedRuntimeRequestContext], AttachedRuntimeRequest
+    ResultRuntimeRequest[AttachedRuntimeRequestContext],
+    AttachedRuntimeRequest,
+    declared_name=None,
+):
+    pass
+
+
+class ServedAttachedResultRuntimeRequest(
+    ServedResultRuntimeRequest[AttachedRuntimeRequestContext],
+    ServedAttachedRuntimeRequest,
+    AttachedResultRuntimeRequest,
 ):
     pass

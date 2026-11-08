@@ -43,7 +43,11 @@ from .transport.tools.reads import OwnerGoalRead
 from .transport.tools.sidebar import ClearQueueQueueAction, QueueAction, SendNowQueueAction
 from .ui_model.observation import SubscribeTranscript
 from agent_comms.runtime_server import (
-    AttachedResultRuntimeRequest, AttachedRuntimeRequest, AttachedRuntimeRequestContext,
+    AttachedResultRuntimeRequest,
+    AttachedRuntimeRequest,
+    AttachedRuntimeRequestContext,
+    ServedAttachedResultRuntimeRequest,
+    ServedAttachedRuntimeRequest,
     SubscriberClosed,
 )
 from .coordination.errors import Refused
@@ -155,6 +159,11 @@ class ProjectRuntimeRequest(AttachedResultRuntimeRequest):
             "AGENT_COMMS_PROJECT_REQUEST": json.dumps(FieldCodec.encode(self)),
         }
 
+
+class ServedProjectRuntimeRequest(
+    ServedAttachedResultRuntimeRequest,
+    ProjectRuntimeRequest,
+):
     def require_original(self, entry):
         if not entry.matches_name(self.thread):
             raise ValueError("Project request names another original thread")
@@ -174,6 +183,13 @@ class ProjectRuntimeRequest(AttachedResultRuntimeRequest):
 
 @dataclass(frozen=True, kw_only=True)
 class SubscribeRuntimeRequest(AttachedRuntimeRequest):
+    pass
+
+
+class ServedSubscribeRuntimeRequest(
+    ServedAttachedRuntimeRequest,
+    SubscribeRuntimeRequest,
+):
     @asynccontextmanager
     async def observing(self, ctx: AttachedRuntimeRequestContext) -> AsyncIterator[None]:
         agent = ctx.server.agent
@@ -211,6 +227,13 @@ class SubscribeRuntimeRequest(AttachedRuntimeRequest):
 
 
 class FreshSubscribeRuntimeRequest(SubscribeRuntimeRequest):
+    pass
+
+
+class ServedFreshSubscribeRuntimeRequest(
+    ServedSubscribeRuntimeRequest,
+    FreshSubscribeRuntimeRequest,
+):
     @asynccontextmanager
     async def subscribed(self, ctx: AttachedRuntimeRequestContext) -> AsyncIterator[None]:
         """A new ID is announced before its first publication can reach the ACP attachment."""
@@ -235,6 +258,11 @@ class PromptRuntimeRequest(AttachedResultRuntimeRequest):
             owner, controller_token, {"controllerToken": controller_token, **parameters}
         )
 
+
+class ServedPromptRuntimeRequest(
+    ServedAttachedResultRuntimeRequest,
+    PromptRuntimeRequest,
+):
     async def result(self, ctx: AttachedRuntimeRequestContext) -> PromptReply:
         controller = next(
             (
@@ -268,6 +296,13 @@ class PromptRuntimeRequest(AttachedResultRuntimeRequest):
 
 @dataclass(frozen=True, kw_only=True)
 class CancelRuntimeRequest(AttachedResultRuntimeRequest):
+    pass
+
+
+class ServedCancelRuntimeRequest(
+    ServedAttachedResultRuntimeRequest,
+    CancelRuntimeRequest,
+):
     async def result(self, ctx: AttachedRuntimeRequestContext) -> CancelReply:
         await ctx.server.agent.turns.cancel(ctx.session)
         return CancelReply()
@@ -296,6 +331,14 @@ class QueueActionRuntimeRequest(AttachedResultRuntimeRequest, declared_name=None
 
 @dataclass(frozen=True, kw_only=True)
 class SendNowRuntimeRequest(QueueActionRuntimeRequest, action=SendNowQueueAction):
+    pass
+
+
+class ServedSendNowRuntimeRequest(
+    ServedAttachedResultRuntimeRequest,
+    SendNowRuntimeRequest,
+    action=SendNowQueueAction,
+):
     async def result(self, ctx: AttachedRuntimeRequestContext) -> QueueActionReply:
         await ctx.server.agent.inputs.send_now(ctx.session)
         return QueueActionReply()
@@ -303,6 +346,14 @@ class SendNowRuntimeRequest(QueueActionRuntimeRequest, action=SendNowQueueAction
 
 @dataclass(frozen=True, kw_only=True)
 class ClearQueueRuntimeRequest(QueueActionRuntimeRequest, action=ClearQueueQueueAction):
+    pass
+
+
+class ServedClearQueueRuntimeRequest(
+    ServedAttachedResultRuntimeRequest,
+    ClearQueueRuntimeRequest,
+    action=ClearQueueQueueAction,
+):
     async def result(self, ctx: AttachedRuntimeRequestContext) -> QueueActionReply:
         await ctx.server.agent.inputs.clear_queued_inputs(ctx.session)
         return QueueActionReply()
@@ -313,6 +364,11 @@ class SetConfigOptionRuntimeRequest(AttachedResultRuntimeRequest):
     config_id: str
     value: str | bool
 
+
+class ServedSetConfigOptionRuntimeRequest(
+    ServedAttachedResultRuntimeRequest,
+    SetConfigOptionRuntimeRequest,
+):
     async def result(self, ctx: AttachedRuntimeRequestContext) -> ConfigOptionReply:
         result = await ctx.server.agent.sessions.config.set_option(
             self.config_id, ctx.session, self.value
@@ -324,12 +380,24 @@ class SetConfigOptionRuntimeRequest(AttachedResultRuntimeRequest):
 class CompactRuntimeRequest(AttachedResultRuntimeRequest):
     instructions: str | None = None
 
+
+class ServedCompactRuntimeRequest(
+    ServedAttachedResultRuntimeRequest,
+    CompactRuntimeRequest,
+):
     async def result(self, ctx: AttachedRuntimeRequestContext) -> CompactionOutcome:
         return await compact_context(ctx.server.agent.turns, ctx.session, self.instructions)
 
 
 @dataclass(frozen=True, kw_only=True)
 class DismissHistoricalInputsRuntimeRequest(AttachedResultRuntimeRequest):
+    pass
+
+
+class ServedDismissHistoricalInputsRuntimeRequest(
+    ServedAttachedResultRuntimeRequest,
+    DismissHistoricalInputsRuntimeRequest,
+):
     async def result(self, ctx: AttachedRuntimeRequestContext) -> DeliveryOverview:
         result = await Coordination.run_worker(partial(
             ctx.server.agent._comms.goals.dismiss_historical_inputs,
@@ -343,13 +411,28 @@ class DismissHistoricalInputsRuntimeRequest(AttachedResultRuntimeRequest):
 class GoalHistoryRuntimeRequest(AttachedResultRuntimeRequest):
     goal_id: OneGoal | AllGoals = AllGoals()
 
+
+class ServedGoalHistoryRuntimeRequest(
+    ServedAttachedResultRuntimeRequest,
+    GoalHistoryRuntimeRequest,
+):
     async def result(self, ctx: AttachedRuntimeRequestContext) -> RecordedGoalHistory:
         return await Coordination.run_worker(partial(
             ctx.server.agent._comms.goals.recorded_history, ctx.name, self.goal_id,
         ))
 
 
-class GoalSnapshotResultRuntimeRequest(AttachedResultRuntimeRequest):
+class GoalSnapshotResultRuntimeRequest(
+    AttachedResultRuntimeRequest,
+    declared_name=None,
+):
+    pass
+
+
+class ServedGoalSnapshotResultRuntimeRequest(
+    ServedAttachedResultRuntimeRequest,
+    GoalSnapshotResultRuntimeRequest,
+):
     @abstractmethod
     async def change(self, ctx: AttachedRuntimeRequestContext) -> None: ...
 
@@ -359,13 +442,20 @@ class GoalSnapshotResultRuntimeRequest(AttachedResultRuntimeRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class GoalRevisionRuntimeRequest(AttachedResultRuntimeRequest):
+class GoalRevisionRuntimeRequest(AttachedResultRuntimeRequest, declared_name=None):
     goal_id: GoalId
     expected_revision: int
 
 
+class ServedGoalRevisionRuntimeRequest(
+    ServedAttachedResultRuntimeRequest,
+    GoalRevisionRuntimeRequest,
+):
+    pass
+
+
 @dataclass(frozen=True, kw_only=True)
-class GoalTextRuntimeRequest(AttachedResultRuntimeRequest):
+class GoalTextRuntimeRequest(AttachedResultRuntimeRequest, declared_name=None):
     text: str = ""
 
     def __post_init__(self) -> None:
@@ -373,9 +463,25 @@ class GoalTextRuntimeRequest(AttachedResultRuntimeRequest):
             raise ValueError("A goal requires text.")
 
 
+class ServedGoalTextRuntimeRequest(
+    ServedAttachedResultRuntimeRequest,
+    GoalTextRuntimeRequest,
+):
+    pass
+
+
 @dataclass(frozen=True, kw_only=True)
 class EditGoalRuntimeRequest(
     GoalTextRuntimeRequest, GoalRevisionRuntimeRequest, GoalSnapshotResultRuntimeRequest
+):
+    pass
+
+
+class ServedEditGoalRuntimeRequest(
+    ServedGoalTextRuntimeRequest,
+    ServedGoalRevisionRuntimeRequest,
+    ServedGoalSnapshotResultRuntimeRequest,
+    EditGoalRuntimeRequest,
 ):
     async def change(self, ctx: AttachedRuntimeRequestContext) -> None:
         await ctx.server.agent.turns.goals.edit_goal(
@@ -387,6 +493,12 @@ class EditGoalRuntimeRequest(
 class UpdateGoalRuntimeRequest(GoalRevisionRuntimeRequest, GoalSnapshotResultRuntimeRequest):
     status: type[GoalAction]
 
+
+class ServedUpdateGoalRuntimeRequest(
+    ServedGoalRevisionRuntimeRequest,
+    ServedGoalSnapshotResultRuntimeRequest,
+    UpdateGoalRuntimeRequest,
+):
     async def change(self, ctx: AttachedRuntimeRequestContext) -> None:
         await ctx.server.agent.turns.goals.update_goal(
             ctx.session, self.status, self.goal_id, self.expected_revision
@@ -395,6 +507,13 @@ class UpdateGoalRuntimeRequest(GoalRevisionRuntimeRequest, GoalSnapshotResultRun
 
 @dataclass(frozen=True, kw_only=True)
 class RetryGoalRuntimeRequest(GoalRevisionRuntimeRequest):
+    pass
+
+
+class ServedRetryGoalRuntimeRequest(
+    ServedGoalRevisionRuntimeRequest,
+    RetryGoalRuntimeRequest,
+):
     async def result(self, ctx: AttachedRuntimeRequestContext) -> GoalReply:
         goal = await ctx.server.agent.turns.goals.retry_goal(
             ctx.session, self.goal_id, self.expected_revision
@@ -404,6 +523,10 @@ class RetryGoalRuntimeRequest(GoalRevisionRuntimeRequest):
 
 @dataclass(frozen=True, kw_only=True)
 class SetGoalRuntimeRequest(GoalTextRuntimeRequest):
+    pass
+
+
+class ServedSetGoalRuntimeRequest(ServedGoalTextRuntimeRequest, SetGoalRuntimeRequest):
     async def result(self, ctx: AttachedRuntimeRequestContext) -> GoalReply:
         goal = await ctx.server.agent.turns.goals.set_goal(ctx.session, self.text)
         return GoalReply(goal)
@@ -411,6 +534,13 @@ class SetGoalRuntimeRequest(GoalTextRuntimeRequest):
 
 @dataclass(frozen=True, kw_only=True)
 class ContextRuntimeRequest(AttachedResultRuntimeRequest):
+    pass
+
+
+class ServedContextRuntimeRequest(
+    ServedAttachedResultRuntimeRequest,
+    ContextRuntimeRequest,
+):
     async def inspect(self, ctx: AttachedRuntimeRequestContext) -> NativeContextData:
         agent = ctx.server.agent
         owner = await Coordination.run_worker(partial(agent._comms.registry.require, ctx.name))
@@ -427,6 +557,11 @@ class ContextSourceRuntimeRequest(ContextRuntimeRequest):
     segment: int
     source: Provenance
 
+
+class ServedContextSourceRuntimeRequest(
+    ServedContextRuntimeRequest,
+    ContextSourceRuntimeRequest,
+):
     def read_source(
         self, ctx: AttachedRuntimeRequestContext, context: NativeContextData,
     ) -> ContextSourceText:
@@ -442,6 +577,13 @@ class ContextSourceRuntimeRequest(ContextRuntimeRequest):
 
 @dataclass(frozen=True, kw_only=True)
 class ContextCoreRuntimeRequest(AttachedResultRuntimeRequest):
+    pass
+
+
+class ServedContextCoreRuntimeRequest(
+    ServedAttachedResultRuntimeRequest,
+    ContextCoreRuntimeRequest,
+):
     def read_context(self, ctx: AttachedRuntimeRequestContext):
         comms = ctx.server.agent._comms
         owner = self.require_owner(comms.registry.entry(ctx.name).entry)
@@ -461,6 +603,11 @@ class ContextCoreSourceRuntimeRequest(ContextCoreRuntimeRequest):
     manifest: SegmentManifest
     source: Provenance
 
+
+class ServedContextCoreSourceRuntimeRequest(
+    ServedContextCoreRuntimeRequest,
+    ContextCoreSourceRuntimeRequest,
+):
     def read_source(self, ctx: AttachedRuntimeRequestContext):
         context = self.read_context(ctx)
         return context.public_source_text(ctx.server.agent._comms, self.owner,
@@ -471,12 +618,17 @@ class ContextCoreSourceRuntimeRequest(ContextCoreRuntimeRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class RecordedContextRuntimeRequest(AttachedResultRuntimeRequest):
+class RecordedContextRuntimeRequest(AttachedResultRuntimeRequest, declared_name=None):
     turn: RecordedContextTurn
     request_id: DispatchRequest
     record: ContextManifestReference
     segment: int
 
+
+class ServedRecordedContextRuntimeRequest(
+    ServedAttachedResultRuntimeRequest,
+    RecordedContextRuntimeRequest,
+):
     def read_manifest(self, ctx: AttachedRuntimeRequestContext):
         comms = ctx.server.agent._comms
         manifest = self.record.read(comms.contexts, ctx.name, comms.registry)
@@ -490,6 +642,11 @@ class RecordedContextRuntimeRequest(AttachedResultRuntimeRequest):
 class ContextReferenceRuntimeRequest(RecordedContextRuntimeRequest):
     source: Provenance
 
+
+class ServedContextReferenceRuntimeRequest(
+    ServedRecordedContextRuntimeRequest,
+    ContextReferenceRuntimeRequest,
+):
     async def result(self, ctx: AttachedRuntimeRequestContext):
         manifest = await self.manifest(ctx)
         text = await Coordination.run_worker(partial(
@@ -502,6 +659,11 @@ class ContextReferenceRuntimeRequest(RecordedContextRuntimeRequest):
 class ContextRecordedSegmentRuntimeRequest(RecordedContextRuntimeRequest):
     contributors: tuple[int, ...] = ()
 
+
+class ServedContextRecordedSegmentRuntimeRequest(
+    ServedRecordedContextRuntimeRequest,
+    ContextRecordedSegmentRuntimeRequest,
+):
     async def selected_segment(self, ctx: AttachedRuntimeRequestContext):
         manifest = await self.manifest(ctx)
         return manifest.selected_segment(self.segment, self.contributors)
@@ -522,6 +684,11 @@ class ContextRecordedSegmentRuntimeRequest(RecordedContextRuntimeRequest):
 class ContextAnnotationsRuntimeRequest(ContextRecordedSegmentRuntimeRequest):
     classifier: ClassifierVersion
 
+
+class ServedContextAnnotationsRuntimeRequest(
+    ServedContextRecordedSegmentRuntimeRequest,
+    ContextAnnotationsRuntimeRequest,
+):
     async def result(self, ctx: AttachedRuntimeRequestContext):
         segment = await self.selected_segment(ctx)
         labels = await Coordination.run_worker(partial(WorkingMemoryAnnotations.for_segment,
@@ -536,6 +703,11 @@ class ContextAnnotationCorrectionRuntimeRequest(CorrectsAnnotation, ContextRecor
     answer: type[SpanAnswer]
     worktree: Checkout
 
+
+class ServedContextAnnotationCorrectionRuntimeRequest(
+    ServedContextRecordedSegmentRuntimeRequest,
+    ContextAnnotationCorrectionRuntimeRequest,
+):
     async def result(self, ctx: AttachedRuntimeRequestContext):
         segment = await self.selected_segment(ctx)
         if not segment.contains_span(self.label.span):

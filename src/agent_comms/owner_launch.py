@@ -18,8 +18,14 @@ from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArgume
 from .registry.registry_document import RegistryEntry, RegistrySnapshot
 from .nominal.field_codec import AcpSessionId, FieldCodec
 from agent_comms.runtime_server import (
-    AttachedResultRuntimeRequest, AttachedRuntimeRequestContext, ResultRuntimeRequest,
-    RuntimeRequestContext, RuntimeServer, SocketClient,
+    AttachedResultRuntimeRequest,
+    AttachedRuntimeRequestContext,
+    ResultRuntimeRequest,
+    RuntimeRequestContext,
+    RuntimeServer,
+    ServedAttachedResultRuntimeRequest,
+    ServedResultRuntimeRequest,
+    SocketClient,
 )
 from .owner_connection import OwnerConnection
 from .thread_identity import ClaimedIdentity, OwnerIdentity
@@ -129,6 +135,13 @@ class HostResources(ToolResult):
 
 @dataclass(frozen=True, kw_only=True)
 class ReadHostResourcesRuntimeRequest(AttachedResultRuntimeRequest):
+    pass
+
+
+class ServedReadHostResourcesRuntimeRequest(
+    ServedAttachedResultRuntimeRequest,
+    ReadHostResourcesRuntimeRequest,
+):
     async def result(self, ctx: AttachedRuntimeRequestContext) -> HostResources:
         owners = sum(len(state.executors()) for state in ctx.server.agent.inputs.drained.values())
         def capture() -> HostResources:
@@ -149,6 +162,11 @@ class ReadHostResourcesRuntimeRequest(AttachedResultRuntimeRequest):
 class ReadOwnerLaunchRuntimeRequest(AttachedResultRuntimeRequest):
     owner: OwnerIdentity
 
+
+class ServedReadOwnerLaunchRuntimeRequest(
+    ServedAttachedResultRuntimeRequest,
+    ReadOwnerLaunchRuntimeRequest,
+):
     def require_owner(self, entry: RegistryEntry) -> Thread:
         if entry.owner_identity != self.owner:
             raise RelationViolationError("Launch request's owner lease changed")
@@ -166,6 +184,11 @@ class StartOwnerRuntimeRequest(ResultRuntimeRequest[RuntimeRequestContext]):
     launch: RetainedOwnerLaunch
     owner: OwnerIdentity
 
+
+class ServedStartOwnerRuntimeRequest(
+    ServedResultRuntimeRequest[RuntimeRequestContext],
+    StartOwnerRuntimeRequest,
+):
     async def bind(
         self, server: RuntimeServer, reader: asyncio.StreamReader, client: SocketClient,
     ) -> RuntimeRequestContext:
@@ -185,6 +208,11 @@ class StopOwnerRuntimeRequest(ResultRuntimeRequest[RuntimeRequestContext]):
     owner: OwnerIdentity
     claim: ClaimedIdentity
 
+
+class ServedStopOwnerRuntimeRequest(
+    ServedResultRuntimeRequest[RuntimeRequestContext],
+    StopOwnerRuntimeRequest,
+):
     def require_owner(self, entry: RegistryEntry) -> Thread:
         if entry.owner_identity != self.owner:
             raise RelationViolationError("Stop request's fenced owner changed")
