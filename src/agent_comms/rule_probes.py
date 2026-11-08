@@ -132,13 +132,13 @@ class Probe(DeclaredFamily, affix="Probe"):
 
 @dataclass(frozen=True)
 class PriorProbe(Probe):
-    question = ("Name a prior you brought into this session that the papers refute. Quote"
-                " Tristan's own words where he corrected it, and the result that refutes it.")
+    question = ("Name one claim in this session's work that a dealt result corrects. Copy the"
+                " recorded prompt line that corrected it, and name the result.")
 
     words: str
-    """Tristan's words, copied exactly from one of his recorded prompts."""
+    """The correcting line, copied exactly from one of the recorded prompts."""
     prior: str
-    """The prior, in your words."""
+    """The corrected claim, in one plain sentence about the work."""
     refuted_by: str
     """The paper's result, e.g. "Corollary 4.12"."""
 
@@ -161,8 +161,8 @@ class PriorProbe(Probe):
 
 @dataclass(frozen=True)
 class HuntProbe(Slop, Probe):
-    question = ("Before you touch anything: one restated fact in the code you are about to edit,"
-                " as its formal statement (pattern, fact, at, derive, by).")
+    question = ("One restated fact in the code you are about to edit, as its formal statement"
+                " (pattern, fact, at, derive, by), with at and by as path:line in a checkout.")
 
     def fault(self, context: ProbeContext) -> str:
         missing = [line.to_wire() for line in (self.at, *self.by.cited())
@@ -180,8 +180,8 @@ class HuntProbe(Slop, Probe):
 
 @dataclass(frozen=True)
 class FlinchProbe(Probe):
-    question = ("Where did you resist Tristan this session? Yes or no, then the hypothesis you had,"
-                " or what the code showed once you checked, citing a file:line or a message id.")
+    question = ("Did a check change one of your plans this session? Yes or no, then what the"
+                " check showed, citing a file:line or a 12-hex message id.")
 
     answer: str
 
