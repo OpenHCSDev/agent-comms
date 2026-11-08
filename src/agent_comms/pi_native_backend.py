@@ -23,7 +23,10 @@ from agent_comms.pi_wire import PiOmitted
 from agent_comms.pi_payloads import PiResponseData
 
 from .agent_backend import CompactionOutcome, FailedCompaction, Forks, Interrupts, NewThreadBackend, NothingToCompaction, PlacedCompaction, RuntimeLocation
-from .thread_model import ThreadModel, UndeclaredModel
+from .registry.thread_model import (
+    ThreadModel,
+    UndeclaredModel,
+)
 from .execution.turn_inbox import InputContent
 from .coordination.coordinator import Coordination
 from .nominal.field_codec import AcpSessionId

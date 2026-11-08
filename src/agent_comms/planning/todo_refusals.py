@@ -7,7 +7,7 @@ from ..errors import (
     RejectedEnforcementError,
     TodoError,
 )
-from ..thread_identity import ThreadIncarnation
+from ..registry.thread_identity import ThreadIncarnation
 
 
 class TodoRefusal(TodoError, RejectedEnforcementError):

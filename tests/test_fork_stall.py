@@ -27,7 +27,7 @@ from agent_comms.installer.logs import InstallLogs
 from agent_comms.installer.request import InstallRequest
 from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.installer.upgrade import FreshRehearsal, RehearsedUpgrade
-from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms_hooks import SubagentId
 
 PROMPT = {"type": "user", "uuid": str(transcript_record("prompt")), "promptId": "p",

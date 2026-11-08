@@ -6,7 +6,7 @@ from agent_comms.read_basis import ChannelConversation, ConversationCursor, Read
 from agent_comms.messaging.read_ledger import ReadDocument
 from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from conftest import installed_comms
 from agent_comms.registry.threads import NativeThread
 

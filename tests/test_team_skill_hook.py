@@ -48,9 +48,9 @@ from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.team.spinning import SpinningTeammate
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.text_digest import TextDigest
-from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.task_attachments.team_pings import TeamDecisions, TeamUpdate, RulePing
-from agent_comms.thread_model import DeclaredModel
+from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import ForkThread, NativeThread
 from agent_comms.ui_model.teammate_state import AwaitingTeam
 from agent_comms_hooks.board import (

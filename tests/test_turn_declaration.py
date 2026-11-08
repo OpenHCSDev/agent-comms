@@ -5,7 +5,7 @@ import pytest
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import FieldCodec, TurnId
-from agent_comms.thread_identity import (
+from agent_comms.registry.thread_identity import (
     NoObservedTurn,
     RecordedThreadIncarnation,
     TurnFence,

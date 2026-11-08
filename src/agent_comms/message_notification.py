@@ -23,7 +23,7 @@ from agent_comms.notification_progress import AssignmentResponse
 from agent_comms.notification_assignment import NotificationAssignmentRead, NotificationReadMark
 from .notification_evidence import FirstRecipient, OutcomeViewer, RecipientCursor, RecipientLimit
 from .notification_progress import DeliveryProgress, HumanReadProgress
-from .thread_identity import ThreadIncarnation
+from .registry.thread_identity import ThreadIncarnation
 from .transcript_sources import AssignedTranscriptSource
 from typing import TYPE_CHECKING
 

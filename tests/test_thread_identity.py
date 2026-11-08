@@ -17,21 +17,24 @@ from agent_comms.messaging.read_ledger import ReadDocument
 from agent_comms.registry.registration import Registration
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.registry.threads import ExternalThread, NativeThread
-from agent_comms.thread_identity import (
+from agent_comms.registry.thread_identity import (
     ClaimedIdentity,
     GenerationCounter,
     RecordedThreadIncarnation,
     TurnIdentity,
 )
-from agent_comms.thread_model import DeclaredModel
-from agent_comms.thread_status import (
+from agent_comms.registry.thread_model import DeclaredModel
+from agent_comms.registry.thread_status import (
     ArchivedThreadStatus,
     ConnectedThreadStatus,
     IdleThreadStatus,
     RunningThreadStatus,
     StoppedThreadStatus,
 )
-from agent_comms.thread_text import GivenThreadText, NoThreadText
+from agent_comms.registry.thread_text import (
+    GivenThreadText,
+    NoThreadText,
+)
 from agent_comms.execution.turn_lease import (
     FinishedTurnFence,
     NoFinishedTurn,

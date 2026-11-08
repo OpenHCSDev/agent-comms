@@ -1,31 +1,40 @@
-"""A7: thread provenance, process ownership and turn identity are distinct facts.
-
-Names are resolved by the registry before constructing an identity. A restart
-does not create a new historical thread; a new turn does not change its owner.
-"""
-
 from __future__ import annotations
 
 import hashlib
 import math
-from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass, field, replace
+from abc import (
+    ABC,
+    abstractmethod,
+)
+from collections.abc import (
+    Callable,
+    Iterable,
+    Sequence,
+)
+from dataclasses import (
+    dataclass,
+    field,
+    replace,
+)
 from functools import cached_property
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self, TypeVar
+from typing import (
+    Annotated,
+    ClassVar,
+    Self,
+    TYPE_CHECKING,
+    TypeVar,
+)
 
-from agent_comms.participant_identity import ParticipantIdentity
-
-from .class_fact import ClassFact
-from .cli_options import JsonFlagRecord
-from .errors import RelationViolationError
-from .nominal.declared_family import (
+from ..class_fact import ClassFact
+from ..cli_options import JsonFlagRecord
+from ..errors import RelationViolationError
+from ..nominal.declared_family import (
     DeclaredFamily,
     UniqueExternalSelector,
     UnknownFamilyMember,
     declared_words,
 )
-from .nominal.field_codec import (
+from ..nominal.field_codec import (
     DisclosureIdentity,
     FieldCodec,
     SingleFieldValue,
@@ -34,18 +43,26 @@ from .nominal.field_codec import (
     WireName,
     WireValue,
 )
-from .projection_source import ProducedRow, ProjectionSource
-from .response_policy import CollectivePolicy, InformationalPolicy, ResponsePolicy
+from ..participant_identity import ParticipantIdentity
+from ..projection_source import (
+    ProducedRow,
+    ProjectionSource,
+)
+from ..response_policy import (
+    CollectivePolicy,
+    InformationalPolicy,
+    ResponsePolicy,
+)
 
 if TYPE_CHECKING:
-    from .child_process import ProcessIdentity
-    from .messages import Message
-    from .messaging.read_ledger import (
+    from .threads import Thread
+    from ..child_process import ProcessIdentity
+    from ..messages import Message
+    from ..messaging.read_ledger import (
         ReadDocument,
         ReadLedger,
     )
-    from .registry.threads import Thread
-    from .registry_provenance import RegistryProvenance
+    from ..registry_provenance import RegistryProvenance
 
 T = TypeVar("T")
 
@@ -478,8 +495,6 @@ class ThreadIncarnationRecord:
         return FieldCodec.decode(cls, {"name": name, "created_at": birth}).incarnation()
 
 
-
-
 @dataclass(frozen=True, slots=True)
 class OwnerIdentity:
     """An allocation from RegistryDocument.owners, used with process proof."""
@@ -631,8 +646,8 @@ class ThreadRole(DeclaredFamily, ProjectionSource, affix="ThreadRole"):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .bus_activity_index import BusActivityIndex
-        from .messaging.bus_display_index import BusDisplayIndex
+        from ..bus_activity_index import BusActivityIndex
+        from ..messaging.bus_display_index import BusDisplayIndex
         return (BusActivityIndex, BusDisplayIndex)
 
 

@@ -7,7 +7,7 @@ from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.team.standing_rules import OrderlessUnreviewedHead
 from agent_comms.text_digest import TextDigest
-from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.ui_model.teammate_state import AwaitingApplicationRun, DeliveredUnclosed, TeammateState
 
 

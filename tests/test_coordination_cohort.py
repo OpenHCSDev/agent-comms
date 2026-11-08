@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.nominal.field_codec import AssignmentId
-from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.assignment_states import (
     DeferredAssignment,
     DeliveredAssignment,
@@ -43,8 +43,8 @@ from agent_comms.exporting import (
     FullLimit,
     JsonlFormat,
 )
-from agent_comms.thread_identity import UserThreadRole
-from agent_comms.thread_status import ArchivedThreadStatus
+from agent_comms.registry.thread_identity import UserThreadRole
+from agent_comms.registry.thread_status import ArchivedThreadStatus
 from agent_comms.wake_policy import BoundedTriageWake, FullWake, MessageAudience
 from agent_comms.messaging.message_page import PageBounds
 from agent_comms.registry.threads import NativeThread

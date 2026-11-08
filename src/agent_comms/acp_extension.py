@@ -59,7 +59,11 @@ from .owner_protocol import IncompatibleOwner
 from agent_comms.pi_wire import McpLiveAcknowledgement
 from .reported_turn import ReportedTurn, ReportedTurnState
 from .routing import MessageRoute, NoMessageRoute
-from .thread_identity import ClaimScoped, ClaimedIdentity, ThreadIncarnation
+from .registry.thread_identity import (
+    ClaimScoped,
+    ClaimedIdentity,
+    ThreadIncarnation,
+)
 from .tool_result import ToolResult
 from .transcripts import (
     LivePageSource, NativeCommittedPrefix, PageSource, TranscriptCursor, TranscriptPage, TranscriptRead, TranscriptReadIdentity,

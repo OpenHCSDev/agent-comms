@@ -199,7 +199,7 @@ def test_standby_refuses_canonical_reply_that_arrived_before_wait(tmp_path, read
 
 @pytest.mark.parametrize("bridge_alive", [True, False])
 def test_standby_on_a_paused_bridge_waits_only_while_its_process_lives(tmp_path, bridge_alive):
-    from agent_comms.thread_status import PausedBridgeThreadStatus
+    from agent_comms.registry.thread_status import PausedBridgeThreadStatus
 
     comms = live_wire(tmp_path, "waiter")
     teammate = NativeThread("teammate", frozenset(), Checkout(tmp_path))

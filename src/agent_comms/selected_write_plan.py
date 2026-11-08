@@ -37,7 +37,11 @@ from .nominal.field_codec import AssignmentId, ClaimId, FieldCodec, MalformedRec
 from .projects.checkouts import Checkout
 from .message_reference import MessageReference
 from .storage.private_path import PrivateDirectoryRole, PrivateFileRole
-from .thread_identity import ClaimedIdentity, ClaimScoped, RecordedThreadIncarnation
+from .registry.thread_identity import (
+    ClaimedIdentity,
+    ClaimScoped,
+    RecordedThreadIncarnation,
+)
 
 _MAX_BYTES = 1024 * 1024
 

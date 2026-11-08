@@ -26,7 +26,7 @@ DEFERRED_DRAIN_ERRORS = (DrainDeferred, *EXTERNAL_UNAVAILABLE_ERRORS)
 
 if TYPE_CHECKING:
     from .comms import Comms
-    from .thread_identity import OwnerIdentity
+    from .registry.thread_identity import OwnerIdentity
 
 
 async def record_drain_failure(

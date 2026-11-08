@@ -49,7 +49,7 @@ from .recorded_time import GeneratedTimestamp
 from .routing import NoTurnRouting, Routing
 from .transcript_events import ImportedMessage, NoticeTranscript, TranscriptEvent
 from .transcript_routes import InputPresentation, NoInputDisplay, _SessionRoutes
-from .thread_model import DeclaredModel
+from .registry.thread_model import DeclaredModel
 from .execution.turn_item import (
     FreshNativeId,
     NativeItemId,

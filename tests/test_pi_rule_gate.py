@@ -30,7 +30,7 @@ from agent_comms.task_attachments.owner_notices import MeantNotice, RestartNotic
 from agent_comms.registry.threads import NativeThread
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.thread_model import DeclaredModel
+from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.cli_bridges.hook_read_gate import ReadInput
 from agent_comms_hooks.skill import DeckReader
 from conftest import answer_deal, fresh_confession, probe_answers

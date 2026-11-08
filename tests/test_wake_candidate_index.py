@@ -21,7 +21,7 @@ from agent_comms.notification_evidence import AllOutcomes
 from agent_comms.messaging.read_ledger import ReadLedger
 from agent_comms.registry.registration import Registration
 from agent_comms.proven_source_coverage import SourcePrefix
-from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.wake_candidate_index import WakeCandidateIndex
 from bus_record_fixture import append_reply, record_from
 from agent_comms.registry.threads import NativeThread

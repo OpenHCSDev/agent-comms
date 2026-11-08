@@ -26,10 +26,14 @@ from .nominal.field_codec import (
     WireRequired,
 )
 from agent_comms.storage.typed_table import StoreRows, Column, DerivedStore, TypedTable
-from .thread_identity import OwnerIdentity
-from .thread_owned_state import ThreadOwnedState
-from .thread_presentation import IdleThreadPresentationStatus, ThreadPresentationStatus, WorkingThreadPresentationStatus
-from .thread_presentation import ThreadPresentation
+from .registry.thread_identity import OwnerIdentity
+from .registry.thread_owned_state import ThreadOwnedState
+from .registry.thread_presentation import (
+    IdleThreadPresentationStatus,
+    ThreadPresentationStatus,
+    WorkingThreadPresentationStatus,
+)
+from .registry.thread_presentation import ThreadPresentation
 
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity

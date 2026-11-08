@@ -9,7 +9,7 @@ from dataclasses import (
 from .runtime_request import AttachedResultRuntimeRequest
 from ..nominal.field_codec import FieldCodec
 from ..owner_connection import socket_path
-from ..thread_presentation import LiveThreadOwnerBinding
+from ..registry.thread_presentation import LiveThreadOwnerBinding
 
 
 @dataclass(frozen=True, kw_only=True)

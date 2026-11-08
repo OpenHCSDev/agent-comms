@@ -9,7 +9,7 @@ from agent_comms.nominal import field_codec
 from .coordination.coordinator import Coordination
 
 from .pi_payloads import PiResponseData, StrictFields
-from .thread_identity import OfferedTools
+from .registry.thread_identity import OfferedTools
 from .execution.turn_context import (
     ContextManifest,
     DispatchRequest,

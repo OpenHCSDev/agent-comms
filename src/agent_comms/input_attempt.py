@@ -36,7 +36,10 @@ from .notification_evidence import ConsumptionEvidence
 from .notification_progress import DeliveryProgress, ShownToModelProgress
 from .reported_turn import ReportedTurnState
 from .text_digest import TextDigest
-from .thread_identity import GenerationCounter, ThreadIncarnation
+from .registry.thread_identity import (
+    GenerationCounter,
+    ThreadIncarnation,
+)
 
 if TYPE_CHECKING:
     from .registry.registry_document import RegistrySnapshot

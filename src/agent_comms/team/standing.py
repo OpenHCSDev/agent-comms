@@ -50,7 +50,10 @@ from agent_comms.registry.registry_document import DEFAULT_ROSTER, RegistrySnaps
 from ..projects.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.service_passes import ServicePassStore, TeamPass
-from agent_comms.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+from ..registry.thread_identity import (
+    RecordedThreadIncarnation,
+    ThreadIncarnation,
+)
 from agent_comms.registry.threads import Thread
 from ..execution.turn_digests import (
     TurnDigestRead,

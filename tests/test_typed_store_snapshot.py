@@ -13,7 +13,7 @@ from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.input_disposition import InputDispositionRow, InputDispositions
 from agent_comms.input_key import BusInputKey
 from agent_comms.storage.maintenance_barrier import MaintenanceNotHeldError
-from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.storage.typed_table import HeldBusFile
 
 

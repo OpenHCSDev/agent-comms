@@ -43,7 +43,10 @@ from agent_comms.native_arguments import GivenArguments, GivenBinary
 from agent_comms.cli_verbs.rule_gate import RuleGateCliCommand
 from agent_comms.pi_rule_gate import PiRedeal
 from agent_comms.rule_deal import OffDealMode
-from agent_comms.thread_identity import NoObservedTurn, TurnFence
+from agent_comms.registry.thread_identity import (
+    NoObservedTurn,
+    TurnFence,
+)
 from delivery_owner_fixture import canonical_agent
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX PTY acceptance")

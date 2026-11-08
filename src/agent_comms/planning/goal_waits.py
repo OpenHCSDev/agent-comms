@@ -26,8 +26,8 @@ from .goals import (
 from ..input_key import InputKey, InputKeyText
 from ..input_attempt import StoredInput, UnresolvedInput
 from ..storage.locked_store import GoalWakeFile
-from ..thread_identity import RecordedThreadIncarnation
-from ..thread_owned_state import ThreadOwnedState
+from ..registry.thread_identity import RecordedThreadIncarnation
+from ..registry.thread_owned_state import ThreadOwnedState
 from ..registry.registry_document import RegistrySnapshot
 from ..registry.threads import Thread
 from ..execution.turn_lease import (

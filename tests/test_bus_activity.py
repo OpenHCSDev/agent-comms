@@ -10,7 +10,7 @@ from agent_comms.messages import InfoKind, Message, NoticeRole
 from agent_comms.read_basis import (
     AllChannelDisplayScope, ChannelDisplayScope, ListedDeliveries, MemberActivityDisplayScope,
 )
-from agent_comms.thread_identity import UserThreadRole
+from agent_comms.registry.thread_identity import UserThreadRole
 
 
 def append(bus, message):

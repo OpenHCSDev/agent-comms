@@ -1,16 +1,17 @@
-"""Stores whose rows belong to one thread declaration and end with it."""
-
 from __future__ import annotations
 
 from abc import abstractmethod
-from collections.abc import Iterable, Sequence
+from collections.abc import (
+    Iterable,
+    Sequence,
+)
 from typing import TYPE_CHECKING
 
-from .storage.store_files import StoreOwner
-from .errors import RelationViolationError
+from ..errors import RelationViolationError
+from ..storage.store_files import StoreOwner
 
 if TYPE_CHECKING:
-    from .registry.threads import Thread
+    from .threads import Thread
 
 
 class ThreadOwnedState(StoreOwner):

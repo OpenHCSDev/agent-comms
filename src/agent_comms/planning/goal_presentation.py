@@ -32,8 +32,8 @@ from ..nominal.field_codec import (
     NullMember,
     WireValue,
 )
-from ..thread_identity import RecordedThreadIncarnation
-from ..thread_presentation import ThreadPresentation
+from ..registry.thread_identity import RecordedThreadIncarnation
+from ..registry.thread_presentation import ThreadPresentation
 
 if TYPE_CHECKING:
     from .goal_actions import GoalAction

@@ -6,7 +6,10 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from .nominal.declared_family import DeclaredOrder
-from .thread_presentation import ThreadPresentationStatus, WorkingThreadPresentationStatus
+from .registry.thread_presentation import (
+    ThreadPresentationStatus,
+    WorkingThreadPresentationStatus,
+)
 
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import FieldCodec, MalformedRecord, MessageId, boundary_decoder

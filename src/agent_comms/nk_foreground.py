@@ -35,7 +35,7 @@ from .nominal.field_codec import FieldCodec, MalformedRecord, RootId
 from agent_comms.native_session_files import NativeSessionFiles
 from .native_package import VerifiedNativePackage
 from agent_comms.execution.selected.result import CoordinatedTurn
-from .thread_text import GivenThreadText
+from .registry.thread_text import GivenThreadText
 from .projects.checkouts import Checkout
 from .registry.threads import NativeThread
 

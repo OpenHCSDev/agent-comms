@@ -36,7 +36,10 @@ from .nominal.field_codec import (
 )
 from .message_reference import MessageReference
 from .projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
-from .thread_identity import GenerationCounter, RecordedThreadIncarnation
+from .registry.thread_identity import (
+    GenerationCounter,
+    RecordedThreadIncarnation,
+)
 
 if TYPE_CHECKING:
     from .coordination.tables.attempts import AttemptRecord

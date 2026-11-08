@@ -20,7 +20,7 @@ from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.presentation import CountedRead, ThreadView
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import DEFAULT_ROSTER
-from agent_comms.thread_status import (
+from agent_comms.registry.thread_status import (
     ArchivedThreadStatus,
     ConnectedThreadStatus,
     DeletingThreadStatus,
@@ -32,7 +32,7 @@ from agent_comms.thread_status import (
     StoppedThreadStatus,
     ThreadStatus,
 )
-from agent_comms.thread_text import GivenThreadText
+from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.registry.threads import OwnerLifecycleControl, NativeThread
 
@@ -166,7 +166,7 @@ def test_delete_fence_rejects_metadata_and_presence_without_erasing_data(tmp_pat
 
 @pytest.mark.parametrize("status", [StoppedThreadStatus(), ArchivedThreadStatus()])
 def test_inactive_owner_survives_a_refused_viewer(tmp_path, status):
-    from agent_comms.thread_presentation import SessionDisconnected
+    from agent_comms.registry.thread_presentation import SessionDisconnected
     from agent_comms.ui_model.status import ThreadStatusModel
 
     comms = wire(tmp_path)
@@ -205,7 +205,7 @@ def test_presence_owns_roster_membership_and_self_rename(status, listed, rename)
 def test_tier_only_tool_changes_next_catalog_without_changing_active_request(tmp_path, status):
     from agent_comms.cli_verbs.tools import ToolsCliCommand
     from agent_comms.pi_vocabulary import ServiceTier
-    from agent_comms.thread_model import DeclaredModel
+    from agent_comms.registry.thread_model import DeclaredModel
     from agent_comms.transport.tools.served import invoke_tool
 
     comms = wire(tmp_path)

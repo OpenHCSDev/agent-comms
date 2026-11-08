@@ -289,7 +289,7 @@ from ..projects.storage_rules import (
     StorageRule,
 )
 from ..team.rule_file import RuleFile
-from ..thread_identity import (
+from ..registry.thread_identity import (
     CoreWatcherIncarnation,
     RecordedThreadIncarnation,
     ThreadIncarnation,

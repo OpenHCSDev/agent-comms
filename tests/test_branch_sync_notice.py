@@ -71,7 +71,7 @@ def test_branch_notice_never_addresses_a_departed_holders_replacement(
 def test_branch_notice_skips_an_archived_holder(branch_notice: tuple[Comms, BranchBehindMain]) -> None:
     """2026-11-02 15:04: this reminder to an archived holder raised 'Initial direct target must
     be visible' and failed every heartbeat pass, so no teammate had a board."""
-    from agent_comms.thread_status import ArchivedThreadStatus
+    from agent_comms.registry.thread_status import ArchivedThreadStatus
 
     comms, notice = branch_notice
     comms.registry.register(comms.registry.require("worker"), ArchivedThreadStatus())

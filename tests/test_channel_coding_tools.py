@@ -13,7 +13,7 @@ from types import SimpleNamespace
 import pytest
 
 from agent_comms.channel_coding_tools import CodingToolSocket
-from agent_comms.thread_identity import UnobservedTools
+from agent_comms.registry.thread_identity import UnobservedTools
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordination.session import NativeCapture
@@ -171,7 +171,10 @@ def test_pi_argument_records_reject_bad_shapes_without_claiming(name, arguments)
 def test_an_offered_mcp_tool_decodes_as_its_call_and_an_unoffered_one_is_refused():
     from agent_comms.native_tool_call import RefusedCodingCall
     from agent_comms.native_tools import McpToolCall
-    from agent_comms.thread_identity import ReportedTools, ToolName
+    from agent_comms.registry.thread_identity import (
+    ReportedTools,
+    ToolName,
+)
 
     name, arguments = "mcp_fixture_echo_092c79e8f8", {"message": "ACCEPTANCE_ECHO"}
     offered = ReportedTools("pi-test", frozenset({ToolName("read"), ToolName(name)}))

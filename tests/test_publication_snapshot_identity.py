@@ -4,7 +4,7 @@ from dataclasses import replace
 
 from agent_comms.mentions import ThreadMention
 from agent_comms.messages import InfoKind, Message, MessageKind
-from agent_comms.thread_identity import UserThreadRole
+from agent_comms.registry.thread_identity import UserThreadRole
 
 
 def test_publication_snapshot_is_frozen_content_not_delivery_enrichment():

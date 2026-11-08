@@ -34,12 +34,20 @@ from agent_comms.presentation import CountedInbox, CountedRead, UncountedRead
 from agent_comms.context_reading import ContextUsage
 from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript, ToolStartTranscript, ToolEndTranscript
 from agent_comms.read_basis import NamedViewer
-from agent_comms.thread_management import ForkSpec
+from agent_comms.registry.thread_management import ForkSpec
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.registry.threads import ChosenModel, NextTurnConfiguration, NativeThread
-from agent_comms.thread_text import ForkedParent, GivenThreadText
-from agent_comms.thread_model import DeclaredModel
-from agent_comms.thread_status import ArchivedThreadStatus, HeartbeatThreadStatus, RunningThreadStatus, StoppedThreadStatus
+from agent_comms.registry.thread_text import (
+    ForkedParent,
+    GivenThreadText,
+)
+from agent_comms.registry.thread_model import DeclaredModel
+from agent_comms.registry.thread_status import (
+    ArchivedThreadStatus,
+    HeartbeatThreadStatus,
+    RunningThreadStatus,
+    StoppedThreadStatus,
+)
 
 
 def test_calling_thread_is_declared_by_owner_launch_environment() -> None:

@@ -44,7 +44,7 @@ from .owner_protocol import (
 )
 from .owner_connection import CapturedOwner, NoControllerToken, OwnerConnection, OwnerIdentityChangedError
 from .transport.runtime_requests import SubscribeRuntimeRequest
-from .thread_identity import ThreadIncarnation
+from .registry.thread_identity import ThreadIncarnation
 
 from .transport.runtime_request import RuntimeRequest
 from .runtime_server import ClientPermissionResponse

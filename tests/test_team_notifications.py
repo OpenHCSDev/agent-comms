@@ -25,7 +25,7 @@ from agent_comms.team.standing_rules import (
     StandingRule,
     UndatedStandingRule,
 )
-from agent_comms.thread_management import GivenTags
+from agent_comms.registry.thread_management import GivenTags
 from agent_comms.team_heartbeat import TeamHeartbeat, TeamObservation
 from agent_comms.comms import Comms
 from agent_comms.tool_caller import ThreadCaller
@@ -621,7 +621,7 @@ def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_
 
 def test_frame_keeps_original_ping_order_and_folded_idle_records(tmp_path):
     from agent_comms.nominal.field_codec import OrderId
-    from agent_comms.thread_identity import RecordedThreadIncarnation
+    from agent_comms.registry.thread_identity import RecordedThreadIncarnation
     from agent_comms.ui_model.hud_groups import IdleGroup
     from agent_comms.ui_model.teammate_state import Idle, NoPendingClock, PendingClock, Stuck
 
@@ -1254,7 +1254,7 @@ def test_a_board_packet_files_under_heartbeats_while_the_owners_own_words_stay_i
 def test_an_archived_lead_keeps_its_board_and_the_pass_completes(notification_bus):
     """2026-11-02: from 14:49 every heartbeat pass died on 'Initial direct target must be visible'
     sending the archived colleague its packet, so no teammate had a board."""
-    from agent_comms.thread_status import ArchivedThreadStatus
+    from agent_comms.registry.thread_status import ArchivedThreadStatus
 
     comms = notification_bus
     comms.registry.register(comms.registry.require("colleague"), ArchivedThreadStatus())

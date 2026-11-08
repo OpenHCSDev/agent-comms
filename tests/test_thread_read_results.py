@@ -8,7 +8,7 @@ import pytest
 from agent_comms.message_notification import NotificationPass
 
 from agent_comms.presentation import WireRevision
-from agent_comms.thread_presentation import NoThreadPresentation
+from agent_comms.registry.thread_presentation import NoThreadPresentation
 from agent_comms.ui_model.observation import (
     NotObserved, ObserveThreads, ThreadBusy, ThreadPresented, ThreadUnavailable, ThreadsObserved,
     UnreadableHistory,

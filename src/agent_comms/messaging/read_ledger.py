@@ -55,8 +55,8 @@ from ..storage.store_files import (
     DependentStateTier,
     SingleFileStore,
 )
-from ..thread_identity import RecordedThreadIncarnation
-from ..thread_owned_state import ThreadOwnedState
+from ..registry.thread_identity import RecordedThreadIncarnation
+from ..registry.thread_owned_state import ThreadOwnedState
 
 
 

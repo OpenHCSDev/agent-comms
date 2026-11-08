@@ -30,7 +30,10 @@ from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import AcpSessionId, InputId
 from .native_input_proof import NativeContextProof
 from .pi_counts import PiCount
-from .thread_model import ThreadModel, UndeclaredModel
+from .registry.thread_model import (
+    ThreadModel,
+    UndeclaredModel,
+)
 from .pi_commands import NativeQuery
 from .pi_payloads import PiResponseData
 from .pi_vocabulary import CompactionReason

@@ -23,7 +23,7 @@ from agent_comms.messaging.sending import TeamReceipts
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import ExternalThread, SubagentThread
 from agent_comms.team.standing_rules import DirectiveUnacted
-from agent_comms.thread_model import DeclaredModel
+from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.tool_caller import ForkCaller, PeerCaller
 
 from test_forks import command, fork_bus  # noqa: F401  (fixture)

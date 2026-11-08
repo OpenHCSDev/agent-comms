@@ -28,8 +28,8 @@ from agent_comms.planning.goal_waits import GoalWaitReview, NoGoalWait, Recorded
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.messages import ConversationRole, NoticeRole
 from agent_comms.storage.store_files import store_lock_path
-from agent_comms.thread_text import GivenThreadText
-from agent_comms.thread_status import StoppedThreadStatus
+from agent_comms.registry.thread_text import GivenThreadText
+from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.transport.request import ToolRequest
 from agent_comms.reported_turn import NoReportedTurn

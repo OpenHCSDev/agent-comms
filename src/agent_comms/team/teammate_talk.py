@@ -16,7 +16,7 @@ from itertools import takewhile
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.comms import Comms
-from agent_comms.thread_identity import ThreadIncarnation
+from ..registry.thread_identity import ThreadIncarnation
 from agent_comms.ui_model.teammate_state import TeammateObservation
 
 from .standing_rules import (

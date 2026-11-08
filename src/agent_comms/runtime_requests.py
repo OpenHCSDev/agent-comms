@@ -51,7 +51,7 @@ from .messaging.bus_read import (
     OwnerReadRuntimeRequest,
     OwnerScopedRead,
 )
-from .thread_identity import ThreadIncarnation
+from .registry.thread_identity import ThreadIncarnation
 from .transport.project_request import ProjectRuntimeRequest
 from .transport.runtime_requests import (
     CancelRuntimeRequest,

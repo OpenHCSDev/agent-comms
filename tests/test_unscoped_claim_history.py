@@ -15,7 +15,7 @@ from agent_comms.envelope_claim_transitions import (
     WakeClaims,
 )
 from agent_comms.nominal.field_codec import ClaimId, FieldCodec, InputId, MalformedRecord, MessageId, TurnId
-from agent_comms.thread_status import RunningThreadStatus
+from agent_comms.registry.thread_status import RunningThreadStatus
 from agent_comms.registry.threads import NativeThread
 
 G1, G2 = ClaimId("a" * 32), ClaimId("b" * 32)

@@ -1,27 +1,141 @@
-"""Thread presentation: declaration and persistence owners."""
-
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field, fields, replace
-from typing import TYPE_CHECKING, ClassVar, Self
+from abc import abstractmethod
+from collections.abc import (
+    Awaitable,
+    Callable,
+)
+from dataclasses import (
+    dataclass,
+    field,
+    fields,
+    replace,
+)
+from functools import partial
+from typing import (
+    ClassVar,
+    Self,
+    TYPE_CHECKING,
+)
 
-from agent_comms.coordination.errors import StaleRevision
-from agent_comms.errors import RelationViolationError, RouteChangedError, UnregisteredThreadError
+import agent_comms.registry.thread_presentation as thread_presentation
 
-from .nominal.declared_family import DeclaredFamily
+from ..child_process import ProcessIdentity
+from ..coordination.errors import StaleRevision
+from ..coordination.work import CoordinationWork
+from ..errors import (
+    RelationViolationError,
+    RouteChangedError,
+    UnregisteredThreadError,
+)
+from ..message_reference import MessageReference
+from ..native_arguments import GivenArguments
+from ..nominal.declared_family import DeclaredFamily
+from ..nominal.field_codec import FieldCodec
 from .thread_identity import OwnerIdentity
-from .child_process import ProcessIdentity
-
-from .message_reference import MessageReference
-from .tool_result import ToolResult
-import agent_comms.session_load as session_load
+from ..tool_result import ToolResult
 
 if TYPE_CHECKING:
-    from .presentation import MessageNotification
-    from .transcripts import AcquiredThreadPresentation, TranscriptReadIdentity
-    from agent_comms.registry.registry_document import RegistrySnapshot
-    from agent_comms.transcripts import Transcripts
+    from .registry_document import RegistrySnapshot
+    from .threads import Thread
+    from ..execution.session_lifecycle import AttachedSessionLifecycle
+    from ..presentation import MessageNotification
+    from ..transcripts import (
+        AcquiredThreadPresentation,
+        TranscriptReadIdentity,
+        Transcripts,
+    )
+
+
+class SessionLoadPlan(CoordinationWork, DeclaredFamily, affix='SessionLoadPlan'):
+    @classmethod
+    def at_ingress(cls, metadata: object) -> 'SessionLoadPlan':
+        return EnsuringSessionLoadPlan() if metadata is None else FieldCodec.decode(cls, metadata)
+
+    def metadata(self) -> dict:
+        return {"agentCommsLoad": FieldCodec.encode(self)}
+
+    @staticmethod
+    def witnessed(metadata: object, key: str, witness: type[SessionLoadPlan]) -> SessionLoadPlan:
+        """Foreign metadata carries a load witness under its key, or carries none."""
+        if isinstance(metadata, dict) and key in metadata:
+            return FieldCodec.decode(witness, metadata[key])
+        return EnsuringSessionLoadPlan()
+
+    @classmethod
+    def at_response(cls, metadata: object) -> 'SessionLoadPlan':
+        return cls.witnessed(metadata, "agentCommsLoad", ExistingSessionLoadPlan)
+
+    @classmethod
+    def from_failure(cls, data: object) -> SessionLoadPlan:
+        """Decode foreign failure metadata into a plan with its own reload behavior."""
+        return cls.witnessed(data, "agentCommsLoadFailure", FailedSessionLoadPlan)
+
+    def superseded_by(self, binding: thread_presentation.ThreadOwnerBinding) -> bool:
+        return False
+
+    async def reload_if_superseded(
+        self, binding: thread_presentation.LiveThreadOwnerBinding,
+        reload: Callable[[SessionLoadPlan], Awaitable[None]],
+    ) -> None:
+        """A plan without an owner witness cannot request an observed reload."""
+
+    @abstractmethod
+    async def resolve(self, lifecycle: "AttachedSessionLifecycle", thread: "Thread") -> "Thread": ...
+
+
+@dataclass(frozen=True, slots=True)
+class EnsuringSessionLoadPlan(SessionLoadPlan):
+    async def resolve(self, lifecycle: "AttachedSessionLifecycle", thread: "Thread") -> "Thread":
+        return await self.run_worker(partial(
+            lifecycle.comms.owners.ensure_owner, thread.name,
+            agent_bin=lifecycle.effects.inputs.configuration.launch.binary,
+            agent_args=GivenArguments(lifecycle.effects.inputs.configuration.agent_args.argv),
+        ))
+
+
+@dataclass(frozen=True, slots=True)
+class WitnessedSessionLoadPlan(SessionLoadPlan):
+    """Original load command/response evidence, never current registry state."""
+
+    binding: thread_presentation.ThreadOwnerBinding
+
+    def superseded_by(self, binding: thread_presentation.ThreadOwnerBinding) -> bool:
+        return self.binding.superseded_by(binding)
+
+    async def reload_if_superseded(
+        self, binding: thread_presentation.LiveThreadOwnerBinding,
+        reload: Callable[[SessionLoadPlan], Awaitable[None]],
+    ) -> None:
+        if self.superseded_by(binding):
+            await reload(ExistingSessionLoadPlan(binding))
+
+
+@dataclass(frozen=True, slots=True)
+class ExistingSessionLoadPlan(WitnessedSessionLoadPlan):
+    binding: thread_presentation.LiveThreadOwnerBinding
+
+    async def resolve(self, lifecycle: "AttachedSessionLifecycle", thread: "Thread") -> "Thread":
+        entry = (await self.run_worker(partial(
+            lifecycle.comms.registry.entry, thread.name,
+        ))).entry
+        if thread.incarnation != self.binding.owner.incarnation:
+            raise RelationViolationError("Read-only attachment targets a different thread incarnation")
+        current = entry.require_owner_process(self.binding.owner, self.binding.process)
+        if not self.binding.process.alive():
+            raise RelationViolationError("Read-only attachment owner exited; no owner was started")
+        return current
+
+
+@dataclass(frozen=True, slots=True)
+class FailedSessionLoadPlan(WitnessedSessionLoadPlan):
+    """The original failed load command's witness; never an input permission."""
+
+    def failure_metadata(self) -> dict:
+        return {"agentCommsLoadFailure": FieldCodec.encode(self)}
+
+    async def resolve(self, lifecycle: "AttachedSessionLifecycle", thread: "Thread") -> "Thread":
+        raise RelationViolationError("A failed load command cannot be replayed")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -152,13 +266,13 @@ class ThreadOwnerBinding(DeclaredFamily, affix="ThreadOwnerBinding"):
         return False
 
     async def reload_if_superseded(
-        self, previous: session_load.SessionLoadPlan,
-        reload: Callable[[session_load.SessionLoadPlan], Awaitable[None]],
+        self, previous: SessionLoadPlan,
+        reload: Callable[[SessionLoadPlan], Awaitable[None]],
     ) -> None:
         """An unavailable owner cannot supply a new existing-session load."""
 
     def recipient_activity(self, activity, snapshot, thread):
-        from .agent_activity import UnavailableRecipientActivity
+        from ..agent_activity import UnavailableRecipientActivity
 
         return UnavailableRecipientActivity()
 
@@ -187,7 +301,7 @@ class LiveThreadOwnerBinding(ThreadOwnerBinding):
         return ordinary
 
     def recipient_activity(self, activity, snapshot, thread):
-        from .agent_activity import LiveRecipientActivity
+        from ..agent_activity import LiveRecipientActivity
 
         return LiveRecipientActivity(thread, activity[thread.name])
 
@@ -195,8 +309,8 @@ class LiveThreadOwnerBinding(ThreadOwnerBinding):
         return replacement.replaces(self)
 
     async def reload_if_superseded(
-        self, previous: session_load.SessionLoadPlan,
-        reload: Callable[[session_load.SessionLoadPlan], Awaitable[None]],
+        self, previous: SessionLoadPlan,
+        reload: Callable[[SessionLoadPlan], Awaitable[None]],
     ) -> None:
         await previous.reload_if_superseded(self, reload)
 
@@ -305,4 +419,3 @@ class NoThreadPresentation(ThreadPresentation):
     def read_sources(self, transcripts: Transcripts, snapshot: RegistrySnapshot,
                      name: str, sent_source_limit: int) -> ThreadPresentation:
         return self
-

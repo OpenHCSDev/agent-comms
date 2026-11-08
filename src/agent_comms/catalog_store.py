@@ -11,7 +11,7 @@ from .catalog_document import CatalogDocument
 from .storage.locked_store import DocumentChange
 from .storage.maintenance_barrier import CarriedDocument
 from .storage.store_files import CatalogTier, SingleFileStore
-from .thread_owned_state import ThreadOwnedState
+from .registry.thread_owned_state import ThreadOwnedState
 
 if TYPE_CHECKING:
     from .activity_clocks import ActivityClocks

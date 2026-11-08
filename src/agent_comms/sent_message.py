@@ -13,7 +13,7 @@ from collections.abc import Mapping
 from .messages import Message
 
 from .message_reference import MessageReference
-from .thread_identity import ThreadIncarnation
+from .registry.thread_identity import ThreadIncarnation
 from .transcript_events import SentTranscript
 
 

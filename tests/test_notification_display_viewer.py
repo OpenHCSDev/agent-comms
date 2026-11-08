@@ -20,7 +20,10 @@ from agent_comms.historical_views import HistoricalDisplay, HistoricalSelection
 from agent_comms.read_basis import NamedViewer
 from agent_comms.messaging.read_ledger import ReadLedger
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
+from agent_comms.registry.thread_identity import (
+    AgentThreadRole,
+    UserThreadRole,
+)
 from agent_comms.registry.threads import NativeThread
 from bus_record_fixture import prepare_native_comms
 from conftest import publish_initial

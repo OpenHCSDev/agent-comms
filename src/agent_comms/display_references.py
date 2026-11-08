@@ -16,7 +16,7 @@ from agent_comms.channel_targets import IncarnationThreadTarget, ThreadTarget
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import SlicePolicy
 from agent_comms.snapshot_slices import MappingRowsSlice, SnapshotRestored, WholeDocumentValue
-from agent_comms.thread_identity import ThreadIncarnation
+from .registry.thread_identity import ThreadIncarnation
 from agent_comms.tool_result import ToolResult
 
 if TYPE_CHECKING:

@@ -31,7 +31,7 @@ from agent_comms.peer_relevance import (
     Visible,
 )
 from agent_comms.relationships import RelationshipEdit
-from agent_comms.thread_text import ForkedParent
+from agent_comms.registry.thread_text import ForkedParent
 from agent_comms.registry.threads import NativeThread
 from agent_comms.execution.turn_context import (
     CoordinationSegment,

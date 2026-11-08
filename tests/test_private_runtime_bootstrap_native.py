@@ -18,7 +18,7 @@ from agent_comms.comms import wire
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.registry.threads import NativeThread
 from test_coordinated_runtime import tmp_path as private_root_fixture
-from agent_comms.thread_model import DeclaredModel
+from agent_comms.registry.thread_model import DeclaredModel
 
 # The native package executes against only the loopback model declared below.
 tmp_path = private_root_fixture

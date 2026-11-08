@@ -69,7 +69,7 @@ from ..task_sources import (
     TaskChange,
     TaskScopeSelection,
 )
-from ..thread_identity import ThreadIncarnation
+from ..registry.thread_identity import ThreadIncarnation
 from ..working_memory_policy import AnnotationDisclosureGrant
 
 

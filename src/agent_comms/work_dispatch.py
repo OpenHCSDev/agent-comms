@@ -33,7 +33,7 @@ from .projects.repository_sources import LocalRepositorySource
 from .repository_name import RepositoryName
 from .shell_effects import AcquireRepositoryStorageEffect, CreateCheckoutStorageEffect
 from .projects.storage_projection import StorageProjection
-from .thread_status import StoppedThreadStatus
+from .registry.thread_status import StoppedThreadStatus
 from .session_file import RegistrySessionLocation
 
 from .registry.threads import NativeThread, Thread

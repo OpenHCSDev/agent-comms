@@ -102,7 +102,7 @@ from ..registry.threads import (
     NativeThread,
     Thread,
 )
-from ..thread_identity import ThreadIncarnation
+from ..registry.thread_identity import ThreadIncarnation
 from ..execution.turn_lease import TurnDeclaration
 
 _LOG = logging.getLogger(__name__)

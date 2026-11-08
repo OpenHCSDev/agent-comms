@@ -43,7 +43,11 @@ from .owner_restart import OwnerRestartRequest, StoppedOwnerFailure
 from .storage.private_path import PrivateDirectoryRole
 from .restart_refusals import RestartRefusal
 from .restart_scope import OwnersNamed
-from .thread_identity import OwnerIdentity, RecordedThreadIncarnation, ThreadIncarnationRecord
+from .registry.thread_identity import (
+    OwnerIdentity,
+    RecordedThreadIncarnation,
+    ThreadIncarnationRecord,
+)
 from .storage.typed_table import Column, DurableStore, FrozenColumn, Generated, Index, StoreRows, TypedTable, sql_literal
 from .watched import ChangeSignal, FileSource
 

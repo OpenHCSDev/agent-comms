@@ -10,7 +10,11 @@ from typing import TYPE_CHECKING, Never, Self
 from agent_comms.cli_command import CliCommand
 from agent_comms.launch_root import DefaultLaunch, LaunchRequest, LaunchRoot
 from agent_comms.nominal.field_codec import SubclassUnion
-from agent_comms.thread_text import AbsentText, GivenText, TextChoice
+from .registry.thread_text import (
+    AbsentText,
+    GivenText,
+    TextChoice,
+)
 
 if TYPE_CHECKING:
     from agent_comms.cli_bridges.shared import BindingThread

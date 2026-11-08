@@ -78,9 +78,16 @@ from .revision_views import (
 )
 from .runtime_info import RuntimeInfo
 from .storage_room import RoomLedger
-from .thread_presentation import ThreadOwnerBinding, UnavailableThreadOwnerBinding
-from .thread_presentation import ThreadPresentation
-from .thread_status import ActiveThreadPresence, ThreadStatus, ThreadStatusName
+from .registry.thread_presentation import (
+    ThreadOwnerBinding,
+    UnavailableThreadOwnerBinding,
+)
+from .registry.thread_presentation import ThreadPresentation
+from .registry.thread_status import (
+    ActiveThreadPresence,
+    ThreadStatus,
+    ThreadStatusName,
+)
 from .registry.threads import Thread
 from .tool_result import ToolResult
 from .ui_model.unread import ExactUnread, IndexingUnread, UnobservedUnread, UnreadPresentation

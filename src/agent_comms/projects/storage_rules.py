@@ -46,8 +46,8 @@ from ..storage.locked_store import DurableFile
 from ..storage.private_path import PrivateDirectoryRole
 from ..storage.store_files import ExclusiveAtomicFile
 from ..storage_room import RoomAllocation
-from ..thread_identity import ThreadIncarnation
-from ..thread_storage import (
+from ..registry.thread_identity import ThreadIncarnation
+from ..registry.thread_storage import (
     CheckoutReuse,
     StoragePath,
     StorageRoots,

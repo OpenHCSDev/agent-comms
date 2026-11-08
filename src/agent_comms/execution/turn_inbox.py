@@ -14,7 +14,7 @@ from ..image_input import ImageInput
 from ..nominal.declared_family import DeclaredFamily
 from ..nominal.field_codec import InputId
 from ..pi_vocabulary import ThinkingLevelField
-from ..thread_model import ThreadModel
+from ..registry.thread_model import ThreadModel
 
 
 class BusyInputPolicy(DeclaredFamily, affix="InputPolicy"):

@@ -31,7 +31,7 @@ from agent_comms.owner_cutover import PreserveOwnerRuntime
 from agent_comms.owner_restart import OwnerRestartRequest
 from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.restart_scope import OwnersNamed
-from agent_comms.thread_model import DeclaredModel
+from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.execution.turn_lease import NoTurnRecord
 from agent_comms.registry.threads import NativeThread
 from bus_history import read_history

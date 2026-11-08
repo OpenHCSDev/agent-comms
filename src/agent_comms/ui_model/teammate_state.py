@@ -32,8 +32,8 @@ from agent_comms.messages import Message
 from agent_comms.native_failures import NativePiUnavailable
 from ..projects.git_errors import GitCommandError
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.thread_status import ThreadStatus
+from ..registry.thread_identity import ThreadIncarnation
+from ..registry.thread_status import ThreadStatus
 from agent_comms.registry.threads import Thread
 from agent_comms.transcript_events import OrderCall, TurnDigest
 from agent_comms.work_branches import WorkBranchError

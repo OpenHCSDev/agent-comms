@@ -27,7 +27,7 @@ from .native_session_files import CheckSession
 from .read_basis import MemberActivityDisplayScope
 from .registry.registry_document import RosterVisibility
 from .session_file import RegistrySessionLocation
-from .thread_text import NoThreadText
+from .registry.thread_text import NoThreadText
 from .projects.checkouts import Checkout
 from .registry.threads import Thread
 from .transcript_routes import TranscriptRoutes

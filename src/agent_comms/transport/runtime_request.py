@@ -18,7 +18,7 @@ from ..storage.maintenance_barrier import (
     MaintenanceHolder,
     NoMaintenanceHolder,
 )
-from ..thread_identity import ThreadIncarnation
+from ..registry.thread_identity import ThreadIncarnation
 
 
 @dataclass(frozen=True, kw_only=True)

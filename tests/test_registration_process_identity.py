@@ -18,7 +18,7 @@ from agent_comms.registry.threads import ExternalThread, ForkThread, NativeThrea
 from agent_comms.storage.maintenance_barrier import (
     InstallingPhase, MaintenanceHeldError, MaintenanceOperator, PausedPhase,
 )
-from agent_comms.thread_text import GivenThreadText
+from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.session_file import RegistrySessionLocation
 
 

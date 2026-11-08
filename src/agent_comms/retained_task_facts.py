@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from .input_disposition import InputDispositions
     from .registry.registry_document import RegistrySnapshot
     from .registry.threads import Thread
-    from .thread_identity import ThreadIncarnation
+    from .registry.thread_identity import ThreadIncarnation
 
 
 class ExactTaskFact(DeclaredFamily, affix="TaskFact"):

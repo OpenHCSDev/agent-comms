@@ -43,8 +43,11 @@ from .peer_relevance import (
 from .registry.registry_document import RegistrySnapshot, RosterVisibility
 from .routing import DeliveryScope
 from .storage.store_files import DependentStateTier, SingleFileStore
-from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
-from .thread_owned_state import ThreadOwnedState
+from .registry.thread_identity import (
+    RecordedThreadIncarnation,
+    ThreadIncarnation,
+)
+from .registry.thread_owned_state import ThreadOwnedState
 from .registry.threads import Thread
 
 if TYPE_CHECKING:

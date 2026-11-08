@@ -63,8 +63,11 @@ from agent_comms.projects.checkouts import (
     UnpushedHead,
 )
 from agent_comms.repository_name import RepositoryName
-from agent_comms.thread_identity import ReportedTools, ToolName
-from agent_comms.thread_text import ForkedParent
+from agent_comms.registry.thread_identity import (
+    ReportedTools,
+    ToolName,
+)
+from agent_comms.registry.thread_text import ForkedParent
 from agent_comms.registry.threads import Thread, NativeThread
 from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.execution.turn_item import (

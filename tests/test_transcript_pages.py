@@ -26,8 +26,11 @@ from agent_comms.execution.turn_item import (
     NativeItemId,
     NativeTurnId,
 )
-from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.thread_text import ForkedParent, GivenThreadText
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.thread_text import (
+    ForkedParent,
+    GivenThreadText,
+)
 from agent_comms.acp_extension import TranscriptSnapshotUpdate
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.transport.tools.reads import TranscriptPageRead

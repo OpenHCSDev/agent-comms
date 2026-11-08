@@ -5,7 +5,11 @@ from dataclasses import dataclass
 
 from agent_comms.coordination.contracts import MAX_REASON_CODE_CHARS, MAX_SANITIZED_DETAIL_CHARS
 from agent_comms.nominal.field_codec import SubclassUnion
-from agent_comms.thread_text import AbsentText, GivenText, TextChoice
+from .registry.thread_text import (
+    AbsentText,
+    GivenText,
+    TextChoice,
+)
 
 
 class ReasonCode(SubclassUnion, TextChoice, affix="ReasonCode"):

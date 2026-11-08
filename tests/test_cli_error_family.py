@@ -16,7 +16,7 @@ from agent_comms.cli_protocol import WATCH_LINE, FailedCoreError, UnavailableCor
 from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.nominal.field_codec import RecordProblems
 from agent_comms.storage.locked_store import SQLiteFile
-from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.threads import NativeThread
 
 

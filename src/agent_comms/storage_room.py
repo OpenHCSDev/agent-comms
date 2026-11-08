@@ -22,7 +22,7 @@ from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import RoomTicket
 from .storage.locked_store import PublishedProperty
 from .storage.store_files import StoreContention
-from .thread_identity import ThreadIncarnation
+from .registry.thread_identity import ThreadIncarnation
 from .tool_denial import StorageDenied
 from .storage.typed_table import (
     Column,

@@ -16,7 +16,10 @@ from agent_comms.relationships import (
 from agent_comms.comms import wire
 from conftest import installed_comms
 from agent_comms.display_order import LastActivityThreadSort
-from agent_comms.thread_text import ForkedParent, NoParent
+from agent_comms.registry.thread_text import (
+    ForkedParent,
+    NoParent,
+)
 from agent_comms.registry.threads import NativeThread
 
 

@@ -86,7 +86,7 @@ if TYPE_CHECKING:
     from ..planning.goal_waits import GoalWait
     from ..planning.goals import GoalDeclaration
     from ..runtime_server import RuntimeServer
-    from ..thread_identity import RecordedThreadIncarnation
+    from ..registry.thread_identity import RecordedThreadIncarnation
 
 
 @dataclass(frozen=True, kw_only=True)

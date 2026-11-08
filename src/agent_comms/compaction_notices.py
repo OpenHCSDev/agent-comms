@@ -9,7 +9,7 @@ from typing import ClassVar
 from .channel_targets import CommsTag
 from .messages import MessageRole, NoticeRole
 from .recorded_time import RecordedEventTime
-from .thread_identity import RecordedThreadIncarnation
+from .registry.thread_identity import RecordedThreadIncarnation
 
 
 @dataclass(frozen=True)

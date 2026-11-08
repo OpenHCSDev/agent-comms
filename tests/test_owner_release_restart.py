@@ -23,7 +23,7 @@ from agent_comms.execution.owner_lifecycle import OwnerLifecycle, OwnerRestartSe
 from agent_comms.owner_restart import FencedOwnerBatch, OwnerRestartRequest, StoppedOwnerFailure
 from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.storage.store_files import ExclusiveLock, StoreLockContention, _store_lock
-from agent_comms.thread_model import DeclaredModel
+from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import NativeThread
 
 

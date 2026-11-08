@@ -10,7 +10,7 @@ import pytest
 from acp.schema import ToolCallStart
 
 import agent_comms.agent_events as events
-from agent_comms.thread_identity import UnobservedTools
+from agent_comms.registry.thread_identity import UnobservedTools
 from agent_comms.acp import SdkSessionConnection
 from agent_comms.agent_event_updates import AcpEventConsumer
 from agent_comms.comms import wire

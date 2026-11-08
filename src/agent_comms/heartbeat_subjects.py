@@ -22,7 +22,10 @@ from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEv
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.service_passes import ServicePasses, ServicePassStore
 from agent_comms.team_service import TeamService
-from agent_comms.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+from .registry.thread_identity import (
+    RecordedThreadIncarnation,
+    ThreadIncarnation,
+)
 
 from .planning.orders import (
     HeadVerdict,

@@ -103,7 +103,7 @@ from dataclasses import dataclass
 from .drain_failures import drain_failures
 from .activity import FailedWakeDiagnostic
 from agent_comms.execution.input_drain import SchedulesWake, WakeDue, WakeHeld, WakeOutcome
-from .thread_identity import OwnerIdentity
+from .registry.thread_identity import OwnerIdentity
 
 from agent_comms.selected_write_authority import BoundSelectedWriteAuthority
 if TYPE_CHECKING:

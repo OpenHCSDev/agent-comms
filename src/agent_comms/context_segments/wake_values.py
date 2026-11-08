@@ -7,7 +7,7 @@ from typing import Annotated
 
 from ..nominal.field_codec import NullMember, RecordMember, SubclassUnion, WireName
 from ..planning.goal_presentation import GoalExecution
-from ..thread_text import ThreadText
+from ..registry.thread_text import ThreadText
 
 
 class WakeGoalValue(SubclassUnion):

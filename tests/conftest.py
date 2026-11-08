@@ -50,7 +50,10 @@ from agent_comms.native_tool_transport import ToolListener
 from agent_comms.pi_durable_backend import PiDurableBackend
 from agent_comms.publisher import InitialWrites, ParticipantPublisher
 from agent_comms.registry.registration import Registration
-from agent_comms.thread_text import ForkedParent, GivenThreadText
+from agent_comms.registry.thread_text import (
+    ForkedParent,
+    GivenThreadText,
+)
 from agent_comms.storage.typed_table import TypedTable
 from agent_comms.native_entries import NativeEvidenceScope
 from agent_comms.cursor_publication import CursorDelivery
@@ -63,7 +66,7 @@ from agent_comms.installer.probes.interpreter import InterpreterBuildProbe, Reco
 from source_programs import SourcePrograms
 from source_revision_fixture import SourceRepository
 from agent_comms.registry.threads import Thread, NativeThread
-from agent_comms.thread_model import DeclaredModel
+from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.registry_document import RegisteredTeamProject
 
 pytest_plugins = (goal_owner_fixture.__name__, "github_fixture", "owner_socket_fixture", "pytest_session")

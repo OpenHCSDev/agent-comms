@@ -18,7 +18,7 @@ from .message_reference import MessageReference
 from .owner_requests import OwnerRequestId, RequestDirective
 from .projection_source import ProjectionSource
 from .projects.checkouts import Checkout
-from .thread_identity import (
+from .registry.thread_identity import (
     RecordedThreadIncarnation,
     ThreadIncarnation,
     TurnIdentity,

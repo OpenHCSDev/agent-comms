@@ -119,7 +119,7 @@ from ..projects.storage_rules import (
 from ..task_attachments.owner_notices import OrderNotice
 from ..team_service import TeamService
 from ..text_digest import TextDigest
-from ..thread_identity import ThreadIncarnation
+from ..registry.thread_identity import ThreadIncarnation
 from ..transcript_events import TurnDigest
 from ..execution.turn_digests import (
     LastTurns,

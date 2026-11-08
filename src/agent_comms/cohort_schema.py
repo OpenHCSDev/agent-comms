@@ -16,7 +16,11 @@ from .audience_manifest import MAX_AUDIENCE_BYTES
 from .coordination.contracts import POLICY_VERSION, RESOLVER_VERSION
 from .coordination.schema import CoordinatorTable
 from .nominal.field_codec import AssignmentId, MessageId, RootId, SubclassUnion, ThreadLookup, WireName
-from .thread_text import AbsentText, GivenText, TextChoice
+from .registry.thread_text import (
+    AbsentText,
+    GivenText,
+    TextChoice,
+)
 from .response_acknowledgement import _canonical
 from .storage.typed_table import (
     Column,

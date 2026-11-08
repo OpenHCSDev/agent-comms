@@ -36,7 +36,7 @@ from .registry_document import (
 from ..routing import Routing
 from ..session_file import RegistrySessionLocation
 from ..storage.store_files import RegistryLocking
-from ..thread_identity import TurnIdentity
+from .thread_identity import TurnIdentity
 from .threads import Thread
 from ..execution.turn_lease import (
     ActiveTurn,

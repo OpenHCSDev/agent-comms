@@ -33,7 +33,7 @@ from agent_comms.assignment_states import TriagePendingAssignment
 from agent_comms.envelope_claim_transitions import UnclaimedResource
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.native_runtime_input import NativeRuntimeInput
-from agent_comms.thread_model import DeclaredModel
+from agent_comms.registry.thread_model import DeclaredModel
 from native_backend_fixture import native_backend_fixture
 from agent_comms.registry.threads import NativeThread
 

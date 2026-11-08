@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from .bus_publication import Delivered
     from .catalog_document import CatalogDocument
     from .registry_provenance import RegistryProvenance
-    from .thread_identity import ThreadIncarnation
+    from .registry.thread_identity import ThreadIncarnation
     from .input_disposition import InputDispositions
     from .messages import Message
     from .registry.threads import Thread

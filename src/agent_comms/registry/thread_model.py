@@ -1,21 +1,36 @@
-"""The model a thread declares: a provider/model name, or none, left to its runtime."""
-
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import (
+    ABC,
+    abstractmethod,
+)
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_comms.nominal.field_codec import SubclassUnion, boundary_decoder
-from agent_comms.native_arguments import NativeArguments, SelectedModel
-from agent_comms.native_failures import NativePiUnavailable
-from agent_comms.pi_vocabulary import NoThinkingOverride, ServiceTier, ThinkingChoice
-from agent_comms.thread_text import AbsentText, GivenText, TextChoice
+from ..native_arguments import (
+    NativeArguments,
+    SelectedModel,
+)
+from ..native_failures import NativePiUnavailable
+from ..nominal.field_codec import (
+    SubclassUnion,
+    boundary_decoder,
+)
+from ..pi_vocabulary import (
+    NoThinkingOverride,
+    ServiceTier,
+    ThinkingChoice,
+)
+from .thread_text import (
+    AbsentText,
+    GivenText,
+    TextChoice,
+)
 
 if TYPE_CHECKING:
-    from agent_comms.native_arguments import ProviderChoice
-    from agent_comms.pi_commands import SetModel
+    from ..native_arguments import ProviderChoice
+    from ..pi_commands import SetModel
 
 
 class ModelSelection(TextChoice):

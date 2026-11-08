@@ -79,7 +79,7 @@ from ..reported_turn import (
 )
 from ..shell_effects import shell_storage_effects
 from ..text_digest import TextDigest
-from ..thread_identity import (
+from ..registry.thread_identity import (
     RecordedThreadIncarnation,
     ThreadIncarnation,
 )

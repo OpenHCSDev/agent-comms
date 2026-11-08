@@ -10,7 +10,7 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_session_files import NativeSessionFiles
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.session_revision import SessionRevision
-from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from stored_inputs import stored_inputs
 from agent_comms.native_session_reopen import PiSessionId
 

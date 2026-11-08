@@ -34,7 +34,7 @@ from agent_comms.planning.orders import (
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.threads import NativeThread, Thread
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from conftest import installed_comms, maintenance_held
 from source_revision_fixture import SourceRepository
 from test_reconcile_stores import reconcile

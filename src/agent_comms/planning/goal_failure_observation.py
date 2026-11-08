@@ -26,7 +26,7 @@ from ..storage.typed_table import (
     TextStorage,
     TypedTable,
 )
-from ..thread_identity import (
+from ..registry.thread_identity import (
     ClaimedIdentity,
     RecordedThreadIncarnation,
     ThreadIncarnation,

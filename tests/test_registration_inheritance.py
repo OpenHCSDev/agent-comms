@@ -19,8 +19,8 @@ from agent_comms.comms import wire
 from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.registration_inheritance import PredicateInheritance
 from agent_comms.registry.threads import Thread, NativeThread
-from agent_comms.thread_text import GivenThreadText
-from agent_comms.thread_model import DeclaredModel
+from agent_comms.registry.thread_text import GivenThreadText
+from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.execution.turn_lease import NoTurnLease
 
 

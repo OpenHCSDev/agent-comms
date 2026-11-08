@@ -23,7 +23,7 @@ from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.messages import Addressed
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import ExternalThread
-from agent_comms.thread_status import ConnectedThreadStatus
+from agent_comms.registry.thread_status import ConnectedThreadStatus
 
 pytest_plugins = ("test_holder_standing_rules",)
 

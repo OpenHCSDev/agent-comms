@@ -43,7 +43,7 @@ from .tool_denial import StorageDenied
 from .projects.storage_projection import StorageProjection
 from .storage_room import NoRoomNeeded, RoomReservation
 from .registry.threads import Thread
-from .thread_identity import OfferedTools
+from .registry.thread_identity import OfferedTools
 from .tool_denial import SelectedToolDenied
 from .execution.turn_goal_permission import TurnGoalPermission
 

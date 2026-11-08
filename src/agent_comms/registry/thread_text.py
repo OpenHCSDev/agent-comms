@@ -1,18 +1,30 @@
-"""Text that is given or absent, and the thread's own title, assignment and parent families."""
-
 from __future__ import annotations
 
 import itertools
 import re
-from abc import ABC, abstractmethod
-from collections.abc import Collection, Iterator
+from abc import (
+    ABC,
+    abstractmethod,
+)
+from collections.abc import (
+    Collection,
+    Iterator,
+)
 from dataclasses import dataclass
 from typing import ClassVar
 
-
-from agent_comms.history_view import ForkOwnHistory, HistoryView, OwnHistory
-from agent_comms.nominal.field_codec import (NullMember, SingleFieldValue, StoredSessionId, SubclassUnion,
-                                            boundary_decoder)
+from ..history_view import (
+    ForkOwnHistory,
+    HistoryView,
+    OwnHistory,
+)
+from ..nominal.field_codec import (
+    NullMember,
+    SingleFieldValue,
+    StoredSessionId,
+    SubclassUnion,
+    boundary_decoder,
+)
 
 
 class TextChoice(ABC):

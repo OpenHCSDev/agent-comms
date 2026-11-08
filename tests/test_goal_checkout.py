@@ -20,7 +20,7 @@ from agent_comms.projects.repository_sources import (
     RepositorySource,
 )
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.thread_creation import RecordedCreationTime
+from agent_comms.registry.thread_creation import RecordedCreationTime
 from agent_comms.shell_effects import AcquireRepositoryStorageEffect
 from agent_comms.tool_denial import StorageDenied
 from agent_comms.projects.storage_projection import StorageProjection

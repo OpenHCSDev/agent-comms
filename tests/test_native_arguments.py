@@ -13,7 +13,11 @@ from agent_comms.native_arguments import (
     SelectedModel,
     ValueArgument,
 )
-from agent_comms.thread_model import DeclaredModel, ThreadModel, UndeclaredModel
+from agent_comms.registry.thread_model import (
+    DeclaredModel,
+    ThreadModel,
+    UndeclaredModel,
+)
 
 
 @pytest.mark.parametrize("selection", [None, "", "model", "/model", "provider/"])

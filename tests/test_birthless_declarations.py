@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent_comms.thread_identity import (
+from agent_comms.registry.thread_identity import (
     CoreWatcherIncarnation,
     DeletedThreadIncarnation,
     RecordedThreadIncarnation,

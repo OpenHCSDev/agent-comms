@@ -19,7 +19,7 @@ from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.storage.locked_store import RootFile
 from agent_comms.messages import Message
-from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.registry.thread_identity import ThreadIncarnation
 from cutover.carry_team_observations import TeamObservations
 
 # The wire names of the deleted HUD ping classes; no class declares them any more.
