@@ -105,26 +105,28 @@ async def test_execution_owns_toggle_dispatch_and_unavailability(
     assert len(unavailable) == int(not expected_actions)
 
 
-@asynccontextmanager
-async def serving_turns(
-    comms: Comms, native: VerifiedNativePackage,
-) -> AsyncIterator[Callable[..., AbstractAsyncContextManager[OwnedTurn]]]:
-    """One real owner serves the worker's turns on this bus and shuts down once at the end."""
+SESSION = AcpSessionId("goal-execution-session")
+
+
+async def bound_owner(comms: Comms, native: VerifiedNativePackage) -> CommsAgent:
+    """One real owner bound to the worker on this bus. Its caller decides whether it shuts
+    down: a shut-down owner stops its thread, so a holder read after its failed turn must
+    still be bound."""
     agent = CommsAgent(comms, GivenBinary(str(native.cli)), auto_wake=False)
-    session = AcpSessionId("goal-execution-session")
-    try:
-        await agent.sessions.bind_owned(comms.registry.require("worker"), session)
-        yield partial(acquired_turn, agent, session)
-    finally:
-        await agent.shutdown()
+    await agent.sessions.bind_owned(comms.registry.require("worker"), SESSION)
+    return agent
 
 
 @pytest.fixture
 async def turn_on(
     execution_bus: Comms, native_runtime_package: VerifiedNativePackage,
 ) -> AsyncIterator[Callable[..., AbstractAsyncContextManager[OwnedTurn]]]:
-    async with serving_turns(execution_bus, native_runtime_package) as turns:
-        yield turns
+    """One real owner serves this test's turns and shuts down once at its end."""
+    agent = await bound_owner(execution_bus, native_runtime_package)
+    try:
+        yield partial(acquired_turn, agent, SESSION)
+    finally:
+        await agent.shutdown()
 
 
 @asynccontextmanager

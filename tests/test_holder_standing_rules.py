@@ -99,7 +99,7 @@ from agent_comms.ui_model.teammate_state import AwaitingTeam, Blocked, Detached,
 from cli_command import team
 from conftest import team_as, declare_test_bus
 from native_backend_fixture import native_backend_fixture, wait_for
-from test_goal_execution import serving_turns
+from test_goal_execution import SESSION, acquired_turn, bound_owner
 
 
 UNRESOLVED_INPUT_KEY = AcpInputKey(InputId.mint())
@@ -294,12 +294,14 @@ def unanswered(comms):
 
 
 def blocked_holder(comms, native):
-    """Settle a real failed turn; never manufacture a stored backend block."""
+    """Settle a real failed turn and leave its owner bound, as a live holder's is; never
+    manufacture a stored backend block."""
     owner = comms.registry.require("worker")
     comms.registry.register(replace(owner, process_identity=ProcessIdentity.capture(os.getpid())))
 
     async def fail_turn():
-        async with serving_turns(comms, native) as turn_on, turn_on(comms) as turn:
+        agent = await bound_owner(comms, native)
+        async with acquired_turn(agent, SESSION, comms) as turn:
             permit, = turn.goal_permit.claims
             await turn.progress.done(events.Done("The previous attempt failed", False))
         return permit.reservation
