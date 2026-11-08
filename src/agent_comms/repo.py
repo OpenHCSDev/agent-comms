@@ -578,10 +578,10 @@ class PinnedSubmodule:
         pinned = read(self.checkout, 'rev-parse', f'{commit}:{module}').strip()
         relative = (self.checkout / file).relative_to(self.path).as_posix()
         store = self.store
-        read(self.checkout, '--git-dir', str(store), 'rev-parse', '--verify',
+        read(store, '--git-dir', '.', 'rev-parse', '--verify',
                  f'{pinned}^{{commit}}')
         try:
-            text = read(self.checkout, '--git-dir', str(store),
+            text = read(store, '--git-dir', '.',
                             'show', f'{pinned}:{relative}')
             return tuple(text.splitlines())
         except GitCommandError as error:
