@@ -1426,3 +1426,36 @@ async def test_an_invalid_order_or_a_failed_git_command_is_a_refusal_not_a_lost_
         status, reply = await tool_call(client, token, call_id, CommsChannelsTool.declared_name, {})
         assert (status, reply["id"], reply["result"]["isError"]) == (200, call_id, True)
         assert shown in reply["result"]["content"][0]["text"]
+
+
+async def test_the_connector_names_work_neither_collection_holds(tmp_path, comms):
+    """On 2026-11-08 a POST /mcp stayed open 6883 seconds and the stop reported
+    "pending tools: none". Both halves were true: nothing was pending in self.calls, and a
+    handler had not finished. A request task is in neither self.calls nor self.watch_tasks,
+    so the report named everything except the thing that was stuck, and no journal line could
+    fill the gap because an access line is only printed once its handler ends.
+
+    The event loop already tracks every task. This asks the loop, so the one fact needed to
+    name a stuck handler's phase, its innermost frame, is in the report.
+    """
+    connector = Connector(ConnectorStore.at(tmp_path / "auth"),
+                          "http://127.0.0.1:18766", comms.root)
+    held = asyncio.Event()
+
+    async def stuck_handler() -> None:
+        await held.wait()
+
+    task = asyncio.create_task(stuck_handler(), name="a-request-nobody-tracks")
+    await asyncio.sleep(0)
+    try:
+        assert task not in connector.calls, "a request task is not a tool call"
+        assert task not in connector.watch_tasks, "a request task is not a watch"
+
+        report = connector.still_running()
+
+        assert "a-request-nobody-tracks" in report, report
+        assert "stuck_handler at" in report, report
+        assert "test_connector.py:" in report, "the frame must name where it is sitting"
+    finally:
+        held.set()
+        await task
