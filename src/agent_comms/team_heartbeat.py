@@ -111,7 +111,10 @@ class HeartbeatRetention(BoardRetention):
             duty.publish(lambda: packet.send(comms, hud.hud_text(now), publication=facts))
 
     def prepare(self, comms, inputs):
-        repositories = comms.registry.snapshot().team_project.require().repository_names()
+        # Asked of the project, not of `require()`: a bus with no registered project answers
+        # no repositories and has no boards to carry reviews for, while requiring one raised
+        # on every pass and logged a failed service worker (test_connector's request log).
+        repositories = comms.registry.snapshot().team_project.repository_names()
         for board in inputs:
             for repository in repositories:
                 board.pulls.carry_reviews(comms.goals, repository)
