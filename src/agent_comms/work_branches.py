@@ -469,11 +469,11 @@ query($owner: String!, $name: String!, $after: String) {
 
     def pull_request_patch_id(self, base: str, head: str) -> str:
         base_head = self.pull_request_base(base, head)
-        patch = self._git(
-            "diff", "--binary", "--full-index", "--no-ext-diff", "--no-textconv",
-            f"{base_head}...{head}", "--",
-        )
-        return self._git("patch-id", "--verbatim", input=patch).partition(" ")[0].strip()
+        output = Repo.acquire_pipeline(self.checkout,
+            ("diff", "--binary", "--full-index", "--no-ext-diff", "--no-textconv",
+             f"{base_head}...{head}", "--"),
+            ("patch-id", "--verbatim"), timeout=self.timeout)
+        return output.partition(" ")[0].strip()
 
     def pull_request_diff(self, base: str, head: str) -> BranchComparison:
         base_head = self.pull_request_base(base, head)
