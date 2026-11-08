@@ -146,8 +146,8 @@ def test_head_review_timer_ping_round_trips_through_field_codec(board_review, no
     comms, request, _, link = board_review
     todo = link()
     timer = HeadReviewTimerUp(
-        todo.id, todo.held().owner_identity, todo.order.checked().id,
-        RecordedEventTime(time.time()), request, todo=todo)
+        problem=todo.id, holder=todo.held().owner_identity, order=todo.order.checked().id,
+        since=RecordedEventTime(time.time()), request=request, todo=todo)
     ping = RulePing.capture(timer)
     decoded = FieldCodec.decode(RulePing, FieldCodec.encode(ping))
     assert decoded == ping

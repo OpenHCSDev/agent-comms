@@ -2,7 +2,6 @@
 
 import asyncio
 import subprocess
-import sys
 import time
 from collections.abc import Callable
 from contextlib import chdir, nullcontext
@@ -12,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from cli_command import team
 
 from agent_comms.team import judge, order
 from agent_comms.comms import Comms
@@ -1194,23 +1194,17 @@ def test_acceptance_over_the_growth_limit_needs_a_reason_naming_each_growing_fil
                       PullRequestLink(request.repo, request.pr), held.generation).record(
                           comms.goals, todo.id)
     before = comms.goals.todos.get(todo.id)
-    common = ["judge", "ok", "--as", "colleague", "--repo", request.repo.to_wire(),
-              "--pr", str(request.pr), "--head", head, "--why", ACCEPTED.text]
+    common = ["--root", str(comms.root), "judge", "ok", "--as", "colleague",
+              "--repo", request.repo.to_wire(), "--pr", str(request.pr),
+              "--head", head, "--why", ACCEPTED.text]
 
-    def cli(*arguments):
-        return subprocess.run(
-            [sys.executable, str(Path(sys.executable).with_name("agent-comms-team")),
-             "--root", str(comms.root), *arguments],
-            cwd=comms.root, capture_output=True, text=True, timeout=30,
-        )
-
-    refused = cli(*common)
+    refused = team(*common)
     assert refused.returncode == 1, refused.stdout + refused.stderr
     assert "--serves" in refused.stderr and f"src/grown.py +{grown}" in refused.stderr
     assert comms.goals.todos.get(todo.id) == before
     assert len(StoredHeadReview.head_reviews(comms.goals.todos, request)) == 1
 
-    back = cli("judge", "back", "--as", "colleague", "--repo", request.repo.to_wire(),
+    back = team("--root", str(comms.root), "judge", "back", "--as", "colleague", "--repo", request.repo.to_wire(),
                "--pr", str(request.pr),
                "--head", head, "--at", "owner.py:2",
                "--roast", "The decision could be improved because it repeats the required checks across fields",
@@ -1219,7 +1213,7 @@ def test_acceptance_over_the_growth_limit_needs_a_reason_naming_each_growing_fil
     assert "why" in back.stderr and "roast.blunt" in back.stderr
     assert comms.goals.todos.get(todo.id) == before
 
-    accepted = cli(*common, "--serves", before.order.checked().edits[0], "--growth",
+    accepted = team(*common, "--serves", before.order.checked().edits[0], "--growth",
                    "grown.py declares forty one values that the reviewed request needs as separate names")
     assert accepted.returncode == 0, accepted.stdout + accepted.stderr
     assert StoredHeadReview.head_reviews(comms.goals.todos, request)[0].order.problem == todo.id
