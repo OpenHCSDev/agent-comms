@@ -21,7 +21,7 @@ import pytest
 import agent_comms_hooks
 from agent_comms import native_package
 from agent_comms.execution.turn_failure import FailedTurnResolution
-from agent_comms.child_process import NoProcess, ObservedProcess, SpawnedProcess
+from agent_comms.child_process import NoProcess, SpawnedProcess
 from agent_comms.comms import wire
 from agent_comms.config_options import ThinkingLevelConfigOption
 from agent_comms.coordination.coordinator import Coordination
@@ -59,56 +59,50 @@ async def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path,
         comms.owners.start_many, ("worker",), agent_bin=GivenBinary("pi"), agent_args=GivenArguments(()),
     ))
     owner = comms.registry.require("worker")
-    try:
-        deadline = time.monotonic() + 10
-        while not socket_path(comms.root, first.pid).exists():
-            assert owner.process_alive, "Actual worker exited before runtime attach"
-            assert time.monotonic() < deadline, "Actual worker failed to attach runtime"
-            await asyncio.sleep(0.02)
-        assert (await Coordination.run_worker(partial(comms.owners.start_many, ("worker",))))[0].pid == owner.require_process().pid
-        assert not owner.process_identity.runs_here()
-        from agent_comms.owner_cutover import PreserveOwnerRuntime
+    deadline = time.monotonic() + 10
+    while not socket_path(comms.root, first.pid).exists():
+        assert owner.process_alive, "Actual worker exited before runtime attach"
+        assert time.monotonic() < deadline, "Actual worker failed to attach runtime"
+        await asyncio.sleep(0.02)
+    assert (await Coordination.run_worker(partial(comms.owners.start_many, ("worker",))))[0].pid == owner.require_process().pid
+    assert not owner.process_identity.runs_here()
+    from agent_comms.owner_cutover import PreserveOwnerRuntime
 
-        assert owner.process_alive
-        assert isinstance(comms.owners.releases.read_many(("worker",))["worker"], NoRelease)
-        restarted = await Coordination.run_worker(partial(
-            comms.owners.restart_owners, OwnersNamed(("worker",)),
-            agent_bin=GivenBinary("pi"), agent_args=GivenArguments(()),
-        ))
-        replacement = comms.registry.require("worker")
-        assert len(restarted) == 1
-        assert replacement.process_alive and not owner.process_alive
-        assert replacement.process_identity != owner.process_identity
-        assert replacement.created_at == declared.created_at
-        assert replacement.task == declared.task
+    assert owner.process_alive
+    assert isinstance(comms.owners.releases.read_many(("worker",))["worker"], NoRelease)
+    restarted = await Coordination.run_worker(partial(
+        comms.owners.restart_owners, OwnersNamed(("worker",)),
+        agent_bin=GivenBinary("pi"), agent_args=GivenArguments(()),
+    ))
+    replacement = comms.registry.require("worker")
+    assert len(restarted) == 1
+    assert replacement.process_alive and not owner.process_alive
+    assert replacement.process_identity != owner.process_identity
+    assert replacement.created_at == declared.created_at
+    assert replacement.task == declared.task
 
-        class KeepFixtureRuntime(PreserveOwnerRuntime):
-            """A fresh lifecycle retains its selected fixture runtime."""
+    class KeepFixtureRuntime(PreserveOwnerRuntime):
+        """A fresh lifecycle retains its selected fixture runtime."""
 
-            def require_selection(self, snapshot, owners):
-                assert [thread.name for thread in owners] == ["worker"]
+        def require_selection(self, snapshot, owners):
+            assert [thread.name for thread in owners] == ["worker"]
 
-            def after_stopped(self, lifecycle):
-                assert not replacement.process_alive
+        def after_stopped(self, lifecycle):
+            assert not replacement.process_alive
 
-        (installed,) = await Coordination.run_worker(partial(
-            wire(comms.root).owners.restart_owners,
-            OwnersNamed(("worker",)), agent_bin=GivenBinary("pi"),
-            agent_args=GivenArguments(()), cutover=KeepFixtureRuntime(),
-        ))
-        assert installed.previous_pid == replacement.require_process().pid
-        assert not replacement.process_alive
-        replacement = comms.registry.require("worker")
-        assert replacement.process_alive and replacement.require_process().pid == installed.pid
-        await Coordination.run_worker(partial(comms.owners.stop, "worker"))
-        assert not replacement.process_alive
-        assert comms.registry.status("worker").stopped
-        assert comms.registry.require("worker").created_at == declared.created_at
-    finally:
-        current = comms.registry.require("worker")
-        if current.process_alive:
-            assert current.process_identity is not None
-            ObservedProcess(current.process_identity).stop_sync()
+    (installed,) = await Coordination.run_worker(partial(
+        wire(comms.root).owners.restart_owners,
+        OwnersNamed(("worker",)), agent_bin=GivenBinary("pi"),
+        agent_args=GivenArguments(()), cutover=KeepFixtureRuntime(),
+    ))
+    assert installed.previous_pid == replacement.require_process().pid
+    assert not replacement.process_alive
+    replacement = comms.registry.require("worker")
+    assert replacement.process_alive and replacement.require_process().pid == installed.pid
+    await Coordination.run_worker(partial(comms.owners.stop, "worker"))
+    assert not replacement.process_alive
+    assert comms.registry.status("worker").stopped
+    assert comms.registry.require("worker").created_at == declared.created_at
 
 
 @pytest.mark.timeout(180)
@@ -273,22 +267,18 @@ def test_failed_real_worker_startup_retains_private_trace(tmp_path: Path, monkey
     comms = wire(root)
     owner = comms.registry.require("failed-start")
     deadline = time.monotonic() + 5
-    try:
-        while owner.process_alive:
-            assert time.monotonic() < deadline, "Worker did not terminate on invalid launch"
-            time.sleep(.01)
-        logs = tuple((root / "diagnostics").glob("owner-*.log"))
-        assert len(logs) == 1
-        trace = logs[0].read_text()
-        assert "Owner launch: failed-start" in trace
-        assert "Traceback (most recent call last)" in trace
-        assert "PublicationActivationBlocked" in trace
-        assert logs[0].stat().st_mode & 0o777 == 0o600
-        assert not socket_path(root, pid).exists()
-        assert owner.session_file == NoSessionFile()
-    finally:
-        if owner.process_alive:
-            ObservedProcess(owner.process_identity).stop_sync()
+    while owner.process_alive:
+        assert time.monotonic() < deadline, "Worker did not terminate on invalid launch"
+        time.sleep(.01)
+    logs = tuple((root / "diagnostics").glob("owner-*.log"))
+    assert len(logs) == 1
+    trace = logs[0].read_text()
+    assert "Owner launch: failed-start" in trace
+    assert "Traceback (most recent call last)" in trace
+    assert "PublicationActivationBlocked" in trace
+    assert logs[0].stat().st_mode & 0o777 == 0o600
+    assert not socket_path(root, pid).exists()
+    assert owner.session_file == NoSessionFile()
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="Exact retained launch uses Linux /proc")

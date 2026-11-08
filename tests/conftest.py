@@ -355,6 +355,19 @@ def native_runtime_package(pinned_native: Path) -> VerifiedNativePackage:
 
 
 @pytest.fixture(autouse=True)
+def _test_worker_hosts_stop_with_the_test(request: pytest.FixtureRequest) -> Iterator[None]:
+    """Every worker host a test started on its private bus stops when the test ends."""
+    if "tmp_path" not in request.fixturenames:
+        yield
+        return
+    from worker_hosts import TestWorkerHosts
+
+    hosts = TestWorkerHosts(request.getfixturevalue("tmp_path"))
+    yield
+    hosts.stop()
+
+
+@pytest.fixture(autouse=True)
 def _managed_runtime_environment_is_explicit(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """A developer's live managed process is not a test wire or native child."""
     from agent_comms.launch_root import LaunchRoot
