@@ -4928,7 +4928,7 @@ class StoredCommitPatch(TodoStoreRows, TypedTable):
                          for row in cls.select(db, commit=commit))
         missing = tuple(commit for commit in needed if commit not in known)
         known.update((commit, cls(commit, patches))
-                     for commit, patches in reader.patch_ids(missing).items())
+                     for commit, patches in reader.prepare_patch_ids(missing).items())
         return tuple(known[commit] for commit in commits)
 
 
@@ -4956,7 +4956,7 @@ class StoredHeadDiff(TodoStoreRows, TypedTable):
         with store.snapshot() as db:
             for row in cls.select(db, base=base, head=head):
                 return row
-        return cls(base, head, reader.whole_patch_ids(base, head),
+        return cls(base, head, reader.prepare_whole_patch_ids(base, head),
                    reader.commits_since(head, base))
 
 

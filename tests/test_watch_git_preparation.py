@@ -388,7 +388,12 @@ def test_promised_content_is_unreadable_not_absent_and_never_lazily_acquired(
                    for event in events)
     monkeypatch.delenv("GIT_TRACE2_EVENT")
     # Only this explicit joined acquisition changes Git. The same-main unknown must retry.
-    Repo.git(repo.checkout, "fetch", "--quiet", "--no-tags", "origin", *objects)
+    expected = (directory / "added.py").read_text()
+    assert Repo.acquire_git(repo.checkout, "show", f"{head}:src/added.py") == expected
+    assert Repo.git(repo.checkout, "show", f"{head}:src/added.py") == expected
+    patches = reader.prepare_patch_ids((head,))
+    assert patches == WorkBranches(source.checkout).prepare_patch_ids((head,))
+    assert reader.prepare_whole_patch_ids(base, head) == WorkBranches(source.checkout).prepare_whole_patch_ids(base, head)
     prepared = case.snapshot()
     recovered = plans.prepare_reading(repo, (), (evidence,), history=Checkout(repo.checkout).read())
     plans.observe_reading(recovered, (evidence,))

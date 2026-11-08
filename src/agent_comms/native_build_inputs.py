@@ -234,6 +234,7 @@ class PartialClone(CloneShape):
 class GitLaunch(Executable):
     """One Git child boundary, also usable by the isolated stdlib bootstrap."""
 
+    command_timeout: ClassVar[float] = 60.0
     program: ClassVar[str] = "git"
     chdir_option: ClassVar[str] = "-C"
     directory_options: ClassVar[frozenset[str]] = frozenset(
@@ -369,7 +370,7 @@ class GitLaunch(Executable):
 
     @classmethod
     def _run(
-        cls, checkout: Path | str, *args: str, timeout: float = 60, input: bytes = b""
+        cls, checkout: Path | str, *args: str, timeout: float = command_timeout, input: bytes = b""
     ) -> subprocess.CompletedProcess[bytes]:
         return cls.completed(
             cls.command(checkout, *args), env=cls.environment(os.environ), timeout=timeout,
@@ -379,7 +380,7 @@ class GitLaunch(Executable):
 
     @classmethod
     def _pipe(cls, checkout: Path | str, producer: tuple[str, ...], consumer: tuple[str, ...],
-              *, timeout: float = 60, input: bytes = b'') -> subprocess.CompletedProcess[bytes]:
+              *, timeout: float = command_timeout, input: bytes = b'') -> subprocess.CompletedProcess[bytes]:
         """Stream Git output between children; capture only the final, bounded answer."""
         environment = cls.environment(os.environ)
         producer_command = cls.command(checkout, *producer)

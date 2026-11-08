@@ -246,9 +246,9 @@ class PullRequestDeliverySource(CommandDeliverySource):
 
     def delivery(self, todo: Todo, repo: Path, evidence: DeliveryEvidence) -> CheckedDelivery:
         delivery = PullRequests((todo,)).merged_delivery(todo, repo, evidence)
-        diff = Repo.git(repo, 'show', '--first-parent', '-m', '--format=', delivery.commit)
+        diff = Repo.acquire_git(repo, 'show', '--first-parent', '-m', '--format=', delivery.commit)
         changed = re.findall(r'^\+\+\+ b/(\S+\.py)$', diff, re.M)
-        sources = [Repo.git(repo, 'show', f'{delivery.commit}:{path}') for path in changed]
+        sources = [Repo.acquire_git(repo, 'show', f'{delivery.commit}:{path}') for path in changed]
         if added := forwarders_added(diff, sources):
             raise ValueError(f'Refused: pull request merge {delivery.commit} adds forwarders '
                              f'{added[:5]}; slop never counts as delivery. Order the hierarchy fix.')
