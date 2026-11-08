@@ -30,6 +30,9 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self, TypeVar
 from agent_comms.goal_turn_permit import GoalTurnPermit
 
 from .child_process import Platform
+from .goal_permit_source import GoalPermitSource, GoalStoreSource
+from .goal_scope import GoalScope
+from .goals import Goal
 from .turn_item import UsageChargeId
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import (
@@ -92,12 +95,10 @@ from .reservation_rules import ReservationRule, RuleCheck
 from .turn_failure import TurnFailure
 from .nominal.field_codec import TurnId
 if TYPE_CHECKING:
-    from .goal_scope import GoalScope
     from .goal_management import Goals
     from .registry.threads import Thread
-    from .turn_context import TurnContext
-    from .goals import Goal
     from .turn_lease import TurnLeaseFence
+    from .turn_context import TurnContext
 
 
 @dataclass(frozen=True)
@@ -567,8 +568,10 @@ class LaunchPermit(GoalTurnPermit):
             "Original launch attempt changed or is unavailable.",
         )).phase.verified_progress
 
-    def charge_for(self, goal_id: GoalId, goals: Goals, response: UsageChargeId,
-                   usage: PiUsage) -> bool:
+    def charge_for(
+        self, goal_id: GoalId, goals: GoalStoreSource[GoalAttemptStore],
+        response: UsageChargeId, usage: PiUsage,
+    ) -> bool:
         if goal_id != self.reservation.goal_id:
             return False
         self.record_provider_usage(goals.open_goal_store(), response, usage)
@@ -743,7 +746,10 @@ class GoalAttemptFile(FileStore, SQLiteReader):
         return GoalAttemptStore.initialize(self.path.parent)
 
 
-class GoalAttemptStore(GoalAttemptFile, DrainSettledFile, StoreWriter, ReconciledFile, GoalWakeFile):
+class GoalAttemptStore(
+    GoalAttemptFile, DrainSettledFile, StoreWriter, ReconciledFile, GoalWakeFile,
+    GoalPermitSource,
+):
     """Owner-private SQLite authority; no synthetic model or context claims.
 
     The caller creates a private directory and explicitly initializes it in a

@@ -34,7 +34,8 @@ from .goal_actions import (
     SentBackOrderGoalAction,
     SetGoalAction,
 )
-from .goal_attempts import Generation
+from .goal_attempts import Generation, GoalAttemptStore
+from .goal_permit_source import GoalStoreSource
 from .errors import UnresolvedAttemptError
 from .goal_history import GoalHistoryEntry, RecordedGoalHistory
 from .goal_scope import AllGoals, GoalScope, OneGoal
@@ -139,7 +140,10 @@ class BornGoalTarget(GoalTarget):
         return thread
 
 
-class Goals(GoalRecords, WakeWorkSource[Thread], GoalFork[Thread, GoalDeclaration]):
+class Goals(
+    GoalRecords, WakeWorkSource[Thread], GoalFork[Thread, GoalDeclaration],
+    GoalStoreSource[GoalAttemptStore],
+):
     def fork_goal(self, parent: Thread, child: Thread) -> Goal:
         """Create a teammate's child goal from its parent's active work."""
         text = ('\n'.join(goal.text for goal in parent.goal.active())

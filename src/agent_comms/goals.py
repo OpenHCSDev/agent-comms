@@ -31,6 +31,7 @@ from .child_process import (
 from .errors import GoalRefused, RejectedEnforcementError, RelationViolationError
 from .goal_authority import GoalAuthority, GoalTurnAuthority, NoGoalAuthority
 from .goal_mutation import GoalMutation
+from .goal_permit_source import GoalPermitSource
 from .goal_states import ActiveGoal, GoalState
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import (
@@ -60,7 +61,6 @@ if TYPE_CHECKING:
     from .turn_context import TurnContext
 
 if TYPE_CHECKING:
-    from .goal_attempts import GoalAttemptStore
     from .goal_management import Goals
     from .todos import Todo
 
@@ -609,7 +609,7 @@ class GoalDeclaration(
     def peer_change_values(self) -> GoalPeerChange: ...
 
     @abstractmethod
-    def stopped_permit(self, store: GoalAttemptStore) -> GoalTurnPermit: ...
+    def stopped_permit(self, store: GoalPermitSource) -> GoalTurnPermit: ...
 
     @abstractmethod
     def settle[Store, Permit](
@@ -692,7 +692,7 @@ class GoalDeclaration(
 
 @dataclass(frozen=True)
 class NoGoal(NullMember, GoalDeclaration):
-    def stopped_permit(self, store: GoalAttemptStore) -> GoalTurnPermit:
+    def stopped_permit(self, store: GoalPermitSource) -> GoalTurnPermit:
         return NoLaunchPermit()
 
     def __iter__(self) -> Iterator[Goal]:
@@ -768,7 +768,7 @@ class Goal(RecordMember, GoalDeclaration):
     state: GoalState = field(default_factory=ActiveGoal)
     order: Annotated[GoalOrder, PresenceExclude()] = field(default_factory=UnorderedGoalOrder)
 
-    def stopped_permit(self, store: GoalAttemptStore) -> GoalTurnPermit:
+    def stopped_permit(self, store: GoalPermitSource) -> GoalTurnPermit:
         return store.stopped_permit(self.id)
 
     def __iter__(self) -> Iterator[Goal]:
