@@ -965,6 +965,7 @@ class Install[Rehearsed: Rehearsal](ABC):
                     # runtime, and which built runtimes nobody is on at all.
                     retirement = RuntimeRetention.after_install(
                         self.staged.runtime, self.installed.runtime, processes, self.root,
+                        self.spill_dir,
                     ).retire()
             finally:
                 # Includes rollback, a failed pause, and failures after the live run.

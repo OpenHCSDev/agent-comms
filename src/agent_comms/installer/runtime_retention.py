@@ -27,11 +27,26 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 
+from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import MalformedRecord
 from agent_comms.root_runtime import RootRuntimeStore
 from agent_comms.runtime_processes import RuntimeProcesses
+
+
+def recorded_prefix(directory: Path) -> frozenset[Path]:
+    """The runtime a `.root-runtime.json` in ``directory`` names, or nothing readable.
+
+    A directory with no record, or one this cannot decode, holds no runtime: it is the
+    live process table, not a stored pointer, that an unreadable answer must make the
+    sweep refuse over.
+    """
+    try:
+        return frozenset((RootRuntimeStore.at(directory).read().prefix,))
+    except (OSError, MalformedRecord):
+        return frozenset()
 
 
 @dataclass(frozen=True)
@@ -47,25 +62,53 @@ class RuntimeRetention:
 
     @classmethod
     def after_install(cls, staged: LaunchRuntime, installed: LaunchRuntime,
-                      processes: RuntimeProcesses, root: Path) -> RuntimeRetention:
+                      processes: RuntimeProcesses, root: Path,
+                      spill_dir: Path) -> RuntimeRetention:
         """What the install that just published ``staged`` still needs.
 
         The outgoing runtime is held by name rather than found by the scan: the installer
-        is running on it, and the scan skips its own lineage, so nothing else would say
-        so. Holding it is also what a rollback needs — the pointer goes back to the
-        runtime the install came from.
+        is running on it, and the scan skips its own lineage, so nothing else would say so.
         """
-        held = {staged.prefix, installed.prefix, LaunchRuntime.running().prefix,
-                *processes.held_prefixes(), *cls.attached(root)}
-        return cls(staged.prefix.parent, frozenset(held), processes.unread())
+        runtimes = staged.prefix.parent
+        named = (staged.prefix, installed.prefix, LaunchRuntime.running().prefix,
+                 *processes.held_executables(), *cls.attached(root),
+                 *cls.restorable(root, spill_dir))
+        held = frozenset().union(*(cls.owning(runtimes, path) for path in named), frozenset())
+        return cls(runtimes, held, processes.unread())
+
+    @staticmethod
+    def owning(runtimes: Path, path: Path) -> frozenset[Path]:
+        """The built runtime a path belongs to: the one directory under ``runtimes`` that
+        contains it, and nothing when the path is somewhere else entirely.
+
+        Not the executable's grandparent, which is what `LaunchRuntime.prefix` answers. A
+        runtime bundles native children several directories down — codex-latency's audit
+        named `share/toad/neovim/bin/nvim` — and their grandparent is a directory inside
+        the build rather than the build. Held by that name, the enclosing runtime would
+        have gone while a process was still running out of it.
+        """
+        relative = path.relative_to(runtimes) if path.is_relative_to(runtimes) else None
+        return frozenset((runtimes / relative.parts[0],)) if relative and relative.parts \
+            else frozenset()
 
     @staticmethod
     def attached(root: Path) -> frozenset[Path]:
         """The prefix this bus root is published to, which outlives every process on it."""
-        try:
-            return frozenset((RootRuntimeStore.at(root).read().prefix,))
-        except FileNotFoundError:
-            return frozenset()
+        return recorded_prefix(root)
+
+    @staticmethod
+    def restorable(root: Path, spill_dir: Path) -> frozenset[Path]:
+        """The prefixes this root's retained store backups would publish if restored.
+
+        A backup carries the root's `.root-runtime.json`, because `RootRuntimeStore` is
+        `RollbackRetained`; restoring one re-attaches the root to whichever runtime was
+        published when it was taken. Three such backups were on this machine when the pile
+        was found, reaching two runtimes older than the outgoing one, so current and
+        outgoing alone are not the rollback holders.
+        """
+        return frozenset().union(
+            *(recorded_prefix(backup.data_root)
+              for backup in StoreBackup.retained(root, spill_dir)), frozenset())
 
     def built(self) -> tuple[Path, ...]:
         """Every prefix under the runtimes directory, newest name last."""

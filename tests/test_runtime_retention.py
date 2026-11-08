@@ -30,19 +30,32 @@ def built(runtimes: Path, name: str, *, completed: bool = True) -> LaunchRuntime
     return runtime
 
 
-def running(runtime: LaunchRuntime) -> UnretiredRuntimeProcess:
-    """What the install's own process scan reports for an application still on ``runtime``."""
+def running(executable: Path) -> UnretiredRuntimeProcess:
+    """What the install's own process scan reports for an application still running
+    ``executable``, which need not be a runtime's own bin/python."""
     identity = ProcessIdentity.capture(1)
     return UnretiredRuntimeProcess(RuntimeProcess(
-        pid=identity.pid, start_time=identity.start_time, interpreter=runtime.interpreter,
+        pid=identity.pid, start_time=identity.start_time, interpreter=executable,
         application=RuntimeApplication(identity, "an application")))
 
 
+def published(directory: Path, runtime: LaunchRuntime) -> Path:
+    """A `.root-runtime.json` naming ``runtime``, as a bus root and a store backup hold it."""
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / ".root-runtime.json").write_text(json.dumps({"prefix": str(runtime.prefix)}))
+    return directory
+
+
 def attached_root(tmp_path: Path, runtime: LaunchRuntime) -> Path:
-    root = tmp_path / "bus"
-    root.mkdir()
-    (root / ".root-runtime.json").write_text(json.dumps({"prefix": str(runtime.prefix)}))
-    return root
+    return published(tmp_path / ".agent-comms", runtime)
+
+
+def taken_backup(spill: Path, root: Path, runtime: LaunchRuntime) -> Path:
+    """One retained store backup, named as BackupName writes it, holding the root's
+    published runtime in its copied stores."""
+    backup = spill / f"{root.name}.upgrade-20261107T223047"
+    published(backup / "stores", runtime)
+    return backup
 
 
 def test_an_install_retires_the_built_runtimes_nothing_holds(tmp_path):
@@ -51,20 +64,31 @@ def test_an_install_retires_the_built_runtimes_nothing_holds(tmp_path):
     10 GiB. Each build is reproducible; a build something points at is not."""
     runtimes = tmp_path / "runtimes"
     staged, outgoing = built(runtimes, "new"), built(runtimes, "old")
-    borrowed, held_by_root = built(runtimes, "borrowed"), built(runtimes, "rooted")
+    borrowed, bundled = built(runtimes, "borrowed"), built(runtimes, "bundled")
+    held_by_root, restorable = built(runtimes, "rooted"), built(runtimes, "restorable")
     unfinished = built(runtimes, "half", completed=False)
     stale = tuple(built(runtimes, f"stale-{index}") for index in range(3))
 
+    # A runtime bundles native children well below bin/: the grandparent of this one is a
+    # directory inside the build, so holding it by that name would hold nothing real.
+    native = bundled.prefix / "share/toad/neovim/bin/nvim"
+    native.parent.mkdir(parents=True)
+    native.touch()
+
+    root = attached_root(tmp_path, held_by_root)
+    spill = tmp_path / "spill"
+    taken_backup(spill, root, restorable)
+
     retention = RuntimeRetention.after_install(
-        staged, outgoing, RuntimeProcesses((running(borrowed),)),
-        attached_root(tmp_path, held_by_root))
+        staged, outgoing, RuntimeProcesses((running(borrowed.interpreter), running(native))),
+        root, spill)
 
     assert set(retention.reclaimable()) == {runtime.prefix for runtime in stale}
     outcome = retention.retire()
     assert isinstance(outcome, SweptRetirement)
     assert len(outcome.retired) == 3
     assert not any(runtime.prefix.exists() for runtime in stale)
-    for kept in (staged, outgoing, borrowed, held_by_root, unfinished):
+    for kept in (staged, outgoing, borrowed, bundled, held_by_root, restorable, unfinished):
         assert kept.prefix.is_dir(), kept.prefix.name
 
 
@@ -77,7 +101,7 @@ def test_a_process_scan_it_could_not_read_retires_nothing(tmp_path):
 
     retention = RuntimeRetention.after_install(
         staged, staged, RuntimeProcesses((UnreadableRuntimeProcess(4321, "denied"),)),
-        tmp_path / "no-bus")
+        tmp_path / "no-bus", tmp_path / "no-spill")
 
     assert stale.prefix in retention.reclaimable()
     outcome = retention.retire()

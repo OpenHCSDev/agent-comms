@@ -17,8 +17,13 @@ class RuntimeProcessOutcome(DeclaredFamily, ABC, affix="RuntimeProcess"):
     def line(self) -> str: ...
 
     @abstractmethod
-    def held_prefix(self) -> frozenset[Path]:
-        """The built runtime this outcome keeps alive, for whoever retires the rest."""
+    def held_executable(self) -> frozenset[Path]:
+        """What this process is running, for whoever retires the runtimes nothing runs.
+
+        The executable and not a runtime: a bundled native child lives several directories
+        inside its runtime, so which build owns it is a question for whoever holds the
+        runtimes directory, and answering a prefix here would answer the wrong one.
+        """
 
     @abstractmethod
     def unread(self) -> tuple[str, ...]:
@@ -33,9 +38,9 @@ class UnreadableRuntimeProcess(RuntimeProcessOutcome):
     def line(self) -> str:
         return f"Unknown runtime PID {self.pid}: {self.reason}"
 
-    def held_prefix(self) -> frozenset[Path]:
-        """A process whose interpreter could not be read names no runtime; `unread` is how
-        it keeps a sweep from deciding about the one it might have been running."""
+    def held_executable(self) -> frozenset[Path]:
+        """A process whose command could not be read names nothing; `unread` is how it
+        keeps a sweep from deciding about the runtime it might have been running."""
         return frozenset()
 
     def unread(self) -> tuple[str, ...]:
@@ -68,10 +73,10 @@ class UnretiredRuntimeProcess(RuntimeProcessOutcome):
             f"owner {self.process.application.describe()}; not signalled"
         )
 
-    def held_prefix(self) -> frozenset[Path]:
-        """The interpreter this process was invoked with — not what its inherited PATH
-        would have found, which on one machine listed 47 runtimes for one process."""
-        return frozenset((self.process.prefix,))
+    def held_executable(self) -> frozenset[Path]:
+        """What this process was invoked with — not what its inherited PATH would have
+        found, which on one machine listed 47 runtimes for a single process."""
+        return frozenset((self.process.interpreter,))
 
     def unread(self) -> tuple[str, ...]:
         return ()
@@ -90,9 +95,9 @@ class RuntimeProcesses:
     def lines(self) -> tuple[str, ...]:
         return tuple(outcome.line() for outcome in self.outcomes)
 
-    def held_prefixes(self) -> frozenset[Path]:
-        """Every built runtime this snapshot found a process running."""
-        return frozenset().union(*(outcome.held_prefix() for outcome in self.outcomes),
+    def held_executables(self) -> frozenset[Path]:
+        """Every command this snapshot found a process running out of a runtime."""
+        return frozenset().union(*(outcome.held_executable() for outcome in self.outcomes),
                                  frozenset())
 
     def unread(self) -> tuple[str, ...]:
