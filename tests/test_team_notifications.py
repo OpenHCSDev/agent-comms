@@ -7,7 +7,7 @@ import pickle
 import time
 from contextlib import contextmanager, nullcontext
 from collections.abc import Iterator
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from multiprocessing import Pipe
 
 import pytest
@@ -42,6 +42,8 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import ProgressRead, TeammateOccupied
 from agent_comms.ui_model import observation
 from agent_comms.ui_model.observation import TeamHudObserved, ObservationService, ObserveTeamHud
+from agent_comms.coordination.errors import DeferredRead
+from agent_comms.presentation import NoRevision
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.transport.tools.reads import TeammateRead
 from agent_comms.tool_caller import ThreadCaller
@@ -886,6 +888,61 @@ def test_a_frame_this_reader_cannot_decode_reaches_the_page_not_the_observer(not
     beat(comms, states=state_cards(comms, TeammateState))
     recovered, = reading.read(comms, comms.views.revision())
     assert pickle.loads(pickle.dumps(recovered)).huds == TeamFrame.read_all(comms.root)
+
+
+@dataclass
+class PreparedInterest:
+    readings: list = field(default_factory=list)
+
+    def prepared(self, reading, service) -> None:
+        self.readings.append(reading)
+
+
+@dataclass
+class PreparingService:
+    """The parts of ObservationService a board preparation touches, recording what it sends."""
+
+    comms: object
+    revision: object
+    sent: list = field(default_factory=list)
+    interest: PreparedInterest = field(default_factory=PreparedInterest)
+
+    def send(self, result) -> None:
+        self.sent.append(result)
+
+
+@pytest.mark.parametrize("failure, outcome", [
+    (DeferredRead("the board's stores are mid-write"), "again"),
+    (ValueError("a heartbeat frame this build cannot decode"), "unreadable"),
+    (RuntimeError("a defect in the board read"), "raised"),
+])
+def test_preparing_the_board_answers_each_read_outcome_through_its_owner(
+        notification_bus, failure, outcome):
+    """prepare() caught every Exception and called it unreadable history: a deferred read was
+    shown as broken instead of retried, and a real defect was rendered as a saved-data error.
+    It now reads through UnreadableHistory.outcome, the owner read() already uses."""
+    comms = notification_bus
+    reading = ObserveTeamHud().observation()
+    service = PreparingService(comms, comms.views.revision())
+    reading.prepared_revision = service.revision
+
+    def failing_board(_comms):
+        raise failure
+
+    reading.read_board = failing_board
+    if outcome == "raised":
+        with pytest.raises(RuntimeError, match="a defect in the board read"):
+            asyncio.run(reading.prepare(service))
+        return
+    asyncio.run(reading.prepare(service))
+    assert service.interest.readings == []
+    if outcome == "again":
+        assert service.sent == []
+        assert isinstance(reading.prepared_revision, NoRevision)
+    else:
+        unreadable, = service.sent
+        assert isinstance(unreadable, observation.TeamHudUnreadable)
+        assert "cannot decode" in str(unreadable.error)
 
 
 def test_codex_usage_decodes_window_and_keeps_refusal_visible():
