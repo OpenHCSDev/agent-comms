@@ -1205,13 +1205,33 @@ class ValueDecoder[T](DecoderPlan, JsonSchemaOwner):
             cls._by_origin[origin] = cls
         for annotation in cls.__dict__.get("annotations", ()):
             cls._by_annotation[annotation] = cls
+        # The lookup compiled from these two is only good for the registry it read, and
+        # this is the one place either of them changes: a decoder declared after an
+        # annotation was first looked up must not stay invisible to it.
+        ValueDecoder._forget_registered()
 
     @classmethod
     def from_annotation(cls, target: object, args: tuple[object, ...]) -> ValueDecoder[T]:
         return cls(target)
 
     @classmethod
+    def _forget_registered(cls) -> None:
+        ValueDecoder.__dict__["_registered"].__func__.cache_clear()
+
+    @classmethod
+    @cache
     def _registered(cls, annotation: object) -> tuple[type[ValueDecoder[object]], ...]:
+        """Which declared decoders claim ``annotation``, compiled once per annotation.
+
+        Walking an annotation's whole MRO and asking `get_origin` of each entry is a pure
+        function of the annotation and the registry, and it was being redone for every
+        value decoded: on a phone profiled while scrolling, `get_origin` alone accounted
+        for 80,808 samples and every one of them came from here.
+
+        Cached, but not frozen. `representation` and `_index` nearby cache annotation
+        metadata, which cannot change; this reads `_by_origin` and `_by_annotation`, which
+        `__init_subclass__` writes, so the registration that writes them is what drops this.
+        """
         matches: list[type[ValueDecoder[object]]] = []
         if annotation in cls._by_annotation:
             matches.append(cls._by_annotation[annotation])
