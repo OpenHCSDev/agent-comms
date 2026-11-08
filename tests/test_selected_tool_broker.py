@@ -13,6 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from coding_owner_fixture import OwnerDouble
 
 import agent_comms.execution.selected.tool_broker as broker
 from agent_comms.native_tool_call import SelectedToolBusy
@@ -41,7 +42,6 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.storage_room import NoRoomNeeded
 from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_denial import SelectedToolDenied
-from agent_comms.registry.thread_identity import UnobservedTools
 
 
 @pytest.fixture
@@ -70,10 +70,7 @@ async def query(connection: OwnerToolConnection, payload: bytes) -> bool:
 def test_duplicate_call_id_in_one_tool_round_is_named_decode_failure(
     tmp_path: Path, tool_listener, undealt_gate
 ) -> None:
-    class Owner:
-        input_id = secrets.token_hex(16)
-        offered = UnobservedTools()
-
+    class Owner(OwnerDouble):
         async def allow(self, round_number, call) -> None:
             raise AssertionError("invalid round must not allow a call")
 
@@ -132,9 +129,7 @@ async def test_prebegin_busy_keeps_native_socket_for_the_next_fresh_call(
     path = CoordinationStore.path_in(private_comms.root)
     input_id = InputId.mint()
 
-    class SlotOwner:
-        offered = UnobservedTools()
-
+    class SlotOwner(OwnerDouble):
         async def allow(self, turn, round_number, call):
             await Coordination.run_async(
                 path,
