@@ -18,8 +18,14 @@ from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArgume
 from .registry.registry_document import RegistryEntry, RegistrySnapshot
 from .nominal.field_codec import AcpSessionId, FieldCodec
 from agent_comms.runtime_server import (
-    AttachedResultRuntimeRequest, AttachedRuntimeRequestContext, ResultRuntimeRequest,
-    RuntimeRequestContext, RuntimeServer, SocketClient,
+    AttachedResultRuntimeRequest,
+    AttachedRuntimeRequestContext,
+    ResultRuntimeRequest,
+    RuntimeRequestContext,
+    RuntimeServer,
+    ServedAttachedResultRuntimeRequest,
+    ServedResultRuntimeRequest,
+    SocketClient,
 )
 from .owner_connection import OwnerConnection
 from .thread_identity import ClaimedIdentity, OwnerIdentity
@@ -129,6 +135,13 @@ class HostResources(ToolResult):
 
 @dataclass(frozen=True, kw_only=True)
 class ReadHostResourcesRuntimeRequest(AttachedResultRuntimeRequest):
+    pass
+
+
+class ServedReadHostResourcesRuntimeRequest(
+    ServedAttachedResultRuntimeRequest,
+    ReadHostResourcesRuntimeRequest,
+):
     async def result(self, ctx: AttachedRuntimeRequestContext) -> HostResources:
         owners = sum(len(state.executors()) for state in ctx.server.agent.inputs.drained.values())
         def capture() -> HostResources:
@@ -149,6 +162,11 @@ class ReadHostResourcesRuntimeRequest(AttachedResultRuntimeRequest):
 class ReadOwnerLaunchRuntimeRequest(AttachedResultRuntimeRequest):
     owner: OwnerIdentity
 
+
+class ServedReadOwnerLaunchRuntimeRequest(
+    ServedAttachedResultRuntimeRequest,
+    ReadOwnerLaunchRuntimeRequest,
+):
     def require_owner(self, entry: RegistryEntry) -> Thread:
         if entry.owner_identity != self.owner:
             raise RelationViolationError("Launch request's owner lease changed")
@@ -166,6 +184,11 @@ class StartOwnerRuntimeRequest(ResultRuntimeRequest[RuntimeRequestContext]):
     launch: RetainedOwnerLaunch
     owner: OwnerIdentity
 
+
+class ServedStartOwnerRuntimeRequest(
+    ServedResultRuntimeRequest[RuntimeRequestContext],
+    StartOwnerRuntimeRequest,
+):
     async def bind(
         self, server: RuntimeServer, reader: asyncio.StreamReader, client: SocketClient,
     ) -> RuntimeRequestContext:
@@ -185,6 +208,17 @@ class StopOwnerRuntimeRequest(ResultRuntimeRequest[RuntimeRequestContext]):
     owner: OwnerIdentity
     claim: ClaimedIdentity
 
+    async def retire(self, sessions: SessionLifecycle, state: OwnerSession) -> OwnerRetiredReply:
+        if state.owner.incarnation != self.owner.incarnation or state.owner.generation >= self.owner.generation:
+            raise RelationViolationError("Stop request does not fence this original session")
+        await sessions.retire_owner(state, self.owner, self.claim)
+        return OwnerRetiredReply(state.owner)
+
+
+class ServedStopOwnerRuntimeRequest(
+    ServedResultRuntimeRequest[RuntimeRequestContext],
+    StopOwnerRuntimeRequest,
+):
     def require_owner(self, entry: RegistryEntry) -> Thread:
         if entry.owner_identity != self.owner:
             raise RelationViolationError("Stop request's fenced owner changed")
@@ -208,9 +242,3 @@ class StopOwnerRuntimeRequest(ResultRuntimeRequest[RuntimeRequestContext]):
         session = next(agent.sessions.fenced_sessions(owner.incarnation), AcpSessionId(owner.name))
         return await agent.inputs.state(session).retire_for_stop(
             ctx.server.agent.sessions, self)
-
-    async def retire(self, sessions: SessionLifecycle, state: OwnerSession) -> OwnerRetiredReply:
-        if state.owner.incarnation != self.owner.incarnation or state.owner.generation >= self.owner.generation:
-            raise RelationViolationError("Stop request does not fence this original session")
-        await sessions.retire_owner(state, self.owner, self.claim)
-        return OwnerRetiredReply(state.owner)

@@ -1,0 +1,430 @@
+{
+ "stages": [
+  {
+   "recipes": [
+    {
+     "recipe_id": "runtime-server-imports-serves-declaration",
+     "operations": [
+      {
+       "operation": "ensure_import",
+       "file_path": "src/agent_comms/runtime_server.py",
+       "import_source": "from .nominal.served_declaration import ServesDeclaration"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "recipes": [
+    {
+     "recipe_id": "serve-runtime-requests",
+     "operations": [
+      {
+       "operation": "serve_class_members",
+       "classes": [
+        {
+         "target": {
+          "file_path": "src/agent_comms/runtime_server.py",
+          "target_qualname": "RuntimeRequest"
+         },
+         "served_header": "class ServedRuntimeRequest[Ctx: RuntimeRequestContext](Command[Ctx, Awaitable[None]], RuntimeRequest[Ctx], metaclass=ServesDeclaration, declared_name=None)",
+         "member_names": [
+          "bind"
+         ],
+         "moved_bases": [
+          "Command[Ctx, Awaitable[None]]"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/runtime_server.py",
+          "target_qualname": "ResultRuntimeRequest"
+         },
+         "served_header": "class ServedResultRuntimeRequest[Ctx: RuntimeRequestContext](ServedRuntimeRequest[Ctx], ResultRuntimeRequest[Ctx])",
+         "member_names": [
+          "apply",
+          "result"
+         ],
+         "declaration_keywords": [
+          "declared_name=None"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/runtime_server.py",
+          "target_qualname": "AttachedRuntimeRequest"
+         },
+         "served_header": "class ServedAttachedRuntimeRequest(ServedRuntimeRequest[AttachedRuntimeRequestContext], AttachedRuntimeRequest)",
+         "member_names": [
+          "require_owner",
+          "bind"
+         ],
+         "declaration_keywords": [
+          "declared_name=None"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/runtime_server.py",
+          "target_qualname": "AttachedResultRuntimeRequest"
+         },
+         "served_header": "class ServedAttachedResultRuntimeRequest(ServedResultRuntimeRequest[AttachedRuntimeRequestContext], ServedAttachedRuntimeRequest, AttachedResultRuntimeRequest)",
+         "member_names": [],
+         "declaration_keywords": [
+          "declared_name=None"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/runtime_requests.py",
+          "target_qualname": "CancelRuntimeRequest"
+         },
+         "served_header": "class ServedCancelRuntimeRequest(ServedAttachedResultRuntimeRequest, CancelRuntimeRequest)",
+         "member_names": [
+          "result"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/runtime_requests.py",
+          "target_qualname": "ClearQueueRuntimeRequest"
+         },
+         "served_header": "class ServedClearQueueRuntimeRequest(ServedAttachedResultRuntimeRequest, ClearQueueRuntimeRequest, action=ClearQueueQueueAction)",
+         "member_names": [
+          "result"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/runtime_requests.py",
+          "target_qualname": "CompactRuntimeRequest"
+         },
+         "served_header": "class ServedCompactRuntimeRequest(ServedAttachedResultRuntimeRequest, CompactRuntimeRequest)",
+         "member_names": [
+          "result"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/runtime_requests.py",
+          "target_qualname": "RecordedContextRuntimeRequest"
+         },
+         "served_header": "class ServedRecordedContextRuntimeRequest(ServedAttachedResultRuntimeRequest, RecordedContextRuntimeRequest)",
+         "member_names": [
+          "read_manifest",
+          "manifest"
+         ],
+         "declaration_keywords": [
+          "declared_name=None"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/runtime_requests.py",
+          "target_qualname": "ContextRecordedSegmentRuntimeRequest"
+         },
+         "served_header": "class ServedContextRecordedSegmentRuntimeRequest(ServedRecordedContextRuntimeRequest, ContextRecordedSegmentRuntimeRequest)",
+         "member_names": [
+          "selected_segment",
+          "result"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/runtime_requests.py",
+          "target_qualname": "ContextAnnotationCorrectionRuntimeRequest"
+         },
+         "served_header": "class ServedContextAnnotationCorrectionRuntimeRequest(ServedContextRecordedSegmentRuntimeRequest, ContextAnnotationCorrectionRuntimeRequest)",
+         "member_names": [
+          "result"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/runtime_requests.py",
+          "target_qualname": "ContextAnnotationsRuntimeRequest"
+         },
+         "served_header": "class ServedContextAnnotationsRuntimeRequest(ServedContextRecordedSegmentRuntimeRequest, ContextAnnotationsRuntimeRequest)",
+         "member_names": [
+          "result"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/runtime_requests.py",
+          "target_qualname": "ContextCoreRuntimeRequest"
+         },
+         "served_header": "class ServedContextCoreRuntimeRequest(ServedAttachedResultRuntimeRequest, ContextCoreRuntimeRequest)",
+         "member_names": [
+          "read_context",
+          "inspect",
+          "result"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/runtime_requests.py",
+          "target_qualname": "ContextCoreSourceRuntimeRequest"
+         },
+         "served_header": "class ServedContextCoreSourceRuntimeRequest(ServedContextCoreRuntimeRequest, ContextCoreSourceRuntimeRequest)",
+         "member_names": [
+          "read_source",
+          "result"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/runtime_requests.py",
+          "target_qualname": "ContextReferenceRuntimeRequest"
+         },
+         "served_header": "class ServedContextReferenceRuntimeRequest(ServedRecordedContextRuntimeRequest, ContextReferenceRuntimeRequest)",
+         "member_names": [
+          "result"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/runtime_requests.py",
+          "target_qualname": "ContextRuntimeRequest"
+         },
+         "served_header": "class ServedContextRuntimeRequest(ServedAttachedResultRuntimeRequest, ContextRuntimeRequest)",
+         "member_names": [
+          "inspect",
+          "result"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/runtime_requests.py",
+          "target_qualname": "ContextSourceRuntimeRequest"
+         },
+         "served_header": "class ServedContextSourceRuntimeRequest(ServedContextRuntimeRequest, ContextSourceRuntimeRequest)",
+         "member_names": [
+          "read_source",
+          "result"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/runtime_requests.py",
+          "target_qualname": "DismissHistoricalInputsRuntimeRequest"
+         },
+         "served_header": "class ServedDismissHistoricalInputsRuntimeRequest(ServedAttachedResultRuntimeRequest, DismissHistoricalInputsRuntimeRequest)",
+         "member_names": [
+          "result"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/runtime_requests.py",
+          "target_qualname": "GoalTextRuntimeRequest"
+         },
+         "served_header": "class ServedGoalTextRuntimeRequest(ServedAttachedResultRuntimeRequest, GoalTextRuntimeRequest)",
+         "member_names": [],
+         "declaration_keywords": [
+          "declared_name=None"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/runtime_requests.py",
+          "target_qualname": "GoalRevisionRuntimeRequest"
+         },
+         "served_header": "class ServedGoalRevisionRuntimeRequest(ServedAttachedResultRuntimeRequest, GoalRevisionRuntimeRequest)",
+         "member_names": [],
+         "declaration_keywords": [
+          "declared_name=None"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/runtime_requests.py",
+          "target_qualname": "GoalSnapshotResultRuntimeRequest"
+         },
+         "served_header": "class ServedGoalSnapshotResultRuntimeRequest(ServedAttachedResultRuntimeRequest, GoalSnapshotResultRuntimeRequest)",
+         "member_names": [
+          "change",
+          "result"
+         ],
+         "declaration_keywords": [
+          "declared_name=None"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/runtime_requests.py",
+          "target_qualname": "EditGoalRuntimeRequest"
+         },
+         "served_header": "class ServedEditGoalRuntimeRequest(ServedGoalTextRuntimeRequest, ServedGoalRevisionRuntimeRequest, ServedGoalSnapshotResultRuntimeRequest, EditGoalRuntimeRequest)",
+         "member_names": [
+          "change"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/runtime_requests.py",
+          "target_qualname": "SubscribeRuntimeRequest"
+         },
+         "served_header": "class ServedSubscribeRuntimeRequest(ServedAttachedRuntimeRequest, SubscribeRuntimeRequest)",
+         "member_names": [
+          "observing",
+          "ready",
+          "subscribed",
+          "apply"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/runtime_requests.py",
+          "target_qualname": "FreshSubscribeRuntimeRequest"
+         },
+         "served_header": "class ServedFreshSubscribeRuntimeRequest(ServedSubscribeRuntimeRequest, FreshSubscribeRuntimeRequest)",
+         "member_names": [
+          "subscribed"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/runtime_requests.py",
+          "target_qualname": "GoalHistoryRuntimeRequest"
+         },
+         "served_header": "class ServedGoalHistoryRuntimeRequest(ServedAttachedResultRuntimeRequest, GoalHistoryRuntimeRequest)",
+         "member_names": [
+          "result"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/bus_read.py",
+          "target_qualname": "OwnerReadRuntimeRequest"
+         },
+         "served_header": "class ServedOwnerReadRuntimeRequest(ServedAttachedResultRuntimeRequest, OwnerReadRuntimeRequest)",
+         "member_names": [
+          "result"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/runtime_requests.py",
+          "target_qualname": "ProjectRuntimeRequest"
+         },
+         "served_header": "class ServedProjectRuntimeRequest(ServedAttachedResultRuntimeRequest, ProjectRuntimeRequest)",
+         "member_names": [
+          "require_original",
+          "require_owner",
+          "result"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/runtime_requests.py",
+          "target_qualname": "PromptRuntimeRequest"
+         },
+         "served_header": "class ServedPromptRuntimeRequest(ServedAttachedResultRuntimeRequest, PromptRuntimeRequest)",
+         "member_names": [
+          "result",
+          "apply"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/owner_launch.py",
+          "target_qualname": "ReadHostResourcesRuntimeRequest"
+         },
+         "served_header": "class ServedReadHostResourcesRuntimeRequest(ServedAttachedResultRuntimeRequest, ReadHostResourcesRuntimeRequest)",
+         "member_names": [
+          "result"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/owner_launch.py",
+          "target_qualname": "ReadOwnerLaunchRuntimeRequest"
+         },
+         "served_header": "class ServedReadOwnerLaunchRuntimeRequest(ServedAttachedResultRuntimeRequest, ReadOwnerLaunchRuntimeRequest)",
+         "member_names": [
+          "require_owner",
+          "result"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/runtime_requests.py",
+          "target_qualname": "RetryGoalRuntimeRequest"
+         },
+         "served_header": "class ServedRetryGoalRuntimeRequest(ServedGoalRevisionRuntimeRequest, RetryGoalRuntimeRequest)",
+         "member_names": [
+          "result"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/runtime_requests.py",
+          "target_qualname": "SendNowRuntimeRequest"
+         },
+         "served_header": "class ServedSendNowRuntimeRequest(ServedAttachedResultRuntimeRequest, SendNowRuntimeRequest, action=SendNowQueueAction)",
+         "member_names": [
+          "result"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/runtime_requests.py",
+          "target_qualname": "SetConfigOptionRuntimeRequest"
+         },
+         "served_header": "class ServedSetConfigOptionRuntimeRequest(ServedAttachedResultRuntimeRequest, SetConfigOptionRuntimeRequest)",
+         "member_names": [
+          "result"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/runtime_requests.py",
+          "target_qualname": "SetGoalRuntimeRequest"
+         },
+         "served_header": "class ServedSetGoalRuntimeRequest(ServedGoalTextRuntimeRequest, SetGoalRuntimeRequest)",
+         "member_names": [
+          "result"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/owner_launch.py",
+          "target_qualname": "StartOwnerRuntimeRequest"
+         },
+         "served_header": "class ServedStartOwnerRuntimeRequest(ServedResultRuntimeRequest[RuntimeRequestContext], StartOwnerRuntimeRequest)",
+         "member_names": [
+          "bind",
+          "result"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/owner_launch.py",
+          "target_qualname": "StopOwnerRuntimeRequest"
+         },
+         "served_header": "class ServedStopOwnerRuntimeRequest(ServedResultRuntimeRequest[RuntimeRequestContext], StopOwnerRuntimeRequest)",
+         "member_names": [
+          "require_owner",
+          "bind",
+          "result"
+         ]
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/runtime_requests.py",
+          "target_qualname": "UpdateGoalRuntimeRequest"
+         },
+         "served_header": "class ServedUpdateGoalRuntimeRequest(ServedGoalRevisionRuntimeRequest, ServedGoalSnapshotResultRuntimeRequest, UpdateGoalRuntimeRequest)",
+         "member_names": [
+          "change"
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

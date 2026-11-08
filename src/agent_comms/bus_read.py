@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from functools import partial
 from typing import cast
 
+from agent_comms.runtime_server import ServedAttachedResultRuntimeRequest
+
 from .comms import Comms
 from .coordination.errors import StaleFence
 from .coordination.coordinator import Coordination
@@ -136,5 +138,10 @@ class OwnerReadRuntimeRequest(OwnerReading[object], AttachedResultRuntimeRequest
     async def read(self, owner: OwnerConnection) -> object:
         return await owner.request(self.declared_name, operation=self.operation)
 
+
+class ServedOwnerReadRuntimeRequest(
+    ServedAttachedResultRuntimeRequest,
+    OwnerReadRuntimeRequest,
+):
     async def result(self, ctx: AttachedRuntimeRequestContext) -> ToolResult:
         return await self.operation.owned(ctx)
