@@ -9,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import Annotated, ClassVar
 
 from ..activity import ObservedActivity
 from ..agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
@@ -96,9 +96,7 @@ from ..turn_lease import (
     TurnState,
 )
 
-if TYPE_CHECKING:
-    from ..storage_rules import StorageRule
-    from .registry_document import RegistrySnapshot
+from .thread_reads import ThreadCheckoutSource, ThreadOwnerSource
 
 
 class ThreadCommandAvailability:
@@ -428,7 +426,7 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread")
             for location, view in parent.runtime.history_locations(parent, registry, visited):
                 yield location, location.view_from_fork(view, self.incarnation.wire_birth)
 
-    def contains_worktree(self, worktree: Checkout, rule: StorageRule) -> bool:
+    def contains_worktree(self, worktree: Checkout, rule: ThreadCheckoutSource[Thread]) -> bool:
         """A project this conversation ran in, or this unit's physical home and extra checkouts."""
         return self.ran_in(worktree) or worktree.resolved().path in rule.checkouts_of(
             self, RepositoryReads())
@@ -536,7 +534,7 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread")
         """The thread when it is a fork working inside its teammate's turn."""
         return ()
 
-    def owner_binding(self, snapshot: RegistrySnapshot) -> ThreadOwnerBinding:
+    def owner_binding(self, snapshot: ThreadOwnerSource[Thread]) -> ThreadOwnerBinding:
         return UnavailableThreadOwnerBinding()
 
     def presentation(self, status: ThreadStatus, ordinary: ThreadPresentation,
@@ -824,7 +822,7 @@ class NativeThread(Thread):
     def prepare_conversation[T](self, preparation: ConversationPreparation[T]) -> T:
         return preparation.native()
 
-    def owner_binding(self, snapshot: RegistrySnapshot) -> ThreadOwnerBinding:
+    def owner_binding(self, snapshot: ThreadOwnerSource[Thread]) -> ThreadOwnerBinding:
         return snapshot.status(self.name).native_owner_binding(snapshot, self)
 
     def presentation(self, status: ThreadStatus, ordinary: ThreadPresentation,

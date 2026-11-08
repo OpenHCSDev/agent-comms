@@ -9,14 +9,14 @@ from typing import TYPE_CHECKING, ClassVar
 from .nominal.declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Active, Complete, Terminal
+from .goal_work import GoalOwner
+from .thread_identity import ThreadIncarnation
 
 if TYPE_CHECKING:
     from .goal_actions import GoalActionContext, ProblemOrderGoalAction
     from agent_comms.goal_management import GoalExecutionSource
     from .goal_presentation import GoalExecution
     from .goals import Goal
-    from .thread_identity import ThreadIncarnation
-    from .registry.threads import Thread
 
 
 @dataclass(frozen=True)
@@ -75,12 +75,12 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
     def accept_order(self, action: ProblemOrderGoalAction, goal: Goal, ctx: GoalActionContext) -> Goal:
         return action.continue_goal(goal, ctx)
 
-    def require_work(self, actor: ThreadIncarnation, owner: Thread) -> None:
+    def require_work(self, actor: ThreadIncarnation, owner: GoalOwner) -> None:
         from .goals import GoalConsentRequired
         if not actor.represents(owner.incarnation):
             raise GoalConsentRequired(owner, actor)
 
-    def work_candidates(self, thread: Thread) -> tuple[Thread, ...]:
+    def work_candidates[Owner](self, thread: Owner) -> tuple[Owner, ...]:
         return ()
 
     def require_model_resume(self) -> None:
@@ -189,7 +189,7 @@ class PausedGoal(OpenGoal, FromOpenGoal):
         if self.protected and not owner:
             raise ValueError(self.source.instruction())
 
-    def require_work(self, actor: ThreadIncarnation, owner: Thread) -> None:
+    def require_work(self, actor: ThreadIncarnation, owner: GoalOwner) -> None:
         self.require_model_resume()
         super().require_work(actor, owner)
 
@@ -250,10 +250,10 @@ class UnrecordedBlockGoal(BlockedState):
 @dataclass(frozen=True)
 class CompletedGoal(Complete, Terminal, GoalState, FromOpenGoal):
 
-    def require_work(self, actor: ThreadIncarnation, owner: Thread) -> None:
+    def require_work(self, actor: ThreadIncarnation, owner: GoalOwner) -> None:
         """Completion frees the goal slot; held Todo and parked-thread fences still apply."""
 
-    def work_candidates(self, thread: Thread) -> tuple[Thread, ...]:
+    def work_candidates[Owner](self, thread: Owner) -> tuple[Owner, ...]:
         return (thread,)
 
     def execution(self, source: GoalExecutionSource) -> GoalExecution:

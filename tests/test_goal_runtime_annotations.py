@@ -11,8 +11,9 @@ from agent_comms.goal_turn_permit import GoalTurnPermit
 from agent_comms.goal_actions import GoalAction, StandbyGoalAction
 from agent_comms.goal_records import GoalRecords
 from agent_comms.goals import GoalDeclaration, GoalOrder, GoalUnavailable
-from agent_comms.goal_work import GoalWorkSource
+from agent_comms.goal_work import GoalOwner, GoalWorkSource
 from agent_comms.registry.threads import Thread
+from agent_comms.thread_presentation import ThreadOwnerBinding
 
 
 @pytest.mark.parametrize(
@@ -20,6 +21,9 @@ from agent_comms.registry.threads import Thread
     (
         (GoalUnavailable.heading, str),
         (Thread.wake_context, WakeWorkContext),
+        (Thread.contains_worktree, bool),
+        (Thread.owner_binding, ThreadOwnerBinding),
+        *((member.owner_binding, ThreadOwnerBinding) for member in Thread.__subclasses__()),
         (GoalDeclaration.settle, NoneType),
         *((member.settle, NoneType) for member in GoalDeclaration.__subclasses__()),
         (GoalDeclaration.clear_wait, bool),
@@ -54,3 +58,15 @@ def test_goal_order_reads_its_assignment_source(order: type[GoalOrder]) -> None:
 @pytest.mark.parametrize("declaration", (GoalDeclaration, *GoalDeclaration.__subclasses__()))
 def test_goal_instructions_read_their_assignment_source(declaration: type[GoalDeclaration]) -> None:
     assert get_type_hints(declaration.instructions_for)["goals"] is GoalWorkSource
+
+
+@pytest.mark.parametrize("declaration", (GoalDeclaration, *GoalDeclaration.__subclasses__()))
+def test_goal_context_callback_keeps_its_context_type(declaration: type[GoalDeclaration]) -> None:
+    hints = get_type_hints(declaration.add_context)
+    assert get_args(hints["prepend_goal"])[1] is hints["context"]
+    assert hints["return"] is hints["context"]
+
+
+@pytest.mark.parametrize("declaration", (GoalDeclaration, *GoalDeclaration.__subclasses__()))
+def test_goal_assignment_checks_use_their_owner_read_contract(declaration: type[GoalDeclaration]) -> None:
+    assert get_type_hints(declaration.require_work)["owner"] is GoalOwner

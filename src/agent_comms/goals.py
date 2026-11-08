@@ -10,7 +10,7 @@ from abc import abstractmethod
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
+from typing import Annotated, ClassVar, Literal
 
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from agent_comms.lifecycle_capability import Active
@@ -32,7 +32,7 @@ from .errors import GoalRefused, RejectedEnforcementError, RelationViolationErro
 from .goal_authority import GoalAuthority, GoalTurnAuthority, NoGoalAuthority
 from .goal_mutation import GoalMutation
 from .goal_permit_source import GoalPermitSource
-from .goal_work import GoalAssignment, GoalWorkSource
+from .goal_work import GoalAssignment, GoalOwner, GoalWorkSource
 from .goal_states import ActiveGoal, GoalState
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import (
@@ -54,10 +54,6 @@ from .text_digest import TextDigest
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .turn_goal_permission import ContinuationGoalPermission, GoalPermission, InactiveGoalPermission
 from .ui_model.goal import GoalDisplay, GoalExecutionDisplay
-
-if TYPE_CHECKING:
-    from .registry.threads import Thread
-    from .turn_context import TurnContext
 
 
 @dataclass(frozen=True)
@@ -284,7 +280,7 @@ class GoalConsentRequired(GoalRefused, RejectedEnforcementError):
 
     reason: ClassVar[str] = "goal owner approval required"
 
-    def __init__(self, owner: Thread, actor: ThreadIncarnation) -> None:
+    def __init__(self, owner: GoalOwner, actor: ThreadIncarnation) -> None:
         super().__init__(
             f"{owner.name} already has {owner.goal.captured}; {actor.name} cannot assign "
             "new work without that goal owner's approval."
@@ -296,7 +292,7 @@ class GoalChangedError(GoalRefused, RejectedEnforcementError):
 
     reason: ClassVar[str] = "goal changed"
 
-    def __init__(self, thread: Thread, expected: GoalCheckpoint) -> None:
+    def __init__(self, thread: GoalOwner, expected: GoalCheckpoint) -> None:
         super().__init__(
             f"{thread.name}: observed {expected}, now {thread.goal.captured}; "
             "the action was not applied"
@@ -600,7 +596,9 @@ class GoalDeclaration(
     ) -> Scope: ...
 
     @abstractmethod
-    def add_context(self, context: TurnContext, owner: Thread, goals: GoalWorkSource) -> TurnContext: ...
+    def add_context[Context](
+        self, context: Context, prepend_goal: Callable[[Goal], Context],
+    ) -> Context: ...
 
     @abstractmethod
     def peer_change_values(self) -> GoalPeerChange: ...
@@ -620,10 +618,10 @@ class GoalDeclaration(
     def accepts_following_handoff(self) -> bool:
         return False
 
-    def require_work(self, actor: ThreadIncarnation, owner: Thread) -> None:
+    def require_work(self, actor: ThreadIncarnation, owner: GoalOwner) -> None:
         """No goal occupies this ready thread's work slot."""
 
-    def work_candidates(self, thread: Thread) -> tuple[Thread, ...]:
+    def work_candidates[Owner](self, thread: Owner) -> tuple[Owner, ...]:
         return (thread,)
 
     @property
@@ -733,7 +731,9 @@ class NoGoal(NullMember, GoalDeclaration):
     ) -> Scope:
         return scope
 
-    def add_context(self, context: TurnContext, owner: Thread, goals: GoalWorkSource) -> TurnContext:
+    def add_context[Context](
+        self, context: Context, prepend_goal: Callable[[Goal], Context],
+    ) -> Context:
         return context
 
     def peer_change_values(self) -> GoalPeerChange:
@@ -818,8 +818,10 @@ class Goal(RecordMember, GoalDeclaration):
     ) -> Scope:
         return scoped(self.revision_key)
 
-    def add_context(self, context: TurnContext, owner: Thread, goals: GoalWorkSource) -> TurnContext:
-        return context.prepend_goal(owner, self, goals)
+    def add_context[Context](
+        self, context: Context, prepend_goal: Callable[[Goal], Context],
+    ) -> Context:
+        return prepend_goal(self)
 
     def peer_change_values(self) -> GoalPeerChange:
         return GoalPeerChange(goal=self.revision_key, state=type(self.state), progress=self.progress)
@@ -827,10 +829,10 @@ class Goal(RecordMember, GoalDeclaration):
     def accepts_following_handoff(self) -> bool:
         return bool(self.state.items_with(Active, self))
 
-    def require_work(self, actor: ThreadIncarnation, owner: Thread) -> None:
+    def require_work(self, actor: ThreadIncarnation, owner: GoalOwner) -> None:
         self.state.require_work(actor, owner)
 
-    def work_candidates(self, thread: Thread) -> tuple[Thread, ...]:
+    def work_candidates[Owner](self, thread: Owner) -> tuple[Owner, ...]:
         return self.state.work_candidates(thread)
 
     @property

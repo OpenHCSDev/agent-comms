@@ -7,6 +7,22 @@ from .nominal.field_codec import GoalId
 from .thread_identity import ThreadIncarnation
 
 
+class GoalObservation(Protocol):
+    @property
+    def captured(self) -> object: ...
+
+
+class GoalOwner(Protocol):
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def incarnation(self) -> ThreadIncarnation: ...
+
+    @property
+    def goal(self) -> GoalObservation: ...
+
+
 class GoalAssignmentOrder[Assignment](Protocol):
     def instructions(self, assignment: Assignment) -> str: ...
 

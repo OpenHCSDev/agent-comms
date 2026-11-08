@@ -8,6 +8,7 @@ import re
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
+from functools import partial
 from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
@@ -1423,7 +1424,9 @@ class TurnContext(DeclaredReply):
         return context.with_goal(owner, comms.goals).with_awareness(comms, owner, relations)
 
     def with_goal(self, owner: Thread, goals) -> TurnContext:
-        return owner.goal.active().add_context(self, owner, goals)
+        return owner.goal.active().add_context(
+            self, partial(self.prepend_goal, owner, goals=goals),
+        )
 
     def prepend_goal(self, owner: Thread, goal: Goal, goals) -> TurnContext:
         return self.prepend(GoalSegment.capture(owner, goal, goals))
