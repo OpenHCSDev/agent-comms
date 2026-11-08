@@ -1255,6 +1255,12 @@ class ModelRefusalNoFallback(SystemEvent, declared_name='model_refusal_no_fallba
     pass
 
 
+class ModelRefusalFallback(SystemEvent, declared_name='model_refusal_fallback'):
+    """Claude Code's notice that a model's safeguards refused a request and it is retrying on
+    the fallback model. It delivers nothing and ends no turn; undeclared, its first record
+    stopped claude-laptop's bridge on 2026-11-08, and every restart died on the same line."""
+
+
 class ApiError(SystemEvent, declared_name='api_error'):
     """Claude Code's notice that it is retrying a failed API request (a 529 overload, say). It
     delivers nothing and ends no turn; undeclared, its first record stopped claude-b-ui's watch
