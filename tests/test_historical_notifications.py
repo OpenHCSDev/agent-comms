@@ -28,7 +28,10 @@ from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.harness_delivery_states import DeliveredOutcome, ObservedMonitor
-from agent_comms.notification_progress import HarnessConsumedProgress
+from agent_comms.notification_progress import (
+    AnsweredProgress, ConsumedDelivery, DeliveryProgress, HarnessConsumedProgress,
+    QueuedProgress, WorkingTakenProgress,
+)
 from agent_comms.coordination.errors import DMScopeChanged, SchemaVersionError
 from agent_comms.nominal.field_codec import InputId, MessageId, TurnId
 from transcript_record_fixture import transcript_record
@@ -126,7 +129,7 @@ def test_harness_consumption_survives_human_display(archived_notification):
 
     consumed = notification()
     assert consumed.state.consumed and not consumed.displayed_to
-    assert consumed.label == consumed.timed_state('Consumed', shown.at_ms)
+    assert consumed.label == consumed.timed_state(ConsumedDelivery.label, shown.at_ms)
     ledger = live.bus.reads.read()
     assert human_display() == ()
     # The UI's "mark read" on the agent's thread, as the registered human viewer.
@@ -202,7 +205,7 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
         activity=activity,
         updated_at_ms=1,
     )
-    assert recorded.label.startswith("Consumed ") and not recorded.state.working
+    assert recorded.label.startswith(f"{ConsumedDelivery.label} ") and not recorded.state.working
     assert recorded.state.detail == ""
     live = assignment.notification(
         recipient,
@@ -211,7 +214,7 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
         activity=activity,
         updated_at_ms=1,
     )
-    assert live.label.startswith("Consumed ") and not live.state.working
+    assert live.label.startswith(f"{ConsumedDelivery.label} ") and not live.state.working
     assert live.state.detail == ""
 
 
@@ -290,15 +293,15 @@ def test_sent_recipient_progresses_through_durable_consumption_and_answer(archiv
         updated_at_ms=2_000,
     )
 
-    assert sent.label.startswith("Sent ") and sent.state == SentProgress(1_000)
-    assert queued.label.startswith("Queued ") and queued.state == QueuedProgress(1_000)
-    assert consumed.label.startswith("Consumed ") and consumed.state == SelectedConsumedProgress(2_000)
-    assert answered.label.startswith("Answered ") and answered.answer == AnsweredResponse(MessageReference(99, reply_id), 3_000)
+    assert sent.label.startswith(f"{DeliveryProgress.label} ") and sent.state == SentProgress(1_000)
+    assert queued.label.startswith(f"{QueuedProgress.label} ") and queued.state == QueuedProgress(1_000)
+    assert consumed.label.startswith(f"{ConsumedDelivery.label} ") and consumed.state == SelectedConsumedProgress(2_000)
+    assert answered.label.startswith(f"{AnsweredProgress.label} ") and answered.answer == AnsweredResponse(MessageReference(99, reply_id), 3_000)
     # A delivered claim carries no consumed time of its own: without native or harness proof
     # its message is not consumed, whatever the claim's update time says. A running turn took
     # it; that is not a decision to ignore it.
     assert delivered.state == TakenProgress(SentProgress(1_000)) and not delivered.state.consumed
-    assert delivered.label.startswith("Sent ")
+    assert delivered.label.startswith(f"{DeliveryProgress.label} ")
 
     # Only the captured live activity says whether the recipient is working now.
     thread = old.registry.snapshot().threads[recipient.canonical_thread]
@@ -309,11 +312,11 @@ def test_sent_recipient_progresses_through_durable_consumption_and_answer(archiv
             recipient, SENDER, observation=observation, activity=activity, updated_at_ms=2_000)
     working = delivered_to(observed(ActivityState.WORKING), consumed_activity)
     assert working.state == WorkingTakenProgress(ShownToModelProgress(2_000))
-    assert working.label.startswith("Seen, working ") and working.state.seen_working
+    assert working.label.startswith(f"{WorkingTakenProgress.label} ") and working.state.seen_working
     idle = delivered_to(observed(ActivityState.IDLE), consumed_activity)
-    assert idle.label.startswith("Consumed ") and not idle.state.seen_working
+    assert idle.label.startswith(f"{ConsumedDelivery.label} ") and not idle.state.seen_working
     unconsumed = delivered_to(observed(ActivityState.WORKING), sent_activity)
-    assert unconsumed.label.startswith("Sent ") and not unconsumed.state.seen_working
+    assert unconsumed.label.startswith(f"{DeliveryProgress.label} ") and not unconsumed.state.seen_working
     confirmed = replace(unconsumed, state=unconsumed.state.model_consumed(HarnessConsumedProgress(context_entry.at_ms)))
     assert confirmed.state.seen_working and confirmed.state.consumed
     assert confirmed.label == confirmed.timed_state(WorkingTakenProgress.label, context_entry.at_ms)
@@ -321,14 +324,14 @@ def test_sent_recipient_progresses_through_durable_consumption_and_answer(archiv
     ignored = IgnoredAssignment.build(FullWake(), None, None)
     declined = ignored.notification(recipient, SENDER, observation=RecordedRecipientActivity(),
                                     activity=consumed_activity, updated_at_ms=2_000)
-    assert declined.label.startswith("Seen, not answering ") and declined.state.seen_not_answering
+    assert declined.label.startswith(f"{ConsumedDelivery.ignored_label} ") and declined.state.seen_not_answering
     unconfirmed = ignored.notification(recipient, SENDER, observation=RecordedRecipientActivity(),
                                        activity=sent_activity, updated_at_ms=2_000)
     assert unconfirmed.label == "Not answering" and not unconfirmed.state.seen_not_answering
     assert unconfirmed.state == IgnoredProgress(SentProgress(1_000))
     assert sum(row.state.consumed for row in (working, declined, unconfirmed, idle)) == 3
     assert not unconfirmed.state.consumed
-    assert delivered_answer.label.startswith("Answered ")
+    assert delivered_answer.label.startswith(f"{AnsweredProgress.label} ")
     assert delivered_answer.answer == AnsweredResponse(MessageReference(99, reply_id), 3_000)
     assert sent.recipient_identity == consumed.recipient_identity == answered.recipient_identity
 
@@ -407,7 +410,7 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(archived_n
     ).outcomes[original.seq, original.message_id]
 
     assert response.answers == (original.reference,)
-    assert notification.label.startswith("Answered ")
+    assert notification.label.startswith(f"{AnsweredProgress.label} ")
     assert notification.answer == AnsweredResponse(response.reference, response.at_ms)
 
 
@@ -475,7 +478,7 @@ def test_live_cli_ack_does_not_become_archived_ack(archived_notification):
         messages[0].seq, messages[0].message_id
     ]
     assert current.state.consumed and not current.displayed_to
-    assert current.label == current.timed_state('Consumed', messages[0].at_ms)
+    assert current.label == current.timed_state(ConsumedDelivery.label, messages[0].at_ms)
     with live.bus.history.read_sources() as sources:
         archived, = source.notification_references(sources, (messages[0].reference,), AllOutcomes()).outcomes[
             messages[0].seq, messages[0].message_id

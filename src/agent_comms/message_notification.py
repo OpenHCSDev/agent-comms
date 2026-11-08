@@ -19,7 +19,7 @@ from .notification_assignment import AssignmentSource, NotificationAssignment
 from agent_comms.notification_progress import AssignmentResponse
 from agent_comms.notification_assignment import NotificationAssignmentRead, NotificationReadMark
 from .notification_evidence import FirstRecipient, OutcomeViewer, RecipientCursor, RecipientLimit
-from .notification_progress import ConsumedDelivery, ConsumingProgress, DeliveryProgress, HumanReadProgress, WorkingTakenProgress
+from .notification_progress import DeliveryProgress, HumanReadProgress
 from .thread_identity import ThreadIncarnation
 from .transcript_sources import AssignedTranscriptSource
 from typing import TYPE_CHECKING
@@ -172,28 +172,34 @@ class MessageNotification:
 
     @classmethod
     def summary(cls, notifications: Iterable[MessageNotification]) -> str:
-        """One message's state and totals; clients never classify or count agents."""
+        """What the sender asked: that it went, how many read it, how many are answering.
+
+        It used to answer a different question — "Passive · Observed 14 recipients
+        (bounded) · Consumed 1 observed" names which internal step fired for whom, and
+        leaves the reader to work out whether anybody read their message. Tristan,
+        2026-11-08: "There should be read, there should be answering and there should be
+        sent. I think that should be enough."
+
+        The counts stay a bounded observation rather than the frozen audience; saying so
+        in the line itself bought nothing, since a count nobody can act on is noise in the
+        column where the answer should be.
+        """
         ordered = cls.ordered(notifications)
         if not ordered:
             # A matched original is sent even when there is no recipient feedback
             # (including when its only synthetic row was the viewing human).
             return DeliveryProgress.label
-        # This is a bounded observation, not the complete frozen audience and
-        # not a set of runtime acknowledgements. Membership proves neither.
-        total = len(ordered)
-        consumed = sum(notification.state.consumed for notification in ordered)
-        read = sum(bool(notification.displayed_to) for notification in ordered)
-        counted = ((ConsumingProgress.label, sum(item.state.answering for item in ordered)),
-                   (WorkingTakenProgress.label, sum(item.state.seen_working for item in ordered)),
-                   (ConsumedDelivery.ignored_label, sum(item.state.seen_not_answering for item in ordered)))
+        # A recipient has read it whether a person displayed it or a model took it into
+        # context; the sender asked who read it, not which of the two paths got there.
+        read = sum(1 for item in ordered
+                   if item.displayed_to or item.state.consumed)
+        counted = ((read, "read"),
+                   (sum(item.state.answering for item in ordered), "answering"))
         leading = ordered[0]
         return " · ".join(
             (
                 *leading.state.summary_prefix(leading),
-                *(f"{label} {count}" for label, count in counted if count),
-                f"Observed {total} recipients (bounded)",
-                f"{ConsumedDelivery.label} {consumed} observed",
-                *((f"{HumanReadProgress.label} {read} observed",) if read else ()),
+                *(f"{count} {word}" for count, word in counted if count),
             )
         )
 

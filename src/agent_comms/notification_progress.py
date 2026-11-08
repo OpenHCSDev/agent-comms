@@ -156,8 +156,11 @@ class DeliveryProgress(ThreadPresentationStatus):
 class ConsumedDelivery(SettledDelivery):
     """The harness or native runtime proved the message entered the model's context."""
 
-    label: ClassVar[str] = "Consumed"
-    ignored_label: ClassVar[str] = "Seen, not answering"
+    # A model taking the message into its context is that recipient reading it. Calling
+    # that "Consumed" told the sender which internal step fired, not whether anyone read
+    # what they sent.
+    label: ClassVar[str] = "Read"
+    ignored_label: ClassVar[str] = "Not answering"
     consumed: ClassVar[bool] = True
 
     def model_consumed(self, proof: ShownToModelProgress) -> Self:
@@ -237,7 +240,7 @@ class TakenProgress(SettledDelivery, ContextualProgress):
 class WorkingTakenProgress(ActiveDelivery, TakenProgress, WorkingThreadPresentationStatus):
     """The same taken message while its recipient is busy. Working does not promise a reply."""
 
-    label = "Seen, working"
+    label = "Working"
 
     @property
     def seen_working(self) -> bool:
