@@ -9,8 +9,7 @@ evidence holds on the plan repository's ``origin/main``; accepting a task proves
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.storage.store_files import SqliteStore
@@ -26,9 +25,9 @@ from agent_comms.phase_evidence import AllEvidence, AuditPatternPresent, BusStor
 from agent_comms.phase_tasks import PhaseTask, UnspecifiedPhaseTask
 from agent_comms.planning.phase_artifacts import RecordedArtifact
 
-if TYPE_CHECKING:
-    from agent_comms.plan_reading import PlanReading
-    from agent_comms.todos import Todo
+from agent_comms.order_phase import OrderPhase
+from agent_comms.plan_reading import PlanReading
+from agent_comms.todos import Todo
 
 
 class Plan(DeclaredFamily, affix="Plan"):
@@ -74,33 +73,6 @@ class ModuleOwnershipPlan(Plan):
 
     document = "plans/MODULE-OWNERSHIP-PLAN.md"
     evidence_manifest: ClassVar[str] = "docs/plan-evidence/module-map-manifest.json"
-
-
-class OrderPhase(DeclaredFamily, affix="Phase"):
-    """What an order serves: one plan phase, or nothing in any plan."""
-
-    @classmethod
-    def order_refusals(cls, read_ready: Callable[[], tuple[type[PlanPhase], ...]],
-                       reason: str) -> tuple[str, ...]:
-        return ()
-
-
-class UnplannedPhase(OrderPhase):
-    @classmethod
-    def order_refusals(cls, read_ready: Callable[[], tuple[type[PlanPhase], ...]],
-                       reason: str) -> tuple[str, ...]:
-        """Read the heartbeat's ready phases only when the stated reason does not answer the
-        refusal."""
-        if len(reason.split()) >= 8:
-            return ()
-        ready = read_ready()
-        if ready:
-            return (
-                "Plan phases are ready: "
-                + ", ".join(phase.declared_name for phase in ready)
-                + ". Name a phase, or provide an explicit unplanned_reason of 8+ words.",
-            )
-        return ()
 
 
 class PlanPhase(OrderPhase, declared_name=None):

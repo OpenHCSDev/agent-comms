@@ -86,7 +86,8 @@ from agent_comms.todos import (
 )
 from agent_comms.work_branches import WorkBranches
 from source_revision_fixture import SourceRepository
-from agent_comms.plan_phases import RetainedStorePhase, UnplannedPhase
+from agent_comms.order_phase import UnplannedPhase
+from agent_comms.plan_phases import RetainedStorePhase
 from agent_comms.todos import FoldedProblemOrder, UnorderedProblemOrder
 from agent_comms.team.standing import ReassignedWheelSpin
 from agent_comms.goals import GoalChangedError, NoGoal

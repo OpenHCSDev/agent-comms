@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from functools import cached_property
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Mapping, Self
+from typing import Mapping, Self
 
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.comms import Comms
@@ -25,8 +25,7 @@ from agent_comms.team_service import TeamService
 from agent_comms.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from agent_comms.todos import HeadVerdict, StoredHeadReview
 
-if TYPE_CHECKING:
-    from agent_comms.plan_phases import OrderPhase
+from agent_comms.order_phase import OrderPhase
 
 
 @dataclass(frozen=True)

@@ -38,6 +38,7 @@ from agent_comms.build_identity import (
     RecordedBuildIdentity,
     UnrecordedBuildIdentity,
 )
+from agent_comms.bus import BusReader
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.change_report import CitedRevisions, CommitRevision, Declaration, FileLine, MainRevision, NoSourceReference, SourceReference, SourceRevision, SourceRoots, SourceText, WorkingTree
 from agent_comms.channel_targets import (
@@ -117,7 +118,7 @@ from agent_comms.owner_requests import (
     RequestSelection,
     RequestState,
 )
-from agent_comms.plan_phases import OrderPhase, UnplannedPhase
+from agent_comms.order_phase import OrderPhase, UnplannedPhase
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.progress_claims import MergedClaim, ProgressClaim, WorkingClaim
 from agent_comms.recorded_time import (
@@ -177,7 +178,6 @@ from agent_comms.registry.registry_document import RegistrySnapshot, TeamProject
 # What reading one source checkout or its listing can raise: one source's failure is data.
 SOURCE_READ_FAILURES = (OSError, SourceReadFailure, TimeoutExpired)
 
-from agent_comms.bus import BusReader
 
 
 @dataclass(frozen=True)

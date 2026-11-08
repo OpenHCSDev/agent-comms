@@ -75,7 +75,8 @@ from agent_comms.order_tools import (
     TodoList,
 )
 from agent_comms.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
-from agent_comms.plan_phases import OrderPhase, PlanPhase
+from agent_comms.order_phase import OrderPhase
+from agent_comms.plan_phases import PlanPhase
 from agent_comms.notification_evidence import AllOutcomes
 from agent_comms.message_notification import MessageNotification
 from agent_comms.recorded_time import EventTime, RecordedEventTime
