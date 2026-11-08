@@ -16,9 +16,9 @@ trap 'printf "\nInstallation stopped. Log: %s/install.log\n" "$installation" >&2
 printf 'Installing Toad Comms and its build dependencies…\n'
 # Termux supports complete package upgrades, not mixed library/consumer versions.
 pkg upgrade -y
-# psutil and Pillow need Termux's Android patches, not desktop Linux wheels.
+# Use Termux's patched native modules and numerical libraries.
 pkg install -y python python-pip uv git openssh clang make cmake ninja rust \
-    pkg-config libffi openssl libjpeg-turbo zlib python-psutil python-pillow
+    pkg-config libffi openssl libjpeg-turbo zlib python-psutil python-pillow python-numpy
 
 if [[ -d "$source/.git" ]]; then
     # uv owns the generated lock; never discard edits to the source or a conflicting lock.
@@ -47,10 +47,22 @@ PY
 )
 
 cd "$source/stack"
+# Android can refuse a just-linked build script during parallel Cargo builds (ETXTBSY).
+export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-1}"
+# Resolution and pip use separate source trees; share compiled Rust dependencies.
+export CARGO_TARGET_DIR="$installation/cargo-target"
+export PIP_CACHE_DIR="$installation/pip-cache"
+# The Termux community index supplies Android wheels absent from desktop PyPI.
+termux_wheels=https://termux-user-repository.github.io/pypi/
+export PIP_EXTRA_INDEX_URL="$termux_wheels"
+export PIP_PREFER_BINARY=1
+export PIP_ONLY_BINARY=maturin
 # Inherit the patched native packages without letting pip change Termux's system Python.
 "$PREFIX/bin/python" -m venv --system-site-packages .venv
 uv export --project . --python "$PREFIX/bin/python" --no-managed-python \
     --no-python-downloads --no-dev --no-hashes --no-emit-project \
+    --index "$termux_wheels" --index-strategy unsafe-best-match \
+    --no-build-package maturin \
     "${upgrades[@]}" --output-file "$installation/requirements.txt" >/dev/null
 .venv/bin/python -m pip install --prefer-binary -r "$installation/requirements.txt"
 .venv/bin/python -m pip check
