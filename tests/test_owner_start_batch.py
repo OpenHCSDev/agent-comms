@@ -7,7 +7,7 @@ import pytest
 
 from agent_comms.cli_verbs.restore_owner import RestoreOwnerCliCommand
 from agent_comms.cli_verbs.start import StartCliCommand
-from agent_comms.comms import Comms, wire
+from agent_comms.comms import Comms
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.native_package import VerifiedNativePackage
@@ -34,9 +34,9 @@ def attached_launch(comms: Comms, name: str) -> RetainedOwnerLaunch:
 @pytest.mark.parametrize("command", (RestoreOwnerCliCommand, StartCliCommand))
 def test_start_batch_attaches_every_owner_to_one_host(
     tmp_path: Path, native_runtime_package: VerifiedNativePackage,
-    command: type[RestoreOwnerCliCommand],
+    command: type[RestoreOwnerCliCommand], comms: Comms,
 ) -> None:
-    comms = prepare_native_comms(wire(tmp_path / "wire"))
+    prepare_native_comms(comms)
     names = ("first", "second")
     for name in names:
         comms.registry.declare(NativeThread(name, frozenset(), Checkout(tmp_path)))
@@ -54,9 +54,9 @@ def test_start_batch_attaches_every_owner_to_one_host(
 
 
 def test_later_selection_failure_joins_the_already_dispatched_start(
-    tmp_path: Path, native_runtime_package: VerifiedNativePackage,
+    tmp_path: Path, native_runtime_package: VerifiedNativePackage, comms: Comms,
 ) -> None:
-    comms = prepare_native_comms(wire(tmp_path / "wire"))
+    prepare_native_comms(comms)
     comms.registry.declare(NativeThread("first", frozenset(), Checkout(tmp_path)))
     try:
         with pytest.raises(UnregisteredThreadError):
@@ -71,14 +71,15 @@ def test_later_selection_failure_joins_the_already_dispatched_start(
 
 
 def test_failed_binding_retires_without_stopping_its_shared_host(
-    tmp_path: Path, native_runtime_package: VerifiedNativePackage,
+    tmp_path: Path, native_runtime_package: VerifiedNativePackage, comms: Comms,
 ) -> None:
-    comms = prepare_native_comms(wire(tmp_path / "wire"))
+    prepare_native_comms(comms)
     for name in ("healthy", "failed"):
         comms.registry.declare(NativeThread(name, frozenset(), Checkout(tmp_path)))
     gate = PiRedeal.of(comms, comms.registry.require("failed"))
-    gate.record.parent.mkdir(parents=True, exist_ok=True)
-    gate.record.write_text("{")  # Fail before an ACP session is published, not a model input.
+    # Malformed JSON is deliberately renewed as an undealt session. An unreadable
+    # record path fails at the same real read boundary, before ACP publication.
+    gate.record.mkdir(parents=True)
     try:
         comms.owners.start_many(("healthy",))
         host = attached_launch(comms, "healthy").process
@@ -91,7 +92,7 @@ def test_failed_binding_retires_without_stopping_its_shared_host(
         assert not comms.registry.require("failed").process_alive
         assert attached_launch(comms, "healthy").process == host
         assert host.alive()
-        gate.record.unlink()
+        gate.record.rmdir()
         comms.owners.start_many(("failed",))
         assert attached_launch(comms, "failed").process == host
     finally:
