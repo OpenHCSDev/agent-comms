@@ -26,7 +26,10 @@ from .native_entries import ImportedSessionWriter
 from .storage.locked_store import PatternFile, RuntimeFile
 from .registry.registration import Registration
 from .relationships import RelationshipStore
-from .repo import Checkout, LaunchCheckout
+from .projects.checkouts import (
+    Checkout,
+    LaunchCheckout,
+)
 from .registry.threads import ExternalThread, NativeThread, KeptModel, ModelChoice, NextTurnConfiguration, Thread
 from .thread_status import StoppedThreadStatus
 from .view_unread import transcript_read_state

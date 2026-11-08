@@ -91,7 +91,7 @@ from agent_comms.registry.registry_document import (
     UnreadRegistry,
 )
 from agent_comms.registry_provenance import DeletedThread
-from agent_comms.repo import Checkout
+from ..projects.checkouts import Checkout
 from agent_comms.revision_views import (
     NotificationsView,
     RegistrationsView,

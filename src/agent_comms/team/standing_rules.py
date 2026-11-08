@@ -102,10 +102,8 @@ from ..registry.registry_document import (
     RegistrySnapshot,
 )
 from ..registry.threads import Thread
-from ..repo import (
-    GitCommandError,
-    Repo,
-)
+from ..projects.git_errors import GitCommandError
+from ..projects.repo import Repo
 from ..repository_name import RepositoryName
 from ..root_runtime import RootRuntimeStore
 from ..service_passes import (
@@ -113,7 +111,7 @@ from ..service_passes import (
     ServicePassStore,
     ServicePasses,
 )
-from ..storage_rules import (
+from ..projects.storage_rules import (
     MemoryUse,
     StorageRule,
     UnitStorage,

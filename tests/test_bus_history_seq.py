@@ -1,7 +1,7 @@
 """Bus history uses sequence keys; Pi session cursors remain byte positions."""
 
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import json
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor

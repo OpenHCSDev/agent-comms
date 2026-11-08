@@ -1,7 +1,7 @@
 """A killed restore must be completed by the next install, before it reads the bus."""
 
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import os
 import signal
 import subprocess

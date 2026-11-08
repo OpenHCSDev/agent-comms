@@ -1,6 +1,6 @@
 """Sort timestamps must reflect thread events, never attachment or heartbeat."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.activity import Activity, ActivityState

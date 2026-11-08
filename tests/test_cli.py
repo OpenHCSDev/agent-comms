@@ -1,7 +1,10 @@
 import sys
 
 
-from agent_comms.repo import Checkout, LaunchCheckout
+from agent_comms.projects.checkouts import (
+    Checkout,
+    LaunchCheckout,
+)
 from agent_comms.bus import Bus
 import json
 import os

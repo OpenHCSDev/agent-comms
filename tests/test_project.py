@@ -16,7 +16,7 @@ from acp import RequestError
 from delivery_owner_fixture import canonical_agent
 from agent_comms.comms import wire
 from agent_comms.acp_extension import CoordinationChangedUpdate, decode_updates
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 
 
 async def test_project_update_is_published_and_old_saved_cwd_can_resume(

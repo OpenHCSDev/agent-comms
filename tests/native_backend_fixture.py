@@ -1,6 +1,6 @@
 """Acquired original native fixture: a saved Pi session, its owner and a loopback provider."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import asyncio
 import json
 import os
@@ -26,7 +26,7 @@ from agent_comms.native_child import PiSessionChild
 from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.selected_actions import NoSelectedTools
-from agent_comms.storage_rules import StorageRule
+from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.threads import NativeThread
 from compaction_loopback import LoopbackProvider
@@ -193,7 +193,7 @@ async def native_backend_fixture(tmp_path, *, package: VerifiedNativePackage,
     root, project, config = (tmp_path / name for name in ("wire", "project", "config"))
     root.mkdir(mode=0o700)
     project.mkdir(mode=0o700)
-    from agent_comms.repo import Repo
+    from agent_comms.projects.repo import Repo
     Repo.git(project, 'init', '--quiet')
     config.mkdir(mode=0o700)
     session = create_fresh_private_session(tmp_path / "sessions", worktree=project).path

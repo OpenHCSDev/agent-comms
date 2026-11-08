@@ -17,7 +17,7 @@ from .harness_install import HarnessSession
 from .input_key import InputKey, InputKeyText
 from .message_reference import MessageReference
 from .tool_result import ToolResult
-from .repo import Checkout
+from .projects.checkouts import Checkout
 from .thread_identity import ClaimScoped, ClaimedIdentity
 from .turn_context import Provenance
 

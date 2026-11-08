@@ -34,7 +34,7 @@ from .coordination.cohort import sealed_cohort_assignments
 from .nominal.declared_family import DeclaredFamily
 from .envelope_claim_transitions import ExistingFileClaim
 from .nominal.field_codec import AssignmentId, ClaimId, FieldCodec, MalformedRecord, MessageId, RootId
-from .repo import Checkout
+from .projects.checkouts import Checkout
 from .message_reference import MessageReference
 from .storage.private_path import PrivateDirectoryRole, PrivateFileRole
 from .thread_identity import ClaimedIdentity, ClaimScoped, RecordedThreadIncarnation

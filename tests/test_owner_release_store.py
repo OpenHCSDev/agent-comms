@@ -4,7 +4,7 @@ from agent_comms.owner_release import (
     NoRelease,
     OwnerReleaseEvidence,
 )
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from dataclasses import replace
 
 from agent_comms.comms import wire

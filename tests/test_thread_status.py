@@ -1,6 +1,6 @@
 """Presence behavior across persisted lifecycle changes and current UI consumers."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import json
 import os
 import subprocess

@@ -1,6 +1,6 @@
 """Current subscription contract exercised across an actual owner Unix socket."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import asyncio
 import json
 import os

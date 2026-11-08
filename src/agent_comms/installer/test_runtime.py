@@ -14,8 +14,8 @@ from pathlib import Path
 from agent_comms.installer.practice import TestHome
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.runtime_stack import RuntimeStack
-from agent_comms.repo import Checkout
-from agent_comms.storage_rules import StorageRule
+from ..projects.checkouts import Checkout
+from ..projects.storage_rules import StorageRule
 
 
 def main() -> None:

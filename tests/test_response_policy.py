@@ -1,4 +1,4 @@
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.nominal.field_codec import GoalId
 from agent_comms.messages import ConversationRole, Message, InfoKind
 from agent_comms.response_policy import ResponseEligibility, ResponsePolicy

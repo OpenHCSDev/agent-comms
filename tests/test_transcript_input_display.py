@@ -1,5 +1,5 @@
 """Saved native input IDs bind transcript display to the owner's submitted intent."""
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.controller import SessionUpdateSink
 
 import json

@@ -30,7 +30,7 @@ from agent_comms.response_acknowledgement import (
 from agent_comms.storage.typed_table import Column, Generated, sql_literal
 
 from .nominal.field_codec import FieldCodec, MessageId, ThreadLookup
-from .repo import Checkout
+from .projects.checkouts import Checkout
 from .wake_policy import RecipientDecision
 from .channel_targets import ThreadTarget
 

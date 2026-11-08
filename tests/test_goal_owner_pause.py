@@ -1,7 +1,7 @@
 """Owner pause remains attributable and cannot be undone by a model tool."""
 
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import pytest
 
 from agent_comms.comms import wire

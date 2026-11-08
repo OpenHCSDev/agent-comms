@@ -1,6 +1,6 @@
 """Source contention retains a viewer read, never manufactures an input failure."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import asyncio
 import json
 import subprocess

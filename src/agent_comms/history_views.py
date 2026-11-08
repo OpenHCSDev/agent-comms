@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 from agent_comms.nominal.field_codec import PresenceExclude
-from agent_comms.repo import Checkout
+from .projects.checkouts import Checkout
 
 from .activity import ActivityCapture, ObservedActivity
 from .activity_clocks import ChannelActivity

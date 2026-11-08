@@ -13,7 +13,12 @@ from agent_comms.phase_evidence import (
     Census, EvidenceFound, EvidenceRead, EvidenceUnread, MainTree, PhaseEvidence,
     UnreadableEvidenceError,
 )
-from agent_comms.repo import Checkout, CheckoutHistory, GitCommandError, Repo
+from .projects.git_errors import GitCommandError
+from .projects.repo import Repo
+from .projects.checkouts import (
+    Checkout,
+    CheckoutHistory,
+)
 
 
 from .planning.orders import Todo

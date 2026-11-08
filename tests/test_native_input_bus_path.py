@@ -1,5 +1,5 @@
 """A saved native owner answers a fresh DM through its bus-owned proof resource."""
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import asyncio
 import json
 from pathlib import Path

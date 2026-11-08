@@ -12,7 +12,7 @@ from agent_comms.storage.locked_store import LiveFilesRequest, RegistryFile
 from agent_comms.private_registry_guard import PrivateRegistryGuard
 from agent_comms.registry.registry_document import NoTeamProject, RegisteredTeamProject
 from agent_comms.registry.registry_store import RegistryStore
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from conftest import maintenance_held
 

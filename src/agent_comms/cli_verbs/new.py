@@ -15,7 +15,10 @@ from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.nominal.field_codec import Multiline
 from agent_comms.nominal.field_codec import Normalize
 from agent_comms.native_settings import NativeThreadDefaults
-from agent_comms.repo import Checkout, LaunchCheckout
+from ..projects.checkouts import (
+    Checkout,
+    LaunchCheckout,
+)
 from agent_comms.pi_vocabulary import ThinkingLevelField
 from agent_comms.thread_management import InheritedTags
 from agent_comms.thread_management import NewThreadSpec

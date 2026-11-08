@@ -2,7 +2,7 @@
 
 
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from bus_history import read_history
 from delivery_owner_fixture import qualified_owner_launch, start_headless_owner  # noqa: F401
 import asyncio

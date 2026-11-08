@@ -17,7 +17,7 @@ from agent_comms.cli_bridges.shared import (
     Watch,
 )
 from agent_comms.errors import UnregisteredThreadError
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 
 

@@ -17,7 +17,7 @@ from agent_comms.cli_verbs.archive import ArchiveCliCommand
 from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.config_options import CatalogChoice
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 
 
 def test_a_surrounding_channel_keeps_its_wire_form_as_a_member_of_every_selection():

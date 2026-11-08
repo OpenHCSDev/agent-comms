@@ -1,7 +1,7 @@
 """Current owner queues scope notices without altering durable input evidence."""
 
 from agent_comms.bus_read import OwnerScopedRead
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import asyncio
 from dataclasses import replace
 from pathlib import Path

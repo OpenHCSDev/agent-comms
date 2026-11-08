@@ -22,7 +22,7 @@ from agent_comms.planning.orders import (
     Todo,
 )
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.storage_rules import StorageRule
+from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.transport.tools.orders import CommsVerdictTool
 from test_judge_dropped import recorded_edit, unjudged

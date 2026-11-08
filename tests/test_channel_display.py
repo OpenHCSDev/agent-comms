@@ -1,6 +1,6 @@
 """The opt-in channel activity feed is a local display, never wire authority."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import json
 from dataclasses import replace
 from threading import Event

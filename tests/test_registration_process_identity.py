@@ -1,6 +1,6 @@
 """Actual process birth is the registration/claim_scope authority, never PID alone."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import os
 from dataclasses import replace
 

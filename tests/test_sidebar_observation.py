@@ -1,6 +1,6 @@
 """Sidebar states answer the same questions before and after a real read."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import gc
 import hashlib
 import pickle

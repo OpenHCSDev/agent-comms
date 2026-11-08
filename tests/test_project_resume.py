@@ -3,7 +3,7 @@
 Real registry and coordination stores in temporary directories. The native
 test runs the real Pi child against a local provider.
 """
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import asyncio
 import json
 import os

@@ -43,7 +43,12 @@ from .nominal.field_codec import (
     TurnId,
 )
 from .registration_inheritance import RegistrationInheritance
-from .repo import DetachedStart, GitCommandError, Repo, ScratchCheckout
+from .projects.git_errors import GitCommandError
+from .projects.repo import Repo
+from .projects.checkouts import (
+    DetachedStart,
+    ScratchCheckout,
+)
 from .reported_turn import NoReportedTurn, ReportedTurnState
 from .shell_effects import shell_storage_effects
 from .text_digest import TextDigest

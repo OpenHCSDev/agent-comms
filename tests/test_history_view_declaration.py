@@ -1,6 +1,6 @@
 """A new history declaration crosses real current and retained-source boundaries."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.nominal.field_codec import TurnId
 from agent_comms.historical_views import HistoryView
 from agent_comms.message_page import PageBounds

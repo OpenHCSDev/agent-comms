@@ -22,7 +22,7 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.message_reference import MessageReference
 from agent_comms.nominal.field_codec import MessageId, TurnId
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.task_sources import AnnotationDisclosureGrant, ProjectTaskScope
 from agent_comms.thread_identity import RecordedThreadIncarnation, TurnIdentity
 from agent_comms.turn_context import (

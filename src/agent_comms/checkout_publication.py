@@ -10,7 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .harness_install import replace_link
-from .repo import Checkout, Repo
+from .projects.repo import Repo
+from .projects.checkouts import Checkout
 from .storage.store_files import StoreGuard
 
 

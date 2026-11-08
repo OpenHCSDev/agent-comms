@@ -5,7 +5,7 @@ manifest whose declaration name is intentionally unavailable in this reader.
 """
 
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.context_store import UNREAD_CONTEXT
 import asyncio
 import pickle

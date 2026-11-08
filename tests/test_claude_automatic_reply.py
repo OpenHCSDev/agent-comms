@@ -25,7 +25,7 @@ from agent_comms.registry.threads import NativeThread
 from agent_comms.harness_delivery_states import DeliveredOutcome
 from agent_comms.messages import AckKind, AlertKind, HandoffKind, InfoKind, Message, MessageKind, NoticeRole, QuestionKind
 from agent_comms.channel_targets import TeammatesTag, ThreadTarget
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.turn_digests import LastTurns
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegisteredTeamProject

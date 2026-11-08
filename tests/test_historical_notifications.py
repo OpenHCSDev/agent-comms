@@ -3,7 +3,7 @@
 
 from agent_comms.notification_progress import AssignmentResponse, AnsweredResponse, UnansweredResponse
 from agent_comms.notification_evidence import AllOutcomes
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.bus import Bus
 from bus_record_fixture import prepare_native_comms
 

@@ -49,7 +49,10 @@ from ..registration_inheritance import (
     InheritEmpty,
     InheritPrevious,
 )
-from ..repo import Checkout, RepositoryReads
+from ..projects.checkouts import (
+    Checkout,
+    RepositoryReads,
+)
 from ..session_file import NoSessionFile, SessionFile
 from ..storage.locked_store import DurableFile, PatternFile
 from ..task_sources import TaskScope
@@ -97,7 +100,7 @@ from ..turn_lease import (
 
 if TYPE_CHECKING:
     from ..goal_management import Goals
-    from ..storage_rules import StorageRule
+    from ..projects.storage_rules import StorageRule
     from .registry_document import RegistrySnapshot
 
 

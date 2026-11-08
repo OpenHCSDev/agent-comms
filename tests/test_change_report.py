@@ -1,6 +1,6 @@
 """The change-report kind and its declared evidence, through the real send path."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import os
 from dataclasses import replace
 import subprocess

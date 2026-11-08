@@ -1,7 +1,7 @@
 """One registry answer turns wanted text into a free thread name."""
 from pathlib import Path
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import os
 
 import pytest

@@ -1,6 +1,6 @@
 """Actual persisted claim boundaries distinguish declaration from claim_scope drift."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import os
 import threading
 import time

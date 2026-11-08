@@ -32,7 +32,7 @@ from .nominal.field_codec import (
     WireOmitDefault,
 )
 from .peer_relevance import AlwaysListed, GoalShown, PeerRelevance
-from .repo import Checkout
+from .projects.checkouts import Checkout
 from .thread_identity import ThreadIncarnation, TurnIdentity
 from .tool_result import DeclaredReply, ToolResult
 from .turn_item import NativeItemId, PiRequestKey

@@ -1,6 +1,6 @@
 """An actual idle owner restart preserves the saved session and retained state."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import asyncio
 
 from agent_comms import restart_queue

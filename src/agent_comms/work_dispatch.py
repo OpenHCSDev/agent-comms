@@ -24,10 +24,15 @@ from .native_settings import NativeThreadDefaults
 from .phase_tasks import PhaseTask
 from .planning.orders import PendingProblemOrder
 from .recorded_time import RecordedEventTime
-from .repo import Checkout, CheckoutStart, LocalRepositorySource, Repo
+from .projects.repo import Repo
+from .projects.checkouts import (
+    Checkout,
+    CheckoutStart,
+)
+from .projects.repository_sources import LocalRepositorySource
 from .repository_name import RepositoryName
 from .shell_effects import AcquireRepositoryStorageEffect, CreateCheckoutStorageEffect
-from .storage_projection import StorageProjection
+from .projects.storage_projection import StorageProjection
 from .thread_status import StoppedThreadStatus
 from .session_file import RegistrySessionLocation
 

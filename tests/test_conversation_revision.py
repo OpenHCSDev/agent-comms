@@ -1,6 +1,6 @@
 """A conversation revision tracks its selected scope, not registry traffic."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import pytest
 
 from agent_comms.comms import wire

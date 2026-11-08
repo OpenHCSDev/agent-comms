@@ -16,7 +16,7 @@ from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.declared_uv import DeclaredUv
 from agent_comms.installer.upgrade import Stack
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 
 
 def test_rehearsal_home_requires_both_installed_inputs(tmp_path, monkeypatch, test_uv):

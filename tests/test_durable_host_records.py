@@ -28,7 +28,7 @@ from agent_comms.pi_wire import RequestId
 from agent_comms.pi_payloads import PiContextUsage, ReportedContextUsage, ReportedText
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.recorded_time import UnrecordedTimeError
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_declaration import ReadAction

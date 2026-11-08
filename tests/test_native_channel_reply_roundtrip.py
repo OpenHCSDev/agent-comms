@@ -1,5 +1,5 @@
 """A published native reply automatically reaches the original channel sender."""
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.controller import SessionUpdateSink
 
 

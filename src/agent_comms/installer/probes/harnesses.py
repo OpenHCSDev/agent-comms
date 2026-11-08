@@ -18,7 +18,7 @@ from agent_comms.harness_install import Harness
 from agent_comms.installer.interpreter_operation import RuntimeProbe, TargetProbe
 from agent_comms.registry.registry_document import TeamProject
 from agent_comms.registry.threads import ExternalThread
-from agent_comms.repo import Checkout
+from ...projects.checkouts import Checkout
 
 
 @dataclass(frozen=True)

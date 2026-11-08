@@ -1,6 +1,6 @@
 """New status text is bounded by activity; saved text is never repaired on read."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import os
 from dataclasses import replace
 

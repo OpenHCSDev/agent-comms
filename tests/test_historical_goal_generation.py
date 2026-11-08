@@ -1,6 +1,6 @@
 """A fresh carry generation says nothing about the old goal's execution."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from contextlib import closing
 from dataclasses import replace
 import os

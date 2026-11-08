@@ -9,7 +9,7 @@ import pytest
 
 import agent_comms
 from agent_comms.coordination.errors import CommandFailure
-from agent_comms.repo import FailedGitCommand
+from agent_comms.projects.git_errors import FailedGitCommand
 
 
 def members(family: type) -> set[type]:

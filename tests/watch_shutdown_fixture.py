@@ -16,7 +16,7 @@ from agent_comms.connector import Connector, ServeVerb
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.launch_root import LaunchRoot, started
 from agent_comms.message_bus import Watch, WatchPass
-from agent_comms.repo import Repo
+from agent_comms.projects.repo import Repo
 from source_revision_fixture import SourceRepository
 from agent_comms.work_branches import WorkBranches
 from git_shutdown_fixture import HeldGitHTTP

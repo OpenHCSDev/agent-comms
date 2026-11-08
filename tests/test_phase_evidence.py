@@ -37,7 +37,7 @@ from nominal_refactor_advisor.audit.findings import GodFunction
 
 from agent_comms.nominal_census import NominalCensus
 from agent_comms.plan_phases import BusDeletionPhase, FLAG, ExternalBoundariesPhase, ModuleMapPhase, PlanPhase, RostersPhase
-from agent_comms.repo import Repo
+from agent_comms.projects.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.work_branches import WorkBranches
 import fixture_git

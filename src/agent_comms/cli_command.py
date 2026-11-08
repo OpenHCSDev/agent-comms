@@ -50,7 +50,7 @@ from agent_comms.nominal.field_codec import (
     WireValue,
 )
 from agent_comms.registry.registry_document import RegistrySnapshot, ResolvedChannel
-from agent_comms.repo import Checkout
+from .projects.checkouts import Checkout
 from agent_comms.target_fields import TargetField
 from agent_comms.tool_result import ToolResult
 from agent_comms_hooks import ToolRefusedError

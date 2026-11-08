@@ -1,6 +1,6 @@
 """Transition-family consequences on the actual canonical registry and locks."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import os
 from dataclasses import replace
 

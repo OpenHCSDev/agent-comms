@@ -1,6 +1,6 @@
 """Standing rules read current state: a blocked goal leads the board until it is active."""
 from agent_comms.planning.order_words import DirectiveText
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import time
 from dataclasses import replace
 

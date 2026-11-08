@@ -1,5 +1,5 @@
 """Single-owner attachment and idle wakeup through real processes and sockets."""
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.runtime_requests import QueueActionRuntimeRequest
 from agent_comms.owner_connection import (
     CapturedOwner, OwnerIdentityChangedError, OwnerReplyConnection, OwnerReplyLostError, socket_path,

@@ -46,7 +46,7 @@ from agent_comms.installer.probes.packages import (
 )
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.repo import Repo
+from ..projects.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.work_branches import WorkBranches
 

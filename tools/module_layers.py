@@ -50,7 +50,7 @@ from agent_comms.head_review import BaseSide, HeadSide, IntegrationInput, Side
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.runtime_resolution import CorePackage, ProjectMetadata, StackSources
 from agent_comms.installer.runtime_wire import ClientImport, CrossesRuntimes
-from agent_comms.repo import Repo
+from agent_comms.projects.repo import Repo
 from agent_comms.repository_name import RepositoryName
 
 ROOT = Path(__file__).resolve().parent.parent

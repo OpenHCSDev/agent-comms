@@ -22,7 +22,7 @@ from agent_comms.notification_reads import (
 from agent_comms.transport.tools.reads import TeammateRead, InputDeliveryRead, OwnerGoalRead, TranscriptPageRead
 from agent_comms.storage.private_path import FileRevision, MissingFile
 from agent_comms.registry_provenance import DeletedThread
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.presentation import NoRevision, WireRevision
 from agent_comms.revision_views import (
     ActivityView, NotificationEvidenceView, NotificationsView, RegistrationsView,

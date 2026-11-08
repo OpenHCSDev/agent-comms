@@ -1,6 +1,6 @@
 """Dependency replies retain original checked identities across registry changes."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.messages import NoticeRole
 import os
 from dataclasses import replace

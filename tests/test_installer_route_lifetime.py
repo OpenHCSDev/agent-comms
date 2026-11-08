@@ -1,7 +1,7 @@
 """The installer publishes and undoes its own route, leaving other publishers alone."""
 
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import errno
 import json
 import os

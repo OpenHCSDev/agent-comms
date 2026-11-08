@@ -9,15 +9,24 @@ import pytest
 from agent_comms.cli_commands import GoalCheckoutGrant
 from agent_comms.comms import Comms
 from agent_comms.goals import Goal
-from agent_comms.repo import Checkout, DetachedStart, GitHubRepositorySource, Repo, RepositoryReads, RepositorySource
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.checkouts import (
+    Checkout,
+    DetachedStart,
+    RepositoryReads,
+)
+from agent_comms.projects.repository_sources import (
+    GitHubRepositorySource,
+    RepositorySource,
+)
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.thread_creation import RecordedCreationTime
 from agent_comms.shell_effects import AcquireRepositoryStorageEffect
 from agent_comms.tool_denial import StorageDenied
-from agent_comms.storage_projection import StorageProjection
+from agent_comms.projects.storage_projection import StorageProjection
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.repository_name import RepositoryName
-from agent_comms.storage_rules import StorageRule
+from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.registry.threads import ExternalThread, NativeThread, Thread
 from cli_command import core_process
 from source_revision_fixture import SourceRepository

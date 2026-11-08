@@ -2,7 +2,7 @@
 publications refuse while held (test_connector.test_publishing_tool_held_mid_call_refuses_at_once)."""
 
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import asyncio
 import os
 import sqlite3

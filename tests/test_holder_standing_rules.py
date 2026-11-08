@@ -22,7 +22,7 @@ from agent_comms.planning.pull_requests import (
     MergedLink,
     PullRequestLink,
 )
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import asyncio
 import json
 from contextlib import nullcontext

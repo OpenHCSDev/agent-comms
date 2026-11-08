@@ -78,7 +78,7 @@ from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.task_attachments.team_pings import TeamUpdate
 from agent_comms.thread_status import ThreadStatus
 from agent_comms.thread_text import AbsentText, GivenText, TextChoice
-from agent_comms.repo import Checkout
+from ..projects.checkouts import Checkout
 from agent_comms.storage.typed_table import (
     DurableTables,
     TableSchema,

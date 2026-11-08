@@ -1,5 +1,5 @@
 from agent_comms.transcript_sources import NoDraft
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import asyncio
 
 import pytest

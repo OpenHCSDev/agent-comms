@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 
 from agent_comms.acp import CommsAgent
 from agent_comms.agent_events import NativeMetadataObservation

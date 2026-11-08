@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.comms import Comms
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.repository_name import RepositoryName
 from agent_comms.task_attachments.owner_notices import OrderNotice
 from agent_comms.registry.threads import NativeThread

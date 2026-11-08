@@ -1,7 +1,7 @@
 """IRC model: channels, DMs, presence, history views."""
 from pathlib import Path
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.channel_targets import CommandTarget, DeclaredTag
 import pytest
 

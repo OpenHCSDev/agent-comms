@@ -36,8 +36,8 @@ from agent_comms.installer.runtime_resolution import (
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.native_build_inputs import NativeBuildInputs
 from agent_comms.native_package import NativePackageStore, pinned_package_for
-from agent_comms.repo import Checkout
-from agent_comms.storage_rules import StorageRule
+from ..projects.checkouts import Checkout
+from ..projects.storage_rules import StorageRule
 
 HOME = Path.home()
 

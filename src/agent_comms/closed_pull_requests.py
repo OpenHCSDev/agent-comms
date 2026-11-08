@@ -18,7 +18,7 @@ from .planning.orders import (
     StoredMainPatch,
     TodoStore,
 )
-from .repo import Repo
+from .projects.repo import Repo
 from .repository_name import RepositoryName
 from .work_branches import CommitBase, UnservableCommitBase, WorkBranchError, WorkBranches
 

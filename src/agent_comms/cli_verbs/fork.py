@@ -9,7 +9,7 @@ from agent_comms.nominal.field_codec import TargetBound
 from agent_comms.registry.threads import NativeOwnerCommand, Thread
 from agent_comms.thread_management import ForkSpec
 from agent_comms.thread_management import GivenTags
-from agent_comms.repo import Checkout
+from ..projects.checkouts import Checkout
 from dataclasses import dataclass
 from typing import Annotated
 from typing import Self

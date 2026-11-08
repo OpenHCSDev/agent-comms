@@ -1,7 +1,7 @@
 """Declared extension decoding is strict and shares its owner with consumers."""
 
 from agent_comms.transcript_sources import NoDraft
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import pytest
 
 from agent_comms.acp_extension import (

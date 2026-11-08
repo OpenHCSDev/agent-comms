@@ -38,7 +38,12 @@ from agent_comms.service_passes import ServicePassStore
 from git_shutdown_fixture import HeldGitHTTP, held_commit
 from agent_comms.nominal_census import NominalCensus
 from agent_comms.phase_evidence import BusStorageAbsent, CommitMerged, EvidenceFound, EvidenceUnread, MainTree, PathsAbsent, PhaseEvidence
-from agent_comms.repo import Checkout, GitCommandError, Repo, UnavailableCommitError
+from agent_comms.projects.git_errors import (
+    GitCommandError,
+    UnavailableCommitError,
+)
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.change_report import BranchHeadRevision, CommitRevision, FileLine, OrderRoots
 from agent_comms.work_branches import SourceGrowth, WorkBranchError, WorkBranches
 from source_revision_fixture import SourceRepository

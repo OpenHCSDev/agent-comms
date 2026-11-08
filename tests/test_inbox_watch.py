@@ -39,7 +39,7 @@ from agent_comms.inbox_watch import OpenWatch
 from agent_comms.launch_runtime import InstalledSource, LaunchRuntime
 from agent_comms.message_reference import MessageReference
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.thread_status import ConnectedThreadStatus, NoBridgeThreadStatus
 from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.tool_caller import ThreadCaller

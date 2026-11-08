@@ -1,6 +1,6 @@
 """Measured admission, not estimates; the claim also owns displayed waiting."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import asyncio
 import os
 import shutil
@@ -15,7 +15,7 @@ from agent_comms.storage_room import (
     BuildRoomWork, RoomClaim, TestGateRoomWork, UnitStartRoomWork,
     WaitingRoomPhase, WorkPeak, RoomNeed,
 )
-from agent_comms.storage_rules import StorageRule
+from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.tool_denial import StorageDenied
 from agent_comms.shell_effects import shell_storage_effects
 from agent_comms.thread_status import RunningThreadStatus

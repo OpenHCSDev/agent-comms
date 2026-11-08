@@ -51,7 +51,7 @@ from ...registry.registry_document import (
 )
 from ...registry.threads import Thread
 from ...relationships import SortableRelationshipGroup, ThreadCommsSnapshot
-from ...repo import Checkout
+from ...projects.checkouts import Checkout
 from ...runtime_server import RuntimeRequest
 from ...send_result import MessagePublished
 from ...served_bus import ServedBus, UnidentifiedBus

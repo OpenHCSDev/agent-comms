@@ -1,6 +1,6 @@
 """A stale open view is a registry-owned deletion result, not observer failure."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import asyncio
 import pickle
 from dataclasses import replace

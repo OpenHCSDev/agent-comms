@@ -1,6 +1,6 @@
 """Canonical saved clocks survive projection, ACP transport and page rebuild."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from dataclasses import replace
 from datetime import datetime
 

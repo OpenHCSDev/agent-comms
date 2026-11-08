@@ -4,7 +4,7 @@
 from agent_comms.bus_read import UiRead
 from agent_comms.team.standing_rules import ServicePassFailing
 from agent_comms.transcripts import EarlierThan
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import asyncio
 import base64
 import errno
@@ -91,7 +91,7 @@ from agent_comms.tool_request import ReadTool
 from agent_comms.transport.request import ToolCall, ToolRequest
 from agent_comms.registry.threads import NativeThread
 import subprocess
-from agent_comms.repo import FailedGitCommand
+from agent_comms.projects.git_errors import FailedGitCommand
 import site
 import socket
 import sys

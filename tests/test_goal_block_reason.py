@@ -1,6 +1,6 @@
 """Blocking is explicit and inspectable; old rows are not assigned invented reasons."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import os
 from dataclasses import replace
 

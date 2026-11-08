@@ -1,7 +1,7 @@
 """Core's error declaration controls encoding and read-watch recovery."""
 from __future__ import annotations
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import asyncio
 import json
 import sys

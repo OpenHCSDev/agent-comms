@@ -1,6 +1,6 @@
 """The checkpoint command commits and pushes a thread's uncommitted work as a named state."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import subprocess
 from pathlib import Path
 

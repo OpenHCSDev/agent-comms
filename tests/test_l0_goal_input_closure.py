@@ -1,6 +1,6 @@
 """Current goal/input boundaries through durable stores and the real owner socket."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import os
 import sqlite3
 from dataclasses import replace

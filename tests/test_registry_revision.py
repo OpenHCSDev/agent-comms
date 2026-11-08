@@ -1,6 +1,6 @@
 """Registry reads reuse unchanged declarations but follow external wire writes."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import json
 
 import pytest

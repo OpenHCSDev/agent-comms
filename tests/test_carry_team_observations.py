@@ -15,7 +15,7 @@ from agent_comms.heartbeat_delivery import OnHeartbeatDelivery
 from agent_comms.installer.carry import CarryChain
 from agent_comms.storage.locked_store import LiveFilesRequest
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.task_attachments.team_pings import (
     TeamUpdateNotice, TeamUpdate, TeamUpdateStore,
 )

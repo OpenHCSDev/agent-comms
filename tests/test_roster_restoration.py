@@ -1,6 +1,6 @@
 """Restoration changes visibility without replay or transferring live ownership."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.channel_targets import CommandTarget
 
 

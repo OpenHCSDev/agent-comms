@@ -1,6 +1,6 @@
 """Named destinations share counting, change attribution and human read contracts."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import pytest
 
 from agent_comms.channel_targets import CommandTarget, IncarnationThreadTarget, NamedTarget

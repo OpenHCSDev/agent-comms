@@ -1,5 +1,5 @@
 import sys
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from bus_history import read_history
 import hashlib
 import json

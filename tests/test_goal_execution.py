@@ -1,6 +1,6 @@
 """Real turn acquisition and terminal handling share the execution owner."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.native_arguments import GivenBinary
 from agent_comms.native_package import VerifiedNativePackage
 import os

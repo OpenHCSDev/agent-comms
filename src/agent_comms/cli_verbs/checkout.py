@@ -5,9 +5,12 @@ from agent_comms.cli_commands import OrderCheckoutGrant
 from agent_comms.cli_support.prepared_checkout import PreparedCheckoutCliCommand
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument
-from agent_comms.repo import LocalRepositorySource, RepositorySource
-from agent_comms.storage_rules import OrderCheckoutAllocation
-from agent_comms.storage_rules import StorageRule
+from ..projects.repository_sources import (
+    LocalRepositorySource,
+    RepositorySource,
+)
+from ..projects.storage_rules import OrderCheckoutAllocation
+from ..projects.storage_rules import StorageRule
 from agent_comms.registry.threads import Thread
 from dataclasses import dataclass
 from pathlib import Path

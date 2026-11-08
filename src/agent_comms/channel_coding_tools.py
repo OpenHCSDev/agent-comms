@@ -40,7 +40,7 @@ from .selected_tool_broker import (
     verify_sent_full_input,
 )
 from .tool_denial import StorageDenied
-from .storage_projection import StorageProjection
+from .projects.storage_projection import StorageProjection
 from .storage_room import NoRoomNeeded, RoomReservation
 from .registry.threads import Thread
 from .thread_identity import OfferedTools

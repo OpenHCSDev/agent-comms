@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import sys
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import json
 import os
 import sqlite3

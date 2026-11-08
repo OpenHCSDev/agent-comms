@@ -14,7 +14,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import TextIO
 
-from agent_comms.storage_rules import StorageRule
+from agent_comms.projects.storage_rules import StorageRule
 
 GIB = 1024**3
 STATE = Path.home() / ".local/state/agent-comms/resource-alert.json"

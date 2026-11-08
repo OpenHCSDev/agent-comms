@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .core_stamp import CoreStamp
-from .repo import Repo
+from .projects.repo import Repo
 
 
 @dataclass(frozen=True)

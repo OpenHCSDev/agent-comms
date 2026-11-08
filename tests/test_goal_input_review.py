@@ -1,6 +1,6 @@
 """Canonical inspection unblocks standby without fabricating native delivery."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.lifecycle_capability import Unresolved
 from agent_comms.channel_targets import CommandTarget
 import os

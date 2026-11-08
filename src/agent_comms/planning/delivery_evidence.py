@@ -9,10 +9,8 @@ from ..errors import TodoError
 from ..nominal.declared_family import DeclaredFamily
 from ..nominal.field_codec import RecordProblems
 from ..order_runs import OrderRun
-from ..repo import (
-    Repo,
-    SourceReadFailure,
-)
+from ..projects.git_errors import SourceReadFailure
+from ..projects.repo import Repo
 from ..work_branches import WorkBranches
 
 SOURCE_READ_FAILURES = (OSError, SourceReadFailure, TimeoutExpired)

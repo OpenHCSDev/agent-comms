@@ -5,7 +5,7 @@ Ordinary conversation sends no longer acquire or manually release files.
 """
 from __future__ import annotations
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import json
 import os
 import signal

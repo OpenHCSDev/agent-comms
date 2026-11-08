@@ -157,7 +157,7 @@ def test_missing_frame_reports_recorded_failure_without_fabricating_a_board(fork
 
 def test_one_unreadable_source_preserves_the_other_original_edit(
         published_board, fork_bus, configured_repository, tmp_path):
-    from agent_comms.repo import Checkout
+    from agent_comms.projects.checkouts import Checkout
     from agent_comms.repository_name import RepositoryName
     from agent_comms.registry.threads import ExternalThread
     from agent_comms.thread_model import DeclaredModel

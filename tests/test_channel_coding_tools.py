@@ -1,7 +1,7 @@
 """Normal coding policies use existing claims; no provider or user work is touched."""
 
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import json
 import os
 import secrets

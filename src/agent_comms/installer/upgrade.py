@@ -148,13 +148,14 @@ from agent_comms.storage.maintenance_barrier import (
 )
 from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.registry.registry_store import RegistryStore
-from agent_comms.repo import Checkout, Repo
+from ..projects.repo import Repo
+from ..projects.checkouts import Checkout
 from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
 from agent_comms.installer.runtime_retention import (
     RetirementOutcome, RuntimeRetention, SweptRetirement,
 )
 from agent_comms.runtime_processes import RuntimeProcesses
-from agent_comms.storage_rules import StorageRule
+from ..projects.storage_rules import StorageRule
 
 from agent_comms.installer.probes.report import InstallReportProbe
 from agent_comms.installer.reporting import InstallOutcome, UnfinishedInstall

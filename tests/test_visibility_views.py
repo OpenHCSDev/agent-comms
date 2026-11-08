@@ -1,7 +1,7 @@
 """Viewer-only presence flags reveal archived threads without reviving owners."""
 
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import pytest
 
 from agent_comms.comms import wire

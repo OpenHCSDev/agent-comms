@@ -26,7 +26,7 @@ from agent_comms.owned_send import OwnedSend
 from agent_comms.execution.owned_turn import OwnedTurn
 from agent_comms.queued_input import InitialInput, QueuedInput
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.repository_name import RepositoryName
 from agent_comms.reservation_rules import ReservationViolationError
 from agent_comms.registry.threads import NativeThread

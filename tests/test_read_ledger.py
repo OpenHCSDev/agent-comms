@@ -1,7 +1,7 @@
 """Read evidence follows displayed messages across projections and restarts."""
 
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import random
 from dataclasses import replace
 
@@ -214,7 +214,7 @@ def test_dm_ack_survives_process_exit_and_rebind_does_not_inherit_reads(tmp_path
             "from agent_comms.channel_targets import ThreadTarget\n"
             "from agent_comms.comms import wire\n"
             "from pathlib import Path\n"
-            "from agent_comms.repo import Checkout\n"
+            "from agent_comms.projects.checkouts import Checkout\n"
             "comms = wire(sys.argv[1])\n"
             "worktree = Checkout(Path(sys.argv[1]))\n"
             "page = comms.views.dm_display_page(ThreadTarget('alice'), worktree=worktree)\n"

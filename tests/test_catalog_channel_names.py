@@ -2,7 +2,7 @@
 
 from agent_comms.activity_clocks import ActivityClocks
 from agent_comms.comms import Comms
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 
 
 def test_channel_names_are_exactly_the_channels_views_builds(comms: Comms) -> None:

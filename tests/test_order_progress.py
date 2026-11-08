@@ -10,7 +10,7 @@ from agent_comms.planning.orders import (
     ProgressRead,
     ProgressSource,
 )
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import asyncio
 import json
 import os
@@ -29,7 +29,11 @@ from agent_comms.comms import wire
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.launch_runtime import LaunchRoot
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repo import CommitsNaming, EveryCommit, GitCommandError
+from agent_comms.projects.git_errors import GitCommandError
+from agent_comms.projects.checkouts import (
+    CommitsNaming,
+    EveryCommit,
+)
 from agent_comms.repository_name import RepositoryName
 from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_caller import ThreadCaller

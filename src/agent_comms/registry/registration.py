@@ -22,7 +22,7 @@ from ..registration_change import RegistrationChange
 from .registry_document import FoundProjectThread, ProjectThreadSelection, RegistryDocument, RegistrySnapshot
 from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from ..routing import NoTurnRouting, Routing
-from ..storage_rules import StorageRule
+from ..projects.storage_rules import StorageRule
 from .threads import ExternalThread, SubagentThread, Thread, NativeThread
 from ..thread_identity import GenerationCounter, UserThreadRole
 from ..thread_status import (
@@ -32,7 +32,12 @@ from ..thread_status import (
     ThreadStatus,
 )
 from ..thread_text import ForkedParent, SubagentRole
-from ..repo import Checkout, CheckoutTransfer, Repo, RepositoryReads
+from ..projects.repo import Repo
+from ..projects.checkouts import (
+    Checkout,
+    CheckoutTransfer,
+    RepositoryReads,
+)
 
 if TYPE_CHECKING:
     from ..catalog_document import CatalogDocument

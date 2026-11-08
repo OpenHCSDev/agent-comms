@@ -1,6 +1,6 @@
 """An ending attempt cannot release a replacement just because its ID is reused."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import os
 
 

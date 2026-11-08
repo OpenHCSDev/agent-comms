@@ -3,7 +3,7 @@
 Exercises the agent the way real clients (Toad, Zed) do: through
 Core's ACP connection over real stdio pipes, plus direct handler-level tests.
 """
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.controller import SessionUpdateSink
 
 import asyncio

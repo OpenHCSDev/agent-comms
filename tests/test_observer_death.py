@@ -1,7 +1,7 @@
 """The UI side of the comms observer reports the observer's end once, with how it exited, and no later use of it raises a pipe error."""
 
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import asyncio
 import os
 from functools import partial

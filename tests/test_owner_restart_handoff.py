@@ -8,7 +8,7 @@ from agent_comms.owner_release import (
     ProcessExitedOwnerCompletion,
     SessionRetiredOwnerCompletion,
 )
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from dataclasses import replace
 import os
 from pathlib import Path

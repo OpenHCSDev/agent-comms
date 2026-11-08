@@ -38,7 +38,7 @@ from agent_comms.cli_bridges.hook_requests import ReadGateRequest, SubagentStart
 
 from agent_comms.team.order import Team, MessageNotification
 from agent_comms.coordination.errors import CoordinationReadUnavailable
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import asyncio
 import io
 from collections.abc import Iterator
@@ -82,7 +82,7 @@ from agent_comms.held_orders import HeldOrders
 from agent_comms.native_transcript import NativeTranscript
 from agent_comms.repository_name import RepositoryName
 from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.storage_rules import StorageRule
+from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.turn_digests import OrderEditsRead, OrderEditCountRead, TurnsSince
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.storage.maintenance_barrier import (

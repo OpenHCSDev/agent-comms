@@ -1,6 +1,6 @@
 """Canonical page identity covers byte and annotation/source changes."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import json
 import sqlite3
 from contextlib import closing

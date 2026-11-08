@@ -1,6 +1,6 @@
 """S5 identity boundaries: process, turn, provenance and saved-data preservation."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import json
 import os
 from dataclasses import replace

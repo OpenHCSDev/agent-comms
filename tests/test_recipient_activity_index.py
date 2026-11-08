@@ -2,7 +2,7 @@
 
 
 from agent_comms.notification_assignment import NotificationSelection
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from dataclasses import replace
 
 import pytest

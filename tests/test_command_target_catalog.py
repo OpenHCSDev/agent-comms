@@ -1,7 +1,7 @@
 """Target families never disguise a broken binding as an unavailable command."""
 
 from pathlib import Path
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from dataclasses import dataclass, field
 
 import pytest

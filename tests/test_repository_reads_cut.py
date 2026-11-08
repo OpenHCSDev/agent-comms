@@ -5,7 +5,11 @@ from pathlib import Path
 import pytest
 import fixture_git
 
-from agent_comms.repo import Checkout, FailedGitCommand, RepositoryReads
+from agent_comms.projects.git_errors import FailedGitCommand
+from agent_comms.projects.checkouts import (
+    Checkout,
+    RepositoryReads,
+)
 
 
 git = fixture_git.run

@@ -1,6 +1,6 @@
 """Direct input state survives a process exit without replaying an attempt."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import multiprocessing
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path

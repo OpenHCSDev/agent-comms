@@ -12,7 +12,8 @@ from typing import ClassVar
 from agent_comms_hooks.shell_commands import ShellCommand
 
 from .native_build_inputs import GitLaunch, GitOptions, NamedProgram
-from .repo import CheckoutStart, RepositorySource
+from .projects.checkouts import CheckoutStart
+from .projects.repository_sources import RepositorySource
 from .storage_admission import StorageAdmission
 from .storage_room import AllocationRoomWork, BuildRoomWork, RoomWork, TestGateRoomWork
 from .tool_denial import SelectedToolDenied, StorageDenied

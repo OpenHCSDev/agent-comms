@@ -32,7 +32,9 @@ from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.launch_runtime import LaunchRoot
 from agent_comms.order_runs import ApplicationOrderRun
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repo import Checkout, GitCommandError, Repo
+from agent_comms.projects.git_errors import GitCommandError
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.registry.threads import ExternalThread, ForkThread
 from agent_comms.thread_status import StoppedThreadStatus

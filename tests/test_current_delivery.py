@@ -1,6 +1,6 @@
 """Retained Bus snapshots preserve current-incarnation routing and displayed reads."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from collections import Counter
 
 import pytest

@@ -2,7 +2,7 @@
 
 
 from agent_comms.planning.orders import TodoStore
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import sqlite3
 from contextlib import closing
 from pathlib import Path

@@ -2,7 +2,7 @@ import sys
 """Provider-free disposable checks of the default-off maintenance claim seam."""
 
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import asyncio
 import json
 import multiprocessing as mp

@@ -1,6 +1,6 @@
 """How much one thread matters to another, and what its peers see of that."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from conftest import publish_initial
 import json
 from dataclasses import replace

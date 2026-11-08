@@ -2,7 +2,7 @@
 
 
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import sqlite3
 
 import pytest
