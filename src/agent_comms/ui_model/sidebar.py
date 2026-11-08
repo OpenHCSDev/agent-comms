@@ -92,27 +92,28 @@ class ChannelRowModel:
     registered_agents: int
     tags: tuple[str, ...]
     unread: UnreadPresentation
-    active: bool
+    working_agents: int
     members: tuple[str, ...]
     pinned_members: frozenset[str]
     order: type[ThreadSort]
+
+    @property
+    def active(self) -> bool:
+        return bool(self.working_agents)
 
     def label(self) -> str:
         """The row's first line: the channel's name, pinned or not."""
         return f"{'* ' if self.pinned else ''}{self.name}"
 
     def summary(self) -> str:
-        """The row's second line, which a 40-column phone still has to fit.
-
-        It says "tags:" rather than leaving a bare list: "3/5 agents · build, review"
-        leaves the reader guessing whether those are tags or two of the agents.
-        """
-        return f"{self.active_agents}/{self.registered_agents} agents · tags: {self.tag_list()}"
+        """In-turn / online / total counts, followed by the channel's tags."""
+        return (f"{self.working_agents}/{self.active_agents}/{self.registered_agents} agents"
+                f" · tags: {self.tag_list()}")
 
     def tooltip(self) -> str:
         """The same facts in full words, for a reader who stopped to hover."""
-        return (f"{self.active_agents} running or idle / {self.registered_agents} registered agents"
-                f" · tags: {self.tag_list()}")
+        return (f"{self.working_agents} in turn / {self.active_agents} online"
+                f" / {self.registered_agents} total · tags: {self.tag_list()}")
 
     def tag_list(self) -> str:
         return ", ".join(self.tags) or "all"
@@ -127,7 +128,7 @@ class ChannelRowModel:
             view.registered_agents,
             tuple(sorted(channel.tags)),
             UnreadPresentation.for_channel(snapshot, channel.name),
-            any(name in working for name in view.members),
+            sum(name in working for name in view.members),
             tuple(name for name in view.members if name in snapshot.threads),
             frozenset(view.pinned_members),
             channel.order,

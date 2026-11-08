@@ -20,7 +20,7 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.historical_views import HistorySource
 from agent_comms.registry.registry_document import HistoricalRootPurpose, ThreadRows
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
-from agent_comms.ui_model.sidebar import SidebarModel
+from agent_comms.ui_model.sidebar import ChannelRowModel, SidebarModel
 from agent_comms.ui_model.unread import ExactUnread, UnobservedUnread
 from agent_comms.registry.threads import NativeThread
 
@@ -52,6 +52,22 @@ def declare_reference(comms):
         return comms.registry.declare(NativeThread(
             name=name, tags=frozenset(), worktree=Checkout(comms.root.parent)), status=status)
     return declare
+
+
+def test_channel_counts_working_online_and_registered_members(comms, declare_reference):
+    busy = declare_reference("busy", RunningThreadStatus())
+    declare_reference("idle", RunningThreadStatus())
+    declare_reference("offline")
+    snapshot = comms.views.viewer_snapshot(Checkout(comms.root.parent))
+    channel = snapshot.channels["#all"]
+    row = ChannelRowModel.of(channel, snapshot, frozenset((busy.name, "not-a-member")))
+    assert (row.working_agents, row.active_agents, row.registered_agents) == (1, 2, 3)
+    assert row.active
+    assert row.summary() == "1/2/3 agents · tags: all"
+    assert row.tooltip() == "1 in turn / 2 online / 3 total · tags: all"
+    idle = ChannelRowModel.of(channel, snapshot, frozenset())
+    assert idle.working_agents == 0
+    assert not idle.active
 
 
 def test_registry_snapshot_constructor_and_pickle_own_immutable_maps(comms, declare_reference):
