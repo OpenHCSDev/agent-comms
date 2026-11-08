@@ -103,7 +103,7 @@ from agent_comms.revision_views import (
     TeamBoardView,
 )
 from agent_comms.team_heartbeat import TeamBoardRead
-from agent_comms.team_hud import TeamFrame, TeamHud
+from agent_comms.team_hud import TeamFrame, TeamHud, TeamPlan
 from agent_comms.team_hud_records import TeammateDetail
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.thread_presentation import ThreadPresentation
@@ -837,19 +837,36 @@ class TeamHudReading(TeamBoardRead, ReadingObservation[ObserveTeamHud]):
         task.add_done_callback(self.preparation.discard)
 
     async def prepare(self, service: ObservationService) -> None:
-        """Only the short retained-frame publication joins shutdown; preparation can retire."""
-        try:
-            plan, huds = await service.comms.bus.when_open(
-                lambda: self.run_async(partial(
-                    self.enter_phase, service.comms.root,
-                    partial(self.read_board, service.comms))))
-            await service.comms.bus.when_open(partial(
+        """Only the short retained-frame publication joins shutdown; preparation can retire.
+
+        The board is read through the stored-read owner ``read`` uses: a deferred or reloading
+        read prepares again on the next look, an unreadable one reaches the page, and any other
+        failure is a defect and raises."""
+        board = await service.comms.bus.when_open(
+            lambda: self.run_async(partial(
                 self.enter_phase, service.comms.root,
-                partial(TeamFrame.replace_all, service.comms.root, plan, huds)))
-        except Exception as error:
-            service.send(TeamHudUnreadable(service.revision, UnreadableHistory.capture(error)))
-        else:
-            service.interest.prepared(self, service)
+                partial(UnreadableHistory.outcome, partial(self.read_board, service.comms)))))
+        await board.answer(
+            partial(self.publish, service),
+            lambda deferred: self.prepare_again(),
+            partial(self.unreadable, service),
+            lambda reload: self.prepare_again(),
+        )
+
+    async def publish(self, service: ObservationService,
+                      board: tuple[TeamPlan, tuple[TeamHud, ...]]) -> None:
+        plan, huds = board
+        await service.comms.bus.when_open(partial(
+            self.enter_phase, service.comms.root,
+            partial(TeamFrame.replace_all, service.comms.root, plan, huds)))
+        service.interest.prepared(self, service)
+
+    async def unreadable(self, service: ObservationService, cause: UnreadableHistory) -> None:
+        service.send(TeamHudUnreadable(service.revision, cause))
+
+    async def prepare_again(self) -> None:
+        """A read that was only deferred has not prepared this revision."""
+        self.prepared_revision = NoRevision()
 
     def read(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:
         yield UnreadableHistory.outcome(
