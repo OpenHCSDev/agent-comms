@@ -46,6 +46,8 @@ from agent_comms.todos import (
     OperationDelivery,
     PendingProblemOrder,
     ProgressRead,
+    ReportDelivery,
+    ReportedProblemOrder,
     PullRequestCommit,
     PullRequestLink,
     Todo,
@@ -521,3 +523,48 @@ def test_a_delivered_order_asks_the_build_whether_its_install_is_still_owed(
         LaunchRuntime.installed().prefix)
 
     assert delivered.installed_line(RecordedBuildIdentity.installed()).endswith("installed")
+
+
+def test_only_an_order_still_owed_an_install_lets_the_build_speak(
+    proof_build_checkouts, comms, tmp_path,
+):
+    """Asking the build is right for an order awaiting one and wrong for every state that
+    owes none. A returned triage answer would have read "Report returned, installed", and a
+    completed Installed state would have turned into "Installed, waiting on install" the
+    moment a later runtime stopped containing the commit whose run had already been
+    witnessed. The second one was reachable before the delivered line ever asked the build,
+    through the merge-observed installed order.
+
+    Each member already says what it owes, in its own line and in waiting_on_install; this
+    is that same answer where the board reads it. InstalledEvidence sits first in the MRO of
+    both installed members, so one declaration covers them.
+    """
+    from test_todos import order
+
+    graph = next(graph for graph in proof_build_checkouts
+                 if graph.repository.github == CorePackage.repository)
+    build = RecordedBuildIdentity.installed()
+    checked = order(graph.repository)
+
+    # The triage answer's own path, todos.py:2588, not `delivered`, which always builds the
+    # plain delivered member whatever kind of delivery it is handed.
+    reported = checked.copy_as(
+        ReportedProblemOrder,
+        delivery=ReportDelivery(report="the findings", at=RecordedEventTime(1000)))
+    assert reported.installed_line(build) == "Report returned"
+
+    works, artifact = "the application ran", str(tmp_path / "proof.txt")
+    installed_merge = checked.merged(graph.newer).installed(works, artifact)
+    assert installed_merge.installed_line(build) == "Installed"
+
+    delivery_commits = CheckedCommitDelivery(
+        commit=graph.newer, delivered_commit=graph.newer,
+        merge=MainDeliveryMerge(), at=RecordedEventTime(1000),
+    )
+    delivered = checked.delivered(delivery_commits)
+    assert delivered.installed_line(build).endswith("waiting on install")
+    assert delivered.installation_commits == delivery_commits.installation_commits
+
+    # Both installed members, not just the merge-observed one: InstalledEvidence is first in
+    # the MRO of each, which is the whole reason one declaration can answer for both.
+    assert delivered.installed(works, artifact).installed_line(build) == "Installed"
