@@ -246,7 +246,6 @@ class NativeInputProof(DurableFile, ReconciledFile, PatternFile, DurableTables):
 class NativeContextProof(NativeContextRecord, NativeInputLocation):
     session_file: Annotated[Path, PathText]
 
-    @property
     def session_identity(self) -> NativeSessionIdentity:
         """The saved session this proof's entry belongs to."""
         return NativeSessionIdentity(self.session_id, str(self.session_file))

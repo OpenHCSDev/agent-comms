@@ -109,7 +109,7 @@ class NativeSessionIdentity(PresentMember, SessionRetention):
             raise NativeReopenError("Native saved source identity changed")
 
     def require_context(self, context) -> None:
-        self.require_same_session(context.session_identity)
+        self.require_same_session(context.session_identity())
 
     def same_session(self, other: NativeSessionIdentity) -> bool:
         """A cutpoint may extend this identity without changing its meaning."""
