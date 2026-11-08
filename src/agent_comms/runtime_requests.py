@@ -129,7 +129,7 @@ class ServedOwnerReadRuntimeRequest(
     OwnerReadRuntimeRequest,
 ):
     async def result(self, ctx: AttachedRuntimeRequestContext) -> ToolResult:
-        return await self.operation.owned(ctx)
+        return await OwnedRead.serving(self.operation).owned(ctx)
 
 
 if TYPE_CHECKING:
@@ -408,7 +408,7 @@ class ServedGoalSnapshotResultRuntimeRequest(
 
     async def result(self, ctx: AttachedRuntimeRequestContext) -> GoalSnapshotReply:
         await self.change(ctx)
-        return await OwnerScopedRead[GoalSnapshotReply].serving(OwnerGoalRead()).owned(ctx)
+        return await OwnedRead[GoalSnapshotReply].serving(OwnerGoalRead()).owned(ctx)
 
 
 class ServedGoalRevisionRuntimeRequest(
