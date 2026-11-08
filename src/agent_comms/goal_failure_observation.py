@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Annotated
 from .turn_failure import TurnFailure
 from .nominal.field_codec import AttemptId, GoalId, TurnId
 from .goal_attempt_identity import GoalAttemptIdentity
+from .goal_work import GoalFailureOwner
 from .repo import Checkout
 from .thread_identity import (
     ClaimedIdentity,
@@ -29,7 +30,6 @@ if TYPE_CHECKING:
     from agent_comms.goal_attempts import FailedTurnObservation
     from .goal_attempts import Reservation
     from .goal_presentation import GoalExecution
-    from .registry.threads import Thread
 
 
 class GoalLedgerTable(DurableTables):
@@ -96,7 +96,7 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable, GoalFailureEvidence):
     def turn(self) -> TurnFence:
         return TurnFence(TurnIdentity(self.incarnation, self.turn_generation), self.turn_id, self.claim_generation)
 
-    def matches_owner(self, owner: Thread, claim_scope: int | None) -> bool:
+    def matches_owner(self, owner: GoalFailureOwner, claim_scope: int | None) -> bool:
         if claim_scope is None:
             return False
         if self.claimed_identity != ClaimedIdentity(owner.incarnation, claim_scope):

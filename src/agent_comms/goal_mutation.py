@@ -1,6 +1,7 @@
 """Goal mutation contracts, independent of command and runtime infrastructure."""
 
 from abc import ABC, abstractmethod
+from typing import Protocol
 
 
 class GoalMutation[Subject, Context, Result](ABC):
@@ -34,6 +35,10 @@ class GoalStateProjection[Execution, Pause](ABC):
 
     @abstractmethod
     def completed(self) -> Execution: ...
+
+
+class GoalContextSource[Owner, Goals, Context](Protocol):
+    def with_goal(self, owner: Owner, goals: Goals) -> Context: ...
 
 
 class GoalFork[Owner, Declaration](ABC):

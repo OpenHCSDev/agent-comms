@@ -3,13 +3,17 @@
 from abc import ABC, abstractmethod
 from typing import Protocol, Self
 
+from .child_process import ProcessState
 from .nominal.field_codec import GoalId
-from .thread_identity import ThreadIncarnation
+from .repo import Checkout
+from .thread_identity import ObservedTurn, ThreadIncarnation
 
 
 class GoalObservation(Protocol):
     @property
     def captured(self) -> object: ...
+
+    def accepts_observation(self, goal_id: GoalId, minimum_revision: int) -> bool: ...
 
 
 class GoalOwner(Protocol):
@@ -23,6 +27,16 @@ class GoalOwner(Protocol):
     def goal(self) -> GoalObservation: ...
 
     def require_goal_assignment(self, actor: ThreadIncarnation) -> None: ...
+
+
+class GoalFailureOwner(GoalOwner, Protocol):
+    @property
+    def worktree(self) -> Checkout: ...
+
+    @property
+    def process_identity(self) -> ProcessState: ...
+
+    def observed_turn(self, claim_scope: int) -> ObservedTurn: ...
 
 
 class GoalAssignmentOrder[Assignment](Protocol):

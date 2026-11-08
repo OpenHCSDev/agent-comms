@@ -8,15 +8,17 @@ import pytest
 
 from agent_comms.context_segments.wake_values import WakeWorkContext
 from agent_comms.display_order import ChannelSort, ThreadSort
+from agent_comms.goal_attempts import FailedTurnObservation, LaunchPermit
 from agent_comms.goal_turn_permit import GoalTurnPermit
 from agent_comms.goal_actions import GoalAction, StandbyGoalAction
 from agent_comms.goal_records import GoalRecords
 from agent_comms.goal_states import GoalState
 from agent_comms.goals import GoalDeclaration, GoalMentionBinding, GoalOrder, GoalUnavailable
-from agent_comms.goal_work import GoalOwner, GoalWorkSource
+from agent_comms.goal_work import GoalFailureOwner, GoalOwner, GoalWorkSource
 from agent_comms.registry.threads import Thread
 from agent_comms.relationships import RelationshipSource, ThreadRelationships
 from agent_comms.thread_presentation import ThreadOwnerBinding
+from agent_comms.thread_identity import TurnFence
 
 
 @pytest.mark.parametrize(
@@ -97,3 +99,15 @@ def test_goal_state_boundary_contracts_resolve(state: type[GoalState]) -> None:
     assert get_type_hints(state.execution)["return"]
     hints = get_type_hints(state.accept_order)
     assert hints["goal"] is hints["return"]
+
+
+@pytest.mark.parametrize("callback", (FailedTurnObservation.from_terminal, LaunchPermit.failure_observation))
+def test_failed_attempt_reads_original_identity_contracts(callback: Callable[..., object]) -> None:
+    hints = get_type_hints(callback)
+    assert hints["owner"] is GoalFailureOwner
+    assert hints["lease"] is TurnFence
+
+
+def test_attempt_context_callback_preserves_its_result_type() -> None:
+    hints = get_type_hints(LaunchPermit.add_context)
+    assert get_args(hints["context"])[-1] is hints["return"]

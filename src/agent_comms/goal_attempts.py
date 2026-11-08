@@ -25,7 +25,7 @@ from contextlib import closing, contextmanager, suppress
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self, TypeVar
+from typing import Annotated, ClassVar, Self, TypeVar
 
 from agent_comms.goal_turn_permit import GoalTurnPermit
 
@@ -94,11 +94,9 @@ from .storage.typed_table import (
 from .reservation_rules import ReservationRule, RuleCheck
 from .turn_failure import TurnFailure
 from .nominal.field_codec import TurnId
-if TYPE_CHECKING:
-    from .goal_management import Goals
-    from .registry.threads import Thread
-    from .turn_lease import TurnLeaseFence
-    from .turn_context import TurnContext
+from .goal_mutation import GoalContextSource
+from .goal_work import GoalFailureOwner
+from .thread_identity import TurnFence
 
 
 @dataclass(frozen=True)
@@ -111,12 +109,12 @@ class FailedTurnObservation:
         cls,
         reservation: Reservation,
         *,
-        owner: Thread,
+        owner: GoalFailureOwner,
         goal: Goal,
-        lease: TurnLeaseFence,
+        lease: TurnFence,
         turn_id: TurnId,
         claim_scope: int,
-        current_owner: Thread | None,
+        current_owner: GoalFailureOwner | None,
         current_claim: int | None,
         failure: TurnFailure,
     ) -> FailedTurnObservation | None:
@@ -551,8 +549,8 @@ class LaunchPermit(GoalTurnPermit):
         OrdinaryGoalGrantCheck(permit=self, store=store).require_valid()
 
     def failure_observation(
-        self, *, owner: Thread, goal: Goal, lease: TurnLeaseFence, turn_id: TurnId,
-        claim_scope: int, current_owner: Thread | None, current_claim: int | None,
+        self, *, owner: GoalFailureOwner, goal: Goal, lease: TurnFence, turn_id: TurnId,
+        claim_scope: int, current_owner: GoalFailureOwner | None, current_claim: int | None,
         failure: TurnFailure,
     ) -> FailedTurnObservation | None:
         return FailedTurnObservation.from_terminal(
@@ -577,7 +575,9 @@ class LaunchPermit(GoalTurnPermit):
         self.record_provider_usage(goals.open_goal_store(), response, usage)
         return True
 
-    def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext:
+    def add_context[Owner, Goals, Context](
+        self, context: GoalContextSource[Owner, Goals, Context], owner: Owner, goals: Goals,
+    ) -> Context:
         return context.with_goal(owner, goals)
 
     def fail_origin(self, store: GoalAttemptStore, goal_id: GoalId) -> None:
