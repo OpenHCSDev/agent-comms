@@ -24,7 +24,7 @@ from .nominal.field_codec import FieldCodec
 from .input_key import InputKey, InputKeyText
 from agent_comms.todos import (
     ExpectedProblem, PendingProblemOrder, RecordOrderHeadVerdict, SendBackVerdict, Todo,
-    TodoCommand, TodoOperation,
+    TodoCommand,
 )
 
 from .change_report import FileLine, NoSourceReference
@@ -34,9 +34,8 @@ from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .goal_mentions import bind_goal_mentions
 from .goal_records import GoalRecords
-from .goal_presentation import GoalSnapshot
 from .registry.registry_document import TeamProject
-from .goal_mutation import GoalMutation, GoalStateOrder
+from .goal_mutation import GoalMutation, GoalSnapshotRead, GoalStateOrder
 from .goal_scope import AllGoals, OneGoal
 from .goal_states import (
     ActiveGoal,
@@ -188,7 +187,7 @@ class GoalAction[Result: GoalDeclaration](
     async def submit_control(
         cls,
         thread: ThreadIncarnation,
-        observe: Callable[[], Awaitable[GoalSnapshot]],
+        observe: Callable[[], Awaitable[GoalSnapshotRead[GoalDeclaration]]],
         invoke: Callable[[AttachedRuntimeRequest], Awaitable[JsonValue]],
         text: str = "",
     ) -> GoalDeclaration:
@@ -563,7 +562,7 @@ class SetGoalAction(ReplacementGoalAction[Goal], OwnerInvocable, RuntimeInvocabl
     @classmethod
     async def submit_control(
         cls, thread: ThreadIncarnation,
-        observe: Callable[[], Awaitable[GoalSnapshot]],
+        observe: Callable[[], Awaitable[GoalSnapshotRead[GoalDeclaration]]],
         invoke: Callable[[AttachedRuntimeRequest], Awaitable[JsonValue]], text: str = "",
     ) -> GoalDeclaration:
         from .runtime_requests import GoalReply, SetGoalRuntimeRequest

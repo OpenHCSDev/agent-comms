@@ -51,6 +51,14 @@ class GoalFailureProjection[Execution, Failure](ABC):
     def failed(self, evidence: Failure) -> Execution: ...
 
 
+class GoalWaitProjection[Execution](ABC):
+    @abstractmethod
+    def generation_execution(self) -> Execution: ...
+
+    @abstractmethod
+    def standby_execution(self) -> Execution: ...
+
+
 class GoalGenerationProjection[Execution](ABC):
     @abstractmethod
     def turn_execution(self) -> Execution: ...
@@ -121,6 +129,11 @@ class GoalReadyGrantSource[Owner, Generation](ABC):
     def ready_goal_grant_locked(
         self, owner: Owner, claim_scope: int, generation: Generation,
     ) -> str: ...
+
+
+class GoalSnapshotRead[Declaration](Protocol):
+    @property
+    def goal(self) -> Declaration: ...
 
 
 class GoalContextSource[Owner, Goals, Context](Protocol):

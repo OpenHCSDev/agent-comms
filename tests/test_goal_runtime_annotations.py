@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from inspect import isfunction
 from types import NoneType
-from typing import get_args, get_type_hints
+from typing import get_args, get_origin, get_type_hints
 
 import pytest
 
@@ -15,7 +15,9 @@ from agent_comms.goal_generation import GenerationState
 from agent_comms.goal_ledger import FailedTurnEvidence, FailedTurnObservation, Generation
 from agent_comms.goal_failure_observation import NoFailedTurnEvidence
 from agent_comms.goal_turn_permit import GoalTurnPermit
-from agent_comms.goal_actions import GoalAction, StandbyGoalAction
+from agent_comms.goal_actions import GoalAction, SetGoalAction, StandbyGoalAction
+from agent_comms.goal_mutation import GoalSnapshotRead
+from agent_comms.goal_wait_target import GoalWaitSenderRead, GoalWaitTarget
 from agent_comms.goal_records import GoalRecords
 from agent_comms.goal_states import GoalState
 from agent_comms.goals import GoalDeclaration, GoalMentionBinding, GoalOrder, GoalUnavailable
@@ -150,3 +152,15 @@ def test_native_terminal_failure_keeps_its_original_proof_type() -> None:
     hints = get_type_hints(NativePiTerminalFailure.__init__)
     assert hints["context"] is NativePiTerminalFailure.__type_params__[0]
     assert hints["failure"] is TurnFailure
+
+
+@pytest.mark.parametrize("action", (GoalAction, SetGoalAction))
+def test_goal_client_reads_only_the_original_goal(action: type[GoalAction]) -> None:
+    hints = get_type_hints(action.submit_control)
+    snapshot = get_args(get_args(hints["observe"])[-1])[0]
+    assert get_origin(snapshot) is GoalSnapshotRead
+    assert get_args(snapshot) == (GoalDeclaration,)
+
+
+def test_dependency_reply_reads_its_original_sender_identity() -> None:
+    assert get_type_hints(GoalWaitTarget.sent)["original"] is GoalWaitSenderRead

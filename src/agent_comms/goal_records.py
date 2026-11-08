@@ -15,7 +15,7 @@ from .planning.goal_waits import (
     GoalWaits,
 )
 from .registry.registration import Registration
-from .goal_presentation import GoalWaitTarget
+from .goal_wait_target import GoalWaitTarget
 from .input_attempt import (
     ReservedInput,
 )
