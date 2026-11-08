@@ -339,3 +339,26 @@ def test_the_stack_relocks_every_branch_tracking_package_and_refuses_a_unit_bran
     toad["source"]["git"] = toad["source"]["git"].replace("branch=main", "branch=work/unit-toad--P694")
     with pytest.raises(ValueError, match="batrachian-toad"):
         ResolvedLock.model_validate(document).tracked()
+
+
+def test_a_tracked_requirement_names_the_branch_and_never_the_locked_revision():
+    """Toad's test environment installed the exported closure with --frozen, so ui-theme
+    arrived at the revision the lock pinned weeks earlier and NAME_WAVE did not exist:
+    71 of 74 tests failed at collection on untouched main. An installer outside the lock
+    asks this lock which packages follow a branch, and gets the branch."""
+    path = Path(__file__).resolve().parents[1] / "stack" / "uv.lock"
+    lock = ResolvedLock.read(path)
+    requirements = lock.tracked_requirements()
+    named = {requirement.split(" @ ", 1)[0] for requirement in requirements}
+    assert named == set(lock.tracked())
+    for requirement in requirements:
+        assert "@main" in requirement, requirement
+        assert requirement.startswith(requirement.split(" @ ", 1)[0] + " @ git+")
+    revisions = {
+        entry.source.location.revision
+        for entry in lock.package
+        if entry.source.tracked(entry.name)
+    }
+    assert revisions, "the tracked packages have locked revisions to avoid naming"
+    for revision in revisions:
+        assert not any(revision in requirement for requirement in requirements)
