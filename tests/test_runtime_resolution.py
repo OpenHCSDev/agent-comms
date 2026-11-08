@@ -362,3 +362,11 @@ def test_a_tracked_requirement_names_the_branch_and_never_the_locked_revision():
     assert revisions, "the tracked packages have locked revisions to avoid naming"
     for revision in revisions:
         assert not any(revision in requirement for requirement in requirements)
+
+    # A caller installing some of these itself names them, and the filtering happens
+    # here where the entries still carry their declared names: nothing reads a package
+    # name back out of rendered requirement text.
+    held = frozenset({"textual", "batrachian-toad"})
+    kept = lock.tracked_requirements(held)
+    assert {requirement.split(" @ ", 1)[0] for requirement in kept} == set(lock.tracked()) - held
+    assert len(kept) == len(requirements) - len(held)
