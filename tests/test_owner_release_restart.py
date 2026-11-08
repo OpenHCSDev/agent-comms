@@ -15,7 +15,6 @@ import pytest
 
 from bus_record_fixture import configure_local_native, prepare_native_comms, start_source_owner
 
-from agent_comms.child_process import ObservedProcess
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.launch_runtime import RestoredRuntime
@@ -53,12 +52,7 @@ def hosted_owner(tmp_path, monkeypatch):
     ))
     start_source_owner(comms, "worker", source_runtime())
     original = comms.registry.require("worker")
-    try:
-        yield comms, original
-    finally:
-        for thread in (original, comms.registry.require("worker")):
-            if thread.process_alive:
-                ObservedProcess(thread.process_identity).stop_sync()
+    yield comms, original
 
 
 def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
