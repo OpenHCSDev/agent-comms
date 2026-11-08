@@ -42,6 +42,44 @@ async def test_a_ui_grant_receives_its_sidebar_over_the_observe_socket(tmp_path,
             assert answered.request == wanted
 
 
+async def test_a_stopping_connector_ends_an_open_observation(tmp_path, comms: Comms) -> None:
+    """This socket joined no registry, so the stop could not see it: begin_shutdown closed
+    every open inbox watch and never reached the observation. What a socket the stop cannot
+    end costs is aiohttp's shutdown_timeout, and that bill was paid once already, on
+    2026-11-06, by a watch handler busy away from its socket; the lesson sits in
+    OpenWatch.ended() one module over. This is that shape, not that measurement.
+
+    Note the other meaning of the word here: the shutdown fixture's ShutdownWatch.observe is
+    a background pass's phase, not this route, so nothing was covering this socket.
+
+    Every long-lived socket now joins one list and the stop walks that list, so a route
+    cannot open one the stop does not know about."""
+    prepare_native_comms(comms)
+    store = ConnectorStore.at(tmp_path / "auth")
+    namespace = comms.registry.store.privacy().namespace
+    credential = store.update(lambda grants: grants.ui_issued(namespace, 60, UiReadAccess))
+    connector = Connector(store, "http://127.0.0.1:18766", comms.root)
+    application = connector.application()
+    async with TestServer(application) as server, TestClient(server) as client:
+        async with client.ws_connect(
+            "/observe", headers={"Authorization": f"Bearer {credential.token}"},
+        ):
+            async with asyncio.timeout(60):
+                while not connector.open_viewers:
+                    await asyncio.sleep(0.01)
+            held, = connector.open_viewers
+            assert not held.watching("claude-ai"), "an observation is nobody's inbox watch"
+
+            await connector.begin_shutdown(application)
+
+            assert held.viewer.closed, "the stop left the observation's socket open"
+            # The handler is left cancelling, so waiting for it is the assertion: a handler
+            # the stop cannot end is exactly what sat through aiohttp's shutdown_timeout.
+            async with asyncio.timeout(10):
+                while not held.handler.done():
+                    await asyncio.sleep(0.01)
+
+
 async def test_the_observe_socket_challenges_a_missing_bearer(tmp_path, comms: Comms) -> None:
     connector = Connector(ConnectorStore.at(tmp_path / "auth"), "http://127.0.0.1:18766", comms.root)
     async with TestServer(connector.application()) as server, TestClient(server) as client:

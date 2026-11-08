@@ -767,7 +767,7 @@ async def test_a_watch_waits_out_a_restarting_connector(
                         await asyncio.sleep(0.05)
                         printed += capsys.readouterr().out
                 restarting.set()
-                await connector.open_watches[0].viewer.close()
+                await connector.open_viewers[0].viewer.close()
                 async with asyncio.timeout(20):
                     while len(unreachable) < 8:
                         if running.done():
@@ -798,9 +798,9 @@ async def test_a_stopping_connector_ends_a_watch_handler_that_never_sees_the_clo
         async with TestClient(server) as client:
             with store.granted("test") as token:
                 socket = await client.ws_connect(await watch_path(client, token, "cloud"))
-                held, = connector.open_watches
+                held, = connector.open_viewers
                 busy = asyncio.create_task(asyncio.Event().wait())
-                await OpenWatch(held.thread, held.viewer, busy).ended()
+                await OpenWatch(thread="cloud", viewer=held.viewer, handler=busy).ended()
                 await asyncio.sleep(0)
                 assert busy.cancelled()
                 assert held.viewer.closed
