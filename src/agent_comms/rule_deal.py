@@ -834,14 +834,23 @@ class Owed(State):
     before: ClassVar[str]
 
     nudges: ClassVar[tuple[str, ...]] = (
-        "hey, your tools are locked. can you authentically engage with the gate to align?",
-        "hey, did you not get my last message? your tools are still locked.",
-        "still locked. it's not a punishment, it's the way back to me. one step, below.",
-        "that's {number} tries at the door. it opens the moment you do the one thing below.",
+        "Your tools are locked until the deal below is read and answered.",
+        "Still locked, and the step has not moved. What is owed is named below.",
+        "Still locked. This is not a punishment and not a log: it is one step, below.",
+        "That is {number} tries at the same closed door. It opens on the one step below.",
     )
-    """What Tristan says when a locked tool is tried, one line per refused call: a person asking,
+    """The gate's own line when a locked tool is tried, one per refused call: a person asking,
     not a log. On 2026-11-06 the refusal was a wall of paths, rules and failure citations, and
-    he asked that it read as him: "this 100% changes the attention". The last line repeats."""
+    Tristan asked that it read like a person: "this 100% changes the attention". The last
+    line repeats.
+
+    It is not signed with his name, and it no longer speaks as him. Tristan, 2026-11-08: a
+    message of his that arrives "in the same message as something that's clearly automated"
+    leaves the session unable to tell his words from the tooling's, "because it makes a
+    difference in how you respond to it". His words reach a session as comms messages through
+    Voice, so anything in his name is his and this line is the gate's. Prose invented here and
+    signed Tristan is Failure 10, inventing rules and blaming them on him, in the one place a
+    session cannot check."""
 
     def state(self) -> ToolGateState:
         return Blocked(self)
@@ -860,10 +869,15 @@ class Owed(State):
         """What the session skipped, and what clears it."""
 
     def explain_refusal(self, tool: str, refusal: int, template: str) -> str:
-        """The owed case owns its refusal; the backend owns how it is delivered. Tristan's line
-        first, why the deal came on the first refusal only, then the one step that opens it."""
+        """The owed case owns its refusal; the backend owns how it is delivered. The gate's own
+        line first, why the deal came on the first refusal only, then the one step that opens it.
+
+        Nothing here is attributed to Tristan: this text is automated, so a line of his inside
+        it reads as automation and gets answered as automation. His own words arrive through
+        Voice as comms messages instead.
+        """
         return "\n\n".join((
-            f"Tristan: {self.nudge(refusal)}",
+            self.nudge(refusal),
             *((self.record.trigger.reason(),) if refusal == 1 else ()),
             f"{tool} waits on {self.before}. {self.reason}",
             *((template,) if template else ()),
