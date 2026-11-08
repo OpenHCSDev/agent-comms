@@ -71,3 +71,11 @@ def test_a_missing_or_stalled_cli_is_reported_not_an_empty_tailnet(monkeypatch, 
     monkeypatch.setattr(subprocess, "run", unavailable)
     with pytest.raises(RuntimeError, match="tailscale"):
         TailnetBuses.peers()
+
+
+def test_ssh_diagnostics_do_not_become_part_of_a_successful_json_answer(monkeypatch):
+    import json
+    answer = json.dumps({"threads": [{"name": "one"}]})
+    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: subprocess.CompletedProcess(
+        args[0], 0, answer, "Warning: Permanently added host to known hosts.\n"))
+    assert TailnetBuses.probe(PEER) == PeerHoldsBus(PEER, 1)

@@ -26,7 +26,7 @@ class ProbedCommand:
 
     @classmethod
     def run(cls, command: Sequence[str]) -> tuple[int, str]:
-        """Its status and everything it said, out and err together.
+        """Its status and answer; a failure retains both output and diagnostics.
 
         A refusal comes back as a status and its own words, never as an exception: every
         caller here has a member for "it would not answer" and needs the reason in it.
@@ -36,4 +36,5 @@ class ProbedCommand:
                                   timeout=cls.timeout_seconds * 2, check=False)
         except (OSError, subprocess.TimeoutExpired) as error:
             return 1, str(error)
-        return done.returncode, done.stdout + done.stderr
+        return done.returncode, (done.stdout if done.returncode == 0
+                                 else done.stdout + done.stderr)

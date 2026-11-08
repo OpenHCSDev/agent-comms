@@ -65,7 +65,7 @@ uv export --project . --python "$PREFIX/bin/python" --no-managed-python \
     --upgrade --output-file "$installation/requirements.txt" >/dev/null
 # uv resolved the complete graph, including source overrides. pip installs that answer;
 # resolving again treats a branch URL and its selected commit as competing dependencies.
-.venv/bin/python -m pip install --no-deps --prefer-binary -r "$installation/requirements.txt"
+.venv/bin/python -m pip install --upgrade --no-deps --prefer-binary -r "$installation/requirements.txt"
 .venv/bin/python -m pip check
 .venv/bin/python -c 'import toad.cli; print("Toad imports successfully.")'
 
