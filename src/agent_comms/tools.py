@@ -80,6 +80,7 @@ from pydantic import JsonValue
 
 from agent_comms.lifecycle_capability import Active
 
+from .bus_identity import BusIdentityStore
 from .change_report import NoChangeReport, ReportEvidence
 from .channel_management import ListTagEdit, TagEdit
 from agent_comms.channel_targets import ChannelTarget, CommandTarget, NamedTarget
@@ -775,7 +776,8 @@ class ServedCommsServedRootTool(CoreRead[ServedRoot], CommsServedRootTool):
     """Serving CommsServedRootTool."""
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ServedRoot:
-        return ServedRoot(str(comms.root.resolve()))
+        root = comms.root.resolve()
+        return ServedRoot(str(root), BusIdentityStore.serving(root))
 
 
 @dataclass(frozen=True, kw_only=True)

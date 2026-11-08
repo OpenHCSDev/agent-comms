@@ -53,6 +53,14 @@ class McpServer(ABC):
     """The session this endpoint serves."""
 
     @abstractmethod
+    def announces(self) -> str:
+        """Which bus is behind this endpoint, in the words its own identity gives.
+
+        A client that learns this from a tool call learns it after it has read something,
+        and reading the wrong bus is the failure this answers, so the handshake says it.
+        """
+
+    @abstractmethod
     async def call(
         self, tool: type[ServedRequest] | type[ConnectorTool],
         arguments: Mapping[str, object], caller: ConnectorCaller, observer: WireExportObserver,
@@ -149,12 +157,24 @@ class InitializeResult(McpResult):
     )
     capabilities: ServerCapabilities = ServerCapabilities()
     server_info: Annotated[ServerInfo, WireName("serverInfo")] = ServerInfo()
-    instructions: str = (
+    instructions: str = ""
+
+    shared_grant: ClassVar[str] = (
         "Several Claude sessions can share one connector grant. When a tool offers the fork "
         "argument, choose one distinct name for this session and pass {\"name\": \"...\"} on "
         "every call, so teammates can tell you apart: your sends come from that name and your "
         "inbox (comms_inbox with thread set to it) holds only what is sent to it."
     )
+
+    @classmethod
+    def announcing(cls, bus: str) -> Self:
+        """The handshake a server answers: which bus it is, and then how to share it.
+
+        Which bus comes first because a session holding several connectors reads this as
+        the one thing that distinguishes them; everything else here is the same on all of
+        them, which was exactly the trouble.
+        """
+        return cls(instructions=f"{bus}\n\n{cls.shared_grant}")
 
 
 @dataclass(frozen=True)
@@ -331,7 +351,7 @@ class InitializeMessage(McpRequest, declared_name="initialize"):
         return await self.answer(connector, caller, http)
 
     async def result(self, connector: McpServer, caller: ConnectorCaller) -> InitializeResult:
-        return InitializeResult()
+        return InitializeResult.announcing(connector.announces())
 
 
 @dataclass(frozen=True, kw_only=True)
