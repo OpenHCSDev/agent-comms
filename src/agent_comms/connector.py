@@ -34,7 +34,7 @@ import sys
 import time
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
-from contextlib import contextmanager, suppress
+from contextlib import AbstractAsyncContextManager, contextmanager, nullcontext, suppress
 from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
 from pathlib import Path
@@ -297,16 +297,28 @@ class RouteBound(ABC):
     @abstractmethod
     def overdue(self, waited: float) -> bool: ...
 
+    @abstractmethod
+    def answering(self, waited: float) -> AbstractAsyncContextManager[object]:
+        """Bounds the wait for an answer, never the work: a call stays in self.calls and
+        stop_calls still joins it, so a mutation finishes even when the request gives up."""
+
 
 class BoundedRoute(RouteBound):
-    """A route that answers and returns. Four orders of magnitude above p999 is not a
-    tuning choice: nothing healthy has come close, and the hang was 7,700 times it."""
+    """A route that answers and returns, bounded at 60s.
+
+    Not a tuned number. Over three days and 31,465 POST /mcp samples, seven ran past five
+    seconds, the longest healthy one 29.993s, and exactly one passed sixty: the 6883.222s
+    hang. So this fails nothing that has ever worked.
+    """
 
     __slots__ = ()
     seconds: ClassVar[float] = 60.0
 
     def overdue(self, waited: float) -> bool:
         return waited > self.seconds
+
+    def answering(self, waited: float) -> AbstractAsyncContextManager[object]:
+        return asyncio.timeout(max(0.0, self.seconds - waited))
 
 
 class LongLivedRoute(RouteBound):
@@ -316,6 +328,9 @@ class LongLivedRoute(RouteBound):
 
     def overdue(self, waited: float) -> bool:
         return False
+
+    def answering(self, waited: float) -> AbstractAsyncContextManager[object]:
+        return nullcontext()
 
 
 BOUNDED_ROUTE = BoundedRoute()
@@ -335,6 +350,10 @@ class RequestWait(ABC):
 
     def waited(self, now: float) -> str:
         return ""
+
+    def answering(self, now: float) -> AbstractAsyncContextManager[object]:
+        """A task with no request behind it answers to nobody and waits as long as it likes."""
+        return nullcontext()
 
 
 class NoRequest(RequestWait):
@@ -364,6 +383,9 @@ class RunningRequest(RequestWait):
         elapsed = now - self.started
         overdue = " OVERDUE" if self.bound.overdue(elapsed) else ""
         return f"{overdue} {elapsed:.3f}s into {self.method} {self.template},"
+
+    def answering(self, now: float) -> AbstractAsyncContextManager[object]:
+        return self.bound.answering(now - self.started)
 
 
 @dataclass(frozen=True)
@@ -506,7 +528,19 @@ class Connector(ConnectorService, McpServer):
             pending = asyncio.create_task(tool.run_async(partial(self.invoke, tool, arguments, caller, observer)))
         self.calls[pending] = tool
         pending.add_done_callback(self.calls.pop)
-        return await asyncio.shield(pending)
+        waiting = self.running_requests.get(asyncio.current_task(), NO_REQUEST)
+        try:
+            async with waiting.answering(time.monotonic()):
+                return await asyncio.shield(pending)
+        except TimeoutError:
+            # The request gives up; the call does not. The shield keeps `pending` running,
+            # self.calls still holds it and stop_calls still joins it, so a mutation
+            # already under way finishes and no write is abandoned half done.
+            logging.warning("%s passed its route's bound with the call still running: %s",
+                            tool.declared_name, self.still_running())
+            raise web.HTTPGatewayTimeout(
+                text=f"{tool.declared_name} has not answered within its deadline; "
+                     "the call is still running and will finish.") from None
 
     async def begin_shutdown(self, app: web.Application) -> None:
         """Close acquisition launches before any shutdown hook can join entered work."""
