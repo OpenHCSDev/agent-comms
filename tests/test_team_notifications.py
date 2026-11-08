@@ -831,26 +831,36 @@ def test_failed_rule_scan_raises_to_the_heartbeat(notification_bus, request):
         StandingRule.broken(comms, observed=states, frame=frame)
 
 
-def test_team_page_reads_each_beats_frame_and_nothing_between(notification_bus):
+async def test_team_page_reads_each_beats_frame_and_nothing_between(notification_bus):
     comms = notification_bus
     states = state_cards(comms, TeammateState)
-    reading = ObserveTeamHud().observation()
-    expected = beat(comms, states=states)
+    expected = await asyncio.to_thread(beat, comms, states=states)  # beat runs its own loop
     client, observer = Pipe()
+
+    async def observed() -> tuple[TeamHudObserved, ...]:
+        """One service pass, as run takes it: the service advances its own revision, and the
+        board it prepares off the pass (in the task group only run enters) is awaited. The
+        pass's other results, such as RevisionObserved, are not the team page's."""
+        await service.observe(set())
+        reading, = service.interest.observations.values()
+        await asyncio.gather(*reading.preparation)
+        sent = []
+        while client.poll():
+            sent.append(client.recv())
+        return tuple(result for result in sent if isinstance(result, TeamHudObserved))
+
     with client, observer:
         service = ObservationService(comms, observer)
         try:
-            reading.step(service, comms.views.revision())
-            assert client.poll()
-            assert client.recv().huds == (expected,)
-            reading.step(service, comms.views.revision())
-            assert not client.poll()
-            beat(comms, states=states)
-            reading.step(service, comms.views.revision())
-            assert client.poll()
-            assert isinstance(client.recv(), TeamHudObserved)
+            async with service.tasks:
+                service.interest.receive(ObserveTeamHud(), service)
+                first, = await observed()
+                assert first.huds == (expected,)
+                assert len(await observed()) == 1  # the page's own preparation, once
+                assert await observed() == ()
+                await asyncio.to_thread(beat, comms, states=states)
+                assert len(await observed()) == 1
         finally:
-            reading.close()
             service.retire()
 
 
