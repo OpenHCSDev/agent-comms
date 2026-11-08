@@ -13,10 +13,9 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from agent_comms.native_runtime_input import NativeRuntimeTable
-from .nominal.field_codec import AcpSessionId, InputId
+from .nominal.field_codec import AcpSessionId, InputId, RootId
 from .coordination.errors import IdentityConflict, RetryScheduled
 from .coordination.coordinator import Coordination
 from .diagnostics import (
@@ -31,7 +30,8 @@ from .native_arguments import SelectedModel
 from .native_input_owner import ParticipantOwner, RegistryOwner
 from .native_entries import NativeEvidenceScope
 from .native_input_proof import NativeContextProof
-from .native_pi import NativePiTerminalFailure, NativeTurnResult
+from .native_pi import NativeTurnResult
+from .turn_failure import NativePiTerminalFailure
 from .native_prompt_binding import bind_expected_prompt
 from .native_prompt_send import PromptBoundary
 from .native_session_reopen import NativeSessionIdentity
@@ -50,9 +50,8 @@ from .tracked_turn import (
 from .turn_context import RenderedInput
 from agent_comms.turn_input_source import SelectedOriginalInput
 
-if TYPE_CHECKING:
-    from .execution.input_drain import InputDrain
-    from .coordinated_runtime import SelectedExecution
+from .execution.input_drain import InputDrain
+from .native_execution import PackagedNativeExecution
 from .private_send_stage import NativeSendStage
 from .selected_participant import SelectedParticipant
 from .selected_session import SelectedSession
@@ -97,7 +96,7 @@ class PrivateSendClaim(PromptBoundary):
         return self.selected.store.session.path
 
     @property
-    def wire_root_id(self) -> str:
+    def wire_root_id(self) -> RootId:
         return self.selected.root_id
 
     @property
@@ -169,7 +168,7 @@ class PrivateSendClaim(PromptBoundary):
 
     async def execute(
         self,
-        execution: SelectedExecution,
+        execution: PackagedNativeExecution,
         *,
         model: SelectedModel,
         selected_tool_mode: NativeToolMode,
@@ -215,7 +214,7 @@ class PrivateSendClaim(PromptBoundary):
                 following=following,
             )
         except NativePiTerminalFailure as error:
-            def settle(store: Coordination, terminal: NativePiTerminalFailure = error):
+            def settle(store: Coordination, terminal: NativePiTerminalFailure[NativeContextProof] = error) -> object:
                 self.verify(store, terminal.context, source_reads)
                 return self.stage.fail_terminal(
                     store, self.participant, self.input_id, self.token_digest,
@@ -320,7 +319,7 @@ class PrivateSendClaim(PromptBoundary):
             )
 
     @contextmanager
-    def prompt_boundary(self, turn):
+    def prompt_boundary(self, turn: TrackedTurnSession) -> Iterator[None]:
         with self(turn.native.attestation.require_identity()):
             turn.grant_prompt()
             yield

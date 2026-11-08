@@ -21,7 +21,14 @@ from .agent_activity import AgentActivity
 from .coordination.errors import StaleFence
 from .errors import BirthChangedError, RelationViolationError, UnregisteredThreadError
 from .goal_records import GoalRecords
-from .context_segments.wake_values import NoWakeGoalContext, WakeGoalContext, WakeWorkContext
+from .context_segments.wake_values import (
+    NoWakeGoalContext, WakeGoalContext, WakeWorkContext, WakeWorkSource,
+)
+from .goal_mutation import (
+    GoalFailureProjection, GoalFork, GoalGenerationProjection, GoalReadyGrantSource,
+    GoalStateProjection, GoalWaitProjection,
+)
+from .goal_states import PauseSource
 from .goal_actions import (
     GoalAction,
     GoalActionContext,
@@ -32,7 +39,10 @@ from .goal_actions import (
     SentBackOrderGoalAction,
     SetGoalAction,
 )
-from .goal_attempts import Generation
+from .goal_attempts import GoalAttemptStore
+from .goal_ledger import FailedTurnEvidence, Generation
+from .goal_wait_target import GoalWaitTarget
+from .goal_permit_source import GoalStoreSource
 from .errors import UnresolvedAttemptError
 from .goal_history import GoalHistoryEntry, RecordedGoalHistory
 from .goal_scope import AllGoals, GoalScope, OneGoal
@@ -49,7 +59,11 @@ from .registry.registry_document import RegistryDocument, RegistrySnapshot
 from .thread_identity import ThreadIncarnation
 from .messages import Message
 from .turn_lease import TurnDeclaration
-from .goal_presentation import GoalExecution, GoalPublicationSnapshot, GoalSnapshot, IdleGoalExecution
+from .goal_presentation import (
+    AttemptFailedExecution, AttemptUnresolvedExecution, CompletedExecution, GoalExecution,
+    GoalPublicationSnapshot, GoalSnapshot, IdleGoalExecution, PausedExecution,
+    RetryableBlockExecution, RunnableExecution, StandbyExecution,
+)
 from .goals import Goal, GoalDeclaration
 from .input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
@@ -68,13 +82,17 @@ _LOG = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class GoalExecutionSource:
+class GoalExecutionSource(
+    GoalStateProjection[GoalExecution, PauseSource],
+    GoalFailureProjection[GoalExecution, FailedTurnEvidence],
+    GoalGenerationProjection[GoalExecution], GoalWaitProjection[GoalExecution],
+):
     """One read's original owners; never persisted or used as launch authority."""
 
     goal: Goal
     wait: GoalWait
     generation: Generation
-    evidence: GoalFailureEvidence
+    evidence: GoalFailureEvidence[FailedTurnEvidence]
     owner: Thread
     snapshot: RegistrySnapshot
     agents: AgentActivity
@@ -86,6 +104,47 @@ class GoalExecutionSource:
     @cached_property
     def owner_alive(self) -> bool:
         return self.owner.process_alive
+
+    def active(self) -> GoalExecution:
+        return self.wait.execution(self)
+
+    def generation_execution(self) -> GoalExecution:
+        return self.generation.lifecycle.execution(self)
+
+    def standby_execution(self) -> GoalExecution:
+        targets = tuple(
+            GoalWaitTarget(target.incarnation.renamed(self.snapshot.canonical_name(target.incarnation.name)))
+            for target in self.wait.targets
+        )
+        inactive = tuple(
+            target for target in targets
+            if not self.agents.is_working(target.incarnation, self.snapshot)
+        )
+        return StandbyExecution(self.goal.id, targets, inactive)
+
+    def paused(self, source: PauseSource) -> GoalExecution:
+        return PausedExecution(self.goal.id, source)
+
+    def blocked(self, reason: str) -> GoalExecution:
+        return RetryableBlockExecution(self.goal.id, reason)
+
+    def completed(self) -> GoalExecution:
+        return CompletedExecution(self.goal.id)
+
+    def turn_execution(self) -> GoalExecution:
+        return self.turn.execution(self)
+
+    def unresolved(self) -> GoalExecution:
+        return AttemptUnresolvedExecution(self.goal.id)
+
+    def runnable(self) -> GoalExecution:
+        return RunnableExecution(self.goal.id)
+
+    def failed(self, evidence: FailedTurnEvidence) -> GoalExecution:
+        return AttemptFailedExecution(self.goal.id, evidence)
+
+    def failed_execution(self) -> GoalExecution:
+        return self.evidence.execution(self)
 
     def execution(self) -> GoalExecution:
         return self.goal.state.execution(self)
@@ -140,7 +199,10 @@ class BornGoalTarget(GoalTarget):
         return thread
 
 
-class Goals(GoalRecords, ProblemGoals):
+class Goals(
+    GoalRecords, ProblemGoals, WakeWorkSource[Thread], GoalFork[Thread, GoalDeclaration],
+    GoalStoreSource[GoalAttemptStore], GoalReadyGrantSource[NativeThread, Generation],
+):
     def fork_goal(self, parent: Thread, child: Thread) -> Goal:
         """Create a teammate's child goal from its parent's active work."""
         text = ('\n'.join(goal.text for goal in parent.goal.active())

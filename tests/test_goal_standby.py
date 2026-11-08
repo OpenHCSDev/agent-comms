@@ -16,7 +16,9 @@ from agent_comms.goal_actions import (
     SetGoalAction,
     StandbyGoalAction,
 )
-from agent_comms.goal_presentation import RunnableExecution, StandbyExecution, GoalWaitTarget
+from agent_comms.goal_presentation import RunnableExecution, StandbyExecution
+from agent_comms.goal_wait_target import GoalWaitTarget
+from agent_comms.thread_status import PausedBridgeThreadStatus
 from agent_comms.planning.goal_waits import GoalWaits
 from goal_owner_fixture import canonical_goal_wire
 from agent_comms.planning.goal_waits import RecordedGoalWait, NoGoalWait
@@ -195,8 +197,6 @@ def test_standby_refuses_canonical_reply_that_arrived_before_wait(tmp_path, read
 
 @pytest.mark.parametrize("bridge_alive", [True, False])
 def test_standby_on_a_paused_bridge_waits_only_while_its_process_lives(tmp_path, bridge_alive):
-    from agent_comms.thread_status import PausedBridgeThreadStatus
-
     comms = live_wire(tmp_path, "waiter")
     teammate = NativeThread("teammate", frozenset(), Checkout(tmp_path))
     if bridge_alive:

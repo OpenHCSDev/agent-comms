@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from abc import abstractmethod
+from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Self
 
 from .channel_targets import CommandTarget
 from .nominal.declared_family import DeclaredFamily
@@ -21,14 +22,12 @@ from .thread_identity import (
     TurnIdentity,
     UserThreadRole,
 )
-from .turn_context import Provenance, WireProvenance
+from .turn_context import ContextSegment, Provenance, WireProvenance
+from .storage.typed_table import TypedTable
 from .ui_model.message_category import MessageCategory
 from .working_memory_requests import AnnotationBudgetExhausted
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
-    from typing import Self
-
     from .bus import BusReader
     from .cli_bridges.shared import CliBridge
     from .context_segments.wake import MessageDelivery
@@ -42,8 +41,6 @@ if TYPE_CHECKING:
     from .registry_provenance import RegistryProvenance
     from .retained_task_facts import RetainedTaskFacts
     from .registry.threads import Thread
-    from .turn_context import ContextSegment
-    from .storage.typed_table import TypedTable
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -52,7 +49,9 @@ class TaskScope(DeclaredFamily, affix="TaskScope"):
 
     @classmethod
     def for_goal(cls, project: Checkout, goal: GoalDeclaration) -> TaskScope:
-        return goal.active().task_scope(TurnTaskScope(project=project))
+        return goal.active().task_scope(
+            scope := TurnTaskScope(project=project), scope.with_goal,
+        )
 
     def with_goal(self, goal: GoalRevision) -> TaskScope:
         return GoalTaskScope(project=self.project, goal=goal)

@@ -9,15 +9,17 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import Annotated, ClassVar
 
 from ..activity import ObservedActivity
 from ..agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
 from ..channel_targets import DeclaredTag, Tag
 from ..child_process import NoProcess, ProcessIdentity, ProcessState
-from ..context_segments.wake_values import WakeWorkContext
+from ..context_segments.wake_values import WakeWorkContext, WakeWorkSource
+from ..goal_mutation import GoalFork
 from ..errors import RelationViolationError
 from ..goals import (
+    GoalConsentRequired,
     GoalDeclaration,
     NoGoal,
 )
@@ -95,10 +97,7 @@ from ..turn_lease import (
     TurnState,
 )
 
-if TYPE_CHECKING:
-    from ..goal_management import Goals
-    from ..storage_rules import StorageRule
-    from .registry_document import RegistrySnapshot
+from .thread_reads import ThreadCheckoutSource, ThreadOwnerSource
 
 
 class ThreadCommandAvailability:
@@ -428,7 +427,7 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread")
             for location, view in parent.runtime.history_locations(parent, registry, visited):
                 yield location, location.view_from_fork(view, self.incarnation.wire_birth)
 
-    def contains_worktree(self, worktree: Checkout, rule: StorageRule) -> bool:
+    def contains_worktree(self, worktree: Checkout, rule: ThreadCheckoutSource[Thread]) -> bool:
         """A project this conversation ran in, or this unit's physical home and extra checkouts."""
         return self.ran_in(worktree) or worktree.resolved().path in rule.checkouts_of(
             self, RepositoryReads())
@@ -536,7 +535,7 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread")
         """The thread when it is a fork working inside its teammate's turn."""
         return ()
 
-    def owner_binding(self, snapshot: RegistrySnapshot) -> ThreadOwnerBinding:
+    def owner_binding(self, snapshot: ThreadOwnerSource[Thread]) -> ThreadOwnerBinding:
         return UnavailableThreadOwnerBinding()
 
     def presentation(self, status: ThreadStatus, ordinary: ThreadPresentation,
@@ -571,6 +570,10 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread")
         """The same declaration under another execution; replace() keeps the class."""
         return member(**{**{item.name: getattr(self, item.name) for item in fields(self)
                             if item.init}, **changes})
+
+    def require_goal_assignment(self, actor: ThreadIncarnation) -> None:
+        if not actor.represents(self.incarnation):
+            raise GoalConsentRequired(self, actor)
 
     def require_restart_owner(self, status) -> None:
         if not self.restart_candidates(status):
@@ -674,7 +677,7 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread")
     def task_scope(self) -> TaskScope:
         return TaskScope.for_goal(self.worktree, self.goal)
 
-    def wake_context(self, goals: Goals) -> WakeWorkContext:
+    def wake_context(self, goals: WakeWorkSource[Thread]) -> WakeWorkContext:
         return goals.wake_context(self)
 
     def continuation_goal(self, original: Thread) -> GoalDeclaration:
@@ -824,7 +827,7 @@ class NativeThread(Thread):
     def prepare_conversation[T](self, preparation: ConversationPreparation[T]) -> T:
         return preparation.native()
 
-    def owner_binding(self, snapshot: RegistrySnapshot) -> ThreadOwnerBinding:
+    def owner_binding(self, snapshot: ThreadOwnerSource[Thread]) -> ThreadOwnerBinding:
         return snapshot.status(self.name).native_owner_binding(snapshot, self)
 
     def presentation(self, status: ThreadStatus, ordinary: ThreadPresentation,
@@ -920,7 +923,9 @@ class SubagentThread(ExternalThread, declared_name="subagent_execution"):
         return replace(child, tags=DeclaredTag.for_child(parent.tags))
 
     @classmethod
-    def child_goal(cls, goals: Goals, parent: Thread) -> Callable[[Thread], GoalDeclaration]:
+    def child_goal(
+        cls, goals: GoalFork[Thread, GoalDeclaration], parent: Thread,
+    ) -> Callable[[Thread], GoalDeclaration]:
         return lambda prepared: prepared.goal
 
 
@@ -944,7 +949,9 @@ class ForkThread(NoChannelInbox, SubagentThread, declared_name="fork_execution")
         return replace(child, tags=parent.tags)
 
     @classmethod
-    def child_goal(cls, goals: Goals, parent: Thread) -> Callable[[Thread], GoalDeclaration]:
+    def child_goal(
+        cls, goals: GoalFork[Thread, GoalDeclaration], parent: Thread,
+    ) -> Callable[[Thread], GoalDeclaration]:
         return lambda prepared: goals.fork_goal(parent, prepared)
 
 

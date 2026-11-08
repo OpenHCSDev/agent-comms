@@ -15,7 +15,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, fields, replace
 from functools import cmp_to_key
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
+from typing import Annotated, ClassVar, Literal, Protocol
 
 from agent_comms.nominal.field_codec import GoalId
 from agent_comms.nominal import field_codec
@@ -44,10 +44,10 @@ from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 from .registry.threads import Thread
 
-if TYPE_CHECKING:
-    from .history_views import HistoryViews
-    from .message_bus import MessageBus
-    from .registry.registration import Registration
+from .bus import BusReader
+from .catalog_store import ChannelCatalog
+from .display_sources import ActivitySource, SentHistorySource
+from .registry.registration import Registration
 
 
 @dataclass(frozen=True, slots=True)
@@ -764,25 +764,52 @@ class RelationshipStore(SingleFileStore, ThreadOwnedState, CarriedDocument[Relat
         self.update(remove)
 
 
+class RelationshipBusSource(ActivitySource, Protocol):
+    @property
+    def bus(self) -> BusReader: ...
+
+
+class RelationshipCatalogSource(Protocol):
+    @property
+    def catalog(self) -> ChannelCatalog: ...
+
+
+class RelationshipSource(SentHistorySource[RegistrySnapshot], Protocol):
+    @property
+    def root(self) -> Path: ...
+
+    @property
+    def registry(self) -> Registration: ...
+
+    @property
+    def bus(self) -> RelationshipBusSource: ...
+
+    @property
+    def channels(self) -> RelationshipCatalogSource: ...
+
+    def revision(self) -> presentation.WireRevision: ...
+
+    def thread_views(
+        self, visibility: RosterVisibility,
+    ) -> tuple[presentation.ThreadView, ...]: ...
+
+
 class ThreadRelationships:
-    """One root-scoped service, retained by Comms; no timers or owner actions."""
+    """Relationships read configuration from their one supplied view owner."""
 
     RECENT_MESSAGES = 512
 
-    def __init__(self, root: Path, registry: Registration, bus: MessageBus, views: HistoryViews):
-        self.root = root
-        self.registry = registry
-        self.bus = bus
+    def __init__(self, views: RelationshipSource):
         self.views = views
-        self.store = RelationshipStore.at(root)
+        self.store = RelationshipStore.at(views.root)
 
     def revision(self) -> presentation.WireRevision:
         """What a snapshot derives from; equal revisions show the same thing."""
         return self.views.revision()
 
     def collaborations(self, owner: str) -> tuple[Collaboration, ...]:
-        registry = self.registry.snapshot()
-        thread = self.registry.require(owner)
+        registry = self.views.registry.snapshot()
+        thread = self.views.registry.require(owner)
         edges = self.store.read().resolved(registry).collaborations
         return tuple(edge.oriented(thread) for edge in edges if edge.incident(thread))
 
@@ -813,19 +840,21 @@ class ThreadRelationships:
         if source is None or not source.matches(goal, owner, registry):
             return
         for binding in source.bindings:
-            projected, issues = binding.project(registry, owner, goal, source)
+            projected, issues = binding.project(
+                registry, owner, goal, source, GoalDerivedContact, GoalMentionDiagnostic,
+            )
             contacts.extend(projected)
             diagnostics.extend(issues)
 
     def goal_contacts(
         self, owner: str
     ) -> tuple[tuple[GoalDerivedContact, ...], tuple[GoalMentionDiagnostic, ...]]:
-        return self._goal_contacts(self.registry.snapshot(), self.registry.require(owner))
+        return self._goal_contacts(self.views.registry.snapshot(), self.views.registry.require(owner))
 
     def peer_relations(self, owner: str) -> tuple[PeerRelation, ...]:
         """Every other registered thread with its relevance to ``owner``, most relevant first."""
-        registry = self.registry.snapshot()
-        thread = self.registry.require(owner)
+        registry = self.views.registry.snapshot()
+        thread = self.views.registry.require(owner)
         edges = self.store.read().resolved(registry).collaborations
         contacts, _ = self._goal_contacts(registry, thread)
         granted: dict[ThreadIncarnation, list[type[PeerRelevance]]] = {}
@@ -857,7 +886,7 @@ class ThreadRelationships:
 
     def context_relations(self, owner: str) -> tuple[PeerRelation, ...]:
         """Open contacts, the parent and current-incarnation recent direct work."""
-        registry = self.registry.snapshot()
+        registry = self.views.registry.snapshot()
         thread = registry.require(owner)
         relations = self.peer_relations(owner)
         messages, _ = self._recent_messages()
@@ -874,7 +903,7 @@ class ThreadRelationships:
 
     def relevance(self, owner: str, peer: str) -> type[PeerRelevance]:
         """The most derived relevance ``peer`` has to ``owner``."""
-        identity = self.registry.require(peer).incarnation
+        identity = self.views.registry.require(peer).incarnation
         for relation in self.peer_relations(owner):
             if relation.peer == identity:
                 return relation.relevance
@@ -882,8 +911,8 @@ class ThreadRelationships:
 
     def contacts(self, owner: str) -> Contacts:
         """Combine manual and bound-goal contacts without reading a bus row."""
-        registry = self.registry.snapshot()
-        thread = self.registry.require(owner)
+        registry = self.views.registry.snapshot()
+        thread = self.views.registry.require(owner)
         edges = self.store.read().resolved(registry).collaborations
         explicit = tuple(edge.oriented(thread) for edge in edges if edge.incident(thread))
         contacts, diagnostics = self._goal_contacts(registry, thread)
@@ -903,9 +932,9 @@ class ThreadRelationships:
         self, owner: str, action: type[RelationshipEdit], peer: str, note: str = ""
     ) -> Collaboration | None:
         command = action(note)
-        first = self.registry.require(owner)
+        first = self.views.registry.require(owner)
         first.role.require_executable(ValueError("Collaborations relate agent threads"))
-        registry = self.registry.snapshot()
+        registry = self.views.registry.snapshot()
         peer = registry.canonical_name(peer)
 
         def change(
@@ -921,8 +950,8 @@ class ThreadRelationships:
 
     def set_order(self, owner: str, group: type[SortableRelationshipGroup],
                   order: type[ThreadSort]) -> type[ThreadSort]:
-        thread = self.registry.require(owner)
-        registry = self.registry.snapshot()
+        thread = self.views.registry.require(owner)
+        registry = self.views.registry.snapshot()
         self.store.update(
             lambda document: DocumentChange.to(group.ordered(document.resolved(registry), thread, order))
         )
@@ -935,7 +964,7 @@ class ThreadRelationships:
         the newest message per target, so the older messages of a conversation decided nothing:
         reading them cost 400 microseconds each, 205 ms of the window on this bus.
         """
-        with self.bus.bus.reading() as source:
+        with self.views.bus.bus.reading() as source:
             through = source.revision()
             messages = source.newest_per_conversation(
                 MessageInput.render(MessageRole.stored_conversations()), (),
@@ -944,7 +973,7 @@ class ThreadRelationships:
 
     def snapshot(self, owner: str) -> ThreadCommsSnapshot:
         # One coherent identity/metadata basis; wire payload work is bounded.
-        registry = self.registry.snapshot()
+        registry = self.views.registry.snapshot()
         thread = registry.require(owner)
         state = self.store.read().resolved(registry)
         edges = state.collaborations
@@ -968,7 +997,7 @@ class ThreadRelationships:
             context.sent.update(order.sent_timestamps(self.views, registry=registry))
         return ThreadCommsSnapshot(
             thread.name,
-            str(self.root.resolve()),
+            str(self.views.root.resolve()),
             tuple(group.build(context) for group in RelationshipGroup.members_with(RelationshipGroup)),
             limited,
             len(messages),

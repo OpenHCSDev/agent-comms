@@ -8,6 +8,7 @@ import re
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
+from functools import partial
 from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
@@ -18,6 +19,7 @@ from .annotation_disclosure import PublicInstructionAnnotations, WithheldAnnotat
 from .cli_result import CliResult
 from .errors import RelationViolationError
 from .goals import Goal, NoGoal
+from .instruction_bytes import InstructionBytes
 from .message_reference import MessageReference
 from .native_session_reopen import NativeSessionIdentity
 from .nominal.declared_family import DeclaredFamily
@@ -267,9 +269,8 @@ class InstructionFile:
 
     @classmethod
     def read(cls, name: str) -> InstructionFile:
-        path = Path(__file__).with_name("instructions") / name
-        raw = path.read_bytes()
-        return cls(raw.decode(), FileProvenance(str(path), hashlib.sha256(raw).hexdigest()))
+        read = InstructionBytes.read(name)
+        return cls(read.text, FileProvenance(str(read.path), hashlib.sha256(read.raw).hexdigest()))
 
     def render(self, values: dict[str, object]) -> str:
         return self.content.format_map(values)
@@ -1423,7 +1424,9 @@ class TurnContext(DeclaredReply):
         return context.with_goal(owner, comms.goals).with_awareness(comms, owner, relations)
 
     def with_goal(self, owner: Thread, goals) -> TurnContext:
-        return owner.goal.active().add_context(self, owner, goals)
+        return owner.goal.active().add_context(
+            self, partial(self.prepend_goal, owner, goals=goals),
+        )
 
     def prepend_goal(self, owner: Thread, goal: Goal, goals) -> TurnContext:
         return self.prepend(GoalSegment.capture(owner, goal, goals))

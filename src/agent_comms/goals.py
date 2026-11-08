@@ -7,14 +7,15 @@ import signal
 import subprocess
 import tempfile
 from abc import abstractmethod
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
+from typing import Annotated, ClassVar, Literal
 
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from agent_comms.lifecycle_capability import Active
 from agent_comms_hooks.shell_commands import ShellCommand
+from metaclass_registry.mro_dispatch import MroDispatch
 
 from .change_report import CitationProject
 from .child_process import (
@@ -29,6 +30,9 @@ from .child_process import (
 )
 from .errors import GoalRefused, RejectedEnforcementError, RelationViolationError
 from .goal_authority import GoalAuthority, GoalTurnAuthority, NoGoalAuthority
+from .goal_mutation import GoalMutation
+from .goal_permit_source import GoalPermitSource
+from .goal_work import GoalAssignment, GoalOwner, GoalWorkSource
 from .goal_states import ActiveGoal, GoalState
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import (
@@ -49,25 +53,11 @@ from .shell_effects import shell_storage_effects
 from .text_digest import TextDigest
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .turn_goal_permission import ContinuationGoalPermission, GoalPermission, InactiveGoalPermission
-from .ui_model.goal import GoalDisplay
-
-if TYPE_CHECKING:
-    from .goal_actions import GoalAction, GoalActionContext
-    from .goal_presentation import GoalExecution
-    from .planning.goal_waits import GoalWaits
-    from .registry.threads import Thread
-    from .task_sources import TaskScope
-    from .turn_context import TurnContext
-
-if TYPE_CHECKING:
-    from .goal_attempts import GoalAttemptStore, LaunchPermit
-    from .goal_management import Goals
-    from .todos import Todo
-    from .turn_goal_account import VerifiedGoalSettlement
+from .ui_model.goal import GoalDisplay, GoalExecutionDisplay
 
 
 @dataclass(frozen=True)
-class GoalUnavailable(GoalDisplay):
+class GoalUnavailable(GoalDisplay["GoalDeclaration", "Goal"]):
     last_confirmed: GoalDeclaration
 
     can_control: ClassVar[bool] = False
@@ -78,11 +68,17 @@ class GoalUnavailable(GoalDisplay):
 
     visible: ClassVar[bool] = True
 
-    def standby(self, execution: GoalExecution) -> bool:
+    def standby(self, execution: GoalExecutionDisplay[Goal]) -> bool:
         return False
 
-    def heading(self, execution: GoalExecution) -> str:
+    def heading(self, execution: GoalExecutionDisplay[Goal]) -> str:
         return self.last_confirmed.unavailable_heading
+
+
+type GoalContactFactory[Contact] = Callable[[str, float, str, float, GoalId, int], Contact]
+type GoalDiagnosticFactory[Diagnostic] = Callable[
+    [str, GoalId, int, str, type[GoalMentionBinding] | Literal["stale_incarnation"]], Diagnostic,
+]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -97,7 +93,10 @@ class GoalMentionBinding(DeclaredFamily, affix="MentionBinding"):
             raise ValueError("Goal mention requires a token")
 
     @abstractmethod
-    def project(self, registry, owner, goal, source): ...
+    def project[Contact, Diagnostic](
+        self, registry, owner, goal, source,
+        make_contact: GoalContactFactory[Contact], make_diagnostic: GoalDiagnosticFactory[Diagnostic],
+    ) -> tuple[tuple[Contact, ...], tuple[Diagnostic, ...]]: ...
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -107,11 +106,12 @@ class UnresolvedMention:
     peer_name: Literal[None] = None
     peer_created_at: Literal[None] = None
 
-    def project(self, registry, owner, goal, source):
-        from .relationships import GoalMentionDiagnostic
-
+    def project[Contact, Diagnostic](
+        self, registry, owner, goal, source,
+        make_contact: GoalContactFactory[Contact], make_diagnostic: GoalDiagnosticFactory[Diagnostic],
+    ) -> tuple[tuple[Contact, ...], tuple[Diagnostic, ...]]:
         return (), (
-            GoalMentionDiagnostic(
+            make_diagnostic(
                 owner.name, goal.id, source.text_revision, self.token, type(self)
             ),
         )
@@ -160,17 +160,18 @@ class ResolvedMentionBinding(GoalMentionBinding):
     def peer(self) -> ThreadIncarnation:
         return RecordedThreadIncarnation(self.peer_name, self.peer_created_at)
 
-    def project(self, registry, owner, goal, source):
-        from .relationships import GoalDerivedContact, GoalMentionDiagnostic
-
-        diagnostic = GoalMentionDiagnostic(
+    def project[Contact, Diagnostic](
+        self, registry, owner, goal, source,
+        make_contact: GoalContactFactory[Contact], make_diagnostic: GoalDiagnosticFactory[Diagnostic],
+    ) -> tuple[tuple[Contact, ...], tuple[Diagnostic, ...]]:
+        diagnostic = make_diagnostic(
             owner.name, goal.id, source.text_revision, self.token, "stale_incarnation"
         )
         if not self.peer.current(registry):
             return (), (diagnostic,)
         peer = registry.threads[self.peer.resolved(registry).name]
         contacts = tuple(
-            GoalDerivedContact(
+            make_contact(
                 owner.name,
                 owner.incarnation.wire_birth,
                 executor.name,
@@ -290,7 +291,7 @@ class GoalConsentRequired(GoalRefused, RejectedEnforcementError):
 
     reason: ClassVar[str] = "goal owner approval required"
 
-    def __init__(self, owner: Thread, actor: ThreadIncarnation) -> None:
+    def __init__(self, owner: GoalOwner, actor: ThreadIncarnation) -> None:
         super().__init__(
             f"{owner.name} already has {owner.goal.captured}; {actor.name} cannot assign "
             "new work without that goal owner's approval."
@@ -302,7 +303,7 @@ class GoalChangedError(GoalRefused, RejectedEnforcementError):
 
     reason: ClassVar[str] = "goal changed"
 
-    def __init__(self, thread: Thread, expected: GoalCheckpoint) -> None:
+    def __init__(self, thread: GoalOwner, expected: GoalCheckpoint) -> None:
         super().__init__(
             f"{thread.name}: observed {expected}, now {thread.goal.captured}; "
             "the action was not applied"
@@ -482,29 +483,29 @@ class CheckedCommit:
 
 
 class GoalOrder(DeclaredFamily, affix="GoalOrder"):
-    def require_completion(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
+    def require_completion(self, goal: Goal, goals: GoalWorkSource, owner: ThreadIncarnation) -> None:
         pass
 
-    def instructions(self, todos: Sequence[Todo]) -> str:
+    def instructions(self, todos: Sequence[GoalAssignment]) -> str:
         return ""
 
-    def todos(self, goals: Goals, owner: ThreadIncarnation, goal_id: GoalId) -> tuple[Todo, ...]:
+    def todos(self, goals: GoalWorkSource, owner: ThreadIncarnation, goal_id: GoalId) -> tuple[GoalAssignment, ...]:
         return ()
 
     def goal_text(self, goal: Goal) -> str:
         return goal.text
 
-    def progress(self, goal: Goal, todos: Sequence[Todo]) -> str:
+    def progress(self, goal: Goal, todos: Sequence[GoalAssignment]) -> str:
         return goal.progress
 
     def require_model_block(self) -> None:
         pass
 
     @abstractmethod
-    def require_order(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None: ...
+    def require_order(self, goal: Goal, goals: GoalWorkSource, owner: ThreadIncarnation) -> None: ...
 
     @abstractmethod
-    def require_replacement(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None: ...
+    def require_replacement(self, goal: Goal, goals: GoalWorkSource, owner: ThreadIncarnation) -> None: ...
 
     def require_edit(self) -> None:
         """Editing keeps the goal's identity, order and directives, so only text an order
@@ -513,10 +514,10 @@ class GoalOrder(DeclaredFamily, affix="GoalOrder"):
 
 @dataclass(frozen=True)
 class UnorderedGoalOrder(GoalOrder):
-    def require_order(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
+    def require_order(self, goal: Goal, goals: GoalWorkSource, owner: ThreadIncarnation) -> None:
         pass
 
-    def require_replacement(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
+    def require_replacement(self, goal: Goal, goals: GoalWorkSource, owner: ThreadIncarnation) -> None:
         pass
 
 
@@ -526,7 +527,7 @@ class ProblemGoalOrder(GoalOrder):
 
     text: ClassVar[str] = "Complete the assigned problems."
 
-    def require_completion(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
+    def require_completion(self, goal: Goal, goals: GoalWorkSource, owner: ThreadIncarnation) -> None:
         """Every assigned problem is delivered or closed; the Goal then completes.
 
         A problem Goal used to refuse completion outright, so the only way out of one was to
@@ -536,18 +537,18 @@ class ProblemGoalOrder(GoalOrder):
         if goals.todos.for_goal(owner, goal.id):
             raise GoalRefused("Complete each problem with its checked delivered commit.")
 
-    def require_order(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
+    def require_order(self, goal: Goal, goals: GoalWorkSource, owner: ThreadIncarnation) -> None:
         if not goals.todos.closed_for_goal(owner, goal.id):
             raise ValueError("The problem Goal has no assigned Todos.")
 
-    def require_replacement(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
+    def require_replacement(self, goal: Goal, goals: GoalWorkSource, owner: ThreadIncarnation) -> None:
         if goals.todos.holds_pending(owner):
             raise GoalRefused("Finish or release the assigned problems before replacing this Goal.")
 
-    def todos(self, goals: Goals, owner: ThreadIncarnation, goal_id: GoalId) -> tuple[Todo, ...]:
+    def todos(self, goals: GoalWorkSource, owner: ThreadIncarnation, goal_id: GoalId) -> tuple[GoalAssignment, ...]:
         return goals.todos.for_goal(owner, goal_id)
 
-    def instructions(self, todos: Sequence[Todo]) -> str:
+    def instructions(self, todos: Sequence[GoalAssignment]) -> str:
         return "\n\n".join(todo.order.instructions(todo) for todo in todos if todo.pending)
 
     def goal_text(self, goal: Goal) -> str:
@@ -556,7 +557,7 @@ class ProblemGoalOrder(GoalOrder):
     def require_edit(self) -> None:
         raise GoalRefused("A problem Goal's text is derived from its assigned problems.")
 
-    def progress(self, goal: Goal, todos: Sequence[Todo]) -> str:
+    def progress(self, goal: Goal, todos: Sequence[GoalAssignment]) -> str:
         """Each problem's order state and latest verdict, as Core records them on its Todo."""
         return "\n".join(todo.progress_line() for todo in todos)
 
@@ -572,7 +573,10 @@ class GoalPeerChange:
     progress: str
 
 
-class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalDeclaration"]):
+class GoalDeclaration(
+    GoalDisplay["GoalDeclaration", "Goal"], SubclassUnion,
+    RegistrationInheritance["GoalDeclaration"],
+):
     """The recorded goal state, including a thread with no goal."""
 
     @classmethod
@@ -586,7 +590,9 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
     def __iter__(self) -> Iterator[Goal]: ...
 
     @abstractmethod
-    def apply_action[R: GoalDeclaration](self, action: GoalAction[R], ctx: GoalActionContext) -> R: ...
+    def apply_action[Context, R: GoalDeclaration](
+        self, action: GoalMutation[Goal, Context, R], ctx: Context,
+    ) -> R: ...
 
     @abstractmethod
     def following_permission(self) -> GoalPermission: ...
@@ -596,31 +602,37 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
     def authority(self) -> GoalTurnAuthority: ...
 
     @abstractmethod
-    def task_scope(self, scope: TaskScope) -> TaskScope: ...
+    def task_scope[Scope](
+        self, scope: Scope, scoped: Callable[[GoalRevision], Scope],
+    ) -> Scope: ...
 
     @abstractmethod
-    def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext: ...
+    def add_context[Context](
+        self, context: Context, prepend_goal: Callable[[Goal], Context],
+    ) -> Context: ...
 
     @abstractmethod
     def peer_change_values(self) -> GoalPeerChange: ...
 
     @abstractmethod
-    def stopped_permit(self, store: GoalAttemptStore) -> GoalTurnPermit: ...
+    def stopped_permit(self, store: GoalPermitSource) -> GoalTurnPermit: ...
 
     @abstractmethod
-    def settle(self, settlement: type[VerifiedGoalSettlement], store: GoalAttemptStore,
-               permit: LaunchPermit, turn: TurnId) -> None: ...
+    def settle[Store, Permit](
+        self, settlement: Callable[[Store, Permit, Goal, TurnId], MroDispatch],
+        store: Store, permit: Permit, turn: TurnId,
+    ) -> None: ...
 
     @abstractmethod
-    def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]: ...
+    def instructions_for(self, goals: GoalWorkSource, owner: ThreadIncarnation) -> tuple[str, ...]: ...
 
     def accepts_following_handoff(self) -> bool:
         return False
 
-    def require_work(self, actor: ThreadIncarnation, owner: Thread) -> None:
+    def require_work(self, actor: ThreadIncarnation, owner: GoalOwner) -> None:
         """No goal occupies this ready thread's work slot."""
 
-    def work_candidates(self, thread: Thread) -> tuple[Thread, ...]:
+    def work_candidates[Owner](self, thread: Owner) -> tuple[Owner, ...]:
         return (thread,)
 
     @property
@@ -655,7 +667,7 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
     def reported_id(self) -> GoalId | None: ...
 
     @abstractmethod
-    def clear_wait(self, waits: GoalWaits) -> bool: ...
+    def clear_wait(self, clear: Callable[[GoalId], bool]) -> bool: ...
 
     def require_active(self) -> Goal:
         goal = self.require()
@@ -686,29 +698,33 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
 
 @dataclass(frozen=True)
 class NoGoal(NullMember, GoalDeclaration):
-    def stopped_permit(self, store: GoalAttemptStore) -> GoalTurnPermit:
+    def stopped_permit(self, store: GoalPermitSource) -> GoalTurnPermit:
         return NoLaunchPermit()
 
     def __iter__(self) -> Iterator[Goal]:
         return iter(())
 
-    def apply_action[R: GoalDeclaration](self, action: GoalAction[R], ctx: GoalActionContext) -> R:
+    def apply_action[Context, R: GoalDeclaration](
+        self, action: GoalMutation[Goal, Context, R], ctx: Context,
+    ) -> R:
         return action.create(ctx)
 
     def registration_value(self, previous: GoalDeclaration) -> GoalDeclaration:
         return previous
 
-    def settle(self, settlement: type[VerifiedGoalSettlement], store: GoalAttemptStore,
-               permit: LaunchPermit, turn: TurnId) -> None:
+    def settle[Store, Permit](
+        self, settlement: Callable[[Store, Permit, Goal, TurnId], MroDispatch],
+        store: Store, permit: Permit, turn: TurnId,
+    ) -> None:
         pass
 
-    def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]:
+    def instructions_for(self, goals: GoalWorkSource, owner: ThreadIncarnation) -> tuple[str, ...]:
         return ()
 
     def reported_id(self) -> None:
         return None
 
-    def clear_wait(self, waits: GoalWaits) -> bool:
+    def clear_wait(self, clear: Callable[[GoalId], bool]) -> bool:
         return False
 
     shows_document: ClassVar[bool] = False
@@ -721,10 +737,14 @@ class NoGoal(NullMember, GoalDeclaration):
     def authority(self) -> NoGoalAuthority:
         return NoGoalAuthority()
 
-    def task_scope(self, scope: TaskScope) -> TaskScope:
+    def task_scope[Scope](
+        self, scope: Scope, scoped: Callable[[GoalRevision], Scope],
+    ) -> Scope:
         return scope
 
-    def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext:
+    def add_context[Context](
+        self, context: Context, prepend_goal: Callable[[Goal], Context],
+    ) -> Context:
         return context
 
     def peer_change_values(self) -> GoalPeerChange:
@@ -735,10 +755,10 @@ class NoGoal(NullMember, GoalDeclaration):
     objective: ClassVar[str] = ""
     progress: ClassVar[str] = ""
 
-    def standby(self, execution: GoalExecution) -> bool:
+    def standby(self, execution: GoalExecutionDisplay[Goal]) -> bool:
         return False
 
-    def heading(self, execution: GoalExecution) -> str:
+    def heading(self, execution: GoalExecutionDisplay[Goal]) -> str:
         return "No current goal"
 
 
@@ -758,23 +778,27 @@ class Goal(RecordMember, GoalDeclaration):
     state: GoalState = field(default_factory=ActiveGoal)
     order: Annotated[GoalOrder, PresenceExclude()] = field(default_factory=UnorderedGoalOrder)
 
-    def stopped_permit(self, store: GoalAttemptStore) -> GoalTurnPermit:
+    def stopped_permit(self, store: GoalPermitSource) -> GoalTurnPermit:
         return store.stopped_permit(self.id)
 
     def __iter__(self) -> Iterator[Goal]:
         yield self
 
-    def apply_action[R: GoalDeclaration](self, action: GoalAction[R], ctx: GoalActionContext) -> R:
+    def apply_action[Context, R: GoalDeclaration](
+        self, action: GoalMutation[Goal, Context, R], ctx: Context,
+    ) -> R:
         return action.change(self, ctx)
 
     def registration_value(self, previous: GoalDeclaration) -> GoalDeclaration:
         return self
 
-    def settle(self, settlement: type[VerifiedGoalSettlement], store: GoalAttemptStore,
-               permit: LaunchPermit, turn: TurnId) -> None:
+    def settle[Store, Permit](
+        self, settlement: Callable[[Store, Permit, Goal, TurnId], MroDispatch],
+        store: Store, permit: Permit, turn: TurnId,
+    ) -> None:
         settlement(store, permit, self, turn).dispatch_sync(self.state)
 
-    def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]:
+    def instructions_for(self, goals: GoalWorkSource, owner: ThreadIncarnation) -> tuple[str, ...]:
         return (self.render_instructions(self.order.instructions(
             self.order.todos(goals, owner, self.id))),)
 
@@ -784,8 +808,8 @@ class Goal(RecordMember, GoalDeclaration):
     def held_stop(self) -> tuple[str, ...]:
         return self.state.held_stop(self.order.goal_text(self))
 
-    def clear_wait(self, waits: GoalWaits) -> bool:
-        return waits.clear(self.id)
+    def clear_wait(self, clear: Callable[[GoalId], bool]) -> bool:
+        return clear(self.id)
 
     shows_document: ClassVar[bool] = True
 
@@ -800,11 +824,15 @@ class Goal(RecordMember, GoalDeclaration):
     def authority(self) -> GoalAuthority:
         return GoalAuthority(self.id, self.state)
 
-    def task_scope(self, scope: TaskScope) -> TaskScope:
-        return scope.with_goal(self.revision_key)
+    def task_scope[Scope](
+        self, scope: Scope, scoped: Callable[[GoalRevision], Scope],
+    ) -> Scope:
+        return scoped(self.revision_key)
 
-    def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext:
-        return context.prepend_goal(owner, self, goals)
+    def add_context[Context](
+        self, context: Context, prepend_goal: Callable[[Goal], Context],
+    ) -> Context:
+        return prepend_goal(self)
 
     def peer_change_values(self) -> GoalPeerChange:
         return GoalPeerChange(goal=self.revision_key, state=type(self.state), progress=self.progress)
@@ -812,26 +840,26 @@ class Goal(RecordMember, GoalDeclaration):
     def accepts_following_handoff(self) -> bool:
         return bool(self.state.items_with(Active, self))
 
-    def require_work(self, actor: ThreadIncarnation, owner: Thread) -> None:
+    def require_work(self, actor: ThreadIncarnation, owner: GoalOwner) -> None:
         self.state.require_work(actor, owner)
 
-    def work_candidates(self, thread: Thread) -> tuple[Thread, ...]:
+    def work_candidates[Owner](self, thread: Owner) -> tuple[Owner, ...]:
         return self.state.work_candidates(thread)
 
     @property
     def objective(self) -> str:
         return self.text
 
-    def details_heading(self, execution: GoalExecution) -> str:
+    def details_heading(self, execution: GoalExecutionDisplay[Goal]) -> str:
         return execution.details_heading(self.heading(execution))
 
     can_control: ClassVar[bool] = True
     visible: ClassVar[bool] = True
 
-    def standby(self, execution: GoalExecution) -> bool:
+    def standby(self, execution: GoalExecutionDisplay[Goal]) -> bool:
         return execution.waiting_for(self)
 
-    def heading(self, execution: GoalExecution) -> str:
+    def heading(self, execution: GoalExecutionDisplay[Goal]) -> str:
         return execution.heading(self.revision)
 
     unavailable_heading: ClassVar[str] = "Goal state unavailable · last confirmed snapshot"

@@ -11,7 +11,6 @@ from agent_comms.nominal.field_codec import RootId
 
 
 import threading
-from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
@@ -26,13 +25,12 @@ from .coordination.errors import (
 )
 from .coordination.snapshot import RecoverySnapshot
 from .coordination.coordinator import Coordination
-from .cursor_publication import CursorDelivery
 from .following_inputs import FollowingInputs
 from .native_package import VerifiedNativePackage
 from .native_pi import NativePiRpcLaunch
 from .native_failures import NativePiUnavailable
 from agent_comms.native_session_files import NativeSessionFiles
-from .pi_native_backend import PersistentPiSession
+from .native_execution import NativeExecution, PackagedNativeExecution
 from .selected_actions import CodingSelectedAction, SelectedAction
 from .selected_participant import NoLivePublication, SelectedParticipant
 from .selected_result import CoordinatedTurn
@@ -46,28 +44,18 @@ class SessionSetupFailed(ValueError):
     """Native session setup is invalid; stop without retrying its input."""
 
 
-@dataclass(kw_only=True)
-class NativeExecution(ABC):
-    cursor_delivery: CursorDelivery
-    pi_session: PersistentPiSession = field(default_factory=PersistentPiSession, compare=False)
-
-    @abstractmethod
-    def tracked_launch(self, package: VerifiedNativePackage, **options) -> NativePiRpcLaunch: ...
-
-
 class IndependentExecution(NativeExecution):
     def tracked_launch(self, package: VerifiedNativePackage, **options) -> NativePiRpcLaunch:
         return NativePiRpcLaunch.tracked(package, **options)
 
 
 @dataclass(kw_only=True)
-class SelectedExecution(NativeExecution):
+class SelectedExecution(PackagedNativeExecution):
     max_attempts: ClassVar[int] = RetryableProviderFailure.max_retries + 1
 
     root: Path
     wire_root_id: RootId
     owner_name: str
-    native_package: VerifiedNativePackage
     opt_in: bool = True
     after_seq: int = 0
     session_file: Path | None = None

@@ -14,7 +14,8 @@ from ..bus_publication import Delivered
 from ..nominal.declared_family import DeclaredFamily
 from ..errors import UnregisteredThreadError
 from ..nominal.field_codec import GoalId, GoalWaitId, NullMember, ThreadLookup, TurnId
-from ..goal_presentation import GoalExecution, GoalWaitTarget, StandbyExecution
+from ..goal_mutation import GoalWaitProjection
+from ..goal_wait_target import GoalWaitTarget
 from ..goals import Goal, GoalDeclaration
 from ..input_key import InputKey, InputKeyText
 from ..input_attempt import StoredInput, UnresolvedInput
@@ -30,7 +31,6 @@ from ..storage.typed_table import (
 )
 
 if TYPE_CHECKING:
-    from agent_comms.goal_management import GoalExecutionSource
     from ..agent_activity import AgentActivity
     from ..registry.registration import Registration
     from ..message_bus import MessageBus
@@ -81,13 +81,13 @@ class GoalWait(ABC):
         return False
 
     @abstractmethod
-    def execution(self, source: GoalExecutionSource) -> GoalExecution: ...
+    def execution[Execution](self, source: GoalWaitProjection[Execution]) -> Execution: ...
 
 
 @dataclass(frozen=True, slots=True)
 class NoGoalWait(GoalWait):
-    def execution(self, source: GoalExecutionSource) -> GoalExecution:
-        return source.generation.lifecycle.execution(source)
+    def execution[Execution](self, source: GoalWaitProjection[Execution]) -> Execution:
+        return source.generation_execution()
 
     @property
     def targets(self) -> tuple[GoalWaitTarget, ...]:
@@ -159,16 +159,8 @@ class RecordedGoalWait(GoalWait):
     def clear(self, waits: GoalWaits) -> bool:
         return waits.consume(self.goal_id, self.wait_id)
 
-    def execution(self, source: GoalExecutionSource) -> GoalExecution:
-        targets = tuple(
-            GoalWaitTarget(target.incarnation.renamed(source.snapshot.canonical_name(target.incarnation.name)))
-            for target in self.targets
-        )
-        inactive = tuple(
-            target for target in targets
-            if not source.agents.is_working(target.incarnation, source.snapshot)
-        )
-        return StandbyExecution(source.goal.id, targets, inactive)
+    def execution[Execution](self, source: GoalWaitProjection[Execution]) -> Execution:
+        return source.standby_execution()
 
     def current_for(self, goal: GoalDeclaration, owner: RecordedThreadIncarnation) -> bool:
         """A retained wait can survive edits, but not replacement of its owner.
@@ -188,7 +180,7 @@ class RecordedGoalWait(GoalWait):
         return (
             original.message.seq > self.after_seq
             and original.direct_for(owner.lookup)
-            and any(target.sent(original) for target in self.targets)
+            and any(target.sent(original.sender_lookup) for target in self.targets)
         )
 
     def review_after_seq(self, goal, owner, targets) -> int:

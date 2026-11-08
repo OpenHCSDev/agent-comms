@@ -8,39 +8,20 @@ from dataclasses import dataclass, fields
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import NullMember, WireValue, GoalId
-from .goal_failure_observation import FailedTurnEvidence
+from .nominal.field_codec import NullMember, GoalId
+from .goal_ledger import FailedTurnEvidence
 from .goal_states import PauseSource
 from .goals import Goal, GoalCheckpoint, GoalDeclaration
 from .lifecycle_capability import Active
-from .thread_identity import RecordedThreadIncarnation
+from .goal_wait_target import GoalWaitTarget
 from .thread_presentation import ThreadPresentation
+from .ui_model.goal import GoalExecutionDisplay
 
 if TYPE_CHECKING:
-    from .bus_publication import Delivered
     from .goal_actions import GoalAction
 
 
-@dataclass(frozen=True, slots=True)
-class GoalWaitTarget(WireValue):
-    incarnation: RecordedThreadIncarnation
-
-    def sent(self, original: Delivered) -> bool:
-        return original.sender_lookup == self.incarnation.lookup
-
-    def to_wire(self) -> dict[str, str | float]:
-        return self.incarnation.to_wire()
-
-    @classmethod
-    def from_wire(cls, data: dict[str, object]) -> GoalWaitTarget:
-        return cls(RecordedThreadIncarnation.from_wire(data))
-
-    @classmethod
-    def schema(cls) -> dict:
-        return RecordedThreadIncarnation.schema()
-
-
-class GoalExecution(DeclaredFamily, affix="Execution"):
+class GoalExecution(DeclaredFamily, GoalExecutionDisplay[Goal], affix="Execution"):
     """The complete execution family consumed by commands, views and the teammate."""
 
     toggle_label: ClassVar[str] = "Pause"

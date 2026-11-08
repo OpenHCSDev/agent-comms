@@ -116,7 +116,7 @@ class Comms(ActivityClient, BusClient):
             self.goals,
             self.ledger,
         )
-        self.relationships = ThreadRelationships(self.root, self.registry, self.bus, self.views)
+        self.relationships = ThreadRelationships(self.views)
 
     async def watch(
         self, name: str, *, after: InboxStart = TakenInputStart(),
