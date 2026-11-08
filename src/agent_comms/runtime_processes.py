@@ -44,6 +44,26 @@ class RuntimeReference(DeclaredFamily, ABC, affix="Reference"):
         """Whether this is about the installation at all."""
         return True
 
+    def hidden(self, identity: ProcessIdentity,
+               error: Exception) -> tuple[RuntimeProcessOutcome, ...]:
+        """What a process described by this reference contributes when its environment
+        will not read.
+
+        Inside the installation that is unknown and refuses the sweep: the process is
+        ours and what else it imports could be any build. The policy belongs here rather
+        than in the reader because the reference is what knows the difference.
+
+        A live process that hides its environment cannot be read by anyone, its owner
+        included — on this machine the user's own systemd, its sd-pam child and ssh-agent
+        all do, permanently, by their own choice and not by ownership — so this cannot
+        refuse for every one of them without being a collector that never runs.
+        """
+        try:
+            identity.require_alive()
+        except (ProcessLookupError, IdentityMismatchError):
+            return ()
+        return (UnreadableRuntimeProcess(identity.pid, str(error)),)
+
     @staticmethod
     def to(path: Path, runtimes: Path) -> RuntimeReference:
         """How ``path`` relates to the builds under ``runtimes``."""
@@ -107,6 +127,17 @@ class ForeignReference(RuntimeReference):
     def names_installation(self) -> bool:
         return False
 
+    def hidden(self, identity: ProcessIdentity,
+               error: Exception) -> tuple[RuntimeProcessOutcome, ...]:
+        """Nothing. A process launched from outside the installation has already said
+        what it runs, in a command every process publishes.
+
+        The limit this leaves is exact: such a process, hiding its environment, cannot be
+        shown to be importing from a build by this reader. It is uninspected, not proven
+        to hold none.
+        """
+        return ()
+
 
 class RuntimeProcessOutcome(DeclaredFamily, ABC, affix="RuntimeProcess"):
     @abstractmethod
@@ -146,20 +177,16 @@ class UnreadableRuntimeProcess(RuntimeProcessOutcome):
 
 
 @dataclass(frozen=True)
-class UnattributedRuntimeProcess(RuntimeProcessOutcome):
-    """Invoked through something that names no build, so what it runs cannot be read back.
+class ReferencingRuntimeProcess(RuntimeProcessOutcome, ABC, declared_name=None):
+    """A process that named one path inside the installation.
 
-    Nothing on this machine was invoked this way when the retention was written; its own
-    console scripts carry the built interpreter in their shebang, so a scan sees a build.
-    It is a reachable invocation, not a hypothetical one: the installer's verification
-    commands are written against `current/bin/python`.
+    What that path holds and what it leaves undecided are the reference's answers, not
+    each member's: the members differ in how a process came to name it, which is what
+    their lines say, and in nothing else.
     """
 
     pid: int
     reference: RuntimeReference
-
-    def line(self) -> str:
-        return f"Unattributed runtime PID {self.pid}: invoked as {self.reference.describes()}"
 
     def held_paths(self) -> frozenset[Path]:
         return self.reference.held()
@@ -169,7 +196,21 @@ class UnattributedRuntimeProcess(RuntimeProcessOutcome):
 
 
 @dataclass(frozen=True)
-class ImportingRuntimeProcess(RuntimeProcessOutcome):
+class UnattributedRuntimeProcess(ReferencingRuntimeProcess):
+    """Invoked through something that names no build, so what it runs cannot be read back.
+
+    Nothing on this machine was invoked this way when the retention was written; its own
+    console scripts carry the built interpreter in their shebang, so a scan sees a build.
+    It is a reachable invocation, not a hypothetical one: the installer's verification
+    commands are written against `current/bin/python`.
+    """
+
+    def line(self) -> str:
+        return f"Unattributed runtime PID {self.pid}: invoked as {self.reference.describes()}"
+
+
+@dataclass(frozen=True)
+class ImportingRuntimeProcess(ReferencingRuntimeProcess):
     """A process with an import root inside the installation, whatever it was invoked with.
 
     An import root is not a PATH entry. PATH is resolution: one entry wins, and the winner
@@ -183,17 +224,8 @@ class ImportingRuntimeProcess(RuntimeProcessOutcome):
     reaching the moving pointer is as undecidable here as an invocation through it.
     """
 
-    pid: int
-    reference: RuntimeReference
-
     def line(self) -> str:
         return f"Importing-runtime PID {self.pid}: {self.reference.describes()}"
-
-    def held_paths(self) -> frozenset[Path]:
-        return self.reference.held()
-
-    def unread(self) -> tuple[str, ...]:
-        return self.reference.unread()
 
 
 @dataclass(frozen=True)
@@ -268,40 +300,14 @@ class RuntimeProcesses:
         except ProcessLookupError:
             return ()
         except (OSError, IdentityMismatchError) as error:
-            return cls.hidden_environment(identity, error, command)
+            # Whether a hidden environment leaves anything undecided is the reference's
+            # answer: it is what knows whether this process is inside the installation.
+            return command.hidden(identity, error)
         named = (*environment.get("PYTHONPATH", "").split(os.pathsep),
                  environment.get("VIRTUAL_ENV", ""))
         references = (RuntimeReference.to(Path(value), directory) for value in named if value)
         return tuple(ImportingRuntimeProcess(identity.pid, reference)
                      for reference in references if reference.names_installation())
-
-    @staticmethod
-    def hidden_environment(identity: ProcessIdentity, error: Exception,
-                           command: RuntimeReference) -> tuple[RuntimeProcessOutcome, ...]:
-        """Whether an environment this could not read is a reason to stop.
-
-        A process that has gone holds nothing, and is asked rather than assumed.
-
-        A live one that hides its environment cannot be read by anyone, its owner
-        included: on this machine the user's own systemd, that systemd's sd-pam child and
-        ssh-agent all refuse it permanently, by their own choice and not by ownership. So
-        refusing the sweep whenever one exists is a collector that never runs once, which
-        leaves the leak it was written for. What such a process is running is taken from
-        its command instead, which every process publishes.
-
-        A hidden environment on a process whose command is already inside the installation
-        does refuse: that one is ours, and what else it imports is genuinely unknown. The
-        limit this leaves is exact — a process that hides its environment and was launched
-        from outside the installation cannot be shown to be importing from one, by this
-        reader or by any other.
-        """
-        if not command.names_installation():
-            return ()
-        try:
-            identity.require_alive()
-        except (ProcessLookupError, IdentityMismatchError):
-            return ()
-        return (UnreadableRuntimeProcess(identity.pid, str(error)),)
 
     @classmethod
     def observe(cls, target: LaunchRuntime, proc: Path = Path("/proc")) -> RuntimeProcesses:
