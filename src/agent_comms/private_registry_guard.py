@@ -374,6 +374,7 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
             _reject("has an ambiguous root path")
         root = self.registry_path.parent.absolute()
         cursor = root
+        platform = Platform.current()
         while True:
             try:
                 info = cursor.lstat()
@@ -382,8 +383,8 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
             sticky_root = info.st_uid == 0 and bool(info.st_mode & stat.S_ISVTX)
             if (
                 not stat.S_ISDIR(info.st_mode)
-                or info.st_uid not in (0, os.geteuid())
-                or (info.st_mode & 0o022 and not sticky_root)
+                or not platform.trusted_ancestor_owner(info.st_uid)
+                or (platform.ancestor_write_bits(info) and not sticky_root)
             ):
                 _reject("has an untrusted directory ancestor")
             if cursor == root and (

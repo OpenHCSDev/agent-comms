@@ -578,6 +578,13 @@ class Platform(DeclaredFamily, affix="Platform"):
     def is_owned(self, info: os.stat_result) -> bool:
         return info.st_uid == os.geteuid()
 
+    def trusted_ancestor_owner(self, uid: int) -> bool:
+        return uid in (0, os.geteuid())
+
+    def ancestor_write_bits(self, info: os.stat_result) -> int:
+        """Directory write permissions granted outside the owner's trusted principals."""
+        return info.st_mode & 0o022
+
     def make_private(self, path: Path, permissions: int) -> None:
         with suppress(FileNotFoundError):
             if stat.S_IMODE(path.lstat().st_mode) != permissions:
@@ -879,6 +886,18 @@ class LinuxPlatform(PidfdHandles, Platform):
 
 class AndroidPlatform(LinuxPlatform):
     """Termux's Python names Android; its process and file operations use the Linux kernel."""
+
+    # AOSP's AID_SYSTEM owns /data; app UID/GID pairs own their isolated sandboxes.
+    system_identity = 1000
+
+    def trusted_ancestor_owner(self, uid: int) -> bool:
+        return uid == self.system_identity or super().trusted_ancestor_owner(uid)
+
+    def ancestor_write_bits(self, info: os.stat_result) -> int:
+        writes = super().ancestor_write_bits(info)
+        if info.st_gid in (0, self.system_identity, os.getegid()):
+            writes &= ~0o020
+        return writes
 
 
 class DarwinPlatform(Platform):
