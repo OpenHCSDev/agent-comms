@@ -6,6 +6,11 @@ import json
 
 import pytest
 
+from agent_comms.transport.tools.orders import (
+    CommsOrderDoneTool,
+    CommsProblemNumberTool,
+    CommsTodoCreateTool,
+)
 from order_scope_fixture import FIX_SCOPE
 from test_todos import order
 from source_revision_fixture import SourceRepository
@@ -23,7 +28,6 @@ from agent_comms.held_orders import HeldOrders
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.order_tools import CommsOrderDoneTool, CommsProblemNumberTool, CommsTodoCreateTool
 from agent_comms.todos import (
     CommitDelivery, DoneTodoState, FixShape, OrderScope,
     PendingProblemOrder, ReportDelivery, ReportedProblemOrder, TodoStore, TriageScope,

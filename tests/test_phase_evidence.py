@@ -442,7 +442,7 @@ def test_roster_relation_is_exempt_only_below_the_family_by_qualified_name(tmp_p
 
 def test_declared_evidence_reads_declarations_not_their_spelling(tmp_path):
     main = main_of(tmp_path, {
-        "src/agent_comms/tools.py": "TEXT = 'class Ghost(Base):'\n"
+        'src/agent_comms/transport/tools/served.py': "TEXT = 'class Ghost(Base):'\n"
                                     "# class Phantom(Base):\n"
                                     "class Real:\n    def compact(self):\n"
                                     "        def inner():\n            pass\n",
@@ -455,7 +455,7 @@ def test_declared_evidence_reads_declarations_not_their_spelling(tmp_path):
     assert not ClassDeclared("Phantom").read(main)
     assert not ClassDeclared("Elsewhere", ("src/agent_comms",)).read(main)
     assert ClassDeclared("Elsewhere").read(main)
-    assert FunctionDeclared("compact", ("src/agent_comms/tools.py",)).read(main)
+    assert FunctionDeclared("compact", ('src/agent_comms/transport/tools/served.py',)).read(main)
     assert not FunctionDeclared("inner").read(main)
     assert not FunctionDeclared("Real").read(main)
     assert FunctionDeclared("test_it", ("tests",)).read(main)

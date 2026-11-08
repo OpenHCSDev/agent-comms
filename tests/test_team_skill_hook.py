@@ -455,7 +455,7 @@ def test_a_verb_reply_carries_the_new_rows_naming_its_caller(notification_bus):
     """P1213: a cloud session acting through ``fork`` has no hook that knows its name, so its
     own verbs carry its rows, beside the reply and never inside it: the structured reply stays
     the declared result remote cores decode. A row prints once; a read carries no board."""
-    from agent_comms.order_tools import CommsTodoListTool
+    from agent_comms.transport.tools.orders import CommsTodoListTool
     from agent_comms.task_attachments.team_pings import TeamUpdateStore
     from agent_comms.tool_caller import ThreadCaller
     from agent_comms.transport.tools.send import CommsSendTool

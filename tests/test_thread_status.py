@@ -206,7 +206,7 @@ def test_tier_only_tool_changes_next_catalog_without_changing_active_request(tmp
     from agent_comms.cli_verbs.tools import ToolsCliCommand
     from agent_comms.pi_vocabulary import ServiceTier
     from agent_comms.thread_model import DeclaredModel
-    from agent_comms.tools import invoke_tool
+    from agent_comms.transport.tools.served import invoke_tool
 
     comms = wire(tmp_path)
     comms.registry.declare(NativeThread("colleague", frozenset(), Checkout(tmp_path)))
@@ -237,7 +237,7 @@ def test_tier_only_tool_changes_next_catalog_without_changing_active_request(tmp
 
 
 def test_roster_and_controls_keep_archived_threads_dormant():
-    from agent_comms.tools import CommsStartTool
+    from agent_comms.transport.tools.served import CommsStartTool
     from agent_comms.transport.request import ToolRequest
     from agent_comms.child_process import NoProcess
 

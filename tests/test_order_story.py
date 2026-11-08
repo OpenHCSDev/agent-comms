@@ -19,15 +19,6 @@ from agent_comms.nominal.field_codec import (
 from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.order_story import TeamStory, OrderStory
-from agent_comms.order_tools import (
-    CommsChangeProblemTool,
-    CommsTeamStoryTool,
-    CommsOrderStoryTool,
-    CommsOrderTool,
-    CommsTodoCreateTool,
-    CommsVerdictsTool,
-    CommsVerdictTool,
-)
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.repository_name import RepositoryName
@@ -47,6 +38,15 @@ from agent_comms.todos import (
     WithdrawTodo,
 )
 from agent_comms.tool_caller import PeerCaller, NoThreadCaller, ThreadCaller
+from agent_comms.transport.tools.orders import (
+    CommsChangeProblemTool,
+    CommsOrderStoryTool,
+    CommsOrderTool,
+    CommsTeamStoryTool,
+    CommsTodoCreateTool,
+    CommsVerdictTool,
+    CommsVerdictsTool,
+)
 from source_revision_fixture import SourceRepository
 from test_todos import order
 

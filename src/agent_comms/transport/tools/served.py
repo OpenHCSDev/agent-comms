@@ -1,8 +1,22 @@
-"""Named external tool requests; declarations own schema, context and behavior."""
-
 from __future__ import annotations
 
-from .transport.tools.sidebar import (
+import asyncio
+import dataclasses
+from abc import abstractmethod
+from collections.abc import Mapping
+from dataclasses import dataclass
+from pathlib import Path
+from typing import (
+    Annotated,
+    ClassVar,
+)
+
+from agent_comms_hooks import ToolRefusedError
+from pydantic import JsonValue
+
+from . import channels
+from .channels import ChannelListing
+from .sidebar import (
     ChannelOrderSet,
     CommsCaptureHumanInputTool,
     CommsChannelTool,
@@ -50,109 +64,149 @@ from .transport.tools.sidebar import (
     TargetActionsRead,
     ThreadViewMarked,
 )
-import asyncio
-
-from agent_comms_hooks import ToolRefusedError
-from agent_comms.nominal.field_codec import WireExclude
-
-from .input_key import InputKeyText
-from .agent_inbox import InboxWait, NoWait, TakenInputPosition, TakenInputStart
-
-# The goal tools are declared in transport/tools/goals.py; importing them here assembles
-# them into the served surface that invoke_tool dispatches over.
-from .transport.tools import channels, goals, inbox, send
-from .tool_request import ServedRequest, HumanToolRequest, ObservedToolRequest, LiveOwnerTool, PublishingTool, PublishingToolRequest, ReadTool, ThreadReadTool, ThreadContextAction, ThreadToolRequest, CoreRead, NativeToolRequest
-from .transport.request import ListedNames, OmittedNames, SubjectBinding, tool_field
-from .tool_declaration import NativeRequestTools
-from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
-from .send_result import MessagePublished
-from .native_tools import CommunicationCall
-
-import dataclasses
-import threading
-from abc import abstractmethod
-from collections.abc import Callable, Mapping
-from dataclasses import dataclass, replace
-from pathlib import Path
-from typing import Annotated, ClassVar, Type
-
-from pydantic import JsonValue
-
-from agent_comms.lifecycle_capability import Active
-
-from .bus_identity import BusIdentityStore
-from .change_report import NoChangeReport, ReportEvidence
-from .channel_management import ListTagEdit, TagEdit
-from agent_comms.channel_targets import ChannelTarget, CommandTarget, NamedTarget
-from .channels import AnyChannel, Channel, SavedView, ViewMatch, ViewPredicate
-from agent_comms.cli_verbs.archive import ArchiveCliCommand
-from agent_comms.cli_verbs.delete_view import DeleteViewCliCommand
-from agent_comms.cli_verbs.fork import ForkCliCommand
-from agent_comms.cli_verbs.history import HistoryCliCommand
-from agent_comms.cli_verbs.pin_channel import PinChannelCliCommand
-from agent_comms.cli_verbs.pin_thread import PinThreadCliCommand
-from agent_comms.cli_verbs.queue_restart import QueueRestartCliCommand
-from agent_comms.cli_verbs.start import StartCliCommand
-from agent_comms.cli_verbs.stop import StopCliCommand
-from agent_comms.cli_commands import ThreadArchivedResult, ThreadCreatedResult, ThreadStoppedResult
-from agent_comms.cli_verbs.threads import ThreadsCliCommand
-from .config_options import ConfigOptions
-from .cli_command import PreparedTargetAction, TargetActionCommand
-from .cli_result import CliResult, TargetEditResult
-from .coordination.tables.refusals import SendRefusal
-from .display_order import ChannelSort
-from .nominal.field_codec import ContextSource, FieldCodec, NullMember, WireChoices, SingleFieldValue, SubclassUnion, WireForm, WireName, WireOmitDefault, projected, GoalId
-from .goal_actions import (
-    ActiveGoalAction, ClearGoalAction, EditGoalAction, GoalAction, GoalActor, GoalPrecondition,
-    ModelInvocable, PausedGoalAction, PeerInvocable, RuntimeInvocable, SetGoalAction,
-    TransitionGoalAction,
+from ..request import (
+    SubjectBinding,
+    tool_field,
 )
-from .goal_history import RecordedGoalHistory
-from .goal_scope import AllGoals, OneGoal
-from .goal_presentation import GoalExecution, GoalSnapshot
-from .planning.goal_waits import NoStandbyReview, StandbyReview
-from .goals import GoalDeclaration
-from .history_result import HistoryPageResult
-from .input_attempt import UnresolvedInputReference
-from .message_page import DisplayedMessagePage, InboxPage, MessagePage, PageBounds
-from .page_traversal import LatestSequence, LiveCursor
-from .historical_views import ConversationRevision
-from .message_reference import MessageReference
-from .messages import InfoKind, Message, MessageKind, NoticeRole, SendableMessageKind
-from .execution.owner_lifecycle import OwnerStartResult
-from .owner_launch import HostResources
-from .page_traversal import NewestCursor, PageCursor
-from .pi_payloads import PublishedGoalToolDetails
-from .pi_vocabulary import ServiceTier, ThinkingLevelField
-from .notification_evidence import AfterRecipient, FirstRecipient, RecipientCursor
-from .message_notification import MessageNotification
-from .presentation import ChannelView, WireRevision
-from .runtime_requests import QueueActionRuntimeRequest
-from .owner_connection import OwnerConnection
-from .turn_context import ContextManifest
-from .importing import ImportedSessionMetadata, ThreadImported
-from .exporting import WireExportProvenance
-from .cli_bridges.history import OfflineHistory
-from .turn_context import ContextSourceText, SegmentManifest
-from .working_memory_annotations import WorkingMemoryAnnotations
-from .working_memory_labels import JevClassifier
-from .notification_evidence import RecipientLimit
-from .progress_claims import ProgressClaim
-from .relationships import (
+from ...acp_extension import CoordinationChangedUpdate
+from ...bus_identity import BusIdentityStore
+from ...channel_management import (
+    ListTagEdit,
+    TagEdit,
+)
+from ...channel_targets import (
+    ChannelTarget,
+    CommandTarget,
+)
+from ...channels import (
+    Channel,
+    SavedView,
+    ViewMatch,
+    ViewPredicate,
+)
+from ...child_process import ProcessIdentity
+from ...cli_bridges.history import OfflineHistory
+from ...cli_command import (
+    PreparedTargetAction,
+    TargetActionCommand,
+)
+from ...cli_commands import (
+    ThreadArchivedResult,
+    ThreadCreatedResult,
+    ThreadStoppedResult,
+)
+from ...cli_result import (
+    CliResult,
+    TargetEditResult,
+)
+from ...cli_verbs.archive import ArchiveCliCommand
+from ...cli_verbs.delete_view import DeleteViewCliCommand
+from ...cli_verbs.fork import ForkCliCommand
+from ...cli_verbs.history import HistoryCliCommand
+from ...cli_verbs.pin_channel import PinChannelCliCommand
+from ...cli_verbs.pin_thread import PinThreadCliCommand
+from ...cli_verbs.queue_restart import QueueRestartCliCommand
+from ...cli_verbs.start import StartCliCommand
+from ...cli_verbs.stop import StopCliCommand
+from ...cli_verbs.threads import ThreadsCliCommand
+from ...comms import Comms
+from ...config_options import ConfigOptions
+from ...coordination.tables.refusals import SendRefusal
+from ...display_references import ReferenceNames
+from ...execution.owner_lifecycle import OwnerStartResult
+from ...exporting import WireExportProvenance
+from ...historical_views import ConversationRevision
+from ...history_result import HistoryPageResult
+from ...history_views import RetiredViews
+from ...host_logs import (
+    HostLog,
+    HostLogRead,
+)
+from ...importing import (
+    ImportedSessionMetadata,
+    ThreadImported,
+)
+from ...input_origin import HumanInputOrigin
+from ...message_notification import MessageNotification
+from ...message_page import MessagePage
+from ...message_reference import MessageReference
+from ...messages import (
+    Message,
+    NoticeRole,
+)
+from ...native_tools import CommunicationCall
+from ...nominal.declared_family import (
+    DeclaredFamily,
+    UnknownFamilyMember,
+)
+from ...nominal.field_codec import (
+    ContextSource,
+    FieldCodec,
+    NullMember,
+    SingleFieldValue,
+    SubclassUnion,
+    WireForm,
+    WireName,
+    WireOmitDefault,
+)
+from ...notification_evidence import (
+    AfterRecipient,
+    FirstRecipient,
+    RecipientCursor,
+    RecipientLimit,
+)
+from ...notification_reads import LiveNotificationRead
+from ...owner_connection import OwnerConnection
+from ...owner_launch import HostResources
+from ...page_traversal import (
+    LatestSequence,
+    LiveCursor,
+    NewestCursor,
+    PageCursor,
+)
+from ...pi_vocabulary import (
+    ServiceTier,
+    ThinkingLevelField,
+)
+from ...presentation import (
+    ChannelView,
+    WireRevision,
+)
+from ...registry.registry_document import (
+    ProjectThreadSelection,
+    RegistrySlice,
+    RegistrySnapshot,
+)
+from ...registry.threads import (
+    ArchiveOwnerControl,
+    NativeOwnerCommand,
+    NextTurnConfiguration,
+    OwnerLifecycleControl,
+    StartOwnerControl,
+)
+from ...relationships import (
     Collaboration,
     GoalDerivedContact,
     GoalMentionDiagnostic,
     RelationshipEdit,
     ThreadCommsSnapshot,
 )
-from .restart_queue import QueuedRestart, RestartQueued, RestartQueue
-from .team.standing import InstallDue
-from .send_result import CorrectionComplete, CorrectionResult, SendResult
-from .repo import Checkout
-from .task_sources import (
+from ...repo import Checkout
+from ...restart_queue import (
+    QueuedRestart,
+    RestartQueue,
+    RestartQueued,
+)
+from ...runtime_requests import QueueActionRuntimeRequest
+from ...send_result import (
+    CorrectionComplete,
+    CorrectionResult,
+    MessagePublished,
+    SendResult,
+)
+from ...task_sources import (
     Constraint,
     CurrentTaskScopeSelection,
-    NoTaskAttachment,
     Decision,
     OriginalTaskChange,
     Subtask,
@@ -160,40 +214,51 @@ from .task_sources import (
     TaskChange,
     TaskScopeSelection,
 )
-from .registry.threads import (
-    ArchiveOwnerControl,
-    NativeOwnerCommand,
-    OwnerLifecycleControl,
-    StartOwnerControl,
-    NextTurnConfiguration,
+from ...team.standing import InstallDue
+from ...thread_identity import (
+    ThreadIncarnation,
+    ToolName,
 )
-from .thread_management import (
+from ...thread_management import (
     InheritedTags,
     ProjectChangeResult,
     RenameThreadResult,
     TagChoice,
     ThreadTitleResult,
 )
-from .input_origin import HumanInputOrigin
-from .thread_presentation import ThreadPresentation
-from .child_process import ProcessIdentity
-from .thread_identity import ToolName
-from .thread_model import ThreadModel
-from .tool_caller import ThreadCaller, ThreadListing, ToolCaller
-from .acp_extension import CoordinationChangedUpdate
-from .history_views import RetiredViews
-from .thread_identity import ThreadIncarnation
-from .display_references import ReferenceNames
-from .registry.registry_document import ProjectThreadSelection, RegistrySlice, RegistrySnapshot
-from .host_logs import HostLog, HostLogRead
-from .tool_result import ToolResult
-from .notification_reads import LiveNotificationRead
-from .work_branches import WorkBranch, WorkBranches
-
-from .comms import Comms
-from .tailnet_tools import ServedCommsTailnetBusesTool, ServedCommsTailnetProfileTool
-
-
+from ...thread_model import ThreadModel
+from ...thread_presentation import ThreadPresentation
+from ...tool_caller import (
+    ThreadCaller,
+    ThreadListing,
+    ToolCaller,
+)
+from ...tool_declaration import NativeRequestTools
+from ...tool_request import (
+    CoreRead,
+    HumanToolRequest,
+    LiveOwnerTool,
+    NativeToolRequest,
+    ObservedToolRequest,
+    PublishingToolRequest,
+    ReadTool,
+    ServedRequest,
+    ThreadContextAction,
+    ThreadReadTool,
+    ThreadToolRequest,
+)
+from ...tool_result import ToolResult
+from ...turn_context import (
+    ContextManifest,
+    ContextSourceText,
+    SegmentManifest,
+)
+from ...work_branches import (
+    WorkBranch,
+    WorkBranches,
+)
+from ...working_memory_annotations import WorkingMemoryAnnotations
+from ...working_memory_labels import JevClassifier
 
 
 @dataclass(frozen=True)
@@ -202,8 +267,6 @@ class ModelChanged(ToolResult):
     model: ThreadModel
     thinking_level: ThinkingLevelField
     service_tier: ServiceTier
-
-
 
 
 @dataclass(frozen=True)
@@ -217,8 +280,6 @@ class ThreadTags(ToolResult):
     tags: tuple[str, ...]
 
 
-
-
 @dataclass(frozen=True)
 class ProjectSet(ToolResult):
     thread: str
@@ -226,22 +287,6 @@ class ProjectSet(ToolResult):
     current: str
     changed: bool
     instruction: str
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 @dataclass(frozen=True)
@@ -276,15 +321,11 @@ class CollaborationList(ToolResult):
     ] = ()
 
 
-
-
 @dataclass(frozen=True)
 class TaskPublished(ToolResult):
     reference: MessageReference
     task: TaskAttachment
     correction: CorrectionResult
-
-
 
 
 @dataclass(frozen=True)
@@ -295,30 +336,6 @@ class RestartAttempts(ToolResult):
 @dataclass(frozen=True)
 class RestartsCancelled(ToolResult):
     cancelled: tuple[QueuedRestart, ...]
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def _tag_set(value: str) -> frozenset[str]:
@@ -394,9 +411,6 @@ class ServedCommsChannelTool(CoreRead[Channel], CommsChannelTool):
         return comms.bus.require_channel(self.name)
 
 
-
-
-
 class ServedCommsHistoricalThreadsTool(CoreRead[HistoricalThreadsRead], CommsHistoricalThreadsTool):
     """Serving CommsHistoricalThreadsTool."""
 
@@ -424,8 +438,6 @@ class ServedCommsImportThreadTool(HumanToolRequest[ThreadImported], CommsImportT
     def answered(self, comms: Comms) -> ThreadImported:
         return comms.threads.import_thread(OfflineHistory.stored(self.harness, self.source, self.session),
                                           name=self.name, worktree=self.worktree)
-
-
 
 
 class ServedCommsContextInspectionTool(CoreRead[ContextInspectionRead], CommsContextInspectionTool):
@@ -473,8 +485,6 @@ class ServedCommsSavedSegmentTool(SavedManifestRead[SegmentManifest], CommsSaved
 
     def apply(self, comms: Comms, caller: ToolCaller) -> SegmentManifest:
         return self.manifest(comms).selected_segment(self.position, self.contributors)
-
-
 
 
 class ServedCommsOwnerRequestTool(HumanToolRequest[OwnerAnswered], CommsOwnerRequestTool):
@@ -533,8 +543,6 @@ class ServedCommsThreadPresentationTool(CoreRead[ThreadPresentation], CommsThrea
         return comms.views.thread_presentations((self.thread,)).read(self.thread).published()
 
 
-
-
 class ServedCommsQueueActionTool(HumanToolRequest[QueueActionApplied], CommsQueueActionTool):
     """Serving CommsQueueActionTool."""
 
@@ -544,14 +552,11 @@ class ServedCommsQueueActionTool(HumanToolRequest[QueueActionApplied], CommsQueu
         return QueueActionApplied(original.name)
 
 
-
 class ServedCommsWireRevisionTool(CoreRead[WireRevision], CommsWireRevisionTool):
     """Serving CommsWireRevisionTool."""
 
     def apply(self, comms: Comms, caller: ToolCaller) -> WireRevision:
         return comms.views.revision()
-
-
 
 
 class ServedCommsMarkPageReadTool(HumanToolRequest[PageMarked], CommsMarkPageReadTool):
@@ -562,7 +567,6 @@ class ServedCommsMarkPageReadTool(HumanToolRequest[PageMarked], CommsMarkPageRea
         return PageMarked(len(self.page.messages))
 
 
-
 class ServedCommsThreadRelationshipsTool(CoreRead[ThreadCommsSnapshot], CommsThreadRelationshipsTool):
     """Serving CommsThreadRelationshipsTool."""
 
@@ -570,15 +574,11 @@ class ServedCommsThreadRelationshipsTool(CoreRead[ThreadCommsSnapshot], CommsThr
         return comms.relationships.snapshot(self.owner)
 
 
-
-
 class ServedCommsSetRelationshipOrderTool(HumanToolRequest[RelationshipOrdered], CommsSetRelationshipOrderTool):
     """Serving CommsSetRelationshipOrderTool."""
 
     def answered(self, comms: Comms) -> RelationshipOrdered:
         return RelationshipOrdered(comms.relationships.set_order(self.owner, self.group, self.order))
-
-
 
 
 class ServedCommsTargetActionsTool(CoreRead[TargetActionsRead], CommsTargetActionsTool):
@@ -610,13 +610,11 @@ class ServedCommsRetiredViewsTool(CoreRead[RetiredViews], CommsRetiredViewsTool)
         return comms.views.retired_views(self.threads, self.channels)
 
 
-
 class ServedCommsThreadConfigurationTool(CoreRead[CoordinationChangedUpdate], CommsThreadConfigurationTool):
     """Serving CommsThreadConfigurationTool."""
 
     def apply(self, comms: Comms, caller: ToolCaller) -> CoordinationChangedUpdate:
         return comms.configuration.answer(self.thread)
-
 
 
 class ServedCommsSessionThreadTool(CoreRead[ProjectThreadSelection], CommsSessionThreadTool):
@@ -745,8 +743,6 @@ class CommsThreadTagsTool(NativeToolRequest):
         return ThreadTags(thread.name, tuple(sorted(thread.tags)))
 
 
-
-
 class ServedCommsConversationPageTool(CoreRead[MessagePage], CommsConversationPageTool):
     """Serving CommsConversationPageTool."""
 
@@ -768,8 +764,6 @@ class ServedCommsLatestSequenceTool(CoreRead[LatestSequence], CommsLatestSequenc
 
     def apply(self, comms: Comms, caller: ToolCaller) -> LatestSequence:
         return LatestSequence(LiveCursor(comms.views.latest_sequence()))
-
-
 
 
 class ServedCommsServedRootTool(CoreRead[ServedRoot], CommsServedRootTool):
@@ -857,64 +851,6 @@ class CommsSetProjectTool(ThreadToolRequest):
         )
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 @dataclass(frozen=True, kw_only=True)
 class CommsThreadsTool(ReadTool, NativeToolRequest):
     label = "Comms Threads"
@@ -928,7 +864,6 @@ class CommsThreadsTool(ReadTool, NativeToolRequest):
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadListing:
         threads = ThreadsCliCommand(active_only=self.active_only).apply(comms)
         return caller.listing(comms, threads.threads)
-
 
 
 class ServedCommsRegistryTool(CoreRead[RegistrySnapshot], CommsRegistryTool):
@@ -1135,10 +1070,6 @@ class CommsSendRefusalsTool(ReadTool, NativeToolRequest):
         ))
 
 
-
-
-
-
 class ServedCommsUserSendTool(PublishingToolRequest[ToolCaller, MessagePublished], CommsUserSendTool):
     """Serving CommsUserSendTool."""
 
@@ -1147,8 +1078,6 @@ class ServedCommsUserSendTool(PublishingToolRequest[ToolCaller, MessagePublished
         message = comms.messaging.send_user_message(
             CommandTarget.named(self.target), self.body, worktree=Checkout(comms.root))
         return MessagePublished.from_send(SendResult(message, CorrectionComplete()))
-
-
 
 
 class ServedCommsMarkThreadViewReadTool(HumanToolRequest[ThreadViewMarked], CommsMarkThreadViewReadTool):
@@ -1256,10 +1185,6 @@ class CommsSubtaskTool(CommsAuthoredTaskTool):
         return self.text
 
 
-
-
-
-
 @dataclass(frozen=True, kw_only=True)
 class CommsHistoryTool(ReadTool, NativeToolRequest):
     label = "Conversation history"
@@ -1283,8 +1208,6 @@ class CommsHistoryTool(ReadTool, NativeToolRequest):
             me=caller.history_viewer(self.participant),
             limit=self.limit, before=self.before,
         ).apply(comms)
-
-
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1404,8 +1327,6 @@ class CommsArchiveTool(ArchiveOwnerControl, ThreadContextAction):
         return ArchiveCliCommand(name=self.name).apply(comms)
 
 
-
-
 @dataclass(frozen=True)
 class ToolReplyResult(CliResult):
     """The tool protocol's own reply, the one every adapter receives, written unwrapped."""
@@ -1414,8 +1335,6 @@ class ToolReplyResult(CliResult):
 
     def to_wire(self) -> dict[str, JsonValue]:
         return self.reply
-
-
 
 
 def invoke_tool(

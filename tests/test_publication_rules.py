@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 import pytest
 
 from agent_comms.team import judge
+from agent_comms.transport.tools.orders import CommsHeadVerdictTool
 from agent_comms_hooks import ToolRefusedError
 from agent_comms.closed_pull_requests import ClosedPullRequestWatch
 from agent_comms.team.publication_rules import (
@@ -18,7 +19,6 @@ from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.head_review import PullRequestHead
 from team_heartbeat_fixture import capture_frame
 from agent_comms.heartbeat_subjects import TeamHistory
-from agent_comms.order_tools import CommsHeadVerdictTool
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.task_attachments.team_pings import RulePing
 from agent_comms.tool_caller import ThreadCaller

@@ -61,19 +61,6 @@ from agent_comms.held_orders import HeldOrders
 from agent_comms.storage.maintenance_barrier import MaintenanceHeldError
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import Message
-from agent_comms.order_tools import (
-    CommsChangeProblemTool,
-    CommsFireTool,
-    CommsOrderCheckTool,
-    CommsOrderDoneTool,
-    CommsOrderRunTool,
-    CommsOrderServeTool,
-    CommsOrderTool,
-    CommsProblemCloseTool,
-    CommsTodoCreateTool,
-    CommsTodoListTool,
-    TodoList,
-)
 from agent_comms.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
 from agent_comms.plan_phases import OrderPhase, PlanPhase
 from agent_comms.notification_evidence import AllOutcomes
@@ -125,6 +112,19 @@ from .standing_rules import (
     ClearingVerb,
     HuntDue,
     OwedAnswer,
+)
+from ..transport.tools.orders import (
+    CommsChangeProblemTool,
+    CommsFireTool,
+    CommsOrderCheckTool,
+    CommsOrderDoneTool,
+    CommsOrderRunTool,
+    CommsOrderServeTool,
+    CommsOrderTool,
+    CommsProblemCloseTool,
+    CommsTodoCreateTool,
+    CommsTodoListTool,
+    TodoList,
 )
 
 

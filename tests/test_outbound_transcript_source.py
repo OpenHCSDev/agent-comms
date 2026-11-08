@@ -25,8 +25,8 @@ from agent_comms.notification_progress import (
 )
 from agent_comms.pi_payloads import PublishedMessageToolDetails
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tools import invoke_tool
 from agent_comms.transcripts import EarlierThan, TranscriptRead
+from agent_comms.transport.tools.served import invoke_tool
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 from agent_comms.registry.threads import NativeThread
 from agent_comms.coordination.errors import CoordinationReadUnavailable

@@ -33,11 +33,6 @@ from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import OrderCheck, ProblemGoalOrder
 from agent_comms.messages import HandoffKind, Message, QuestionKind
 from agent_comms.order_runs import ApplicationOrderRun
-from agent_comms.order_tools import (
-    CommsOrderDeliverTool,
-    CommsVerdictTool,
-    TodoChanged,
-)
 from agent_comms.storage.locked_store import SQLiteFile
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.slop import (
@@ -74,7 +69,12 @@ from agent_comms.todos import (
     TriageScope,
 )
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tools import CommsHistoryTool
+from agent_comms.transport.tools.orders import (
+    CommsOrderDeliverTool,
+    CommsVerdictTool,
+    TodoChanged,
+)
+from agent_comms.transport.tools.served import CommsHistoryTool
 from agent_comms_hooks import ToolRefusedError
 from test_held_problem_orders import merge_two_commit_fix
 from test_todos import order, thread

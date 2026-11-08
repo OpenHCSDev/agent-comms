@@ -54,6 +54,10 @@ from .launch_root import started
 from .child_process import GitChildren, HelperStart, OwnedGitOpening, SpawnedHelper, join_retirement
 from .active_route import CommsRoute, resolve_comms_route
 from .comms import Comms, client_wire, wire
+from .transport.tools.orders import (
+    CommsHeadVerdictTool,
+    HeadVerdictTool,
+)
 from .ui_model.observation import RelayConnection, relay_frames, serve_encoded
 from .repo import Checkout
 from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
@@ -91,7 +95,6 @@ from .inbox_watch import InboxWatch, OpenWatch, WatchRoute, WatchTickets
 from .open_viewer import OpenObservation, OpenViewer
 from .tool_caller import ThreadCaller
 from .transport.tools.send import CommsSendTool, SendTool
-from .order_tools import CommsHeadVerdictTool, HeadVerdictTool
 from .send_result import MessagePublished
 from .transport.mcp import (
     AnsweredCall,

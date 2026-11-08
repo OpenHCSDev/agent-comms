@@ -10,8 +10,8 @@ from agent_comms.connector import ConnectorSendTool
 from agent_comms.connector_caller import DirectorCaller
 from agent_comms.errors import CommittedMessageError
 from agent_comms.owner_requests import RequestDirective
-from agent_comms.tools import invoke_tool
 from agent_comms.storage.typed_table import RowNotFoundError
+from agent_comms.transport.tools.served import invoke_tool
 from goal_owner_fixture import canonical_goal_wire
 from agent_comms.registry.threads import NativeThread
 

@@ -61,6 +61,11 @@ from agent_comms.goal_actions import (
 from agent_comms.goal_presentation import RunnableExecution
 from agent_comms.goal_states import ActiveGoal
 from agent_comms.goals import CountCheckResult, OrderCheck, ProblemGoalOrder
+from agent_comms.transport.tools.orders import (
+    CommsTeamStoryTool,
+    CommsTodoListTool,
+    TodoList,
+)
 from team_heartbeat_fixture import capture_frame
 from agent_comms.held_orders import HeldOrders
 from agent_comms.heartbeat_delivery import OnHeartbeatDelivery
@@ -74,7 +79,6 @@ from agent_comms.messages import ConversationRole, InfoKind, Message, NoticeRole
 from agent_comms.native_arguments import GivenBinary
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.order_story import TeamStory
-from agent_comms.order_tools import CommsTeamStoryTool, CommsTodoListTool, TodoList
 from agent_comms.owner_requests import NewestOpenRequest, RequestDirective
 from agent_comms.read_basis import DMDisplayScope, RepliesDisplayScope
 from agent_comms.recorded_time import RecordedEventTime

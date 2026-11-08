@@ -19,6 +19,7 @@ from agent_comms.team.standing_rules import (
     ReviewTimerUp,
     StuckMerge,
 )
+from agent_comms.transport.tools.orders import CommsHeadVerdictTool
 from cli_command import team as team_command
 
 import pytest
@@ -51,7 +52,6 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.work_branches import (
     SourceGrowth, ThreadBranchCheckout, UnregisteredBranchCheckout, WorkBranches,
 )
-from agent_comms.order_tools import CommsHeadVerdictTool
 from agent_comms.todos import (
     CarriedHeadVerdict, ClosedListedPullRequest, ConflictMergeBlock, DraftListedPullRequest, FailedCheckMergeBlock, GrownHeadVerdict, GrowthReason, OrderHeadReview, LinkedHeadReview,
     NoHeadOrder, OrderClaim, ProgressRead, PullRequestLink, PullRequests, RecordPullRequest, RejectedHeadVerdict,

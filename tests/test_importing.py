@@ -1,7 +1,6 @@
 import sys
 
 from agent_comms.core_access import LocalCoreAccess
-from agent_comms.tools import CommsImportedSourceTool
 from agent_comms.repo import Checkout
 from agent_comms.comms import Comms
 from agent_comms.registry.registration import Registration
@@ -15,6 +14,7 @@ from dataclasses import replace
 from collections.abc import Callable, Iterable
 from typing import BinaryIO, IO, Self
 from types import TracebackType
+from agent_comms.transport.tools.sidebar import CommsImportedSourceTool
 from pydantic import JsonValue
 from agent_comms.harness_install import (
     ClaudeCodeHarness,

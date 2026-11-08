@@ -10,8 +10,8 @@ from agent_comms.team.vibe_check import Chokehold, ChokeholdAnswer
 from agent_comms.goal_actions import ChokeholdPausedGoalAction, OwnerInvocable, PausedGoalAction
 from agent_comms.task_attachments.owner_notices import ChokeholdNotice
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tools import invoke_tool
 from agent_comms.registry.threads import NativeThread
+from agent_comms.transport.tools.served import invoke_tool
 
 
 def _teammate(comms, monkeypatch, name):

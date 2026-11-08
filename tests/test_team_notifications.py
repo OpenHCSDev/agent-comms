@@ -27,6 +27,7 @@ from agent_comms.thread_management import GivenTags
 from agent_comms.team_heartbeat import TeamHeartbeat, TeamObservation
 from agent_comms.comms import Comms
 from agent_comms.tool_caller import ThreadCaller
+from agent_comms.transport.tools.served import invoke_tool
 from team_heartbeat_fixture import ObservedHeartbeat, capture_frame, current_hud
 from agent_comms.team_hud import TeamFrame, TeamHud, TeamPlan, CodexUsage, UnreadableUsage
 from agent_comms.team_hud_records import Teammate, PhasesDoneByPlanGroup
@@ -44,7 +45,6 @@ from agent_comms.ui_model.observation import TeamHudObserved, ObservationService
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.transport.tools.reads import TeammateRead
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tools import invoke_tool
 from agent_comms.work_branches import WorkBranchError
 from agent_comms.ui_model.observation import ReadOperation, ReadRefused
 from agent_comms.cli_bridges.codex_connection import CodexConnection

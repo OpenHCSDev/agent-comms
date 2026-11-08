@@ -52,7 +52,6 @@ from agent_comms.nominal.field_codec import (
     RecordProblems,
 )
 from agent_comms.head_review import HeadReviewOrder, PromotedHeadReview, PullRequestHead
-from agent_comms.order_tools import CommsHeadVerdictTool, CommsUnjudgedTool, CommsVerdictsTool
 from agent_comms.recorded_time import EventTime
 from agent_comms.slop import Derivation, Slop
 from agent_comms.todos import (
@@ -91,6 +90,11 @@ from agent_comms.tool_declaration import EditCall, ReplacementEdit
 from .standing_rules import (
     HeadReviewRule,
     StandingRule,
+)
+from ..transport.tools.orders import (
+    CommsHeadVerdictTool,
+    CommsUnjudgedTool,
+    CommsVerdictsTool,
 )
 
 

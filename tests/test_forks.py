@@ -3,6 +3,11 @@
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.hook_forks import SessionSubagents
 from agent_comms.cli_bridges.session_watch import WatchClaim
+from agent_comms.transport.tools.orders import (
+    CommsHudTool,
+    CommsTeamLoadTool,
+    CommsTodoListTool,
+)
 from agent_comms_hooks.watch import WatchRecord
 from agent_comms.cli_bridges.hook_requests import ReadGateRequest, SubagentStartRequest, SubagentStopRequest
 
@@ -64,7 +69,6 @@ from agent_comms.storage.maintenance_barrier import (
     MaintenanceOperator,
 )
 from agent_comms.order_runs import MechanicalOrderRun
-from agent_comms.order_tools import CommsTeamLoadTool, CommsHudTool, CommsTodoListTool
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.slop import DeclarationDerivation, ExistingLine, Slop

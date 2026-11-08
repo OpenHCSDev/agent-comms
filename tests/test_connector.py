@@ -22,6 +22,11 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
+from agent_comms.transport.tools.served import (
+    CommsPinChannelTool,
+    ServedCommsUserSendTool,
+    invoke_tool,
+)
 from aiohttp import ClientSession, CookieJar, web
 from aiohttp.test_utils import TestClient, TestServer
 from yarl import URL
@@ -43,7 +48,10 @@ from agent_comms.transport.mcp import (
     PROTOCOL_VERSION, SESSION_HEADER, CancelledMessage, InitializeResult, NoProgress,
     ProgressToken, StreamedLine, ToolCallMeta, ToolsCallMessage, ToolsCallReply, ToolsCallResult,
 )
-from agent_comms.transport.tools.sidebar import ServedRoot
+from agent_comms.transport.tools.sidebar import (
+    CommsUserSendTool,
+    ServedRoot,
+)
 from agent_comms.bus_identity import BusIdentityStore
 from agent_comms.connector_caller import (
     CALLER, GrantRefusedError, ReadOnlyConnectorCaller, ScopedUiCaller, UiCaller, UiReadCaller,
@@ -74,7 +82,6 @@ from agent_comms.storage.maintenance_barrier import (
 )
 from agent_comms.storage.store_files import ExclusiveLock, StoreGuard, _store_lock
 from agent_comms.transport.tools.channels import ChannelListing, CommsChannelsTool
-from agent_comms.tools import CommsPinChannelTool, CommsUserSendTool, ServedCommsUserSendTool, invoke_tool
 from agent_comms.transport.tools.send import CommsSendTool
 from agent_comms.tool_caller import HumanCaller, NoThreadCaller, ThreadCaller
 from agent_comms.thread_identity import UserThreadRole
@@ -1205,7 +1212,7 @@ async def remote_answer(client: TestClient, token: str, request):
 async def test_a_ui_reads_one_conversation_page_the_same_locally_and_remotely(client, comms):
     """The UI's page request answers in process and through tools/call with one record."""
     from agent_comms.core_access import LocalCoreAccess
-    from agent_comms.tools import CommsConversationPageTool
+    from agent_comms.transport.tools.sidebar import CommsConversationPageTool
 
     comms.registry.declare(NativeThread(CALLER.name, frozenset(), Checkout(comms.root)))
     sent = comms.messaging.send_user_message(
@@ -1231,7 +1238,10 @@ async def test_a_ui_checks_a_conversation_for_changes_the_same_locally_and_remot
     back from the connector as the same record, channel or DM, and settle once nothing
     changed. The latest-sequence bound travels the same way."""
     from agent_comms.core_access import LocalCoreAccess
-    from agent_comms.tools import CommsConversationRevisionTool, CommsLatestSequenceTool
+    from agent_comms.transport.tools.sidebar import (
+    CommsConversationRevisionTool,
+    CommsLatestSequenceTool,
+)
 
     comms.registry.declare(NativeThread(CALLER.name, frozenset({"comms"}), Checkout(comms.root)))
     comms.messaging.send_user_message(
@@ -1352,7 +1362,7 @@ async def test_a_call_that_asks_for_progress_streams_it_then_its_reply(client, s
     """MCP progress: a tools/call carrying a progress token is answered as server-sent events,
     the export's progress notices first and its reply last."""
     from agent_comms.exporting import EverythingScope, FullLimit, JsonlFormat
-    from agent_comms.tools import CommsExportWireTool
+    from agent_comms.transport.tools.sidebar import CommsExportWireTool
 
     prepare_native_comms(comms)
     namespace = comms.registry.store.privacy().namespace

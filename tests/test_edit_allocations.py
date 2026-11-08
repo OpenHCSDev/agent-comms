@@ -6,7 +6,6 @@ import pytest
 
 from agent_comms.nominal.field_codec import GoalId, OrderId
 from agent_comms.goal_actions import CreateProblemGoalAction
-from agent_comms.order_tools import CommsTodoCreateTool
 from agent_comms.repo import Checkout
 from agent_comms.shell_effects import WriteStorageEffect
 from agent_comms.tool_denial import StorageDenied
@@ -21,6 +20,8 @@ from agent_comms.todos import (
     TodoConflict,
 )
 from agent_comms.tool_caller import ThreadCaller
+from agent_comms.transport.tools.orders import CommsTodoCreateTool
+
 
 pytest_plugins = ('test_forks',)
 

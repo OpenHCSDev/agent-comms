@@ -29,6 +29,11 @@ from agent_comms.installer.probes.packages import ArchiveRecord, CommitRecord, G
 from agent_comms.installer.runtime_resolution import CorePackage, RuntimePackage, RuntimeResolution
 from agent_comms.installer.logs import InstallLogs
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.transport.tools.orders import (
+    CommsOrderDoneTool,
+    CommsProblemCloseTool,
+    CommsTodoCreateTool,
+)
 from conftest import record_installed_runtime
 from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun
 from agent_comms.progress_claims import WorkingClaim
@@ -54,7 +59,6 @@ from agent_comms.todos import (
     UnmergedListedPullRequest,
 )
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.order_tools import CommsOrderDoneTool, CommsProblemCloseTool, CommsTodoCreateTool
 from github_fixture import GitHubFixture
 import fixture_git
 from order_scope_fixture import FIX_SCOPE
