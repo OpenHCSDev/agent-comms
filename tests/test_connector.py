@@ -42,11 +42,14 @@ from agent_comms.transport.mcp import (
     SESSION_HEADER, CancelledMessage, InitializeResult, NoProgress, ProgressToken, StreamedLine,
     ToolCallMeta, ToolsCallMessage, ToolsCallReply, ToolsCallResult,
 )
-from agent_comms.connector_caller import CALLER, GrantRefusedError, ScopedUiCaller, UiCaller, UiReadCaller
+from agent_comms.connector_caller import (
+    CALLER, GrantRefusedError, ReadOnlyConnectorCaller, ScopedUiCaller, UiCaller, UiReadCaller,
+)
 from agent_comms.connector_profile import HttpsMcpEndpoint, UiConnectionProfile, UiGrantId, UiGrantSummary
 from agent_comms.connector_store import (
     CALLBACK, CODE_SECONDS, AuthorizationQuery, ConnectorCredentialsFile, ConnectorGrants,
-    ConnectorStore, ExpiredProfile, HeldUiProfiles, IssuedCode, OpenableProfile, TrustedBrowser,
+    ConnectorStore, ExpiredProfile, HeldUiProfiles, IssuedCode, OpenableProfile,
+    ReadServiceAccess, TrustedBrowser,
     UiAccess, UiGrantAccess, UiReadAccess, UnreadableProfile, digest,
 )
 from agent_comms.coordination.errors import TranscriptChanged
@@ -56,7 +59,6 @@ from agent_comms.message_bus import WatchPass
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import ServicePassFailing
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, RecordProblems, RootId
-from agent_comms.host_services import ServiceNotServingError
 from agent_comms.host_services.connector import ConnectorService
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.launch_root import LaunchRoot
@@ -113,7 +115,7 @@ def test_real_connector_refusals_and_replaced_source(tmp_path, source_programs):
 
 
 @pytest.mark.parametrize("registered", [True, False])
-def test_connector_round_trip_reads_this_bus_as_its_caller(comms, tmp_path, registered):
+def test_connector_round_trip_reads_without_a_director_thread(comms, tmp_path, registered):
 
     original = comms.registry.declare(NativeThread("claude-ai", frozenset(), Checkout(comms.root)))
     with socket.socket() as probe:
@@ -140,13 +142,9 @@ def test_connector_round_trip_reads_this_bus_as_its_caller(comms, tmp_path, regi
                 tmp_path / "home" / ".local/state/agent-comms/connector")),
             port=port,
         )
-        if registered:
-            proof.serves()
-        else:
-            with pytest.raises(ServiceNotServingError) as refused:
-                proof.serves()
-            assert CALLER.name in str(refused.value)
-            assert server.poll() is None
+        proof.serves()
+        assert server.poll() is None
+        assert proof.store.read().access == {}
     finally:
         server.terminate()
         server.wait(timeout=30)
@@ -156,6 +154,16 @@ def test_connector_round_trip_reads_this_bus_as_its_caller(comms, tmp_path, regi
 @pytest.fixture
 def store(tmp_path: Path) -> ConnectorStore:
     return ConnectorStore.at(tmp_path)
+
+
+def test_service_read_grant_is_temporary_and_cannot_publish(store: ConnectorStore, comms: Comms):
+    with store.granted("connector health proof", ReadServiceAccess) as token:
+        caller = store.read().access[digest(token)].caller()
+        assert isinstance(caller, ReadOnlyConnectorCaller)
+        assert CommsChannelsTool.declared_name in caller.exposed()
+        with pytest.raises(ToolRefusedError, match="declared reads only"):
+            caller.invoke(CommsSendTool(target="worker", body="must not publish"), comms)
+    assert store.read().access == {}
 
 
 @pytest.fixture

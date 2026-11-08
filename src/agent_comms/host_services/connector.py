@@ -21,7 +21,7 @@ from ..connector import (
     ConnectorVerb,
     ServeVerb,
 )
-from ..connector_store import ConnectorStore
+from ..connector_store import ConnectorStore, ReadServiceAccess
 from ..errors import RelationViolationError
 from ..nominal.field_codec import Argument, FieldCodec, MalformedRecord, PathText
 from ..launch_root import LaunchRoot
@@ -55,7 +55,7 @@ class ConnectorService:
         read = CommsChannelsTool().called()
         call = ToolsCallMessage(jsonrpc="2.0", id=0, params=read)
         try:
-            with self.store.granted("upgrade round trip") as token:
+            with self.store.granted("upgrade round trip", ReadServiceAccess) as token:
                 request = urllib.request.Request(
                     f"http://{LOOPBACK}:{self.port}/mcp",
                     data=json.dumps(FieldCodec.encode(call)).encode(),
