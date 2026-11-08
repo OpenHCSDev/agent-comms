@@ -6,10 +6,7 @@ from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import (
-    Annotated,
-    ClassVar,
-)
+from typing import Annotated, ClassVar
 
 from pydantic import JsonValue
 
@@ -110,15 +107,14 @@ from agent_comms.send_result import (
     MessagePublished,
     SendResult,
 )
+from agent_comms.task_scope import CurrentTaskScopeSelection, TaskScopeSelection
 from agent_comms.task_sources import (
     Constraint,
-    CurrentTaskScopeSelection,
     Decision,
     OriginalTaskChange,
     Subtask,
     TaskAttachment,
     TaskChange,
-    TaskScopeSelection,
 )
 from agent_comms.team.standing import InstallDue
 from agent_comms.tool_caller import ThreadCaller, ThreadListing, ToolCaller

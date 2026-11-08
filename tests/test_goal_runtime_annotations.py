@@ -18,6 +18,7 @@ from agent_comms.turn_runner import TurnRunner
 from agent_comms.turn_progress import TurnProgress
 from agent_comms.route_client import ActivityClient
 from agent_comms.comms import Comms
+from agent_comms.messaging import Messaging
 from agent_comms.acp_extension import AgentCommsUpdate, LiveQueueScope, PromptRequest, QueueScope
 from agent_comms.context_segments.wake_values import WakeWorkContext
 from agent_comms.execution.input_drain import InputDrain
@@ -171,6 +172,10 @@ def test_generation_failure_read_names_its_stored_row() -> None:
      agent_events.TextEvent, agent_events.Notice, agent_events.RuntimeInfoObservation,
      agent_events.NativeMetadataObservation, agent_events.AgentEventConsumer,
      TurnProgress, ActivityClient,
+     (task_scope := get_type_hints(Thread.task_scope.fget)["return"]),
+     *task_scope.members_with(task_scope),
+     (scope_selection := get_type_hints(Messaging.pin_user_constraint)["scope"]),
+     *scope_selection.members_with(scope_selection),
      *ConfigOption.members_with(ConfigOption),
      GenerationState, *GenerationState.members_with(GenerationState),
      GoalAttemptPhase, *GoalAttemptPhase.members_with(GoalAttemptPhase),
@@ -242,6 +247,15 @@ def test_event_notice_constructor_keeps_its_result_type() -> None:
     assert get_args(hints["notice_update"])[-1] is get_args(hints["return"])[0]
 
 
+def test_task_scope_uses_the_original_nominal_owner() -> None:
+    scope = get_type_hints(Thread.task_scope.fget)["return"]
+    owner = get_type_hints(scope.require_current)["owner"]
+    source = get_origin(owner)
+    assert source is not None and issubclass(Thread, source)
+    assert get_args(owner) == (scope,)
+    assert get_type_hints(source.task_scope.fget)["return"] is source.__type_params__[0]
+
+
 def test_dependency_owner_annotations_resolve() -> None:
     assert get_type_hints(GoalRecords)["registry"]
     assert get_type_hints(GoalRecords._release_reviewed_wait)["edit"]
@@ -282,6 +296,10 @@ def test_dependency_reply_reads_its_original_sender_identity() -> None:
     "agent_comms.turn_progress_reads",
     "agent_comms.turn_progress",
     "agent_comms.route_client",
+    "agent_comms.task_scope",
+    "agent_comms.task_scope_owner",
+    "agent_comms.task_sources",
+    "agent_comms.messaging",
 ))
 def test_goal_publication_contracts_resolve_cold(first_module: str) -> None:
     completed = subprocess.run(

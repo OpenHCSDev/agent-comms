@@ -5,6 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass, field
+from functools import partial
 from typing import TYPE_CHECKING, Annotated, Self
 
 from agent_comms.errors import RelationViolationError
@@ -14,9 +15,7 @@ from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup, TurnId, WireOmitDefault
 from agent_comms.owner_requests import OwnerRequestId, RequestDirective
-from agent_comms.planning.goals import GoalDeclaration, GoalRevision
 from agent_comms.projection_source import ProjectionSource
-from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import (
     RecordedThreadIncarnation,
     ThreadIncarnation,
@@ -24,6 +23,7 @@ from agent_comms.registry.thread_identity import (
     UserThreadRole,
 )
 from agent_comms.storage.typed_table import TypedTable
+from agent_comms.task_scope import TaskScope, TaskScopeSelection
 from agent_comms.ui_model.message_category import MessageCategory
 from agent_comms.working_memory_requests import AnnotationBudgetExhausted
 
@@ -41,116 +41,6 @@ if TYPE_CHECKING:
     from agent_comms.registry_provenance import RegistryProvenance
     from agent_comms.retained_task_facts import RetainedTaskFacts
     from agent_comms.task_attachments.team_pings import TeamUpdate
-
-
-@dataclass(frozen=True, kw_only=True)
-class TaskScope(DeclaredFamily, affix="TaskScope"):
-    project: Checkout
-
-    @classmethod
-    def for_goal(cls, project: Checkout, goal: GoalDeclaration) -> TaskScope:
-        return goal.active().task_scope(
-            scope := TurnTaskScope(project=project), scope.with_goal,
-        )
-
-    def with_goal(self, goal: GoalRevision) -> TaskScope:
-        return GoalTaskScope(project=self.project, goal=goal)
-
-    def require_current(self, owner: Thread) -> None:
-        if self.project != owner.worktree:
-            raise RelationViolationError("Task project differs from its declared owner")
-        self.require_context(owner)
-
-    def require_human_context(self, owner: Thread) -> None:
-        self.require_current(owner)
-
-    def for_human(self) -> TaskScope:
-        return self
-
-    @abstractmethod
-    def require_context(self, owner: Thread) -> None: ...
-
-    @abstractmethod
-    def applies(self, owner: Thread, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot) -> bool: ...
-
-    def require_correction(self, previous: ScopedTaskDeclaration, correction: ScopedTaskDeclaration,
-                           registry: RegistrySnapshot) -> None:
-        if previous.scope != self:
-            raise RelationViolationError("Decision correction must preserve its original scope")
-
-
-@dataclass(frozen=True, kw_only=True)
-class GoalTaskScope(TaskScope):
-    goal: GoalRevision
-
-    def require_context(self, owner: Thread) -> None:
-        owner.goal.require().require_id(self.goal.id).require_active()
-        owner.goal.require_checkpoint(self.goal)
-
-    def applies(self, owner: Thread, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot) -> bool:
-        return owner.task_scope == self
-
-
-@dataclass(frozen=True, kw_only=True)
-class ProjectTaskScope(TaskScope):
-    def require_context(self, owner: Thread) -> None:
-        pass
-
-    def applies(self, owner: Thread, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot) -> bool:
-        return owner.worktree == self.project
-
-
-@dataclass(frozen=True, kw_only=True)
-class TurnTaskScope(TaskScope):
-    """The enclosing declaration's original turn determines this scope."""
-
-    def require_context(self, owner: Thread) -> None:
-        if owner.task_scope != self:
-            raise RelationViolationError("An active goal requires its revision scope")
-
-    def applies(self, owner: Thread, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot) -> bool:
-        return owner.worktree == self.project and declaration.turn_scope_matches(owner, registry)
-
-    def require_human_context(self, owner: Thread) -> None:
-        raise RelationViolationError("A USER constraint cannot borrow a model turn scope")
-
-    def for_human(self) -> TaskScope:
-        return ProjectTaskScope(project=self.project)
-
-    def require_correction(self, previous: ScopedTaskDeclaration, correction: ScopedTaskDeclaration,
-                           registry: RegistrySnapshot) -> None:
-        super().require_correction(previous, correction, registry)
-        previous.require_same_turn(correction, registry)
-
-
-class TaskScopeSelection(DeclaredFamily, affix="ScopeSelection"):
-    @abstractmethod
-    def select(self, owner: Thread) -> TaskScope: ...
-
-    @abstractmethod
-    def select_human(self, owner: Thread) -> TaskScope: ...
-
-
-@dataclass(frozen=True)
-class CurrentTaskScopeSelection(TaskScopeSelection, declared_name="current"):
-    def select(self, owner: Thread) -> TaskScope:
-        return owner.task_scope
-
-    def select_human(self, owner: Thread) -> TaskScope:
-        return owner.task_scope.for_human()
-
-
-@dataclass(frozen=True)
-class ExplicitTaskScopeSelection(TaskScopeSelection, declared_name="explicit"):
-    scope: TaskScope
-
-    def select(self, owner: Thread) -> TaskScope:
-        self.scope.require_current(owner)
-        return self.scope
-
-    def select_human(self, owner: Thread) -> TaskScope:
-        self.scope.require_human_context(owner)
-        return self.scope
 
 
 class TaskChange(DeclaredFamily, affix="TaskChange"):
@@ -435,7 +325,9 @@ class ScopedTaskDeclaration(TaskAttachment):
         previous = self.require_previous(original)
         if previous.author.resolved(registry) != self.author.resolved(registry):
             raise RelationViolationError("An agent cannot correct another author's task declaration")
-        self.scope.require_correction(previous, self, registry)
+        self.scope.require_correction(
+            previous.scope, partial(previous.require_same_turn, self, registry),
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -462,7 +354,7 @@ class ModelTaskDeclaration(ScopedTaskDeclaration):
     def applies(self, owner: Thread, registry: RegistrySnapshot) -> bool:
         return (self.author.current(registry)
                 and self.author.resolved(registry) == owner.incarnation
-                and self.scope.applies(owner, self, registry))
+                and self.scope.applies(owner, partial(self.turn_scope_matches, owner, registry)))
 
     def turn_scope_matches(self, owner: Thread, registry: RegistrySnapshot) -> bool:
         return owner.has_authored_turn(self.source_turn.resolved(registry), self.source_turn_id)
@@ -563,7 +455,7 @@ class HumanConstraintPin(ScopedTaskDeclaration):
     def applies(self, owner: Thread, registry: RegistrySnapshot) -> bool:
         return (self.recipient.current(registry)
                 and self.recipient.resolved(registry) == owner.incarnation
-                and self.scope.applies(owner, self, registry))
+                and self.scope.applies(owner, partial(self.turn_scope_matches, owner, registry)))
 
     def original_text_source(self, message: Message, originals: dict[MessageReference, Message]) -> Message:
         try:

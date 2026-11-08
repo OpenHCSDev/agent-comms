@@ -92,7 +92,8 @@ from agent_comms.registry.thread_storage import (
 from agent_comms.registry.thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
 from agent_comms.session_file import NoSessionFile, SessionFile
 from agent_comms.storage.locked_store import DurableFile, PatternFile
-from agent_comms.task_sources import TaskScope
+from agent_comms.task_scope import TaskScope
+from agent_comms.task_scope_owner import TaskScopeOwner
 
 
 class ThreadCommandAvailability:
@@ -322,7 +323,7 @@ class ThreadCatalogFile(DurableFile, PatternFile):
 
 
 @dataclass(frozen=True, slots=True)
-class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread"):
+class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, TaskScopeOwner[TaskScope], affix="Thread"):
     """Declares one agent thread's identity and provenance; each member is how it executes.
 
     The registration owns transport intent; presence does not imply an RPC.

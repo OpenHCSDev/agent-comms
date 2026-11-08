@@ -36,12 +36,10 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.field_codec import MessageId, TurnId
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.registry.thread_identity import (
-    RecordedThreadIncarnation,
-    TurnIdentity,
-)
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation, TurnIdentity
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
-from agent_comms.task_sources import AnnotationDisclosureGrant, ProjectTaskScope
+from agent_comms.task_scope import ProjectTaskScope
+from agent_comms.task_sources import AnnotationDisclosureGrant
 from agent_comms.working_memory_annotations import (
     PreviouslyRequestedAnnotation,
     WorkingMemoryAnnotations,

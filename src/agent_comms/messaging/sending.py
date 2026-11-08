@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-from abc import (
-    ABC,
-    abstractmethod,
-)
+from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -49,15 +46,14 @@ from agent_comms.send_result import (
     CorrectionResult,
     SendResult,
 )
+from agent_comms.task_scope import CurrentTaskScopeSelection, TaskScopeSelection
 from agent_comms.task_sources import (
-    CurrentTaskScopeSelection,
     HumanConstraintPin,
     NativeInputConstraintPin,
     NoTaskAttachment,
     OriginalTaskChange,
     TaskAttachment,
     TaskChange,
-    TaskScopeSelection,
 )
 from agent_comms.working_memory_policy import AnnotationDisclosureGrant
 
