@@ -282,6 +282,47 @@ class ClientRegistrationReply(ClientRegistration):
     token_endpoint_auth_method: str = "none"
 
 
+class RouteBound(ABC):
+    """Whether a route staying open this long is a defect or its job.
+
+    Measured on 2026-11-08 from this connector's own access lines: POST /mcp answered
+    25,836 requests at p50 0.019s, p99 0.287s, p999 0.888s, and the one hang at 6883.222s.
+    GET /observe answered 140 at p50 6.823s, p99 2036.403s, up to 2830.038s, because
+    staying open is what it is for. One bound over both would call 140 healthy observes
+    overdue, so the route owns this and nothing global can.
+    """
+
+    __slots__ = ()
+
+    @abstractmethod
+    def overdue(self, waited: float) -> bool: ...
+
+
+class BoundedRoute(RouteBound):
+    """A route that answers and returns. Four orders of magnitude above p999 is not a
+    tuning choice: nothing healthy has come close, and the hang was 7,700 times it."""
+
+    __slots__ = ()
+    seconds: ClassVar[float] = 60.0
+
+    def overdue(self, waited: float) -> bool:
+        return waited > self.seconds
+
+
+class LongLivedRoute(RouteBound):
+    """A route whose request is meant to outlive the exchange: an observation or a watch."""
+
+    __slots__ = ()
+
+    def overdue(self, waited: float) -> bool:
+        return False
+
+
+BOUNDED_ROUTE = BoundedRoute()
+LONG_LIVED_ROUTES: Mapping[str, RouteBound] = MappingProxyType(
+    {OBSERVE_PATH: LongLivedRoute(), "/watch/{ticket}": LongLivedRoute()})
+
+
 class RequestWait(ABC):
     """How long a running task's request has been unanswered.
 
@@ -317,9 +358,12 @@ class RunningRequest(RequestWait):
     method: str
     template: str
     started: float
+    bound: RouteBound = BOUNDED_ROUTE
 
     def waited(self, now: float) -> str:
-        return f" {now - self.started:.3f}s into {self.method} {self.template},"
+        elapsed = now - self.started
+        overdue = " OVERDUE" if self.bound.overdue(elapsed) else ""
+        return f"{overdue} {elapsed:.3f}s into {self.method} {self.template},"
 
 
 @dataclass(frozen=True)
@@ -560,8 +604,9 @@ class Connector(ConnectorService, McpServer):
         answering = asyncio.current_task()
         # This line prints only once the handler ends, so a handler that never ends is
         # invisible here. The same facts go where a stuck one can be asked for them.
+        bound = LONG_LIVED_ROUTES.get(template, BOUNDED_ROUTE)
         self.running_requests[answering] = RunningRequest(
-            method=request.method, template=template, started=started)
+            method=request.method, template=template, started=started, bound=bound)
         try:
             response = await handler(request)
             status = response.status
@@ -572,7 +617,11 @@ class Connector(ConnectorService, McpServer):
         finally:
             self.running_requests.pop(answering, None)
             elapsed = time.monotonic() - started
-            logging.info("%s %s %s %.3fs", request.method, template, status, elapsed)
+            # A request that answers late still answered, so this reports and refuses
+            # nothing: the route decides whether its own duration is news.
+            logging.log(
+                logging.WARNING if bound.overdue(elapsed) else logging.INFO,
+                "%s %s %s %.3fs", request.method, template, status, elapsed)
 
     async def watch_orders(self, app: web.Application) -> AsyncIterator[None]:
         """Core owns both order maintenance and the teammate's changed-rule wakes."""

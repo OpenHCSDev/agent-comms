@@ -36,7 +36,7 @@ from agent_comms.comms import Comms, wire
 from agent_comms.transport.progress import WireExportObserver
 from agent_comms.connector import (
     ApprovalLink, AuthorizationCodeGrant, Connector, ConnectorSendTool, ConnectorVerb, GrantUiVerb,
-    RunningRequest, ServeVerb, RevokeVerb,
+    LongLivedRoute, RunningRequest, ServeVerb, RevokeVerb,
 )
 from agent_comms.transport.mcp import (
     PROTOCOL_VERSION, SESSION_HEADER, CancelledMessage, InitializeResult, NoProgress,
@@ -47,7 +47,9 @@ from agent_comms.bus_identity import BusIdentityStore
 from agent_comms.connector_caller import (
     CALLER, GrantRefusedError, ReadOnlyConnectorCaller, ScopedUiCaller, UiCaller, UiReadCaller,
 )
-from agent_comms.connector_profile import HttpsMcpEndpoint, UiConnectionProfile, UiGrantId, UiGrantSummary
+from agent_comms.connector_profile import (
+    OBSERVE_PATH, HttpsMcpEndpoint, UiConnectionProfile, UiGrantId, UiGrantSummary,
+)
 from agent_comms.connector_store import (
     CALLBACK, CODE_SECONDS, AuthorizationQuery, ConnectorCredentialsFile, ConnectorGrants,
     ConnectorStore, ExpiredProfile, HeldUiProfiles, IssuedCode, OpenableProfile,
@@ -1482,6 +1484,17 @@ async def test_the_connector_names_work_neither_collection_holds(tmp_path, comms
         assert "stuck_handler_nested" in timed, timed
         # Every other task answers no request, so nothing claims an age it does not have.
         assert timed.count("into POST /mcp") == 1, timed
+        # 6883s on a route whose p999 is 0.888s is news, and the report says so.
+        assert "OVERDUE" in timed, timed
+
+        # The same duration on a route whose job is staying open is not news at all:
+        # one global bound would have called 140 healthy observes overdue on 2026-11-08.
+        connector.running_requests[task] = RunningRequest(
+            method="GET", template=OBSERVE_PATH, started=time.monotonic() - 6883.0,
+            bound=LongLivedRoute())
+        observing = connector.still_running()
+        assert "into GET /observe" in observing, observing
+        assert "OVERDUE" not in observing, observing
     finally:
         connector.running_requests.pop(task, None)
         held.set()
