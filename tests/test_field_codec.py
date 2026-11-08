@@ -1283,3 +1283,36 @@ def test_a_declaration_evaluates_its_annotations_once():
     """Pi payloads call _types on every decode. Uncached, a real journal entry cost 2.21 ms
     instead of 0.16 ms and the resident worker burned 112% CPU (2026-10-30)."""
     assert FieldCodec._types(SecretMember) is FieldCodec._types(SecretMember)
+
+
+def test_a_decoder_registered_after_a_lookup_is_not_invisible_to_it():
+    """The compiled lookup is only good for the registry it read.
+
+    `_registered` walks an annotation's whole MRO asking `get_origin` of each entry, and
+    was doing it for every value decoded — on a phone profiled while scrolling, every one
+    of 80,808 `get_origin` samples came from there. Caching it is safe only while the
+    registration that writes `_by_origin` and `_by_annotation` drops the cache, which is
+    what separates this from the annotation-metadata caches beside it: those read nothing
+    that changes.
+    """
+    from agent_comms.nominal.field_codec import ValueDecoder
+
+    class Later:
+        pass
+
+    assert ValueDecoder._registered(Later) == ()
+
+    class LaterDecoder(ValueDecoder):
+        annotations = (Later,)
+
+    assert ValueDecoder._registered(Later) == (LaterDecoder,)
+
+
+def test_a_compiled_decoder_lookup_is_compiled_once():
+    """Twice for one annotation is the same tuple, not a second MRO walk."""
+    from agent_comms.nominal.field_codec import ValueDecoder
+
+    class Looked:
+        pass
+
+    assert ValueDecoder._registered(Looked) is ValueDecoder._registered(Looked)
