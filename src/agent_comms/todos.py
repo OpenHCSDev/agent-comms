@@ -3367,8 +3367,7 @@ class DeliveredProblemOrder(AwaitingInstallationProblemOrder):
         member owns the words for its answer (merged_state). Spelling "waiting on install"
         here instead told Tristan's board that P42 and P48 awaited an install whose commits
         were already in the running build."""
-        answer = installed.containing(
-            self.delivery.installation_commits, self.check.directory)
+        answer = installed.containing(self.installation_commits, self.check.directory)
         return f"{self.line}, {answer.merged_state}"
 
     def delivery_rates(self) -> Iterator[tuple[str, float]]:
@@ -3419,6 +3418,11 @@ class ReportedProblemOrder(DeliveredProblemOrder):
     delivery: ReportDelivery
     line: ClassVar[str] = "Report returned"
 
+    def installed_line(self, installed: InstalledBuild) -> str:
+        """A returned triage answer owes no install, so no build has a say in its words.
+        It already says so twice, in this line and in ``waiting_on_install``."""
+        return self.line
+
     def require_close(self) -> None:
         pass
 
@@ -3437,6 +3441,15 @@ class InstalledEvidence(CheckedProblemOrder, declared_name=None):
     works: str
     artifact: str
     line: ClassVar[str] = "Installed"
+
+    def installed_line(self, installed: InstalledBuild) -> str:
+        """Recorded evidence of the thing working is not a question for the current build.
+
+        This mixin sits first in the MRO of both installed members, so one declaration
+        answers for the delivered and the merge-observed one. Without it the merge-observed
+        order asked the build and could report "Installed, waiting on install" the moment a
+        later runtime stopped containing the commit whose run was already witnessed."""
+        return self.line
 
     @property
     def accepted(self) -> bool:
