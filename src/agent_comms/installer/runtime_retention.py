@@ -22,12 +22,12 @@ What counts is the interpreter a process was actually invoked with, which is wha
 
 from __future__ import annotations
 
-import shutil
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 
 from agent_comms.installer.backup import StoreBackup
+from agent_comms.installer.building_runtime import BuildingRuntime
 from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -184,7 +184,7 @@ class RuntimeRetention:
         failures: list[str] = []
         for prefix in self.reclaimable():
             try:
-                shutil.rmtree(prefix)
+                BuildingRuntime.discard(prefix)
             except OSError as error:
                 failures.append(f"{prefix.name}: {error}")
                 continue
