@@ -1,9 +1,12 @@
 """An install takes back the built runtimes nothing holds, and only those."""
 
 import json
+import os
+import sys
+import time
 from pathlib import Path
 
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.child_process import ProcessIdentity, SpawnedProcess
 from agent_comms.installer.runtime_retention import (
     RefusedRetirement,
     RuntimeRetention,
@@ -11,6 +14,7 @@ from agent_comms.installer.runtime_retention import (
 )
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.runtime_processes import (
+    ImportingRuntimeProcess,
     RuntimeApplication,
     RuntimeProcess,
     RuntimeProcesses,
@@ -91,6 +95,43 @@ def test_an_install_retires_the_built_runtimes_nothing_holds(tmp_path):
     assert not any(runtime.prefix.exists() for runtime in stale)
     for kept in (staged, outgoing, borrowed, bundled, held_by_root, restorable, unfinished):
         assert kept.prefix.is_dir(), kept.prefix.name
+
+
+def test_a_runtime_a_live_process_imports_from_is_not_reclaimable(tmp_path):
+    """Read by the real /proc scanner, not a constructed outcome.
+
+    codex-latency reproduced this against the collector: a system interpreter launched
+    with PYTHONPATH into a build, importing from it and staying alive, left the scan with
+    nothing unread and that build reclaimable. Its command names no runtime, so only its
+    environment says what it is holding.
+    """
+    runtimes = tmp_path / "runtimes"
+    staged, borrowed = built(runtimes, "new"), built(runtimes, "borrowed")
+    library = borrowed.prefix / "lib"
+    library.mkdir()
+    (library / "borrower_module.py").write_text("VALUE = 1\n")
+
+    child = SpawnedProcess.launch(
+        (sys.executable, str(Path(__file__).with_name("runtime_process_importer.py")),
+         "borrower_module"),
+        env={**os.environ, "PYTHONPATH": str(library)},
+    ).process
+    try:
+        deadline = time.monotonic() + 10
+        while True:
+            scan = RuntimeProcesses.observe(staged)
+            if any(child.pid == outcome.pid for outcome in scan.outcomes
+                   if isinstance(outcome, ImportingRuntimeProcess)):
+                break
+            assert time.monotonic() < deadline, "The scan never saw the importing child"
+            time.sleep(0.1)
+        retention = RuntimeRetention.after_install(
+            staged, staged, scan, tmp_path / "no-bus", tmp_path / "no-spill")
+        assert borrowed.prefix not in retention.reclaimable()
+        assert borrowed.prefix in retention.held
+    finally:
+        child.terminate()
+        child.wait(timeout=10)
 
 
 def test_a_backup_pointer_it_cannot_read_retires_nothing(tmp_path):

@@ -17,12 +17,14 @@ class RuntimeProcessOutcome(DeclaredFamily, ABC, affix="RuntimeProcess"):
     def line(self) -> str: ...
 
     @abstractmethod
-    def held_executable(self) -> frozenset[Path]:
-        """What this process is running, for whoever retires the runtimes nothing runs.
+    def held_paths(self) -> frozenset[Path]:
+        """What this process uses from inside the installation, for whoever retires the
+        runtimes nothing uses: what it was invoked with, or what it can import.
 
-        The executable and not a runtime: a bundled native child lives several directories
-        inside its runtime, so which build owns it is a question for whoever holds the
-        runtimes directory, and answering a prefix here would answer the wrong one.
+        Paths and not runtimes: a bundled native child lives several directories inside
+        its runtime and an import root is a directory within one, so which build owns a
+        path is a question for whoever holds the runtimes directory. Answering a prefix
+        here would answer the wrong one.
         """
 
     @abstractmethod
@@ -38,7 +40,7 @@ class UnreadableRuntimeProcess(RuntimeProcessOutcome):
     def line(self) -> str:
         return f"Unknown runtime PID {self.pid}: {self.reason}"
 
-    def held_executable(self) -> frozenset[Path]:
+    def held_paths(self) -> frozenset[Path]:
         """A process whose command could not be read names nothing; `unread` is how it
         keeps a sweep from deciding about the runtime it might have been running."""
         return frozenset()
@@ -69,11 +71,40 @@ class UnattributedRuntimeProcess(RuntimeProcessOutcome):
         return (f"Unattributed runtime PID {self.pid}: invoked as {self.executable}, "
                 "which names the installation's pointer rather than a build")
 
-    def held_executable(self) -> frozenset[Path]:
+    def held_paths(self) -> frozenset[Path]:
         return frozenset()
 
     def unread(self) -> tuple[str, ...]:
         return (self.line(),)
+
+
+@dataclass(frozen=True)
+class ImportingRuntimeProcess(RuntimeProcessOutcome):
+    """A process with an import root inside the installation, whatever it was invoked with.
+
+    An import root is not a PATH entry. PATH is resolution: one entry wins, and the winner
+    is already visible as the command, which is why 47 historical runtimes inherited on one
+    process's PATH hold nothing. Every entry on an import path stays live for as long as the
+    process does, so a build a running process can import from at any moment is in use —
+    codex-latency ran a system interpreter with `PYTHONPATH` into a build and watched the
+    collector call that build reclaimable.
+
+    An environment this cannot read belongs to another user, and the installation is this
+    user's at 0700, so there is nothing there for them to import.
+    """
+
+    pid: int
+    roots: tuple[Path, ...]
+
+    def line(self) -> str:
+        return (f"Importing-runtime PID {self.pid}: "
+                f"{', '.join(str(root) for root in self.roots)}")
+
+    def held_paths(self) -> frozenset[Path]:
+        return frozenset(self.roots)
+
+    def unread(self) -> tuple[str, ...]:
+        return ()
 
 
 @dataclass(frozen=True)
@@ -102,7 +133,7 @@ class UnretiredRuntimeProcess(RuntimeProcessOutcome):
             f"owner {self.process.application.describe()}; not signalled"
         )
 
-    def held_executable(self) -> frozenset[Path]:
+    def held_paths(self) -> frozenset[Path]:
         """What this process was invoked with — not what its inherited PATH would have
         found, which on one machine listed 47 runtimes for a single process."""
         return frozenset((self.process.interpreter,))
@@ -124,14 +155,33 @@ class RuntimeProcesses:
     def lines(self) -> tuple[str, ...]:
         return tuple(outcome.line() for outcome in self.outcomes)
 
-    def held_executables(self) -> frozenset[Path]:
-        """Every command this snapshot found a process running out of a runtime."""
-        return frozenset().union(*(outcome.held_executable() for outcome in self.outcomes),
+    def held_paths(self) -> frozenset[Path]:
+        """Everything inside the installation this snapshot found a process using."""
+        return frozenset().union(*(outcome.held_paths() for outcome in self.outcomes),
                                  frozenset())
 
     def unread(self) -> tuple[str, ...]:
         """Every process this snapshot could not read."""
         return tuple(line for outcome in self.outcomes for line in outcome.unread())
+
+    @staticmethod
+    def import_roots(platform: Platform, identity: ProcessIdentity,
+                     directory: Path) -> frozenset[Path]:
+        """The directories inside ``directory`` this process can import from.
+
+        Read from its environment rather than guessed: `PYTHONPATH` entries and a
+        `VIRTUAL_ENV` are the roots a live interpreter keeps on its import path, so a
+        build named by one is in use however the process was invoked. An environment this
+        cannot read belongs to another user, who cannot read the installation either.
+        """
+        try:
+            environment = platform.environment(identity)
+        except (ProcessLookupError, OSError, IdentityMismatchError):
+            return frozenset()
+        named = (*environment.get("PYTHONPATH", "").split(os.pathsep),
+                 environment.get("VIRTUAL_ENV", ""))
+        return frozenset(Path(value) for value in named
+                         if value and Path(value).is_relative_to(directory))
 
     @classmethod
     def observe(cls, target: LaunchRuntime, proc: Path = Path("/proc")) -> RuntimeProcesses:
@@ -153,6 +203,11 @@ class RuntimeProcesses:
             except (OSError, IdentityMismatchError) as error:
                 outcomes.append(UnreadableRuntimeProcess(pid, str(error)))
                 continue
+            # Independent of the command: a process importing from a build holds it even
+            # when it was launched by a system interpreter from somewhere else entirely.
+            roots = cls.import_roots(platform, identity, directory)
+            if roots:
+                outcomes.append(ImportingRuntimeProcess(pid, tuple(sorted(roots))))
             # Other namespaces do not name an agent-comms installation.
             interpreter = Path(invoked)
             if not interpreter.is_relative_to(directory):

@@ -122,7 +122,7 @@ class RuntimeRetention:
         runtimes = staged.prefix.parent
         pointers = cls.pointers(root, spill_dir)
         named = (staged.prefix, installed.prefix, LaunchRuntime.running().prefix,
-                 *processes.held_executables(),
+                 *processes.held_paths(),
                  *(prefix for pointer in pointers for prefix in pointer.held()))
         held = frozenset().union(*(cls.owning(runtimes, path) for path in named), frozenset())
         unread = (*processes.unread(),
