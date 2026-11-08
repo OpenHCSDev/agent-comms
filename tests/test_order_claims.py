@@ -18,7 +18,6 @@ from agent_comms.coordination.errors import (
 from agent_comms.change_report import FileLine
 from agent_comms.team.order import OrderFile, TeamContext, main
 from agent_comms.team.standing import DeliveryAwaitingJudgement, Scrutinize
-from agent_comms.standing_rules import OwedAnswer
 from agent_comms.errors import (
     TodoConflict,
     TodoError,
@@ -49,6 +48,7 @@ from agent_comms.slop import (
     ExistingLine,
     Slop,
 )
+from agent_comms.team.standing_rules import OwedAnswer
 from agent_comms.todos import (
     TriageScope,
     SelectedClaimReviewer,

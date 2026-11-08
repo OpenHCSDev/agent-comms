@@ -84,11 +84,6 @@ from agent_comms.repo import Repo, RepositoryReads
 from agent_comms.repository_name import RepositoryName
 from agent_comms.team_hud import TeamPlanDocument
 from agent_comms.slop import Slop
-from agent_comms.standing_rules import (
-    ClearingVerb,
-    HuntDue,
-    OwedAnswer,
-)
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import (
     BluntText,
@@ -125,6 +120,12 @@ from agent_comms.todos import (
 )
 from agent_comms.tool_caller import ForkCaller, PeerCaller, NoThreadCaller
 from agent_comms.storage.typed_table import RowNotFoundError
+
+from .standing_rules import (
+    ClearingVerb,
+    HuntDue,
+    OwedAnswer,
+)
 
 
 def refuse(text, *families):

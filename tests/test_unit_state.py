@@ -12,6 +12,10 @@ import pytest
 
 from agent_comms.activity import ActivityState
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.team.standing_rules import (
+    ReviewTimerUp,
+    TeamInputs,
+)
 from agent_comms.team_heartbeat import TeamObservation
 from agent_comms.team_hud import TeamFrame
 from team_heartbeat_fixture import LIVE_PLAN_READINGS, ObservedHeartbeat, capture_frame, current_hud, observe_team
@@ -22,7 +26,6 @@ from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.launch_runtime import LaunchRoot
 from agent_comms.order_runs import ApplicationOrderRun
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.standing_rules import ReviewTimerUp
 from agent_comms.repo import Checkout, GitCommandError, Repo
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.registry.threads import ExternalThread, ForkThread
@@ -30,7 +33,6 @@ from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.thread_text import ForkedParent
 from agent_comms.task_attachments.team_pings import TeamUpdate, TeammatePing
 from agent_comms.todos import DeliverTodo, OperationDelivery, ProgressRead, UnreadProgress
-from agent_comms.heartbeat_frame import TeamInputs
 from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.ui_model.teammate_state import (

@@ -14,12 +14,18 @@ from agent_comms.registry.threads import ForkThread, ExternalThread
 from agent_comms.team.standing import DeliveryAwaitingJudgement
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.goal_actions import SetGoalAction
+from agent_comms.team.standing_rules import (
+    HeadReviewTimerUp,
+    LinkedUnreviewedHead,
+    OrderlessUnreviewedHead,
+    ReviewTimerUp,
+    StandingRule,
+)
 from team_heartbeat_fixture import capture_frame
 from agent_comms.head_review import HeadReviewOrder, PullRequestHead
 from agent_comms.tool_caller import ForkCaller, PeerCaller, ThreadCaller
 from agent_comms_hooks import ToolRefusedError
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.standing_rules import HeadReviewTimerUp, LinkedUnreviewedHead, OrderlessUnreviewedHead, ReviewTimerUp, StandingRule
 from agent_comms.task_attachments.team_pings import RulePing
 from agent_comms.todos import (
     Assignment, ClaimOrder, DeliveredProblemOrder, NoHeadOrder, OrderHeadReview, OrderClaim,
@@ -304,7 +310,7 @@ def test_review_scope_requires_the_actual_registered_birth(board_review):
 def test_unreviewed_head_line_names_each_verb_once_and_every_argument() -> None:
     from agent_comms.head_review import PullRequestHead
     from agent_comms.repository_name import RepositoryName
-    from agent_comms.standing_rules import OrderlessUnreviewedHead
+    from agent_comms.team.standing_rules import OrderlessUnreviewedHead
 
     head = "a" * 40
     line = OrderlessUnreviewedHead(request=PullRequestHead(RepositoryName.from_wire("o/r"), 7, head), due_at=0).line()

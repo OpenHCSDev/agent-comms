@@ -10,6 +10,15 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from functools import partial
+from agent_comms.team.standing_rules import (
+    HeadReviewTimerUp,
+    IdlePullRequest,
+    LinkedUnreviewedHead,
+    OrderlessPullRequest,
+    OrderlessUnreviewedHead,
+    ReviewTimerUp,
+    StuckMerge,
+)
 from cli_command import team as team_command
 
 import pytest
@@ -31,10 +40,6 @@ from agent_comms.heartbeat_delivery import OnHeartbeatDelivery
 from agent_comms.heartbeat_subjects import TeamHistory, HeadSubject, UnlandedHeadSubject
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
-from agent_comms.standing_rules import (
-    HeadReviewTimerUp, IdlePullRequest, OrderlessPullRequest, OrderlessUnreviewedHead,
-    LinkedUnreviewedHead, ReviewTimerUp, StuckMerge,
-)
 from agent_comms.repo import Checkout
 from agent_comms.task_attachments.team_pings import TeamDecisions, TeamUpdate, TeamUpdateStore, RulePing
 from agent_comms.thread_status import StoppedThreadStatus
@@ -1475,7 +1480,7 @@ def test_a_request_still_red_a_day_after_it_opened_churns_however_often_it_moved
     reads its age from when it opened, and only a red required check counts."""
     import math
 
-    from agent_comms.standing_rules import ChurningPullRequest
+    from agent_comms.team.standing_rules import ChurningPullRequest
     from agent_comms.todos import FailedCheckMergeBlock
 
     now = time.time()

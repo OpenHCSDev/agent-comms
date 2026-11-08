@@ -21,6 +21,10 @@ from agent_comms.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.channel_targets import TeammatesTag, CommsTag
 from agent_comms.messaging import TeamReceipts
+from agent_comms.team.standing_rules import (
+    OwedAnswer,
+    StandingRule,
+)
 from agent_comms.todos import DoneTodoState
 from agent_comms.team.order import Team, ListedProblems, OrderFile, SayVerb, SendVerb
 from agent_comms.team.questions import UnansweredTeammateAsks
@@ -70,7 +74,6 @@ from agent_comms.read_basis import DMDisplayScope, RepliesDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.service_passes import ServicePassStore
-from agent_comms.standing_rules import OwedAnswer, StandingRule
 from agent_comms.storage.store_files import ExclusiveLock, StoreLockContention, _store_lock
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_status import StoppedThreadStatus

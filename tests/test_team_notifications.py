@@ -17,6 +17,12 @@ from agent_comms.bus_read import UiRead
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.cli_verbs.fork import ForkCliCommand
 from agent_comms.heartbeat_delivery import OffHeartbeatDelivery, OnHeartbeatDelivery
+from agent_comms.team.standing_rules import (
+    ReviewTimerUp,
+    ServicePassFailing,
+    StandingRule,
+    UndatedStandingRule,
+)
 from agent_comms.thread_management import GivenTags
 from agent_comms.team_heartbeat import TeamHeartbeat, TeamObservation
 from agent_comms.comms import Comms
@@ -42,7 +48,6 @@ from agent_comms.tools import invoke_tool
 from agent_comms.work_branches import WorkBranchError
 from agent_comms.ui_model.observation import ReadOperation, ReadRefused
 from agent_comms.cli_bridges.codex_connection import CodexConnection
-from agent_comms.standing_rules import ReviewTimerUp, ServicePassFailing, StandingRule, UndatedStandingRule
 from agent_comms.ui_model.teammate_state import (
     Spinning, TeammateState, UrgentGroup,
 )
@@ -909,7 +914,7 @@ def test_waiting_notification_keeps_actionable_subjects_overflow_and_original_ev
     comms = notification_bus
     from agent_comms.head_review import PullRequestHead
     from agent_comms.repository_name import RepositoryName
-    from agent_comms.standing_rules import OrderlessUnreviewedHead
+    from agent_comms.team.standing_rules import OrderlessUnreviewedHead
 
     rules = tuple(OrderlessUnreviewedHead(
         request=PullRequestHead(RepositoryName.from_wire("OpenHCSDev/toad"), 100 + index, "a" * 40),

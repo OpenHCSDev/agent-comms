@@ -25,8 +25,11 @@ import pytest
 
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.team.order import Team, PullRequestVerb, SayVerb
-from agent_comms.standing_rules import OwedAnswer, StandingRule
 from agent_comms.task_attachments.team_pings import RulePing
+from agent_comms.team.standing_rules import (
+    OwedAnswer,
+    StandingRule,
+)
 from agent_comms.ui_model.teammate_state import AwaitingTeam
 from agent_comms.team.standing import RetainedHolderWheelSpin, UnownedOrderWatch, UnownedWheelSpin
 from agent_comms.team_heartbeat import TeamHeartbeat

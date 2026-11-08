@@ -1,9 +1,3 @@
-"""Standing rules the teammate keeps: each member derives its violations on read.
-
-Members reading Core state are declared here; members reading the teammate's own
-files are declared in ``agent_comms.team.standing`` until those files move into Core.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -11,68 +5,142 @@ import math
 import time
 from abc import abstractmethod
 from collections import Counter
-from collections.abc import Iterable, Iterator, Mapping, Sequence
-from dataclasses import dataclass, field, fields
-from functools import cache
+from collections.abc import (
+    Iterable,
+    Iterator,
+    Mapping,
+    Sequence,
+)
+from dataclasses import (
+    dataclass,
+    field,
+    fields,
+)
+from functools import (
+    cache,
+    cached_property,
+)
 from itertools import combinations
 from pathlib import Path
 from subprocess import TimeoutExpired
-from typing import TYPE_CHECKING, ClassVar, Self, cast
+from typing import (
+    ClassVar,
+    Self,
+    TYPE_CHECKING,
+    cast,
+)
 
-from agent_comms.nominal.declared_family import DeclaredFamily, RegisteredFamily
-from agent_comms.declared_verb import DeclaredVerb
-from agent_comms.errors import RejectedEnforcementError, RelationViolationError, TodoConflict
-from agent_comms.nominal.field_codec import DefaultExternalName, DefaultedName, FieldCodec, OrderId
-from agent_comms.head_review import HeadReviewOrder, PullRequestHead
-from agent_comms.heartbeat_subjects import (
+from ..bus import BusReader
+from ..channel_targets import ThreadTarget
+from ..child_process import (
+    ProcessIdentity,
+    ResidentMemory,
+)
+from ..comms import Comms
+from ..declared_verb import DeclaredVerb
+from ..errors import (
+    RejectedEnforcementError,
+    RelationViolationError,
+    TodoConflict,
+)
+from ..goal_management import Goals
+from ..head_review import (
+    HeadReviewOrder,
+    PullRequestHead,
+)
+from ..heartbeat_subjects import (
     AnswerSubject,
     HeadSubject,
     HeartbeatSubject,
     TeammateSubject,
 )
-from agent_comms.held_orders import HeldOrders
-from agent_comms.messages import Message
-from agent_comms.message_reference import MessageReference
-from agent_comms.owner_requests import OwnerRequestId, RequestDirective
-from agent_comms.recorded_time import EventTime, RecordedEventTime
-from agent_comms.repository_name import RepositoryName
-from agent_comms.repo import GitCommandError
-from agent_comms.service_passes import FailingPass, ServicePasses, ServicePassStore
-from agent_comms.storage_rules import MemoryUse, StorageRule, UnitStorage
-from agent_comms.child_process import ProcessIdentity, ResidentMemory
-from agent_comms.root_runtime import RootRuntimeStore
-from agent_comms.text_digest import TextDigest
-from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.registry.threads import Thread
-from agent_comms.todos import (
+from ..held_orders import HeldOrders
+from ..message_reference import MessageReference
+from ..messages import Message
+from ..nominal.declared_family import (
+    DeclaredFamily,
+    RegisteredFamily,
+)
+from ..nominal.field_codec import (
+    DefaultExternalName,
+    DefaultedName,
+    FieldCodec,
+    OrderId,
+)
+from ..owner_requests import (
+    OwnerRequestId,
+    RequestDirective,
+)
+from ..plan_phases import PlanPhase
+from ..plan_reading import (
+    PlanReading,
+    PlanReadings,
+)
+from ..recorded_time import (
+    EventTime,
+    RecordedEventTime,
+)
+from ..registry.registry_document import (
+    RegisteredTeamProject,
+    RegistrySnapshot,
+)
+from ..registry.threads import Thread
+from ..repo import (
+    GitCommandError,
+    Repo,
+)
+from ..repository_name import RepositoryName
+from ..root_runtime import RootRuntimeStore
+from ..service_passes import (
+    FailingPass,
+    ServicePassStore,
+    ServicePasses,
+)
+from ..storage_rules import (
+    MemoryUse,
+    StorageRule,
+    UnitStorage,
+)
+from ..task_attachments.owner_notices import OrderNotice
+from ..team_service import TeamService
+from ..text_digest import TextDigest
+from ..thread_identity import ThreadIncarnation
+from ..todos import (
+    ClosedHeadReading,
+    EditWorkplaces,
+    HeadReviewRecord,
     HeadVerdict,
     MergeBlock,
+    OrderClaim,
+    OwnerRequest,
+    PresentCheckout,
     ProgressRead,
     ProgressSource,
+    PullRequest,
+    StoredClosedHead,
     StoredHeadReview,
     Todo,
+    TodoStore,
 )
-from agent_comms.channel_targets import ThreadTarget
-from agent_comms.task_attachments.owner_notices import OrderNotice
-from agent_comms.team_service import TeamService
-from agent_comms.work_branches import (
-    BranchDifference, SourceGrowth, UnparsedSource, WorkBranchError,
+from ..transcript_events import TurnDigest
+from ..turn_digests import (
+    LastTurns,
+    OrderEditCountRead,
+    RecentTurnsSince,
+    TurnDigestRead,
+)
+from ..work_branches import (
+    BranchDifference,
+    SourceGrowth,
+    UnparsedSource,
+    WorkBranchError,
 )
 
 if TYPE_CHECKING:
-    from agent_comms.bus import BusReader
-    from agent_comms.comms import Comms
-    from agent_comms.goal_management import Goals
-    from agent_comms.heartbeat_frame import HeartbeatFrame
-    from agent_comms.registry.registry_document import RegistrySnapshot
-    from agent_comms.todos import (
-        OrderClaim,
-        OwnerRequest,
-        PresentCheckout,
-        PullRequest,
-        TodoStore,
+    from ..ui_model.teammate_state import (
+        TeammateObservation,
+        TeammateState,
     )
-    from agent_comms.ui_model.teammate_state import TeammateObservation, TeammateState
 
 
 @dataclass(frozen=True)
@@ -371,7 +439,6 @@ class RetiredStandingRule(DefaultExternalName, StandingRule):
 class FamilyScan(StandingRule, declared_name=None):
     """The class naming this among its bases owns one scan its members share: a member its
     scan selects is never scanned a second time."""
-
 
 
 class CoreActsStandingRule(StandingRule, declared_name=None):
@@ -870,6 +937,102 @@ class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
         """Why naming this debt in an action that reaches only these threads would record an
         answer its asker never receives; empty when it would not."""
         return ""
+
+
+@dataclass(frozen=True)
+class TeamInputs(HeldOrders):
+    """The live hold cut and acquired inputs that observation must not reopen."""
+
+    pulls: ProgressRead
+    plan: PlanReading
+
+    @classmethod
+    def prepare(cls, comms: Comms, project: RegisteredTeamProject, pulls: ProgressRead,
+                plans: PlanReadings) -> Self:
+        holds = HeldOrders.read(comms)
+        pulls.register(holds.todos)
+        repositories = project.repository_names()
+        pulls.read_open(repositories)
+        repository = Repo.declaring(project.repos, PlanPhase.__module__)
+        plan = plans.prepare_reading(
+            repository,
+            comms.goals.todos.board_history(),
+            tuple(phase.phase_evidence() for phase in PlanPhase.members_with(PlanPhase)),
+            history=pulls.checkout(repository.checkout).branches.history,
+        )
+        StandingRule.prepare_all(comms, holds, pulls)
+        return cls(holds.live, holds.orphaned, pulls, plan)
+
+
+@dataclass(frozen=True)
+class HeartbeatFrame(TeamInputs):
+    """One beat's observed answers, sharing its already prepared hold/forge/plan inputs."""
+
+    answers: tuple[OwedAnswer, ...]
+    closed: ClosedHeadReading
+    head_reviews: Mapping[PullRequestHead, tuple[HeadReviewRecord, ...]]
+    workplaces: Mapping[ThreadIncarnation, EditWorkplaces]
+    review_timers: tuple[tuple[Todo, RecordedEventTime], ...]
+    recent: ClassVar[LastTurns] = LastTurns(2)
+
+    @cached_property
+    def _turns(self) -> dict[ThreadIncarnation, tuple[TurnDigest, ...]]:
+        return {}
+
+    @cached_property
+    def _edit_counts(self) -> dict[str, int]:
+        return {}
+
+    def turns_for(self, comms: Comms, thread: Thread) -> tuple[TurnDigest, ...]:
+        """One original turn read covering this holder's review cuts and recent window."""
+        identity = thread.incarnation
+        if identity not in self._turns:
+            since = min((comms.goals.todos.unjudged_since(todo)
+                         for todo in self.holders.get(identity, ())), default=time.time())
+            self._turns[identity] = TurnDigestRead(
+                comms.root, thread, RecentTurnsSince(since, recent=self.recent)).read().turns
+        return self._turns[identity]
+
+    def recent_turns(self, comms: Comms, thread: Thread) -> tuple[TurnDigest, ...]:
+        return self.recent.take(self.turns_for(comms, thread))
+
+    def edit_counts(self, comms: Comms) -> Mapping[str, int]:
+        """The count projection shares the frame's workplaces, progress and turn digests."""
+        for read in OrderEditCountRead.judgeable(
+                comms.root, self.live, self.pulls.progress(self.todos, comms.registry),
+                self.workplaces):
+            if read.todo.id not in self._edit_counts:
+                self._edit_counts[read.todo.id] = read.from_turns(
+                    self.turns_for(comms, read.thread))
+        for todo in self.todos:
+            self._edit_counts.setdefault(todo.id, 0)
+        return self._edit_counts
+
+    @classmethod
+    def capture(cls, comms: Comms, inputs: TeamInputs, plans: PlanReadings) -> Self:
+        """One team board: every teammate's owed answers, never one lead's."""
+        snapshot = comms.registry.snapshot()
+        project = snapshot.team_project.require()
+        with comms.goals.todos.snapshot() as db:
+            closed = StoredClosedHead.current(db, project.repository_names())
+            reviews = StoredHeadReview.head_reviews_among(
+                db, (head.request for head in closed.lost))
+        plan = plans.observe_reading(inputs.plan,
+            tuple(phase.phase_evidence() for phase in PlanPhase.members_with(PlanPhase)))
+        return cls(
+            inputs.live,
+            inputs.orphaned,
+            inputs.pulls,
+            plan,
+            tuple({answer.observation_key(): answer
+                   for teammate in TeamService.teammates(snapshot, comms.goals)
+                   for answer in OwedAnswer.read_scan(comms, teammate.incarnation, inputs)
+                   }.values()),
+            closed,
+            reviews,
+            EditWorkplaces.capture(comms, snapshot, inputs.live, inputs.pulls),
+            TodoStore.timers_up_in(inputs.todos, time.time(), inputs.pulls.progress(inputs.todos, comms.registry)),
+        )
 
 
 @dataclass(frozen=True)
@@ -1429,6 +1592,7 @@ class ServicePassFailing(FailingPass, IndependentStandingRule, DatedStandingRule
 
     def line(self) -> str:
         return self.failure_line(self.watch)
+
 
 @dataclass(frozen=True)
 class BoardDisagrees(UndatedStandingRule):

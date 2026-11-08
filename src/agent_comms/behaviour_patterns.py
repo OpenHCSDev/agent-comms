@@ -29,7 +29,10 @@ from .pattern_sources import (
     ProblemFix,
     SeedCatalog,
 )
-from .standing_rules import BoardDisagrees, StandingRule
+from .team.standing_rules import (
+    BoardDisagrees,
+    StandingRule,
+)
 from .todos import PlainText, Todo, TodoStore, VoidStrikeTodo
 
 POSTMORTEM = "https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md"

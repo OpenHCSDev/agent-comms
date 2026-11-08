@@ -55,7 +55,6 @@ from agent_comms.head_review import HeadReviewOrder, PromotedHeadReview, PullReq
 from agent_comms.order_tools import CommsHeadVerdictTool, CommsUnjudgedTool, CommsVerdictsTool
 from agent_comms.recorded_time import EventTime
 from agent_comms.slop import Derivation, Slop
-from agent_comms.standing_rules import HeadReviewRule, StandingRule
 from agent_comms.todos import (
     AbandonedHeadVerdict,
     AcceptedVerdict,
@@ -88,6 +87,12 @@ from agent_comms.todos import (
 )
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tool_declaration import EditCall, ReplacementEdit
+
+from .standing_rules import (
+    HeadReviewRule,
+    StandingRule,
+)
+
 
 EDIT_LINE = "required with edit IDs: an exact diff line each edit contains; repeat for each"
 BRANCH = re.compile(r"\bisinstance\(|\bhasattr\(|^\s*(if|elif|match|case)\b|\bif\b.*\belse\b")

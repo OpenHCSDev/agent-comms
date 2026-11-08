@@ -15,6 +15,12 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.team.standing_rules import (
+    RepeatedTodoChange,
+    ServicePassFailing,
+    StaleTodoDecision,
+    StandingRule,
+)
 from order_scope_fixture import FIX_SCOPE
 from agent_comms.change_report import FileLine
 from agent_comms.child_process import ProcessIdentity
@@ -36,9 +42,6 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import StorageRule
 from agent_comms.service_passes import ServicePassStore
-from agent_comms.standing_rules import (
-    RepeatedTodoChange, ServicePassFailing, StaleTodoDecision, StandingRule,
-)
 from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.errors import TodoConflict, TodoError
 from agent_comms.todos import (

@@ -8,6 +8,7 @@ from contextlib import closing
 from pathlib import Path
 
 import pytest
+from agent_comms.team.standing_rules import DirectiveUnacted
 from aiohttp import web
 
 from agent_comms.cli_bridges.claude import ClaudeBridge
@@ -19,7 +20,6 @@ from agent_comms.comms import Comms
 from agent_comms.coordination.errors import CoordinationBeginUnavailable
 from agent_comms.connector import ConnectorSendTool
 from agent_comms.connector_caller import DirectorCaller
-from agent_comms.standing_rules import DirectiveUnacted
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.registry.threads import NativeThread
 from agent_comms.harness_delivery_states import DeliveredOutcome

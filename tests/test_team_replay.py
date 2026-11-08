@@ -19,6 +19,17 @@ import pytest
 
 from agent_comms.team.publication_rules import EmptyPullRequest, UnpushedBranch
 from agent_comms.team.spinning import SpinningTeammate, StaleUncommittedEdits
+from agent_comms.team.standing_rules import (
+    BranchBehindMain,
+    BranchGrowth,
+    ConflictingBranches,
+    DeliveredHeadReview,
+    HeldBranchRule,
+    LostTools,
+    StandingRule,
+    TeamInputs,
+    UnparsedBranch,
+)
 from agent_comms.team_heartbeat import TeamObservation
 from team_heartbeat_fixture import LIVE_PLAN_READINGS, current_hud, observe_team
 from agent_comms.cli_bridges.codex_connection import CodexConnection
@@ -26,23 +37,12 @@ from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.nominal.field_codec import ToolCallId
 from agent_comms.goal_actions import CreateProblemGoalAction
-from agent_comms.heartbeat_frame import TeamInputs
 from agent_comms.launch_runtime import LaunchRoot
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Checkout, Repo, RepositoryReads, UnpushedHead
 from agent_comms.repository_name import RepositoryName
-from agent_comms.standing_rules import (
-    BranchBehindMain,
-    UnparsedBranch,
-    BranchGrowth,
-    ConflictingBranches,
-    DeliveredHeadReview,
-    HeldBranchRule,
-    LostTools,
-    StandingRule,
-)
 from agent_comms.thread_identity import ReportedTools, ToolName
 from agent_comms.thread_text import ForkedParent
 from agent_comms.registry.threads import Thread, NativeThread

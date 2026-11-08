@@ -13,7 +13,6 @@ from agent_comms.team.standing import RequestStalled
 from agent_comms.team.request import main as request_main
 from agent_comms.comms import Comms
 from agent_comms.connector import ConnectorSendTool
-from agent_comms.standing_rules import DirectiveUnacted
 from agent_comms.connector_caller import CALLER, DirectorCaller
 from agent_comms.errors import RelationViolationError
 from agent_comms.goals import OrderCheck
@@ -23,6 +22,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.repo import Checkout, Repo
 from agent_comms.repository_name import RepositoryName
+from agent_comms.team.standing_rules import DirectiveUnacted
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.todos import (
     ClaimOrder,

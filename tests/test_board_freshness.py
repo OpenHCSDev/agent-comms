@@ -9,13 +9,13 @@ import threading
 
 import pytest
 
+from agent_comms.team.standing_rules import StandingRule
 from test_holder_standing_rules import held_bus  # noqa: F401
 
 from agent_comms.cli_bridges.codex_connection import CodexConnection
 from agent_comms.presentation import WireRevision
 from agent_comms.revision_views import TeamBoardView
 from agent_comms.service_passes import ServicePassStore
-from agent_comms.standing_rules import StandingRule
 from agent_comms.task_attachments.team_pings import TeamUpdateStore
 from pathlib import Path
 

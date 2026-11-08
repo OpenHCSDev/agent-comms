@@ -26,7 +26,6 @@ from agent_comms.cli_bridges.shared import Serve
 from agent_comms.goal_actions import ReissuedOrderGoalAction
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, Id128
 from agent_comms.head_review import PullRequestHead
-from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.heartbeat_subjects import (
     HeadSubject,
     HeartbeatSubject,
@@ -51,17 +50,6 @@ from agent_comms.registry.registry_document import DEFAULT_ROSTER, RegistrySnaps
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.service_passes import ServicePassStore, TeamPass
-from agent_comms.standing_rules import (
-    CoreActsStandingRule,
-    DatedStandingRule,
-    IndependentStandingRule,
-    OrderHeadReviewCommands,
-    OwedAnswer,
-    ReasonedStandingRule,
-    StandingRule,
-    FamilyScan,
-    UndatedStandingRule,
-)
 from agent_comms.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from agent_comms.registry.threads import Thread
 from agent_comms.todos import (
@@ -78,6 +66,18 @@ from agent_comms.ui_model.teammate_state import AwaitingTeam, TeammateState
 from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
 from agent_comms_hooks import SubagentId
 
+from .standing_rules import (
+    CoreActsStandingRule,
+    DatedStandingRule,
+    FamilyScan,
+    HeartbeatFrame,
+    IndependentStandingRule,
+    OrderHeadReviewCommands,
+    OwedAnswer,
+    ReasonedStandingRule,
+    StandingRule,
+    UndatedStandingRule,
+)
 from ..cli_bridges.session_watch import DeafWatch
 
 

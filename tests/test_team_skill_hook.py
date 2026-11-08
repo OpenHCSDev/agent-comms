@@ -1,6 +1,12 @@
 """The real SessionStart command works before a teammate connects to the bus."""
 
 
+from agent_comms.team.standing_rules import (
+    DirectiveUnacted,
+    OrderlessUnreviewedHead,
+    RetiredStandingRule,
+    ReviewTimerUp,
+)
 from agent_comms.transport.mcp import AnsweredCall
 from agent_comms.repo import Checkout, Repo
 import io
@@ -36,7 +42,6 @@ from agent_comms.pattern_sources import PostmortemFailure
 from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.team.spinning import SpinningTeammate
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.standing_rules import DirectiveUnacted, OrderlessUnreviewedHead, RetiredStandingRule, ReviewTimerUp
 from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.task_attachments.team_pings import TeamDecisions, TeamUpdate, RulePing
