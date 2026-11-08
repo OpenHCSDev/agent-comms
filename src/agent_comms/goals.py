@@ -55,7 +55,6 @@ from .turn_goal_permission import ContinuationGoalPermission, GoalPermission, In
 from .ui_model.goal import GoalDisplay, GoalExecutionDisplay
 
 if TYPE_CHECKING:
-    from .planning.goal_waits import GoalWaits
     from .registry.threads import Thread
     from .task_sources import TaskScope
     from .turn_context import TurnContext
@@ -661,7 +660,7 @@ class GoalDeclaration(
     def reported_id(self) -> GoalId | None: ...
 
     @abstractmethod
-    def clear_wait(self, waits: GoalWaits) -> bool: ...
+    def clear_wait(self, clear: Callable[[GoalId], bool]) -> bool: ...
 
     def require_active(self) -> Goal:
         goal = self.require()
@@ -718,7 +717,7 @@ class NoGoal(NullMember, GoalDeclaration):
     def reported_id(self) -> None:
         return None
 
-    def clear_wait(self, waits: GoalWaits) -> bool:
+    def clear_wait(self, clear: Callable[[GoalId], bool]) -> bool:
         return False
 
     shows_document: ClassVar[bool] = False
@@ -798,8 +797,8 @@ class Goal(RecordMember, GoalDeclaration):
     def held_stop(self) -> tuple[str, ...]:
         return self.state.held_stop(self.order.goal_text(self))
 
-    def clear_wait(self, waits: GoalWaits) -> bool:
-        return waits.clear(self.id)
+    def clear_wait(self, clear: Callable[[GoalId], bool]) -> bool:
+        return clear(self.id)
 
     shows_document: ClassVar[bool] = True
 

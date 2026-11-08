@@ -1,12 +1,10 @@
 """Goal commands own behavior; one parent owns CAS, publication and actor checks."""
 
-from __future__ import annotations
-
 import time
 from abc import abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self
+from typing import Annotated, ClassVar, Self
 
 from agent_comms.nominal.field_codec import GoalId, GoalWaitId, MessageId, RetryDecisionId
 from agent_comms.nominal import field_codec
@@ -36,6 +34,8 @@ from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .goal_mentions import bind_goal_mentions
 from .goal_records import GoalRecords
+from .goal_presentation import GoalSnapshot
+from .registry.registry_document import TeamProject
 from .goal_mutation import GoalMutation
 from .goal_scope import AllGoals, OneGoal
 from .goal_states import (
@@ -65,12 +65,6 @@ from .attempt_resolution import ComplianceDecision, OrderDecision, RetryDecision
 from .owner_connection import CapturedOwner
 from .runtime_server import AttachedRuntimeRequest
 from pydantic import JsonValue
-
-if TYPE_CHECKING:
-    from .goal_management import Goals
-    from .registry.registry_document import TeamProject
-    from .goal_presentation import GoalSnapshot
-
 
 
 class GoalActor:
@@ -217,7 +211,7 @@ class GoalAction[Result: GoalDeclaration](
         if not isinstance(self, actor):
             raise ValueError(f"This actor cannot take goal action {self.declared_name!r}.")
 
-    def prepare(self, goals: Goals, name: str, actor: type) -> GoalAction[Result]:
+    def prepare(self, goals: GoalRecords, name: str, actor: type) -> GoalAction[Result]:
         return self
 
     def apply(self, ctx: GoalPublicationContext) -> Result:
@@ -234,7 +228,7 @@ class GoalAction[Result: GoalDeclaration](
         )
         ctx.goals.registry._commit_registration(ctx.edit, change)
         if not self.preserve_wait:
-            ctx.thread.goal.clear_wait(ctx.goals.waits)
+            ctx.thread.goal.clear_wait(ctx.goals.waits.clear)
         return goal
 
     @abstractmethod
@@ -348,7 +342,7 @@ class StandbyGoalAction(GoalReportAction, ModelInvocable, RuntimeInvocable):
     def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:
         return ActiveGoal()
 
-    def prepare(self, goals: Goals, name: str, actor: type) -> GoalAction[Goal]:
+    def prepare(self, goals: GoalRecords, name: str, actor: type) -> GoalAction[Goal]:
         ctx = GoalActionContext(goals, goals.registry.require(name), actor)
         self.expect.check(ctx)
         review = goals._goal_input_review(ctx.thread, ctx.thread.goal.require().id, self.wait_for)
