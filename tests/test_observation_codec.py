@@ -2,8 +2,11 @@
 
 import pytest
 
-from agent_comms.coordination.errors import DeferredRead, ReportedDeferredRead, Refused
+from agent_comms.coordination.errors import DeferredRead, ReadAgain, ReloadRequired, ReportedDeferredRead, Refused, StaleRevision, TranscriptChanged
 from agent_comms.errors import GoalRefused, RouteChangedError
+from agent_comms.goals import GoalChangedError, GoalConsentRequired, UnobservedGoalCheckpoint
+from agent_comms.repo import Checkout
+from agent_comms.registry.threads import Thread
 from agent_comms_hooks import ToolRefusedError
 from agent_comms.nominal.field_codec import ErrorRecord, FieldCodec, MalformedRecord, ReportedError
 from agent_comms.ui_model.observation import ReadRefused, UnreadableHistory
@@ -77,10 +80,6 @@ def test_every_unread_kind_round_trips(unread: UnreadPresentation) -> None:
 
 def goal_refusals(comms) -> tuple[Exception, ...]:
     """Every goal refusal member, built the way Core builds it."""
-    from agent_comms.goals import GoalChangedError, GoalConsentRequired, UnobservedGoalCheckpoint
-    from agent_comms.repo import Checkout
-    from agent_comms.registry.threads import Thread
-
     comms.registry.declare(Thread("worker", frozenset(), Checkout(comms.root)))
     worker = comms.registry.require("worker")
     return (GoalRefused("no"), GoalConsentRequired(worker, worker.incarnation),
@@ -96,8 +95,15 @@ def test_every_goal_refusal_arrives_as_itself(comms) -> None:
 
 
 def test_a_changed_transcript_still_asks_the_reader_to_reload() -> None:
-    from agent_comms.coordination.errors import ReloadRequired, TranscriptChanged
-
     received = round_trip(ReadRefused(10, TranscriptChanged(), "trace"), ReadRefused).error
     assert type(received) is TranscriptChanged and isinstance(received, ReloadRequired)
     assert str(received) == str(TranscriptChanged())
+
+
+def test_a_changed_draft_keeps_retry_semantics_across_the_observation_wire() -> None:
+    sent = StaleRevision("Transcript changed while reading its current draft")
+    received = round_trip(ReadRefused(11, sent, "service trace"), ReadRefused).error
+    assert type(received) is StaleRevision
+    assert isinstance(received, ReadAgain)
+    assert isinstance(received, DeferredRead)
+    assert received.args == sent.args
