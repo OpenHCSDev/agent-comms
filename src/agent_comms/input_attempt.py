@@ -218,8 +218,11 @@ class InputAttempt(LifecycleCapability, ConsumptionEvidence, DeclaredFamily, aff
 class InputDeliveryScope(DeclaredFamily, affix="InputDeliveryScope"):
     """The queue evidence available to this delivery read, not an input outcome."""
 
-    pending_label: ClassVar[str] = "unconfirmed"
-    notices_label: ClassVar[str] = "historical notices"
+    pending_label: ClassVar[str] = "not confirmed"
+    notices_label: ClassVar[str] = "earlier notices"
+    """Plain words, because these are counted into a status line a person reads: they were
+    "unconfirmed" and "historical notices", which name the read's own bookkeeping rather
+    than telling the reader what happened to their input (rules/talk.md)."""
 
     @abstractmethod
     def historical_notice(self, row: StoredInput) -> bool:
@@ -235,8 +238,7 @@ class UnobservedInputDeliveryScope(NullMember, InputDeliveryScope, declared_name
 @dataclass(frozen=True)
 class OwnerQueueInputDeliveryScope(InputDeliveryScope, declared_name="owner_queue"):
     keys: frozenset[Annotated[InputKey, InputKeyText]]
-    pending_label: ClassVar[str] = "awaiting start"
-    notices_label: ClassVar[str] = "earlier notices"
+    pending_label: ClassVar[str] = "waiting to start"
 
     def historical_notice(self, row: StoredInput) -> bool:
         return row.key not in self.keys
