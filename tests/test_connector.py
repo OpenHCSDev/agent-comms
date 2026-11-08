@@ -39,9 +39,11 @@ from agent_comms.connector import (
     ServeVerb, RevokeVerb,
 )
 from agent_comms.transport.mcp import (
-    SESSION_HEADER, CancelledMessage, InitializeResult, NoProgress, ProgressToken, StreamedLine,
-    ToolCallMeta, ToolsCallMessage, ToolsCallReply, ToolsCallResult,
+    PROTOCOL_VERSION, SESSION_HEADER, CancelledMessage, InitializeResult, NoProgress,
+    ProgressToken, StreamedLine, ToolCallMeta, ToolsCallMessage, ToolsCallReply, ToolsCallResult,
 )
+from agent_comms.transport.tools.sidebar import ServedRoot
+from agent_comms.bus_identity import BusIdentityStore
 from agent_comms.connector_caller import (
     CALLER, GrantRefusedError, ReadOnlyConnectorCaller, ScopedUiCaller, UiCaller, UiReadCaller,
 )
@@ -583,7 +585,11 @@ async def test_connector_lists_every_tool(client, store, comms):
         "jsonrpc": "2.0", "id": "initialize", "result": {
             "protocolVersion": "2025-06-18", "capabilities": {"tools": {"listChanged": False}},
             "serverInfo": {"name": "agent-comms", "version": "1"},
-            "instructions": InitializeResult().instructions,
+            # The bus it serves, then how to share it: test_a_connector_names_its_bus_at_the
+            # _handshake owns what that first part says.
+            "instructions": InitializeResult.announcing(
+                BusIdentityStore.serving(comms.root.resolve()).announced(str(comms.root.resolve())),
+            ).instructions,
         },
     }
     ready = await client.post("/mcp", headers=headers, json={
@@ -1275,11 +1281,14 @@ def test_every_session_is_told_how_to_take_its_own_name() -> None:
 
     fork = FieldCodec.record_schema(CommsSendTool, ActingFork)["properties"]["fork"]
     assert "Your own name on the bus" in fork["description"]
-    assert "distinct name" in InitializeResult().instructions
+    assert "distinct name" in InitializeResult.announcing("a bus").instructions
 
 
 async def test_connector_reports_the_root_its_core_serves(client, comms):
     """A remote UI keys its observation by the served root, read through the same tools/call."""
+    from agent_comms.bus_identity import BusIdentityStore
+
+    minted = BusIdentityStore.minted_for(comms.root.resolve())
     headers = {"Authorization": f"Bearer {await approved_token(client, comms)}"}
     response = await client.post("/mcp", headers=headers, json={
         "jsonrpc": "2.0", "id": 1, "method": "tools/call",
@@ -1287,7 +1296,56 @@ async def test_connector_reports_the_root_its_core_serves(client, comms):
     })
     result = (await response.json())["result"]
     assert result["isError"] is False
-    assert result["structuredContent"]["root"] == str(comms.root.resolve())
+    answered = FieldCodec.decode(ServedRoot, result["structuredContent"])
+    assert answered.root == str(comms.root.resolve())
+    # The path is the observation key; the identity is what says whose key it is.
+    assert answered.bus.same_bus(minted)
+
+
+async def test_two_buses_at_one_path_do_not_answer_as_one_bus(tmp_path):
+    """Every machine in this fleet runs as the same user with its bus at the same path, so a
+    served root is the same answer on all of them. The identity minted at each root is not.
+
+    On 2026-11-07 a session read another machine's bus through a second connector and took
+    that bus's thread of its own name for itself; nothing it could ask disagreed.
+    """
+    from agent_comms.bus_identity import BusIdentityStore
+
+    one, other = tmp_path / "one", tmp_path / "other"
+    for root in (one, other):
+        root.mkdir()
+        BusIdentityStore.minted_for(root)
+
+    # As the fleet presents them: one path, one user, one hostname, two buses.
+    here = ServedRoot("/home/ts/.agent-comms", BusIdentityStore.serving(one))
+    there = ServedRoot("/home/ts/.agent-comms", BusIdentityStore.serving(other))
+
+    assert here.root == there.root
+    assert not here.bus.same_bus(there.bus)
+    assert not there.bus.same_bus(here.bus)
+    # And it still recognizes itself: a check that refuses everything is no check.
+    assert here.bus.same_bus(ServedRoot(here.root, BusIdentityStore.serving(one)).bus)
+
+
+async def test_a_connector_names_its_bus_at_the_handshake(client, comms):
+    """A client that learns which bus it reached from a tool call learns it after reading
+    something. The one thing that differs between two connectors is said before anything."""
+    from agent_comms.bus_identity import BusIdentityStore
+
+    minted = BusIdentityStore.minted_for(comms.root.resolve())
+    headers = {"Authorization": f"Bearer {await approved_token(client, comms)}"}
+    response = await client.post("/mcp", headers=headers, json={
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": {"protocolVersion": PROTOCOL_VERSION, "capabilities": {},
+                   "clientInfo": {"name": "test", "version": "1"}},
+    })
+    instructions = (await response.json())["result"]["instructions"]
+    assert str(comms.root.resolve()) in instructions
+    # The token, not the sentence around it: the sentence a bus with no identity answers
+    # opens with the same words up to the root, which is how this first passed vacuously.
+    named = re.search(r"identified as (\w+)", instructions)
+    assert named and minted.holds(named.group(1)), f"No bus is named in: {instructions}"
+    assert "distinct name" in instructions
 
 
 async def test_a_call_that_asks_for_progress_streams_it_then_its_reply(client, store, comms, tmp_path):

@@ -48,6 +48,7 @@ from yarl import URL
 
 
 from .declared_verb import DeclaredVerb
+from .bus_identity import BusIdentityStore
 from .command import Command
 from .launch_root import started
 from .child_process import GitChildren, HelperStart, OwnedGitOpening, SpawnedHelper, join_retirement
@@ -317,6 +318,12 @@ class Connector(ConnectorService, McpServer):
     session: McpSession = field(
         default_factory=McpSession, init=False, repr=False, compare=False,
     )
+
+    def announces(self) -> str:
+        """Read at each handshake rather than held: the identity is minted when serving
+        starts, and a root prepared under this process should not keep answering that it
+        has none."""
+        return BusIdentityStore.serving(self.root).announced(str(self.root))
 
     @cached_property
     def watch_tickets(self) -> WatchTickets:
@@ -788,6 +795,9 @@ class ServeVerb(ConnectorOptions):
     help = f"Serve MCP on {LOOPBACK}:{PORT}{MCP_PATH}"
 
     def apply(self, ctx: ConnectorStore) -> int | str:
+        # Serving is where a bus's identity is minted: the read that answers it is a read,
+        # and this runs once per Core rather than once per client that asks.
+        BusIdentityStore.minted_for(self.root)
         connector = Connector(ctx, self.issuer.rstrip("/"), self.root)
         app = connector.application()
         logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")

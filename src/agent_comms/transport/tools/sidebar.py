@@ -54,6 +54,7 @@ from ...relationships import SortableRelationshipGroup, ThreadCommsSnapshot
 from ...repo import Checkout
 from ...runtime_server import RuntimeRequest
 from ...send_result import MessagePublished
+from ...served_bus import ServedBus, UnidentifiedBus
 from ...session_revision import SessionObservation
 from ...thread_identity import ClaimedIdentity, ThreadIncarnation
 from ...thread_management import ImportDirectory, ProjectChangeResult, RenameThreadResult
@@ -116,9 +117,18 @@ class RelationshipOrdered(ToolResult):
 
 @dataclass(frozen=True)
 class ServedRoot(ToolResult):
-    """The bus root a Core serves: the key its observation requests and views are read under."""
+    """Which bus a Core serves: the key its observation requests and views are read under,
+    and the identity that says whose bus that key belongs to.
+
+    The root alone was the whole answer until 2026-11-07, when a reader holding two
+    connectors resolved one machine's threads as the other's: every machine in this fleet
+    keeps its bus at the same path, so the key matched and the bus did not. `served_bus.py`
+    carries that story. A Core older than the identity answers no member at all, which is
+    an answer a reader must not resolve rather than one it can compare.
+    """
 
     root: str
+    bus: ServedBus = UnidentifiedBus()
 
 
 @dataclass(frozen=True)
