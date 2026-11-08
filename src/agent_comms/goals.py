@@ -75,6 +75,12 @@ class GoalUnavailable(GoalDisplay["GoalDeclaration", "Goal"]):
         return self.last_confirmed.unavailable_heading
 
 
+type GoalContactFactory[Contact] = Callable[[str, float, str, float, GoalId, int], Contact]
+type GoalDiagnosticFactory[Diagnostic] = Callable[
+    [str, GoalId, int, str, type[GoalMentionBinding] | Literal["stale_incarnation"]], Diagnostic,
+]
+
+
 @dataclass(frozen=True, kw_only=True)
 class GoalMentionBinding(DeclaredFamily, affix="MentionBinding"):
     """One current stored resolution family; each member owns its projection."""
@@ -87,7 +93,10 @@ class GoalMentionBinding(DeclaredFamily, affix="MentionBinding"):
             raise ValueError("Goal mention requires a token")
 
     @abstractmethod
-    def project(self, registry, owner, goal, source): ...
+    def project[Contact, Diagnostic](
+        self, registry, owner, goal, source,
+        make_contact: GoalContactFactory[Contact], make_diagnostic: GoalDiagnosticFactory[Diagnostic],
+    ) -> tuple[tuple[Contact, ...], tuple[Diagnostic, ...]]: ...
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -97,11 +106,12 @@ class UnresolvedMention:
     peer_name: Literal[None] = None
     peer_created_at: Literal[None] = None
 
-    def project(self, registry, owner, goal, source):
-        from .relationships import GoalMentionDiagnostic
-
+    def project[Contact, Diagnostic](
+        self, registry, owner, goal, source,
+        make_contact: GoalContactFactory[Contact], make_diagnostic: GoalDiagnosticFactory[Diagnostic],
+    ) -> tuple[tuple[Contact, ...], tuple[Diagnostic, ...]]:
         return (), (
-            GoalMentionDiagnostic(
+            make_diagnostic(
                 owner.name, goal.id, source.text_revision, self.token, type(self)
             ),
         )
@@ -150,17 +160,18 @@ class ResolvedMentionBinding(GoalMentionBinding):
     def peer(self) -> ThreadIncarnation:
         return RecordedThreadIncarnation(self.peer_name, self.peer_created_at)
 
-    def project(self, registry, owner, goal, source):
-        from .relationships import GoalDerivedContact, GoalMentionDiagnostic
-
-        diagnostic = GoalMentionDiagnostic(
+    def project[Contact, Diagnostic](
+        self, registry, owner, goal, source,
+        make_contact: GoalContactFactory[Contact], make_diagnostic: GoalDiagnosticFactory[Diagnostic],
+    ) -> tuple[tuple[Contact, ...], tuple[Diagnostic, ...]]:
+        diagnostic = make_diagnostic(
             owner.name, goal.id, source.text_revision, self.token, "stale_incarnation"
         )
         if not self.peer.current(registry):
             return (), (diagnostic,)
         peer = registry.threads[self.peer.resolved(registry).name]
         contacts = tuple(
-            GoalDerivedContact(
+            make_contact(
                 owner.name,
                 owner.incarnation.wire_birth,
                 executor.name,

@@ -7,12 +7,14 @@ from typing import get_args, get_type_hints
 import pytest
 
 from agent_comms.context_segments.wake_values import WakeWorkContext
+from agent_comms.display_order import ChannelSort, ThreadSort
 from agent_comms.goal_turn_permit import GoalTurnPermit
 from agent_comms.goal_actions import GoalAction, StandbyGoalAction
 from agent_comms.goal_records import GoalRecords
-from agent_comms.goals import GoalDeclaration, GoalOrder, GoalUnavailable
+from agent_comms.goals import GoalDeclaration, GoalMentionBinding, GoalOrder, GoalUnavailable
 from agent_comms.goal_work import GoalOwner, GoalWorkSource
 from agent_comms.registry.threads import Thread
+from agent_comms.relationships import RelationshipSource, ThreadRelationships
 from agent_comms.thread_presentation import ThreadOwnerBinding
 
 
@@ -70,3 +72,20 @@ def test_goal_context_callback_keeps_its_context_type(declaration: type[GoalDecl
 @pytest.mark.parametrize("declaration", (GoalDeclaration, *GoalDeclaration.__subclasses__()))
 def test_goal_assignment_checks_use_their_owner_read_contract(declaration: type[GoalDeclaration]) -> None:
     assert get_type_hints(declaration.require_work)["owner"] is GoalOwner
+
+
+@pytest.mark.parametrize("binding", (GoalMentionBinding, *GoalMentionBinding.__subclasses__()))
+def test_goal_mention_projection_constructor_contracts_resolve(binding: type[GoalMentionBinding]) -> None:
+    hints = get_type_hints(binding.project)
+    assert "make_contact" in hints and "make_diagnostic" in hints and "return" in hints
+
+
+@pytest.mark.parametrize("order", (*ThreadSort.members_with(ThreadSort), *ChannelSort.members_with(ChannelSort)))
+def test_display_choice_runtime_contracts_resolve(order: type[ThreadSort] | type[ChannelSort]) -> None:
+    assert get_type_hints(order.store_channel_order)
+    assert get_type_hints(order.key)
+
+
+def test_relationship_projection_contract_resolves() -> None:
+    assert get_type_hints(ThreadRelationships.__init__)["views"] is RelationshipSource
+    assert get_type_hints(RelationshipSource.thread_views)["return"]
