@@ -462,6 +462,21 @@ class AuditDue:
             owner_words=tuple(OwnerWordsAnswer(words, "") for words in self.owner_words),
         )
 
+    def probe_shapes(self) -> str:
+        """Each owed probe's question beside the shape its answer takes.
+
+        The blank audit shows ``probes: []`` and nothing about what belongs in it, while
+        ``meant`` has had its declaration-derived shape printed all along. rule_probes.py is
+        unreadable until the audit parses, so the only documentation left was a sequence of
+        type errors that each give away half the answer: a tagged object is told the
+        discriminator is wrong, a bare string is told it wants an object. On 2026-11-08 that
+        cost four sessions an hour between them. Same family, same derivation, both fields."""
+        return "\n".join(
+            f"{probe.declared_name}: {probe.question}\n"
+            + json.dumps(FieldCodec.record_schema(probe), ensure_ascii=False)
+            for probe in Probe.owed(self.owner_words)
+        )
+
     def template(self, audit_path: Path) -> str:
         """Render the required answers from their declarations, not another JSON schema."""
         audit = self.skeleton()
@@ -470,6 +485,9 @@ class AuditDue:
                 "When a question arrives, add its exact id and your explanatory answer to meant."
                 " Each entry has this declaration-derived shape: "
                 + json.dumps(FieldCodec.record_schema(MeantAnswer), ensure_ascii=False),
+                "Every probe this deal owes, one object each in probes, each naming its member"
+                f' in a {Probe.family_discriminator} field, as in'
+                f' {{"{Probe.family_discriminator}": "prior", ...}}:\n' + self.probe_shapes(),
                 f"The deal wrote this SessionAudit blank to {audit_path}; fill quote, does, why and"
                 " doing in place (write it whole if the file is gone), keeping every rule name and"
                 " quoted words unchanged. Doing names your current action; probes come after:\n"
