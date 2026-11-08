@@ -7,11 +7,6 @@ from pathlib import Path
 
 from agent_comms.bus_publication import AgentOrigin, AutomatedOrigin, HumanOrigin, InitialOrigin
 from agent_comms.change_report import NoChangeReport, ReportEvidence
-from agent_comms.messaging.channel_targets import (
-    CommandTarget,
-    IncarnationThreadTarget,
-    NamedTarget,
-)
 from agent_comms.coordination.session import NativeCapture
 from agent_comms.errors import (
     CommittedMessageError,
@@ -23,6 +18,13 @@ from agent_comms.errors import (
 from agent_comms.execution.turn_context import ContextSegment
 from agent_comms.execution.turn_item import NoSourceTurn, SourceTurn
 from agent_comms.external_transcript import ExternalTranscript
+from agent_comms.input_disposition import InputDispositions
+from agent_comms.messaging.channel_targets import (
+    CommandTarget,
+    IncarnationThreadTarget,
+    NamedTarget,
+)
+from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import (
     ConversationRole,
@@ -32,7 +34,6 @@ from agent_comms.messaging.messages import (
     MessageRole,
     NoticeRole,
 )
-from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.nominal.field_codec import ThreadLookup
 from agent_comms.planning.goal_management import Goals
 from agent_comms.planning.orders import TodoStore
@@ -157,7 +158,13 @@ class Messaging:
     def _answered_by(self, owner: Thread, target: str,
                      source_turn: SourceTurn) -> tuple[MessageReference, ...]:
         """Native lease or explicitly named external source; never a newest-row guess."""
-        references = list(owner.turn_lease.answered_inputs(self, owner, target))
+        references: list[MessageReference] = []
+        for lease in owner.turn_lease.held():
+            inputs = InputDispositions(self.root).in_turn(lease.turn_id)
+            with NativeCapture(self.bus) as boundary, self.bus.bus.reading() as source:
+                references.extend(inputs.answered_by(
+                    lease, source, boundary.registry, target, privacy=boundary.privacy,
+                ))
         references.extend(source_turn.external_answers(
             NativeCapture(self.bus), ExternalTranscript(self.root, owner.incarnation),
             CommandTarget.named(target),

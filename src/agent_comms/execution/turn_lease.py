@@ -8,14 +8,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from agent_comms.activity import ObservedActivity
-from agent_comms.coordination.session import NativeCapture
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity, ProcessState
 from agent_comms.execution.turn_phase import IdlePhase, PreparingPhase, TurnPhase
 from agent_comms.goal_mutation import GoalTurnProjection
-from agent_comms.input_disposition import InputDispositions
 from agent_comms.lifecycle_capability import Executing, LifecycleCapability
-from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.field_codec import (
     NullMember,
     RecordMember,
@@ -43,12 +40,7 @@ from agent_comms.storage.locked_store import (
     PatternFile,
 )
 from agent_comms.storage.store_files import DependentStateTier, SingleFileStore
-
-if TYPE_CHECKING:
-    from agent_comms.messaging.sending import Messaging
-    from agent_comms.registry.registry_document import RegistrySnapshot
-    from agent_comms.registry.registry_store import RegistryStore
-    from agent_comms.registry.threads import Thread
+from agent_comms.turn_registry import TurnRegistry
 
 
 class TurnDeclaration(LifecycleCapability, SubclassUnion, affix=""):
@@ -351,12 +343,6 @@ class TurnLease(ABC):
     def held(self) -> tuple[TurnLeaseFence, ...]: ...
 
     @abstractmethod
-    def answered_inputs(
-        self, messaging: Messaging, owner: Thread, target: str,
-    ) -> tuple[MessageReference, ...]:
-        """What a message from this owner to target answers."""
-
-    @abstractmethod
     def attests(self, claim_scope: int, turn_id: TurnId) -> bool:
         """This lease holds ``turn_id`` under ``claim_scope``."""
 
@@ -395,11 +381,6 @@ class NoTurnLease(NullMember, TurnLease):
     def held(self) -> tuple[TurnLeaseFence, ...]:
         return ()
 
-    def answered_inputs(
-        self, messaging: Messaging, owner: Thread, target: str,
-    ) -> tuple[MessageReference, ...]:
-        return ()
-
     def attests(self, claim_scope: int, turn_id: TurnId) -> bool:
         return False
 
@@ -435,15 +416,6 @@ class TurnLeaseFence(TurnFence, TurnLease):
     def held(self) -> tuple[TurnLeaseFence, ...]:
         return (self,)
 
-    def answered_inputs(
-        self, messaging: Messaging, owner: Thread, target: str,
-    ) -> tuple[MessageReference, ...]:
-        inputs = InputDispositions(messaging.root).in_turn(self.turn_id)
-        with NativeCapture(messaging.bus) as boundary, messaging.bus.bus.reading() as source:
-            return inputs.answered_by(
-                self, source, boundary.registry, target, privacy=boundary.privacy,
-            )
-
     def attests(self, claim_scope: int, turn_id: TurnId) -> bool:
         return self.can_attest(claim_scope) and self.turn_id == turn_id
 
@@ -470,7 +442,10 @@ class TurnRecord(LifecycleCapability, SubclassUnion, affix=""):
     """A stored turn reference or the declared absence of one; never a phase cache."""
 
     @abstractmethod
-    def bound_to(self, registry_path: Path, identity: TurnIdentity) -> TurnRecord: ...
+    def bound_to(
+        self, registry_path: Path, identity: TurnIdentity, *,
+        registry_type: type[TurnRegistry[StoredTurnRecord, TurnDeclaration, LockedTurn]],
+    ) -> TurnRecord: ...
 
     @abstractmethod
     def read(self) -> TurnDeclaration: ...
@@ -507,7 +482,10 @@ class TurnRecord(LifecycleCapability, SubclassUnion, affix=""):
 @dataclass(frozen=True)
 class NoTurnRecord(NullMember, TurnRecord):
 
-    def bound_to(self, registry_path: Path, identity: TurnIdentity) -> NoTurnRecord:
+    def bound_to(
+        self, registry_path: Path, identity: TurnIdentity, *,
+        registry_type: type[TurnRegistry[StoredTurnRecord, TurnDeclaration, LockedTurn]],
+    ) -> NoTurnRecord:
         return self
 
     def read(self) -> NoTurn:
@@ -531,7 +509,10 @@ class FinishedTurn(RecordMember, TurnRecord):
 
     turn_id: TurnId
 
-    def bound_to(self, registry_path: Path, identity: TurnIdentity) -> FinishedTurn:
+    def bound_to(
+        self, registry_path: Path, identity: TurnIdentity, *,
+        registry_type: type[TurnRegistry[StoredTurnRecord, TurnDeclaration, LockedTurn]],
+    ) -> FinishedTurn:
         return self
 
     def read(self) -> NoTurn:
@@ -563,8 +544,11 @@ class FinishedTurn(RecordMember, TurnRecord):
 class StoredTurnReference(RecordMember, TurnRecord):
     """Wire presence only; the registry's thread supplies the turn identity."""
 
-    def bound_to(self, registry_path: Path, identity: TurnIdentity) -> StoredTurnRecord:
-        return StoredTurnRecord.for_identity(registry_path, identity)
+    def bound_to(
+        self, registry_path: Path, identity: TurnIdentity, *,
+        registry_type: type[TurnRegistry[StoredTurnRecord, TurnDeclaration, LockedTurn]],
+    ) -> StoredTurnRecord:
+        return StoredTurnRecord.for_identity(registry_path, identity, registry_type=registry_type)
 
     def read(self) -> TurnDeclaration:
         raise RelationViolationError("Turn reference must be bound by its registry")
@@ -666,6 +650,10 @@ class StoredTurnRecord(Executing, TurnFile, StoredTurnReference,
         repr=False, compare=False
     )
 
+    registry_type: Annotated[type[TurnRegistry[StoredTurnRecord, TurnDeclaration, LockedTurn]], WireTransient()] = field(
+        repr=False, compare=False
+    )
+
     @property
     def path(self) -> Path:
         identity = self.identity
@@ -678,16 +666,17 @@ class StoredTurnRecord(Executing, TurnFile, StoredTurnReference,
         return LockedTurnFile(self.path)
 
     @property
-    def registry(self) -> RegistryStore:
-        """The registry owner this stored reference is bound to."""
-        from agent_comms.registry.registry_store import RegistryStore
+    def registry(self) -> TurnRegistry[StoredTurnRecord, TurnDeclaration, LockedTurn]:
+        """Construct the original registry provider bound by its declaration."""
+        return self.registry_type(self.registry_path)
 
-        return RegistryStore(self.registry_path)
-
-    def bound_to(self, registry_path: Path, identity: TurnIdentity) -> StoredTurnRecord:
-        record = super().bound_to(registry_path, identity)
-        return (self if (self.registry_path, self.identity) ==
-                (record.registry_path, record.identity) else record)
+    def bound_to(
+        self, registry_path: Path, identity: TurnIdentity, *,
+        registry_type: type[TurnRegistry[StoredTurnRecord, TurnDeclaration, LockedTurn]],
+    ) -> StoredTurnRecord:
+        record = super().bound_to(registry_path, identity, registry_type=registry_type)
+        return (self if (self.registry_path, self.identity, self.registry_type) ==
+                (record.registry_path, record.identity, record.registry_type) else record)
 
     def read(self) -> TurnDeclaration:
         """This turn while its thread still names it, else the thread's current turn.
@@ -703,14 +692,18 @@ class StoredTurnRecord(Executing, TurnFile, StoredTurnReference,
         return self.read()
 
     @classmethod
-    def for_identity(cls, registry_path: Path, identity: TurnIdentity) -> StoredTurnRecord:
-        return cls(identity, registry_path.resolve())
+    def for_identity(
+        cls, registry_path: Path, identity: TurnIdentity, *,
+        registry_type: type[TurnRegistry[StoredTurnRecord, TurnDeclaration, LockedTurn]],
+    ) -> StoredTurnRecord:
+        return cls(identity, registry_path.resolve(), registry_type)
 
     @classmethod
     def begin(
-        cls, registry_path: Path, identity: TurnIdentity, turn: ActiveTurn,
+        cls, registry_path: Path, identity: TurnIdentity, turn: ActiveTurn, *,
+        registry_type: type[TurnRegistry[StoredTurnRecord, TurnDeclaration, LockedTurn]],
     ) -> StoredTurnRecord:
-        record = cls.for_identity(registry_path, identity)
+        record = cls.for_identity(registry_path, identity, registry_type=registry_type)
         record.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         record.writers.replace(turn)
         return record
@@ -767,17 +760,23 @@ class TurnCompletion(ABC):
     """Whether terminal publication attested an exact finished turn."""
 
     @abstractmethod
-    def idle_sources(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]: ...
+    def idle_sources[Source](
+        self, idle_after: Callable[[TurnFence], tuple[Source, ...]],
+    ) -> tuple[Source, ...]: ...
 
 
 @dataclass(frozen=True, slots=True)
 class NoFinishedTurn(TurnCompletion):
-    def idle_sources(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+    def idle_sources[Source](
+        self, idle_after: Callable[[TurnFence], tuple[Source, ...]],
+    ) -> tuple[Source, ...]:
         return ()
 
 
 class FinishedTurnFence(TurnFence, TurnCompletion):
     """Durable exact-turn completion witness, not a reply or model grant."""
 
-    def idle_sources(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
-        return snapshot.idle_after(self)
+    def idle_sources[Source](
+        self, idle_after: Callable[[TurnFence], tuple[Source, ...]],
+    ) -> tuple[Source, ...]:
+        return idle_after(self)

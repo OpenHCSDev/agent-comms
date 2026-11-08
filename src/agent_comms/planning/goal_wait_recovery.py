@@ -221,7 +221,7 @@ class GoalWaitRecovery:
     def release_waits_after_terminal_turn(self, fence: TurnCompletion) -> tuple[str, ...]:
         """A completed turn may release silence observed outside the registry lock."""
         snapshot = self.registry.snapshot()
-        sources = fence.idle_sources(snapshot)
+        sources = fence.idle_sources(snapshot.idle_after)
         if not sources:
             return ()
         source, = sources
@@ -248,7 +248,7 @@ class GoalWaitRecovery:
             return ()
         def release(edit: RegistryEdit) -> tuple[str, ...]:
             current = edit.original.snapshot
-            sources = fence.idle_sources(current)
+            sources = fence.idle_sources(current.idle_after)
             if not sources or any(self.agents.is_working(target.incarnation, current)
                                   for target in wait.targets):
                 return ()

@@ -53,6 +53,7 @@ from agent_comms.storage.locked_store import (
 from agent_comms.storage.maintenance_barrier import CarriedDocument
 from agent_comms.storage.private_path import FileObservation, FileRevision, MissingFile
 from agent_comms.storage.store_files import RegistryLocking
+from agent_comms.turn_registry import TurnRegistry
 
 
 class CachedRegistry(ABC):
@@ -302,10 +303,10 @@ class RegistryEdit:
             current,
             turn_generation=identity.generation,
             project_resume_due=False,
-            turn_record=StoredTurnRecord.begin(self.store.path, identity, turn),
+            turn_record=StoredTurnRecord.begin(self.store.path, identity, turn, registry_type=RegistryStore),
         )
         if current.turn_generation:
-            self.superseded.append(StoredTurnRecord.for_identity(self.store.path, current.turn_identity))
+            self.superseded.append(StoredTurnRecord.for_identity(self.store.path, current.turn_identity, registry_type=RegistryStore))
         self.document.threads[current.name] = leased
         self.document.last_seen[current.name] = time.time()
         return leased, self.document.owners.generations[current.name]
@@ -324,7 +325,8 @@ class RegistryEdit:
 
 
 @dataclass(frozen=True, slots=True)
-class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocument]):
+class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocument],
+                    TurnRegistry[StoredTurnRecord, TurnDeclaration, LockedTurn]):
     json_indent = 2
     cache: RegistryCache = field(init=False, compare=False, repr=False)
     presence: PresenceStore = field(init=False, compare=False, repr=False)
@@ -536,7 +538,7 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         return FieldCodec.encode(value)
 
     def _bind_thread(self, thread: Thread) -> Thread:
-        record = thread.turn_record.bound_to(self.path, thread.turn_identity)
+        record = thread.turn_record.bound_to(self.path, thread.turn_identity, registry_type=RegistryStore)
         session = thread.session_file.bound_to(self.path.parent)
         if record is thread.turn_record and session is thread.session_file:
             return thread

@@ -18,6 +18,7 @@ from agent_comms.planning.goal_failure_observation import NoFailedTurnEvidence
 from agent_comms.planning.goal_generation import BlockedGeneration
 from agent_comms.planning.goals import Goal
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation, TurnIdentity
 from agent_comms.registry.threads import NativeThread
 
@@ -38,7 +39,7 @@ def bound(tmp_path, *, thread_registration):
     identity = TurnIdentity(owner.incarnation, 7)
     lease = TurnLeaseFence(
         identity, TurnId('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'), 3,
-        record=StoredTurnRecord.for_identity(thread_registration.store.path, identity),
+        record=StoredTurnRecord.for_identity(thread_registration.store.path, identity, registry_type=RegistryStore),
     )
     observation = FailedTurnObservation.from_terminal(
         permit.reservation, owner=owner, goal=goal, lease=lease,
