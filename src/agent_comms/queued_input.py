@@ -47,7 +47,10 @@ from .input_key import AcpInputKey, InputKey
 from .input_disposition import InputDispositions
 from .input_origin import InputOrigin, UnattributedInputOrigin, WireInputOrigin
 from .routing import ScheduledTurn
-from .thread_identity import ClaimedIdentity, ClaimScoped
+from .registry.thread_identity import (
+    ClaimedIdentity,
+    ClaimScoped,
+)
 from .registry.threads import Thread
 from .execution.turn_context import TurnContext
 from .execution.turn_goal_permission import (

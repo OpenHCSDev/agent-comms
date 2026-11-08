@@ -12,7 +12,11 @@ from typing import TYPE_CHECKING, Annotated, Literal
 from agent_comms.nominal.field_codec import BoundedText, SingleFieldValue, SubclassUnion
 from agent_comms.installer.reporting import UnpostedWriter
 from .projects.storage_rules import StorageRule
-from agent_comms.thread_text import AbsentText, GivenText, TextChoice
+from .registry.thread_text import (
+    AbsentText,
+    GivenText,
+    TextChoice,
+)
 
 if TYPE_CHECKING:
     from agent_comms.cli_bridges.shared import SessionBridgeResumes

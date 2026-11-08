@@ -16,7 +16,7 @@ from agent_comms.owner_connection import socket_path
 from agent_comms.native_arguments import GivenBinary
 from agent_comms.restart_scope import OwnersNamed
 from agent_comms.routing import NoTurnRouting
-from agent_comms.thread_model import DeclaredModel
+from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.session_file import RegistrySessionLocation
 from native_backend_fixture import native_backend_fixture
 from agent_comms.registry.threads import NativeThread

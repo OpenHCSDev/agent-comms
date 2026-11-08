@@ -24,8 +24,11 @@ from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SetVar
 from agent_comms.execution.owner_lifecycle import OwnerRestartSelection
 from agent_comms.owner_restart import OwnerRestartHandoff, RetiredOwnerLaunch
 from agent_comms.registry.registry_document import RegistryDocument, RegistrySnapshot
-from agent_comms.thread_identity import GenerationCounter, OwnerIdentity
-from agent_comms.thread_status import StoppedThreadStatus
+from agent_comms.registry.thread_identity import (
+    GenerationCounter,
+    OwnerIdentity,
+)
+from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.native_arguments import ConfiguredBinary, InheritedArguments
 from agent_comms.registry.threads import NativeThread
 

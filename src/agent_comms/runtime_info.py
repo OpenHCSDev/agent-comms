@@ -15,8 +15,11 @@ from .storage.locked_store import DocumentChange
 from .storage.maintenance_barrier import CarriedDocument
 from .pi_counts import PiCount, UnreportedCount
 from .storage.store_files import DependentStateTier, SingleFileStore
-from .thread_model import ThreadModel, UndeclaredModel
-from .thread_owned_state import ThreadOwnedState
+from .registry.thread_model import (
+    ThreadModel,
+    UndeclaredModel,
+)
+from .registry.thread_owned_state import ThreadOwnedState
 
 if TYPE_CHECKING:
     from .agent_events import RuntimeInfoObservation

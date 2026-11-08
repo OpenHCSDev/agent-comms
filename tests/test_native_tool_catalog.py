@@ -19,7 +19,7 @@ def test_tool_discovery_loads_the_requested_declarations_without_changing_the_bu
     NamedToolLookup,
     SearchToolLookup,
 )
-    from agent_comms.thread_identity import ToolName
+    from agent_comms.registry.thread_identity import ToolName
     import pytest
 
     before = comms.registry.snapshot(), comms.bus.bus.revision()

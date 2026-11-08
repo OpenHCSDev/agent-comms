@@ -115,7 +115,7 @@ from ...team_hud_records import (
     Teammate,
     TeammateDetail,
 )
-from ...thread_identity import ThreadIncarnation
+from ...registry.thread_identity import ThreadIncarnation
 from ...tool_caller import (
     ThreadCaller,
     ToolCaller,

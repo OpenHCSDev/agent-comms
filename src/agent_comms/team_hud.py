@@ -32,7 +32,7 @@ from .planning.plan_phases import (
     PlanPhase,
 )
 from agent_comms.service_passes import BoardUnavailable, FailingPass, ServicePassStore, ServiceReading
-from agent_comms.thread_identity import ThreadIncarnation
+from .registry.thread_identity import ThreadIncarnation
 from agent_comms.ui_model.teammate_state import TeammateState
 from agent_comms.task_attachments.team_pings import (
     AlarmGroup, AlarmSection, TeamDelivery, TeamUpdate, Ping,

@@ -57,11 +57,23 @@ from ..transport.runtime_requests import (
     SubscribeRuntimeRequest,
 )
 from ..session_effects import SessionEffects
-from ..session_load import ExistingSessionLoadPlan, FailedSessionLoadPlan, SessionLoadPlan
-from ..thread_identity import AcpThreadRole, ClaimedIdentity, OwnerIdentity, ThreadIncarnation
-from ..thread_model import ThreadModel
-from ..thread_status import ActiveThreadPresence
-from ..thread_text import NoThreadText, ThreadText
+from ..registry.thread_presentation import (
+    ExistingSessionLoadPlan,
+    FailedSessionLoadPlan,
+    SessionLoadPlan,
+)
+from ..registry.thread_identity import (
+    AcpThreadRole,
+    ClaimedIdentity,
+    OwnerIdentity,
+    ThreadIncarnation,
+)
+from ..registry.thread_model import ThreadModel
+from ..registry.thread_status import ActiveThreadPresence
+from ..registry.thread_text import (
+    NoThreadText,
+    ThreadText,
+)
 from ..projects.checkouts import Checkout
 from ..registry.threads import NativeThread, Thread
 from ..transcript_updates import TranscriptReplay

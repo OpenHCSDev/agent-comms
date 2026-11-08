@@ -86,7 +86,7 @@ from agent_comms.storage.store_files import ExclusiveLock, StoreGuard, _store_lo
 from agent_comms.transport.tools.channels import ChannelListing, CommsChannelsTool
 from agent_comms.transport.tools.send import CommsSendTool
 from agent_comms.tool_caller import HumanCaller, NoThreadCaller, ThreadCaller
-from agent_comms.thread_identity import UserThreadRole
+from agent_comms.registry.thread_identity import UserThreadRole
 from agent_comms.tool_request import ReadTool
 from agent_comms.transport.request import ToolCall, ToolRequest
 from agent_comms.registry.threads import NativeThread

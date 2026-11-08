@@ -20,10 +20,13 @@ from typing import NoReturn
 from agent_comms.display_order import ChannelSort, NameChannelSort, ThreadSort
 from agent_comms.presentation import CoordinationSnapshot, ThreadView
 from agent_comms.registry.threads import ConversationPreparation
-from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.thread_model import ThreadModel
-from agent_comms.thread_presentation import SessionDisconnected, ThreadPresentationStatus
-from agent_comms.thread_status import ActiveThreadPresence
+from ..registry.thread_identity import ThreadIncarnation
+from ..registry.thread_model import ThreadModel
+from ..registry.thread_presentation import (
+    SessionDisconnected,
+    ThreadPresentationStatus,
+)
+from ..registry.thread_status import ActiveThreadPresence
 from agent_comms.ui_model.changes import KeyedModel
 from agent_comms.ui_model.unread import UnreadPresentation, UnobservedUnread
 

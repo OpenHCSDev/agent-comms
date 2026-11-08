@@ -18,7 +18,10 @@ from agent_comms.messaging.sending import TeamReceipts
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript, UserTranscript
 from agent_comms.native_entries import NativeEntry
-from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
+from agent_comms.registry.thread_status import (
+    RunningThreadStatus,
+    StoppedThreadStatus,
+)
 from agent_comms.registry.threads import NativeThread
 from agent_comms.execution.turn_item import (
     NativeItemId,
@@ -80,7 +83,7 @@ def test_check_roots_contain_new_child_allocations_and_actual_rule_publication(
 ):
     from agent_comms.pi_rule_gate import PiRedeal
     from agent_comms.rule_deal import StartedDeal
-    from agent_comms.thread_text import ForkedParent
+    from agent_comms.registry.thread_text import ForkedParent
 
     source_policy = source.registry.storage_rule
     scratches = []

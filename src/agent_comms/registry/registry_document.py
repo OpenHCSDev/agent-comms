@@ -78,8 +78,8 @@ from ..restart_refusals import (
     OwnerChangedBeforeFenceRefusal,
     OwnerGenerationChangedRefusal,
 )
-from ..thread_creation import CreationTime
-from ..thread_identity import (
+from .thread_creation import CreationTime
+from .thread_identity import (
     ClaimedIdentity,
     GenerationCounter,
     OfferedTools,
@@ -90,15 +90,18 @@ from ..thread_identity import (
     ThreadIncarnationRecord,
     TurnIdentity,
 )
-from ..thread_presentation import ThreadOwnerBinding
-from ..thread_status import (
+from .thread_presentation import ThreadOwnerBinding
+from .thread_status import (
     ActiveThreadPresence,
     ArchivedThreadStatus,
     StoppedThreadStatus,
     StoppingThreadStatus,
     ThreadStatus,
 )
-from ..thread_text import ForkedParent, NoParent
+from .thread_text import (
+    ForkedParent,
+    NoParent,
+)
 from .threads import Thread, ThreadWorkState
 from ..execution.turn_lease import (
     FinishedTurn,

@@ -36,7 +36,7 @@ from .wake_policy import RecipientDecision
 
 from dataclasses import field
 from functools import cached_property
-from .thread_identity import ThreadIncarnation
+from .registry.thread_identity import ThreadIncarnation
 from agent_comms.notification_evidence import FirstRecipient, OutcomeViewer, RecipientCursor, RecipientLimit
 from .bus_publication import Delivered
 if TYPE_CHECKING:

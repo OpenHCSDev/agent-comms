@@ -13,7 +13,7 @@ from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument
 from agent_comms.nominal.field_codec import TargetBound
 from agent_comms.registry.registry_document import RegistrySnapshot
-from agent_comms.thread_status import ThreadStatus
+from ..registry.thread_status import ThreadStatus
 from agent_comms.registry.threads import Thread
 from dataclasses import dataclass
 from dataclasses import replace

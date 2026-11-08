@@ -15,7 +15,7 @@ from agent_comms.disclosure_text import (
 from agent_comms.nominal.field_codec import DisclosureIdentity, FieldCodec, OrderId
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.task_attachments.team_pings import TeamDecisions, FoldedRule, RulePing
-from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.ui_model.hud_groups import (
     IdleGroup, InProgressGroup, ProblemsGroup, ReadyToTestGroup, UrgentGroup,
 )

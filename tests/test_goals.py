@@ -26,7 +26,7 @@ from agent_comms.task_sources import GoalTaskScope, TurnTaskScope
 from agent_comms.registry.threads import ChosenModel, NextTurnConfiguration, Thread, NativeThread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.transport.request import ToolRequest
-from agent_comms.thread_model import DeclaredModel
+from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.reported_turn import NoReportedTurn, ReportedTurn, ReportedTurnState
 from agent_comms.planning.goal_scope import OneGoal
 

@@ -14,7 +14,10 @@ from agent_comms.errors import UnknownChannelError, UnregisteredThreadError
 from agent_comms.messages import Message, InfoKind
 from agent_comms.read_basis import NamedViewer
 from bus_history import read_history
-from agent_comms.thread_text import ForkedParent, GivenThreadText
+from agent_comms.registry.thread_text import (
+    ForkedParent,
+    GivenThreadText,
+)
 from agent_comms.registry.threads import NativeThread
 
 

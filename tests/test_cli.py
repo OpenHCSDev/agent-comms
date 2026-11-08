@@ -24,7 +24,7 @@ from agent_comms.registry.threads import (
     NativeThread,
 )
 from agent_comms.native_arguments import GivenArguments, GivenBinary
-from agent_comms.thread_model import UndeclaredModel
+from agent_comms.registry.thread_model import UndeclaredModel
 from agent_comms.cli_command import CommandSelectionChanged, CliCommand, TargetBatchResult, TargetCompleted, TargetFailed, TargetEdit
 from agent_comms.lifecycle_capability import Successful
 from conftest import installed_comms
@@ -49,8 +49,15 @@ from agent_comms.messages import SendableRole, NoticeRole
 from agent_comms.execution.owner_lifecycle import OwnerStartResult
 from agent_comms.pi_vocabulary import ServiceTier
 from agent_comms.restart_scope import OneOwner
-from agent_comms.thread_identity import TurnIdentity, UserThreadRole
-from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus, RunningThreadStatus
+from agent_comms.registry.thread_identity import (
+    TurnIdentity,
+    UserThreadRole,
+)
+from agent_comms.registry.thread_status import (
+    ArchivedThreadStatus,
+    StoppedThreadStatus,
+    RunningThreadStatus,
+)
 from agent_comms.execution.turn_lease import (
     ActiveTurn,
     RecordedGeneration,

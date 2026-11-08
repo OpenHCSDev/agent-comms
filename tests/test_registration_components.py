@@ -21,7 +21,7 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.storage.store_files import AtomicFile
 from agent_comms.registry.threads import ExternalThread, Thread, NativeThread
-from agent_comms.thread_text import GivenThreadText
+from agent_comms.registry.thread_text import GivenThreadText
 
 
 def owner(path):

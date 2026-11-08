@@ -38,9 +38,9 @@ from agent_comms.projects.checkouts import (
 from agent_comms.repository_name import RepositoryName
 from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.tool_denial import StorageDenied
-from agent_comms.thread_creation import RecordedCreationTime
+from agent_comms.registry.thread_creation import RecordedCreationTime
 from agent_comms.registry.threads import ExternalThread, NativeThread
-from agent_comms.thread_status import StoppedThreadStatus
+from agent_comms.registry.thread_status import StoppedThreadStatus
 from cli_command import core, core_process
 import fixture_git
 from order_scope_fixture import FIX_SCOPE

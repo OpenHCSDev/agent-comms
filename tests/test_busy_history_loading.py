@@ -17,7 +17,7 @@ from agent_comms.ui_model.observation import (
     LocalRouteObservation, ObservationProcess, ReadBusy, ReadNotifications, ReadTranscript,
 )
 from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.thread_identity import UnrecordedThreadIncarnation
+from agent_comms.registry.thread_identity import UnrecordedThreadIncarnation
 from agent_comms.registry.threads import NativeThread
 
 

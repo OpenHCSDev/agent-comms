@@ -1,15 +1,13 @@
-"""One thread's configuration answer: sessions and the Toad footer read the same object."""
-
 from __future__ import annotations
 
 import os
 from pathlib import Path
 
-from .acp_extension import CoordinationChangedUpdate
-from .child_process import ProcessIdentity
-from .registry.registration import Registration
+from .registration import Registration
+from ..acp_extension import CoordinationChangedUpdate
+from ..agent_activity import AgentActivity
+from ..child_process import ProcessIdentity
 from .thread_management import ThreadManagement
-from .agent_activity import AgentActivity
 
 
 class ThreadConfiguration:

@@ -66,7 +66,7 @@ from ..storage.store_files import (
     DependentStateTier,
     SingleFileStore,
 )
-from ..thread_identity import (
+from ..registry.thread_identity import (
     NoObservedTurn,
     ObservedTurn,
     ThreadIncarnation,

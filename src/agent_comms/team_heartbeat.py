@@ -17,7 +17,7 @@ from agent_comms.task_attachments.team_pings import (
     AlarmGroup, TeamUpdate, TeamUpdateStore, PublishedFacts, RulePing, TeammatePing,
 )
 from agent_comms.team_service import TeamService
-from agent_comms.thread_identity import ThreadIncarnation
+from .registry.thread_identity import ThreadIncarnation
 from agent_comms.heartbeat_subjects import TeamHistory
 from .execution.watch_passes import PreparedWatchPass
 from agent_comms.watch_phase import WatchPhase

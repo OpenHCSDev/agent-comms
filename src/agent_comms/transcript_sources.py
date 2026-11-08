@@ -43,7 +43,10 @@ from .routing import TurnRouting
 from .rule_deal import Mute, Speaking, Voice
 from .sent_message import AssignedSourceIdentity, PublishedSentMessage
 from .sent_reports import ResolvesSentReports
-from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+from .registry.thread_identity import (
+    RecordedThreadIncarnation,
+    ThreadIncarnation,
+)
 from .transcript_events import (
     IncomingTranscript,
     SentTranscript,

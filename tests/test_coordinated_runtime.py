@@ -28,8 +28,8 @@ from agent_comms.coordination.database import CoordinationStore
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.notification_progress import HumanReadProgress
 from agent_comms.pi_vocabulary import HighThinkingLevel
-from agent_comms.thread_model import DeclaredModel
-from agent_comms.thread_text import GivenThreadText
+from agent_comms.registry.thread_model import DeclaredModel
+from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.execution.turn_context import TurnContext
 from bus_history import read_history
 from bus_record_fixture import prepare_native_comms
@@ -159,7 +159,7 @@ def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> No
 def test_selected_and_following_use_the_original_question_contract(tmp_path: Path) -> None:
     from agent_comms.channel_targets import CommandTarget
     from agent_comms.task_attachments.owner_notices import MeantNotice
-    from agent_comms.thread_identity import UserThreadRole
+    from agent_comms.registry.thread_identity import UserThreadRole
 
     root, root_id, comms, peer, people = _root(tmp_path)
     comms.registry.declare(NativeThread("owner", frozenset(), Checkout(tmp_path), role=UserThreadRole))

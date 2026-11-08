@@ -21,7 +21,10 @@ from .jsonl_stream import JsonlStreamReader
 from .storage.maintenance_barrier import MaintenanceHolder
 from .owner_protocol import OwnerLine
 from .storage.private_path import PrivateSocketRole
-from .thread_identity import OwnerIdentity, ThreadIncarnation
+from .registry.thread_identity import (
+    OwnerIdentity,
+    ThreadIncarnation,
+)
 from .registry.threads import NativeThread, Thread
 
 if TYPE_CHECKING:

@@ -23,9 +23,7 @@ from agent_comms.messaging.read_ledger import (
 from agent_comms.read_basis import ConversationCursor, ReadCursor
 from agent_comms.registry_provenance import RegistryProvenance
 from agent_comms.registry.registry_document import RegistrySnapshot
-from agent_comms.thread_identity import (
-    UnrecordedThreadIncarnation,
-)
+from agent_comms.registry.thread_identity import UnrecordedThreadIncarnation
 from goal_owner_fixture import canonical_goal_wire
 from agent_comms.registry.threads import NativeThread
 

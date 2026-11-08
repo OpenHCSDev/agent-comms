@@ -28,7 +28,7 @@ from agent_comms.nominal.field_codec import (
 )
 from agent_comms.launch_root import LaunchRoot
 from .projects.checkouts import Checkout
-from agent_comms.thread_text import (
+from .registry.thread_text import (
     AbsentText,
     GivenText,
     NoParent,

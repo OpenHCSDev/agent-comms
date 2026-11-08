@@ -24,7 +24,10 @@ from agent_comms.message_reference import MessageReference
 from agent_comms.nominal.field_codec import MessageId, TurnId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.task_sources import AnnotationDisclosureGrant, ProjectTaskScope
-from agent_comms.thread_identity import RecordedThreadIncarnation, TurnIdentity
+from agent_comms.registry.thread_identity import (
+    RecordedThreadIncarnation,
+    TurnIdentity,
+)
 from agent_comms.execution.turn_context import (
     ContextManifest,
     ContextSpan,

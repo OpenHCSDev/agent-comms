@@ -19,9 +19,12 @@ from agent_comms.cli_verbs.queue_restart import QueueRestartCliCommand
 from agent_comms.cli_verbs.restart import RestartCliCommand
 from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.thread_status import (
-    ArchivedThreadStatus, RunningThreadStatus, StoppedThreadStatus, ThreadStatus,
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.thread_status import (
+    ArchivedThreadStatus,
+    RunningThreadStatus,
+    StoppedThreadStatus,
+    ThreadStatus,
 )
 from agent_comms.registry.threads import NativeThread
 

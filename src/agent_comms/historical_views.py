@@ -65,7 +65,7 @@ from .registry.registry_document import RegistrySnapshot
 from .registry_provenance import RegistryProvenance
 from .revision_views import BusSourceView
 from .storage.store_files import SingleFileStore, SourceTier, StoreOwner
-from .thread_identity import UnrecordedThreadIncarnation
+from .registry.thread_identity import UnrecordedThreadIncarnation
 from .display_references import ReferenceContext
 from .registry.threads import Thread, ThreadProvenance
 from .transcript_routes import TranscriptRoutes

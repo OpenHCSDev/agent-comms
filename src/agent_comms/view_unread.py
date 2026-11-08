@@ -28,8 +28,8 @@ from .messaging.read_ledger import (
     ReadLedger,
 )
 from .registry.registry_document import RosterVisibility
-from .thread_identity import ThreadIncarnation
-from .thread_owned_state import ThreadOwnedState
+from .registry.thread_identity import ThreadIncarnation
+from .registry.thread_owned_state import ThreadOwnedState
 from .storage.typed_table import (
     Column,
     JsonStorage,

@@ -16,7 +16,7 @@ from conftest import installed_comms
 from agent_comms.coordination.errors import DMScopeChanged
 from agent_comms.messaging.message_page import PageBounds
 from agent_comms.read_basis import DMSelection
-from agent_comms.thread_identity import UserThreadRole
+from agent_comms.registry.thread_identity import UserThreadRole
 from agent_comms.registry.threads import Thread, NativeThread
 from bus_record_fixture import prepare_native_comms
 

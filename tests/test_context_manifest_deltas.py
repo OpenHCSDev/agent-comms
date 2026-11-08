@@ -20,7 +20,7 @@ import sqlite3
 
 from agent_comms.nominal.field_codec import ContextStoreId, FieldCodec, TurnId
 from agent_comms.native_session_reopen import NativeSessionIdentity
-from agent_comms.thread_identity import TurnIdentity
+from agent_comms.registry.thread_identity import TurnIdentity
 from agent_comms.execution.turn_context import ObservedDispatchRequest
 from agent_comms.execution.turn_context import (
     ContextManifest,

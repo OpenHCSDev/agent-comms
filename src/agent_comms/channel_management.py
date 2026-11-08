@@ -20,13 +20,19 @@ from .display_order import ChannelSort, ThreadSort
 from .messaging.message_bus import MessageBus
 from .messages import InfoKind, MembershipConversationRole, Message
 from .registry.registration import Registration
-from .thread_identity import ThreadIncarnation
-from .thread_management import ChangedTags, GivenTags
+from .registry.thread_identity import ThreadIncarnation
+from .registry.thread_management import (
+    ChangedTags,
+    GivenTags,
+)
 from .registry.threads import Thread
 
 if TYPE_CHECKING:
     from .catalog_document import CatalogDocument
-    from .thread_management import TagChoice, ThreadManagement
+    from .registry.thread_management import (
+    TagChoice,
+    ThreadManagement,
+)
 
 
 @dataclass(frozen=True)

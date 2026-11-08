@@ -109,8 +109,8 @@ from agent_comms.revision_views import (
 from agent_comms.team_heartbeat import TeamBoardRead
 from agent_comms.team_hud import TeamFrame, TeamHud, TeamPlan
 from agent_comms.team_hud_records import TeammateDetail
-from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.thread_presentation import ThreadPresentation
+from ..registry.thread_identity import ThreadIncarnation
+from ..registry.thread_presentation import ThreadPresentation
 from agent_comms.transcripts import AcquiredThreadPresentation, TranscriptReadIdentity, TranscriptRead
 from agent_comms.tool_result import ToolResult
 from agent_comms.transport.request import ToolRequest

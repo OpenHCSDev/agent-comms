@@ -31,7 +31,7 @@ from agent_comms.projection_source import ProducedRow
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.task_attachments.owner_notices import OwnerNotice
 from agent_comms.text_digest import TextDigest
-from agent_comms.thread_identity import ThreadIncarnation
+from ..registry.thread_identity import ThreadIncarnation
 from agent_comms.ui_model.message_category import HeartbeatCategory, MessageCategory
 from agent_comms.ui_model.teammate_state import AwaitingTeam, TeammateState
 from agent_comms_hooks.board import BoardEntry

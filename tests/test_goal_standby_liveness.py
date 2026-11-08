@@ -22,11 +22,14 @@ from agent_comms.planning.goal_actions import (
     StandbyGoalAction,
 )
 from agent_comms.planning.goal_waits import GoalWaits
-from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
+from agent_comms.registry.thread_status import (
+    RunningThreadStatus,
+    StoppedThreadStatus,
+)
 from goal_owner_fixture import canonical_goal_wire
 from agent_comms.planning.goal_waits import NoGoalWait
 from agent_comms.planning.goal_waits import RecordedGoalWait
-from agent_comms.thread_text import GivenThreadText
+from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
 from agent_comms.planning.goal_scope import OneGoal
 

@@ -41,7 +41,7 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.storage_room import NoRoomNeeded
 from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_denial import SelectedToolDenied
-from agent_comms.thread_identity import UnobservedTools
+from agent_comms.registry.thread_identity import UnobservedTools
 
 
 @pytest.fixture

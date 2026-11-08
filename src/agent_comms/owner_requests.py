@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from agent_comms.channel_targets import NamedTarget
     from agent_comms.messages import Message
     from agent_comms.registry.registration import Registration
-    from agent_comms.thread_identity import ThreadIncarnation
+    from .registry.thread_identity import ThreadIncarnation
     from agent_comms.bus import BusReader
 
     from .planning.orders import (

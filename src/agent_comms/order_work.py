@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .nominal.field_codec import ToolCallId
-from .thread_identity import ThreadIncarnation
+from .registry.thread_identity import ThreadIncarnation
 from .tool_result import ToolResult
 from .transcript_events import OrderCall, TurnDigest
 

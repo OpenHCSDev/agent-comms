@@ -24,7 +24,7 @@ from agent_comms.team.standing_rules import StorageHomeMissing
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, RecordProblems
-from agent_comms.thread_creation import RecordedCreationTime
+from agent_comms.registry.thread_creation import RecordedCreationTime
 from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.checkouts import (
@@ -50,7 +50,7 @@ from agent_comms.projects.storage_rules import (
     StorageRule,
     UnitStorage,
 )
-from agent_comms.thread_storage import (
+from agent_comms.registry.thread_storage import (
     StoragePath,
     StorageRoots,
     NoRepositoryChoice,

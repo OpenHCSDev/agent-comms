@@ -45,7 +45,10 @@ from agent_comms.nominal.field_codec import AcpSessionId, AssignmentId, ClaimId,
 from agent_comms.planning.goal_presentation import IdleGoalExecution
 from agent_comms.planning.goals import NoGoal
 from agent_comms.pi_wire import McpLiveAcknowledgement
-from agent_comms.thread_identity import ClaimedIdentity, RecordedThreadIncarnation
+from agent_comms.registry.thread_identity import (
+    ClaimedIdentity,
+    RecordedThreadIncarnation,
+)
 from agent_comms.registry.threads import NativeThread
 from agent_comms.transcripts import NativeTranscriptCursor
 from agent_comms.storage.private_path import MissingFile

@@ -45,7 +45,7 @@ from .private_nk_entrypoint import (
 )
 from .storage.private_path import FileObservation, PrivateFileRole
 from .private_runtime_schema import PrivateCoordinatorTable
-from .thread_identity import ClaimedIdentity
+from .registry.thread_identity import ClaimedIdentity
 
 
 if TYPE_CHECKING:

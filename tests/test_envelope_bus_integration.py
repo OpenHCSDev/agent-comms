@@ -29,7 +29,7 @@ from agent_comms.exporting import EverythingScope, FullLimit, JsonlFormat
 from agent_comms.nominal.field_codec import ClaimId, InputId, TurnId
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import Message
-from agent_comms.thread_status import RunningThreadStatus
+from agent_comms.registry.thread_status import RunningThreadStatus
 from agent_comms.registry.threads import NativeThread
 from bus_history import read_history
 

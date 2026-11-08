@@ -7,7 +7,7 @@ from agent_comms.catalog_document import CatalogAccess
 from agent_comms.cli_command import CliCommand
 from agent_comms.comms import Comms
 from agent_comms.registry.threads import ThreadCommandAvailability, Thread
-from agent_comms.thread_status import ThreadStatus
+from ..registry.thread_status import ThreadStatus
 from dataclasses import dataclass
 from typing import Self
 

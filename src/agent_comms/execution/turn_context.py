@@ -55,7 +55,7 @@ from ..planning.goals import (
     NoGoal,
 )
 from ..projects.checkouts import Checkout
-from ..thread_identity import (
+from ..registry.thread_identity import (
     ThreadIncarnation,
     TurnIdentity,
 )

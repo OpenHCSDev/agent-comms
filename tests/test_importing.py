@@ -4,7 +4,11 @@ from agent_comms.core_access import LocalCoreAccess
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.comms import Comms
 from agent_comms.registry.registration import Registration
-from agent_comms.thread_text import GivenThreadText, NoThreadText, ThreadText
+from agent_comms.registry.thread_text import (
+    GivenThreadText,
+    NoThreadText,
+    ThreadText,
+)
 import asyncio
 import json
 import os
@@ -23,8 +27,8 @@ from agent_comms.harness_install import (
     OpenCodeHarness,
     PiHarness,
 )
-from agent_comms.thread_text import ExpectedSession
-from agent_comms.thread_creation import RecordedCreationTime
+from agent_comms.registry.thread_text import ExpectedSession
+from agent_comms.registry.thread_creation import RecordedCreationTime
 from agent_comms.transcript_events import (
     ImportedMessage,
     ImportedReply,
@@ -52,14 +56,17 @@ from agent_comms.cli_bridges.codex_connection import CodexConnection
 from agent_comms.cli_bridges.codex_protocol import BusInput, InitializeResponse, RequestParams, ItemsList
 from agent_comms.cli_bridges.codex_rollout import ROLLOUT_RECORD, ForeignItem, ForeignRecord, ResponseItemRecord
 from agent_comms.cli_bridges.history import DefaultAddress, OfflineHistory, OnlineHistory
-from agent_comms.thread_text import AnySession, NamedSession
+from agent_comms.registry.thread_text import (
+    AnySession,
+    NamedSession,
+)
 from agent_comms.cli_bridges.opencode import OpenCodeServer, OpenCodeConnection
 from agent_comms.cli_bridges.opencode_parts import SavedMessage
 from agent_comms.cli_bridges.opencode_protocol import Session
 from agent_comms.nominal.field_codec import FieldCodec, MessageId
 from agent_comms.native_entries import NativeEntry, ImportedMetadataEntry
 from agent_comms.registry.threads import ThreadProvenance, ExternalThread, NativeThread
-from agent_comms.thread_status import StoppedThreadStatus
+from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.runtime_updates import FinishedItem, TurnEnded
 from agent_comms.ui_model.message_category import AgentCategory, ThinkingCategory, UserCategory
 from agent_comms.execution.turn_context import CodexRolloutProvenance

@@ -60,10 +60,17 @@ from ..runtime_request import RuntimeRequest
 from ...send_result import MessagePublished
 from ...served_bus import ServedBus, UnidentifiedBus
 from ...session_revision import SessionObservation
-from ...thread_identity import ClaimedIdentity, ThreadIncarnation
-from ...thread_management import ImportDirectory, ProjectChangeResult, RenameThreadResult
-from ...thread_presentation import ThreadPresentation
-from ...thread_text import ExpectedSession
+from ...registry.thread_identity import (
+    ClaimedIdentity,
+    ThreadIncarnation,
+)
+from ...registry.thread_management import (
+    ImportDirectory,
+    ProjectChangeResult,
+    RenameThreadResult,
+)
+from ...registry.thread_presentation import ThreadPresentation
+from ...registry.thread_text import ExpectedSession
 from ...tool_result import ToolResult
 from ...transcripts import TranscriptCursor
 from ...execution.turn_context import (

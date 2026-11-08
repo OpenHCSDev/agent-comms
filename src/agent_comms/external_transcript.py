@@ -32,7 +32,7 @@ from .native_runtime_input import NativeRuntimeInput
 from .native_tools import MutatingPathTool
 from .native_transcript import RecordsCut
 from .recorded_time import EventTime, GeneratedTimestamp
-from .thread_identity import ThreadIncarnation
+from .registry.thread_identity import ThreadIncarnation
 from .tool_declaration import ToolDeclaration
 from .transcript_events import (
     AssistantTranscript,

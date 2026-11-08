@@ -33,7 +33,7 @@ from agent_comms.messaging.read_ledger import (
     ReadLedger,
     ReadNotice,
 )
-from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from bus_record_fixture import prepare_native_comms
 from agent_comms.registry.threads import NativeThread
 

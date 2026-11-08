@@ -11,7 +11,7 @@ from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember
 from agent_comms.storage.locked_store import DocumentChange
 from agent_comms.storage.maintenance_barrier import CarriedDocument
-from agent_comms.thread_owned_state import ThreadOwnedState
+from .registry.thread_owned_state import ThreadOwnedState
 
 from .storage.store_files import DependentStateTier, SingleFileStore
 

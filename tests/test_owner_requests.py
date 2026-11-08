@@ -33,7 +33,7 @@ from agent_comms.projects.repo import Repo
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.repository_name import RepositoryName
 from agent_comms.team.standing_rules import DirectiveUnacted
-from agent_comms.thread_status import StoppedThreadStatus
+from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.transport.tools.send import CommsSendTool
 from agent_comms.registry.threads import NativeThread

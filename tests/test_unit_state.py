@@ -37,8 +37,8 @@ from agent_comms.projects.repo import Repo
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.registry.threads import ExternalThread, ForkThread
-from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.thread_text import ForkedParent
+from agent_comms.registry.thread_status import StoppedThreadStatus
+from agent_comms.registry.thread_text import ForkedParent
 from agent_comms.task_attachments.team_pings import TeamUpdate, TeammatePing
 from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.execution.turn_item import (

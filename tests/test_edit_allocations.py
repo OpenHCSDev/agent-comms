@@ -22,7 +22,7 @@ from agent_comms.projects.storage_rules import (
 )
 from agent_comms.projects.storage_projection import StorageProjection
 from agent_comms.registry.threads import ExternalThread
-from agent_comms.thread_model import DeclaredModel
+from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.transport.tools.orders import CommsTodoCreateTool
 

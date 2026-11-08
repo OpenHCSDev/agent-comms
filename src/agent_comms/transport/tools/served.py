@@ -215,19 +215,19 @@ from ...task_sources import (
     TaskScopeSelection,
 )
 from ...team.standing import InstallDue
-from ...thread_identity import (
+from ...registry.thread_identity import (
     ThreadIncarnation,
     ToolName,
 )
-from ...thread_management import (
+from ...registry.thread_management import (
     InheritedTags,
     ProjectChangeResult,
     RenameThreadResult,
     TagChoice,
     ThreadTitleResult,
 )
-from ...thread_model import ThreadModel
-from ...thread_presentation import ThreadPresentation
+from ...registry.thread_model import ThreadModel
+from ...registry.thread_presentation import ThreadPresentation
 from ...tool_caller import (
     ThreadCaller,
     ThreadListing,

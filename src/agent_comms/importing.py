@@ -19,7 +19,10 @@ from .cli_result import CliResult
 from .tool_result import ToolResult
 from .nominal.field_codec import FieldCodec, WireName
 from .harness_install import Harness
-from .thread_text import NoThreadText, ThreadText
+from .registry.thread_text import (
+    NoThreadText,
+    ThreadText,
+)
 from .transcript_events import ImportedInput, ImportedMessage, NoRetainedRequest
 from .execution.turn_context import CodexRolloutProvenance
 from .execution.turn_item import NativeItemId

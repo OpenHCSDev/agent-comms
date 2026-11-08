@@ -24,7 +24,7 @@ from agent_comms.runtime_updates import (
     EarlierPublishedPage, OfferedToolsObserved, PublishedPage, RuntimeUpdate, SessionFacts, ThreadOutput,
 )
 from ..projects.checkouts import Checkout
-from agent_comms.thread_identity import UnreportedTools
+from ..registry.thread_identity import UnreportedTools
 from .codex_connection import CodexConnection
 from .codex_protocol import (
     DisplayOutput, ToolOutput, ResumeThread, ResumedThread, ItemsList, ItemsPage, ItemStream, BusInput,

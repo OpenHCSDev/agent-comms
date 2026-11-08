@@ -10,7 +10,7 @@ from agent_comms.messaging.read_selection import DisplayUnreadSelection
 from agent_comms.read_basis import ChannelConversation, ChannelDisplayScope, DisplayedConversation, ReadCursor
 from agent_comms.registry_provenance import RegistryProvenance
 from agent_comms.transcripts import NotifiedThreadPresentation
-from agent_comms.thread_presentation import WorkingThreadPresentationStatus
+from agent_comms.registry.thread_presentation import WorkingThreadPresentationStatus
 from agent_comms.ui_model.status import ThreadStatusModel
 
 

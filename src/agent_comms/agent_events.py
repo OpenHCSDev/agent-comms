@@ -48,7 +48,10 @@ from .pi_vocabulary import (
     ThinkingLevelField,
     UnknownCompactionReason,
 )
-from .thread_model import ThreadModel, UndeclaredModel
+from .registry.thread_model import (
+    ThreadModel,
+    UndeclaredModel,
+)
 from .tool_declaration import OtherAction, ToolAction, ToolDeclaration
 from .tool_results import NoSentMessage, NoToolDiff, ToolDiff
 from .execution.turn_failure import (

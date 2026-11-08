@@ -30,7 +30,7 @@ from .execution.owner_lifecycle import (
 from .owner_release import OwnerCompletion
 from .restart_refusals import OwnerSelectionChangedRefusal
 from .restart_scope import AllOwners, RestartScope
-from .thread_identity import ThreadAuthority
+from .registry.thread_identity import ThreadAuthority
 from .registry.threads import Thread
 
 if TYPE_CHECKING:

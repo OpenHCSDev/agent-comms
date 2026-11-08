@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, ClassVar
 from .bus_publication import ServiceOrigin
 from .registry.threads import ServiceThread
 from .projects.checkouts import Checkout
-from .thread_identity import ServiceThreadRole
+from .registry.thread_identity import ServiceThreadRole
 
 if TYPE_CHECKING:
     from .registry.registration import Registration

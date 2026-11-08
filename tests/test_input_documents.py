@@ -25,7 +25,7 @@ from agent_comms.input_attempt import (
 from agent_comms.input_disposition import InputDispositions, InputDocument
 from agent_comms.lifecycle_capability import Unresolved
 from agent_comms.reported_turn import ReportedTurn
-from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.threads import NativeThread
 from stored_inputs import insert_inputs, stored_inputs
 
@@ -287,7 +287,7 @@ def test_original_native_user_receipts_include_group_and_corrected_final_only(tm
 
 def test_owned_bus_input_keeps_its_original_recipient_birth() -> None:
     from agent_comms.input_key import OwnedBusInputKey
-    from agent_comms.thread_identity import UnrecordedThreadIncarnation
+    from agent_comms.registry.thread_identity import UnrecordedThreadIncarnation
 
     row = ReservedInput(
         OwnedBusInputKey(7, 10.0), 7, "owner", 4, "owner", "original input",

@@ -36,7 +36,11 @@ from agent_comms.transport.tools.orders import (
 from agent_comms.transport.tools.reads import InputDeliveryRead, OwnerGoalRead
 from agent_comms.reported_turn import ReportedTurn
 from agent_comms.registry.threads import ExternalThread, NativeThread, Thread
-from agent_comms.thread_status import ConnectedThreadStatus, StoppedThreadStatus, ThreadStatus
+from agent_comms.registry.thread_status import (
+    ConnectedThreadStatus,
+    StoppedThreadStatus,
+    ThreadStatus,
+)
 from agent_comms.owner_connection import OwnerIdentityChangedError
 from agent_comms.coordination.errors import ReloadRequired, StaleFence
 from agent_comms.tool_caller import ToolCaller

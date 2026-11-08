@@ -19,7 +19,7 @@ from .registry.registration import Registration
 from .notification_evidence import OutcomeViewer, OwnerOutcomes
 from .presentation import SentMessageSummary, ThreadRecord
 from .registry.threads import ForkThread, SubagentThread, Thread
-from .thread_identity import ThreadIncarnation
+from .registry.thread_identity import ThreadIncarnation
 from .tool_result import ToolResult
 from .execution.turn_phase import IdlePhase
 

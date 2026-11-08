@@ -32,7 +32,7 @@ from ..storage.private_path import (
     FileRevision,
     ObservedPath,
 )
-from ..thread_identity import ThreadIncarnation
+from ..registry.thread_identity import ThreadIncarnation
 from ..tool_declaration import ToolDeclaration
 from ..tool_request import ThreadReadTool
 from ..tool_result import ToolResult

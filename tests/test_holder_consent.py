@@ -36,9 +36,15 @@ from agent_comms.planning.orders import (
 )
 from agent_comms.planning.todo_refusals import HolderConsentRequired
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.thread_identity import CoreWatcherIncarnation, RecordedThreadIncarnation
-from agent_comms.thread_status import (
-    NoBridgeThreadStatus, PausedBridgeThreadStatus, StoppedThreadStatus, StoppingThreadStatus,
+from agent_comms.registry.thread_identity import (
+    CoreWatcherIncarnation,
+    RecordedThreadIncarnation,
+)
+from agent_comms.registry.thread_status import (
+    NoBridgeThreadStatus,
+    PausedBridgeThreadStatus,
+    StoppedThreadStatus,
+    StoppingThreadStatus,
 )
 from agent_comms.registry.threads import ParkedThreadWorkState
 from agent_comms.tool_caller import ForkCaller, PeerCaller, ThreadCaller

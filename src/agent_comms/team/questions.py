@@ -16,7 +16,7 @@ from ..planning.orders import Todo
 
 if TYPE_CHECKING:
     from agent_comms.registry.registry_document import RegistrySnapshot
-    from agent_comms.thread_identity import ThreadIncarnation
+    from ..registry.thread_identity import ThreadIncarnation
 
 
 @dataclass(frozen=True, slots=True)
