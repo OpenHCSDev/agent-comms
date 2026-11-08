@@ -88,6 +88,7 @@ from .tool_result import ToolResult
 from .task_sources import OwnerRequestAttachment
 from .cli_bridges.claude_transcript import WATCH_REPLACED
 from .inbox_watch import InboxWatch, OpenWatch, WatchRoute, WatchTickets
+from .open_viewer import OpenObservation, OpenViewer
 from .tool_caller import ThreadCaller
 from .transport.tools.send import CommsSendTool, SendTool
 from .order_tools import CommsHeadVerdictTool, HeadVerdictTool
@@ -311,9 +312,10 @@ class Connector(ConnectorService, McpServer):
     watch_tasks: set[asyncio.Task[None]] = field(
         default_factory=set, init=False, repr=False, compare=False,
     )
-    open_watches: list[OpenWatch] = field(
+    open_viewers: list[OpenViewer] = field(
         default_factory=list, init=False, repr=False, compare=False,
     )
+    """Every long-lived socket this process is serving, so the stop can end all of them."""
 
     session: McpSession = field(
         default_factory=McpSession, init=False, repr=False, compare=False,
@@ -344,16 +346,16 @@ class Connector(ConnectorService, McpServer):
         # A transcript line holds whatever a tool returned, far past aiohttp's 4 MiB default.
         viewer = web.WebSocketResponse(heartbeat=self.heartbeat_seconds, max_msg_size=64 * 1024 * 1024)
         await viewer.prepare(request)
-        watch = OpenWatch(thread, viewer, request.task)
-        replaced = tuple(held for held in self.open_watches if held.thread == thread)
-        self.open_watches.append(watch)
+        watch = OpenWatch(thread=thread, viewer=viewer, handler=request.task)
+        replaced = tuple(held for held in self.open_viewers if held.watching(thread))
+        self.open_viewers.append(watch)
         for held in replaced:
             await held.viewer.close(code=WATCH_REPLACED, message=b"replaced by a newer watch")
         try:
             await ticket.opened(offer, viewer)
             await InboxWatch(thread, self.root, offer).carried(viewer)
         finally:
-            self.open_watches.remove(watch)
+            self.open_viewers.remove(watch)
             # The access log says only that the socket ended; this says which side ended it.
             logging.info("Watch for %s ended with close code %s; error %r",
                          thread, viewer.close_code, viewer.exception())
@@ -385,8 +387,8 @@ class Connector(ConnectorService, McpServer):
         retirement = self.git_children.start_shutdown()
         for task in self.watch_tasks:
             task.cancel()
-        for watch in tuple(self.open_watches):
-            await watch.ended()
+        for held in tuple(self.open_viewers):
+            await held.ended()
         await join_retirement(retirement)
 
     async def stop_calls(self, app: web.Application) -> None:
@@ -687,7 +689,12 @@ class Connector(ConnectorService, McpServer):
             raise web.HTTPForbidden(text=str(error))
         viewer = web.WebSocketResponse()
         await viewer.prepare(request)
-        await ObservationRelay(resolve_comms_route(self.root), self.helper_start).carry(viewer)
+        observation = OpenObservation(viewer=viewer, handler=request.task)
+        self.open_viewers.append(observation)
+        try:
+            await ObservationRelay(resolve_comms_route(self.root), self.helper_start).carry(viewer)
+        finally:
+            self.open_viewers.remove(observation)
         return viewer
 
     async def mcp(self, request: web.Request) -> web.StreamResponse:
