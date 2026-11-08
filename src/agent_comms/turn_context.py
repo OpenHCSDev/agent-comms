@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from importlib.resources import files
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
@@ -17,6 +18,7 @@ from pydantic import JsonValue
 from .annotation_disclosure import PublicInstructionAnnotations, WithheldAnnotations
 from .cli_result import CliResult
 from .errors import RelationViolationError
+from . import instructions
 from .planning.goals import (
     Goal,
     NoGoal,
@@ -270,7 +272,7 @@ class InstructionFile:
 
     @classmethod
     def read(cls, name: str) -> InstructionFile:
-        path = Path(__file__).with_name("instructions") / name
+        path = files(instructions) / name
         raw = path.read_bytes()
         return cls(raw.decode(), FileProvenance(str(path), hashlib.sha256(raw).hexdigest()))
 
