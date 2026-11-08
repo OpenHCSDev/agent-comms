@@ -51,6 +51,7 @@ cd "$source/stack"
 export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-1}"
 # Resolution and pip use separate source trees; share compiled Rust dependencies.
 export CARGO_TARGET_DIR="$installation/cargo-target"
+export PIP_CACHE_DIR="$installation/pip-cache"
 # Inherit the patched native packages without letting pip change Termux's system Python.
 "$PREFIX/bin/python" -m venv --system-site-packages .venv
 uv export --project . --python "$PREFIX/bin/python" --no-managed-python \

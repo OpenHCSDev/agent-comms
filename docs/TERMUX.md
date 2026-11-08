@@ -18,6 +18,10 @@ replace system Python, start agents, configure SSH hosts, or change Tailscale.
 The first native build can take tens of minutes on a phone. Cargo uses one build
 job by default and keeps a shared build cache for dependency resolution and
 installation, so those steps can reuse compatible compiled Rust dependencies.
+Build tools remain installed. The source, virtual environment, Cargo target cache
+and pip wheel cache remain under `~/.local/share/toad-comms`; uv also retains its
+cache under `~/.cache/uv`. Keep those directories to reuse compatible builds.
+Changed dependency versions or a changed Python ABI may still require rebuilding.
 Run the same command again to update. Installation output is also saved in
 `~/.local/share/toad-comms/install.log`.
 
