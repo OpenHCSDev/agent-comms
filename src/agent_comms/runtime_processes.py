@@ -16,6 +16,14 @@ class RuntimeProcessOutcome(DeclaredFamily, ABC, affix="RuntimeProcess"):
     @abstractmethod
     def line(self) -> str: ...
 
+    @abstractmethod
+    def held_prefix(self) -> frozenset[Path]:
+        """The built runtime this outcome keeps alive, for whoever retires the rest."""
+
+    @abstractmethod
+    def unread(self) -> tuple[str, ...]:
+        """What this outcome could not read, which leaves a runtime undecided."""
+
 
 @dataclass(frozen=True)
 class UnreadableRuntimeProcess(RuntimeProcessOutcome):
@@ -24,6 +32,14 @@ class UnreadableRuntimeProcess(RuntimeProcessOutcome):
 
     def line(self) -> str:
         return f"Unknown runtime PID {self.pid}: {self.reason}"
+
+    def held_prefix(self) -> frozenset[Path]:
+        """A process whose interpreter could not be read names no runtime; `unread` is how
+        it keeps a sweep from deciding about the one it might have been running."""
+        return frozenset()
+
+    def unread(self) -> tuple[str, ...]:
+        return (self.line(),)
 
 
 @dataclass(frozen=True)
@@ -52,6 +68,14 @@ class UnretiredRuntimeProcess(RuntimeProcessOutcome):
             f"owner {self.process.application.describe()}; not signalled"
         )
 
+    def held_prefix(self) -> frozenset[Path]:
+        """The interpreter this process was invoked with — not what its inherited PATH
+        would have found, which on one machine listed 47 runtimes for one process."""
+        return frozenset((self.process.prefix,))
+
+    def unread(self) -> tuple[str, ...]:
+        return ()
+
 
 @dataclass(frozen=True)
 class RuntimeProcesses:
@@ -65,6 +89,15 @@ class RuntimeProcesses:
 
     def lines(self) -> tuple[str, ...]:
         return tuple(outcome.line() for outcome in self.outcomes)
+
+    def held_prefixes(self) -> frozenset[Path]:
+        """Every built runtime this snapshot found a process running."""
+        return frozenset().union(*(outcome.held_prefix() for outcome in self.outcomes),
+                                 frozenset())
+
+    def unread(self) -> tuple[str, ...]:
+        """Every process this snapshot could not read."""
+        return tuple(line for outcome in self.outcomes for line in outcome.unread())
 
     @classmethod
     def observe(cls, target: LaunchRuntime, proc: Path = Path("/proc")) -> RuntimeProcesses:

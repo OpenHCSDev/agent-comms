@@ -906,6 +906,12 @@ class UnbuiltRuntime:
     def matches(self, lock: Path, stack: RuntimeStack, core: str) -> bool:
         return False
 
+    def reclaimable(self) -> bool:
+        """A prefix with no recorded resolution is a build in flight, or one whose
+        completion was never proven. A retirement that took it would pull the floor out
+        from under a running install; leaving it costs one directory."""
+        return False
+
     def prepare(self, stack: RuntimeStack, core: str) -> None:
         stack.sync()
 
@@ -931,6 +937,11 @@ class RuntimeResolution(BaseModel):
     interpreter: RecordedInterpreterBuild | InterpreterBuild = Field(
         default_factory=InterpreterBuild
     )
+
+    def reclaimable(self) -> bool:
+        """A completed build is reproducible from the commit and lock recorded here, so
+        nothing is lost by taking it once no holder names it."""
+        return True
 
     def require_runtime(self, actual: RuntimeResolution) -> None:
         """Require recorded interpreter evidence on both sides before comparing inputs."""
