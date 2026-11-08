@@ -45,9 +45,13 @@ def test_delivery_uses_declared_overview_and_preserves_typed_rows():
     assert delivery.overview.historical_inputs == (historical,)
     assert (delivery.overview.historical_count, delivery.overview.dismissed_historical_count) == (1, 2)
     assert delivery.overview.current_scope is OwnerQueueInputDeliveryScope
-    assert delivery.pending == 'awaiting start'
-    assert DeliveryView.from_wire(FieldCodec.encode(
-        replace(overview, current_scope=UnobservedInputDeliveryScope))).pending == 'unconfirmed'
+    # Each scope's own label, asked of the scope: the wording is its to change, and the
+    # assertion is that the decoded scope is the one whose label comes back.
+    assert delivery.pending == OwnerQueueInputDeliveryScope.pending_label
+    assert DeliveryView.from_wire(FieldCodec.encode(replace(
+        overview, current_scope=UnobservedInputDeliveryScope,
+    ))).pending == UnobservedInputDeliveryScope.pending_label
+    assert OwnerQueueInputDeliveryScope.pending_label != UnobservedInputDeliveryScope.pending_label
     with pytest.raises(ValueError):
         DeliveryView.from_wire({**wire, 'unexpected': True})
 

@@ -72,13 +72,22 @@ class DeliveryView:
     def shown(self) -> bool:
         return False
 
-    @property
-    def summary(self) -> str:
-        return ""
+    def parts(self) -> tuple[str, ...]:
+        """What delivery has to say right now, as parts for a consumer to join.
+
+        Parts and not a sentence, because the separator belongs to whoever joins them.
+        notices_summary used to carry its own leading " · " so that two widgets standing
+        side by side would read as one line: the separator became a property of the text,
+        only that one arrangement worked, and the status title above it had to invent its
+        own third spelling of the same counts (BOUND-4, IDEN-5).
+        """
+        return ()
 
     @property
-    def notices_summary(self) -> str:
-        return ""
+    def summary(self) -> str:
+        """Delivery's one line, under its own label; nothing to say stays silent."""
+        parts = self.parts()
+        return " · ".join(("Delivery", *parts)) if parts else ""
 
     @property
     def history_summary(self) -> str:
@@ -125,10 +134,20 @@ class ReadDeliveryView(DeliveryView):
     def shown(self) -> bool:
         return bool(self.current or self.notices)
 
+    def parts(self) -> tuple[str, ...]:
+        """Waiting input jobs are not per-recipient message totals. A count of zero says
+        nothing, which is what the widget that used to hide it was already deciding."""
+        return (
+            *((f"{self.current} {self.pending}",) if self.current else ()),
+            *((self.notice_count,) if self.notices else ()),
+        )
+
     @property
-    def summary(self) -> str:
-        """Waiting input jobs are not per-recipient message totals."""
-        return f"Delivery · {self.current} {self.pending}"
+    def notice_count(self) -> str:
+        """Earlier notices still showing, or the ones already cleared."""
+        if self.overview.historical_count:
+            return f"{self.overview.historical_count} {self.notice_label}"
+        return f"{self.overview.dismissed_historical_count} {self.notice_label} cleared"
 
     @property
     def pending(self) -> str:
@@ -137,15 +156,6 @@ class ReadDeliveryView(DeliveryView):
     @property
     def notice_label(self) -> str:
         return self.overview.current_scope.notices_label
-
-    @property
-    def notices_summary(self) -> str:
-        count = (
-            f"{self.overview.historical_count} {self.notice_label}"
-            if self.overview.historical_count
-            else f"{self.overview.dismissed_historical_count} {self.notice_label} cleared"
-        )
-        return f"{' · ' if self.current else ''}{count}"
 
     @property
     def history_summary(self) -> str:

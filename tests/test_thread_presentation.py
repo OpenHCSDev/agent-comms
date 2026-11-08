@@ -109,8 +109,11 @@ def test_input_delivery_keeps_its_explanation_and_original_work(working):
     status = WorkingThreadPresentationStatus() if working else IdleThreadPresentationStatus()
     ordinary = status.activity_presentation("worker", "thinking", "Actual work")
     delivery = ReadDeliveryView(DeliveryOverview(
+        # No sequence= here: a bus input's key IS its sequence (input_attempt.py:254),
+        # and this call kept passing the field that fold removed, so the test had been
+        # raising TypeError in its own setup rather than checking anything.
         inputs=(UnresolvedInput(
-            sequence=None, target="worker", text="Unconfirmed input",
+            target="worker", text="An input that is not confirmed",
             input_id=AcpInputKey(InputId.mint()), status="unknown",
         ),), historical_count=0, dismissed_historical_count=0, historical_inputs=(),
         current_scope=UnobservedInputDeliveryScope,
