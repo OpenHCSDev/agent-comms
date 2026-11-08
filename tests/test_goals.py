@@ -18,6 +18,7 @@ from agent_comms.goal_actions import (
     SetGoalAction,
 )
 from agent_comms.goals import Goal, NoGoal
+from agent_comms.context_segments.wake_values import NoWakeGoalContext, WakeGoalContext
 from agent_comms.task_sources import GoalTaskScope, TurnTaskScope
 from agent_comms.registry.threads import ChosenModel, NextTurnConfiguration, Thread, NativeThread
 from agent_comms.tool_caller import ThreadCaller
@@ -95,8 +96,6 @@ def test_no_goal_set_goal_and_cleared_goal_each_answer_from_the_member(comms, tm
 
     def absent(thread: Thread) -> None:
         assert thread.goal == NoGoal()
-        from agent_comms.context_segments.wake_values import NoWakeGoalContext
-
         context = thread.wake_context(comms.goals)
         assert isinstance(context.current_goal, NoWakeGoalContext)
         assert FieldCodec.encode(context)["current_goal"] is None
@@ -108,14 +107,13 @@ def test_no_goal_set_goal_and_cleared_goal_each_answer_from_the_member(comms, tm
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Ship the release"))
     thread = stored()
     assert thread.goal.require() == thread.goal.require().require_id(goal.id) == goal
-    from agent_comms.context_segments.wake_values import WakeGoalContext
-
     context = thread.wake_context(comms.goals)
     assert context.current_goal == WakeGoalContext(
-        text="Ship the release", state=goal.state, progress=goal.progress,
+        text="Ship the release", execution=comms.goals.goal_execution(thread.name), progress=goal.progress,
     )
     assert FieldCodec.encode(context)["current_goal"] == {
-        "text": "Ship the release", "status": {"kind": "active"}, "progress": goal.progress,
+        "text": "Ship the release", "status": FieldCodec.encode(comms.goals.goal_execution(thread.name)),
+        "progress": goal.progress,
     }
     scope = thread.task_scope
     assert scope == GoalTaskScope(project=Checkout(tmp_path), goal=goal.revision_key)

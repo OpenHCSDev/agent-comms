@@ -32,7 +32,7 @@ from agent_comms.goal_scope import OneGoal
 from agent_comms.goals import NoGoal
 from agent_comms.storage.store_files import ExclusiveLock
 from agent_comms.goal_states import ActiveGoal, PausedGoal
-from agent_comms.tools import CommsGoalHistoryTool
+from agent_comms.transport.request import ToolRequest
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.registry.threads import NativeThread
 
@@ -80,7 +80,7 @@ def test_goal_history_records_transitions_replacement_clear_and_rename(tmp_path,
     assert reopened.goals.goal_history("reviewer", OneGoal(first.id)) == entries[:5]
     assert reopened.goals.goal_history("reviewer", OneGoal(second.id)) == entries[4:]
 
-    result = CommsGoalHistoryTool.invoke(
+    result = ToolRequest.member_named("comms_goal_history").invoke(
         reopened, {"goal_id": FieldCodec.encode(first.id)}, caller=ThreadCaller("worker"),
     )
     assert [row["after"]["revision"] for row in result["history"] if row["after"]] == [

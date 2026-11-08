@@ -675,7 +675,7 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread")
         return TaskScope.for_goal(self.worktree, self.goal)
 
     def wake_context(self, goals: Goals) -> WakeWorkContext:
-        return WakeWorkContext.from_thread(self, goals)
+        return goals.wake_context(self)
 
     def continuation_goal(self, original: Thread) -> GoalDeclaration:
         """The current active goal still belongs to this captured project/goal."""

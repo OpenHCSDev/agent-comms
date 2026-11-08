@@ -1,13 +1,17 @@
 """Real turn acquisition and terminal handling share the execution owner."""
 
 from agent_comms.repo import Checkout
+from agent_comms.native_arguments import GivenBinary
+from agent_comms.native_package import VerifiedNativePackage
 import os
 import signal
 import sqlite3
 import subprocess
 import sys
-from contextlib import AsyncExitStack, asynccontextmanager, closing
+from collections.abc import AsyncIterator, Callable
+from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontextmanager, closing
 from dataclasses import fields
+from functools import partial
 
 import pytest
 
@@ -15,7 +19,7 @@ from agent_comms import agent_events as events
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_failure import NativeTurnError
 from agent_comms.child_process import ChildOutcome, ProcessIdentity
-from agent_comms.comms import wire
+from agent_comms.comms import Comms, wire
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, GoalId
 from agent_comms.goal_actions import (
     ActiveGoalAction,
@@ -101,12 +105,27 @@ async def test_execution_owns_toggle_dispatch_and_unavailability(
     assert len(unavailable) == int(not expected_actions)
 
 
-@asynccontextmanager
-async def turn_on(comms, *, original_owner_input=False):
-    agent = CommsAgent(comms, auto_wake=False)
-    owner = comms.registry.require("worker")
+@pytest.fixture
+async def turn_on(
+    execution_bus: Comms, native_runtime_package: VerifiedNativePackage,
+) -> AsyncIterator[Callable[..., AbstractAsyncContextManager[OwnedTurn]]]:
+    """One real owner serves this test's turns and shuts down once at its end."""
+    agent = CommsAgent(
+        execution_bus, GivenBinary(str(native_runtime_package.cli)), auto_wake=False,
+    )
     session = AcpSessionId("goal-execution-session")
-    await agent.sessions.bind_owned(owner, session)
+    try:
+        await agent.sessions.bind_owned(execution_bus.registry.require("worker"), session)
+        yield partial(acquired_turn, agent, session)
+    finally:
+        await agent.shutdown()
+
+
+@asynccontextmanager
+async def acquired_turn(
+    agent: CommsAgent, session: AcpSessionId, comms: Comms, *, original_owner_input: bool = False,
+) -> AsyncIterator[OwnedTurn]:
+    owner = comms.registry.require("worker")
     turn = OwnedTurn(
         agent.turns, session, owner.name, "Continue original work",
         original_owner_input=original_owner_input, original_goal_id=owner.goal.require().id,
@@ -123,7 +142,7 @@ def failure_count(comms):
 
 
 @pytest.mark.asyncio
-async def test_failed_turn_writes_ledger_once_and_reads_failed_execution(execution_bus):
+async def test_failed_turn_writes_ledger_once_and_reads_failed_execution(execution_bus, turn_on):
     comms = execution_bus
     goal = comms.registry.require("worker").goal.require()
     async with turn_on(comms) as turn:
@@ -146,7 +165,7 @@ async def test_failed_turn_writes_ledger_once_and_reads_failed_execution(executi
 
 @pytest.mark.asyncio
 async def test_goal_history_shows_the_ledgers_failed_attempt_beside_active_revisions(
-    execution_bus,
+    execution_bus, turn_on,
 ):
     comms = execution_bus
     async with turn_on(comms) as turn:
@@ -162,7 +181,7 @@ async def test_goal_history_shows_the_ledgers_failed_attempt_beside_active_revis
 
 
 @pytest.mark.asyncio
-async def test_provider_retry_during_live_turn_writes_no_goal_failure(execution_bus):
+async def test_provider_retry_during_live_turn_writes_no_goal_failure(execution_bus, turn_on):
     comms = execution_bus
     goal = comms.registry.require("worker").goal.require()
     async with turn_on(comms) as turn:
@@ -179,7 +198,7 @@ async def test_provider_retry_during_live_turn_writes_no_goal_failure(execution_
 
 
 @pytest.mark.asyncio
-async def test_owner_stop_beats_backend_failure_and_next_turn_runs_without_retry(execution_bus):
+async def test_owner_stop_beats_backend_failure_and_next_turn_runs_without_retry(execution_bus, turn_on):
     comms = execution_bus
     async with turn_on(comms) as turn:
         await turn.progress.done(events.Done("dying backend", False))
@@ -198,7 +217,7 @@ async def test_owner_stop_beats_backend_failure_and_next_turn_runs_without_retry
 
 
 @pytest.mark.asyncio
-async def test_turn_failing_under_install_hold_is_stopped_not_blocked(execution_bus):
+async def test_turn_failing_under_install_hold_is_stopped_not_blocked(execution_bus, turn_on):
     """An install holds maintenance before it signals owners; the hold is the stop."""
     comms = execution_bus
     async with turn_on(comms) as turn:
@@ -229,7 +248,7 @@ def test_only_a_signal_ends_the_native_child_as_stopped():
 
 
 @pytest.mark.asyncio
-async def test_turn_whose_child_was_signaled_is_stopped_not_blocked(execution_bus):
+async def test_turn_whose_child_was_signaled_is_stopped_not_blocked(execution_bus, turn_on):
     """A group kill reaches the child before the owner's stop callback; the goal stays runnable."""
     comms = execution_bus
     async with turn_on(comms) as turn:
@@ -240,7 +259,7 @@ async def test_turn_whose_child_was_signaled_is_stopped_not_blocked(execution_bu
 
 
 @pytest.mark.asyncio
-async def test_verified_productive_turn_recovers_blocked_generation(execution_bus):
+async def test_verified_productive_turn_recovers_blocked_generation(execution_bus, turn_on):
     comms = execution_bus
     async with turn_on(comms) as failed:
         await failed.progress.done(events.Done("backend failed", False))
@@ -254,7 +273,7 @@ async def test_verified_productive_turn_recovers_blocked_generation(execution_bu
 
 
 @pytest.mark.asyncio
-async def test_turn_refused_by_coordination_is_resumable_not_blocked(execution_bus):
+async def test_turn_refused_by_coordination_is_resumable_not_blocked(execution_bus, turn_on):
     """A bus refusal inside the turn's own drain says nothing about the backend; the goal resumes.
 
     The copied bus is not a private root, so the turn's drain (prepare_native) is refused
