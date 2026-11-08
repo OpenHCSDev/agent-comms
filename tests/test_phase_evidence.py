@@ -36,7 +36,14 @@ from agent_comms.phase_evidence import (
 from nominal_refactor_advisor.audit.findings import GodFunction
 
 from agent_comms.nominal_census import NominalCensus
-from agent_comms.plan_phases import BusDeletionPhase, FLAG, ExternalBoundariesPhase, ModuleMapPhase, PlanPhase, RostersPhase
+from agent_comms.planning.plan_phases import (
+    BusDeletionPhase,
+    FLAG,
+    ExternalBoundariesPhase,
+    ModuleMapPhase,
+    PlanPhase,
+    RostersPhase,
+)
 from agent_comms.projects.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.work_branches import WorkBranches
@@ -118,7 +125,7 @@ def test_roster_evidence_keeps_external_abi_and_each_remaining_internal_registry
     source = Path(__file__).parents[1] / "src/agent_comms"
     reading = main_of(tmp_path, {
         "src/phase_evidence.py": (source / "phase_evidence.py").read_text(),
-        "src/plan_phases.py": (source / "plan_phases.py").read_text(),
+        "src/planning/plan_phases.py": (source / "planning" / "plan_phases.py").read_text(),
         "src/producer.py": "PI_0_85_1_EVENT_KINDS = frozenset({'alpha', 'beta'})\n"
                            "class Runtime:\n    event_kinds = PI_0_85_1_EVENT_KINDS\n",
         "src/unrelated.py": "class OtherOwner:\n    members = {}\n"
@@ -424,9 +431,9 @@ def test_roster_expression_answers_preserve_admitted_syntax(
 
 def test_roster_relation_is_exempt_only_below_the_family_by_qualified_name(tmp_path):
     reading = main_of(tmp_path, {
-        "src/agent_comms/plan_phases.py": "class PlanPhase:\n    pass\n",
+        "src/agent_comms/planning/plan_phases.py": "class PlanPhase:\n    pass\n",
         "src/decoy.py": "class PlanPhase:\n    pass\n",
-        "src/phases.py": "from agent_comms.plan_phases import PlanPhase\n"
+        "src/phases.py": "from agent_comms.planning.plan_phases import PlanPhase\n"
                          "from decoy import PlanPhase as Spoofed\n"
                          "class A:\n    pass\nclass B:\n    pass\n"
                          "class Real(PlanPhase):\n    after = (A, B)\n"

@@ -64,7 +64,7 @@ from ...order_story import (
     TeamStory,
 )
 from ...order_work import OrderWork
-from ...plan_phases import OrderPhase
+from ...planning.plan_phases import OrderPhase
 from ...planning.delivery_evidence import TodoProblems
 from ...planning.order_words import (
     DeliveryReport,

@@ -70,7 +70,7 @@ from ..owner_requests import (
     OwnerRequestId,
     RequestDirective,
 )
-from ..plan_phases import PlanPhase
+from ..planning.plan_phases import PlanPhase
 from ..plan_reading import (
     PlanReading,
     PlanReadings,

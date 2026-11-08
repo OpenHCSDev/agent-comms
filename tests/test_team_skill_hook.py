@@ -39,7 +39,7 @@ from agent_comms.team.rule_file import RuleFile
 from agent_comms.team.standing import PlanIdle
 from agent_comms.planning.goal_actions import CreateProblemGoalAction
 from team_heartbeat_fixture import capture_frame
-from agent_comms.plan_phases import BusWriterPhase
+from agent_comms.planning.plan_phases import BusWriterPhase
 from agent_comms.repository_name import RepositoryName
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import FieldCodec, OrderId

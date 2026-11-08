@@ -21,7 +21,10 @@ from agent_comms.nominal.field_codec import (
     projected,
 )
 from agent_comms.order_story import OrderStory
-from agent_comms.plan_phases import Plan, PlanPhase
+from .planning.plan_phases import (
+    Plan,
+    PlanPhase,
+)
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.tool_result import ToolResult
