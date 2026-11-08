@@ -3276,7 +3276,7 @@ class Assignment(TodoHolder):
 
     def record_review(self, goals: Goals, current: Todo,
                       operation: RecordOrderHeadVerdict) -> None:
-        from .goal_actions import GoalPrecondition, HeadReviewedOrderGoalAction
+        from ..goal_actions import GoalPrecondition, HeadReviewedOrderGoalAction
 
         goals.update_goal(self.owner, HeadReviewedOrderGoalAction(
             expect=GoalPrecondition(goal_id=OneGoal(self.generation)),
