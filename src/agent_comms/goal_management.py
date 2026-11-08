@@ -26,7 +26,7 @@ from .context_segments.wake_values import (
 )
 from .goal_mutation import (
     GoalFailureProjection, GoalFork, GoalGenerationProjection, GoalReadyGrantSource,
-    GoalStateProjection,
+    GoalStateProjection, GoalWaitProjection,
 )
 from .goal_states import PauseSource
 from .goal_actions import (
@@ -40,6 +40,7 @@ from .goal_actions import (
 )
 from .goal_attempts import GoalAttemptStore
 from .goal_ledger import FailedTurnEvidence, Generation
+from .goal_wait_target import GoalWaitTarget
 from .goal_permit_source import GoalStoreSource
 from .errors import UnresolvedAttemptError
 from .goal_history import GoalHistoryEntry, RecordedGoalHistory
@@ -60,7 +61,7 @@ from .turn_lease import TurnDeclaration
 from .goal_presentation import (
     AttemptFailedExecution, AttemptUnresolvedExecution, CompletedExecution, GoalExecution,
     GoalPublicationSnapshot, GoalSnapshot, IdleGoalExecution, PausedExecution,
-    RetryableBlockExecution, RunnableExecution,
+    RetryableBlockExecution, RunnableExecution, StandbyExecution,
 )
 from .goals import Goal, GoalDeclaration
 from .input_attempt import (
@@ -80,7 +81,7 @@ _LOG = logging.getLogger(__name__)
 class GoalExecutionSource(
     GoalStateProjection[GoalExecution, PauseSource],
     GoalFailureProjection[GoalExecution, FailedTurnEvidence],
-    GoalGenerationProjection[GoalExecution],
+    GoalGenerationProjection[GoalExecution], GoalWaitProjection[GoalExecution],
 ):
     """One read's original owners; never persisted or used as launch authority."""
 
@@ -102,6 +103,20 @@ class GoalExecutionSource(
 
     def active(self) -> GoalExecution:
         return self.wait.execution(self)
+
+    def generation_execution(self) -> GoalExecution:
+        return self.generation.lifecycle.execution(self)
+
+    def standby_execution(self) -> GoalExecution:
+        targets = tuple(
+            GoalWaitTarget(target.incarnation.renamed(self.snapshot.canonical_name(target.incarnation.name)))
+            for target in self.wait.targets
+        )
+        inactive = tuple(
+            target for target in targets
+            if not self.agents.is_working(target.incarnation, self.snapshot)
+        )
+        return StandbyExecution(self.goal.id, targets, inactive)
 
     def paused(self, source: PauseSource) -> GoalExecution:
         return PausedExecution(self.goal.id, source)

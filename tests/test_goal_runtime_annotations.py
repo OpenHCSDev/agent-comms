@@ -17,7 +17,8 @@ from agent_comms.goal_failure_observation import NoFailedTurnEvidence
 from agent_comms.goal_turn_permit import GoalTurnPermit
 from agent_comms.goal_actions import GoalAction, SetGoalAction, StandbyGoalAction
 from agent_comms.goal_mutation import GoalSnapshotRead
-from agent_comms.goal_wait_target import GoalWaitSenderRead, GoalWaitTarget
+from agent_comms.goal_wait_target import GoalWaitTarget
+from agent_comms.nominal.field_codec import ThreadLookup
 from agent_comms.goal_records import GoalRecords
 from agent_comms.goal_states import GoalState
 from agent_comms.goals import GoalDeclaration, GoalMentionBinding, GoalOrder, GoalUnavailable
@@ -163,4 +164,4 @@ def test_goal_client_reads_only_the_original_goal(action: type[GoalAction]) -> N
 
 
 def test_dependency_reply_reads_its_original_sender_identity() -> None:
-    assert get_type_hints(GoalWaitTarget.sent)["original"] is GoalWaitSenderRead
+    assert get_type_hints(GoalWaitTarget.sent)["sender_lookup"] is ThreadLookup
