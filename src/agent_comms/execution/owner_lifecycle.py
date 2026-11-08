@@ -409,7 +409,7 @@ class OwnerLifecycle:
         agent_args.apply(env)
         host = RootRuntimeStore.at(self.root).acquire_host(
             launch_runtime,
-            (str(launch_runtime.interpreter), "-m", "agent_comms.worker",
+            (str(launch_runtime.interpreter), "-m", "agent_comms.execution.worker",
              *LaunchRoot.from_path(self.launch_authority.child_root).arguments()),
             environment=launch_runtime.environment(ThreadLaunch.strip(dict(os.environ))),
             cwd=str(self.root),

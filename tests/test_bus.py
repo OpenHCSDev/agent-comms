@@ -185,7 +185,7 @@ print(json.dumps(dict(
 )))
 """
 STARTUPS = (
-    "table-first", "agent_comms.task_attachments.team_pings", "agent_comms.worker",
+    "table-first", "agent_comms.task_attachments.team_pings", "agent_comms.execution.worker",
     "agent_comms.cli_verbs.reconcile_stores",
 )
 
