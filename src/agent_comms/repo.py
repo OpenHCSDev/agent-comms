@@ -264,7 +264,7 @@ class Repo(GitLaunch, BaseModel, WireValue):
                                        for entry in entries.split("\0") if entry)}
 
     @classmethod
-    def blobs(cls, checkout: Path | str, *objects: str, timeout: float = 60) -> tuple[bytes, ...]:
+    def blobs(cls, checkout: Path | str, *objects: str, timeout: float = GitLaunch.command_timeout) -> tuple[bytes, ...]:
         """Decode required contents once; an unavailable blob is never an absent path."""
         if not objects:
             return ()
@@ -284,7 +284,7 @@ class Repo(GitLaunch, BaseModel, WireValue):
         return tuple(contents)
 
     @classmethod
-    def git_bytes(cls, checkout: Path | str, *args: str, timeout: float = 60,
+    def git_bytes(cls, checkout: Path | str, *args: str, timeout: float = GitLaunch.command_timeout,
                   input: str = "") -> bytes:
         """Git's exact output, for answers sized in bytes (``cat-file --batch``); every
         failure a GitCommandError."""
@@ -299,12 +299,36 @@ class Repo(GitLaunch, BaseModel, WireValue):
 
     @classmethod
     def git_pipeline(cls, checkout: Path | str, producer: tuple[str, ...], consumer: tuple[str, ...],
-                     *, timeout: float = 60, input: str = '') -> str:
+                     *, timeout: float = GitLaunch.command_timeout, input: str = '') -> str:
         return cls._output(checkout, cls._pipe(checkout, producer, consumer,
                            timeout=timeout, input=input.encode())).decode()
 
     @classmethod
-    def git(cls, checkout: Path | str, *args: str, timeout: float = 60, input: str = "") -> str:
+    def acquire_pipeline(
+        cls, checkout: Path | str, producer: tuple[str, ...], consumer: tuple[str, ...],
+        *, timeout: float = GitLaunch.command_timeout, input: str = '',
+    ) -> str:
+        """Prepare exactly the requested content under the joined acquisition lifetime.
+
+        GitLaunch may ask its promisor for missing objects here. Repo's ordinary
+        commands still pass the clone's strict read options after preparation.
+        """
+        with cls.acquiring():
+            return cls._output(checkout, GitLaunch._pipe(
+                checkout, producer, consumer, timeout=timeout, input=input.encode(),
+            )).decode()
+
+    @classmethod
+    def acquire_git(cls, checkout: Path | str, *args: str, timeout: float = GitLaunch.command_timeout,
+                    input: str = "") -> str:
+        """Acquire a requested source answer before validation, never during observation."""
+        with cls.acquiring():
+            return cls._output(checkout, GitLaunch._run(
+                checkout, *args, timeout=timeout, input=input.encode(),
+            )).decode()
+
+    @classmethod
+    def git(cls, checkout: Path | str, *args: str, timeout: float = GitLaunch.command_timeout, input: str = "") -> str:
         """Git's output as text; every failure a GitCommandError."""
         return cls.git_bytes(checkout, *args, timeout=timeout, input=input).decode()
 

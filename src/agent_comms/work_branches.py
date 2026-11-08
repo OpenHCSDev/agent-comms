@@ -324,7 +324,7 @@ class WorkBranches:
     reads: RepositoryReads = field(default_factory=RepositoryReads, compare=False, repr=False,
                                    kw_only=True)
     main: ClassVar[str] = "main"
-    timeout: ClassVar[float] = 60.0
+    timeout: ClassVar[float] = Repo.command_timeout
 
     _PULLS: ClassVar[str] = """
 query($owner: String!, $name: String!, $after: String) {
@@ -499,19 +499,19 @@ query($owner: String!, $name: String!, $after: String) {
         return tuple(commit.sha for commit in self.history.commits((head,), *excluded)
                      if len(commit.parents) < 2)
 
-    def whole_patch_ids(self, base: str, head: str) -> frozenset[str]:
+    def prepare_whole_patch_ids(self, base: str, head: str) -> frozenset[str]:
         """One stable fingerprint of the entire immutable diff, including multi-commit squash."""
-        output = Repo.git_pipeline(self.checkout,
+        output = Repo.acquire_pipeline(self.checkout,
             ('diff', '--full-index', '--no-color', '--no-renames', '--no-ext-diff',
              '--no-textconv', base, head),
             ('patch-id', '--stable'), timeout=self.timeout, input='')
         return frozenset(line.split()[0] for line in output.splitlines())
 
-    def patch_ids(self, commits: tuple[str, ...]) -> dict[str, frozenset[str]]:
+    def prepare_patch_ids(self, commits: tuple[str, ...]) -> dict[str, frozenset[str]]:
         """Decode Git's patch fingerprints once; an empty commit has an empty set of patches."""
         patches: dict[str, frozenset[str]] = {commit: frozenset() for commit in commits}
         if commits:
-            fingerprints = Repo.git_pipeline(self.checkout,
+            fingerprints = Repo.acquire_pipeline(self.checkout,
                 ('diff-tree', '--stdin', '--root', '-r', '-p', '--full-index', '--no-color',
                  '--no-renames', '--no-ext-diff', '--no-textconv'),
                 ('patch-id', '--stable'), timeout=self.timeout,
