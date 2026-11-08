@@ -21,6 +21,7 @@ from agent_comms.child_process import DetachedChildStdio, ObservedProcess, Spawn
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms_project import AgentCommsProject, ClientTypeErrors
 from nominal_refactor_advisor import audit
+from nominal_refactor_advisor.json_reports import json_report_object
 import fixture_git
 from module_layers import StackClient
 from process_tree_fixture import TREE, identities, ready
@@ -85,7 +86,7 @@ class Checkout:
         """The comparison's exit status and report, taking only the named measures'
         measurements. The command line itself is proven by the tests that launch it."""
         result = audit.gate.compare(AgentCommsProject(self.path), base, head, self.root, 2, measured)
-        return int(result.failed), json.loads(json.dumps(result.report()))
+        return int(result.failed), json.loads(json.dumps(json_report_object(result)))
 
 
 @pytest.fixture(params=["src/agent_comms", "src/toad"])
