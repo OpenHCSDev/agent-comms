@@ -9,6 +9,8 @@ from contextlib import chdir, nullcontext
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
+from functools import partial
+from cli_command import team as team_command
 
 import pytest
 
@@ -1197,12 +1199,7 @@ def test_acceptance_over_the_growth_limit_needs_a_reason_naming_each_growing_fil
     common = ["judge", "ok", "--as", "colleague", "--repo", request.repo.to_wire(),
               "--pr", str(request.pr), "--head", head, "--why", ACCEPTED.text]
 
-    def cli(*arguments):
-        return subprocess.run(
-            [sys.executable, str(Path(sys.executable).with_name("agent-comms-team")),
-             "--root", str(comms.root), *arguments],
-            cwd=comms.root, capture_output=True, text=True, timeout=30,
-        )
+    cli = partial(team_command, "--root", str(comms.root))
 
     refused = cli(*common)
     assert refused.returncode == 1, refused.stdout + refused.stderr

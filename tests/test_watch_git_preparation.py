@@ -28,6 +28,7 @@ from agent_comms.native_build_inputs import (
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.comms import Comms
 from agent_comms.message_bus import Watch
+from agent_comms.head_review import OpenPullRequestHead
 from agent_comms.service_passes import ServicePassStore
 from git_shutdown_fixture import HeldGitHTTP, held_commit
 from agent_comms.nominal_census import NominalCensus
@@ -335,6 +336,8 @@ def test_promised_content_is_unreadable_not_absent_and_never_lazily_acquired(
     (directory / "promised.py").write_text("value = 1\n")
     (directory / "deleted.py").write_text("deleted = 1\n")
     base = source.publish_change("Before content changes", "src")
+    review_base = "review-base"
+    source.git(source.checkout, "push", "origin", f"{base}:refs/heads/{review_base}")
     (directory / "promised.py").write_text("value = 1\nother = 2\n")
     (directory / "added.py").write_text("added = 1\n")
     (directory / "deleted.py").unlink()
@@ -405,6 +408,15 @@ def test_promised_content_is_unreadable_not_absent_and_never_lazily_acquired(
         "src/added.py": 1, "src/deleted.py": -1, "src/promised.py": 1,
     }
     assert case.snapshot() == prepared
+    review_case = GitPreparation.create(source, tmp_path / "review-promisor", "--no-checkout", "--filter=blob:none")
+    for blob in objects:
+        assert GitLaunch._run(review_case.repository.checkout, "--no-lazy-fetch", "cat-file", "-e", blob).returncode != 0
+    review_reader = WorkBranches(review_case.repository.checkout)
+    review_reader.prepare_pull_request(review_base, head)
+    request = OpenPullRequestHead.from_forge(source.github, 44, f"{head} {review_base} false {OpenPullRequestHead.forge_state}")
+    expected_reader = WorkBranches(source.checkout)
+    expected_reader.prepare_pull_request(review_base, head)
+    assert request.change_identity(review_reader, review_base) == request.change_identity(expected_reader, review_base)
 
 
 @pytest.mark.parametrize("method", ("GET", "POST"))
