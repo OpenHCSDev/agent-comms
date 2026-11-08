@@ -21,7 +21,9 @@ from multiprocessing.connection import Connection
 from yarl import URL
 
 from .transport.mcp import CancelledMessage, JsonRpcId, StreamedLine, ToolsCallMessage, ToolsCallReply
-from .connector_profile import OBSERVE_PATH, HttpsMcpEndpoint, UiConnectionProfile, UiCredential
+from .connector_profile import (
+    OBSERVE_PATH, EndpointRoute, HttpsMcpEndpoint, UiConnectionProfile, UiCredential,
+)
 from .transport.progress import WireExportCancelled
 from .nominal.field_codec import FieldCodec, RpcCallId
 from .transport.request import ConnectionDropped, CoreAccess, ObservedRequest, RequestPoster, ToolRequest
@@ -143,11 +145,12 @@ class ConnectorObservationPeer(ObservationPeer):
 
 
 class ConnectorClient(ObservationSource):
-    """Reaching one connector: its endpoint, the credential it accepts, and the TLS trust
-    both the calls and the observation use."""
+    """Reaching one connector: its endpoint, the credential it accepts, the route this machine
+    reaches it by, and the TLS trust both the calls and the observation use."""
 
     endpoint: HttpsMcpEndpoint
     credential: UiCredential
+    route: EndpointRoute
 
     @cached_property
     def tls(self) -> ssl.SSLContext:
