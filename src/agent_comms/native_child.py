@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, NoReturn
 
 from .child_process import AttachedChild, ChildOutcome, join_retirement
+from .native_prompt_send import send_fenced_prompt
 from .nominal.declared_family import DeclaredFamily
 from .launch_runtime import INHERITED_ENVIRONMENT
 from .native_attestation import NativeAttestation, PendingAttestation
@@ -166,7 +167,7 @@ class PiChild:
         *, measurements: PublicationMeasurements,
     ) -> None:
         self.reader.track(command)
-        await self.proc.send_fenced(self.reader.command_bytes(command), boundary, measurements=measurements)
+        await send_fenced_prompt(self.proc.stdin, self.reader.command_bytes(command), boundary, measurements=measurements)
 
     async def reply_ui(self, response: ExtensionUiResponse) -> None:
         self.send(response)
