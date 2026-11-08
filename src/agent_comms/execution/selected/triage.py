@@ -1,20 +1,29 @@
-"""One bounded decoded decision owns its claim settlement and continuation."""
-
 from __future__ import annotations
 
 import json
-from collections.abc import Awaitable, Callable
 from abc import abstractmethod
+from collections.abc import (
+    Awaitable,
+    Callable,
+)
 from dataclasses import dataclass
 from functools import partial
-from typing import TYPE_CHECKING, ClassVar, Literal
+from typing import (
+    ClassVar,
+    Literal,
+    TYPE_CHECKING,
+)
 
-from .assignment_states import FailedAssignment, IgnoredAssignment, TriagePendingAssignment
-from .coordination.tables.assignments import WakeAssignment
-from .coordination.tables.executions import WireOrigin
-from .coordination.coordinator import Coordination
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import (
+from agent_comms.assignment_states import (
+    FailedAssignment,
+    IgnoredAssignment,
+    TriagePendingAssignment,
+)
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.tables.assignments import WakeAssignment
+from agent_comms.coordination.tables.executions import WireOrigin
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     InputId,
     JsonShapeFamily,
@@ -22,23 +31,22 @@ from .nominal.field_codec import (
     MalformedRecord,
     TextRepresentation,
 )
-from .selected_result import CoordinatedTurn
-from .storage.typed_table import TextStorage
+from agent_comms.execution.selected.result import CoordinatedTurn
+from agent_comms.storage.typed_table import TextStorage
 
 if TYPE_CHECKING:
     from sqlite3 import Connection
 
-    from .assignment_states import AssignmentState
-    from .coordinated_runtime import SelectedExecution
-    from .historical_native_inputs import HistoricalNativeInput
-    from .native_input_proof import NativeContextProof
-    from .native_input_record import TriageNativeExecution
-    from .native_runtime_input import NativeRuntimeInput
-    from .private_send_claim import PrivateSendClaim
-    from .private_send_stage import TriageNativeSend
-    from .selected_participant import SelectedParticipant
-    from .selected_result import CoordinatedTurn
-    from .selected_session import SelectedSession
+    from agent_comms.assignment_states import AssignmentState
+    from agent_comms.coordinated_runtime import SelectedExecution
+    from agent_comms.execution.selected.participant import SelectedParticipant
+    from agent_comms.execution.selected.session import SelectedSession
+    from agent_comms.historical_native_inputs import HistoricalNativeInput
+    from agent_comms.native_input_proof import NativeContextProof
+    from agent_comms.native_input_record import TriageNativeExecution
+    from agent_comms.native_runtime_input import NativeRuntimeInput
+    from agent_comms.private_send_claim import PrivateSendClaim
+    from agent_comms.private_send_stage import TriageNativeSend
 
 
 class InvalidTriageDecision(ValueError):
@@ -225,7 +233,10 @@ class RejectedTriageOutcome(SelectedTriageOutcome):
         self, participant: SelectedParticipant, session: SelectedSession, input_id: InputId,
         execution: SelectedExecution, settled: tuple[WakeAssignment, ...],
     ) -> CoordinatedTurn | None:
-        from .selected_result import CoordinatedTurn, publish_native_failure
+        from agent_comms.execution.selected.result import (
+            CoordinatedTurn,
+            publish_native_failure,
+        )
 
         sent = await Coordination.run_worker(partial(
             publish_native_failure, participant, input_id,
@@ -270,7 +281,7 @@ class DecidedTriageRecord(TriageDecisionRecord):
         return RecordedTriageText.encode(self.decision)
 
     def historical_proof(self, record: NativeRuntimeInput, lifecycle: AssignmentState, execution: TriageNativeExecution, **source) -> HistoricalNativeInput:
-        from .historical_native_inputs import TriageHistoricalNativeInput
+        from ...historical_native_inputs import TriageHistoricalNativeInput
 
         return TriageHistoricalNativeInput(execution=execution, decision=self.decision, **source)
 

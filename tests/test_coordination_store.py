@@ -74,7 +74,7 @@ from agent_comms.owner_fence import OwnerFence, prepare_fence_token
 from agent_comms.reason_codes import GivenReasonCode, NoDetail
 from agent_comms.recovery_states import FailedRecovery
 from agent_comms.response_acknowledgement import canonical_publication_key
-from agent_comms.selected_source_batch import SelectedSource
+from agent_comms.execution.selected.source_batch import SelectedSource
 from agent_comms.execution.turn_failure import ProviderRetryExhausted
 from agent_comms.storage.typed_table import SQLiteForeignKeys
 from agent_comms.wake_policy import (
@@ -100,7 +100,7 @@ def wire_source(db: StandaloneCoordination, assignment_id: AssignmentId, origina
     from agent_comms.audience_manifest import freeze_audience
     from agent_comms.frozen_recipient import FrozenRecipient
     from agent_comms.bus import PrivateRecord
-    from agent_comms.selected_source_batch import SelectedSource
+    from agent_comms.execution.selected.source_batch import SelectedSource
     from agent_comms.wake_policy import WakeDecision
 
     audience = freeze_audience(original, (FrozenRecipient(SENDER_LOOKUP, "Owner"),),

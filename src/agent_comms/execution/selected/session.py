@@ -1,28 +1,35 @@
-"""Selected sources own identity checks, not which tools a turn carries."""
-
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import (
+    dataclass,
+    field,
+)
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .coordination.errors import IdentityConflict
-from .coordination.coordinator import Coordination
-from agent_comms.native_arguments import NativeArguments, NativeInputProofArgument
-from agent_comms.native_session_files import NativeSessionFiles
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.fresh_private_session import create_fresh_private_session
-from agent_comms.participant_identity import ParticipantIdentity
-from .native_session_reopen import NativeSessionIdentity
-from .native_evidence_read import session_location
+from agent_comms.launch_runtime import (
+    RestartEnvironment,
+    ThreadLaunch,
+)
+from agent_comms.native_arguments import (
+    NativeArguments,
+    NativeInputProofArgument,
+)
+from agent_comms.native_evidence_read import session_location
 from agent_comms.native_failures import NativePiUnavailable
-from .nominal.field_codec import boundary_decoder
-from .storage.private_path import PrivateFileRole
-from .launch_runtime import RestartEnvironment, ThreadLaunch
-from .pi_vocabulary import ThinkingChoice
+from agent_comms.native_session_files import NativeSessionFiles
+from agent_comms.native_session_reopen import NativeSessionIdentity
+from agent_comms.nominal.field_codec import boundary_decoder
+from agent_comms.participant_identity import ParticipantIdentity
+from agent_comms.pi_vocabulary import ThinkingChoice
+from agent_comms.storage.private_path import PrivateFileRole
 
 if TYPE_CHECKING:
-    from .selected_participant import SelectedParticipant
+    from agent_comms.execution.selected.participant import SelectedParticipant
 
 
 @dataclass(frozen=True)
@@ -44,7 +51,7 @@ class SelectedSession:
         return None
 
     def attestation(self):
-        from .native_attestation import PendingAttestation
+        from ...native_attestation import PendingAttestation
 
         return PendingAttestation()
 
@@ -143,12 +150,12 @@ class SavedSelectedSession(SelectedSession):
         return self.identity.session_file
 
     def attestation(self):
-        from .native_attestation import PendingAttestation
+        from ...native_attestation import PendingAttestation
 
         return PendingAttestation(self.identity)
 
     def tracked_attestation(self, current):
-        from .native_attestation import KnownSessionAttestation
+        from ...native_attestation import KnownSessionAttestation
 
         return KnownSessionAttestation(self.identity)
 

@@ -34,10 +34,16 @@ from .native_failures import NativePiUnavailable
 from agent_comms.native_session_files import NativeSessionFiles
 from .pi_native_backend import PersistentPiSession
 from .selected_actions import CodingSelectedAction, SelectedAction
-from .selected_participant import NoLivePublication, SelectedParticipant
-from .selected_result import CoordinatedTurn
-from .selected_session import SelectedSession
-from .selected_turn import SelectedAttempt, SelectedConsideration
+from agent_comms.execution.selected.participant import (
+    NoLivePublication,
+    SelectedParticipant,
+)
+from agent_comms.execution.selected.result import CoordinatedTurn
+from agent_comms.execution.selected.session import SelectedSession
+from agent_comms.execution.selected.turn import (
+    SelectedAttempt,
+    SelectedConsideration,
+)
 from .selected_write_authority import NoSelectedWritePlans, SelectedWriteAuthority
 from .execution.turn_failure import RetryableProviderFailure
 

@@ -40,7 +40,7 @@ from .native_session_reopen import NativeSessionIdentity
 from .native_transcript import NativeTranscript
 from .pi_commands import Compact, NativeQuery
 from .rule_deal import SystemPromptDelivery
-from .selected_session import SavedSelectedSession
+from agent_comms.execution.selected.session import SavedSelectedSession
 from .session_revision import (
     SessionObservation,
     SessionRevision,

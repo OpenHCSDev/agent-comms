@@ -34,8 +34,8 @@ from agent_comms.coordination.tables.attempts import ReplayFact
 from agent_comms.coordination.tables.executions import CurrentExecutions, WireOrigin
 from agent_comms.cursor_publication import CursorDelivery
 from agent_comms.native_input_record import FullNativeExecution, NumberNativeColumn, TextNativeColumn
-from agent_comms.selected_participant import SelectedParticipant
-from agent_comms.selected_turn import SelectedAttempt
+from agent_comms.execution.selected.participant import SelectedParticipant
+from agent_comms.execution.selected.turn import SelectedAttempt
 from agent_comms.launch_runtime import ThreadLaunch
 from contextlib import closing
 from test_coordinated_runtime import _root

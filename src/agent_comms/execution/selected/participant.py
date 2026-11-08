@@ -1,56 +1,82 @@
-"""A selected participant holds one exact live lease and its captured source batch."""
-
 from __future__ import annotations
 
-from agent_comms.notification_assignment import NotificationSelection
 from collections.abc import Generator
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
+from dataclasses import (
+    dataclass,
+    field,
+)
 from functools import partial
 
-from agent_comms.reason_codes import GivenReasonCode
-from metaclass_registry.mro_dispatch import (
-    MroDispatch,
-    handles,
+from agent_comms.agent_events import CompactionEvent
+from agent_comms.cohort_schema import CohortTable
+from agent_comms.comms import Comms
+from agent_comms.context_store import (
+    ContextPrior,
+    UNREAD_CONTEXT,
 )
-
-from .execution.turn_phase import NativePhaseChanged
-from .agent_events import CompactionEvent
-from .cohort_schema import CohortTable
-from .comms import Comms
-from agent_comms.native_runtime_input import NativeRuntimeTable
-from .context_store import UNREAD_CONTEXT, ContextPrior
-from .coordination.cohort import _claim_record, pending_sealed_assignments
-from .coordination.errors import IdentityConflict, StaleFence
-from .coordination.response import LiveResponseOwner, ResponseTable
-from .coordination.snapshot import RecoverySnapshot
-from .coordination.tables.assignments import WakeAssignment
-from .coordination.tables.executions import WireOrigin
-from .coordination.coordinator import Coordination
-from .cursor_publication import CursorDelivery
-from .errors import RelationViolationError
-from .nominal.field_codec import TurnId, RootId, ThreadLookup
-from .messaging.message_bus import MessageBus
-from .message_reference import MessageReference
-from .native_arguments import SelectedModel
-from .native_attestation import ObservedAttestation
-from .native_input_owner import ParticipantOwner, RegistryOwner
-from .notification_assignment import NotificationAssignment
-from agent_comms.message_notification import NotificationWindow
-from agent_comms.notification_assignment import NotificationAssignmentRead
-from .participant_store import ParticipantSnapshot
-from .pi_events import TurnContextObserved
-from .notification_evidence import OwnerOutcomes
-from .message_notification import MessageNotification, SentMessageOutcome
-from .publisher import ParticipantPublisher
-from .selected_source_batch import SelectedSource, SelectedSourceBatch
-from .execution.turn_phase import (
+from agent_comms.coordination.cohort import (
+    _claim_record,
+    pending_sealed_assignments,
+)
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.errors import (
+    IdentityConflict,
+    StaleFence,
+)
+from agent_comms.coordination.response import (
+    LiveResponseOwner,
+    ResponseTable,
+)
+from agent_comms.coordination.snapshot import RecoverySnapshot
+from agent_comms.coordination.tables.assignments import WakeAssignment
+from agent_comms.coordination.tables.executions import WireOrigin
+from agent_comms.cursor_publication import CursorDelivery
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.turn_goal_permission import (
+    OwnerGoalPermission,
+    TurnGoalPermission,
+)
+from agent_comms.execution.turn_phase import (
+    NativePhaseChanged,
     PreparingPhase,
     TurnPhase,
 )
-from .execution.turn_goal_permission import (
-    OwnerGoalPermission,
-    TurnGoalPermission,
+from agent_comms.message_notification import (
+    MessageNotification,
+    SentMessageOutcome,
+)
+from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_bus import MessageBus
+from agent_comms.native_arguments import SelectedModel
+from agent_comms.native_attestation import ObservedAttestation
+from agent_comms.native_input_owner import (
+    ParticipantOwner,
+    RegistryOwner,
+)
+from agent_comms.native_runtime_input import NativeRuntimeTable
+from agent_comms.nominal.field_codec import (
+    RootId,
+    ThreadLookup,
+    TurnId,
+)
+from agent_comms.notification_assignment import (
+    NotificationAssignment,
+    NotificationAssignmentRead,
+    NotificationSelection,
+)
+from agent_comms.notification_evidence import OwnerOutcomes
+from agent_comms.participant_store import ParticipantSnapshot
+from agent_comms.pi_events import TurnContextObserved
+from agent_comms.publisher import ParticipantPublisher
+from agent_comms.reason_codes import GivenReasonCode
+from agent_comms.execution.selected.source_batch import (
+    SelectedSource,
+    SelectedSourceBatch,
+)
+from metaclass_registry.mro_dispatch import (
+    MroDispatch,
+    handles,
 )
 
 

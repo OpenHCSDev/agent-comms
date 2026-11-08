@@ -35,7 +35,7 @@ from .publisher import ResponseWrites
 from .runtime_server import RuntimeServer
 
 if TYPE_CHECKING:
-    from .selected_participant import SelectedParticipant
+    from agent_comms.execution.selected.participant import SelectedParticipant
 
 
 class CursorRetry(ABC):

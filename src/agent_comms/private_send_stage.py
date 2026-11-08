@@ -34,7 +34,10 @@ from .native_prompt_binding import (
 from .native_runtime_input import NativeRuntimeInput
 from .private_sidecar import native_request_digest
 from .reservation_rules import ReservationViolationError
-from .selected_triage import DecidedTriageRecord, SelectedTriage
+from agent_comms.execution.selected.triage import (
+    DecidedTriageRecord,
+    SelectedTriage,
+)
 from .text_digest import TextDigest
 from .execution.turn_failure import TurnFailure
 from .storage.typed_table import SqlValue

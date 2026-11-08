@@ -7,7 +7,7 @@ from ..native_entries import NativeEntry
 from ..pi_payloads import PiMessage, StorageDenialToolDetails
 from ..tool_declaration import one_line
 from ..registry.registration import Registration
-from ..selected_triage import SelectedTriage
+from agent_comms.execution.selected.triage import SelectedTriage
 from .order import Team
 
 def thread_names(registry: Registration) -> dict[str, str]:

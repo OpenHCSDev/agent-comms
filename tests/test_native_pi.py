@@ -28,7 +28,7 @@ from agent_comms.execution.turn_item import FreshNativeId
 from agent_comms.native_startup import NATIVE_STARTUP_POLICY
 from agent_comms.native_transcript import NativeTranscript
 from agent_comms.selected_actions import NoSelectedTools
-from agent_comms.selected_session import SelectedSession
+from agent_comms.execution.selected.session import SelectedSession
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.tracked_turn import TrackedTurnSession
 from native_proof_cases import read_context_proof, read_proof_rows, write_proof_rows

@@ -5,7 +5,10 @@ import json
 from agent_comms.team.tool_watch import emit
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.native_tool_call import CodingCall
-from agent_comms.selected_triage import FullSelectedTriage, SelectedTriage
+from agent_comms.execution.selected.triage import (
+    FullSelectedTriage,
+    SelectedTriage,
+)
 
 
 def test_coordination_call_digests_its_arguments():
