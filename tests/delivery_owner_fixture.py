@@ -11,7 +11,7 @@ from functools import partial
 from agent_comms.acp import CommsAgent
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.owner_launch import RetainedOwnerLaunch
+from agent_comms.transport.owner_requests import RetainedOwnerLaunch
 
 import pytest
 from agent_comms.native_arguments import GivenBinary

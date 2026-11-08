@@ -68,7 +68,10 @@ from ..registry.registry_document import RegistryDocument, RegistryEntry
 from ..registry.registry_store import RegistryEntryRevision
 from ..routing import ScheduledTurn
 from ..runtime_server import RuntimeServer
-from ..owner_launch import OwnerRetiredReply, StopOwnerRuntimeRequest
+from ..transport.owner_requests import (
+    OwnerRetiredReply,
+    StopOwnerRuntimeRequest,
+)
 from .session_lifecycle import SessionLifecycle
 from ..thread_identity import ClaimedIdentity, OwnerIdentity
 from ..registry.threads import NativeThread, Thread

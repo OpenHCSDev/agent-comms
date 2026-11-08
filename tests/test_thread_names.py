@@ -222,7 +222,7 @@ def test_a_ui_reads_a_threads_context_through_core(tmp_path):
     from agent_comms.context_store import BeforeContextManifest, ContextManifestCursor, ContextStoreIdentity
     from agent_comms.core_access import LocalCoreAccess
     from agent_comms.nominal.field_codec import ContextStoreId, FieldCodec
-    import agent_comms.runtime_requests as runtime
+    import agent_comms.transport.runtime_requests as runtime
     from agent_comms.transport.tools.sidebar import (
     CommsContextInspectionTool,
     CommsOwnerRequestTool,

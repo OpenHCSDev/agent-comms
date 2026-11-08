@@ -25,7 +25,7 @@ from .thread_identity import OwnerIdentity, ThreadIncarnation
 from .registry.threads import NativeThread, Thread
 
 if TYPE_CHECKING:
-    from agent_comms.runtime_server import RuntimeRequest
+    from .transport.runtime_request import RuntimeRequest
     from .child_process import ProcessIdentity
     from .comms import Comms
     from .registry.registry_document import RegistryEntry

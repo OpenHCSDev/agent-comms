@@ -21,7 +21,7 @@ from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec
 from agent_comms.owner_protocol import OwnerFailure, OwnerLine
 from agent_comms.storage.private_path import PrivateSocketRole
 from agent_comms.owner_connection import socket_path
-from agent_comms.runtime_requests import GoalHistoryRuntimeRequest
+from agent_comms.transport.runtime_requests import GoalHistoryRuntimeRequest
 from served_requests import served
 from agent_comms.registry.threads import NativeThread
 

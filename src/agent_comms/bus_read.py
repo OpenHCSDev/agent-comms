@@ -22,7 +22,8 @@ from .owner_connection import (
     OwnerReplyConnection,
 )
 from .storage.private_path import FileRevision, ObservedPath
-from .runtime_server import AttachedResultRuntimeRequest, AttachedRuntimeRequestContext
+from .transport.runtime_request import AttachedResultRuntimeRequest
+from .runtime_server import AttachedRuntimeRequestContext
 from .read_basis import NoDisplaySelection, ReadAuthority
 from .registry.registry_document import RegistrySnapshot
 from .registry.registry_store import RegistryCut
