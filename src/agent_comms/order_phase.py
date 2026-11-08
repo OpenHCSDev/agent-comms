@@ -7,7 +7,7 @@ from collections.abc import Callable
 from .nominal.declared_family import DeclaredFamily
 
 
-class OrderPhase(DeclaredFamily, affix="Phase"):
+class OrderPhase(DeclaredFamily, affix="Phase", discovery_package="agent_comms.plan_phases"):
     """What an order serves: one plan phase, or nothing in any plan."""
 
     @classmethod
