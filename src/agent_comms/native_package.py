@@ -45,23 +45,25 @@ class NativePackageMissing(NativePackageError, NativePiUnavailable):  # noqa: N8
     """No build of this manifest's pin exists yet: native Pi is unavailable until it is prepared."""
 
 
-def _resource_root() -> Path:
-    module = Path(__file__).resolve()
-    # A checkout owns its resources in stack/, even if build artifacts exist
-    # beside the source. Only an installed package owns _native resources.
-    if module.parent.name == "agent_comms" and module.parent.parent.name == "src":
-        return module.parents[2] / "stack"
-    packaged = module.with_name("_native")
+def resource_root(package: Path) -> Path:
+    """The native resources of the agent_comms package directory `package`. A checkout
+    owns them in stack/, even if build artifacts exist beside the source; only an
+    installed package owns _native."""
+    if package.name == "agent_comms" and package.parent.name == "src":
+        return package.parents[1] / "stack"
+    packaged = package / "_native"
     if packaged.is_dir():
         return packaged
     raise NativePackageError("Installed native package resources are unavailable")
 
 
-MANIFEST = _resource_root() / "pi-native.sha256"
-OWNER_INSTRUCTIONS = _resource_root() / "AGENTS.md"
+# The package directory this file sits in, at whatever depth its dotted name puts it.
+RESOURCES = resource_root(Path(__file__).resolve().parents[(__package__ or "").count(".")])
+MANIFEST = RESOURCES / "pi-native.sha256"
+OWNER_INSTRUCTIONS = RESOURCES / "AGENTS.md"
 # The system prompt a Core-launched session carries: OWNER_INSTRUCTIONS and the whole deal,
 # derived at preparation by deal_prompt.DealPrompt, with the reads it carries beside it.
-SYSTEM_PROMPT = _resource_root() / "SYSTEM_PROMPT.md"
+SYSTEM_PROMPT = RESOURCES / "SYSTEM_PROMPT.md"
 
 
 PACKAGE_LAYOUT = "node_modules/@earendil-works/pi-coding-agent"
@@ -331,7 +333,7 @@ def write_native_manifest(root: Path) -> None:
             lines.append(hashlib.sha256((root / path).read_bytes()).hexdigest() + "  " + path)
         else:
             lines.append(line)
-    lines.append(INPUTS_PREFIX + NativeBuildInputs(_resource_root().parent).digest(MANIFEST))
+    lines.append(INPUTS_PREFIX + NativeBuildInputs(RESOURCES.parent).digest(MANIFEST))
     with tempfile.NamedTemporaryFile(dir=MANIFEST.parent, prefix=".pi-native-pin-",
                                      delete=False) as stream:
         replacement = Path(stream.name)
