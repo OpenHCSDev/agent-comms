@@ -128,6 +128,10 @@ class TranscriptEvent(EventMerge, Dated, DeclaredFamily, affix="Transcript"):
     def append_to(self, events: list[TranscriptEvent]) -> None:
         events.append(self)
 
+    def sent_reports(self) -> tuple[SentTranscript, ...]:
+        """The publication reports this event asks its source to qualify."""
+        return ()
+
     def started_calls(self) -> tuple[ToolCallId, ...]:
         """The tool rounds this event opens in reading order; most open none."""
         return ()
@@ -442,6 +446,9 @@ class SentTranscript(OutgoingRoute, WireTextTranscript):
 
     category = OutboundCategory
 
+    def sent_reports(self) -> tuple[SentTranscript, ...]:
+        return (self,)
+
     def result_parts(self, otherwise: tuple) -> tuple[SentTranscript, ...]:
         return (self,)
 
@@ -464,12 +471,6 @@ class SentTranscript(OutgoingRoute, WireTextTranscript):
         """A report stands for an original wire message only when it is that message's report."""
         return self == type(self).from_message(message)
 
-    def core_message(self, source) -> Message:
-        """Read the actual original; a stored report cannot invent its missing kind or role."""
-        for reference, original in source.sent_messages((self.source,)).items():
-            if reference == self.source and self.matches(original):
-                return original
-        raise ValueError("Sent report no longer matches its original assigned wire message")
 
 
 class ThinkingTranscript(ModelOutput, SilentTranscript, LiveTextTranscript):
@@ -538,6 +539,9 @@ class ToolStartTranscript(ToolTranscript):
 
 @dataclass(frozen=True, kw_only=True)
 class ToolEndTranscript(ToolTranscript):
+    def sent_reports(self) -> tuple[SentTranscript, ...]:
+        return self.sent_message.sent_reports()
+
     def ended_calls(self) -> tuple[ToolCallId, ...]:
         return (self.tool_call_id,)
 

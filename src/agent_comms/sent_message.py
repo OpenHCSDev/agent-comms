@@ -7,16 +7,14 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Self
+from typing import Self
+from collections.abc import Mapping
+
+from .messages import Message
 
 from .message_reference import MessageReference
 from .thread_identity import ThreadIncarnation
 from .transcript_events import SentTranscript
-
-if TYPE_CHECKING:
-    from collections.abc import Mapping
-
-    from .messages import Message
 
 
 class PublicationSource(ABC):
@@ -86,7 +84,7 @@ class OutgoingMessageReference:
 class PublishedSentMessage:
     """A full reported message proved by its original sender's wire assignment."""
 
-    message: SentTranscript
+    original: Message
     scope: AssignedSourceIdentity
 
     def __post_init__(self):
@@ -102,7 +100,12 @@ class PublishedSentMessage:
             original = originals[message.source]
         except KeyError:
             return message
-        return cls(message, scope) if message.matches(original) else message
+        return cls(original, scope) if message.matches(original) else message
+
+    @property
+    def message(self) -> SentTranscript:
+        """The report is derived from the retained original that qualified it."""
+        return SentTranscript.from_message(self.original)
 
     @property
     def reference(self) -> OutgoingMessageReference:

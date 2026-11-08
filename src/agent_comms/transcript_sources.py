@@ -42,6 +42,7 @@ from .storage.private_path import FileIdentity, MissingFile
 from .routing import TurnRouting
 from .rule_deal import Mute, Speaking, Voice
 from .sent_message import AssignedSourceIdentity, PublishedSentMessage
+from .sent_reports import ResolvesSentReports
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .transcript_events import (
     IncomingTranscript,
@@ -50,30 +51,6 @@ from .transcript_events import (
 )
 from .turn_item import NativeTurnId
 from .storage.typed_table import StoreWriter
-
-
-class ResolvesSentReports(ABC):
-    """A Send report is qualified against one owner's publication evidence.
-
-    Every resolver declares the ordered tuple once; the mapping keyed by each report is
-    derived here. A display lookup asks by part, so a resolver that offered only the
-    tuple would leave its consumer to build that index, and one that offered only the
-    mapping would restate a derivation the primitive already decides.
-    """
-
-    __slots__ = ()
-
-    @abstractmethod
-    def resolve_sent(
-        self, messages: tuple[SentTranscript, ...],
-    ) -> tuple[SentTranscript | PublishedSentMessage, ...]: ...
-
-    def resolve_sent_messages(
-        self, reports: Iterable[SentTranscript],
-    ) -> dict[SentTranscript, SentTranscript | PublishedSentMessage]:
-        """Each report, keyed by itself, with this resolver's publication evidence for it."""
-        reports = tuple(reports)
-        return dict(zip(reports, self.resolve_sent(reports), strict=True))
 
 
 class WireFrontier(DeclaredFamily, ResolvesSentReports, affix="WireFrontier"):
