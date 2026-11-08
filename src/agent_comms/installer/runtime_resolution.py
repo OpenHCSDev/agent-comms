@@ -16,7 +16,7 @@ from functools import cached_property
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
-from urllib.parse import parse_qsl, urlsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit
 from zipfile import ZipFile
 
 from agent_comms.installer.building_runtime import BuildingRuntime
@@ -717,6 +717,9 @@ class LockSource(BaseModel):
     def tracked(self, name: str) -> tuple[str, ...]:
         return ()
 
+    def tracked_requirement(self, name: str) -> tuple[str, ...]:
+        return ()
+
     def project_source(self) -> UvSourceOptions:
         raise ValueError("Local/virtual sources have no external retention projection")
 
@@ -767,6 +770,21 @@ class GitSource(LockSource):
         branches = self.location.selector.branches()
         self.require_branches(name, branches)
         return (name,) if branches else ()
+
+    def tracked_requirement(self, name: str) -> tuple[str, ...]:
+        """This package named by the branch it follows, for an installer outside the lock.
+
+        The locked revision answers "what did this branch point at when we solved"; a test
+        environment asking for the branch wants today's answer, and reading the revision
+        out of the lock gives it a dead one.
+        """
+        branches = self.location.selector.branches()
+        self.require_branches(name, branches)
+        if not branches:
+            return ()
+        fields = self.location.package.fields()
+        suffix = f"#{urlencode(fields)}" if fields else ""
+        return (f"{name} @ git+{self.location.repository}@{branches[0]}{suffix}",)
 
     @staticmethod
     def require_branches(name: str, branches: tuple[str, ...]) -> None:
@@ -860,6 +878,18 @@ class ResolvedLock(BaseModel):
         """Every package whose recorded source follows a branch, each named once."""
         return tuple(dict.fromkeys(
             name for entry in self.package for name in entry.source.tracked(entry.name)))
+
+    def tracked_requirements(self) -> tuple[str, ...]:
+        """The same packages as requirements naming their branch, for installers outside this lock.
+
+        Toad's test environment installs the exported closure with ``--frozen`` and then has
+        to ask for these separately: the freeze is correct for everything pinned and wrong
+        for everything tracking a branch, which is the one set this lock can already name.
+        """
+        return tuple(dict.fromkeys(
+            requirement
+            for entry in self.package
+            for requirement in entry.source.tracked_requirement(entry.name)))
 
     def external(self, excluded: frozenset[str]) -> dict[str, VersionedPackage]:
         """Current-interpreter external evidence; local/virtual entries select themselves out."""
