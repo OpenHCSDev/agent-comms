@@ -370,18 +370,23 @@ class Connector(ConnectorService, McpServer):
         a POST /mcp stayed open 6883 seconds and the stop reported "pending tools: none",
         because the handler that never finished is a request task and neither self.calls nor
         self.watch_tasks holds one. The event loop already tracks every task, so this asks
-        the loop rather than adding a third registry. Each line's innermost frame is the
-        phase the task is stuck in, which is the one fact a journal line cannot carry: a
-        completed access line is only printed once the handler ends.
+        the loop rather than adding a third registry.
+
+        Each line reads leaf first, and the leaf is the phase: a completed access line is
+        only printed once the handler ends, so that frame is the one fact no journal can
+        carry. asyncio.capture_call_graph owns walking a suspended await chain to reach it.
+        Task.get_stack does not: on a handler awaiting session claim awaiting a body read it
+        returns the handler frame alone, which names the task and not where it is stuck.
         """
         running = []
         for task in sorted(asyncio.all_tasks(), key=lambda pending: pending.get_name()):
             if task.done():
                 continue
-            frames = task.get_stack(limit=self.stack_frames)
+            graph = asyncio.capture_call_graph(task, limit=self.stack_frames)
             where = " <- ".join(
-                f"{frame.f_code.co_name} at {frame.f_code.co_filename}:{frame.f_lineno}"
-                for frame in reversed(frames)
+                f"{entry.frame.f_code.co_name}"
+                f" at {entry.frame.f_code.co_filename}:{entry.frame.f_lineno}"
+                for entry in (graph.call_stack if graph is not None else ())
             )
             running.append(f"  {task.get_name()}: {where or 'awaiting, no python frame'}")
         return "\n".join(running) or "  none"
@@ -846,10 +851,10 @@ class ServeVerb(ConnectorOptions):
         loop = asyncio.get_running_loop()
         for signum in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(signum, stopped.set)
-        # A stuck handler has to be named while it is still stuck, and nothing here can be
-        # read after the fact: the access line prints only once the handler ends, and py-spy
-        # cannot attach because this process is systemd's child, not the asking session's
-        # (kernel.yama.ptrace_scope is 1 on this host). So it answers for itself on request.
+        # A stuck handler has to be named while it is still stuck: the access line prints
+        # only once the handler ends. py-spy answers the other half, a handler blocked in a
+        # synchronous call, and cannot see a suspended coroutine at all, because it reads
+        # thread stacks and an awaiting coroutine sits on none.
         loop.add_signal_handler(signal.SIGUSR1, connector.log_pending, "asked what it is doing")
         try:
             await SystemdSite(runner, LOOPBACK, self.port).start()
