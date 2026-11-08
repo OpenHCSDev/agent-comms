@@ -377,14 +377,19 @@ class TeamFrame(TeamFrameFile, JsonDocument[TeamHud]):
         document = TeamPlanDocument.at(root)
         document.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         document._publish_unlocked(plan)
+        for stale in cls.matching_in(root) - cls.write_all(root, huds):
+            stale.unlink(missing_ok=True)
+
+    @classmethod
+    def write_all(cls, root: Path, huds: tuple[TeamHud, ...]) -> frozenset[Path]:
+        """Write one frame per teammate in huds, unlinking nothing, and name what was written."""
         written = set()
         for hud in huds:
             frame = cls.at(root, hud.teammate)
             frame.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             frame._publish_unlocked(hud)
             written.add(frame.path)
-        for stale in cls.matching_in(root) - written:
-            stale.unlink(missing_ok=True)
+        return frozenset(written)
 
     @classmethod
     def read_all(cls, root: Path) -> tuple[TeamHud, ...]:
