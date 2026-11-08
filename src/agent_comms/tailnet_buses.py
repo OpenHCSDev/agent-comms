@@ -13,11 +13,13 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
 from agent_comms.probed_command import ProbedCommand
+from agent_comms.nominal.declared_family import DeclaredFamily
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,7 +52,7 @@ class TailnetPeer:
         return next((address for address in addresses if ":" not in address), "")
 
 
-class PeerBus(ABC):
+class PeerBus(DeclaredFamily, ABC, affix="Peer"):
     """What a probe found on one peer.
 
     Every peer gets a member, including the ones that answered nothing: a peer left out of
@@ -66,7 +68,7 @@ class PeerBus(ABC):
         """How a picker names this peer in one line."""
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class PeerHoldsBus(PeerBus):
     """Its CLI answered with its registry, so there is a bus here to open."""
 
@@ -78,7 +80,7 @@ class PeerHoldsBus(PeerBus):
         return f"{self.peer.name} · {self.threads} threads"
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class PeerWithoutBus(PeerBus):
     """Reachable, and its CLI is not installed or answered nothing we can read."""
 
@@ -89,7 +91,7 @@ class PeerWithoutBus(PeerBus):
         return f"{self.peer.name} · no bus answered"
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class PeerUnreachable(PeerBus):
     """Tailscale says it is up, and ssh did not get there."""
 
@@ -100,7 +102,7 @@ class PeerUnreachable(PeerBus):
         return f"{self.peer.name} · unreachable"
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class PeerOffline(PeerBus):
     """Tailscale says it is down, so nothing is asked of it."""
 
@@ -146,17 +148,18 @@ class TailnetBuses(ProbedCommand):
     def peers(cls) -> tuple[TailnetPeer, ...]:
         status, output = cls.run(cls.status_command())
         if status != 0:
-            return ()
+            raise RuntimeError(output.strip() or "Tailscale status did not answer")
         return TailnetPeer.listed(json.loads(output))
 
     @classmethod
+    def probe(cls, peer: TailnetPeer) -> PeerBus:
+        if not peer.online or not peer.address:
+            return cls.found(peer, 0, "")
+        status, output = cls.run(cls.probe_command(peer))
+        return cls.found(peer, status, output)
+
+    @classmethod
     def seen(cls) -> tuple[PeerBus, ...]:
-        """Every peer this tailnet reports, with what each one answered."""
-        found = []
-        for peer in cls.peers():
-            if not peer.online or not peer.address:
-                found.append(cls.found(peer, 0, ""))
-                continue
-            status, output = cls.run(cls.probe_command(peer))
-            found.append(cls.found(peer, status, output))
-        return tuple(found)
+        """Independent peers answer concurrently; one unreachable host cannot queue all others."""
+        with ThreadPoolExecutor() as workers:
+            return tuple(workers.map(cls.probe, cls.peers()))

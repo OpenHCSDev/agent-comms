@@ -16,7 +16,7 @@ from agent_comms.connector_profile import (
 from agent_comms.nominal.field_codec import FieldCodec, RootId
 from agent_comms.tailnet_buses import PeerHoldsBus, TailnetPeer
 from agent_comms.tailnet_profiles import (
-    HoldingPeerProfile, PeerAnsweredNothing, PeerRefusedProfile, TailnetProfiles,
+    HoldingPeerProfile, OfferedPeerProfile, PeerAnsweredNothing, PeerRefusedProfile, TailnetProfiles,
 )
 
 GAMING = PeerHoldsBus(TailnetPeer("ts-gaming", "100.119.57.99", True), 43)
@@ -33,7 +33,7 @@ def profile_text() -> str:
 def test_the_ask_runs_the_peers_own_connector_over_ssh():
     command = TailnetProfiles.ask_command(GAMING)
     assert command[0] == "ssh" and "100.119.57.99" in command
-    assert command[-1].endswith("agent-comms-connector offer-ui"), (
+    assert command[-1].endswith("agent-comms-connector offer-ui --access ui_access"), (
         f"the peer decides its own root and endpoint, so the ask names neither: {command}")
     assert "BatchMode=yes" in command, "a peer wanting a password is a failure, not a prompt"
 
@@ -41,7 +41,10 @@ def test_the_ask_runs_the_peers_own_connector_over_ssh():
 def test_a_profile_comes_back_held_under_the_peer(tmp_path, monkeypatch):
     monkeypatch.setattr("agent_comms.connector_store.HeldUiProfiles.directory",
                         classmethod(lambda cls: tmp_path))
-    asked = TailnetProfiles.asked(GAMING, 0, profile_text() + "\n")
+    offered = TailnetProfiles.asked(GAMING, 0, profile_text() + "\n")
+    assert isinstance(offered, OfferedPeerProfile)
+    assert not list(tmp_path.iterdir()), "Core returns a profile, not a path on its own host"
+    asked = offered.hold()
     assert isinstance(asked, HoldingPeerProfile) and asked.reason() == ""
     assert asked.path == tmp_path / "ts-gaming.json"
     held = UiConnectionProfile.read(asked.path)
@@ -109,11 +112,11 @@ def test_asking_again_replaces_what_was_held_and_revokes_it(tmp_path, monkeypatc
                         classmethod(lambda cls: tmp_path))
     asked: list[tuple[str, ...]] = []
     monkeypatch.setattr(TailnetProfiles, "run",
-                        classmethod(lambda cls, command: asked.append(tuple(command)) or (0, "")))
+                        classmethod(lambda cls, command: asked.append(tuple(command)) or (0, profile_text())))
 
-    first = TailnetProfiles.asked(GAMING, 0, profile_text())
+    first = TailnetProfiles.ask(GAMING, TailnetProfiles.held_grants(GAMING)).hold()
     held = sorted(path.name for path in tmp_path.iterdir())
-    second = TailnetProfiles.asked(GAMING, 0, profile_text())
+    second = TailnetProfiles.ask(GAMING, TailnetProfiles.held_grants(GAMING)).hold()
 
     assert held == ["ts-gaming.json"] and first.path == second.path
     assert sorted(path.name for path in tmp_path.iterdir()) == ["ts-gaming.json"], (

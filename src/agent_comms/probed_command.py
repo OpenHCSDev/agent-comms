@@ -31,6 +31,9 @@ class ProbedCommand:
         A refusal comes back as a status and its own words, never as an exception: every
         caller here has a member for "it would not answer" and needs the reason in it.
         """
-        done = subprocess.run(tuple(command), capture_output=True, text=True, errors="replace",
-                              timeout=cls.timeout_seconds * 2, check=False)
+        try:
+            done = subprocess.run(tuple(command), capture_output=True, text=True, errors="replace",
+                                  timeout=cls.timeout_seconds * 2, check=False)
+        except (OSError, subprocess.TimeoutExpired) as error:
+            return 1, str(error)
         return done.returncode, done.stdout + done.stderr
