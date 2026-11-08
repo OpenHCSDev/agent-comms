@@ -7,6 +7,8 @@ overrides = [
     { name = "agent-comms", editable = "../" },
     { name = "formbridge", git = "https://github.com/OpenHCSDev/formbridge.git?branch=main" },
     { name = "metaclass-registry", git = "https://github.com/OpenHCSDev/metaclass-registry?branch=main" },
+    { name = "nominal-refactor-advisor", git = "https://github.com/OpenHCSDev/NominalRefactorAdvisor?branch=main" },
+    { name = "python-introspect", git = "https://github.com/OpenHCSDev/python-introspect?branch=main" },
     { name = "textual", extras = ["syntax"], git = "https://github.com/OpenHCSDev/textual.git?branch=main" },
     { name = "ui-theme", git = "https://github.com/OpenHCSDev/ui-theme.git?branch=main" },
 ]
@@ -211,7 +213,7 @@ wheels = [
 [[package]]
 name = "batrachian-toad"
 version = "0.6.20"
-source = { git = "https://github.com/OpenHCSDev/toad.git?branch=main#ee99a188b94af796529cd6c42d29d2bdd8e5ad63" }
+source = { git = "https://github.com/OpenHCSDev/toad.git?branch=main#4e385f46bd580bf0feb2f4f407650b21f83fde06" }
 dependencies = [
     { name = "agent-client-protocol" },
     { name = "agent-comms" },
@@ -661,7 +663,7 @@ wheels = [
 [[package]]
 name = "nominal-refactor-advisor"
 version = "0.1.0"
-source = { git = "https://github.com/OpenHCSDev/NominalRefactorAdvisor?rev=main#66f7dff445f0c73a11e7615c750210d2676a5f8b" }
+source = { git = "https://github.com/OpenHCSDev/NominalRefactorAdvisor?branch=main#b70c0aac3a13294a2bcc712079286b34fcc21999" }
 dependencies = [
     { name = "metaclass-registry" },
     { name = "tree-sitter" },
@@ -971,7 +973,7 @@ wheels = [
 [[package]]
 name = "python-introspect"
 version = "0.3.0"
-source = { git = "https://github.com/OpenHCSDev/python-introspect?rev=main#f2876b9ee089c65789607284949e11a9f58283fe" }
+source = { git = "https://github.com/OpenHCSDev/python-introspect?branch=main#f2876b9ee089c65789607284949e11a9f58283fe" }
 dependencies = [
     { name = "annotated-types" },
     { name = "metaclass-registry" },
@@ -1064,7 +1066,7 @@ wheels = [
 [[package]]
 name = "textual"
 version = "8.2.8"
-source = { git = "https://github.com/OpenHCSDev/textual.git?branch=main#7153084570b3bdcfee9170778a54615763297d1f" }
+source = { git = "https://github.com/OpenHCSDev/textual.git?branch=main#98fc4b3e5de2e9eda80c5ac5d5a88a6622b6db74" }
 dependencies = [
     { name = "markdown-it-py", extra = ["linkify"] },
     { name = "mdit-py-plugins" },
@@ -1097,7 +1099,7 @@ syntax = [
 [[package]]
 name = "textual-diff-view"
 version = "0.1.5"
-source = { git = "https://github.com/OpenHCSDev/textual-diff-view.git?rev=95db444b536cba27081dd2c1496f71e25670a446#95db444b536cba27081dd2c1496f71e25670a446" }
+source = { git = "https://github.com/OpenHCSDev/textual-diff-view.git?branch=main#b9d14d8ac45b225e1a07d19bbf2e0ac68e1050f1" }
 dependencies = [
     { name = "textual", extra = ["syntax"] },
 ]
@@ -1448,7 +1450,7 @@ wheels = [
 [[package]]
 name = "ui-theme"
 version = "0.1.0"
-source = { git = "https://github.com/OpenHCSDev/ui-theme.git?branch=main#ba614bcb90b38c1f70789059a3c6aef8c017971b" }
+source = { git = "https://github.com/OpenHCSDev/ui-theme.git?branch=main#458ba2588e1f002398374316b3d34033fc59f3b0" }
 dependencies = [
     { name = "metaclass-registry" },
     { name = "terminaltexteffects" },
