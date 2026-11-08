@@ -538,7 +538,7 @@ class CommitDelivery(CommitSourceDelivery, declared_name="delivered_commit"):
         """
         check = todo.order.checked().check
         requests = await asyncio.to_thread(PullRequests((todo,)).listed,
-                                           todo.repo, MergedListedPullRequest, todo)
+                                           todo.repository.github, MergedListedPullRequest, todo)
         for request in requests:
             for merge in request.delivery_merges(self):
                 return merge
@@ -1086,7 +1086,7 @@ class PullRequests(RepositoryReads):
 
     def merged_delivery(self, todo: Todo, repo: Path, evidence: DeliveryEvidence) -> CommitDelivery:
         """Read the newest merged PR linked to this order in its checked repository."""
-        source = Repo.of(repo).github
+        source = todo.repository.github
         for request in self.listed(source, MergedListedPullRequest, todo):
             return request.delivery(repo, evidence)
         raise TodoError(
@@ -5797,7 +5797,8 @@ class Todo(TodoStoreRows, TypedTable):
 
     @property
     def repository(self) -> Repo:
-        return Repo(checkout=self.order.checked().check.directory, github=self.repo)
+        """The check's checkout owns its origin; the problem keeps its separate home."""
+        return Repo.of(self.order.checked().check.directory)
 
     @property
     def judged_calls(self) -> tuple[ToolCallId, ...]:
