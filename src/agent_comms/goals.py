@@ -7,7 +7,7 @@ import signal
 import subprocess
 import tempfile
 from abc import abstractmethod
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from agent_comms.lifecycle_capability import Active
 from agent_comms_hooks.shell_commands import ShellCommand
+from metaclass_registry.mro_dispatch import MroDispatch
 
 from .change_report import CitationProject
 from .child_process import (
@@ -59,10 +60,9 @@ if TYPE_CHECKING:
     from .turn_context import TurnContext
 
 if TYPE_CHECKING:
-    from .goal_attempts import GoalAttemptStore, LaunchPermit
+    from .goal_attempts import GoalAttemptStore
     from .goal_management import Goals
     from .todos import Todo
-    from .turn_goal_account import VerifiedGoalSettlement
 
 
 @dataclass(frozen=True)
@@ -612,8 +612,10 @@ class GoalDeclaration(
     def stopped_permit(self, store: GoalAttemptStore) -> GoalTurnPermit: ...
 
     @abstractmethod
-    def settle(self, settlement: type[VerifiedGoalSettlement], store: GoalAttemptStore,
-               permit: LaunchPermit, turn: TurnId) -> None: ...
+    def settle[Store, Permit](
+        self, settlement: Callable[[Store, Permit, Goal, TurnId], MroDispatch],
+        store: Store, permit: Permit, turn: TurnId,
+    ) -> None: ...
 
     @abstractmethod
     def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]: ...
@@ -704,8 +706,10 @@ class NoGoal(NullMember, GoalDeclaration):
     def registration_value(self, previous: GoalDeclaration) -> GoalDeclaration:
         return previous
 
-    def settle(self, settlement: type[VerifiedGoalSettlement], store: GoalAttemptStore,
-               permit: LaunchPermit, turn: TurnId) -> None:
+    def settle[Store, Permit](
+        self, settlement: Callable[[Store, Permit, Goal, TurnId], MroDispatch],
+        store: Store, permit: Permit, turn: TurnId,
+    ) -> None:
         pass
 
     def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]:
@@ -778,8 +782,10 @@ class Goal(RecordMember, GoalDeclaration):
     def registration_value(self, previous: GoalDeclaration) -> GoalDeclaration:
         return self
 
-    def settle(self, settlement: type[VerifiedGoalSettlement], store: GoalAttemptStore,
-               permit: LaunchPermit, turn: TurnId) -> None:
+    def settle[Store, Permit](
+        self, settlement: Callable[[Store, Permit, Goal, TurnId], MroDispatch],
+        store: Store, permit: Permit, turn: TurnId,
+    ) -> None:
         settlement(store, permit, self, turn).dispatch_sync(self.state)
 
     def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]:
