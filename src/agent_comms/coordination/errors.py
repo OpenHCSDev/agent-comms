@@ -178,8 +178,14 @@ class ReadAgain(CoordinationError):  # noqa: N818 - capability, not an outcome
     the same bounds may still answer (StaleRevision) or never can (ReloadRequired)."""
 
 
-class StaleRevision(ReadAgain, DeferredRead):  # noqa: N818 - nominal outcome name
-    """The supplied CAS revision is not the authoritative revision."""
+class StaleRevision(ReadAgain, DeferredRead, DeclaredError):  # noqa: N818 - nominal outcome name
+    """The supplied CAS revision is not the authoritative revision.
+
+    Its message is its whole state. Preserve the original retry/deferral roles
+    when an observation carries it to a remote UI.
+    """
+
+    wire_type: ClassVar[object] = tuple[str]
 
 
 class ReloadRequired(ReadAgain, DeclaredError):  # noqa: N818 - nominal outcome name
