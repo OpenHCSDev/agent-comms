@@ -23,7 +23,7 @@ from contextvars import copy_context
 from dataclasses import dataclass, field, fields, replace
 from datetime import UTC, datetime
 from functools import cached_property, partial
-from itertools import islice
+from itertools import batched, islice
 from math import ceil
 from pathlib import Path
 from subprocess import TimeoutExpired
@@ -1059,6 +1059,12 @@ class PullRequestUpdatePage:
 class PullRequests(RepositoryReads):
     """Forge facts and repository reads shared within one board read."""
 
+    # Pull requests per GraphQL request. Each one asks for up to 100 check runs and whether
+    # each is required, and GitHub's gateway gives up on the whole request around ten
+    # seconds in. Measured 2026-11-08 on openhcs's older pages: 100 failed every time, 50
+    # took up to 6.1 s, 25 took up to 4.8 s.
+    query_batch: ClassVar[int] = 25
+
     def __init__(self, todos: Sequence[Todo] = ()) -> None:
         super().__init__()
         self._read: dict[tuple[RepositoryName, int], ListedPullRequest] = {}
@@ -1145,8 +1151,8 @@ class PullRequests(RepositoryReads):
 
     def rows(self, repo: RepositoryName, numbers: tuple[int, ...]) -> tuple[ListedPullRequest, ...]:
         missing = tuple(number for number in numbers if (repo, number) not in self._read)
-        if missing:
-            self._read.update(((repo, row.number), row) for row in self.query(repo, missing))
+        for batch in batched(missing, self.query_batch):
+            self._read.update(((repo, row.number), row) for row in self.query(repo, batch))
         return tuple(self._read[repo, number] for number in numbers)
 
     def open(self, repo: RepositoryName) -> tuple[UnmergedListedPullRequest, ...]:
