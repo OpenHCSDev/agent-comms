@@ -188,7 +188,7 @@ class NativeSendStage(ABC):
             evidence = source_reads.for_source(context.session_file)
             if not evidence.corroborates_context(
                 context, input_id=input_id,
-                files=NativeSessionFiles.for_identity(context.session_identity,
+                files=NativeSessionFiles.for_identity(context.session_identity(),
                                          root=store.session.path.parent,
                                          owner=owner.thread.incarnation.require_recorded()),
             ):

@@ -77,7 +77,7 @@ class SelectedSession:
         return self.attest(actual)
 
     def require_context(self, context) -> None:
-        self.attest(context.session_identity)
+        self.attest(context.session_identity())
 
     def continued(self, context) -> SelectedSession:
         raise NativePiUnavailable("An unselected session cannot own a tracked native continuation")
@@ -140,7 +140,7 @@ class SavedSelectedSession(SelectedSession):
     def continued(self, context) -> SelectedSession:
         self.require_context(context)
         return SavedSelectedSession(self.directory, owner=self.owner,
-            identity=context.session_identity)
+            identity=context.session_identity())
 
     @property
     def path(self) -> Path:
