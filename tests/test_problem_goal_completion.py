@@ -25,6 +25,7 @@ from agent_comms.registry.threads import NativeThread, Thread
 from agent_comms.repo import Checkout
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.todos import (
+    AssignTodo,
     DeliverTodo,
     InstallTodo,
     OperationDelivery,
@@ -146,6 +147,28 @@ def test_owner_and_goal_must_come_from_the_same_historical_assignment(
     assert not scene.store.closed_for_goal(scene.owner.incarnation, next_goal.id)
     assert not scene.store.closed_for_goal(other.incarnation, scene.goal.id)
     assert len(scene.store.events(first.id, ReleaseTodo)) == 2
+
+
+def test_stale_merge_records_neither_row_nor_assignment_history(
+    assigned_problems: AssignedProblems,
+) -> None:
+    scene = assigned_problems
+    current = scene.store.get("P1")
+    observed = current.order.run.after_merge(
+        current, current.order.merged(scene.source.main_commit),
+    )
+    corrected = scene.store.apply(current.id, AssignTodo(
+        expected_revision=current.revision, actor=scene.owner.incarnation,
+        proposed=current.held(), review_at=RecordedEventTime(1001),
+        order=current.order, request=current.request.require(),
+    ))
+    assert corrected.assignment == current.assignment
+    assert corrected.revision > current.revision
+    history = scene.store.sources(current.id)
+    scene.store.record_merges((observed,))
+    assert scene.store.get(current.id) == corrected
+    assert scene.store.sources(current.id) == history
+    assert not scene.store.events(current.id, ReleaseTodo)
 
 
 def test_historical_membership_uses_its_index(assigned_problems: AssignedProblems) -> None:

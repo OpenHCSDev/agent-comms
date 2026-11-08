@@ -6567,6 +6567,17 @@ class OwnerRequestStore(DurableStore):
             db, tuple(todo.id for todo in rows)))
 
 
+@dataclass(frozen=True)
+class RecordMergedTodo(RecordsAssignmentHistory, TodoCommand, declared_name=None):
+    """Persist an observed merge through the same history write as authored changes."""
+
+    following: Todo
+    actor: ThreadIncarnation = field(default_factory=CoreWatcherIncarnation.watcher)
+
+    def changed(self, current: Todo) -> Todo:
+        return self.following
+
+
 @dataclass(frozen=True, slots=True)
 class TodoStore(OwnerRequestStore, TodoHistory):
     """One SQLite row owns both todo state and its exclusive assignment.
@@ -6786,7 +6797,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
             for result in completed:
                 current = self._current(db, result.id)
                 if current.revision + 1 == result.revision:
-                    result.upsert(db)
+                    RecordMergedTodo(current.revision, result).write(db, current, self)
 
     def holds_pending(self, owner: ThreadIncarnation) -> bool:
         """Whether a problem assigned to owner pends, under any generation; its Goal stays open."""
