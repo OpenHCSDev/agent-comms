@@ -7,6 +7,7 @@ import os
 from types import SimpleNamespace
 
 import pytest
+from coding_owner_fixture import OwnerDouble
 
 from agent_comms.native_tool_call import ArgumentRefusal
 from agent_comms.native_tools import NativeToolDeclaration
@@ -29,7 +30,7 @@ def test_pi_optional_nulls_are_omitted_by_the_existing_codec(name, arguments, en
 @pytest.mark.parametrize("request_first", [False, True])
 async def test_refused_arguments_complete_without_an_owner_callback(
         tmp_path, request_first, tool_listener, undealt_gate):
-    class Owner:
+    class Owner(OwnerDouble):
         async def allow(self, round_number, call):
             raise AssertionError("invalid arguments must never acquire authority")
 

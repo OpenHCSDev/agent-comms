@@ -11,9 +11,9 @@ from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 
 import pytest
+from coding_owner_fixture import OwnerDouble
 
 from agent_comms.channel_coding_tools import CodingToolSocket
-from agent_comms.registry.thread_identity import UnobservedTools
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordination.session import NativeCapture
@@ -214,15 +214,6 @@ def _request(socket, id, name, args):
         json.dumps({"token": socket.listener.token, "call_id": id, "name": name, "arguments": args}) + "\n"
     ).encode()
 
-
-class OwnerDouble:
-    """A coding owner whose thread was offered nothing beyond the declared tools; each
-    test overrides only how it answers ``allow``."""
-
-    offered = UnobservedTools()
-
-    def __init__(self) -> None:
-        self.input_id = secrets.token_hex(16)
 
 
 @pytest.mark.asyncio
