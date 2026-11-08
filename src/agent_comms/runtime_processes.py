@@ -48,6 +48,35 @@ class UnreadableRuntimeProcess(RuntimeProcessOutcome):
 
 
 @dataclass(frozen=True)
+class UnattributedRuntimeProcess(RuntimeProcessOutcome):
+    """Invoked through the installation's moving pointer rather than a build.
+
+    `current` names whichever runtime was published when the process started, and once it
+    has moved there is nothing left in the command to say which that was. The process
+    therefore holds a build and will not say which one, so a retirement must not decide
+    about any of them — `unread` is how it refuses the whole sweep.
+
+    Nothing on this machine was invoked this way when the retention was written; its own
+    console scripts carry the built interpreter in their shebang, so a scan sees a build.
+    It is a reachable invocation, not a hypothetical one: the installer's verification
+    commands are written against `current/bin/python`.
+    """
+
+    pid: int
+    executable: Path
+
+    def line(self) -> str:
+        return (f"Unattributed runtime PID {self.pid}: invoked as {self.executable}, "
+                "which names the installation's pointer rather than a build")
+
+    def held_executable(self) -> frozenset[Path]:
+        return frozenset()
+
+    def unread(self) -> tuple[str, ...]:
+        return (self.line(),)
+
+
+@dataclass(frozen=True)
 class RuntimeApplication:
     """The observed parent application's exact identity and display name."""
 
@@ -127,6 +156,8 @@ class RuntimeProcesses:
             # Other namespaces do not name an agent-comms installation.
             interpreter = Path(invoked)
             if not interpreter.is_relative_to(directory):
+                if interpreter.is_relative_to(LaunchRuntime.pointer_in(directory.parent)):
+                    outcomes.append(UnattributedRuntimeProcess(pid, interpreter))
                 continue
             runtime = LaunchRuntime.from_interpreter(interpreter)
             if runtime.prefix == target.prefix:

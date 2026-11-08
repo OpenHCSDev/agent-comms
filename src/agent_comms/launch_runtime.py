@@ -96,8 +96,14 @@ class LaunchRuntime:
         return home / ".local/share/agent-comms"
 
     @classmethod
+    def pointer_in(cls, state: Path) -> Path:
+        """The moving pointer in a state directory: what an invocation names when it wants
+        whichever runtime is published rather than a particular build."""
+        return state / "current"
+
+    @classmethod
     def current_pointer(cls) -> Path:
-        return cls.state_directory(Path.home()) / "current"
+        return cls.pointer_in(cls.state_directory(Path.home()))
 
     @classmethod
     def installed(cls) -> LaunchRuntime:

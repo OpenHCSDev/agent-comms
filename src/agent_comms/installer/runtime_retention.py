@@ -36,17 +36,67 @@ from agent_comms.root_runtime import RootRuntimeStore
 from agent_comms.runtime_processes import RuntimeProcesses
 
 
-def recorded_prefix(directory: Path) -> frozenset[Path]:
-    """The runtime a `.root-runtime.json` in ``directory`` names, or nothing readable.
+class RecordedPointer(DeclaredFamily, ABC, affix="Pointer"):
+    """What a stored `.root-runtime.json` says about the runtime it would publish.
 
-    A directory with no record, or one this cannot decode, holds no runtime: it is the
-    live process table, not a stored pointer, that an unreadable answer must make the
-    sweep refuse over.
+    Three answers, because two of them are not the same: a root that never published
+    names no runtime, and a record that will not decode names one this cannot read. The
+    first holds nothing; the second must stop the sweep, or a corrupt backup silently
+    loses its only hold on the runtime it would restore.
     """
-    try:
-        return frozenset((RootRuntimeStore.at(directory).read().prefix,))
-    except (OSError, MalformedRecord):
+
+    @abstractmethod
+    def held(self) -> frozenset[Path]:
+        """The runtime this pointer keeps."""
+
+    @abstractmethod
+    def unread(self) -> tuple[str, ...]:
+        """Why this pointer left a runtime undecided."""
+
+    @staticmethod
+    def read_at(directory: Path) -> RecordedPointer:
+        try:
+            return NamedPointer(RootRuntimeStore.at(directory).read().prefix)
+        except FileNotFoundError:
+            return AbsentPointer()
+        except (OSError, MalformedRecord) as error:
+            return UnreadablePointer(directory, str(error))
+
+
+@dataclass(frozen=True)
+class NamedPointer(RecordedPointer):
+    prefix: Path
+
+    def held(self) -> frozenset[Path]:
+        return frozenset((self.prefix,))
+
+    def unread(self) -> tuple[str, ...]:
+        return ()
+
+
+@dataclass(frozen=True)
+class AbsentPointer(RecordedPointer):
+    """No record at all, which is a complete answer: nothing was published here."""
+
+    def held(self) -> frozenset[Path]:
         return frozenset()
+
+    def unread(self) -> tuple[str, ...]:
+        return ()
+
+
+@dataclass(frozen=True)
+class UnreadablePointer(RecordedPointer):
+    """A record that is present and will not be read. Unknown is not absence."""
+
+    path: Path
+    reason: str
+
+    def held(self) -> frozenset[Path]:
+        return frozenset()
+
+    def unread(self) -> tuple[str, ...]:
+        return (f"Unreadable runtime pointer under {self.path}: {self.reason}",)
 
 
 @dataclass(frozen=True)
@@ -70,11 +120,29 @@ class RuntimeRetention:
         is running on it, and the scan skips its own lineage, so nothing else would say so.
         """
         runtimes = staged.prefix.parent
+        pointers = cls.pointers(root, spill_dir)
         named = (staged.prefix, installed.prefix, LaunchRuntime.running().prefix,
-                 *processes.held_executables(), *cls.attached(root),
-                 *cls.restorable(root, spill_dir))
+                 *processes.held_executables(),
+                 *(prefix for pointer in pointers for prefix in pointer.held()))
         held = frozenset().union(*(cls.owning(runtimes, path) for path in named), frozenset())
-        return cls(runtimes, held, processes.unread())
+        unread = (*processes.unread(),
+                  *(line for pointer in pointers for line in pointer.unread()))
+        return cls(runtimes, held, unread)
+
+    @staticmethod
+    def pointers(root: Path, spill_dir: Path) -> tuple[RecordedPointer, ...]:
+        """Every stored record of a runtime this root has published: its own, and one per
+        retained store backup.
+
+        A backup carries the root's `.root-runtime.json`, because `RootRuntimeStore` is
+        `RollbackRetained`; restoring one re-attaches the root to whichever runtime was
+        published when it was taken. Three such backups were on this machine when the pile
+        was found, reaching two runtimes older than the outgoing one, so current and
+        outgoing alone are not the rollback holders.
+        """
+        return (RecordedPointer.read_at(root),
+                *(RecordedPointer.read_at(backup.data_root)
+                  for backup in StoreBackup.retained(root, spill_dir)))
 
     @staticmethod
     def owning(runtimes: Path, path: Path) -> frozenset[Path]:
@@ -90,25 +158,6 @@ class RuntimeRetention:
         relative = path.relative_to(runtimes) if path.is_relative_to(runtimes) else None
         return frozenset((runtimes / relative.parts[0],)) if relative and relative.parts \
             else frozenset()
-
-    @staticmethod
-    def attached(root: Path) -> frozenset[Path]:
-        """The prefix this bus root is published to, which outlives every process on it."""
-        return recorded_prefix(root)
-
-    @staticmethod
-    def restorable(root: Path, spill_dir: Path) -> frozenset[Path]:
-        """The prefixes this root's retained store backups would publish if restored.
-
-        A backup carries the root's `.root-runtime.json`, because `RootRuntimeStore` is
-        `RollbackRetained`; restoring one re-attaches the root to whichever runtime was
-        published when it was taken. Three such backups were on this machine when the pile
-        was found, reaching two runtimes older than the outgoing one, so current and
-        outgoing alone are not the rollback holders.
-        """
-        return frozenset().union(
-            *(recorded_prefix(backup.data_root)
-              for backup in StoreBackup.retained(root, spill_dir)), frozenset())
 
     def built(self) -> tuple[Path, ...]:
         """Every prefix under the runtimes directory, newest name last."""

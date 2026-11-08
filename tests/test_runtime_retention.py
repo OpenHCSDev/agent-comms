@@ -14,6 +14,7 @@ from agent_comms.runtime_processes import (
     RuntimeApplication,
     RuntimeProcess,
     RuntimeProcesses,
+    UnattributedRuntimeProcess,
     UnreadableRuntimeProcess,
     UnretiredRuntimeProcess,
 )
@@ -90,6 +91,58 @@ def test_an_install_retires_the_built_runtimes_nothing_holds(tmp_path):
     assert not any(runtime.prefix.exists() for runtime in stale)
     for kept in (staged, outgoing, borrowed, bundled, held_by_root, restorable, unfinished):
         assert kept.prefix.is_dir(), kept.prefix.name
+
+
+def test_a_backup_pointer_it_cannot_read_retires_nothing(tmp_path):
+    """A record that is present and will not decode is unknown, not absent. Reading it as
+    absence would drop the only hold on the runtime that backup would restore, and the
+    sweep would take exactly the rollback target it was meant to protect."""
+    runtimes = tmp_path / "runtimes"
+    staged, stale = built(runtimes, "new"), built(runtimes, "stale")
+    root = attached_root(tmp_path, staged)
+    spill = tmp_path / "spill"
+    backup = taken_backup(spill, root, stale)
+    (backup / "stores/.root-runtime.json").write_text("{not json")
+
+    retention = RuntimeRetention.after_install(
+        staged, staged, RuntimeProcesses(()), root, spill)
+
+    outcome = retention.retire()
+    assert isinstance(outcome, RefusedRetirement)
+    assert "Unreadable runtime pointer" in outcome.line()
+    assert stale.prefix.is_dir()
+
+
+def test_a_root_that_published_nothing_is_not_an_unreadable_one(tmp_path):
+    """Absence is a complete answer, and must not refuse: a bus root with no record has
+    published no runtime, which is the ordinary state of a root the install just made."""
+    runtimes = tmp_path / "runtimes"
+    staged, stale = built(runtimes, "new"), built(runtimes, "stale")
+
+    retention = RuntimeRetention.after_install(
+        staged, staged, RuntimeProcesses(()), tmp_path / "unpublished", tmp_path / "no-spill")
+
+    assert isinstance(retention.retire(), SweptRetirement)
+    assert not stale.prefix.exists()
+
+
+def test_a_process_invoked_through_the_pointer_retires_nothing(tmp_path):
+    """`current` names whichever build was published when the process started, so once it
+    has moved the command no longer says which. It holds one of them and will not say
+    which, so none of them can be decided about."""
+    runtimes = tmp_path / "runtimes"
+    staged, stale = built(runtimes, "new"), built(runtimes, "stale")
+    pointer = LaunchRuntime.pointer_in(runtimes.parent)
+
+    retention = RuntimeRetention.after_install(
+        staged, staged,
+        RuntimeProcesses((UnattributedRuntimeProcess(5150, pointer / "bin/python"),)),
+        tmp_path / "no-bus", tmp_path / "no-spill")
+
+    outcome = retention.retire()
+    assert isinstance(outcome, RefusedRetirement)
+    assert "names the installation's pointer" in outcome.line()
+    assert stale.prefix.is_dir()
 
 
 def test_a_process_scan_it_could_not_read_retires_nothing(tmp_path):
