@@ -3,10 +3,8 @@
 from dataclasses import dataclass, field
 from typing import ClassVar, Self
 
-from agent_comms.nominal.field_codec import OrderId
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.standing_rules import HeldBranch, HeldBranchRule
-from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.standing_rules import HeldBranch, HeldBranchRule, HeldOrderBranchRule
 from agent_comms.turn_digests import OrderToolCallCountRead, TurnsSince
 
 
@@ -16,8 +14,6 @@ class SpinningTeammate(HeldBranchRule, declared_name="spinning_unit"):
     not a source change: the empty first commit every draft PR starts with moves HEAD and
     changes nothing (2026-10-25: unit-signal made 92 calls on P681 behind one)."""
 
-    problem: str
-    holder: ThreadIncarnation
     call_count: int = field(compare=False)
 
     calls: ClassVar[int] = 40
@@ -35,7 +31,7 @@ class SpinningTeammate(HeldBranchRule, declared_name="spinning_unit"):
                 TurnsSince(held.todo.order.checked().at.recorded_at("A held order")), held.todo,
             ).read()
             if count >= cls.calls:
-                found.append(cls(held.problem, held.holder, count))
+                found.append(cls(holder=held.holder, problem=held.problem, call_count=count))
         return tuple(found)
 
     def line(self) -> str:
@@ -44,12 +40,9 @@ class SpinningTeammate(HeldBranchRule, declared_name="spinning_unit"):
 
 
 @dataclass(frozen=True)
-class StaleUncommittedEdits(HeldBranchRule):
+class StaleUncommittedEdits(HeldOrderBranchRule):
     """A held order's selected edits have stopped moving without becoming a commit."""
 
-    problem: str
-    order: OrderId
-    holder: ThreadIncarnation
     edited_at: float
     now: float = field(compare=False)
 
@@ -58,7 +51,8 @@ class StaleUncommittedEdits(HeldBranchRule):
     @classmethod
     def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
         return tuple(
-            cls(held.problem, held.todo.order.checked().id, held.holder, edited, held.source.now)
+            cls(holder=held.holder, problem=held.problem, order=held.todo.order.checked().id,
+                edited_at=edited, now=held.source.now)
             for held in branches
             for progress in held.source.frame.pulls.progress(
                 (held.todo,), held.source.comms.registry).values()

@@ -800,8 +800,8 @@ def test_new_local_commit_on_an_unpushed_branch_is_not_a_resolution(notification
 
     comms = notification_bus
     holder = comms.registry.require("worker").incarnation
-    first, moved = (UnpushedBranch("P594", "order", holder, tmp_path,
-                                   UnpushedHead(head, commits, ""))
+    first, moved = (UnpushedBranch(holder=holder, problem="P594", order="order",
+                                   worktree=tmp_path, unpublished=UnpushedHead(head, commits, ""))
                     for head, commits in (("a" * 40, 54), ("b" * 40, 57)))
     assert RulePing.capture(first) == RulePing.capture(moved)
     beat(comms, (first,))
