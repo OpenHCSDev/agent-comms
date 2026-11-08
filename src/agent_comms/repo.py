@@ -572,16 +572,16 @@ class PinnedSubmodule:
         """Whether the checkout-relative file belongs under this pinned module."""
         return (self.checkout / file).is_relative_to(self.path)
 
-    def lines(self, commit: str, file: str) -> tuple[str, ...]:
+    def lines(self, commit: str, file: str, *, read: Callable[..., str] = Repo.git) -> tuple[str, ...]:
         """Read the parent's pinned object, independent of the module's working tree."""
         module = self.path.relative_to(self.checkout).as_posix()
-        pinned = Repo.git(self.checkout, 'rev-parse', f'{commit}:{module}').strip()
+        pinned = read(self.checkout, 'rev-parse', f'{commit}:{module}').strip()
         relative = (self.checkout / file).relative_to(self.path).as_posix()
         store = self.store
-        Repo.git(self.checkout, '--git-dir', str(store), 'rev-parse', '--verify',
+        read(self.checkout, '--git-dir', str(store), 'rev-parse', '--verify',
                  f'{pinned}^{{commit}}')
         try:
-            text = Repo.git(self.checkout, '--git-dir', str(store),
+            text = read(self.checkout, '--git-dir', str(store),
                             'show', f'{pinned}:{relative}')
             return tuple(text.splitlines())
         except GitCommandError as error:

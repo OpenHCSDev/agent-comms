@@ -34,6 +34,10 @@ from .repository_name import RepositoryName
 class SourceText(ABC):
     """Where cited source lines are read: a fetched git revision or a checkout's files."""
 
+    def prepare(self, repository: Path, file: str) -> tuple[str, ...]:
+        """Return prepared citation lines; working-tree files need no acquisition."""
+        return self.lines(repository, file)
+
     @abstractmethod
     def lines(self, repository: Path, file: str) -> tuple[str, ...]: ...
 
@@ -76,20 +80,26 @@ class SourceRevision(SourceText):
     def resolve(self, repository: Path) -> str:
         """The commit this revision names in ``repository``."""
 
+    def prepare(self, repository: Path, file: str) -> tuple[str, ...]:
+        return self._lines(repository, file, Repo.acquire_git)
+
     def lines(self, repository: Path, file: str) -> tuple[str, ...]:
+        return self._lines(repository, file, Repo.git)
+
+    def _lines(self, repository: Path, file: str, read: Callable[..., str]) -> tuple[str, ...]:
         if repository not in self._commits:
             self._commits[repository] = self.resolve(repository)
         commit = self._commits[repository]
         root = repository.absolute()
         path = (root / file).relative_to(root).as_posix()
         try:
-            text = Repo.git(repository, 'show', f'{commit}:{path}')
+            text = read(repository, 'show', f'{commit}:{path}')
             return tuple(text.splitlines())
         except GitCommandError as error:
             if error.source_path_absent(commit, path):
                 for submodule in Checkout(repository).submodules():
                     if submodule.contains(path):
-                        return submodule.lines(commit, path)
+                        return submodule.lines(commit, path, read=read)
                 raise MissingSourceLine(
                     f'Source file {file} does not exist at {commit}.'
                 ) from error
@@ -108,8 +118,13 @@ class FetchedRevision(SourceRevision):
     @abstractmethod
     def fetch_refspec(self) -> str: ...
 
+    def prepare(self, repository: Path, file: str) -> tuple[str, ...]:
+        with Repo.acquiring():
+            if repository not in self._commits:
+                Repo.git(repository, 'fetch', Repo.remote, self.fetch_refspec)
+            return super().prepare(repository, file)
+
     def resolve(self, repository: Path) -> str:
-        Repo.git(repository, 'fetch', 'origin', self.fetch_refspec)
         return Repo.git(
             repository, 'rev-parse', '--verify', f'{self.reference}^{{commit}}'
         ).strip()
@@ -141,6 +156,9 @@ class CitedRevisions(SourceRevision):
 
     def resolve(self, repository: Path) -> str:
         return self.revisions[0].resolve(repository)
+
+    def prepare(self, repository: Path, file: str) -> tuple[str, ...]:
+        return self.revisions[0].prepare(repository, file)
 
     def lines(self, repository: Path, file: str) -> tuple[str, ...]:
         return self.revisions[0].lines(repository, file)
@@ -361,7 +379,7 @@ class FileLine(WireValue, SourceReference):
         revision.require_any(lambda candidate: self.require_line(repository, candidate))
 
     def require_line(self, repository: Path, revision: SourceText) -> None:
-        if self.line > len(revision.lines(repository, self.file)):
+        if self.line > len(revision.prepare(repository, self.file)):
             raise MissingSourceLine(
                 f"Source owner {self.to_wire()} does not exist at the cited revision."
             )
@@ -372,7 +390,7 @@ class FileLine(WireValue, SourceReference):
     ) -> FileLine:
         """Resolve a nominal module class in the same Git source its order will cite."""
         file = repository.module_file(declaration.__module__).as_posix()
-        body = ast.parse('\n'.join(revision.lines(repository.checkout, file)), filename=file).body
+        body = ast.parse('\n'.join(revision.prepare(repository.checkout, file)), filename=file).body
         for name in declaration.__qualname__.split('.'):
             for node in body:
                 if isinstance(node, ast.ClassDef) and node.name == name:
@@ -390,7 +408,7 @@ class FileLine(WireValue, SourceReference):
         revision.require_any(lambda candidate: self.require_class_at(repository, candidate))
 
     def require_class_at(self, repository: Path, revision: SourceText) -> None:
-        tree = ast.parse('\n'.join(revision.lines(repository, self.file)), filename=self.file)
+        tree = ast.parse('\n'.join(revision.prepare(repository, self.file)), filename=self.file)
         declarations = tuple(node for node in ast.walk(tree) if isinstance(node, ast.ClassDef))
         if not any(node.lineno == self.line for node in declarations):
             if declarations:

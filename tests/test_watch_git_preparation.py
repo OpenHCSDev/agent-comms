@@ -34,7 +34,8 @@ from git_shutdown_fixture import HeldGitHTTP, held_commit
 from agent_comms.nominal_census import NominalCensus
 from agent_comms.phase_evidence import BusStorageAbsent, CommitMerged, EvidenceFound, EvidenceUnread, MainTree, PathsAbsent, PhaseEvidence
 from agent_comms.repo import Checkout, GitCommandError, Repo, UnavailableCommitError
-from agent_comms.todos import DraftPullRequest, UnmergedPullRequest
+from agent_comms.todos import CitedEvidence, DraftPullRequest, UnmergedPullRequest
+from agent_comms.change_report import CommitRevision, FileLine, OrderRoots
 from agent_comms.work_branches import SourceGrowth, WorkBranchError, WorkBranches
 from source_revision_fixture import SourceRepository
 from team_heartbeat_fixture import RetainedNominalPlanReadings
@@ -417,6 +418,17 @@ def test_promised_content_is_unreadable_not_absent_and_never_lazily_acquired(
     expected_reader = WorkBranches(source.checkout)
     expected_reader.prepare_pull_request(review_base, head)
     assert request.change_identity(review_reader, review_base) == request.change_identity(expected_reader, review_base)
+    citation_case = GitPreparation.create(source, tmp_path / "citation-promisor", "--no-checkout", "--filter=blob:none")
+    for blob in objects:
+        assert GitLaunch._run(citation_case.repository.checkout, "--no-lazy-fetch", "cat-file", "-e", blob).returncode != 0
+    cited = CitedEvidence(evidence=(FileLine("src/added.py", 1),))
+    cited.require_cited(OrderRoots(citation_case.repository.checkout, source.project), CommitRevision(head))
+    assert Repo.git(citation_case.repository.checkout, "show", f"{head}:src/added.py") == expected
+    readonly_case = GitPreparation.create(source, tmp_path / "readonly-promisor", "--no-checkout", "--filter=blob:none")
+    before_read = readonly_case.snapshot()
+    with pytest.raises(GitCommandError):
+        CommitRevision(head).lines(readonly_case.repository.checkout, "src/added.py")
+    assert readonly_case.snapshot() == before_read
 
 
 @pytest.mark.parametrize("method", ("GET", "POST"))
