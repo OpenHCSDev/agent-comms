@@ -36,6 +36,7 @@ from agent_comms.messaging.bus_tables import (
 from agent_comms.task_attachments.team_pings import TeamUpdateNotice, TeamUpdate
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.messaging.messages import (
+    ConversationActivity,
     BusProjectionTables,
     BusRow,
     BusTables,
@@ -109,6 +110,12 @@ def projection_source(pristine_projection: PristineProjection, tmp_path: Path) -
     checkout = tmp_path / "producer-source"
     shutil.copytree(pristine_projection.checkout, checkout, symlinks=True)
     return checkout / "src" / "agent_comms"
+
+
+def _module_file(declared: type) -> Path:
+    """Where `declared`'s module lives under the agent_comms package."""
+
+    return Path(*declared.__module__.split(".")[1:]).with_suffix(".py")
 
 
 def projection_source_digest(source: Path) -> str:
@@ -298,7 +305,7 @@ def test_activity_source_changes_only_sent_activity(
     pristine_projection: PristineProjection, projection_source: Path,
 ) -> None:
     before = json.loads(pristine_projection.digest)
-    path = projection_source / "messages.py"
+    path = projection_source / _module_file(ConversationActivity)
     original = path.read_text()
     old = "return (SentActivity(message.sender, message.timestamp),)"
     assert original.count(old) == 1
@@ -314,8 +321,10 @@ def test_display_import_does_not_add_projection_producers(
     before = pristine_projection.digest
     path = projection_source / "producer_stamp.py"
     original = path.read_text()
-    declaration = "from agent_comms.messaging.bus import Bus as Bus"
-    assert original.count(declaration) == 1
+    (declaration,) = (
+        line for line in original.splitlines()
+        if line.partition("#")[0].rstrip().endswith("import Bus as Bus")
+    )
     path.write_text(original.replace(declaration, declaration + "\nfrom agent_comms import cli"))
     assert projection_source_digest(projection_source) == before
 
@@ -910,10 +919,11 @@ def test_moving_a_producer_module_to_another_package_keeps_every_producer_digest
     2026-11-04 #4084's storage move made all 13 bus tables 'stored rows of an earlier
     producer' and cost a 128 s rehearsal rebuild."""
     checkout = projection_source.parents[1]
+    producer = _module_file(ConversationActivity)
     # The codemod moves with `git mv`, so the copy's files are tracked first.
     subprocess.run(("git", "-C", str(checkout), "add", "-A"), check=True, capture_output=True)
     subprocess.run((sys.executable, str(Path(__file__).resolve().parents[1] / "tools" /
-                    "move_flat_modules.py"), str(checkout), "relocated", "messages"),
+                    "move_flat_modules.py"), str(checkout), "relocated", producer.parts[0]),
                    check=True, capture_output=True, timeout=120)
-    assert (projection_source / "relocated" / "messages.py").exists()
+    assert (projection_source / "relocated" / producer).exists()
     assert projection_source_digest(projection_source) == pristine_projection.digest
