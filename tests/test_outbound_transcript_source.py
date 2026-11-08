@@ -4,6 +4,7 @@ from agent_comms.notification_assignment import NotificationSelection
 from agent_comms.notification_evidence import AllOutcomes, OwnerOutcomes
 from agent_comms.repo import Checkout
 from agent_comms.channel_targets import CommandTarget
+from agent_comms.messages import Message
 
 import sqlite3
 import sys
@@ -413,3 +414,48 @@ def test_a_forced_key_batch_captures_the_same_evidence_through_the_recipient_ind
         assert any(detail.startswith(f"SEARCH {WakeAssignment.declared_name} USING INDEX {index}")
                    for detail in plan), plan
         assert not any(detail.startswith(f"SCAN {WakeAssignment.declared_name}") for detail in plan), plan
+
+
+def test_a_page_retains_its_sent_publication_answers_across_the_wire(tmp_path):
+    from agent_comms.sent_message import PublishedSentMessage
+    from agent_comms.transcripts import TranscriptPage
+
+    _path, _root_id, comms, _initial, _people = _root(tmp_path)
+    message = comms.messaging.send("beta", "sender", "Retained remote publication").message
+    page = comms.transcripts.capture_page_read("beta").read()
+    sent = page.events[-1]
+    remote = FieldCodec.decode(TranscriptPage, FieldCodec.encode(page))
+    database = comms.bus.bus.path
+    absent = database.with_suffix(".off-device")
+    database.rename(absent)
+    try:
+        resolved, = remote.resolve_sent((sent,))
+    finally:
+        absent.rename(database)
+    assert isinstance(resolved, PublishedSentMessage)
+    assert resolved.original == Message.from_message(message)
+    assert resolved.reference.message == message.reference
+    assert resolved.scope.recipient == comms.registry.require("beta").incarnation
+    assert resolved.scope.root == str(comms.root)
+
+
+def test_captured_report_evidence_keeps_unproved_reports_unproved(tmp_path):
+    from agent_comms.sent_message import PublishedSentMessage
+    from agent_comms.sent_reports import CapturedSentReports
+    from agent_comms.transcript_events import SentTranscript, ToolEndTranscript
+    from agent_comms.nominal.field_codec import ToolCallId
+
+    _path, _root_id, comms, _initial, _people = _root(tmp_path)
+    message = comms.messaging.send("beta", "sender", "Exact original").message
+    report = SentTranscript.from_message(message)
+    forged = replace(report, text="Not the original body")
+    source = AssignedTranscriptSource.for_thread(comms.root, comms.registry.require("beta"), comms.bus.bus)
+    tool = ToolEndTranscript(tool_call_id=ToolCallId("send"), tool_name="comms_send", timestamp=message.timestamp,
+                             position=0, sent_message=report)
+    assert tool.sent_reports() == (report,)
+    captured = CapturedSentReports(sent_resolutions=source.capture_sent_reports((report, forged)))
+    remote = FieldCodec.decode(CapturedSentReports, FieldCodec.encode(captured))
+    resolved, unproved = remote.resolve_sent((report, forged))
+    assert isinstance(resolved, PublishedSentMessage)
+    assert resolved.original == Message.from_message(message)
+    assert unproved == forged

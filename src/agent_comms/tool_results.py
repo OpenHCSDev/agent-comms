@@ -42,6 +42,9 @@ class NoToolDiff(NullMember):
 class NoSentMessage(NullMember):
     """The tool result reports no sent message."""
 
+    def sent_reports(self) -> tuple:
+        return ()
+
     def result_parts(self, otherwise: tuple) -> tuple:
         return otherwise
 

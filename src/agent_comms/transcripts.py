@@ -41,6 +41,7 @@ from .registry.registration import Registration
 from .registry.registry_store import RegistryStore
 from .routing import TurnRouting
 from .sent_message import AssignedSourceIdentity
+from .sent_reports import CapturedSentReports
 from .registry.threads import Thread, ThreadProvenance
 from .transcript_events import ForkOriginTranscript, ForkTaskTranscript, TranscriptEvent
 from .transcript_routes import TranscriptRoutes
@@ -393,7 +394,7 @@ class Through(PageLimit):
 
 
 @dataclass(frozen=True, slots=True)
-class TranscriptPage:
+class TranscriptPage(CapturedSentReports):
     events: tuple[TranscriptEvent, ...]
     before: TranscriptCursor
     after: TranscriptCursor
@@ -966,6 +967,8 @@ class Transcripts:
                 has_older,
                 end != frontier,
                 identity,
+                sent_resolutions=source.capture_sent_reports(
+                    report for event in events for report in event.sent_reports()),
             ),
             draft,
         )
