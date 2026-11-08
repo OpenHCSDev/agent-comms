@@ -147,7 +147,7 @@ def test_teammate_state_family_uses_real_records(held_bus, tmp_path, request, me
         elif member is Idle:
             teammate = "outsider"
         elif member is Blocked:
-            blocked_holder(comms)
+            blocked_holder(comms, request.getfixturevalue("native_runtime_package"))
         elif member is Detached:
             comms.registry.register(comms.registry.require(teammate), StoppedThreadStatus())
         elif member is AwaitingTeam:
