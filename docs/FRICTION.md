@@ -143,8 +143,16 @@ The rule rejects path-looking variables in commands, which is right for writes a
 read-only scan over several checkouts. It also tells you to do something impossible ("use a
 literal destination") for a loop whose whole point is that there is no single destination.
 
-**Owner:** the storage rule's command scan. **Fix:** exempt commands that write nothing, or name
-the one write it thinks it found.
+**Owner:** Git's effect decoding and the shell's loop-body word. **P17 reproduction:** direct
+`git -C "$repo" status --short` still raises the destination refusal. On the current baseline,
+the exact loop above instead passes accidentally: `do git ...` is decoded as a program named
+`do`, hiding the first command's effects. The same blind spot hides a first-body `touch "$p/file"`
+or `git -C "$p" reset --hard`; admission of the original loop alone is therefore not proof.
+
+**Repair:** the working-tree effect requests physical directory resolution only when needed,
+while `do` at command position introduces the real body command. Regression coverage checks
+reads, first-body writes, forbidden checkout creation, redirections, and repeated literal `-C`.
+With the source changes stashed: 10 failed / 9 passed. Restored with the storage suite: 94 passed.
 
 ## 7. Nothing on this host writes the frames, so every `order` verb refuses
 

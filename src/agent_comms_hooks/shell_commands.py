@@ -331,6 +331,18 @@ class Separator(Operator, spellings=(';', ';;', ';&', ';;&', '&', '&&', '|', '||
     pass
 
 
+class LoopBodyWord(ShellWord, spellings=('do',)):
+    """At command position, ``do`` introduces the loop body, not an executable.
+
+    Keeping it as the program name concealed the first body's storage effects. As an
+    argument (or when quoted) it is still ordinary text.
+    """
+
+    def argument(self, parser: ShellParser) -> None:
+        if parser.words:
+            super().argument(parser)
+
+
 class BraceWord(ShellWord, spellings=('{', '}')):
     """Reserved at command position; an argument or redirection still owns its word."""
 
