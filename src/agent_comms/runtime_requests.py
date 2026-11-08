@@ -7,11 +7,16 @@ commands do not own coordination, backend or identity lifecycles.
 
 from __future__ import annotations
 
+from .comms import Comms
 from .controller import NO_CONTROLLER
+from .errors import RelationViolationError
 from .projects.checkouts import Checkout
 
 import json
-from abc import abstractmethod
+from abc import (
+    ABC,
+    abstractmethod,
+)
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
@@ -43,7 +48,11 @@ from .nominal.field_codec import (
 from .planning.goal_history import RecordedGoalHistory
 from .planning.goals import Goal
 from .manual_compaction_bridge import compact_context
-from .bus_read import OwnerScopedRead
+from .bus_read import (
+    OwnerReadRuntimeRequest,
+    OwnerScopedRead,
+)
+from .thread_identity import ThreadIncarnation
 from .transport.runtime_requests import (
     CancelRuntimeRequest,
     ClearQueueRuntimeRequest,
@@ -90,7 +99,10 @@ from .owner_connection import socket_path
 from .owner_protocol import ClientLine, OwnerAnnouncement, OwnerFailure, OwnerReady
 from .pi_payloads import NativeContextData
 from .thread_presentation import LiveThreadOwnerBinding
-from .tool_result import DeclaredReply
+from .tool_result import (
+    DeclaredReply,
+    ToolResult,
+)
 from .turn_context import (
     ContextManifest,
     ContextSourceText,
@@ -98,6 +110,27 @@ from .turn_context import (
 )
 from .working_memory_annotations import WorkingMemoryAnnotations
 from .working_memory_labels import ModelLabel
+
+
+class OwnedRead[Result: ToolResult = ToolResult](OwnerScopedRead[Result], ABC):
+    @abstractmethod
+    async def owned(self, ctx: AttachedRuntimeRequestContext) -> Result: ...
+
+
+class OwnerLiveRead[Result: ToolResult = ToolResult](OwnedRead[Result], ABC):
+    """This subfamily has no answer without the selected live native owner."""
+
+    def unavailable(self, comms: Comms, owner: ThreadIncarnation) -> Result:
+        raise RelationViolationError("The read requires the live native owner.")
+
+
+class ServedOwnerReadRuntimeRequest(
+    ServedAttachedResultRuntimeRequest,
+    OwnerReadRuntimeRequest,
+):
+    async def result(self, ctx: AttachedRuntimeRequestContext) -> ToolResult:
+        return await self.operation.owned(ctx)
+
 
 if TYPE_CHECKING:
     from .agent_backend import CompactionOutcome

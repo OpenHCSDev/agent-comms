@@ -25,9 +25,12 @@ from ...acp_extension import (
     TurnChangedUpdate,
     UpdateMetadata,
 )
+from ...runtime_requests import (
+    OwnedRead,
+    OwnerLiveRead,
+)
 from ...bus_read import (
     CapturesTranscriptPage,
-    OwnerLiveRead,
     OwnerScopedRead,
     UiRead,
 )
@@ -611,7 +614,7 @@ class CommsTurnsTool(ThreadReadTool):
                        detail=self.detail)
 
 
-class ServedInputDeliveryRead(OwnerScopedRead, InputDeliveryRead):
+class ServedInputDeliveryRead(OwnedRead, InputDeliveryRead):
     """Serving the delivery projection: the owner's queue when observed, else the stored one."""
 
     def unavailable(self, comms: Comms, owner: ThreadIncarnation) -> DeliveryOverview:
