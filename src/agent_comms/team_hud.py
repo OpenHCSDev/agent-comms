@@ -27,7 +27,10 @@ from agent_comms.nominal.field_codec import (
     projected,
 )
 from agent_comms.storage.locked_store import JsonDocument
-from agent_comms.plan_phases import Plan, PlanPhase
+from .planning.plan_phases import (
+    Plan,
+    PlanPhase,
+)
 from agent_comms.service_passes import BoardUnavailable, FailingPass, ServicePassStore, ServiceReading
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.ui_model.teammate_state import TeammateState

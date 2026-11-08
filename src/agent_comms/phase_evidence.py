@@ -362,7 +362,7 @@ class PatternEvidence(MainEvidence):
 
     def searched(self, main: MainTree) -> tuple[str, ...]:
         """``paths`` without the phase declarations, which spell every pattern they ban."""
-        from .plan_phases import PlanPhase
+        from .planning.plan_phases import PlanPhase
 
         declaration = main.repo.module_file(PlanPhase.__module__)
         return (*self.paths, f":!{declaration.as_posix()}")

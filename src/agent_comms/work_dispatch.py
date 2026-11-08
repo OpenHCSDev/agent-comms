@@ -41,7 +41,7 @@ from .registry.threads import NativeThread, Thread
 if TYPE_CHECKING:
     from .comms import Comms
     from .plan_reading import PlanReading
-    from .plan_phases import PlanPhase
+    from .planning.plan_phases import PlanPhase
 
 
 @dataclass(frozen=True)
