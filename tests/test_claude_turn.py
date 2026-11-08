@@ -120,18 +120,27 @@ def test_an_assistant_record_with_no_prompt_opens_its_own_turn():
     assert session.turn == KnownTurn(NativeTurnId(transcript_record('thinking')))
 
 
-def test_an_api_retry_notice_reads_as_a_system_event_that_ends_no_turn():
-    """2026-11-06: Claude Code 2.1.318 wrote its first api_error record (a 529 retry notice) and
-    the undeclared subtype stopped claude-b-ui's watch; nothing reached the bus after it."""
+@pytest.mark.parametrize('notice', [
+    # 2026-11-06: Claude Code 2.1.318's first api_error record (a 529 retry notice) stopped
+    # claude-b-ui's watch; nothing reached the bus after it.
+    dict(type='system', subtype='api_error', level='error', uuid=transcript_record('retry'),
+         timestamp='2026-11-06T19:53:37.000Z', sessionId='session', source='request_retry',
+         retryAttempt=1, retryInMs=501, maxRetries=7, version='2.1.318',
+         error=dict(message='529 overloaded_error', status=529, requestId='req_1',
+                    formatted='529 Overloaded', connection=None, isNetworkDown=False,
+                    rateLimits=None, noResponse=None)),
+    # 2026-11-08: a refused request retried on the fallback model stopped claude-laptop's
+    # bridge, and every restart died on the same line.
+    dict(type='system', subtype='model_refusal_fallback', level='warning',
+         uuid=transcript_record('fallback'), timestamp='2026-11-06T21:58:52.752Z',
+         sessionId='session', content='Switched to the fallback model.', trigger='refusal',
+         direction='retry', scope='session', originalModel='claude-opus-5-5',
+         fallbackModel='claude-opus-5', requestId='req_2', apiRefusalCategory='reasoning_extraction',
+         apiRefusalExplanation=None, refusedUserMessageUuid=None, isMeta=False),
+], ids=lambda notice: notice['subtype'])
+def test_a_retry_notice_reads_as_a_system_event_that_ends_no_turn(notice):
     running = NativeTurnId(transcript_record('prompt'))
     session = ClaudeSession(phase=Live(), turn=KnownTurn(running))
-    notice = dict(
-        type='system', subtype='api_error', level='error', uuid=transcript_record('retry'),
-        timestamp='2026-11-06T19:53:37.000Z', sessionId='session', source='request_retry',
-        retryAttempt=1, retryInMs=501, maxRetries=7, version='2.1.318',
-        error=dict(message='529 overloaded_error', status=529, requestId='req_1', formatted='529 Overloaded',
-                   connection=None, isNetworkDown=False, rateLimits=None, noResponse=None),
-    )
     record = ClaudeJsonLines().decode_line(json.dumps(notice).encode(), 0)
     assert not record.ends_turn()
     assert record.updates(session) == ()
