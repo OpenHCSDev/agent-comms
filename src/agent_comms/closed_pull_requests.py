@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
 
 from .head_review import PullRequestHead
 from .message_bus import JoinedWatch
@@ -17,8 +16,7 @@ from .todos import (
 )
 from .work_branches import CommitBase, UnservableCommitBase, WorkBranchError, WorkBranches
 
-if TYPE_CHECKING:
-    from .comms import Comms
+from .comms import Comms
 
 
 @dataclass(frozen=True)
@@ -83,7 +81,7 @@ class ClosedHeadScan:
                              db, self.repo, commit.patches - self.new_patches))
 
 
-class ClosedPullRequestWatch(JoinedWatch):
+class ClosedPullRequestWatch(JoinedWatch[Comms]):
     """Each completed repository publishes before the next external observation starts."""
 
     def watch_pass(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:

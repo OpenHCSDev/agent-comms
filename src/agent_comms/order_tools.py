@@ -237,7 +237,7 @@ class CommsUnjudgedTool(ThreadReadTool):
         passes = ServicePassStore.at(comms.root).read()
         edits: list[EditCall] = []
         unavailable: list[UnavailableOrderEdits] = []
-        for read in OrderEditsRead.for_team(comms, owner.name):
+        for read in OrderEditsRead.for_team(comms.goals, owner.name):
             try:
                 edits.extend(read.read())
             except (WorkBranchError, OSError) as error:
@@ -760,7 +760,7 @@ class CommsEmergencyReleaseTool(ThreadToolRequest, declared_name="comms_emergenc
         waived: list[WaivedEdits] = []
         unreadable: list[UnavailableOrderEdits] = []
         verdicts: list[JudgedCall] = []
-        for read in OrderEditsRead.for_team(comms, caller.name):
+        for read in OrderEditsRead.for_team(comms.goals, caller.name):
             try:
                 edits = read.read()
             except (WorkBranchError, OSError) as error:

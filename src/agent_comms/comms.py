@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator, Mapping
 from contextlib import AbstractContextManager, aclosing
 from dataclasses import dataclass
-from functools import cached_property, partial
+from functools import partial
 import math
 import time
 from typing import ClassVar
@@ -22,14 +22,13 @@ from .errors import UnregisteredThreadError
 from .goal_management import Goals
 from .history_views import HistoryViews
 from .storage.maintenance_barrier import MaintenanceBarrier
-from .message_bus import MessageBus
+from .message_bus import BusClient, MessageBus
 from .message_page import InboxPage
 from .message_reference import InboxStart
 from .agent_inbox import TakenInputStart
 from .messages import Message
 from .messaging import Messaging
 from .execution.owner_lifecycle import OwnerLifecycle
-from .publisher import OwnerPublisher
 from .relationships import ThreadRelationships
 from .agent_activity import AgentActivity
 from .registry.registration import Registration
@@ -91,7 +90,7 @@ class UntakenCut:
         return self.registry is snapshot and self.key == key
 
 
-class Comms(ActivityClient):
+class Comms(ActivityClient, BusClient):
     def __init__(self, root: CommsRoute) -> None:
         super().__init__(root)
         self.goals = Goals(self.root, self.registry, self.bus, self.agents)
@@ -138,10 +137,6 @@ class Comms(ActivityClient):
                         after = after.advanced(message.reference)
                     if not batch.remaining:
                         break
-
-    @cached_property
-    def bus(self) -> MessageBus:
-        return MessageBus(self.root, self.registry, OwnerPublisher)
 
     def activity_store(self) -> InboxActivity:
         return InboxActivity(self.root, self.registry, self.bus)

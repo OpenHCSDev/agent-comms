@@ -23,7 +23,7 @@ from git_shutdown_fixture import HeldGitHTTP
 from connector_shutdown_fixture import HeldCall
 
 
-class ShutdownWatch(HeldCall, WatchPass[None], affix="ShutdownWatch"):
+class ShutdownWatch(HeldCall, WatchPass[Comms, None], affix="ShutdownWatch"):
     """A private declaration family, never an extra production watch registration."""
 
     def observe(self, comms: Comms, prepared: None) -> None:

@@ -352,7 +352,7 @@ def test_edits_under_a_merged_order_are_nobodys_review(fork_bus):
     open_order = {hold.todo.id: NoCommitProgress() for hold in holds}
     merged = {hold.todo.id: MergedProgress("a" * 40) for hold in holds}
     workplaces = EditWorkplaces.capture(
-        comms, comms.registry.snapshot(), held.holders, ProgressRead())
+        comms.goals, comms.registry.snapshot(), held.holders, ProgressRead())
     assert [read.read() for read in OrderEditCountRead.judgeable(
         comms.root, holds, open_order, workplaces)] == [3]
     assert tuple(OrderEditCountRead.judgeable(comms.root, holds, merged, workplaces)) == ()
@@ -376,7 +376,7 @@ def edit_workplaces(comms):
     snapshot = comms.registry.snapshot()
     held = HeldOrders.of(comms.goals.todos, snapshot)
     history = comms.goals.todos.board_history()
-    return held.live, EditWorkplaces.capture(comms, snapshot, held.holders, ProgressRead(history))
+    return held.live, EditWorkplaces.capture(comms.goals, snapshot, held.holders, ProgressRead(history))
 
 
 def save_edit_order(comms, todo):

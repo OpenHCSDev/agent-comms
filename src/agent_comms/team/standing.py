@@ -9,7 +9,7 @@ from abc import abstractmethod
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from functools import partial
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import ClassVar, Self
 
 from agent_comms.build_identity import InstalledBuild, RecordedBuildIdentity, RepositoryCommit
 from agent_comms.bus import BusReader
@@ -52,6 +52,7 @@ from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.service_passes import ServicePassStore, TeamPass
 from agent_comms.standing_rules import (
+    ClearingVerb,
     CoreActsStandingRule,
     DatedStandingRule,
     IndependentStandingRule,
@@ -81,8 +82,6 @@ from agent_comms_hooks import SubagentId
 from ..cli_bridges.session_watch import DeafWatch
 
 
-if TYPE_CHECKING:
-    from agent_comms.team.order import TeamVerb
 
 
 @dataclass(frozen=True)
@@ -459,7 +458,7 @@ class DeliveryAwaitingJudgement(TeammateOwedAnswer, UndatedStandingRule, OrderHe
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         return False
 
-    def blocks(self, reached: frozenset[str], action: TeamVerb,
+    def blocks(self, reached: frozenset[str], action: ClearingVerb,
                answered: tuple[OwedAnswer, ...]) -> bool:
         """Work sent to the holder waits on this judgement; an answer to the holder's own ask
         never does, or the gate would refuse the conversation the answer gate demands."""
@@ -650,7 +649,7 @@ class RetainedHolderWheelSpin(CoreActsStandingRule, UnownedWheelSpin):
                 f" hand the row away? -> keep {self.todo.id} with {self.previous.owner}")
 
 
-class UnownedOrderWatch(WatchPass[tuple[UnownedWheelSpin, ...]]):
+class UnownedOrderWatch(WatchPass[Comms, tuple[UnownedWheelSpin, ...]]):
     """Keep dispatch preparation joined; only individually audited readers can be dropped.
     One pairing over every unowned order, so an idle unit is offered once; each rule acts as
     its own order's creator."""

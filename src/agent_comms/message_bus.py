@@ -14,9 +14,8 @@ from collections.abc import (
 )
 from contextlib import AbstractContextManager, aclosing, contextmanager
 from dataclasses import dataclass
-from functools import partial
+from functools import cached_property, partial
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from agent_comms.activity_clocks import ActivityClocks
 from agent_comms.agent_inbox import TakenInputCursor
@@ -59,14 +58,22 @@ from agent_comms.storage.maintenance_barrier import (
 
 from .watched import FileSource
 
-if TYPE_CHECKING:
-    from agent_comms.comms import Comms
-    from agent_comms.registry.registration import Registration
-    from agent_comms.registry.threads import Thread
-    from agent_comms.relationships import PeerRelation
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.threads import Thread
+from agent_comms.relationships import PeerRelation
+from agent_comms.route_client import RouteClient
+from agent_comms.publisher import OwnerPublisher
 
 
-class Watch(AsyncWork, WatchPhase, DeclaredFamily, ABC):
+class BusClient(RouteClient):
+    """The selected route owns one cached bus, without the other Core stores."""
+
+    @cached_property
+    def bus(self) -> MessageBus:
+        return MessageBus(self.root, self.registry, OwnerPublisher)
+
+
+class Watch[Wire: BusClient](AsyncWork, WatchPhase, DeclaredFamily, ABC):
     """Observe, then apply the result while the bus is open.
 
     A hold is waited out on the service's own loop, where its stop cancels the wait. Waiting
@@ -75,29 +82,29 @@ class Watch(AsyncWork, WatchPhase, DeclaredFamily, ABC):
     """
 
     @abstractmethod
-    async def run(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None: ...
+    async def run(self, opened_wire: Callable[[], AbstractContextManager[Wire]]) -> None: ...
 
-    def failed(self, opened_wire: Callable[[], AbstractContextManager[Comms]],
+    def failed(self, opened_wire: Callable[[], AbstractContextManager[Wire]],
                error: Exception) -> None:
         """A service may report its failed pass; ordinary watches need no extra action."""
 
 
-class JoinedWatch(Watch):
+class JoinedWatch[Wire: BusClient](Watch[Wire]):
     """The whole pass is one joined operation under maintenance."""
 
-    async def run(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
+    async def run(self, opened_wire: Callable[[], AbstractContextManager[Wire]]) -> None:
         with opened_wire() as comms:
             await comms.bus.when_open(partial(
                 self.enter_phase, comms.root, partial(self.watch_pass, opened_wire)))
 
     @abstractmethod
-    def watch_pass(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None: ...
+    def watch_pass(self, opened_wire: Callable[[], AbstractContextManager[Wire]]) -> None: ...
 
 
-class PreparedWatchPass[Prepared, Observed](Watch):
+class PreparedWatchPass[Wire: BusClient, Prepared, Observed](Watch[Wire]):
     """Joined effects finish; a source-proved safe read can drop observation."""
 
-    async def run(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
+    async def run(self, opened_wire: Callable[[], AbstractContextManager[Wire]]) -> None:
         with opened_wire() as comms:
             prepared = await comms.bus.when_open(partial(
                 self.enter_phase, comms.root, partial(self.prepare, comms)))
@@ -107,19 +114,19 @@ class PreparedWatchPass[Prepared, Observed](Watch):
                 self.enter_phase, comms.root, partial(self.pass_body, comms, observed)))
 
     @abstractmethod
-    def prepare(self, comms: Comms) -> Prepared: ...
+    def prepare(self, comms: Wire) -> Prepared: ...
 
     @abstractmethod
-    def observe(self, comms: Comms, prepared: Prepared) -> Observed: ...
+    def observe(self, comms: Wire, prepared: Prepared) -> Observed: ...
 
     @abstractmethod
-    def pass_body(self, comms: Comms, observed: Observed) -> None: ...
+    def pass_body(self, comms: Wire, observed: Observed) -> None: ...
 
 
-class WatchPass[Observed](PreparedWatchPass[None, Observed]):
+class WatchPass[Wire: BusClient, Observed](PreparedWatchPass[Wire, None, Observed]):
     """A phased watch with no acquisition; only watches with real inputs override preparation."""
 
-    def prepare(self, comms: Comms) -> None:
+    def prepare(self, comms: Wire) -> None:
         pass
 
 

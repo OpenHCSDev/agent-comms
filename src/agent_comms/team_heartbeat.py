@@ -223,7 +223,7 @@ class TeamBoardRead(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
 
 
 class TeamHeartbeat(TeamBoardRead, TeamPass,
-                    PreparedWatchPass[tuple[TeamInputs, ...], tuple[TeamObservation, ...]],
+                    PreparedWatchPass[Comms, tuple[TeamInputs, ...], tuple[TeamObservation, ...]],
                     declared_name="team_heartbeat"):
     """The scheduled service adds its effects to the same board the UI prepares."""
 

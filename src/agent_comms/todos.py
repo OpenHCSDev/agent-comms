@@ -178,7 +178,6 @@ from agent_comms.registry.registry_document import RegistrySnapshot, TeamProject
 SOURCE_READ_FAILURES = (OSError, SourceReadFailure, TimeoutExpired)
 
 from agent_comms.bus import BusReader
-from agent_comms.route_client import RouteClient
 
 
 @dataclass(frozen=True)
@@ -292,6 +291,7 @@ class OrderCompletion(DeclaredFamily, affix="Delivery"):
 class ProblemGoals(ABC):
     """The goal owner operations a Todo transition requires, independent of its manager."""
 
+    root: Path
     registry: Registration
     bus: PublishedBus
     todos: TodoStore
@@ -6935,14 +6935,14 @@ class EditWorkplaces:
             self.require_owner(todo, snapshot)
 
     @classmethod
-    def capture(cls, comms: RouteClient, snapshot: RegistrySnapshot, holders: Mapping[ThreadIncarnation, Sequence[Todo]],
+    def capture(cls, goals: ProblemGoals, snapshot: RegistrySnapshot, holders: Mapping[ThreadIncarnation, Sequence[Todo]],
                 pulls: ProgressRead
                 ) -> dict[ThreadIncarnation, EditWorkplaces]:
         """Acquire source/forge facts once, then match edits without Git or network calls."""
         todos = tuple(todo for owned in holders.values() for todo in owned)
         if not todos:
             return {}
-        prepared = cls.for_assignment(comms.root, snapshot, todos, (),
+        prepared = cls.for_assignment(goals.root, snapshot, todos, (),
                                       ObservedBoundaryRead(pulls))
         repositories = snapshot.team_project.require().repos
         registered = frozenset(repo.github for repo in repositories)
@@ -6972,7 +6972,7 @@ class EditWorkplaces:
                     for row in pulls.rows(repo.github, tuple(
                         link.number for link in links if link.repo == repo.github))
                     for link in links if link.repo == repo.github and link.number == row.number}
-        progress = pulls.progress(todos, comms.registry)
+        progress = pulls.progress(todos, goals.registry)
         source_orders: dict[Path, dict[str, Todo]] = {}
         for todo in todos:
             paths = {order.check.directory for order in todo.order.declarations}

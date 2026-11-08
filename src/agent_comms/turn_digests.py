@@ -8,7 +8,7 @@ from abc import abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self
+from typing import Annotated, ClassVar, Self
 
 from agent_comms_hooks import ToolRefusedError
 from pydantic import JsonValue
@@ -27,6 +27,7 @@ from .problem_number import ProblemNumber
 from .registry.threads import ConversationPreparation, Thread
 from .thread_identity import ThreadIncarnation
 from .todos import (
+    ProblemGoals,
     EditWorkplaces, NoCommitProgress, OrderProgress, ProgressRead, Todo, TodoStore,
 )
 from .tool_declaration import EditCall
@@ -36,9 +37,7 @@ from .transcript_events import IncomingTranscript, TurnDigest
 from .turn_item import NativeTurnId
 from .work_branches import WorkBranchError
 
-if TYPE_CHECKING:
-    from .comms import Comms
-    from .transcript_sources import TranscriptSource
+from .transcript_sources import TranscriptSource
 
 
 class TurnView(DeclaredFamily, affix="TurnView"):
@@ -302,14 +301,14 @@ class OrderEditRead[Result](OrderRead[Result]):
         return self.when_readable(super().read)
 
     @classmethod
-    def for_team(cls, comms: Comms, teammate: str) -> Iterator[Self]:
-        snapshot = comms.registry.snapshot()
-        held = HeldOrders.of(comms.goals.todos, snapshot)
-        history = comms.goals.todos.board_history()
+    def for_team(cls, goals: ProblemGoals, teammate: str) -> Iterator[Self]:
+        snapshot = goals.registry.snapshot()
+        held = HeldOrders.of(goals.todos, snapshot)
+        history = goals.todos.board_history()
         pulls = ProgressRead(history)
-        workplaces = EditWorkplaces.capture(comms, snapshot, held.holders, pulls)
+        workplaces = EditWorkplaces.capture(goals, snapshot, held.holders, pulls)
         yield from cls.judgeable(
-            comms.root, held.live, pulls.progress(held.todos, comms.registry), workplaces)
+            goals.root, held.live, pulls.progress(held.todos, goals.registry), workplaces)
 
     @classmethod
     def judgeable(cls, root: Path, holds: Iterable[LiveHold],

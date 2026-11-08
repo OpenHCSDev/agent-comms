@@ -402,7 +402,7 @@ async def test_request_log_names_the_route_and_never_its_values(client, store, r
 
 
 @dataclass
-class PublishingWatch(WatchPass[None], declared_name=None):
+class PublishingWatch(WatchPass[Comms, None], declared_name=None):
     calls: int = 0
     completed: threading.Event = field(default_factory=threading.Event)
 
