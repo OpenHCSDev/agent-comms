@@ -215,7 +215,7 @@ class FilesystemRole(DeclaredFamily, affix="Role"):
 
     @classmethod
     @abstractmethod
-    def accepts_permissions(cls, mode: int) -> bool: ...
+    def accepts_permissions(cls, observed: os.stat_result) -> bool: ...
 
     @classmethod
     def accepts_links(cls, nlink: int) -> bool:
@@ -265,8 +265,8 @@ class PrivateRole(FilesystemRole):
     permissions: ClassVar[int]
 
     @classmethod
-    def accepts_permissions(cls, mode: int) -> bool:
-        return stat.S_IMODE(mode) == cls.permissions
+    def accepts_permissions(cls, observed: os.stat_result) -> bool:
+        return stat.S_IMODE(observed.st_mode) == cls.permissions
 
     @classmethod
     def create(cls, path: str | Path, refusal: Exception, *, dir_fd: int | None = None) -> int:
@@ -354,7 +354,7 @@ class OwnedDirectoryRole(FilesystemRole):
         return stat.S_ISDIR(mode)
 
     @classmethod
-    def accepts_permissions(cls, mode: int) -> bool:
+    def accepts_permissions(cls, observed: os.stat_result) -> bool:
         return True
 
 
@@ -374,11 +374,11 @@ class TrustedAncestorRole(FilesystemRole):
 
     @classmethod
     def accepts_owner(cls, uid: int) -> bool:
-        return uid in (0, os.geteuid())
+        return Platform.current().trusted_ancestor_owner(uid)
 
     @classmethod
-    def accepts_permissions(cls, mode: int) -> bool:
-        return not mode & 0o022 or bool(mode & stat.S_ISVTX)
+    def accepts_permissions(cls, observed: os.stat_result) -> bool:
+        return not Platform.current().ancestor_write_bits(observed) or bool(observed.st_mode & stat.S_ISVTX)
 
 
 class FilesystemRule(DeclaredFamily, affix="Rule"):
@@ -402,7 +402,7 @@ class ForeignNodeOwnerRule(FilesystemRule):
 class UnsafeNodePermissionsRule(FilesystemRule):
     @classmethod
     def violated(cls, role, observed):
-        return not role.accepts_permissions(observed.st_mode)
+        return not role.accepts_permissions(observed)
 
 
 class MultipleLinksRule(FilesystemRule):
