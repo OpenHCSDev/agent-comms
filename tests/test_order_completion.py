@@ -1,4 +1,5 @@
 """One copied-bus command family owns check correction, delivery and closure."""
+import shutil
 import subprocess
 import sys
 import time
@@ -145,8 +146,10 @@ class TestOrderCompletion:
             assert refused.value.problems.keys() >= {'--seen.run', '--seen.working'}
             assert 'checkout' not in refused.value.problems
             assert ctx.comms.goals.todos.get('P1') == current
+            launcher = shutil.which('agent-comms-team')
+            assert launcher is not None
             result = subprocess.run(
-                [sys.executable, str(Path(sys.executable).with_name('agent-comms-team')),
+                [sys.executable, launcher,
                  '--root', str(ctx.root), 'order', 'done', 'worker', 'P1', '--op', '--as', 'colleague'],
                 cwd=ctx.root, capture_output=True, text=True, timeout=30,
             )

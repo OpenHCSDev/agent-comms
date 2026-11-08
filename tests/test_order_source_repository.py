@@ -1,0 +1,59 @@
+"""A delivery follows its checked repository, not the problem's home repository."""
+
+from dataclasses import replace
+from typing import get_type_hints
+
+import pytest
+
+from agent_comms.errors import TodoError
+from agent_comms.team.order import Team
+from github_fixture import GitHubFixture
+from agent_comms.todos import (
+    NoDeliveryEvidence,
+    MergedListedPullRequest,
+    PullRequestCommit,
+    PullRequestLink,
+    PullRequests,
+)
+from agent_comms.repository_name import RepositoryName
+from test_todos import adopt_pr, pr_order
+
+pytest_plugins = ("test_todos",)
+OTHER_REPOSITORY = RepositoryName.from_wire("example/client")
+
+
+@pytest.mark.parametrize(("home_is_source", "source_linked"), [
+    (True, True),
+    (False, True),
+    (False, False),
+])
+def test_delivery_resolves_only_the_linked_checked_repository(
+    pr_team: Team, github_cli: GitHubFixture, home_is_source: bool, source_linked: bool,
+) -> None:
+    get_type_hints(PullRequests.merged_delivery)
+    source = pr_team.repos[0]
+    home = source.github if home_is_source else OTHER_REPOSITORY
+    original = adopt_pr(pr_team, pr_order(pr_team, "P1").id, 1)
+    expected, = PullRequests((original,)).listed(source.github, MergedListedPullRequest, original)
+    links = (PullRequestLink(home, 1),)
+    if source_linked:
+        links = tuple(dict.fromkeys((*links, PullRequestLink(source.github, 1))))
+    # These are immutable reader inputs, reachable through TodoStore.create and PR linking;
+    # no canonical row or private reader cache is changed by this case matrix.
+    current = replace(original, repo=home, order=replace(original.order, pull_requests=links))
+    if home != source.github:
+        github_cli.configure(home)
+        github_cli.put(home, MergedListedPullRequest(
+            number=1, branch="feature/other", head="e" * 40,
+            updated="2099-01-01T00:00:00Z", base="main",
+            reviewable_times=("2099-01-01T00:00:00Z",),
+            merge=PullRequestCommit("f" * 40), merged="2099-01-01T00:00:00Z",
+        ))
+    reader = PullRequests((current,))
+    if not source_linked:
+        with pytest.raises(TodoError, match="has no merged pull request"):
+            reader.merged_delivery(current, source.checkout, NoDeliveryEvidence())
+    else:
+        delivered = reader.merged_delivery(current, source.checkout, NoDeliveryEvidence())
+        assert (delivered.commit, delivered.delivered) == (expected.merge, expected.head)
+    assert (current.repo, original.repo) == (home, source.github)

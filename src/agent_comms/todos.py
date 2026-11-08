@@ -1085,8 +1085,9 @@ class PullRequests(RepositoryReads):
             for retained in row.retained_assignments(assignment)))
 
     def merged_delivery(self, todo: Todo, repo: Path, evidence: DeliveryEvidence) -> CommitDelivery:
-        """The newest merged request linked to the order is what `order done` checks."""
-        for request in self.listed(todo.repo, MergedListedPullRequest, todo):
+        """Read the newest merged PR linked to this order in its checked repository."""
+        source = Repo.of(repo).github
+        for request in self.listed(source, MergedListedPullRequest, todo):
             return request.delivery(repo, evidence)
         raise TodoError(
             f"{todo.id} has no merged pull request; link it with `order pr` and merge it.")
