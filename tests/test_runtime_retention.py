@@ -4,6 +4,7 @@ import json
 import os
 import sys
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 from agent_comms.child_process import ProcessIdentity, SpawnedProcess
@@ -15,6 +16,7 @@ from agent_comms.installer.runtime_retention import (
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.runtime_processes import (
     ImportingRuntimeProcess,
+    PointerReference,
     RuntimeApplication,
     RuntimeProcess,
     RuntimeProcesses,
@@ -61,6 +63,34 @@ def taken_backup(spill: Path, root: Path, runtime: LaunchRuntime) -> Path:
     backup = spill / f"{root.name}.upgrade-20261107T223047"
     published(backup / "stores", runtime)
     return backup
+
+
+@contextmanager
+def importing_child(library: Path, staged: LaunchRuntime):
+    """A live system interpreter importing from ``library``, and the real scan that saw it.
+
+    Launched and read through `RuntimeProcesses.observe` rather than constructed, because
+    a constructed outcome passes straight over the thing being tested: the scan deciding
+    for itself what a process is holding.
+    """
+    child = SpawnedProcess.launch(
+        (sys.executable, str(Path(__file__).with_name("runtime_process_importer.py")),
+         "borrower_module"),
+        env={**os.environ, "PYTHONPATH": str(library)},
+    ).process
+    try:
+        deadline = time.monotonic() + 10
+        while True:
+            scan = RuntimeProcesses.observe(staged)
+            if any(child.pid == outcome.pid for outcome in scan.outcomes
+                   if isinstance(outcome, ImportingRuntimeProcess)):
+                break
+            assert time.monotonic() < deadline, "The scan never saw the importing child"
+            time.sleep(0.1)
+        yield scan
+    finally:
+        child.terminate()
+        child.wait(timeout=10)
 
 
 def test_an_install_retires_the_built_runtimes_nothing_holds(tmp_path):
@@ -111,27 +141,38 @@ def test_a_runtime_a_live_process_imports_from_is_not_reclaimable(tmp_path):
     library.mkdir()
     (library / "borrower_module.py").write_text("VALUE = 1\n")
 
-    child = SpawnedProcess.launch(
-        (sys.executable, str(Path(__file__).with_name("runtime_process_importer.py")),
-         "borrower_module"),
-        env={**os.environ, "PYTHONPATH": str(library)},
-    ).process
-    try:
-        deadline = time.monotonic() + 10
-        while True:
-            scan = RuntimeProcesses.observe(staged)
-            if any(child.pid == outcome.pid for outcome in scan.outcomes
-                   if isinstance(outcome, ImportingRuntimeProcess)):
-                break
-            assert time.monotonic() < deadline, "The scan never saw the importing child"
-            time.sleep(0.1)
+    with importing_child(library, staged) as scan:
         retention = RuntimeRetention.after_install(
             staged, staged, scan, tmp_path / "no-bus", tmp_path / "no-spill")
         assert borrowed.prefix not in retention.reclaimable()
         assert borrowed.prefix in retention.held
-    finally:
-        child.terminate()
-        child.wait(timeout=10)
+
+
+def test_an_import_path_through_the_pointer_retires_nothing(tmp_path):
+    """Read by the real /proc scanner. The same ambiguity, reached the other way.
+
+    codex-latency pointed a live importer at `current/lib` after the pointer case was
+    already closed for commands, and the collector called the pointed-at build
+    reclaimable: the command path and the environment path each resolved a path to a
+    build, and only one of them had learned that `current` resolves to none. They now ask
+    one `RuntimeReference`.
+    """
+    runtimes = tmp_path / "runtimes"
+    staged, borrowed = built(runtimes, "new"), built(runtimes, "borrowed")
+    library = borrowed.prefix / "lib"
+    library.mkdir()
+    (library / "borrower_module.py").write_text("VALUE = 1\n")
+    pointer = LaunchRuntime.pointer_in(runtimes.parent)
+    pointer.symlink_to(borrowed.prefix, target_is_directory=True)
+
+    with importing_child(pointer / "lib", staged) as scan:
+        retention = RuntimeRetention.after_install(
+            staged, staged, scan, tmp_path / "no-bus", tmp_path / "no-spill")
+        outcome = retention.retire()
+
+    assert isinstance(outcome, RefusedRetirement)
+    assert "names the installation's pointer" in outcome.line()
+    assert borrowed.prefix.is_dir()
 
 
 def test_a_backup_pointer_it_cannot_read_retires_nothing(tmp_path):
@@ -177,7 +218,8 @@ def test_a_process_invoked_through_the_pointer_retires_nothing(tmp_path):
 
     retention = RuntimeRetention.after_install(
         staged, staged,
-        RuntimeProcesses((UnattributedRuntimeProcess(5150, pointer / "bin/python"),)),
+        RuntimeProcesses((UnattributedRuntimeProcess(
+            5150, PointerReference(pointer / "bin/python")),)),
         tmp_path / "no-bus", tmp_path / "no-spill")
 
     outcome = retention.retire()

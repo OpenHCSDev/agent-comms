@@ -12,6 +12,102 @@ from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.launch_runtime import LaunchRuntime
 
 
+class RuntimeReference(DeclaredFamily, ABC, affix="Reference"):
+    """What one path a process names says about the build it is using.
+
+    A command and an import root ask the same question of a path, and asking it in two
+    places is how the same ambiguity gets forgotten once: the command learned that
+    `current` names no particular build while the environment still resolved it to
+    whatever the pointer happens to say now. codex-latency found that by pointing a live
+    importer at `current/lib` after the command case was already closed. One relation,
+    three answers, both callers.
+    """
+
+    @abstractmethod
+    def held(self) -> frozenset[Path]:
+        """What this reference keeps, for whoever retires the runtimes nothing uses.
+
+        A path and not a runtime: a bundled native child lives several directories inside
+        its build and an import root is a directory within one, so which build owns a path
+        belongs to whoever holds the runtimes directory.
+        """
+
+    @abstractmethod
+    def unread(self) -> tuple[str, ...]:
+        """Why this reference leaves a build undecided."""
+
+    @abstractmethod
+    def describes(self) -> str:
+        """This reference in one phrase, for the line its process reports."""
+
+    def names_installation(self) -> bool:
+        """Whether this is about the installation at all."""
+        return True
+
+    @staticmethod
+    def to(path: Path, runtimes: Path) -> RuntimeReference:
+        """How ``path`` relates to the builds under ``runtimes``."""
+        if path.is_relative_to(runtimes):
+            return BuildReference(path)
+        if path.is_relative_to(LaunchRuntime.pointer_in(runtimes.parent)):
+            return PointerReference(path)
+        return ForeignReference()
+
+
+@dataclass(frozen=True)
+class BuildReference(RuntimeReference):
+    """A path inside one build, which therefore names it."""
+
+    path: Path
+
+    def held(self) -> frozenset[Path]:
+        return frozenset((self.path,))
+
+    def unread(self) -> tuple[str, ...]:
+        return ()
+
+    def describes(self) -> str:
+        return str(self.path)
+
+
+@dataclass(frozen=True)
+class PointerReference(RuntimeReference):
+    """A path through the installation's moving pointer, which names no build.
+
+    `current` named whichever runtime was published when the process reached for it, and
+    once it has moved nothing in the path says which that was. The process holds a build
+    and will not say which, so none of them can be decided about.
+    """
+
+    path: Path
+
+    def held(self) -> frozenset[Path]:
+        return frozenset()
+
+    def unread(self) -> tuple[str, ...]:
+        return (f"{self.path} names the installation's pointer rather than a build",)
+
+    def describes(self) -> str:
+        return f"{self.path}, which names the installation's pointer rather than a build"
+
+
+@dataclass(frozen=True)
+class ForeignReference(RuntimeReference):
+    """A path outside the installation, which holds none of its builds."""
+
+    def held(self) -> frozenset[Path]:
+        return frozenset()
+
+    def unread(self) -> tuple[str, ...]:
+        return ()
+
+    def describes(self) -> str:
+        return "a path outside the installation"
+
+    def names_installation(self) -> bool:
+        return False
+
+
 class RuntimeProcessOutcome(DeclaredFamily, ABC, affix="RuntimeProcess"):
     @abstractmethod
     def line(self) -> str: ...
@@ -51,12 +147,7 @@ class UnreadableRuntimeProcess(RuntimeProcessOutcome):
 
 @dataclass(frozen=True)
 class UnattributedRuntimeProcess(RuntimeProcessOutcome):
-    """Invoked through the installation's moving pointer rather than a build.
-
-    `current` names whichever runtime was published when the process started, and once it
-    has moved there is nothing left in the command to say which that was. The process
-    therefore holds a build and will not say which one, so a retirement must not decide
-    about any of them — `unread` is how it refuses the whole sweep.
+    """Invoked through something that names no build, so what it runs cannot be read back.
 
     Nothing on this machine was invoked this way when the retention was written; its own
     console scripts carry the built interpreter in their shebang, so a scan sees a build.
@@ -65,17 +156,16 @@ class UnattributedRuntimeProcess(RuntimeProcessOutcome):
     """
 
     pid: int
-    executable: Path
+    reference: RuntimeReference
 
     def line(self) -> str:
-        return (f"Unattributed runtime PID {self.pid}: invoked as {self.executable}, "
-                "which names the installation's pointer rather than a build")
+        return f"Unattributed runtime PID {self.pid}: invoked as {self.reference.describes()}"
 
     def held_paths(self) -> frozenset[Path]:
-        return frozenset()
+        return self.reference.held()
 
     def unread(self) -> tuple[str, ...]:
-        return (self.line(),)
+        return self.reference.unread()
 
 
 @dataclass(frozen=True)
@@ -89,22 +179,21 @@ class ImportingRuntimeProcess(RuntimeProcessOutcome):
     codex-latency ran a system interpreter with `PYTHONPATH` into a build and watched the
     collector call that build reclaimable.
 
-    An environment this cannot read belongs to another user, and the installation is this
-    user's at 0700, so there is nothing there for them to import.
+    The root goes through the same `RuntimeReference` a command does, so an import path
+    reaching the moving pointer is as undecidable here as an invocation through it.
     """
 
     pid: int
-    roots: tuple[Path, ...]
+    reference: RuntimeReference
 
     def line(self) -> str:
-        return (f"Importing-runtime PID {self.pid}: "
-                f"{', '.join(str(root) for root in self.roots)}")
+        return f"Importing-runtime PID {self.pid}: {self.reference.describes()}"
 
     def held_paths(self) -> frozenset[Path]:
-        return frozenset(self.roots)
+        return self.reference.held()
 
     def unread(self) -> tuple[str, ...]:
-        return ()
+        return self.reference.unread()
 
 
 @dataclass(frozen=True)
@@ -164,24 +253,55 @@ class RuntimeProcesses:
         """Every process this snapshot could not read."""
         return tuple(line for outcome in self.outcomes for line in outcome.unread())
 
-    @staticmethod
-    def import_roots(platform: Platform, identity: ProcessIdentity,
-                     directory: Path) -> frozenset[Path]:
-        """The directories inside ``directory`` this process can import from.
+    @classmethod
+    def imports(cls, platform: Platform, identity: ProcessIdentity, directory: Path,
+                command: RuntimeReference) -> tuple[RuntimeProcessOutcome, ...]:
+        """What this process can import from inside the installation.
 
         Read from its environment rather than guessed: `PYTHONPATH` entries and a
         `VIRTUAL_ENV` are the roots a live interpreter keeps on its import path, so a
-        build named by one is in use however the process was invoked. An environment this
-        cannot read belongs to another user, who cannot read the installation either.
+        build named by one is in use however the process was invoked. Each goes through
+        the same `RuntimeReference` a command does.
         """
         try:
             environment = platform.environment(identity)
-        except (ProcessLookupError, OSError, IdentityMismatchError):
-            return frozenset()
+        except ProcessLookupError:
+            return ()
+        except (OSError, IdentityMismatchError) as error:
+            return cls.hidden_environment(identity, error, command)
         named = (*environment.get("PYTHONPATH", "").split(os.pathsep),
                  environment.get("VIRTUAL_ENV", ""))
-        return frozenset(Path(value) for value in named
-                         if value and Path(value).is_relative_to(directory))
+        references = (RuntimeReference.to(Path(value), directory) for value in named if value)
+        return tuple(ImportingRuntimeProcess(identity.pid, reference)
+                     for reference in references if reference.names_installation())
+
+    @staticmethod
+    def hidden_environment(identity: ProcessIdentity, error: Exception,
+                           command: RuntimeReference) -> tuple[RuntimeProcessOutcome, ...]:
+        """Whether an environment this could not read is a reason to stop.
+
+        A process that has gone holds nothing, and is asked rather than assumed.
+
+        A live one that hides its environment cannot be read by anyone, its owner
+        included: on this machine the user's own systemd, that systemd's sd-pam child and
+        ssh-agent all refuse it permanently, by their own choice and not by ownership. So
+        refusing the sweep whenever one exists is a collector that never runs once, which
+        leaves the leak it was written for. What such a process is running is taken from
+        its command instead, which every process publishes.
+
+        A hidden environment on a process whose command is already inside the installation
+        does refuse: that one is ours, and what else it imports is genuinely unknown. The
+        limit this leaves is exact — a process that hides its environment and was launched
+        from outside the installation cannot be shown to be importing from one, by this
+        reader or by any other.
+        """
+        if not command.names_installation():
+            return ()
+        try:
+            identity.require_alive()
+        except (ProcessLookupError, IdentityMismatchError):
+            return ()
+        return (UnreadableRuntimeProcess(identity.pid, str(error)),)
 
     @classmethod
     def observe(cls, target: LaunchRuntime, proc: Path = Path("/proc")) -> RuntimeProcesses:
@@ -203,16 +323,16 @@ class RuntimeProcesses:
             except (OSError, IdentityMismatchError) as error:
                 outcomes.append(UnreadableRuntimeProcess(pid, str(error)))
                 continue
+            # A reference holds a path only when it names one build; the others are the
+            # pointer, which names a build it will not say, and somewhere else entirely.
+            interpreter = Path(invoked)
+            command = RuntimeReference.to(interpreter, directory)
             # Independent of the command: a process importing from a build holds it even
             # when it was launched by a system interpreter from somewhere else entirely.
-            roots = cls.import_roots(platform, identity, directory)
-            if roots:
-                outcomes.append(ImportingRuntimeProcess(pid, tuple(sorted(roots))))
-            # Other namespaces do not name an agent-comms installation.
-            interpreter = Path(invoked)
-            if not interpreter.is_relative_to(directory):
-                if interpreter.is_relative_to(LaunchRuntime.pointer_in(directory.parent)):
-                    outcomes.append(UnattributedRuntimeProcess(pid, interpreter))
+            outcomes.extend(cls.imports(platform, identity, directory, command))
+            if not command.held():
+                if command.names_installation():
+                    outcomes.append(UnattributedRuntimeProcess(pid, command))
                 continue
             runtime = LaunchRuntime.from_interpreter(interpreter)
             if runtime.prefix == target.prefix:
