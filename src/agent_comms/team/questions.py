@@ -10,11 +10,12 @@ from agent_comms.bus import BusReader
 from agent_comms.message_page import MessageReadRequest
 from agent_comms.messages import Message, MessageInput, MessageKind, NeedsAnswerKind
 from agent_comms.read_basis import RepliesDisplayScope
+from agent_comms.todos import Todo
+
 
 if TYPE_CHECKING:
     from agent_comms.registry.registry_document import RegistrySnapshot
     from agent_comms.thread_identity import ThreadIncarnation
-    from agent_comms.todos import Todo
 
 
 @dataclass(frozen=True, slots=True)

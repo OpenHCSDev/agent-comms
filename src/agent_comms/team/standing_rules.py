@@ -41,7 +41,6 @@ from ..declared_verb import DeclaredVerb
 from ..errors import (
     RejectedEnforcementError,
     RelationViolationError,
-    TodoConflict,
 )
 from ..goal_management import Goals
 from ..head_review import (
@@ -120,6 +119,7 @@ from ..todos import (
     StoredClosedHead,
     StoredHeadReview,
     Todo,
+    TodoConflict,
     TodoStore,
 )
 from ..transcript_events import TurnDigest

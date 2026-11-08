@@ -43,7 +43,6 @@ if TYPE_CHECKING:
     from .read_ledger import ReadDocument, ReadLedger
     from .registry.threads import Thread
     from .registry_provenance import RegistryProvenance
-    from .todos import Todo
 
 T = TypeVar("T")
 
@@ -258,9 +257,6 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
     def answerable(self, owners: Sequence[ThreadIncarnation]) -> tuple[ThreadLookup, ...]:
         """Whose receipts this actor may answer: a birthless member received nothing."""
         return ()
-
-    def require_may_change(self, todo: Todo) -> None:
-        todo.require_maintainer(self)
 
     def selects_lookup(self, lookup: ThreadLookup) -> bool:
         return False

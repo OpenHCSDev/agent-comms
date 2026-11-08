@@ -22,14 +22,20 @@ from agent_comms.head_review import BaseSide, CombinedInput, HeadReview, HeadSid
 from agent_comms.repository_name import RepositoryName
 from agent_comms.repo import GitCommandError, Repo, UnavailableCommitError
 from agent_comms.todos import (
-    DraftListedPullRequest, MergedListedPullRequest, PullRequestCommit, QualifiedHeadVerdict,
-    ReviewedHeadVerdict, TodoError, UnmergedListedPullRequest, VerdictReason,
+    DraftListedPullRequest,
+    MergedListedPullRequest,
+    PullRequestCommit,
+    QualifiedHeadVerdict,
+    ReviewedHeadVerdict,
+    TodoConflict,
+    TodoError,
+    UnmergedListedPullRequest,
+    VerdictReason,
 )
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.test_lease import TestLease
 from agent_comms.tool_denial import StorageDenied
-from agent_comms.errors import TodoConflict
 from agent_comms.order_tools import CommsTodoCreateTool
 from agent_comms.tool_caller import PeerCaller
 from agent_comms.recorded_time import RecordedEventTime

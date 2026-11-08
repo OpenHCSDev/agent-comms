@@ -8,12 +8,13 @@ from typing import TYPE_CHECKING
 
 from .errors import NobodyOwedError
 from .registry.threads import Thread
+from .todos import OwnerRequest
+
 
 if TYPE_CHECKING:
     from .goal_management import Goals
     from .registry.registration import Registration
     from .registry.registry_document import RegistrySnapshot
-    from .todos import OwnerRequest
 
 
 class HeartbeatDuty(ABC):

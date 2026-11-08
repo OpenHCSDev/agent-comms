@@ -6,7 +6,7 @@ import time
 
 import pytest
 
-from agent_comms.errors import RelationViolationError, TodoConflict
+from agent_comms.errors import RelationViolationError
 from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction, OwnerInvocable, PausedGoalAction, ReissuedOrderGoalAction, SetGoalAction
 from agent_comms.goal_states import ActiveGoal, BlockedGoal, CompletedGoal, ModelPause, PausedGoal
 from agent_comms.goals import Goal, GoalConsentRequired, NoGoal
@@ -18,7 +18,13 @@ from agent_comms.thread_status import (
     NoBridgeThreadStatus, PausedBridgeThreadStatus, StoppedThreadStatus, StoppingThreadStatus,
 )
 from agent_comms.registry.threads import ParkedThreadWorkState
-from agent_comms.todos import AssignTodo, HolderConsentRequired, ReleaseTodo, StrikeReason
+from agent_comms.todos import (
+    AssignTodo,
+    HolderConsentRequired,
+    ReleaseTodo,
+    StrikeReason,
+    TodoConflict,
+)
 from agent_comms.tool_caller import ForkCaller, PeerCaller, ThreadCaller
 
 from test_forks import fork_bus  # noqa: F401

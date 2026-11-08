@@ -19,7 +19,6 @@ from agent_comms.change_report import FileLine
 from agent_comms.team.order import OrderFile, TeamContext, main
 from agent_comms.team.standing import DeliveryAwaitingJudgement, Scrutinize
 from agent_comms.errors import (
-    TodoConflict,
     TodoError,
     HumanSendRefusedError,
 )
@@ -50,28 +49,29 @@ from agent_comms.slop import (
 )
 from agent_comms.team.standing_rules import OwedAnswer
 from agent_comms.todos import (
-    TriageScope,
-    SelectedClaimReviewer,
-    ExpectedProblem,
     CheckedProblemOrder,
-    ClaimedProblemOrder,
     ClaimOrder,
+    ClaimPublicationUnavailable,
+    ClaimedProblemOrder,
     CorrectCheckTodo,
     DeliveredProblemOrder,
     DeliveryReport,
     DoneTodoState,
+    ExpectedProblem,
     FailedCheckStrike,
     OrderClaim,
     OrderMessage,
     PendingProblemOrder,
     PullRequestLink,
     ReleaseTodo,
+    ResumeClaimOrder,
+    SelectedClaimReviewer,
     SendBackVerdict,
     StrikeReason,
     StrikeTodo,
     Todo,
-    ClaimPublicationUnavailable,
-    ResumeClaimOrder,
+    TodoConflict,
+    TriageScope,
 )
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsHistoryTool

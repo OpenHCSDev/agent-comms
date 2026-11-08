@@ -25,7 +25,10 @@ from agent_comms.team.standing_rules import (
     OwedAnswer,
     StandingRule,
 )
-from agent_comms.todos import DoneTodoState
+from agent_comms.todos import (
+    DoneTodoState,
+    TodoConflict,
+)
 from agent_comms.team.order import Team, ListedProblems, OrderFile, SayVerb, SendVerb
 from agent_comms.team.questions import UnansweredTeammateAsks
 from agent_comms.team.standing import (
@@ -44,7 +47,10 @@ from agent_comms.comms import wire
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.errors import (
-    CommittedMessageError, HumanSendRefusedError, RelationViolationError, TodoConflict, TodoError,
+    CommittedMessageError,
+    HumanSendRefusedError,
+    RelationViolationError,
+    TodoError,
 )
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, InputId, MessageId, OrderId, RecordProblems, TurnId
 from agent_comms.goal_actions import (
