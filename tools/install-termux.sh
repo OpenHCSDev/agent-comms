@@ -16,9 +16,9 @@ trap 'printf "\nInstallation stopped. Log: %s/install.log\n" "$installation" >&2
 printf 'Installing Toad Comms and its build dependencies…\n'
 # Termux supports complete package upgrades, not mixed library/consumer versions.
 pkg upgrade -y
-# psutil and Pillow need Termux's Android patches, not desktop Linux wheels.
+# Use Termux's patched native modules and numerical libraries.
 pkg install -y python python-pip uv git openssh clang make cmake ninja rust \
-    pkg-config libffi openssl libjpeg-turbo zlib python-psutil python-pillow
+    pkg-config libffi openssl libjpeg-turbo zlib python-psutil python-pillow python-numpy
 
 if [[ -d "$source/.git" ]]; then
     # uv owns the generated lock; never discard edits to the source or a conflicting lock.
