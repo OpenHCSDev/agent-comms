@@ -1,6 +1,8 @@
-"""The runtime socket: each request's family, the context it binds to, and the server that
-decodes, binds and applies it. Nothing here loads ACP, so declaring or sending a request
-stays light; the ACP agent reaches the server only as its owner."""
+"""The runtime socket: each served request, its context, and the decoding boundary.
+
+Wire declarations stay lightweight in transport. Only the serving boundary acquires
+their implementations before binding and applying a request.
+"""
 
 from __future__ import annotations
 
@@ -23,6 +25,8 @@ from typing import (
 )
 
 from pydantic import BaseModel
+
+import agent_comms
 
 from .command import Command
 from .controller import (
@@ -338,7 +342,7 @@ class RuntimeServer(SessionUpdateSink):
             line = await reader.readline()
             if not line:
                 return
-            request = FieldCodec.decode(RuntimeRequest, json.loads(line))
+            request = FieldCodec.decode(ServedRuntimeRequest, json.loads(line))
             with request.holder.selected():
                 context = await request.bind(self, reader, client)
                 await request.apply(context)
@@ -400,6 +404,16 @@ class ServedRuntimeRequest[Ctx: RuntimeRequestContext](
     metaclass=ServesDeclaration,
     declared_name=None,
 ):
+    @classmethod
+    def _member_declarations(cls) -> tuple[type[RuntimeRequest], ...]:
+        """Acquire the server's implementations before decoding a wire request.
+
+        Clients only need the transport declarations. The serving boundary acquires
+        their implementations through the existing package discovery, not import order.
+        """
+        cls.discover_package(agent_comms)
+        return super()._member_declarations()
+
     @abstractmethod
     async def bind(
         self, server: RuntimeServer, reader: asyncio.StreamReader, client: SocketClient,
