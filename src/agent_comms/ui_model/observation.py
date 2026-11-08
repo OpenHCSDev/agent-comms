@@ -827,9 +827,13 @@ class TeamHudReading(ReadingObservation[ObserveTeamHud]):
 
     @staticmethod
     def refreshed(comms: Comms) -> tuple[TeamHud, ...]:
-        """The held board, rebuilt first when a store it derives from is newer than it."""
-        if TeamFrame.owed(comms.root):
-            TeamHeartbeat().retain_board(comms)
+        """The held board.
+
+        A store newer than the frames is reported by `TeamFrame.owed`, and the rebuild it
+        asks for belongs to the heartbeat's own worker: `retain_board` reads the account
+        through `CodexConnection.usage`, which calls `asyncio.run`, so it cannot run inside
+        the observation service's loop (ObserverProcessDied, 2026-11-07 20:08).
+        """
         return TeamFrame.read_all(comms.root)
 
     def read(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:

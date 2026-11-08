@@ -55,16 +55,16 @@ def test_the_watched_paths_include_the_todo_store(tmp_path):
     assert TodoStore.path_in(tmp_path) in TeamFrameFile.source_paths(tmp_path)
 
 
-def test_a_board_read_rebuilds_without_any_heartbeat_pass(held_bus):
-    """The proof this order owes: no frame on the bus, no pass run, a board nonetheless.
+def test_a_board_read_never_rebuilds_on_the_service_loop(held_bus):
+    """The read serves the held frames; it does not run the board pass.
 
-    `TeamHudReading.refreshed` is what a view's read now calls; before it, the only path to a
-    board was `TeamFrame.read_all`, which returns nothing until a heartbeat writes a frame.
+    `TeamHeartbeat.retain_board` reads the account through `CodexConnection.usage`, which calls
+    `asyncio.run` — illegal inside the observation service's loop. Calling it from a read
+    killed the observer (ObserverProcessDied, 2026-11-07 20:08), so the read stays a read.
     """
     from agent_comms.team_hud import TeamFrame
     from agent_comms.ui_model.observation import TeamHudReading
 
     assert TeamFrame.read_all(held_bus.root) == (), "the bus starts with no published board"
-    board = TeamHudReading.refreshed(held_bus)
-    assert board, "a read rebuilds the board it displays without waiting for a heartbeat"
-    assert TeamFrame.read_all(held_bus.root) == board, "the rebuilt board is the retained one"
+    assert TeamHudReading.refreshed(held_bus) == (), "a read serves the held board, not a pass"
+    assert TeamFrame.read_all(held_bus.root) == (), "and it wrote no frame of its own"
