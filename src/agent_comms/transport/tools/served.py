@@ -197,7 +197,7 @@ from ...restart_queue import (
     RestartQueue,
     RestartQueued,
 )
-from ...runtime_requests import QueueActionRuntimeRequest
+from ..runtime_requests import QueueActionRuntimeRequest
 from ...send_result import (
     CorrectionComplete,
     CorrectionResult,

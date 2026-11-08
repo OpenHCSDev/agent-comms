@@ -21,7 +21,7 @@ from .native_arguments import (
     LaunchArguments,
     LaunchBinary,
 )
-from .owner_launch import RetainedOwnerLaunch
+from .transport.owner_requests import RetainedOwnerLaunch
 from .execution.owner_lifecycle import (
     OwnerLifecycle,
     OwnerRestartResult,

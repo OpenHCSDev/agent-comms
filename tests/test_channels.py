@@ -239,7 +239,7 @@ async def test_new_tag_disposition_is_declared_in_original_editor_and_tool_catal
     from agent_comms.launch_root import LaunchRoot
 
     from agent_comms.config_options import ConfigOptions
-    from agent_comms.owner_launch import RetainedOwnerLaunch
+    from agent_comms.transport.owner_requests import RetainedOwnerLaunch
 
     with LaunchRoot.from_path(comms.root).selected():
         prepared = await action.prepared(ConfigOptions(RetainedOwnerLaunch.configured(), comms.route))

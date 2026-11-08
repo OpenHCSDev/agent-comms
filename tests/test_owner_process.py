@@ -116,7 +116,7 @@ async def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path,
 async def test_team_memory_stays_under_its_cap(tmp_path, native_workers, owner_count):
     from acp.schema import TextContentBlock
     from agent_comms.acp import CommsClient
-    from agent_comms.owner_launch import RetainedOwnerLaunch
+    from agent_comms.transport.owner_requests import RetainedOwnerLaunch
     from agent_comms.execution.owner_lifecycle import OwnerRestartSelection
     from native_backend_fixture import NativeBackendFixture
     from delivery_owner_fixture import FakeClient
@@ -297,7 +297,7 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
     from agent_comms.planning.goal_states import BlockedGoal
     from agent_comms.planning.goals import Goal
     from agent_comms.owner_cutover import PreserveOwnerRuntime
-    from agent_comms.owner_launch import RetainedOwnerLaunch
+    from agent_comms.transport.owner_requests import RetainedOwnerLaunch
 
     model = 'response-local/fixture'
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", model)
