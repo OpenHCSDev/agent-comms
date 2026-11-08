@@ -15,7 +15,9 @@ toad-comms
 The installer upgrades Termux's package set, then installs the native Android dependencies and the maintained Toad
 stack into `~/.local/share/toad-comms`. It does not install a Linux container,
 replace system Python, start agents, configure SSH hosts, or change Tailscale.
-Native dependencies may take several minutes to compile on the first install.
+The first native build can take tens of minutes on a phone. Cargo uses one build
+job by default and keeps a shared build cache for dependency resolution and
+installation, so those steps do not start separate Rust dependency builds.
 Run the same command again to update. Installation output is also saved in
 `~/.local/share/toad-comms/install.log`.
 
