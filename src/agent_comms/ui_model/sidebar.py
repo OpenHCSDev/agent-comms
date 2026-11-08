@@ -102,8 +102,12 @@ class ChannelRowModel:
         return f"{'* ' if self.pinned else ''}{self.name}"
 
     def summary(self) -> str:
-        """The row's second line, which a 40-column phone still has to fit."""
-        return f"{self.active_agents}/{self.registered_agents} agents · {self.tag_list()}"
+        """The row's second line, which a 40-column phone still has to fit.
+
+        It says "tags:" rather than leaving a bare list: "3/5 agents · build, review"
+        leaves the reader guessing whether those are tags or two of the agents.
+        """
+        return f"{self.active_agents}/{self.registered_agents} agents · tags: {self.tag_list()}"
 
     def tooltip(self) -> str:
         """The same facts in full words, for a reader who stopped to hover."""
