@@ -31,17 +31,27 @@ class UnreadPresentation(TaggedUnion, affix="Unread"):
     def for_channel(cls, snapshot: CoordinationSnapshot, name: str) -> UnreadPresentation:
         return snapshot.channel_unread[name]
 
+    mark: ClassVar[str] = "●"
+
     @property
-    @abstractmethod
-    def label(self) -> str:
-        """The badge rows and tabs show."""
+    def badge(self) -> str:
+        """What rows and tabs show: that there is something unread, never how many.
+
+        Tristan, 2026-11-08: "number of unread messages still show instead of just a
+        symbol for read/unread or styling". The count stays in ``detail``, for a reader
+        who stopped to hover, and off a row that has to fit a 40-column phone.
+        """
+        return self.mark if self.highlighted else ""
 
     @property
     def highlighted(self) -> bool:
         """Whether a known unread count requires emphasis, independent of the badge."""
         return False
 
-    detail = ""
+    @property
+    def detail(self) -> str:
+        """The tooltip's full words, which is the one place a number belongs."""
+        return ""
 
 
 @dataclass(frozen=True)
@@ -49,12 +59,12 @@ class ExactUnread(TaggedRecordMember, UnreadPresentation):
     count: int = 0
 
     @property
-    def label(self) -> str:
-        return f"({self.count})" if self.count else ""
-
-    @property
     def highlighted(self) -> bool:
         return bool(self.count)
+
+    @property
+    def detail(self) -> str:
+        return f"{self.count} unread" if self.count else ""
 
 
 @dataclass(frozen=True)
@@ -62,12 +72,12 @@ class ReplyUnread(TaggedRecordMember, UnreadPresentation):
     count: int
 
     @property
-    def label(self) -> str:
-        return f"({self.count})"
-
-    @property
     def highlighted(self) -> bool:
         return bool(self.count)
+
+    @property
+    def detail(self) -> str:
+        return f"{self.count} unread replies"
 
 
 @dataclass(frozen=True)
@@ -77,20 +87,22 @@ class CappedReplyUnread(ReplyUnread):
         return cls(count) if count else EmptyCappedReplyUnread()
 
     @property
-    def label(self) -> str:
-        return f"({self.count}+)"
+    def detail(self) -> str:
+        return f"at least {self.count} unread replies"
 
 
 @dataclass(frozen=True)
 class EmptyCappedReplyUnread(CappedReplyUnread):
     count: ClassVar[int] = 0
-    label = ""
+    detail = ""
 
 
 @dataclass(frozen=True)
 class IndexingUnread(TaggedRecordMember, UnreadPresentation):
+    """Indexing is still running, so the row marks that it has not finished looking."""
+
     waiting = True
-    label = "Indexing…"
+    badge = "…"
     detail = "Unread replies are still being indexed; the exact count is not yet known."
 
 
@@ -98,5 +110,4 @@ class IndexingUnread(TaggedRecordMember, UnreadPresentation):
 class UnobservedUnread(TaggedRecordMember, UnreadPresentation):
     """No observation for this view's source has arrived yet."""
 
-    label = ""
     detail = "Waiting for this source's unread state."
