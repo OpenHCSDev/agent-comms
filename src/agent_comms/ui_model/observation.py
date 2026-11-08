@@ -47,7 +47,7 @@ from agent_comms.acp_extension import (
 from agent_comms.active_route import CommsRoute
 from agent_comms.activity import ObservedActivity
 from agent_comms.bus_read import CapturesTranscriptPage, OwnerScopedRead, UiRead
-from agent_comms.child_process import ReadWork, HelperStart, SpawnedHelper, join_retirement
+from agent_comms.child_process import HelperStart, SpawnedHelper, join_retirement
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import (
@@ -102,7 +102,7 @@ from agent_comms.revision_views import (
     TeamFramesView,
     TeamBoardView,
 )
-from agent_comms.team_heartbeat import TeamHeartbeat
+from agent_comms.team_heartbeat import TeamBoardRead
 from agent_comms.team_hud import TeamFrame, TeamHud
 from agent_comms.team_hud_records import TeammateDetail
 from agent_comms.thread_identity import ThreadIncarnation
@@ -811,14 +811,13 @@ class StopTeamHud(TaggedRecordMember, ObservationRequest):
         service.interest.remove(TeamHudReading)
 
 
-class TeamHudReading(ReadWork, ReadingObservation[ObserveTeamHud]):
+class TeamHudReading(TeamBoardRead, ReadingObservation[ObserveTeamHud]):
     """Serve held frames immediately; prepare changed stores outside the service loop."""
 
     view = TeamFramesView()
 
     def __init__(self, request: ObserveTeamHud):
-        super().__init__(request)
-        self.board = TeamHeartbeat()
+        super().__init__(request=request)
         self.preparation: set[asyncio.Task[None]] = set()
         self.prepared_revision: ReadState = NoRevision()
 
@@ -842,10 +841,10 @@ class TeamHudReading(ReadWork, ReadingObservation[ObserveTeamHud]):
         try:
             plan, huds = await service.comms.bus.when_open(
                 lambda: self.run_async(partial(
-                    self.board.enter_phase, service.comms,
-                    partial(self.board.read_board, service.comms))))
+                    self.enter_phase, service.comms.root,
+                    partial(self.read_board, service.comms))))
             await service.comms.bus.when_open(partial(
-                self.board.enter_phase, service.comms,
+                self.enter_phase, service.comms.root,
                 partial(TeamFrame.replace_all, service.comms.root, plan, huds)))
         except Exception as error:
             service.send(TeamHudUnreadable(service.revision, UnreadableHistory.capture(error)))

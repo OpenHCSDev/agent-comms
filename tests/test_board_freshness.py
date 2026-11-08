@@ -15,7 +15,7 @@ from agent_comms.revision_views import TeamBoardView
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import StandingRule
 from agent_comms.task_attachments.team_pings import TeamUpdateStore
-from agent_comms.team_heartbeat import TeamHeartbeat, TeamObservation
+from agent_comms.team_heartbeat import TeamBoardRead, TeamObservation
 from agent_comms.team_hud import CodexUsage, TeamFrame, TeamPlan, UnreadableUsage
 from agent_comms.todos import ProgressRead, TodoStore
 from agent_comms.ui_model.observation import (
@@ -57,7 +57,7 @@ def test_preparing_a_board_has_no_service_or_publication_effects(held_bus, accou
     ):
         monkeypatch.setattr(owner, method, forbid_service_effect)
     before = held_bus.views.revision()
-    plan, huds = TeamHeartbeat().read_board(held_bus)
+    plan, huds = TeamBoardRead().read_board(held_bus)
     assert isinstance(plan, TeamPlan)
     assert huds
     assert TeamFrame.read_all(held_bus.root) == ()
@@ -70,7 +70,7 @@ async def test_live_observer_serves_while_preparation_blocks_then_updates_withou
     started = asyncio.Event()
     release = threading.Event()
     loop = asyncio.get_running_loop()
-    original = TeamHeartbeat.read_board
+    original = TeamBoardRead.read_board
     builds = []
 
     def blocked_read(board, comms):
@@ -79,7 +79,7 @@ async def test_live_observer_serves_while_preparation_blocks_then_updates_withou
         assert release.wait(10), "The observer loop could not release its worker"
         return original(board, comms)
 
-    monkeypatch.setattr(TeamHeartbeat, "read_board", blocked_read)
+    monkeypatch.setattr(TeamBoardRead, "read_board", blocked_read)
     before_passes = ServicePassStore.at(held_bus.root).read()
     client, observer = Pipe()
     with client, observer:
@@ -138,7 +138,7 @@ async def test_retiring_interest_drops_preparation_without_a_late_publication(co
         finally:
             finished.set()
 
-    monkeypatch.setattr(TeamHeartbeat, "read_board", blocked_read)
+    monkeypatch.setattr(TeamBoardRead, "read_board", blocked_read)
     monkeypatch.setattr(TeamFrame, "replace_all", forbid_service_effect)
     client, observer = Pipe()
     with client, observer:

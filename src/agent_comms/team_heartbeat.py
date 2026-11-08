@@ -5,7 +5,6 @@ from __future__ import annotations
 import time
 from collections.abc import Callable, Mapping
 from contextlib import AbstractContextManager
-from abc import abstractmethod
 from dataclasses import dataclass
 
 from agent_comms.cli_bridges.codex_connection import CodexConnection
@@ -18,9 +17,11 @@ from agent_comms.task_attachments.team_pings import (
     AlarmGroup, TeamUpdate, TeamUpdateStore, PublishedFacts, RulePing, TeammatePing,
 )
 from agent_comms.team_service import TeamService
+from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.heartbeat_frame import TeamInputs, HeartbeatFrame
 from agent_comms.heartbeat_subjects import TeamHistory
 from agent_comms.message_bus import PreparedWatchPass
+from agent_comms.watch_phase import WatchPhase
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal_census import NominalPlanReadings
 from agent_comms.plan_reading import PlanReadings, RetainedPlanReadings
@@ -70,13 +71,13 @@ class BoardRetention(DeclaredFamily, affix="Retention"):
     reader rebuild its board without running the service on a keystroke's behalf.
     """
 
-    @abstractmethod
     def enforced(self, comms: Comms, duty: TeamService, observed: TeamObservation,
-                 known: frozenset) -> Mapping[StandingRule, Exception]: ...
+                 known: frozenset) -> Mapping[StandingRule, Exception]:
+        return {}
 
-    @abstractmethod
     def published(self, comms: Comms, duty: TeamService, packet: TeamUpdate, hud: TeamHud,
-                  now: float, latest: PublishedFacts) -> None: ...
+                  now: float, latest: PublishedFacts) -> None:
+        """A read never publishes service packets."""
 
     def prepare(self, comms: Comms, inputs: tuple[TeamInputs, ...]) -> None:
         """A display acquires inputs without carrying forge verdicts."""
@@ -90,13 +91,12 @@ class BoardRetention(DeclaredFamily, affix="Retention"):
     def retain(self, comms: Comms, plan: TeamPlan, huds: tuple[TeamHud, ...]) -> None:
         """A preparation returns its result without publishing from a droppable read."""
 
-    @abstractmethod
-    def advance_clock(self) -> bool:
-        """Whether this pass advances the heartbeat's own completion clock."""
+    def completed(self, comms: Comms, teammates: tuple[ThreadIncarnation, ...]) -> None:
+        """A read never advances the service completion clock."""
 
 
 @dataclass(frozen=True)
-class HeartbeatRetention(BoardRetention, declared_name="heartbeat"):
+class HeartbeatRetention(BoardRetention):
     """The service's pass: it enforces the rules and publishes every teammate's packet."""
 
     def enforced(self, comms, duty, observed, known):
@@ -125,64 +125,26 @@ class HeartbeatRetention(BoardRetention, declared_name="heartbeat"):
     def retain(self, comms, plan, huds):
         TeamFrame.replace_all(comms.root, plan, huds)
 
-    def advance_clock(self):
-        return True
+    def completed(self, comms, teammates):
+        ServicePassStore.at(comms.root).heartbeat_passed(
+            teammates,
+            (thread.incarnation for thread in comms.registry.all_threads().values()),
+        )
 
 
 @dataclass(frozen=True)
-class ReadRetention(BoardRetention, declared_name="read"):
-    """A view's own refresh: it derives and retains the board, and enforces nothing."""
-
-    def enforced(self, comms, duty, observed, known):
-        return {}
-
-    def published(self, comms, duty, packet, hud, now, latest):
-        return None
-
-    def advance_clock(self):
-        return False
+class ReadRetention(BoardRetention):
+    """A view prepares the shared board with no service effects."""
 
 
-class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamService,
-                         TeamPass,
-                         PreparedWatchPass[tuple[TeamInputs, ...], tuple[TeamObservation, ...]],
-                         declared_name="team_heartbeat"):
-
-    def failed(self, opened_wire: Callable[[], AbstractContextManager[Comms]],
-               error: Exception) -> None:
-        """The service loop has already recorded the failure; every served teammate's board
-        gains that retained occurrence once, and every line it already holds keeps its age."""
-        with opened_wire() as comms:
-            name = type(self).__name__
-            retained = ServicePassStore.at(comms.root).read().failing[name]
-            failure = ServicePassFailing(watch=name, since=retained.since, error=retained.error,
-                                         failed_at=retained.failed_at)
-            now = time.time()
-            snapshot = comms.registry.snapshot()
-            actions = TeamHistory.of(comms, snapshot, self.actors(snapshot))
-            duty = self.duty(comms.registry, comms.goals)
-            for thread in self.served(comms.registry, comms.goals):
-                for update in TeamUpdate.report_failure(
-                    thread.incarnation, failure,
-                    TeamUpdate.latest(comms, thread.incarnation),
-                    published=TeamUpdate.published(comms, thread.incarnation), now=now,
-                ):
-                    TeamUpdateStore.record(comms.root, update)
-                    sections = AlarmGroup.sections((update,), update.open_pings(actions),
-                                                   update.stopped(snapshot))
-                    duty.publish(lambda update=update, sections=sections: update.send(comms, (
-                        HudUnavailableGroup.heading(),
-                        *TeamHud.alarm_text(sections, now),
-                    )))
+class TeamBoardRead(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamService, WatchPhase):
+    """The shared board derivation, independent of the heartbeat's scheduling and effects."""
 
     def read_board(self, comms: Comms) -> tuple[TeamPlan, tuple[TeamHud, ...]]:
         """Prepare the shared board without service effects or retained-frame writes."""
         retention = ReadRetention()
         return self.pass_body(
             comms, self.observe(comms, self.prepare_board(comms, retention)), retention)
-
-    def prepare(self, comms: Comms) -> tuple[TeamInputs, ...]:
-        return self.prepare_board(comms, HeartbeatRetention())
 
     def prepare_board(self, comms: Comms, retention: BoardRetention) -> tuple[TeamInputs, ...]:
         """Acquire one shared board; only the service carries its forge verdicts."""
@@ -253,9 +215,41 @@ class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
         finally:
             # A later teammate's failure does not erase frames/passes already completed.
             retention.retain(comms, plan, tuple(huds.values()))
-            if retention.advance_clock():
-                ServicePassStore.at(comms.root).heartbeat_passed(
-                    completed,
-                    (thread.incarnation for thread in comms.registry.all_threads().values()),
-                )
+            retention.completed(comms, tuple(completed))
         return plan, tuple(huds.values())
+
+
+class TeamHeartbeat(TeamBoardRead, TeamPass,
+                    PreparedWatchPass[tuple[TeamInputs, ...], tuple[TeamObservation, ...]],
+                    declared_name="team_heartbeat"):
+    """The scheduled service adds its effects to the same board the UI prepares."""
+
+    def prepare(self, comms: Comms) -> tuple[TeamInputs, ...]:
+        return self.prepare_board(comms, HeartbeatRetention())
+
+    def failed(self, opened_wire: Callable[[], AbstractContextManager[Comms]],
+               error: Exception) -> None:
+        """The service loop has already recorded the failure; every served teammate's board
+        gains that retained occurrence once, and every line it already holds keeps its age."""
+        with opened_wire() as comms:
+            name = type(self).__name__
+            retained = ServicePassStore.at(comms.root).read().failing[name]
+            failure = ServicePassFailing(watch=name, since=retained.since, error=retained.error,
+                                         failed_at=retained.failed_at)
+            now = time.time()
+            snapshot = comms.registry.snapshot()
+            actions = TeamHistory.of(comms, snapshot, self.actors(snapshot))
+            duty = self.duty(comms.registry, comms.goals)
+            for thread in self.served(comms.registry, comms.goals):
+                for update in TeamUpdate.report_failure(
+                    thread.incarnation, failure,
+                    TeamUpdate.latest(comms, thread.incarnation),
+                    published=TeamUpdate.published(comms, thread.incarnation), now=now,
+                ):
+                    TeamUpdateStore.record(comms.root, update)
+                    sections = AlarmGroup.sections((update,), update.open_pings(actions),
+                                                   update.stopped(snapshot))
+                    duty.publish(lambda update=update, sections=sections: update.send(comms, (
+                        HudUnavailableGroup.heading(),
+                        *TeamHud.alarm_text(sections, now),
+                    )))

@@ -106,8 +106,8 @@ class RetainedPlanReadings(PlanReadings):
     """Keep completed private snapshots; every reading prepared in one pass shares one answer
     per repository commit, so served teammates never re-parse or re-evaluate it."""
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, **kwargs: object) -> None:
+        super().__init__(**kwargs)
         self.plans: tuple[PlanReading, ...] = ()
         self.prepared: tuple[PlanReading, ...] = ()
         self.lock = Lock()
