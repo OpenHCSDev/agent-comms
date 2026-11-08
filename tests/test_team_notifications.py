@@ -607,7 +607,8 @@ def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_
 def test_frame_keeps_original_ping_order_and_folded_idle_records(tmp_path):
     from agent_comms.nominal.field_codec import OrderId
     from agent_comms.thread_identity import RecordedThreadIncarnation
-    from agent_comms.ui_model.teammate_state import Idle, IdleGroup, NoPendingClock, PendingClock, Stuck
+    from agent_comms.ui_model.hud_groups import IdleGroup
+    from agent_comms.ui_model.teammate_state import Idle, NoPendingClock, PendingClock, Stuck
 
     now = time.time()
     idle = Teammate(

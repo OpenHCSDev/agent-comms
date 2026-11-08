@@ -16,9 +16,11 @@ from agent_comms.standing_rules import ServicePassFailing
 from agent_comms.task_attachments.team_pings import TeamDecisions, FoldedRule, RulePing
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.todos import OpenPrProgress
+from agent_comms.ui_model.hud_groups import (
+    IdleGroup, InProgressGroup, ProblemsGroup, ReadyToTestGroup, UrgentGroup,
+)
 from agent_comms.ui_model.teammate_state import (
-    AwaitingApplicationRun, Idle, IdleGroup, InProgressGroup, Moving, NoPendingClock,
-    PendingClock, ReadyToTestGroup, Stuck, UrgentGroup,
+    AwaitingApplicationRun, Idle, Moving, NoPendingClock, PendingClock, Stuck,
 )
 
 
@@ -70,9 +72,15 @@ def test_shared_hud_groups_strip_full_alarms_and_plain_text() -> None:
     hud = example_hud()
     groups = hud.groups
     assert tuple(section.group for section in groups) == (
-        UrgentGroup, InProgressGroup, ReadyToTestGroup, IdleGroup,
+        ProblemsGroup, UrgentGroup, InProgressGroup, ReadyToTestGroup, IdleGroup,
+    ), "problems lead the board"
+    problems, *units = groups
+    # One row per problem, naming every unit on it. Three of this example's units hold the
+    # same order, which a card per holder would have shown three times.
+    assert tuple((card.card.problem, card.held_by) for card in problems.records) == (
+        ("P930", "screen, blocked, run-next"),
     )
-    assert tuple(unit.unit.name for section in groups for unit in section.records) == (
+    assert tuple(unit.unit.name for section in units for unit in section.records) == (
         "blocked", "screen", "run-next", "idle",
     )
     plain = hud.hud_text(1000)
@@ -94,8 +102,13 @@ def test_shared_hud_groups_strip_full_alarms_and_plain_text() -> None:
         for table in section.tables:
             layout = table.layout(60)
             narrow = "\n".join(layout.render_lines(layout.widths(60)))
-            assert all(unit.unit.name in narrow for unit in table.records)
-    assert tuple(unit.unit for unit in groups[0].records) == (hud.units[1].unit,)
+            # Each record's own identity, asked of the record: a unit answers its name and
+            # a problem answers its problem id, so this holds for every kind of row rather
+            # than only the ones that happen to have a .unit.
+            assert all(DisclosureText.describe(record).summary in narrow
+                       for record in table.records)
+    urgent, = (section for section in groups if section.group is UrgentGroup)
+    assert tuple(unit.unit for unit in urgent.records) == (hud.units[1].unit,)
 
 
 def test_display_facts_ignore_only_hidden_clocks_and_paint_time() -> None:

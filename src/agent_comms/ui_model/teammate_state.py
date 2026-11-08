@@ -17,7 +17,10 @@ from typing import ClassVar, Self
 
 from agent_comms.comms import Comms
 from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.disclosure_text import AccentTone, ViewHeading, WarningTone
+from agent_comms.ui_model.hud_groups import (
+    ExpandedHudGroup, HudGroup, IdleGroup, InProgressGroup, ParkedGroup,
+    ReadyToTestGroup, UrgentGroup,
+)
 from agent_comms.nominal.field_codec import (
     DisclosedRecord,
     MalformedRecord,
@@ -179,53 +182,6 @@ class TeammateObservation:
         """Each held order's merge as its progress reads it; unmerged orders read no commit."""
         return {origin.todo.id: next(MergedProgress.found(origin), NoCommitProgress())
                 for origin in self.sources}
-
-
-class ExpandedHudGroup:
-    """Expanded sections consume their tables; collapsed sections do not prepare them."""
-
-    @classmethod
-    def table_lines(cls, tables: Iterable[tuple[str, ...]]) -> tuple[str, ...]:
-        return tuple(line for table in tables for line in table)
-
-
-class HudGroup(ViewHeading, affix="Group"):
-    """The declared order and headings shared by heartbeat and native table views."""
-
-    @classmethod
-    def table_lines(cls, tables: Iterable[tuple[str, ...]]) -> tuple[str, ...]:
-        return ()
-
-    @classmethod
-    def needs_hand(cls) -> bool:
-        return False
-
-class UrgentGroup(ExpandedHudGroup, HudGroup):
-    tone = WarningTone
-
-    @classmethod
-    def needs_hand(cls) -> bool:
-        return True
-
-
-class InProgressGroup(ExpandedHudGroup, HudGroup):
-    """Ordinary ink, deliberately. It was SuccessTone, so the busiest group on the board
-    was painted green - and a tone is a row's BACKGROUND (declared_table.py:125), so a
-    team of working units was a wall of solid green for the one urgent row to compete
-    with. Green also claims something finished well, and work in progress has not.
-    Colour is left to the two groups that want something from a person."""
-
-
-class ReadyToTestGroup(ExpandedHudGroup, HudGroup):
-    tone = AccentTone
-
-
-class IdleGroup(HudGroup):
-    pass
-
-
-class ParkedGroup(HudGroup):
-    """Cards of teammates that read nothing now: one count, below the working groups."""
 
 
 class ReadyForApplication:

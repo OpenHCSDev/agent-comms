@@ -16,7 +16,7 @@ from agent_comms.usage_reading import RateLimitReading
 from agent_comms.team.vibe_check import OverloadDegradation
 from agent_comms.team_frame_file import TeamFrameFile, TeamPlanFile
 from agent_comms.team_hud_records import (
-    FinishedPhases, HudSection, TeamOrder, TeamPhase, Teammate,
+    FinishedPhases, HudSection, ProblemCard, TeamOrder, TeamPhase, Teammate,
 )
 from agent_comms.team_service import TeamService
 from agent_comms.disclosure_text import (
@@ -248,8 +248,25 @@ class TeamHud(TeamLoad):
                        for plan in Plan.members_with(Plan) if plan in live
                        for phases in (tuple(phase for phase in finished if phase.plan is plan),)
                        if phases)
-        return HudSection.partition((*self.units, *(phase for phase in self.phases if not phase.finished),
-                                     *folded))
+        return HudSection.partition((
+            # Problems first, each with every unit holding it. They were already here,
+            # inside the unit cards, with Teammate.work flattening every one of a unit's
+            # orders into a single cell; a card per problem is the same facts where they
+            # can be read. Grouped by the order itself, so one problem held by three units
+            # is one row naming three holders rather than three rows that read as three
+            # problems - and so the table's unique-identity rule is not broken by the
+            # second holder of anything.
+            *(ProblemCard(order, tuple(holders)) for order, holders in self.held_problems().items()),
+            *self.units, *(phase for phase in self.phases if not phase.finished), *folded,
+        ))
+
+    def held_problems(self) -> dict[TeamOrder, list[ThreadIncarnation]]:
+        """Every problem on this board, and who holds it."""
+        held: dict[TeamOrder, list[ThreadIncarnation]] = {}
+        for unit in self.units:
+            for order in unit.orders:
+                held.setdefault(order, []).append(unit.unit)
+        return held
 
     def status_table(self, now: float) -> ViewTable[TeamStatus]:
         return ViewTable(TeamStatus, HudExclude, (TeamStatus(
