@@ -21,9 +21,13 @@ Run the same installer command to update.
 
 ## Remote buses
 
-Use Toad's **Open bus** menu. Automatic tailnet discovery currently requires the
-desktop `tailscale status` command, which Android's Tailscale app does not expose
-to Termux. The installer leaves discovery and host configuration unchanged.
+Open a saved bus, then use Toad's **Open bus** menu. The connected Core discovers
+machines through its own Tailscale client and asks their buses for access. The
+phone does not need the desktop Tailscale CLI or a hard-coded host list.
+
+Android's Tailscale app does not expose its peer list to Termux. A fresh phone
+therefore needs one initial UI profile from a bus; after connecting, discovery
+runs through that bus. The menu paints immediately while discovery runs.
 
 The shortcut accepts Toad's normal arguments, including a saved UI profile:
 

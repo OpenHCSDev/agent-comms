@@ -74,7 +74,7 @@ from abc import abstractmethod
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Type
+from typing import Annotated, ClassVar, Type
 
 from pydantic import JsonValue
 
@@ -189,8 +189,8 @@ from .tool_result import ToolResult
 from .notification_reads import LiveNotificationRead
 from .work_branches import WorkBranch, WorkBranches
 
-if TYPE_CHECKING:
-    from .comms import Comms
+from .comms import Comms
+from .tailnet_tools import ServedCommsTailnetBusesTool, ServedCommsTailnetProfileTool
 
 
 
