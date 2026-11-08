@@ -36,7 +36,7 @@ from agent_comms.comms import Comms, wire
 from agent_comms.transport.progress import WireExportObserver
 from agent_comms.connector import (
     ApprovalLink, AuthorizationCodeGrant, Connector, ConnectorSendTool, ConnectorVerb, GrantUiVerb,
-    LongLivedRoute, RunningRequest, ServeVerb, RevokeVerb,
+    BoundedRoute, LongLivedRoute, RunningRequest, ServeVerb, RevokeVerb,
 )
 from agent_comms.transport.mcp import (
     PROTOCOL_VERSION, SESSION_HEADER, CancelledMessage, InitializeResult, NoProgress,
@@ -1428,6 +1428,34 @@ async def test_an_invalid_order_or_a_failed_git_command_is_a_refusal_not_a_lost_
         status, reply = await tool_call(client, token, call_id, CommsChannelsTool.declared_name, {})
         assert (status, reply["id"], reply["result"]["isError"]) == (200, call_id, True)
         assert shown in reply["result"]["content"][0]["text"]
+
+
+async def test_a_request_stalled_before_its_tool_call_still_answers(client, comms, monkeypatch):
+    """codex-latency, 2026-11-08: the first bound started inside call(), but mcp awaits
+    bearer_caller, request.json and session dispatch before reaching it, so an
+    authenticated request that never finishes its body waited forever and no deadline
+    applied. The bound belongs around the whole handler, which is the scope log_route
+    already owns.
+    """
+    token = await approved_token(client, comms)
+    stalled = asyncio.Event()
+    authentic = Connector.bearer_caller
+
+    async def stalls_in_the_auth_phase(self, request):
+        caller = await authentic(self, request)
+        await stalled.wait()  # mcp() awaits this before it ever reaches call()
+        return caller
+
+    monkeypatch.setattr(BoundedRoute, "seconds", 0.25)
+    monkeypatch.setattr(Connector, "bearer_caller", stalls_in_the_auth_phase)
+    try:
+        answer = await client.post(
+            "/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "ping"},
+            headers={"Authorization": f"Bearer {token}"})
+        assert answer.status == web.HTTPGatewayTimeout.status_code, await answer.text()
+        assert "deadline" in await answer.text()
+    finally:
+        stalled.set()
 
 
 async def test_the_connector_names_work_neither_collection_holds(tmp_path, comms):

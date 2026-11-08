@@ -351,10 +351,6 @@ class RequestWait(ABC):
     def waited(self, now: float) -> str:
         return ""
 
-    def answering(self, now: float) -> AbstractAsyncContextManager[object]:
-        """A task with no request behind it answers to nobody and waits as long as it likes."""
-        return nullcontext()
-
 
 class NoRequest(RequestWait):
     """This task answers no request: a watch, a helper or a tool call."""
@@ -383,9 +379,6 @@ class RunningRequest(RequestWait):
         elapsed = now - self.started
         overdue = " OVERDUE" if self.bound.overdue(elapsed) else ""
         return f"{overdue} {elapsed:.3f}s into {self.method} {self.template},"
-
-    def answering(self, now: float) -> AbstractAsyncContextManager[object]:
-        return self.bound.answering(now - self.started)
 
 
 @dataclass(frozen=True)
@@ -521,26 +514,20 @@ class Connector(ConnectorService, McpServer):
         self, tool: type[ServedRequest] | type[ConnectorTool],
         arguments: Mapping[str, object], caller: ConnectorCaller, observer: WireExportObserver,
     ) -> AnsweredCall:
-        """Start once; a disconnected HTTP client cannot abandon its write."""
+        """Start once; a disconnected HTTP client cannot abandon its write.
+
+        The route's bound lives in log_route, around the whole handler, so a request that
+        stalls before ever reaching here is bounded too. The shield is this method's own
+        job and stays: when that bound gives up, `pending` keeps running, self.calls still
+        holds it and stop_calls still joins it, so a mutation under way finishes.
+        """
         if self.git_children.closing.is_set():
             raise web.HTTPServiceUnavailable(text="Connector is stopping")
         with OwnedGitOpening(self.git_children).bound():
             pending = asyncio.create_task(tool.run_async(partial(self.invoke, tool, arguments, caller, observer)))
         self.calls[pending] = tool
         pending.add_done_callback(self.calls.pop)
-        waiting = self.running_requests.get(asyncio.current_task(), NO_REQUEST)
-        try:
-            async with waiting.answering(time.monotonic()):
-                return await asyncio.shield(pending)
-        except TimeoutError:
-            # The request gives up; the call does not. The shield keeps `pending` running,
-            # self.calls still holds it and stop_calls still joins it, so a mutation
-            # already under way finishes and no write is abandoned half done.
-            logging.warning("%s passed its route's bound with the call still running: %s",
-                            tool.declared_name, self.still_running())
-            raise web.HTTPGatewayTimeout(
-                text=f"{tool.declared_name} has not answered within its deadline; "
-                     "the call is still running and will finish.") from None
+        return await asyncio.shield(pending)
 
     async def begin_shutdown(self, app: web.Application) -> None:
         """Close acquisition launches before any shutdown hook can join entered work."""
@@ -642,9 +629,22 @@ class Connector(ConnectorService, McpServer):
         self.running_requests[answering] = RunningRequest(
             method=request.method, template=template, started=started, bound=bound)
         try:
-            response = await handler(request)
+            # The whole handler, not just the tool call inside it. A request stalls in
+            # bearer_caller, request.json or session dispatch long before it reaches
+            # call(), so a bound that started there left an unfinished authenticated body
+            # waiting forever (codex-latency, 2026-11-08). One scope owns this; call()
+            # keeps only its shield, so a tool already running still finishes.
+            async with bound.answering(0.0):
+                response = await handler(request)
             status = response.status
             return response
+        except TimeoutError:
+            status = web.HTTPGatewayTimeout.status_code
+            logging.warning("%s %s passed its route's bound; still running:\n%s",
+                            request.method, template, self.still_running())
+            raise web.HTTPGatewayTimeout(
+                text=f"{request.method} {template} has not answered within its deadline; "
+                     "work already started is shielded and will finish.") from None
         except web.HTTPException as refusal:
             status = refusal.status
             raise
