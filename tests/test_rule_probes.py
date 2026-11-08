@@ -5,6 +5,7 @@ import pytest
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
+from agent_comms.rule_deal import AuditDue
 from agent_comms.rule_probes import FlinchProbe, HuntProbe, PriorProbe, Probe, ProbeContext
 
 HIS = ("cam we use knheritsmce rather than a flag",)
@@ -96,3 +97,29 @@ def test_a_bus_with_no_registered_project_reads_the_launch_directory_alone(tmp_p
     assert context.roots() == (tmp_path,)
     assert probe(probe="hunt", pattern="IDEN-3", fact="one fact restated in two owners",
                  at="src/owner.py:1", derive="declaration", by="src/owner.py:1").fault(context) == ""
+
+
+def test_the_deal_prints_the_shape_of_every_probe_it_demands():
+    """A session cannot read this module until its audit parses, so one that has not seen
+    these shapes could only learn them from refusals, and the two type errors each give away
+    half the answer: a tagged object is told the discriminator is wrong, a bare string is
+    told it wants an object. On 2026-11-08 that cost four sessions an hour between them,
+    while the same template had been printing MeantAnswer's declaration-derived shape all
+    along. Derived from the family, so a new probe member is documented by existing.
+    """
+    due = AuditDue(owner_words=HIS)
+    printed = due.template(Path("/tmp/session.audit.json"))
+
+    assert Probe.family_discriminator in printed, "nothing says which key names the member"
+    owed = Probe.owed(HIS)
+    assert owed, "a deal that owes no probe cannot show their shapes"
+    for member in owed:
+        assert member.declared_name in printed
+        assert member.question in printed
+        for required in FieldCodec.record_schema(member)["required"]:
+            assert required in printed, f"{member.declared_name} hides its {required} field"
+
+    # Two facts nobody should have to discover from a refusal: which mechanisms `derive`
+    # admits, and how a probe cites a file in another registered repository.
+    assert "base-method" in printed
+    assert "owner/name:" in printed
