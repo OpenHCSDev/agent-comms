@@ -34,6 +34,7 @@ from .pi_commands import (
     SetModel,
     SetThinkingLevel,
 )
+from .transport.project_request import ProjectRuntimeRequest
 from .watched import FileSource
 
 if TYPE_CHECKING:
@@ -331,7 +332,7 @@ class ConfigOptions:
         return {
             **ThreadLaunch.strip(dict(self.launch.environment)),
             **self.launch.configuration.encode(),
-            **thread.native_environment(self.route.root, snapshot),
+            **ProjectRuntimeRequest.native_environment(thread, self.route.root, snapshot),
         }
 
     def catalog_for(self, member: type[CatalogConfigOption]) -> CatalogConfigOption:
