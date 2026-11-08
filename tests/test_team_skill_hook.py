@@ -889,7 +889,7 @@ def test_refusal_counts_names_tool_and_prefills_the_owned_audit(
         output = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
         assert output["permissionDecision"] == "deny"
         reason = output["permissionDecisionReason"]
-        assert reason.startswith(f"Tristan: {Owed.nudges[attempt - 1]}")
+        assert reason.startswith(Owed.nudges[attempt - 1])
         assert f"{tool} waits on reading." in reason
         reasons.append(reason)
     assert f"Tristan told you, verbatim:\n{words[0]}\nYou did not." in reasons[0]
@@ -910,7 +910,7 @@ def test_refusal_counts_names_tool_and_prefills_the_owned_audit(
         assert str(start.audit) in output["permissionDecisionReason"]
     start.prepare(DeckReader(), AuditDue(words), StartedDeal())
     gated(transcript, "Bash", {"command": "true"}, comms=team_bus, binding=team_binding).judge()
-    assert json.dumps(f"Tristan: {Owed.nudges[0]}")[1:-1] in capsys.readouterr().out
+    assert json.dumps(Owed.nudges[0])[1:-1] in capsys.readouterr().out
 
 
 def test_the_audit_answers_each_shown_prompt_by_its_own_words_with_an_action():
