@@ -58,7 +58,7 @@ def test_recorded_failure_precedes_stale_board_and_load_without_changing_retaine
         assert 'original branch read failed' in lines[0]
         assert lines[0].endswith(' ago)')  # the failure's age, painted when the line is read
         assert 'last completed' in lines[1]
-        assert any('STALE retained' in line for line in lines)
+        assert any('Nothing is refreshing these rows' in line for line in lines)
     edits = ThreadCaller('colleague').invoke(CommsUnjudgedTool(), comms)
     assert 'original branch read failed' in edits.service_status[0]
     assert edits.complete and edits.unavailable == ()
@@ -98,13 +98,17 @@ def test_stopped_heartbeat_without_failure_explains_stale_board_and_refuses_deta
         passes, teammate_completed=passes.teammate_completed | {owner: time.time() - 3600})))
     hud = TeamFrame.current(comms, 'colleague')
     assert not hud.services.failing
-    assert hud.header[0] == 'no failure recorded, so no heartbeat is running'
-    assert 'STALE retained' in hud.retained_status()
+    # One line says it, not two. The header no longer opens with the double negative
+    # service_status used to add beside this; retained_status is the only place the
+    # board says whether it is refreshing, so the two cannot disagree.
+    assert hud.retained_status() == 'Nothing is refreshing these rows. Last time they were read:'
+    assert 'no failure recorded' not in '\n'.join(hud.header)
     card = hud.units[0]
     request = ReadOperation(str(comms.root), TeammateRead(
         frame_owner=owner, unit=card.unit,
         orders=tuple(dict.fromkeys(order.order for order in card.orders))))
-    with pytest.raises(ToolRefusedError, match='no failure recorded, so no heartbeat is running'):
+    # The refusal carries its own reason rather than the deleted header line.
+    with pytest.raises(ToolRefusedError, match='the teammate heartbeat is stale'):
         request.read(comms)
 
 
@@ -116,8 +120,7 @@ def test_a_pass_still_inside_its_declared_duration_is_not_called_dead(published_
         passes, teammate_completed=passes.teammate_completed | {
             owner: time.time() - TeamHeartbeat.pass_duration})))
     hud = TeamFrame.current(comms, 'colleague')
-    assert hud.header[0] != 'no failure recorded, so no heartbeat is running'
-    assert hud.retained_status() == 'Retained board rows and load:'
+    assert hud.retained_status() == 'The team, right now:'
     hud.require_current()
 
 
@@ -129,7 +132,7 @@ def test_failing_watch_does_not_make_a_fresh_heartbeat_stale(published_board):
     services.failed('another-watch', OSError('independent watch failed'))
     hud = TeamFrame.current(comms, 'colleague')
     assert 'independent watch failed' in hud.header[0]
-    assert hud.retained_status() == 'Retained board rows and load:'
+    assert hud.retained_status() == 'The team, right now:'
     hud.require_current()
 
 

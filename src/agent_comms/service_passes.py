@@ -93,10 +93,12 @@ class ServiceReading(ToolResult):
     def service_status(self) -> tuple[str, ...]:
         now = time.time()
         clock = self.heartbeat.aged_line('Tristan last completed', now)
-        failures = self.services.failure_lines(now)
-        if not failures and not self.services.heartbeat_current(self.heartbeat):
-            failures = ('no failure recorded, so no heartbeat is running',)
-        return (*failures, *(clock or ('Tristan last completed: unrecorded',)))
+        # No "no failure recorded, so no heartbeat is running" here. That line was a
+        # double negative that read as a non-sequitur, and it was the second place one
+        # fact was spelled: TeamHud.retained_status already says whether these rows are
+        # refreshing, and a refusal already carries its own reason (IDEN-3).
+        return (*self.services.failure_lines(now),
+                *(clock or ('Tristan last completed: unrecorded',)))
 
     def require_current(self) -> None:
         """A disclosure without a health header cannot serve stale cards silently."""

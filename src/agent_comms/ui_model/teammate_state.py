@@ -17,7 +17,7 @@ from typing import ClassVar, Self
 
 from agent_comms.comms import Comms
 from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.disclosure_text import AccentTone, SuccessTone, ViewHeading, WarningTone
+from agent_comms.disclosure_text import AccentTone, ViewHeading, WarningTone
 from agent_comms.nominal.field_codec import (
     DisclosedRecord,
     MalformedRecord,
@@ -209,7 +209,11 @@ class UrgentGroup(ExpandedHudGroup, HudGroup):
 
 
 class InProgressGroup(ExpandedHudGroup, HudGroup):
-    tone = SuccessTone
+    """Ordinary ink, deliberately. It was SuccessTone, so the busiest group on the board
+    was painted green - and a tone is a row's BACKGROUND (declared_table.py:125), so a
+    team of working units was a wall of solid green for the one urgent row to compete
+    with. Green also claims something finished well, and work in progress has not.
+    Colour is left to the two groups that want something from a person."""
 
 
 class ReadyToTestGroup(ExpandedHudGroup, HudGroup):

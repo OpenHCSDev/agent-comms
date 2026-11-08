@@ -101,7 +101,8 @@ class CodexUsage:
 @dataclass(frozen=True)
 class TeamStatus(DisclosedRecord):
     load: float
-    review_up: int
+    reviews_due: int
+    """Its label is derived from this name, and "Review Up: 0" told a reader nothing."""
     unjudged: int
     forks: int
     usage: str
@@ -126,9 +127,17 @@ class TeamLoad(ServiceReading):
     load: OverloadDegradation
 
     def retained_status(self) -> str:
+        """Whether what follows is being kept up to date, in the words a person uses.
+
+        It shouted "STALE retained board rows and load:" while service_status separately
+        announced "no failure recorded, so no heartbeat is running" - one fact, two
+        vocabularies, stacked, which is most of why this header read as a block of
+        unrelated text (Tristan, 2026-11-08, on the teams window: "there is like a big
+        block of random text").
+        """
         if self.services.heartbeat_current(self.heartbeat):
-            return 'Retained board rows and load:'
-        return 'STALE retained board rows and load:'
+            return 'The team, right now:'
+        return 'Nothing is refreshing these rows. Last time they were read:'
 
     def health_lines(self) -> tuple[str, ...]:
         return (*self.service_status, self.retained_status())
