@@ -52,10 +52,17 @@ export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-1}"
 # Resolution and pip use separate source trees; share compiled Rust dependencies.
 export CARGO_TARGET_DIR="$installation/cargo-target"
 export PIP_CACHE_DIR="$installation/pip-cache"
+# The Termux community index supplies Android wheels absent from desktop PyPI.
+termux_wheels=https://termux-user-repository.github.io/pypi/
+export PIP_EXTRA_INDEX_URL="$termux_wheels"
+export PIP_PREFER_BINARY=1
+export PIP_ONLY_BINARY=maturin
 # Inherit the patched native packages without letting pip change Termux's system Python.
 "$PREFIX/bin/python" -m venv --system-site-packages .venv
 uv export --project . --python "$PREFIX/bin/python" --no-managed-python \
     --no-python-downloads --no-dev --no-hashes --no-emit-project \
+    --index "$termux_wheels" \
+    --no-build-package maturin \
     "${upgrades[@]}" --output-file "$installation/requirements.txt" >/dev/null
 .venv/bin/python -m pip install --prefer-binary -r "$installation/requirements.txt"
 .venv/bin/python -m pip check
