@@ -45,10 +45,10 @@ from .storage_room import NoRoomNeeded, RoomReservation
 from .registry.threads import Thread
 from .thread_identity import OfferedTools
 from .tool_denial import SelectedToolDenied
-from .turn_goal_permission import TurnGoalPermission
+from .execution.turn_goal_permission import TurnGoalPermission
 
 from .reservation_rules import ReservationRule, ReservationViolationError
-from .turn_input_source import TurnInputSource
+from .execution.turn_input_source import TurnInputSource
 from .reservation_rules import RuleCheck
 from .planning.goals import GoalDeclaration
 from .planning.goal_waits import GoalWait

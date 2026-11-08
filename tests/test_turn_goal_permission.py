@@ -19,7 +19,10 @@ from agent_comms.native_tools import CoordinationCall, ReadTool
 from agent_comms.pi_payloads import ProvidedToolResult
 from agent_comms.transport.tools.goals import GoalSet
 from agent_comms.tool_denial import SelectedToolDenied
-from agent_comms.turn_goal_permission import OwnerGoalPermission, TurnGoalPermission
+from agent_comms.execution.turn_goal_permission import (
+    OwnerGoalPermission,
+    TurnGoalPermission,
+)
 
 
 def test_goal_publication_is_exact_and_coding_output_cannot_author_it():

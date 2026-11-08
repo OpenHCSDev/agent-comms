@@ -33,7 +33,7 @@ from .nominal.field_codec import FieldCodec
 from .image_input import ImageInput
 
 if TYPE_CHECKING:
-    from .turn_inbox import StreamingInputPolicy
+    from .execution.turn_inbox import StreamingInputPolicy
 
 from .storage.private_path import ObservedPath, PrivateFileRole, TrustedAncestorRole
 from .storage.store_files import ExclusiveLock, StoreOwner

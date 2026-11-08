@@ -18,7 +18,7 @@ from agent_comms.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.comms import wire
 from agent_comms.coordination.errors import HistoricalSourceChanged, ReloadRequired
 from agent_comms.nominal.field_codec import InputId
-from agent_comms.turn_item import FreshNativeId
+from agent_comms.execution.turn_item import FreshNativeId
 from agent_comms.historical_views import HistoricalMessage, HistoryArchive, HistorySource
 from agent_comms.installer.backup import bus_files
 from agent_comms.message_page import MessagePageRequest, PageBounds

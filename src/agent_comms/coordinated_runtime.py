@@ -39,7 +39,7 @@ from .selected_result import CoordinatedTurn
 from .selected_session import SelectedSession
 from .selected_turn import SelectedAttempt, SelectedConsideration
 from .selected_write_authority import NoSelectedWritePlans, SelectedWriteAuthority
-from .turn_failure import RetryableProviderFailure
+from .execution.turn_failure import RetryableProviderFailure
 
 
 class SessionSetupFailed(ValueError):

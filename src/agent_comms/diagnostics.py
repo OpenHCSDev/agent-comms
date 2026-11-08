@@ -27,8 +27,8 @@ from .storage.locked_store import PatternFile, RuntimeFile
 from .native_failures import NativeRequestFailure
 from .publication_measurements import PublicationMeasurements
 from .storage.store_files import AtomicFile
-from .turn_failure import TurnFailure
-from .turn_lease import TurnLeaseFence
+from .execution.turn_failure import TurnFailure
+from .execution.turn_lease import TurnLeaseFence
 
 if TYPE_CHECKING:
     from .activity import DrainDiagnostic

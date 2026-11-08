@@ -1,10 +1,12 @@
-"""Persistent ACP turn orchestration over existing session/input and S2 owners."""
-
 from __future__ import annotations
 
 import asyncio
+from collections.abc import (
+    Awaitable,
+    Callable,
+)
 from contextlib import AsyncExitStack
-from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -16,66 +18,106 @@ from metaclass_registry.mro_dispatch import (
 )
 from pydantic import JsonValue
 
-from .input_key import InputKey
-
-from . import (
+from .goal_scheduler import GoalScheduler
+from .input_drain import (
+    BackgroundWake,
+    SessionScheduleCheck,
+    WakeScheduleCheck,
+)
+from .owned_turn import OwnedTurn
+from .turn_context import SegmentManifest
+from .turn_effects import TurnEffects
+from .turn_input_source import (
+    InputDependency,
+    NoInputDependency,
+    TurnAcceptance,
+)
+from .turn_lease import (
+    TurnLeaseFence,
+    TurnState,
+)
+from .turn_phase import (
+    CancellingPhase,
+    TurnPhase,
+)
+from .. import (
     agent_events as events,
     pi_events as pi,
 )
-from .agent_backend import AgentBackend
-from .agent_event_updates import AcpEventConsumer, TurnEventConsumer
-from .channel_targets import NamedTarget
-from .channels import AllChannel
-from .controller import Controller
-from .coordination.coordinator import Coordination
-from .nominal.field_codec import AcpSessionId, GoalId, InputId, TurnId
-from .errors import RelationViolationError
-from .following_inputs import OwnerFollowingInputs
-from .planning.goal_actions import (
+from ..agent_backend import AgentBackend
+from ..agent_event_updates import (
+    AcpEventConsumer,
+    TurnEventConsumer,
+)
+from ..channel_targets import NamedTarget
+from ..channels import AllChannel
+from ..controller import Controller
+from ..coordination.coordinator import Coordination
+from ..errors import RelationViolationError
+from ..following_inputs import OwnerFollowingInputs
+from ..image_input import ImageInput
+from ..input_key import InputKey
+from ..input_origin import (
+    InputOrigin,
+    UnattributedInputOrigin,
+)
+from ..messages import Message
+from ..native_input_owner import RegistryOwner
+from ..nominal.field_codec import (
+    AcpSessionId,
+    GoalId,
+    InputId,
+    TurnId,
+)
+from ..pi_commands import (
+    AgentCommsInspectContext,
+    AgentCommsInspectContextSegment,
+    NativeQuery,
+)
+from ..pi_payloads import (
+    NativeContextData,
+    StateData,
+)
+from ..pi_rule_gate import PiRedeal
+from ..planning.goal_actions import (
     GoalPrecondition,
     OwnerInvocable,
     PausedGoalAction,
 )
-from .execution.goal_scheduler import GoalScheduler
-from .image_input import ImageInput
-from .input_origin import InputOrigin, UnattributedInputOrigin
-from .messages import Message
-from .native_input_owner import RegistryOwner
-from .execution.owned_turn import OwnedTurn
-from .pi_commands import (
-    NativeQuery,
-    AgentCommsInspectContext,
-    AgentCommsInspectContextSegment,
+from ..planning.goal_scope import OneGoal
+from ..queued_input import InitialInput
+from ..registry.threads import Thread
+from ..reservation_rules import (
+    ReservationRule,
+    ReservationViolationError,
 )
-from .pi_payloads import NativeContextData, StateData
-from .queued_input import InitialInput
-from .pi_rule_gate import PiRedeal
-from .routing import NoTurnRouting, Routing
-from .runtime_server import RuntimeServer, SubscriberClosed
-from .registry.threads import Thread
-from .transcript_updates import TurnTranscriptUpdate
-from .turn_context import SegmentManifest
-from .turn_effects import TurnEffects
-from .turn_lease import TurnLeaseFence, TurnState
-from .turn_input_source import InputDependency, NoInputDependency, TurnAcceptance
-from .turn_phase import CancellingPhase, TurnPhase
-from .planning.goal_scope import OneGoal
+from ..routing import (
+    NoTurnRouting,
+    Routing,
+    ScheduledTurn,
+)
+from ..runtime_server import (
+    RuntimeServer,
+    SubscriberClosed,
+)
+from ..transcript_updates import TurnTranscriptUpdate
 
-from dataclasses import dataclass
-from .reservation_rules import ReservationRule, ReservationViolationError
-from .routing import ScheduledTurn
-from agent_comms.execution.input_drain import BackgroundWake, SessionScheduleCheck, WakeScheduleCheck
 if TYPE_CHECKING:
-    from . import pi_events as pi
-    from .comms import Comms
-    from .context_reading import ContextUsage
-    from .coordinated_runtime import SelectedExecution
-    from .execution.input_drain import DrainTurn, InputDrain, OwnerSession
-    from .execution.session_lifecycle import SessionLifecycle
-
+    from .input_drain import (
+        DrainTurn,
+        InputDrain,
+        OwnerSession,
+    )
+    from .session_lifecycle import SessionLifecycle
+    from ..comms import Comms
+    from ..context_reading import ContextUsage
+    from ..coordinated_runtime import SelectedExecution
 
 AGENT_PREFIX = "!agent "
+
+
 RELAY_PREFIX = "!relay "
+
 
 @dataclass(frozen=True, kw_only=True)
 class OwnerTurnScheduleCheck(SessionScheduleCheck):

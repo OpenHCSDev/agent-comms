@@ -8,7 +8,12 @@ from agent_comms.comms import wire
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.nominal.field_codec import FieldCodec, TurnId
 from agent_comms.registry.threads import Thread, NativeThread
-from agent_comms.turn_lease import FinishedTurnFence, NoFinishedTurn, NoTurn, NoTurnLease
+from agent_comms.execution.turn_lease import (
+    FinishedTurnFence,
+    NoFinishedTurn,
+    NoTurn,
+    NoTurnLease,
+)
 
 
 def test_old_lease_cannot_clear_same_id_after_delete_rebind(tmp_path):

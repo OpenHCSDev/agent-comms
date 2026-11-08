@@ -19,7 +19,7 @@ from .message_reference import MessageReference
 from .tool_result import ToolResult
 from .projects.checkouts import Checkout
 from .thread_identity import ClaimScoped, ClaimedIdentity
-from .turn_context import Provenance
+from .execution.turn_context import Provenance
 
 if TYPE_CHECKING:
     from .comms import Comms

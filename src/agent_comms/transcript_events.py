@@ -32,7 +32,10 @@ from .recorded_time import EventTime, UnrecordedEventTime
 from .routing import MessageRoute, NoTurnRouting, Routing, TurnRouting
 from .tool_results import SENT_MESSAGE_MIME, NoSentMessage, NoToolDiff, ToolDiff, ToolText
 from .transcript_merge import EventMerge, StreamingMerge
-from .turn_item import NativeItemId, NativeTurnId
+from .execution.turn_item import (
+    NativeItemId,
+    NativeTurnId,
+)
 from .ui_model.message_category import (
     AgentCategory,
     InboundCategory,

@@ -38,9 +38,15 @@ from ..session_file import RegistrySessionLocation
 from ..storage.store_files import RegistryLocking
 from ..thread_identity import TurnIdentity
 from .threads import Thread
-from ..turn_lease import (
-    ActiveTurn, LockedTurn, NamedTurn, RecordedGeneration, RetiredTurn, StoredTurnRecord,
-    TurnDeclaration, TurnRecord,
+from ..execution.turn_lease import (
+    ActiveTurn,
+    LockedTurn,
+    NamedTurn,
+    RecordedGeneration,
+    RetiredTurn,
+    StoredTurnRecord,
+    TurnDeclaration,
+    TurnRecord,
 )
 
 

@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .nominal.declared_family import DeclaredFamily
 from .projects.repo import Repo
-from .turn_context import FileProvenance
+from .execution.turn_context import FileProvenance
 
 if TYPE_CHECKING:
     from .comms import Comms

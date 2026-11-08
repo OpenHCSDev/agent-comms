@@ -67,7 +67,10 @@ from agent_comms.thread_identity import ReportedTools, ToolName
 from agent_comms.thread_text import ForkedParent
 from agent_comms.registry.threads import Thread, NativeThread
 from agent_comms.transcript_events import ToolStartTranscript
-from agent_comms.turn_item import NativeItemId, NativeTurnId
+from agent_comms.execution.turn_item import (
+    NativeItemId,
+    NativeTurnId,
+)
 from agent_comms.ui_model.teammate_state import Unreadable
 from agent_comms.work_branches import SourceGrowth, WorkBranchError
 from conftest import declare_test_bus

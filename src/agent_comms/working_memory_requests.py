@@ -7,7 +7,7 @@ from typing import Literal
 
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import FieldCodec
-from .turn_context import ContextSpan
+from .execution.turn_context import ContextSpan
 from .message_reference import MessageReference
 from .working_memory_disclosure import DisclosureState
 from .working_memory_labels import ClassifierVersion, JevUsage, QuestionVersion

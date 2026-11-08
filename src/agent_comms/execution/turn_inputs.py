@@ -1,13 +1,10 @@
-"""Input forwarding owns pending native IDs and never replays written inputs.
-
-Declared handlers on this owner select each inbox operation by its nominal
-MRO, and convert it to its Pi command at the owning send boundary.
-"""
-
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import (
+    dataclass,
+    field,
+)
 from typing import TYPE_CHECKING
 
 from metaclass_registry.mro_dispatch import (
@@ -15,21 +12,39 @@ from metaclass_registry.mro_dispatch import (
     handles,
 )
 
-from . import agent_events as events
-from . import pi_commands as commands
-from . import turn_failure as failures
-from .acp_failure import UnrecordedFailureSource
-from .turn_inbox import ClearQueue, InputRequest, SendNow, TurnInbox, TurnInboxItem, UseSettings
-from .nominal.field_codec import InputId
-from .storage.locked_store import RegistryFile
-from .storage.maintenance_barrier import MaintenanceBarrier
-from .native_failures import NativePiUnavailable
-from .pending_requests import PendingRequest
-from .prompt_state import PreparedSession, UnwrittenPrompt
+from .turn_failure import PromptSendFailed
+from .turn_inbox import (
+    ClearQueue,
+    InputRequest,
+    SendNow,
+    TurnInbox,
+    TurnInboxItem,
+    UseSettings,
+)
+from .. import (
+    agent_events as events,
+    pi_commands as commands,
+)
+from ..acp_failure import UnrecordedFailureSource
+from ..native_failures import NativePiUnavailable
+from ..nominal.field_codec import InputId
+from ..pending_requests import PendingRequest
+from ..prompt_state import (
+    PreparedSession,
+    UnwrittenPrompt,
+)
+from ..storage.locked_store import RegistryFile
+from ..storage.maintenance_barrier import MaintenanceBarrier
 
 if TYPE_CHECKING:
-    from .backend import NativeSession, TurnSession
-    from .pi_events import MessageStart, Response
+    from ..backend import (
+        NativeSession,
+        TurnSession,
+    )
+    from ..pi_events import (
+        MessageStart,
+        Response,
+    )
 
 
 class NoCurrentItem(TurnInboxItem):
@@ -74,7 +89,7 @@ class InputForwarding(MroDispatch):
     ) -> tuple[events.AgentEvent, ...]:
         """Retire the live write, preserve its durable UNKNOWN, and report the actual refusal."""
         item = self.retire(native_id)
-        failure = failures.PromptSendFailed(
+        failure = PromptSendFailed(
             f"Following input {item.input_id} was rejected: {response.error.require()}"
         )
         session.output.record_failure(failure)

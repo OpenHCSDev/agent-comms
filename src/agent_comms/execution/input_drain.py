@@ -25,7 +25,13 @@ from ..acp_extension import (
 )
 from ..activity import FailedWakeDiagnostic, StoppedDrainDiagnostic
 from ..agent_backend import AgentBackend
-from ..turn_inbox import ClearQueue, InputContent, SendNow, TurnInbox, TurnInboxItem
+from .turn_inbox import (
+    ClearQueue,
+    InputContent,
+    SendNow,
+    TurnInbox,
+    TurnInboxItem,
+)
 from ..bus import Bus
 from ..child_process import join_retirement
 from ..cohort_schema import AcceptanceFrontier
@@ -66,16 +72,22 @@ from ..owner_launch import OwnerRetiredReply, StopOwnerRuntimeRequest
 from .session_lifecycle import SessionLifecycle
 from ..thread_identity import ClaimedIdentity, OwnerIdentity
 from ..registry.threads import NativeThread, Thread
-from ..turn_context import TurnContext, UserFollowupSegment
-from ..turn_input_source import AcceptedFollowingInput, OriginalTurnInput
-from ..turn_terminal import OwnerStop
+from .turn_context import (
+    TurnContext,
+    UserFollowupSegment,
+)
+from .turn_input_source import (
+    AcceptedFollowingInput,
+    OriginalTurnInput,
+)
+from .turn_terminal import OwnerStop
 from ..watched import ChangeSignal, FileLifetimeSource, FileSource
 
 from ..nominal.declared_family import DeclaredFamily
 from ..storage.maintenance_barrier import MaintenanceStatus
 from ..reservation_rules import ReservationRule, RuleCheck, ReservationViolationError
-from ..turn_outcome import TurnOutcome
-from ..turn_input_source import NoTurnAcceptance
+from .turn_outcome import TurnOutcome
+from .turn_input_source import NoTurnAcceptance
 if TYPE_CHECKING:
     from ..planning.goals import GoalDeclaration
     from agent_comms.following_inputs import OwnerFollowingInputs

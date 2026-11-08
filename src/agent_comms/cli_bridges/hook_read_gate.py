@@ -25,7 +25,7 @@ from agent_comms.compaction_notices import CompactionNotice
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.cli_bridges.shared import Binding, Watch
 import time
-from agent_comms.turn_phase import ToolRunningPhase
+from ..execution.turn_phase import ToolRunningPhase
 from agent_comms_hooks import Bash, ClaudeToolHook, ClaudeTranscriptHook, HookRecord
 from agent_comms.meant_voice import BusVoice
 from .hook_forks import SubagentActivity

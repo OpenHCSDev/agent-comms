@@ -6,7 +6,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.turn_failure import FailedTurnResolution
+from agent_comms.execution.turn_failure import FailedTurnResolution
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.planning.goal_actions import (
@@ -23,7 +23,7 @@ from agent_comms.planning.goals import Goal
 from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.transport.request import ToolRequest
-from agent_comms.turn_failure import BackendFailed
+from agent_comms.execution.turn_failure import BackendFailed
 from conftest import installed_comms
 
 

@@ -1,15 +1,16 @@
-"""ACP-facing effects of turn orchestration."""
-
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import (
+    ABC,
+    abstractmethod,
+)
 from typing import TYPE_CHECKING
 
 from acp.schema import PromptRequest
 
 if TYPE_CHECKING:
-    from .runtime_server import RuntimeServer
-    from .execution.session_lifecycle import SessionLifecycle
+    from .session_lifecycle import SessionLifecycle
+    from ..runtime_server import RuntimeServer
     from .turn_runner import TurnRunner
 
 

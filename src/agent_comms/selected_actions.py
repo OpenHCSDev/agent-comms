@@ -20,7 +20,7 @@ from .selected_claim import (
 from .selected_write_authority import BoundSelectedWriteAuthority
 from .selected_write_plan import PlannedWrite
 from .registry.threads import Thread
-from .turn_context import InstructionFile
+from .execution.turn_context import InstructionFile
 
 if TYPE_CHECKING:
     from .channel_coding_tools import CodingToolOwner

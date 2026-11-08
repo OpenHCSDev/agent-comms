@@ -5,9 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Never
 
-from . import turn_failure as failures
+from .execution.turn_failure import TerminalFailure
 from .native_input_proof import NativeInputCommit
-from .turn_inbox import TurnInboxItem
+from .execution.turn_inbox import TurnInboxItem
 from .native_pi import NativePiInputNotSent
 from .pi_events import AgentSettled, MessageStart, Response
 
@@ -37,7 +37,7 @@ class PromptState:
 
     def validate_terminal(self, session: NativeSession, transport_ok: bool) -> None:
         """A user prompt owes its declared input, answer and queue evidence."""
-        for cause in failures.TerminalFailure.members_with(failures.TerminalFailure):
+        for cause in TerminalFailure.members_with(TerminalFailure):
             if cause.detected(session, transport_ok):
                 session.output.record_failure(cause(cause.explanation(session.output)))
 

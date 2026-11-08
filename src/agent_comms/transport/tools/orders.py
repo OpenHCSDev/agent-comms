@@ -127,7 +127,7 @@ from ...tool_request import (
 )
 from ...tool_result import ToolResult
 from ...transcripts import TranscriptRead
-from ...turn_digests import (
+from ...execution.turn_digests import (
     ActivityTurnView,
     LastTurns,
     OrderEditsRead,

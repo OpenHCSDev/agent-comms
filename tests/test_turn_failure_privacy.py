@@ -2,12 +2,12 @@
 
 import pytest
 
-from agent_comms.turn_failure import (
+from agent_comms.execution.turn_failure import (
     InputIdUnavailable,
     ModelRequestFailed,
     ProviderRetryExhausted,
 )
-from agent_comms.turn_output import TurnOutput
+from agent_comms.execution.turn_output import TurnOutput
 
 
 @pytest.mark.parametrize('kind', [InputIdUnavailable, ModelRequestFailed, ProviderRetryExhausted])

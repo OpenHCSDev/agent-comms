@@ -50,7 +50,14 @@ from .shell_effects import AcquireRepositoryStorageEffect, CreateCheckoutStorage
 from .thread_model import ThreadModel
 from .registry.threads import Thread
 from .head_review import PullRequestHead
-from .turn_context import CodexRolloutProvenance, ContextManifest, ContextSegment, ContributionCoordinates, Provenance, TurnContext
+from .execution.turn_context import (
+    CodexRolloutProvenance,
+    ContextManifest,
+    ContextSegment,
+    ContributionCoordinates,
+    Provenance,
+    TurnContext,
+)
 from .storage.typed_table import SQLiteSchemaDifference, StoreRewrite
 
 from agent_comms.session_file import SessionFile

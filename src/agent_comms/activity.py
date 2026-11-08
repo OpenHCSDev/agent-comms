@@ -34,7 +34,7 @@ from .thread_presentation import ThreadPresentation
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity
     from .registry.threads import Thread
-    from .turn_phase import TurnPhase
+    from .execution.turn_phase import TurnPhase
 
 
 class ThreadOutput(ABC):

@@ -51,7 +51,7 @@ class PauseSource(DeclaredFamily, affix="Pause"):
 
 class OwnerPause(PauseSource):
     def instruction(self) -> str:
-        from ..turn_context import InstructionFile
+        from ..execution.turn_context import InstructionFile
         return InstructionFile.read("owner-pause.md").content
 
 

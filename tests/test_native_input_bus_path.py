@@ -10,14 +10,20 @@ import signal
 import agent_comms.native_package as native_package
 import pytest
 
-from agent_comms.turn_inbox import ClearQueue, InputContent, InputRequest, SteerInputPolicy, TurnInbox
+from agent_comms.execution.turn_inbox import (
+    ClearQueue,
+    InputContent,
+    InputRequest,
+    SteerInputPolicy,
+    TurnInbox,
+)
 from agent_comms.backend import NativeSession
 from agent_comms.child_process import Platform
 from agent_comms.nominal.field_codec import InputId
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.store_files import RegistryLocking
 from agent_comms.native_package import VerifiedNativePackage
-from agent_comms.turn_watchdog import ModelWait
+from agent_comms.execution.turn_watchdog import ModelWait
 from agent_comms.native_arguments import NativeInputProofArgument
 from agent_comms.native_input_proof import NativeContextJournal
 from native_proof_cases import read_context_proof

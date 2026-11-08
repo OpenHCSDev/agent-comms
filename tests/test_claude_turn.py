@@ -7,8 +7,14 @@ import json
 
 from transcript_record_fixture import transcript_record
 
-from agent_comms.turn_item import NativeItemId, NativeTurnId
-from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase
+from agent_comms.execution.turn_item import (
+    NativeItemId,
+    NativeTurnId,
+)
+from agent_comms.execution.turn_phase import (
+    ModelWaitPhase,
+    ToolRunningPhase,
+)
 from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
 from agent_comms.cli_bridges.claude_protocol import (
     ApiError, CatchUp, ClaudeSession, ClaudeToolDraft, KnownTurn, Live, ReadResultObserved,

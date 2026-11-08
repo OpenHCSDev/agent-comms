@@ -111,7 +111,7 @@ from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_caller import ForkCaller, NoThreadCaller, PeerCaller
 from agent_comms.connector import ConnectorSendTool
 from agent_comms.connector_caller import DirectorCaller
-from agent_comms.turn_digests import OrderEditCountRead
+from agent_comms.execution.turn_digests import OrderEditCountRead
 from agent_comms.ui_model.teammate_state import AwaitingTeam, Blocked, Detached, TeammateState
 from cli_command import team
 from conftest import team_as, declare_test_bus

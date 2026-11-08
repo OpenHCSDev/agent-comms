@@ -17,7 +17,10 @@ from agent_comms.planning.goal_states import (
 )
 from agent_comms.planning.goals import Goal
 from agent_comms.reported_turn import ReportedTurn
-from agent_comms.turn_goal_account import OriginGoalSettlement, VerifiedGoalSettlement
+from agent_comms.execution.turn_goal_account import (
+    OriginGoalSettlement,
+    VerifiedGoalSettlement,
+)
 
 
 

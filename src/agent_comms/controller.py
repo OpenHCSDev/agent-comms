@@ -70,7 +70,7 @@ if TYPE_CHECKING:
 
     from .runtime_server import RuntimeServer
     from agent_comms.acp import AcpSelectedWriteAuthority
-    from .turn_runner import TurnRunner
+    from .execution.turn_runner import TurnRunner
 
 ACP_PERMISSION_TIMEOUT_SECONDS = 14.0
 

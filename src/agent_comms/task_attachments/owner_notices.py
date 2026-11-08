@@ -23,7 +23,7 @@ from agent_comms.thread_identity import ThreadIncarnation
 if TYPE_CHECKING:
     from agent_comms.bus import BusReader
     from agent_comms.context_segments.wake import MessageDelivery
-    from agent_comms.turn_context import ContextSegment
+    from ..execution.turn_context import ContextSegment
     from agent_comms.comms import Comms
     from agent_comms.messaging import Messaging
     from agent_comms.registry.registry_document import RegistrySnapshot

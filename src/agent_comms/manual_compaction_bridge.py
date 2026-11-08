@@ -28,10 +28,13 @@ from .agent_backend import (
 from .agent_event_updates import TurnEventConsumer
 from .coordination.coordinator import Coordination
 from .pi_vocabulary import ManualCompactionReason
-from .turn_phase import CompactionPhase, PublishingPhase
+from .execution.turn_phase import (
+    CompactionPhase,
+    PublishingPhase,
+)
 
 if TYPE_CHECKING:
-    from .turn_runner import TurnRunner
+    from .execution.turn_runner import TurnRunner
 
 
 class CompactionReply(MroDispatch):

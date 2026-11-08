@@ -53,8 +53,8 @@ from agent_comms.execution.owned_turn import OwnedTurn
 from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_caller import ToolCaller
 from agent_comms.transport.tools.goals import CommsGoalHistoryTool
-from agent_comms.turn_failure import NativeChildSignaled
-from agent_comms.turn_input_source import NoTurnAcceptance
+from agent_comms.execution.turn_failure import NativeChildSignaled
+from agent_comms.execution.turn_input_source import NoTurnAcceptance
 
 
 @pytest.fixture

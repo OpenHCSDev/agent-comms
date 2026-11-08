@@ -1,10 +1,15 @@
-"""Observed turn progress owned by the existing nominal agent-event consumer."""
-
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Iterable
+from collections.abc import (
+    Awaitable,
+    Callable,
+    Iterable,
+)
 from contextlib import ExitStack
-from dataclasses import dataclass, replace
+from dataclasses import (
+    dataclass,
+    replace,
+)
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -17,28 +22,52 @@ from metaclass_registry.mro_dispatch import (
     handles,
 )
 
-from . import agent_events as events
-from .acp_extension import LiveQueueScope, TranscriptChangedUpdate, encode_updates
-from .acp_failure import NativeTurnOutcome
-from .agent_event_updates import RoutedTurnEventConsumer, TurnEventConsumer
-from .context_store import UNREAD_CONTEXT, ContextPrior
-from .coordination.coordinator import Coordination
-from .diagnostics import record_request_progress, record_terminal_failure
-from .publication_measurements import PublicationMeasurements
-from .messages import AlertKind, NoticeRole
-from .nominal.field_codec import AcpSessionId
-from .send_result import SendResult
-from .thread_identity import ClaimedIdentity
-from .transcript_updates import TurnTranscriptUpdate
-from .turn_failure import ModelRequestFailed, NoTurnFailure
+from .turn_failure import (
+    ModelRequestFailed,
+    NoTurnFailure,
+)
 from .turn_lease import TurnState
-from .native_turn_context import ContextObserved
-from .turn_phase import NativePhaseChanged, PublishingPhase
+from .turn_phase import (
+    NativePhaseChanged,
+    PublishingPhase,
+)
+from .. import agent_events as events
+from ..acp_extension import (
+    LiveQueueScope,
+    TranscriptChangedUpdate,
+    encode_updates,
+)
+from ..acp_failure import NativeTurnOutcome
+from ..agent_event_updates import (
+    RoutedTurnEventConsumer,
+    TurnEventConsumer,
+)
+from ..context_store import (
+    ContextPrior,
+    UNREAD_CONTEXT,
+)
+from ..coordination.coordinator import Coordination
+from ..diagnostics import (
+    record_request_progress,
+    record_terminal_failure,
+)
+from ..messages import (
+    AlertKind,
+    NoticeRole,
+)
+from ..native_turn_context import ContextObserved
+from ..nominal.field_codec import AcpSessionId
+from ..publication_measurements import PublicationMeasurements
+from ..send_result import SendResult
+from ..thread_identity import ClaimedIdentity
+from ..transcript_updates import TurnTranscriptUpdate
 
 if TYPE_CHECKING:
-    from .execution.owned_turn import OwnedTurn
+    from .owned_turn import (
+        OwnedTurn,
+        TurnGoalAccount,
+    )
     from .turn_failure import TurnFailure
-    from agent_comms.execution.owned_turn import TurnGoalAccount
 
 
 @dataclass(kw_only=True)
@@ -48,8 +77,6 @@ class TurnEventPublication(MroDispatch):
     @handles(events.InputStarted, events.Done)
     async def sync_goals(self, event: events.InputStarted) -> None:
         await self.sync_goal_execution(self.session_id)
-
-
 
 
 class TurnProgress(events.AgentEventConsumer):

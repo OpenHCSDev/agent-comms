@@ -13,7 +13,12 @@ from types import SimpleNamespace
 import pytest
 
 import agent_comms.agent_backend as ab
-from agent_comms.turn_inbox import InputContent, InputRequest, SendNow, SteerInputPolicy
+from agent_comms.execution.turn_inbox import (
+    InputContent,
+    InputRequest,
+    SendNow,
+    SteerInputPolicy,
+)
 from agent_comms.nominal.field_codec import AcpSessionId, InputId
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec
@@ -234,7 +239,7 @@ def test_cli_registry_reads_do_not_load_the_pi_runtime(tmp_path):
             "NativeThread('a', frozenset(), '/tmp').backend\n"
             "assert 'agent_comms.backend' not in sys.modules\n"
             "assert 'agent_comms.tracked_turn' not in sys.modules\n"
-            "assert 'agent_comms.turn_watchdog' not in sys.modules\n"
+            "assert 'agent_comms.execution.turn_watchdog' not in sys.modules\n"
         ), str(tmp_path)],
         capture_output=True, text=True, timeout=60,
     )

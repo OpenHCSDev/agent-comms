@@ -20,8 +20,8 @@ if TYPE_CHECKING:
     from .controller import SessionUpdateSink
     from .agent_events import Done, Error
     from .input_disposition import InputDocument
-    from .turn_failure import TurnFailure
-    from .turn_input_source import OriginalTurnInput
+    from .execution.turn_failure import TurnFailure
+    from .execution.turn_input_source import OriginalTurnInput
 
 from .coordination.errors import Refused
 from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember

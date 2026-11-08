@@ -9,7 +9,7 @@ from agent_comms.channel_targets import CommandTarget
 from conftest import accept_initial
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.notification_progress import SentProgress
-from agent_comms.turn_input_source import NoTurnAcceptance
+from agent_comms.execution.turn_input_source import NoTurnAcceptance
 from agent_comms.wake_policy import BoundedTriageWake
 from bus_history import read_history
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401

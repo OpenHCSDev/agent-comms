@@ -24,7 +24,10 @@ from .goal_turn_permit import (
 from .. import agent_events as events
 from ..controller import NO_CONTROLLER
 from ..agent_backend import InputStartListener
-from ..turn_inbox import InputContent, TurnInbox
+from .turn_inbox import (
+    InputContent,
+    TurnInbox,
+)
 from ..channel_coding_tools import CodingToolMode
 from ..channel_input_batch import InputBatch
 from ..coordination.errors import CoordinationError, Refused
@@ -48,32 +51,42 @@ from ..pi_events import (
 from ..routing import MessageRoute, NoMessageRoute, ScheduledTurn, TurnRouting
 from ..send_outcome import SendBoundary
 from ..transcript_routes import DisplayText, NoDisplayText
-from ..turn_failure import BackendFailed, CoordinationRefused, TurnFailure
-from ..turn_goal_permission import (
+from .turn_failure import (
+    BackendFailed,
+    CoordinationRefused,
+    TurnFailure,
+)
+from .turn_goal_permission import (
     OwnerGoalPermission,
     TurnGoalPermission,
 )
-from ..turn_input_source import (
+from .turn_input_source import (
     InputDependency,
     NoInputDependency,
     OwnerOriginalInput,
     ScheduledOriginalInput,
     TurnAcceptance,
 )
-from ..turn_phase import CancellingPhase, PromptAcceptancePhase
-from ..turn_progress import TurnProgress
-from ..turn_terminal import EndedWithoutResult, TurnTerminal
+from .turn_phase import (
+    CancellingPhase,
+    PromptAcceptancePhase,
+)
+from .turn_progress import TurnProgress
+from .turn_terminal import (
+    EndedWithoutResult,
+    TurnTerminal,
+)
 
 from agent_comms.errors import GoalAttemptError
 from dataclasses import field
-from ..turn_item import UsageChargeId
+from .turn_item import UsageChargeId
 from ..transport.tools.goals import CommsSetGoalTool
-from ..turn_lease import TurnLeaseFence
+from .turn_lease import TurnLeaseFence
 from ..registry.threads import NativeThread, Thread
 from agent_comms.pi_wire import PiUsage
 from ..comms import Comms
 if TYPE_CHECKING:
-    from ..turn_runner import TurnRunner
+    from .turn_runner import TurnRunner
     from ..planning.goal_attempts import LaunchPermit
 
 
@@ -362,13 +375,13 @@ class OwnedTurn:
         self.env_extra = self.runner.inputs.state(self.session_id).owned().configuration.native_environment(
             self.thread, self.runner.comms.registry.snapshot()
         )
-        from ..turn_context import (
-            AutomaticTitleSegment,
-            RecordedContextTurn,
-            ReplyRouteSegment,
-            TurnContext,
-            TurnProvenance,
-        )
+        from .turn_context import (
+    AutomaticTitleSegment,
+    RecordedContextTurn,
+    ReplyRouteSegment,
+    TurnContext,
+    TurnProvenance,
+)
 
         self.relations = self.runner.comms.relationships.context_relations(self.thread.name)
         self.context = TurnContext.for_owner(

@@ -1,32 +1,41 @@
-"""Original turn contributors and their observations, never input authority."""
-
 from __future__ import annotations
 
 import hashlib
 import json
 import re
-from abc import ABC, abstractmethod
+from abc import (
+    ABC,
+    abstractmethod,
+)
 from collections.abc import Mapping
-from dataclasses import dataclass, field, replace
-from pathlib import Path
+from dataclasses import (
+    dataclass,
+    field,
+    replace,
+)
 from importlib.resources import files
+from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self
+from typing import (
+    Annotated,
+    ClassVar,
+    Self,
+    TYPE_CHECKING,
+)
 
 from pydantic import JsonValue
 
-from .annotation_disclosure import PublicInstructionAnnotations, WithheldAnnotations
-from .cli_result import CliResult
-from .errors import RelationViolationError
-from . import instructions
-from .planning.goals import (
-    Goal,
-    NoGoal,
+from .. import instructions
+from ..annotation_disclosure import (
+    PublicInstructionAnnotations,
+    WithheldAnnotations,
 )
-from .message_reference import MessageReference
-from .native_session_reopen import NativeSessionIdentity
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import (
+from ..cli_result import CliResult
+from ..errors import RelationViolationError
+from ..message_reference import MessageReference
+from ..native_session_reopen import NativeSessionIdentity
+from ..nominal.declared_family import DeclaredFamily
+from ..nominal.field_codec import (
     FieldCodec,
     IdentityExclude,
     NullMember,
@@ -36,19 +45,36 @@ from .nominal.field_codec import (
     TurnId,
     WireOmitDefault,
 )
-from .peer_relevance import AlwaysListed, GoalShown, PeerRelevance
-from .projects.checkouts import Checkout
-from .thread_identity import ThreadIncarnation, TurnIdentity
-from .tool_result import DeclaredReply, ToolResult
-from .turn_item import NativeItemId, PiRequestKey
-from .wake_policy import WakePolicy
+from ..peer_relevance import (
+    AlwaysListed,
+    GoalShown,
+    PeerRelevance,
+)
+from ..planning.goals import (
+    Goal,
+    NoGoal,
+)
+from ..projects.checkouts import Checkout
+from ..thread_identity import (
+    ThreadIncarnation,
+    TurnIdentity,
+)
+from ..tool_result import (
+    DeclaredReply,
+    ToolResult,
+)
+from .turn_item import (
+    NativeItemId,
+    PiRequestKey,
+)
+from ..wake_policy import WakePolicy
 
 if TYPE_CHECKING:
-    from .context_store import RecordedContextState
-    from .input_attempt import StoredInput
-    from .presentation import ThreadView
-    from .registry.threads import Thread
-    from .relationships import PeerRelation
+    from ..context_store import RecordedContextState
+    from ..input_attempt import StoredInput
+    from ..presentation import ThreadView
+    from ..registry.threads import Thread
+    from ..relationships import PeerRelation
 
 
 @dataclass(frozen=True)
@@ -120,7 +146,7 @@ class CodexRolloutProvenance(Provenance):
                 "· not current instructions")
 
     def public_text(self, comms) -> str:
-        from .cli_bridges.codex_rollout import ROLLOUT_RECORD
+        from ..cli_bridges.codex_rollout import ROLLOUT_RECORD
 
         if min(self.offset, self.length, self.instruction) < 0:
             raise ValueError("Historical Codex source coordinates must be nonnegative")
@@ -989,12 +1015,12 @@ class NativeMessages:
         return list(self.messages)
 
     def public_text(self) -> str:
-        from .pi_payloads import PiMessage
+        from ..pi_payloads import PiMessage
 
         return "\n".join(PiMessage.from_wire(message).text for message in self.messages)
 
     def source_ranges(self) -> tuple[ContributionCoordinates, ...]:
-        from .pi_payloads import PiMessage
+        from ..pi_payloads import PiMessage
 
         offset = 0
         ranges = []
@@ -1014,7 +1040,7 @@ class NativeAnnotations(NativeMessages):
     """A transcript span keeps the disclosure policy of its original native message."""
 
     def disclosure_for(self, span: ContextSpan):
-        from .pi_payloads import PiMessage
+        from ..pi_payloads import PiMessage
 
         for source, message in zip(self.source_ranges(), self.messages, strict=True):
             if source.contains(span.coordinates):
@@ -1440,8 +1466,8 @@ class TurnContext(DeclaredReply):
 
         Its relationships, the messages addressed to it and its partners' goal changes.
         """
-        from .context_segments.partner_activity import PartnerActivitySegment
-        from .context_segments.relationships import RelationshipsSegment
+        from ..context_segments.partner_activity import PartnerActivitySegment
+        from ..context_segments.relationships import RelationshipsSegment
 
         context = self
         for segment in (

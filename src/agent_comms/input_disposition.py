@@ -57,7 +57,7 @@ if TYPE_CHECKING:
     from .private_registry_guard import RegistryPrivacy
     from .registry.registry_document import RegistryEntry, RegistrySnapshot
     from .registry.threads import Thread
-    from .turn_lease import TurnLeaseFence
+    from .execution.turn_lease import TurnLeaseFence
 
 
 @dataclass(frozen=True)

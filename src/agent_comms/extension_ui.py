@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 from .pi_events import CancelledUiChoice, DialogUiRequest, ExtensionUiChoice
 from agent_comms.pi_wire import McpLiveAcknowledgement
-from .turn_failure import ExtensionUiFailed
+from .execution.turn_failure import ExtensionUiFailed
 
 if TYPE_CHECKING:
     from .backend import TurnSession

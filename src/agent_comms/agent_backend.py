@@ -36,9 +36,9 @@ from .pi_payloads import PiResponseData
 from .pi_vocabulary import CompactionReason
 from .rule_deal import DealDelivery
 from .session_revision import NoSessionObservation, SessionObservation
-from .turn_inbox import InputContent
+from .execution.turn_inbox import InputContent
 from .tool_result import DeclaredReply
-from .turn_outcome import TurnOutcome
+from .execution.turn_outcome import TurnOutcome
 
 if TYPE_CHECKING:
     from .agent_events import AgentEvent
@@ -46,7 +46,7 @@ if TYPE_CHECKING:
     from .execution.owned_turn import TurnDelivery
     from .registry.threads import Thread
     from .transcript_sources import TranscriptSource
-    from .turn_runner import TurnRunner
+    from .execution.turn_runner import TurnRunner
 
 
 class BackendDeclarationError(TypeError):

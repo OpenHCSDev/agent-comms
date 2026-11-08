@@ -22,7 +22,7 @@ from agent_comms.messages import Message, InfoKind
 from agent_comms.task_sources import Decision
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.transport.tools.served import invoke_tool
-from agent_comms.turn_lease import NoTurnLease
+from agent_comms.execution.turn_lease import NoTurnLease
 from functools import partial
 from bus_history import read_history
 from agent_comms.registry.threads import NativeThread

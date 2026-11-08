@@ -43,18 +43,22 @@ from .pi_vocabulary import NoThinkingOverride, ThinkingChoice
 from .request_progress import NO_REQUEST_OBSERVER, RequestObserver
 from .selected_session import SelectedSession
 from .tool_denial import SelectedToolDenied
-from .turn_context import InputContributionCoordinates
-from .turn_watchdog import DEFAULT_MODEL_WAIT, TurnWait, TurnWaitExpired
+from .execution.turn_context import InputContributionCoordinates
+from .execution.turn_watchdog import (
+    DEFAULT_MODEL_WAIT,
+    TurnWait,
+    TurnWaitExpired,
+)
 
 if TYPE_CHECKING:
     from .acp_failure import ProviderRetryResult
-    from .turn_inbox import TurnInbox
+    from .execution.turn_inbox import TurnInbox
     from .coordinated_runtime import NativeExecution
     from .cursor_publication import CursorDelivery
     from .owned_send import OwnedSend
     from .pi_native_backend import PersistentPiSession
     from .pi_payloads import UserMessage
-    from .turn_failure import TurnFailure
+    from .execution.turn_failure import TurnFailure
 
 
 NativeObserver = Callable[[pi.PiEvent | AgentEvent | ObservedAttestation], Awaitable[None]]

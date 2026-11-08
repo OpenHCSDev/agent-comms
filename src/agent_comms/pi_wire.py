@@ -13,7 +13,10 @@ from pydantic import JsonValue
 from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from .nominal.field_codec import ExternalField, FieldCodec, InputId, MalformedRecord, NullMember, RecordProblems, SingleFieldValue, ValidatedScalar, WireName, WireNullDefault, WireOmitDefault, boundary_decoder
 from .pi_counts import NonnegativePiCount, TotalPiCount, UnreportedCount
-from .turn_item import PiRequestKey, UsageChargeId
+from .execution.turn_item import (
+    PiRequestKey,
+    UsageChargeId,
+)
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -21,7 +24,7 @@ if TYPE_CHECKING:
     from .pending_requests import PendingRequest, PendingRequests
     from .pi_commands import PiCommand
     from .pi_events import Response
-    from .turn_phase import TurnPhase
+    from .execution.turn_phase import TurnPhase
 
 
 class PiPayload(ExternalField):

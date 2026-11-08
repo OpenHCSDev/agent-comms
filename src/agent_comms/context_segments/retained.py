@@ -4,7 +4,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from ..exporting import AuthoredSourceScope, FullLimit, WireExportBoundary, WireExportProvenance, WireTranscriptExporter
 from ..retained_task_facts import RetainedTaskFacts
-from ..turn_context import ContextSegment, OwnerProvenance, WireProvenance
+from ..execution.turn_context import (
+    ContextSegment,
+    OwnerProvenance,
+    WireProvenance,
+)
 
 @dataclass(frozen=True, kw_only=True)
 class RetainedSegment(ContextSegment):

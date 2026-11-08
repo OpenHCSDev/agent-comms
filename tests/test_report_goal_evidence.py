@@ -16,7 +16,7 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.transport.tools.goals import CommsGoalTool
-from agent_comms.turn_context import FileProvenance
+from agent_comms.execution.turn_context import FileProvenance
 
 
 @pytest.fixture

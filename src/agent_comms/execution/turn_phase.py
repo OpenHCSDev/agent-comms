@@ -1,21 +1,30 @@
-"""Shared turn stages own activity and phase-specific watchdog behavior."""
-
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, ClassVar, Self
+from dataclasses import (
+    dataclass,
+    field,
+    replace,
+)
+from typing import (
+    ClassVar,
+    Self,
+    TYPE_CHECKING,
+)
 
-from .activity import Activity, ActivityState, ObservedActivity
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import ToolCallId
-from .pi_payloads import ProviderDiagnosticError
+from ..activity import (
+    Activity,
+    ActivityState,
+    ObservedActivity,
+)
+from ..agent_events import AgentEvent
+from ..child_process import ProcessIdentity
+from ..nominal.declared_family import DeclaredFamily
+from ..nominal.field_codec import ToolCallId
+from ..pi_payloads import ProviderDiagnosticError
 
-
-from .child_process import ProcessIdentity
-from agent_comms.agent_events import AgentEvent
 if TYPE_CHECKING:
-    from .agent_activity import AgentActivity
     from .turn_lease import TurnLeaseFence
+    from ..agent_activity import AgentActivity
 
 
 @dataclass(frozen=True)
@@ -178,6 +187,7 @@ class FailedPhase(ClosingTurn, TurnPhase):
 class CancellingPhase(ClosingTurn, TurnPhase):
     keeps_project_resume = False
     label = "Cancelling"
+
 
 class ShutdownPhase(ClosingTurn, TurnPhase):
     """Native shutdown cannot allow follow-ups or resume model activity."""

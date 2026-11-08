@@ -57,8 +57,17 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
-from agent_comms.turn_item import NativeItemId, NativeTurnId, NamedSourceTurn
-from agent_comms.turn_phase import CompactionPhase, ModelWaitPhase, ToolRunningPhase, TurnPhase
+from ..execution.turn_item import (
+    NativeItemId,
+    NativeTurnId,
+    NamedSourceTurn,
+)
+from ..execution.turn_phase import (
+    CompactionPhase,
+    ModelWaitPhase,
+    ToolRunningPhase,
+    TurnPhase,
+)
 
 from ..wire_models import DeclaredWireFamily, WireModel
 from .shared import BridgeInputObserved

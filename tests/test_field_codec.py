@@ -58,7 +58,7 @@ from agent_comms.messages import (
     NoticeRole,
 )
 from agent_comms.transcript_events import ToolStartTranscript
-from agent_comms.turn_item import NativeItemId
+from agent_comms.execution.turn_item import NativeItemId
 from conftest import transcript_records
 
 

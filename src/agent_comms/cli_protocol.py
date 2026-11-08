@@ -27,7 +27,10 @@ from .external_transcript import RequestedEarlierPage
 from .nominal.field_codec import TimestampText
 from .storage.maintenance_barrier import MaintenanceHeldError
 from .recorded_time import UnrecordedTimeError
-from .turn_item import NativeTurnId, TurnItem
+from .execution.turn_item import (
+    NativeTurnId,
+    TurnItem,
+)
 from .wire_models import DeclaredWireFamily, WireModel
 
 

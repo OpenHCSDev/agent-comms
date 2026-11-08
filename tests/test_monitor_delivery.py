@@ -62,14 +62,17 @@ from agent_comms.message_reference import BridgeStart, MessageReference
 from agent_comms.runtime_updates import (
     AllTurnsEnded, FinishedItem, FinishedTurn, HiddenItem, RuntimeUpdate,
 )
-from agent_comms.turn_item import NativeItemId, NativeTurnId
+from agent_comms.execution.turn_item import (
+    NativeItemId,
+    NativeTurnId,
+)
 from agent_comms.external_transcript import ExternalTurnInput
 from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.messages import AlertKind, InfoKind, Message, NoticeRole, QuestionKind
 from agent_comms.channel_targets import ThreadTarget
 from agent_comms.diagnostics import record_terminal_failure
 from agent_comms.transcript_events import AssistantTranscript
-from agent_comms.turn_failure import BackendFailed
+from agent_comms.execution.turn_failure import BackendFailed
 
 
 async def stored_attempts(bridge) -> tuple[HarnessDelivery, ...]:

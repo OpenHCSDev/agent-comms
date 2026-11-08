@@ -1,27 +1,36 @@
-"""Output, diagnostic privacy and terminal failure selection for one native turn."""
-
 from __future__ import annotations
 
 from collections.abc import Iterator
-from dataclasses import dataclass, field
+from dataclasses import (
+    dataclass,
+    field,
+)
 from typing import TYPE_CHECKING
 
-from . import agent_events as events
-from . import turn_failure as failures
-from agent_comms.pi_payloads import NativeMessageFailureSource
-from .acp_failure import FailureSource, NoRetry, ProviderRetryResult, UnrecordedFailureSource
-from .native_arguments import SelectedModel
+from .turn_failure import (
+    NoTurnFailure,
+    TurnFailure,
+)
+from .. import agent_events as events
+from ..acp_failure import (
+    FailureSource,
+    NoRetry,
+    ProviderRetryResult,
+    UnrecordedFailureSource,
+)
+from ..native_arguments import SelectedModel
+from ..pi_payloads import NativeMessageFailureSource
 
 if TYPE_CHECKING:
-    from .backend import NativeSession
-    from agent_comms.pi_wire import PiDiagnostic
-    from .pi_payloads import AssistantMessage
+    from ..backend import NativeSession
+    from ..pi_payloads import AssistantMessage
+    from ..pi_wire import PiDiagnostic
 
 
 @dataclass
 class TurnOutput:
     sensitive: bool = False
-    failure: failures.TurnFailure = field(default_factory=failures.NoTurnFailure)
+    failure: TurnFailure = field(default_factory=NoTurnFailure)
     error_message: str | None = None
     _failed_message_source: FailureSource = field(
         default_factory=UnrecordedFailureSource, init=False, repr=False)
@@ -60,14 +69,14 @@ class TurnOutput:
     def native_failure_source(self) -> NativeMessageFailureSource:
         return self._failed_message_source.require_native()
 
-    def record_failure(self, failure: failures.TurnFailure) -> None:
+    def record_failure(self, failure: TurnFailure) -> None:
         if failure.supersedes(self.failure):
             self.failure = failure.with_text(self.redact(failure.text))
 
     def _end_request_failure(self) -> None:
         """The refused request's failure no longer decides the turn."""
         if self.failure.ends_with_request_retry:
-            self.failure = failures.NoTurnFailure()
+            self.failure = NoTurnFailure()
 
     def request_retried(self) -> None:
         """Pi re-sends the refused request; that refusal no longer decides the turn."""
@@ -75,7 +84,7 @@ class TurnOutput:
         self._end_request_failure()
         self.error_message = None
 
-    def request_exhausted(self, failure: failures.TurnFailure) -> None:
+    def request_exhausted(self, failure: TurnFailure) -> None:
         """Pi's recovery ended the request; its final error replaces the interim refusal."""
         self._end_request_failure()
         self.record_failure(failure)
@@ -84,7 +93,7 @@ class TurnOutput:
         self.declared_failure.raise_native(proof, model)
 
     @property
-    def declared_failure(self) -> failures.TurnFailure:
+    def declared_failure(self) -> TurnFailure:
         return self.retry_result.refine_failure(self.failure)
 
     @property

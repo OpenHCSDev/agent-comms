@@ -1,20 +1,41 @@
-"""Turn lease: declaration and persistence owners."""
-
 from __future__ import annotations
 
 import time
-from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable, Iterator
-from dataclasses import dataclass, field, replace
+from abc import (
+    ABC,
+    abstractmethod,
+)
+from collections.abc import (
+    Callable,
+    Iterable,
+    Iterator,
+)
+from dataclasses import (
+    dataclass,
+    field,
+    replace,
+)
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import (
+    Annotated,
+    ClassVar,
+    TYPE_CHECKING,
+)
 
-from .activity import ObservedActivity
-from .channel_targets import CommandTarget
-from .child_process import ProcessIdentity, ProcessState
-from .coordination.session import NativeCapture
-from .errors import RelationViolationError
-from .nominal.field_codec import (
+from ..activity import ObservedActivity
+from ..child_process import (
+    ProcessIdentity,
+    ProcessState,
+)
+from ..coordination.session import NativeCapture
+from ..errors import RelationViolationError
+from ..input_disposition import InputDispositions
+from ..lifecycle_capability import (
+    Executing,
+    LifecycleCapability,
+)
+from ..message_reference import MessageReference
+from ..nominal.field_codec import (
     NullMember,
     RecordMember,
     SingleFieldValue,
@@ -23,33 +44,48 @@ from .nominal.field_codec import (
     WireTransient,
     boundary_decoder,
 )
-from .planning.goal_presentation import RunningExecution
-from .input_disposition import InputDispositions
-from .lifecycle_capability import Executing, LifecycleCapability
-from .storage.locked_store import (
-    DocumentBytes, DocumentChange, DocumentTransactions, DurableFile, LockedFile,
+from ..planning.goal_presentation import RunningExecution
+from ..reported_turn import (
+    NoReportedTurn,
+    ReportedTurn,
+    ReportedTurnState,
+)
+from ..routing import (
+    NoTurnRouting,
+    Routing,
+)
+from ..storage.locked_store import (
+    DocumentBytes,
+    DocumentChange,
+    DocumentTransactions,
+    DurableFile,
+    LockedFile,
     PatternFile,
 )
-from .message_reference import MessageReference
-from .reported_turn import NoReportedTurn, ReportedTurn, ReportedTurnState
-from .routing import NoTurnRouting, Routing
-from .storage.store_files import DependentStateTier, SingleFileStore
-from .thread_identity import (
+from ..storage.store_files import (
+    DependentStateTier,
+    SingleFileStore,
+)
+from ..thread_identity import (
     NoObservedTurn,
     ObservedTurn,
     ThreadIncarnation,
     TurnFence,
     TurnIdentity,
 )
-from .turn_phase import IdlePhase, PreparingPhase, TurnPhase
+from .turn_phase import (
+    IdlePhase,
+    PreparingPhase,
+    TurnPhase,
+)
 
 if TYPE_CHECKING:
-    from .planning.goal_management import GoalExecutionSource
-    from .planning.goal_presentation import GoalExecution
-    from .messaging import Messaging
-    from .registry.registry_document import RegistrySnapshot
-    from .registry.registry_store import RegistryStore
-    from .registry.threads import Thread
+    from ..messaging import Messaging
+    from ..planning.goal_management import GoalExecutionSource
+    from ..planning.goal_presentation import GoalExecution
+    from ..registry.registry_document import RegistrySnapshot
+    from ..registry.registry_store import RegistryStore
+    from ..registry.threads import Thread
 
 
 class TurnDeclaration(LifecycleCapability, SubclassUnion, affix=""):
@@ -506,6 +542,7 @@ class TurnRecord(LifecycleCapability, SubclassUnion, affix=""):
     @abstractmethod
     def observed_turn(self, identity: TurnIdentity, claim_scope: int) -> ObservedTurn: ...
 
+
 @dataclass(frozen=True)
 class NoTurnRecord(NullMember, TurnRecord):
 
@@ -525,6 +562,7 @@ class NoTurnRecord(NullMember, TurnRecord):
 
     def observed_turn(self, identity: TurnIdentity, claim_scope: int) -> NoObservedTurn:
         return NoObservedTurn()
+
 
 @dataclass(frozen=True)
 class FinishedTurn(RecordMember, TurnRecord):
@@ -559,6 +597,7 @@ class FinishedTurn(RecordMember, TurnRecord):
     def observed_turn(self, identity: TurnIdentity, claim_scope: int) -> TurnFence:
         return TurnFence(identity, self.turn_id, claim_scope)
 
+
 @dataclass(frozen=True)
 class StoredTurnReference(RecordMember, TurnRecord):
     """Wire presence only; the registry's thread supplies the turn identity."""
@@ -582,6 +621,7 @@ class StoredTurnReference(RecordMember, TurnRecord):
 
     def observed_turn(self, identity: TurnIdentity, claim_scope: int) -> TurnFence:
         raise RelationViolationError("Turn reference must be bound by its registry")
+
 
 class MissingTurnRecordError(RelationViolationError):
     """A turn file is gone: superseded since its registry named it, or never written."""
@@ -679,7 +719,7 @@ class StoredTurnRecord(Executing, TurnFile, StoredTurnReference,
     @property
     def registry(self) -> RegistryStore:
         """The registry owner this stored reference is bound to."""
-        from .registry.registry_store import RegistryStore
+        from ..registry.registry_store import RegistryStore
 
         return RegistryStore(self.registry_path)
 

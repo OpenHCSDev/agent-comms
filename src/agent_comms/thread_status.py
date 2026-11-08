@@ -15,7 +15,7 @@ from .nominal.field_codec import FieldCodec, TextRepresentation
 from .lifecycle_capability import LifecycleCapability
 from .thread_presentation import InactiveThreadPresentationStatus, LiveThreadOwnerBinding, ThreadOwnerBinding, UnavailableThreadOwnerBinding
 from .thread_presentation import ThreadPresentation
-from .turn_lease import (
+from .execution.turn_lease import (
     FinishedTurnFence,
     NoFinishedTurn,
 )
@@ -24,11 +24,14 @@ if TYPE_CHECKING:
     from .activity import ObservedActivity
     from .message_reference import MessageReference
     from .messaging import Messaging
-    from .turn_item import SourceTurn
+    from .execution.turn_item import SourceTurn
     from .registry.registry_document import RegistryEntry, RegistrySnapshot, RosterVisibility
     from .thread_identity import GenerationCounter, OwnerIdentity
     from .registry.threads import Thread
-    from .turn_lease import TurnCompletion, TurnLeaseFence
+    from .execution.turn_lease import (
+    TurnCompletion,
+    TurnLeaseFence,
+)
 
 
 class AlwaysListed:

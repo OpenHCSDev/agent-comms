@@ -1,18 +1,18 @@
-"""The goal authority captured by an original or freshly accepted owner input."""
-
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import (
+    ABC,
+    abstractmethod,
+)
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from agent_comms.nominal.field_codec import GoalId
-
-from .planning.goal_authority import GoalTurnAuthority
+from ..nominal.field_codec import GoalId
+from ..planning.goal_authority import GoalTurnAuthority
 
 if TYPE_CHECKING:
-    from .planning.goals import GoalDeclaration
-    from .planning.goal_waits import GoalWait
+    from ..planning.goal_waits import GoalWait
+    from ..planning.goals import GoalDeclaration
     from .turn_input_source import InputDependency
 
 

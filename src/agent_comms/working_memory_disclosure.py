@@ -6,7 +6,10 @@ from dataclasses import dataclass
 
 from agent_comms.nominal import field_codec
 
-from .turn_context import ContextSegment, ContextSpan
+from .execution.turn_context import (
+    ContextSegment,
+    ContextSpan,
+)
 from .working_memory_questions import SpanQuestion
 
 

@@ -47,8 +47,8 @@ from .tracked_turn import (
     NativeObserver,
     TrackedTurnSession,
 )
-from .turn_context import RenderedInput
-from agent_comms.turn_input_source import SelectedOriginalInput
+from .execution.turn_context import RenderedInput
+from .execution.turn_input_source import SelectedOriginalInput
 
 if TYPE_CHECKING:
     from .execution.input_drain import InputDrain

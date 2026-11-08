@@ -12,7 +12,10 @@ from agent_comms.planning.goal_generation import (
 )
 from agent_comms.queued_input import InitialInput
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.turn_failure import BackendFailed, FailedTurnResolution
+from agent_comms.execution.turn_failure import (
+    BackendFailed,
+    FailedTurnResolution,
+)
 from delivery_owner_fixture import reply_turn_finished
 from native_backend_fixture import native_backend_fixture
 

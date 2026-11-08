@@ -34,7 +34,7 @@ if TYPE_CHECKING:
     from .pi_payloads import PiToolResult
     from .pi_rule_gate import PiRuleGate
     from .shell_effects import StorageEffect
-    from .turn_goal_permission import TurnGoalPermission
+    from .execution.turn_goal_permission import TurnGoalPermission
 
 
 

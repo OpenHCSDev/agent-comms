@@ -9,7 +9,7 @@ from .input_key import InputKey
 
 from .class_fact import ClassFact
 from .projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
-from .turn_origin import TurnOrigin
+from .execution.turn_origin import TurnOrigin
 import builtins
 import re
 import sqlite3

@@ -6,8 +6,11 @@ from agent_comms.coordination.coordinator import Coordination
 from agent_comms.nominal.field_codec import TurnId
 from agent_comms.lifecycle_capability import Active
 from agent_comms.queued_input import DeliveredInput
-from agent_comms.turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
-from agent_comms.turn_input_source import SelectedOriginalInput
+from agent_comms.execution.turn_goal_permission import (
+    InactiveGoalPermission,
+    TurnGoalPermission,
+)
+from agent_comms.execution.turn_input_source import SelectedOriginalInput
 from agent_comms.wake_policy import MessageAudience
 from conftest import publish_initial
 from test_acp_private_nk_delivery import _session

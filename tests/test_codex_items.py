@@ -8,7 +8,10 @@ from agent_comms.cli_bridges.codex_protocol import (
 from agent_comms.nominal.field_codec import MessageId
 from agent_comms.transcript_events import UserTranscript
 from agent_comms.registry.threads import ExternalThread
-from agent_comms.turn_item import NativeItemId, NativeTurnId
+from agent_comms.execution.turn_item import (
+    NativeItemId,
+    NativeTurnId,
+)
 
 
 def _output(tmp_path):
@@ -60,7 +63,10 @@ def test_client_id_boundary_retains_its_member_through_item_use(wire, decoded):
 
 def test_codex_stream_reports_activity_and_finishes_items(tmp_path):
     t1_turn_id = NativeTurnId('t1')
-    from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase
+    from agent_comms.execution.turn_phase import (
+    ModelWaitPhase,
+    ToolRunningPhase,
+)
     from agent_comms.cli_bridges.codex_protocol import ItemStream, RpcNotification
     from agent_comms.runtime_updates import ActiveItem, FinishedItem, FinishedTurn, TurnStarted
     from agent_comms.native_tools import BashTool

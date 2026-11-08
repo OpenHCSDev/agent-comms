@@ -1,28 +1,41 @@
-"""Declaration-owned turn waits, progress budgets and retry diagnostics."""
-
 from __future__ import annotations
 
 import asyncio
 import math
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import (
+    AsyncIterator,
+    Callable,
+    Iterator,
+)
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, ClassVar
+from typing import (
+    ClassVar,
+    TYPE_CHECKING,
+)
 
 from metaclass_registry.mro_dispatch import (
     MroDispatch,
     handles,
 )
 
-from . import agent_events as events
-from . import turn_failure as failures
-from . import turn_phase as phases
-from .nominal.declared_family import DeclaredFamily
-from .native_startup import SessionLoad
+from .turn_failure import (
+    InputMissing,
+    ModelStalled,
+    NativePreflightTimeout,
+)
+from .turn_phase import (
+    AcceptsPrompt,
+    PromptAcceptancePhase,
+    TurnPhase,
+)
+from .. import agent_events as events
+from ..native_startup import SessionLoad
+from ..nominal.declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
-    from .backend import TurnSession
-    from .native_startup import NativeStartupPolicy
-    from .pi_events import PiEvent
+    from ..backend import TurnSession
+    from ..native_startup import NativeStartupPolicy
+    from ..pi_events import PiEvent
 
 
 class TurnWaitExpired(TimeoutError):
@@ -79,7 +92,7 @@ class TurnWait(DeclaredFamily, affix="Wait"):
 
 
 class PreflightWait(TurnWait):
-    reason = failures.NativePreflightTimeout.declared_name
+    reason = NativePreflightTimeout.declared_name
     phase = "await_get_state"
 
     async def expire(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
@@ -96,7 +109,7 @@ class PreflightWait(TurnWait):
         session.output.diagnostic.update(watchdog.session_load.diagnostic)
         session_size = watchdog.session_load.summary
         session.output.record_failure(
-            failures.NativePreflightTimeout(
+            NativePreflightTimeout(
                 "Pi native input-ID capability preflight timed out "
                 f"(phase={self.phase}, elapsed_ms={elapsed_ms}, "
                 f"wait_ms={wait_ms}, budget_ms={budget_ms}, "
@@ -114,7 +127,7 @@ class InputStartWait(TurnWait):
 
     async def expire(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         session.output.record_failure(
-            failures.InputMissing("Pi RPC run ended without this prompt's user message start.")
+            InputMissing("Pi RPC run ended without this prompt's user message start.")
         )
         await session.native.shutdown()
         async for event in super().expire(session):
@@ -135,7 +148,7 @@ class ModelWait(TurnWait):
         await session.abort_stalled_rpc()
         for started in session.started_during_abort:
             yield started
-        session.output.record_failure(failures.ModelStalled(
+        session.output.record_failure(ModelStalled(
             session.watchdog.phase.stalled().stall_message(self.budget)
         ))
         async for event in super().expire(session):
@@ -187,7 +200,7 @@ class ProgressWatchdog(MroDispatch):
         self.model_wait = model_wait.fresh()
         self.poll_wait = PollWait()
         self.unbounded_wait = UnboundedWait()
-        self.phase: phases.TurnPhase = phases.PromptAcceptancePhase()
+        self.phase: TurnPhase = PromptAcceptancePhase()
 
     def launching(self, clock: Callable[[], float], session_file: str | None) -> None:
         self.clock = clock
@@ -224,7 +237,7 @@ class ProgressWatchdog(MroDispatch):
         self.progress()
         self.phase = self.phase.model_progress()
 
-    @handles(phases.AcceptsPrompt)
+    @handles(AcceptsPrompt)
     def accept_prompt(self, event: PiEvent, session: TurnSession) -> None:
         if event.invalidates_stop:
             session.output.final_assistant_stop = False

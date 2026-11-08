@@ -11,7 +11,7 @@ from .coordination.tables.assignments import WakeAssignment
 from .reservation_rules import ReservationRule, RuleCheck
 from .native_input_record import NativeInputIdentity, NativeInputRecord
 from .native_runtime_input import NativeRuntimeInput
-from .turn_goal_permission import GoalPermission
+from .execution.turn_goal_permission import GoalPermission
 from .registry.threads import Thread
 
 if TYPE_CHECKING:

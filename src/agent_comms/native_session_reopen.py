@@ -10,7 +10,7 @@ from typing import Annotated, TYPE_CHECKING
 from .nominal.field_codec import FieldCodec, MalformedRecord, NullMember, PresentMember, WireName
 from abc import ABC, abstractmethod
 from .storage.private_path import FileRevision
-from .turn_item import FreshNativeId
+from .execution.turn_item import FreshNativeId
 
 if TYPE_CHECKING:
     from .native_child import PiSessionChild

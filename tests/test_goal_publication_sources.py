@@ -34,7 +34,10 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_document import RegistryDocument
 from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.thread_text import GivenThreadText
-from agent_comms.turn_phase import IdlePhase, ToolRunningPhase
+from agent_comms.execution.turn_phase import (
+    IdlePhase,
+    ToolRunningPhase,
+)
 from delivery_owner_fixture import canonical_agent
 from goal_owner_fixture import canonical_goal_wire
 

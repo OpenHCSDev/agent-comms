@@ -13,9 +13,12 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 from pydantic import JsonValue
 
 from . import agent_events as events
-from . import turn_failure as failures
 from .acp_failure import UnrecordedFailureSource
-from .turn_inbox import InputRequest, StreamingInputPolicy
+from .execution.turn_failure import BackendFailed
+from .execution.turn_inbox import (
+    InputRequest,
+    StreamingInputPolicy,
+)
 from .child_process import BoundedRun
 from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from .nominal.field_codec import (
@@ -37,8 +40,11 @@ from .native_session_reopen import NativeSessionIdentity
 from .native_tool_call import OwnerToolConnection
 from agent_comms.pi_wire import PiOmitted, PiRequestId, RequestId
 from .pi_payloads import CompactionData, EmptyData, ModelsData, NativeContextData, PiResponseData, QueueClearedData, ReportedText, SessionStatsData, SessionSwitchData, StateData, ThinkingLevelsData, UnknownData
-from .turn_context import InputContributionCoordinates, SegmentManifest
-from .turn_item import PiRequestKey
+from .execution.turn_context import (
+    InputContributionCoordinates,
+    SegmentManifest,
+)
+from .execution.turn_item import PiRequestKey
 
 if TYPE_CHECKING:
     from .backend import TurnSession
@@ -148,7 +154,7 @@ class PiCommand(DeclaredFamily):
         return ()
 
     def rejected(self, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
-        failure = failures.BackendFailed(
+        failure = BackendFailed(
             f"Native {self.response_type().declared_name} refused: {response.error.require()}"
         )
         session.output.record_failure(failure)

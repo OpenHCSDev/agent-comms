@@ -57,7 +57,7 @@ from .selected_triage import (
     TriageDecisionRecord,
 )
 from .tool_denial import SelectedToolDenied
-from .turn_item import FreshNativeId
+from .execution.turn_item import FreshNativeId
 from .storage.typed_table import (
     LOCAL_TABLE_SOURCE,
     AttachedPracticeRebuild,

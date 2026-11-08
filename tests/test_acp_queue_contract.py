@@ -140,7 +140,10 @@ async def test_real_acp_rejects_nonstring_user_text_before_unknown_or_enqueue(tm
     (17, "x" * 4096),
 ], ids=["long-unicode", "many-inputs", "large-total"])
 async def test_queue_preview_preserves_long_input_identity_body_and_actions(tmp_path, count, text):
-    from agent_comms.turn_inbox import ClearQueue, SendNow
+    from agent_comms.execution.turn_inbox import (
+    ClearQueue,
+    SendNow,
+)
     from agent_comms.acp_extension import AvailableQueueProjection, QueueItem
 
     agent, inbox = held_owner(tmp_path)
@@ -218,9 +221,17 @@ async def test_original_queued_and_routed_starts_own_their_input_identity(tmp_pa
     from agent_comms.input_attempt import StartedInput
     from agent_comms.input_key import BusInputKey
     from agent_comms.text_digest import TextDigest
-    from agent_comms.turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
+    from agent_comms.execution.turn_goal_permission import (
+    InactiveGoalPermission,
+    TurnGoalPermission,
+)
     from agent_comms.queued_input import AcceptedTurn
-    from agent_comms.turn_input_source import NoInputDependency, NoTurnAcceptance, OwnerOriginalInput, RoutedOriginalInput
+    from agent_comms.execution.turn_input_source import (
+    NoInputDependency,
+    NoTurnAcceptance,
+    OwnerOriginalInput,
+    RoutedOriginalInput,
+)
 
     _, agent, incarnation, generation = _owner(tmp_path)
     input_id, native_id = InputId.mint(), InputId.mint()

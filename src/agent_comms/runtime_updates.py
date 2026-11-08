@@ -27,8 +27,17 @@ from .transcript_events import (
 )
 from .thread_text import NoThreadText, ThreadText
 from .thread_identity import OfferedTools
-from .turn_phase import IdlePhase, ModelWaitPhase, TurnPhase
-from .turn_item import NativeItemId, NativeTurnId, NoSourceTurn, TurnItem
+from .execution.turn_phase import (
+    IdlePhase,
+    ModelWaitPhase,
+    TurnPhase,
+)
+from .execution.turn_item import (
+    NativeItemId,
+    NativeTurnId,
+    NoSourceTurn,
+    TurnItem,
+)
 
 if TYPE_CHECKING:
     from .cli_bridges.shared import TranscriptBridge
