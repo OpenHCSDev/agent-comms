@@ -32,20 +32,6 @@ else
     git clone --depth 1 https://github.com/OpenHCSDev/agent-comms.git "$source"
 fi
 
-# The stack owns every Python package/source selection. Refresh its tracked branches,
-# retaining its PyPI pins, exactly as the desktop installer does.
-mapfile -t upgrades < <("$PREFIX/bin/python" - "$source/stack/pyproject.toml" <<'PY'
-import sys
-import tomllib
-with open(sys.argv[1], "rb") as stream:
-    sources = tomllib.load(stream)["tool"]["uv"]["sources"]
-for name, source in sources.items():
-    if "branch" in source:
-        print("--upgrade-package")
-        print(name)
-PY
-)
-
 cd "$source/stack"
 # Android can refuse a just-linked build script during parallel Cargo builds (ETXTBSY).
 export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-1}"
@@ -59,11 +45,13 @@ export PIP_PREFER_BINARY=1
 export PIP_ONLY_BINARY=maturin
 # Inherit the patched native packages without letting pip change Termux's system Python.
 "$PREFIX/bin/python" -m venv --system-site-packages .venv
+# Resolve this platform from the declared constraints, including transitive branches;
+# an old desktop lock may pin releases from before Android wheels were available.
 uv export --project . --python "$PREFIX/bin/python" --no-managed-python \
     --no-python-downloads --no-dev --no-hashes --no-emit-project \
     --index "$termux_wheels" --index-strategy unsafe-best-match \
     --no-build-package maturin \
-    "${upgrades[@]}" --output-file "$installation/requirements.txt" >/dev/null
+    --upgrade --output-file "$installation/requirements.txt" >/dev/null
 .venv/bin/python -m pip install --prefer-binary -r "$installation/requirements.txt"
 .venv/bin/python -m pip check
 .venv/bin/python -c 'import toad.cli; print("Toad imports successfully.")'
