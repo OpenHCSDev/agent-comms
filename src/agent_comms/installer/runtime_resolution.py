@@ -879,16 +879,22 @@ class ResolvedLock(BaseModel):
         return tuple(dict.fromkeys(
             name for entry in self.package for name in entry.source.tracked(entry.name)))
 
-    def tracked_requirements(self) -> tuple[str, ...]:
+    def tracked_requirements(self, excluded: frozenset[str] = frozenset()) -> tuple[str, ...]:
         """The same packages as requirements naming their branch, for installers outside this lock.
 
         Toad's test environment installs the exported closure with ``--frozen`` and then has
         to ask for these separately: the freeze is correct for everything pinned and wrong
         for everything tracking a branch, which is the one set this lock can already name.
+
+        ``excluded`` names the distributions the caller installs itself, by the same
+        canonical name :meth:`external` uses. Filtered here, where the entries still carry
+        their declared names, so no caller reads a package name back out of the rendered
+        requirement text.
         """
         return tuple(dict.fromkeys(
             requirement
             for entry in self.package
+            if canonicalize_name(entry.name) not in excluded
             for requirement in entry.source.tracked_requirement(entry.name)))
 
     def external(self, excluded: frozenset[str]) -> dict[str, VersionedPackage]:
