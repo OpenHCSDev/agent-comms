@@ -9,6 +9,7 @@ from agent_comms_hooks import ClaudeSubagentHook, ClaudeTranscriptHook, Subagent
 
 from .shared import Binding
 from ..comms import Comms
+from ..registry.threads import Thread
 from ..tool_caller import ForkCaller, ForkRecordOwed
 from ..turn_phase import ModelWaitPhase, TurnPhase
 
@@ -17,8 +18,17 @@ from ..turn_phase import ModelWaitPhase, TurnPhase
 class SubagentActivity(ClaudeSubagentHook):
     """The actual SDK subagent id owns its activity; parent fork provenance is not a rank."""
 
+    def actor(self, comms: Comms, binding: Binding) -> Thread:
+        """The bound parent incarnation every event of this subagent acts under."""
+        return comms.registry.snapshot().born(binding.owner.require_recorded().lookup)
+
     def enter(self, comms: Comms, binding: Binding, phase: TurnPhase) -> None:
-        comms.registry.snapshot().born(binding.owner.require_recorded().lookup)
+        """Claude Code does not raise SubagentStart for every agent type (a web-fetch agent's
+        first event is its first tool call), so the fork is declared on whichever of its events
+        arrives first, under the same parent the start event would have used."""
+        actor = self.actor(comms, binding)
+        if self.agent_id.fork not in comms.registry:
+            ForkCaller(self.agent_id.fork).join(comms, actor.name)
         comms.agents.enter_phase(self.agent_id.fork, phase)
 
 
@@ -29,9 +39,8 @@ class SubagentHook(SubagentActivity):
     agent_type: str
 
     def register(self, comms: Comms, binding: Binding) -> None:
-        actor = comms.registry.snapshot().born(binding.owner.require_recorded().lookup)
         fork = self.agent_id.fork
-        ForkCaller(fork).join(comms, actor.name)
+        ForkCaller(fork).join(comms, self.actor(comms, binding).name)
         self.warn(f"Core registered you as in-turn fork {fork}: pass `--fork {fork}`"
                   " on every agent-comms-team verb; the action keeps your parent authority"
                   " and records your own incarnation. Record what you found before stopping.")

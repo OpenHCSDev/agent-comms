@@ -927,6 +927,21 @@ def test_the_audit_answers_each_shown_prompt_by_its_own_words_with_an_action():
     assert due.refusal(SessionAudit(words, probes=probes)) == ""
 
 
+def test_a_subagent_whose_start_event_never_came_is_declared_by_its_first_call(
+        tmp_path, capsys, team_session, team_bus, team_binding):
+    """Claude Code raises no SubagentStart for some agent types: a web-fetch subagent's first
+    event was its WebFetch call, refused with "Thread 'claude-abfbd354543ff17a7' is not
+    registered" (2026-11-08). Its first event declares the fork under the bound parent."""
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    assert DeckStart.decode(hook_record(transcript, "SessionStart")).take(team_bus, team_binding)
+    assert "claude-b5" not in team_session.registry
+    assert not refused(capsys, gated(transcript, "Bash", {"command": "ls"}, agent_id="b5",
+                                     comms=team_bus, binding=team_binding))
+    child = team_session.registry.require_member("claude-b5", ForkThread)
+    assert tuple(child.parent.names()) == ("claude-code",)
+
+
 def test_a_subagent_and_an_unbound_session_are_never_gated(
         tmp_path, monkeypatch, capsys, team_session, team_bus, team_binding):
     transcript = tmp_path / "session.jsonl"
