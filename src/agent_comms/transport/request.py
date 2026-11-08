@@ -13,6 +13,7 @@ from typing_extensions import TypeVarTuple
 
 from pydantic import JsonValue
 
+from ..coordination.errors import CoordinationReadUnavailable
 from .progress import WireExportObserver
 from ..nominal.declared_family import DeclaredFamily
 from ..nominal.field_codec import (
@@ -129,6 +130,10 @@ class ToolRequest[Result: ToolResult = ToolResult](
         the caller hears the connection failed."""
         raise dropped
 
+    def unavailable(self, error: OSError) -> dict[str, JsonValue]:
+        """A failed transport does not establish whether a write ran."""
+        raise error
+
     @classmethod
     def result_type(cls) -> type[Result]:
         """The result this request declares in its class header, followed through every
@@ -202,6 +207,14 @@ class ReadRequest[Result: ToolResult = ToolResult](ToolRequest[Result], declared
     def dropped(self, remote: RequestPoster, dropped: ConnectionDropped) -> dict[str, JsonValue]:
         """A read changes nothing, so it is asked once more on a fresh connection."""
         return remote.exchange(self)
+
+    def unavailable(self, error: OSError) -> dict[str, JsonValue]:
+        """The source answered no read; retain its last value until it recovers."""
+        raise RemoteReadUnavailable(str(error)) from error
+
+
+class RemoteReadUnavailable(CoordinationReadUnavailable, ConnectionError):
+    """A remote read acquired no answer; its transport failure remains its cause."""
 
 
 @dataclass(frozen=True, kw_only=True)

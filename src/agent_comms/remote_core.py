@@ -21,6 +21,7 @@ from multiprocessing.connection import Connection
 from yarl import URL
 
 from .transport.mcp import CancelledMessage, JsonRpcId, StreamedLine, ToolsCallMessage, ToolsCallReply
+from .coordination.errors import CoordinationReadUnavailable
 from .connector_profile import (
     OBSERVE_PATH, EndpointRoute, HttpsMcpEndpoint, UiConnectionProfile, UiCredential,
 )
@@ -65,8 +66,13 @@ class ServiceFailed(RelayEnding):
         return self.traceback
 
 
-class ConnectorObserverClosed(ObserverDied):
-    """The connector ended a remote UI's observation; there is no local process to describe."""
+class ConnectorObserverClosed(ObserverDied, CoordinationReadUnavailable):
+    """The remote source ended: show its cause, but defer its pending reads.
+
+    The observation owner still reports the failure and reconnects. Pending
+    page workers retain their drawn source instead of raising the same outage
+    again; a service failure and a closed socket keep their distinct endings.
+    """
 
     def __init__(self, url: URL, ending: RelayEnding):
         self.ending = ending
@@ -194,9 +200,14 @@ class RemoteCoreAccess(UiConnectionProfile, CoreAccess, ConnectorClient, Request
     def post[R: ToolResult](self, request: ToolRequest[R]) -> dict[str, JsonValue]:
         """One posted tools/call and its reply; a dropped connection is the request's to answer."""
         try:
-            return self.exchange(request)
-        except ConnectionDropped as dropped:
-            return request.dropped(self, dropped)
+            try:
+                return self.exchange(request)
+            except ConnectionDropped as dropped:
+                return request.dropped(self, dropped)
+        except OSError as error:
+            # This boundary knows the transport failed, not whether a tool ran.
+            # The request owns that distinction; only reads can be deferred.
+            return request.unavailable(error)
 
     def exchange[R: ToolResult](
         self, request: ToolRequest[R],

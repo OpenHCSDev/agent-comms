@@ -23,7 +23,6 @@ from pydantic import JsonValue
 from ..cli_protocol import CoreError
 from ..connector_caller import ConnectorCaller, ConnectorTool
 from ..coordination.errors import CommandFailure, Refused
-from ..errors import RelationViolationError
 from .progress import CancellableWireExport, WireExportCancelled, WireExportObserver, WireExportProgress
 from ..nominal.declared_family import DeclaredFamily
 from ..nominal.field_codec import (
@@ -570,7 +569,8 @@ class ToolsCallReply(McpReply, StreamedEvent):
     def structured(self) -> dict[str, JsonValue]:
         """The tool's declared reply, or its declared failure raised."""
         if self.result.is_error:
-            raise RelationViolationError(" ".join(content.text for content in self.result.content))
+            error, = self.result.content
+            CoreError.decoded(error.text).raise_error()
         return self.result.structured_content
 
     def delivered(self, observer: WireExportObserver, replies: list[ToolsCallReply]) -> None:
