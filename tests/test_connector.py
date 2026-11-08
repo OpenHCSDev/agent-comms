@@ -36,7 +36,7 @@ from agent_comms.comms import Comms, wire
 from agent_comms.transport.progress import WireExportObserver
 from agent_comms.connector import (
     ApprovalLink, AuthorizationCodeGrant, Connector, ConnectorSendTool, ConnectorVerb, GrantUiVerb,
-    ServeVerb, RevokeVerb,
+    RunningRequest, ServeVerb, RevokeVerb,
 )
 from agent_comms.transport.mcp import (
     PROTOCOL_VERSION, SESSION_HEADER, CancelledMessage, InitializeResult, NoProgress,
@@ -1470,6 +1470,19 @@ async def test_the_connector_names_work_neither_collection_holds(tmp_path, comms
         assert report.index("body_read") < report.index("session_claim") < report.index(
             "stuck_handler_nested"
         ), f"leaf first, so the phase reads before its callers: {report}"
+
+        # A phase alone cannot tell a slow call from a hang; the age can. log_route owns
+        # the start time and prints it only once the handler ends, so a request carries it
+        # while it runs and the report reads it back.
+        connector.running_requests[task] = RunningRequest(
+            method="POST", template="/mcp", started=time.monotonic() - 6883.0)
+        timed = connector.still_running()
+        assert "POST /mcp" in timed, timed
+        assert "688" in timed, f"the report must say how long it has been waiting: {timed}"
+        assert "stuck_handler_nested" in timed, timed
+        # Every other task answers no request, so nothing claims an age it does not have.
+        assert timed.count("into POST /mcp") == 1, timed
     finally:
+        connector.running_requests.pop(task, None)
         held.set()
         await task

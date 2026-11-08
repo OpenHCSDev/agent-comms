@@ -32,7 +32,7 @@ import signal
 import socket
 import sys
 import time
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field, replace
@@ -282,6 +282,46 @@ class ClientRegistrationReply(ClientRegistration):
     token_endpoint_auth_method: str = "none"
 
 
+class RequestWait(ABC):
+    """How long a running task's request has been unanswered.
+
+    A task the loop reports may be a watch, a tool call or a request handler, and only the
+    last has a request behind it. The absent member answers for the others, so the report
+    asks one question instead of testing for a missing entry.
+    """
+
+    __slots__ = ()
+
+    def waited(self, now: float) -> str:
+        return ""
+
+
+class NoRequest(RequestWait):
+    """This task answers no request: a watch, a helper or a tool call."""
+
+    __slots__ = ()
+
+
+NO_REQUEST = NoRequest()
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RunningRequest(RequestWait):
+    """A request this process accepted and has not answered yet.
+
+    log_route already holds the one fact a hang needs and prints it only once the handler
+    ends: on 2026-11-08 a POST /mcp ran 6883 seconds and its access line never appeared, so
+    nothing said how long it had been stuck. Carrying it here puts the age beside the phase.
+    """
+
+    method: str
+    template: str
+    started: float
+
+    def waited(self, now: float) -> str:
+        return f" {now - self.started:.3f}s into {self.method} {self.template},"
+
+
 @dataclass(frozen=True)
 class Connector(ConnectorService, McpServer):
     """The MCP endpoint and the OAuth authorization server in front of it."""
@@ -306,6 +346,10 @@ class Connector(ConnectorService, McpServer):
     ] = field(
         default_factory=dict, init=False, repr=False, compare=False,
     )
+    running_requests: dict[asyncio.Task[object], RequestWait] = field(
+        default_factory=dict, init=False, repr=False, compare=False,
+    )
+    """Requests accepted and not yet answered, by the task answering each."""
     observed: dict[JsonRpcId, CancellableWireExport] = field(
         default_factory=dict, init=False, repr=False, compare=False,
     )
@@ -363,6 +407,10 @@ class Connector(ConnectorService, McpServer):
                          thread, viewer.close_code, viewer.exception())
         return viewer
 
+    def waited(self, task: asyncio.Task[object], now: float) -> str:
+        """How long this task's request has been unanswered, for a task that is one."""
+        return self.running_requests.get(task, NO_REQUEST).waited(now)
+
     def still_running(self) -> str:
         """Every task this process has not finished, and where each one is sitting.
 
@@ -379,6 +427,7 @@ class Connector(ConnectorService, McpServer):
         returns the handler frame alone, which names the task and not where it is stuck.
         """
         running = []
+        now = time.monotonic()
         for task in sorted(asyncio.all_tasks(), key=lambda pending: pending.get_name()):
             if task.done():
                 continue
@@ -388,7 +437,8 @@ class Connector(ConnectorService, McpServer):
                 f" at {entry.frame.f_code.co_filename}:{entry.frame.f_lineno}"
                 for entry in (graph.call_stack if graph is not None else ())
             )
-            running.append(f"  {task.get_name()}: {where or 'awaiting, no python frame'}")
+            running.append(f"  {task.get_name()}:{self.waited(task, now)} "
+                           f"{where or 'awaiting, no python frame'}")
         return "\n".join(running) or "  none"
 
     def log_pending(self, reason: str = "stopping") -> None:
@@ -507,6 +557,11 @@ class Connector(ConnectorService, McpServer):
                 raise TypeError("Unsupported aiohttp route")
         started = time.monotonic()
         status = web.HTTPInternalServerError.status_code
+        answering = asyncio.current_task()
+        # This line prints only once the handler ends, so a handler that never ends is
+        # invisible here. The same facts go where a stuck one can be asked for them.
+        self.running_requests[answering] = RunningRequest(
+            method=request.method, template=template, started=started)
         try:
             response = await handler(request)
             status = response.status
@@ -515,6 +570,7 @@ class Connector(ConnectorService, McpServer):
             status = refusal.status
             raise
         finally:
+            self.running_requests.pop(answering, None)
             elapsed = time.monotonic() - started
             logging.info("%s %s %s %.3fs", request.method, template, status, elapsed)
 
