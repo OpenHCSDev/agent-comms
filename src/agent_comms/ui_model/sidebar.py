@@ -82,23 +82,46 @@ class ThreadRowModel:
 
 @dataclass(frozen=True)
 class ChannelRowModel:
+    """One channel's row. It holds the channel's agent counts and tags, and spells them
+    for each place they are shown; a row that pre-baked its label had the counts in a
+    string the second line could not get at, and its tags only in a tooltip."""
+
     name: str
-    label: str
-    tooltip: str
+    pinned: bool
+    active_agents: int
+    registered_agents: int
+    tags: tuple[str, ...]
     unread: UnreadPresentation
     active: bool
     members: tuple[str, ...]
     pinned_members: frozenset[str]
     order: type[ThreadSort]
 
+    def label(self) -> str:
+        """The row's first line: the channel's name, pinned or not."""
+        return f"{'* ' if self.pinned else ''}{self.name}"
+
+    def summary(self) -> str:
+        """The row's second line, which a 40-column phone still has to fit."""
+        return f"{self.active_agents}/{self.registered_agents} agents · {self.tag_list()}"
+
+    def tooltip(self) -> str:
+        """The same facts in full words, for a reader who stopped to hover."""
+        return (f"{self.active_agents} running or idle / {self.registered_agents} registered agents"
+                f" · tags: {self.tag_list()}")
+
+    def tag_list(self) -> str:
+        return ", ".join(self.tags) or "all"
+
     @classmethod
     def of(cls, view, snapshot: CoordinationSnapshot, working: frozenset[str]) -> ChannelRowModel:
         channel = view.channel
         return cls(
             channel.name,
-            f"{'* ' if channel.pinned else ''}{channel.name} {view.active_agents}/{view.registered_agents}",
-            f"{view.active_agents} running or idle / {view.registered_agents} registered agents"
-            f" · tags: {', '.join(sorted(channel.tags)) or 'all'}",
+            channel.pinned,
+            view.active_agents,
+            view.registered_agents,
+            tuple(sorted(channel.tags)),
             UnreadPresentation.for_channel(snapshot, channel.name),
             any(name in working for name in view.members),
             tuple(name for name in view.members if name in snapshot.threads),
