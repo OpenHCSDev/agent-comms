@@ -21,15 +21,13 @@ from .input_attempt import (
 )
 from .input_disposition import InputDispositions
 from .message_bus import MessageBus
+from .messages import Message
+from .goal_work import GoalWorkSource
 from .registry.threads import Thread
 from .todos import TodoStore
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from .messages import Message
 
 
-class GoalRecords(GoalWaitRecovery):
+class GoalRecords(GoalWaitRecovery, GoalWorkSource):
     def __init__(self, root: Path, registry: Registration, bus: MessageBus, agents: AgentActivity):
         self.root = root
         self.registry = registry

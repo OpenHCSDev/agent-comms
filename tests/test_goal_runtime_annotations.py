@@ -10,7 +10,8 @@ from agent_comms.context_segments.wake_values import WakeWorkContext
 from agent_comms.goal_turn_permit import GoalTurnPermit
 from agent_comms.goal_actions import GoalAction, StandbyGoalAction
 from agent_comms.goal_records import GoalRecords
-from agent_comms.goals import GoalDeclaration, GoalUnavailable
+from agent_comms.goals import GoalDeclaration, GoalOrder, GoalUnavailable
+from agent_comms.goal_work import GoalWorkSource
 from agent_comms.registry.threads import Thread
 
 
@@ -43,3 +44,13 @@ def test_goal_scope_callback_keeps_its_scope_type(declaration: type[GoalDeclarat
     hints = get_type_hints(declaration.task_scope)
     assert hints["scope"] is hints["return"]
     assert get_args(hints["scoped"])[1] is hints["return"]
+
+
+@pytest.mark.parametrize("order", (GoalOrder, *GoalOrder.__subclasses__()))
+def test_goal_order_reads_its_assignment_source(order: type[GoalOrder]) -> None:
+    assert get_type_hints(order.todos)["goals"] is GoalWorkSource
+
+
+@pytest.mark.parametrize("declaration", (GoalDeclaration, *GoalDeclaration.__subclasses__()))
+def test_goal_instructions_read_their_assignment_source(declaration: type[GoalDeclaration]) -> None:
+    assert get_type_hints(declaration.instructions_for)["goals"] is GoalWorkSource

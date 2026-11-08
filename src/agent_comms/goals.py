@@ -32,6 +32,7 @@ from .errors import GoalRefused, RejectedEnforcementError, RelationViolationErro
 from .goal_authority import GoalAuthority, GoalTurnAuthority, NoGoalAuthority
 from .goal_mutation import GoalMutation
 from .goal_permit_source import GoalPermitSource
+from .goal_work import GoalAssignment, GoalWorkSource
 from .goal_states import ActiveGoal, GoalState
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import (
@@ -57,10 +58,6 @@ from .ui_model.goal import GoalDisplay, GoalExecutionDisplay
 if TYPE_CHECKING:
     from .registry.threads import Thread
     from .turn_context import TurnContext
-
-if TYPE_CHECKING:
-    from .goal_management import Goals
-    from .todos import Todo
 
 
 @dataclass(frozen=True)
@@ -479,29 +476,29 @@ class CheckedCommit:
 
 
 class GoalOrder(DeclaredFamily, affix="GoalOrder"):
-    def require_completion(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
+    def require_completion(self, goal: Goal, goals: GoalWorkSource, owner: ThreadIncarnation) -> None:
         pass
 
-    def instructions(self, todos: Sequence[Todo]) -> str:
+    def instructions(self, todos: Sequence[GoalAssignment]) -> str:
         return ""
 
-    def todos(self, goals: Goals, owner: ThreadIncarnation, goal_id: GoalId) -> tuple[Todo, ...]:
+    def todos(self, goals: GoalWorkSource, owner: ThreadIncarnation, goal_id: GoalId) -> tuple[GoalAssignment, ...]:
         return ()
 
     def goal_text(self, goal: Goal) -> str:
         return goal.text
 
-    def progress(self, goal: Goal, todos: Sequence[Todo]) -> str:
+    def progress(self, goal: Goal, todos: Sequence[GoalAssignment]) -> str:
         return goal.progress
 
     def require_model_block(self) -> None:
         pass
 
     @abstractmethod
-    def require_order(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None: ...
+    def require_order(self, goal: Goal, goals: GoalWorkSource, owner: ThreadIncarnation) -> None: ...
 
     @abstractmethod
-    def require_replacement(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None: ...
+    def require_replacement(self, goal: Goal, goals: GoalWorkSource, owner: ThreadIncarnation) -> None: ...
 
     def require_edit(self) -> None:
         """Editing keeps the goal's identity, order and directives, so only text an order
@@ -510,10 +507,10 @@ class GoalOrder(DeclaredFamily, affix="GoalOrder"):
 
 @dataclass(frozen=True)
 class UnorderedGoalOrder(GoalOrder):
-    def require_order(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
+    def require_order(self, goal: Goal, goals: GoalWorkSource, owner: ThreadIncarnation) -> None:
         pass
 
-    def require_replacement(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
+    def require_replacement(self, goal: Goal, goals: GoalWorkSource, owner: ThreadIncarnation) -> None:
         pass
 
 
@@ -523,7 +520,7 @@ class ProblemGoalOrder(GoalOrder):
 
     text: ClassVar[str] = "Complete the assigned problems."
 
-    def require_completion(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
+    def require_completion(self, goal: Goal, goals: GoalWorkSource, owner: ThreadIncarnation) -> None:
         """Every assigned problem is delivered or closed; the Goal then completes.
 
         A problem Goal used to refuse completion outright, so the only way out of one was to
@@ -533,18 +530,18 @@ class ProblemGoalOrder(GoalOrder):
         if goals.todos.for_goal(owner, goal.id):
             raise GoalRefused("Complete each problem with its checked delivered commit.")
 
-    def require_order(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
+    def require_order(self, goal: Goal, goals: GoalWorkSource, owner: ThreadIncarnation) -> None:
         if not goals.todos.closed_for_goal(owner, goal.id):
             raise ValueError("The problem Goal has no assigned Todos.")
 
-    def require_replacement(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
+    def require_replacement(self, goal: Goal, goals: GoalWorkSource, owner: ThreadIncarnation) -> None:
         if goals.todos.holds_pending(owner):
             raise GoalRefused("Finish or release the assigned problems before replacing this Goal.")
 
-    def todos(self, goals: Goals, owner: ThreadIncarnation, goal_id: GoalId) -> tuple[Todo, ...]:
+    def todos(self, goals: GoalWorkSource, owner: ThreadIncarnation, goal_id: GoalId) -> tuple[GoalAssignment, ...]:
         return goals.todos.for_goal(owner, goal_id)
 
-    def instructions(self, todos: Sequence[Todo]) -> str:
+    def instructions(self, todos: Sequence[GoalAssignment]) -> str:
         return "\n\n".join(todo.order.instructions(todo) for todo in todos if todo.pending)
 
     def goal_text(self, goal: Goal) -> str:
@@ -553,7 +550,7 @@ class ProblemGoalOrder(GoalOrder):
     def require_edit(self) -> None:
         raise GoalRefused("A problem Goal's text is derived from its assigned problems.")
 
-    def progress(self, goal: Goal, todos: Sequence[Todo]) -> str:
+    def progress(self, goal: Goal, todos: Sequence[GoalAssignment]) -> str:
         """Each problem's order state and latest verdict, as Core records them on its Todo."""
         return "\n".join(todo.progress_line() for todo in todos)
 
@@ -603,7 +600,7 @@ class GoalDeclaration(
     ) -> Scope: ...
 
     @abstractmethod
-    def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext: ...
+    def add_context(self, context: TurnContext, owner: Thread, goals: GoalWorkSource) -> TurnContext: ...
 
     @abstractmethod
     def peer_change_values(self) -> GoalPeerChange: ...
@@ -618,7 +615,7 @@ class GoalDeclaration(
     ) -> None: ...
 
     @abstractmethod
-    def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]: ...
+    def instructions_for(self, goals: GoalWorkSource, owner: ThreadIncarnation) -> tuple[str, ...]: ...
 
     def accepts_following_handoff(self) -> bool:
         return False
@@ -712,7 +709,7 @@ class NoGoal(NullMember, GoalDeclaration):
     ) -> None:
         pass
 
-    def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]:
+    def instructions_for(self, goals: GoalWorkSource, owner: ThreadIncarnation) -> tuple[str, ...]:
         return ()
 
     def reported_id(self) -> None:
@@ -736,7 +733,7 @@ class NoGoal(NullMember, GoalDeclaration):
     ) -> Scope:
         return scope
 
-    def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext:
+    def add_context(self, context: TurnContext, owner: Thread, goals: GoalWorkSource) -> TurnContext:
         return context
 
     def peer_change_values(self) -> GoalPeerChange:
@@ -790,7 +787,7 @@ class Goal(RecordMember, GoalDeclaration):
     ) -> None:
         settlement(store, permit, self, turn).dispatch_sync(self.state)
 
-    def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]:
+    def instructions_for(self, goals: GoalWorkSource, owner: ThreadIncarnation) -> tuple[str, ...]:
         return (self.render_instructions(self.order.instructions(
             self.order.todos(goals, owner, self.id))),)
 
@@ -821,7 +818,7 @@ class Goal(RecordMember, GoalDeclaration):
     ) -> Scope:
         return scoped(self.revision_key)
 
-    def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext:
+    def add_context(self, context: TurnContext, owner: Thread, goals: GoalWorkSource) -> TurnContext:
         return context.prepend_goal(owner, self, goals)
 
     def peer_change_values(self) -> GoalPeerChange:
