@@ -22,7 +22,7 @@ from agent_comms.goal_states import UnrecordedBlockGoal
 from agent_comms.goals import Goal
 from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tools import CommsGoalTool
+from agent_comms.transport.request import ToolRequest
 from agent_comms.turn_failure import BackendFailed
 from conftest import installed_comms
 
@@ -60,7 +60,7 @@ def test_missing_or_blank_block_reason_rejects_without_side_effects(tmp_path, mo
         assert comms.goals.goal_history("worker", OneGoal(original.id)) == before_history
 
     with pytest.raises(ValueError):
-        CommsGoalTool.invoke(
+        ToolRequest.member_named("comms_goal").invoke(
             comms,
             {"goal_id": original.id, "status": "blocked", "progress": " \t "}, caller=ThreadCaller("worker"),
         )

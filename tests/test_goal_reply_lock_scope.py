@@ -31,7 +31,7 @@ from agent_comms.storage.store_files import store_lock_path
 from agent_comms.thread_text import GivenThreadText
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tools import CommsGoalTool
+from agent_comms.transport.request import ToolRequest
 from agent_comms.reported_turn import NoReportedTurn
 from goal_owner_fixture import canonical_goal_wire
 from agent_comms.registry.threads import NativeThread
@@ -113,7 +113,7 @@ def standby(comms, reviewed_inputs=()):
 
 
 def test_standby_reads_replies_without_holding_registry(probed):
-    CommsGoalTool.invoke(probed, {
+    ToolRequest.member_named("comms_goal").invoke(probed, {
         "goal_id": probed.registry.require("owner").goal.require().id,
         "status": "standby", "progress": "Waiting for the child", "wait_for": ["child"],
     }, caller=ThreadCaller("owner"))

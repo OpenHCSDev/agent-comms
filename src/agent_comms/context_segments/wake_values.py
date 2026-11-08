@@ -3,15 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated, Self
+from typing import Annotated
 
 from ..nominal.field_codec import NullMember, RecordMember, SubclassUnion, WireName
-from ..goal_states import GoalState
+from ..goal_presentation import GoalExecution
 from ..thread_text import ThreadText
-
-if TYPE_CHECKING:
-    from ..goal_management import Goals
-    from ..registry.threads import Thread
 
 
 class WakeGoalValue(SubclassUnion):
@@ -25,7 +21,7 @@ class NoWakeGoalContext(NullMember, WakeGoalValue):
 @dataclass(frozen=True)
 class WakeGoalContext(RecordMember, WakeGoalValue):
     text: str
-    state: Annotated[GoalState, WireName("status")]
+    execution: Annotated[GoalExecution, WireName("status")]
     progress: str
 
 
@@ -36,13 +32,3 @@ class WakeWorkContext(RecordMember):
     tags: tuple[str, ...]
     original_assignment: ThreadText
     current_goal: WakeGoalValue
-
-    @classmethod
-    def from_thread(cls, thread: Thread, goals: Goals) -> Self:
-        return cls(
-            name=thread.name,
-            title=thread.title,
-            tags=tuple(sorted(thread.tags)),
-            original_assignment=thread.task,
-            current_goal=thread.goal.wake_context(goals, thread.incarnation),
-        )

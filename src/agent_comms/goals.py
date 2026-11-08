@@ -27,7 +27,6 @@ from .child_process import (
     SignaledOutcome,
     TimedOutOutcome,
 )
-from .context_segments.wake_values import NoWakeGoalContext, WakeGoalContext, WakeGoalValue
 from .errors import GoalRefused, RejectedEnforcementError, RelationViolationError
 from .goal_authority import GoalAuthority, GoalTurnAuthority, NoGoalAuthority
 from .goal_states import ActiveGoal, GoalState
@@ -646,9 +645,6 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
 
     unavailable_heading: ClassVar[str] = "Goal state unavailable"
 
-    @abstractmethod
-    def wake_context(self, goals: Goals, owner: ThreadIncarnation) -> WakeGoalValue: ...
-
     def continued_by(self, current: GoalDeclaration) -> GoalDeclaration:
         return self
 
@@ -714,9 +710,6 @@ class NoGoal(NullMember, GoalDeclaration):
 
     def clear_wait(self, waits: GoalWaits) -> bool:
         return False
-
-    def wake_context(self, goals: Goals, owner: ThreadIncarnation) -> WakeGoalValue:
-        return NoWakeGoalContext()
 
     shows_document: ClassVar[bool] = False
     shows_progress: ClassVar[bool] = False
@@ -793,13 +786,6 @@ class Goal(RecordMember, GoalDeclaration):
 
     def clear_wait(self, waits: GoalWaits) -> bool:
         return waits.clear(self.id)
-
-    def wake_context(self, goals: Goals, owner: ThreadIncarnation) -> WakeGoalValue:
-        todos = self.order.todos(goals, owner, self.id)
-        return WakeGoalContext(
-            text=self.order.goal_text(self), state=self.state,
-            progress=self.order.progress(self, todos),
-        )
 
     shows_document: ClassVar[bool] = True
 

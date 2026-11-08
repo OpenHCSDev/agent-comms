@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .agent_events import (
+    GoalChange,
     GoalChanged,
     GoalUnchanged,
 )
@@ -14,13 +15,13 @@ from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import replace
 from functools import cached_property
-from typing import TYPE_CHECKING
 
 from agent_comms.nominal.field_codec import GoalId
 from .agent_activity import AgentActivity
 from .coordination.errors import StaleFence
 from .errors import BirthChangedError, RelationViolationError, UnregisteredThreadError
 from .goal_records import GoalRecords
+from .context_segments.wake_values import NoWakeGoalContext, WakeGoalContext, WakeWorkContext
 from .goal_actions import (
     GoalAction,
     GoalActionContext,
@@ -45,10 +46,8 @@ from dataclasses import dataclass
 from .goal_failure_observation import GoalFailureEvidence
 from .registry.registry_document import RegistryDocument, RegistrySnapshot
 from .thread_identity import ThreadIncarnation
-if TYPE_CHECKING:
-    from .agent_events import GoalChange
-    from .messages import Message
-    from .turn_lease import TurnDeclaration
+from .messages import Message
+from .turn_lease import TurnDeclaration
 from .goal_presentation import GoalExecution, GoalPublicationSnapshot, GoalSnapshot, IdleGoalExecution
 from .goals import Goal, GoalDeclaration
 from .input_attempt import (
@@ -272,6 +271,19 @@ class Goals(GoalRecords):
         return RecordedGoalHistory(
             tuple(entry.recorded() for entry in self.goal_history(name, scope)),
             self.open_goal_store().failures(owner, scope),
+        )
+
+    def wake_context(self, owner: Thread) -> WakeWorkContext:
+        """The native wake carries the same effective lifecycle as every goal reader."""
+        snapshot = self.snapshot_for(owner, self.registry.snapshot(), self.waits.resolve)
+        current_goal = next((WakeGoalContext(
+            text=goal.order.goal_text(goal), execution=snapshot.execution,
+            progress=goal.order.progress(
+                goal, goal.order.todos(self, owner.incarnation, goal.id)),
+        ) for goal in snapshot.goal), NoWakeGoalContext())
+        return WakeWorkContext(
+            name=owner.name, title=owner.title, tags=tuple(sorted(owner.tags)),
+            original_assignment=owner.task, current_goal=current_goal,
         )
 
     def goal_execution(self, name: str) -> GoalExecution:
