@@ -17,7 +17,7 @@ stack into `~/.local/share/toad-comms`. It does not install a Linux container,
 replace system Python, start agents, configure SSH hosts, or change Tailscale.
 The first native build can take tens of minutes on a phone. Cargo uses one build
 job by default and keeps a shared build cache for dependency resolution and
-installation, so those steps do not start separate Rust dependency builds.
+installation, so those steps can reuse compatible compiled Rust dependencies.
 Run the same command again to update. Installation output is also saved in
 `~/.local/share/toad-comms/install.log`.
 
