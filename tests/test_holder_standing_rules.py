@@ -99,7 +99,7 @@ from agent_comms.ui_model.teammate_state import AwaitingTeam, Blocked, Detached,
 from cli_command import team
 from conftest import team_as, declare_test_bus
 from native_backend_fixture import native_backend_fixture, wait_for
-from test_goal_execution import turn_on
+from test_goal_execution import serving_turns
 
 
 UNRESOLVED_INPUT_KEY = AcpInputKey(InputId.mint())
@@ -293,13 +293,13 @@ def unanswered(comms):
         comms, observed=TeammateState.current(comms, frame), frame=frame)
 
 
-def blocked_holder(comms):
+def blocked_holder(comms, native):
     """Settle a real failed turn; never manufacture a stored backend block."""
     owner = comms.registry.require("worker")
     comms.registry.register(replace(owner, process_identity=ProcessIdentity.capture(os.getpid())))
 
     async def fail_turn():
-        async with turn_on(comms) as turn:
+        async with serving_turns(comms, native) as turn_on, turn_on(comms) as turn:
             permit, = turn.goal_permit.claims
             await turn.progress.done(events.Done("The previous attempt failed", False))
         return permit.reservation
@@ -400,8 +400,8 @@ def test_an_order_rule_observation_compares_its_cited_repositories(held_bus):
     assert HolderGone(first).observation_key() != HolderGone(second).observation_key()
 
 
-def test_failed_holder_is_reported_without_reissuing_orders_or_replaying_unknown(held_bus):
-    blocked_holder(held_bus)
+def test_failed_holder_is_reported_without_reissuing_orders_or_replaying_unknown(held_bus, native_runtime_package):
+    blocked_holder(held_bus, native_runtime_package)
     goal = held_bus.registry.require("worker").goal.require()
     store = held_bus.goals.open_goal_store()
     generation = store.require_generation(goal.id)
@@ -418,8 +418,8 @@ def test_failed_holder_is_reported_without_reissuing_orders_or_replaying_unknown
     assert state_cards(held_bus, Blocked) == (violation,)
 
 
-def test_an_owner_approved_order_to_a_blocked_goal_activates_it_and_keeps_its_group(held_bus):
-    blocked_holder(held_bus)
+def test_an_owner_approved_order_to_a_blocked_goal_activates_it_and_keeps_its_group(held_bus, native_runtime_package):
+    blocked_holder(held_bus, native_runtime_package)
     before = held_bus.registry.require("worker").goal.require()
     todo = held_bus.goals.todos.get("P1")
     other = held_bus.goals.todos.get("P2")
@@ -1012,11 +1012,11 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(
     assert not tuple(worktrees.iterdir())
 
 
-def test_one_state_per_teammate_even_when_blocked_and_detached(held_bus):
+def test_one_state_per_teammate_even_when_blocked_and_detached(held_bus, native_runtime_package):
     held_bus.registry.register(held_bus.registry.require("worker"), StoppedThreadStatus())
     detached, = state_cards(held_bus, Detached)
     assert detached.unit.name == "worker" and set(detached.orders) == {"P1", "P2"}
-    blocked_holder(held_bus)
+    blocked_holder(held_bus, native_runtime_package)
     blocked, = state_cards(held_bus, Blocked)
     frame = capture_frame(held_bus, ProgressRead())
     states = TeammateState.current(held_bus, frame)
@@ -1025,8 +1025,8 @@ def test_one_state_per_teammate_even_when_blocked_and_detached(held_bus):
         held_bus, observed=states, frame=frame)
 
 
-def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus):
-    blocked_holder(held_bus)
+def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus, native_runtime_package):
+    blocked_holder(held_bus, native_runtime_package)
     question = publish(held_bus, "worker", "colleague", time.time() - 901)
     expected = tuple(rule.line() for rule in (
         *state_cards(held_bus, Blocked), *unanswered(held_bus),
@@ -1181,7 +1181,7 @@ def test_naming_one_line_of_a_burst_answers_the_burst_at_the_gate(held_bus):
     assert all(rule.answered_by((checks[0], holds[1])) for rule in (*vibe, *hold))
 
 
-def test_a_compliant_answer_resumes_a_held_teammate_whose_attempt_was_interrupted(held_bus):
+def test_a_compliant_answer_resumes_a_held_teammate_whose_attempt_was_interrupted(held_bus, native_runtime_package):
     """A held teammate whose last attempt failed refuses a status-only resume; the chokehold's
     release continues its generation the way a fresh order does, so one such teammate neither stays
     paused nor stops the release of the others (the heartbeat died on it, 2026-10-21 22:43)."""
@@ -1192,7 +1192,7 @@ def test_a_compliant_answer_resumes_a_held_teammate_whose_attempt_was_interrupte
         OwnerInvocable,
     )
 
-    blocked_holder(held_bus)
+    blocked_holder(held_bus, native_runtime_package)
     held_bus.goals.update_goal("worker", ChokeholdPausedGoalAction())
     with pytest.raises(ValueError, match="unresolved"):
         held_bus.goals.update_goal("worker", ActiveGoalAction(), actor=OwnerInvocable)
