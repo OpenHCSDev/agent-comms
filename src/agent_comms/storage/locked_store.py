@@ -893,8 +893,16 @@ class SQLiteStorage(RootFile, SqliteStore):
     def read_snapshot(
         cls, path: Path, contention: StoreContention = DEFAULT_STORE_CONTENTION
     ) -> sqlite3.Connection:
-        """Open and acquire one consistent read-only snapshot with SQLite's busy handler."""
-        return cls._acquire_snapshot(cls._open_reader(path, contention))
+        """Open and acquire one consistent read-only snapshot with SQLite's busy handler.
+
+        A refusal names the store and SQLite's own error, so a reader of the reported
+        traceback knows which database was busy and why without reproducing it."""
+        try:
+            return cls._acquire_snapshot(cls._open_reader(path, contention))
+        except sqlite3.OperationalError as error:
+            error.add_note(f"SQLite store: {path}; SQLite error: "
+                           f"{error.sqlite_errorname} ({error.sqlite_errorcode})")
+            raise
 
     @classmethod
     def recovering_snapshot(cls, path: Path) -> sqlite3.Connection:
