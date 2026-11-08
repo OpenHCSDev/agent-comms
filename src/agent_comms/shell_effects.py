@@ -4,22 +4,18 @@ from __future__ import annotations
 import getopt
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
 from agent_comms_hooks.shell_commands import ShellCommand
 
-from .native_build_inputs import GitLaunch, NamedProgram
-from .repo import Checkout, CheckoutStart, RepositorySource
+from .native_build_inputs import GitLaunch, GitOptions, NamedProgram
+from .repo import CheckoutStart, RepositorySource
+from .storage_admission import StorageAdmission
 from .storage_room import AllocationRoomWork, BuildRoomWork, RoomWork, TestGateRoomWork
 from .tool_denial import SelectedToolDenied, StorageDenied
-
-if TYPE_CHECKING:
-    from .storage_projection import StorageProjection
-    from .storage_rules import UnitStorage
-
 
 class ShellProgram(NamedProgram):
     programs: ClassVar[dict[str, type[ShellProgram]]] = {}
@@ -64,8 +60,12 @@ class StorageEffect(ABC):
     def require_order_check(self) -> None:
         """Ordinary storage effects remain valid in an order check."""
 
+    def in_directory(self, directory: Callable[[], Path]) -> StorageEffect:
+        """A directory-independent effect never asks for a physical destination."""
+        return self
+
     @abstractmethod
-    def check(self, projection: StorageProjection) -> None:
+    def check(self, projection: StorageAdmission) -> None:
         """Refuse this operation if the thread's storage cannot take it."""
 
 
@@ -73,24 +73,31 @@ class StorageEffect(ABC):
 class WriteStorageEffect(StorageEffect):
     path: Path
 
-    def check(self, projection: StorageProjection) -> None:
+    def check(self, projection: StorageAdmission) -> None:
         projection.require_write(self.path)
+
+
+class WorkingTreeStorageEffect(WriteStorageEffect):
+    """Only a working-tree write needs Git's selected directory resolved."""
+
+    def in_directory(self, directory: Callable[[], Path]) -> WriteStorageEffect:
+        return WriteStorageEffect(directory())
 
 
 @dataclass(frozen=True)
 class ForbiddenStorageEffect(StorageEffect):
     reason: str
 
-    def check(self, projection: StorageProjection) -> None:
-        projection.rule.deny(self.reason)
+    def check(self, projection: StorageAdmission) -> None:
+        projection.deny(self.reason)
 
 
 @dataclass(frozen=True)
 class AllocateStorageEffect(StorageEffect):
     work: ClassVar[tuple[type[RoomWork], ...]] = (AllocationRoomWork,)
 
-    def check(self, projection: StorageProjection) -> None:
-        projection.rule.require_floor()
+    def check(self, projection: StorageAdmission) -> None:
+        projection.require_floor()
 
 
 class BuildStorageEffect(AllocateStorageEffect):
@@ -114,21 +121,8 @@ class CheckoutStorageEffect(AllocateStorageEffect):
     path: Path
     repository: RepositorySource
 
-    def project(self, storage: UnitStorage) -> UnitStorage:
-        return storage.adding(Checkout(self.path))
-
-    def check(self, projection: StorageProjection) -> None:
-        rule, thread = projection.rule, projection.thread
-        rule.require_destination(thread, self.path)
-        rule.require_physical_allocation(self.path)
-        if not rule.owns_checkout(thread, self.path, self.repository.github, projection.reads):
-            destination = rule.order_checkout(rule.roots_of(thread), "P<number>")
-            rule.deny(f'checkout destination must be {destination}')
-        selected = rule.reused_checkout(thread, self.repository.github, self.path, projection.reads)
-        if selected != self.path:
-            rule.deny(f'Reuse {selected}; this agent already has a checkout of '
-                      f'{self.repository.github}. Do not create another for a new goal/order.')
-        projection.storage = self.project(projection.storage)
+    def check(self, projection: StorageAdmission) -> None:
+        projection.require_checkout(self.path, self.repository)
         super().check(projection)
 
 
@@ -136,11 +130,9 @@ class CheckoutStorageEffect(AllocateStorageEffect):
 class AcquireRepositoryStorageEffect(CheckoutStorageEffect):
     """Check both allocations before a source can clone or fetch; donors grant no edits."""
 
-    def check(self, projection: StorageProjection) -> None:
+    def check(self, projection: StorageAdmission) -> None:
         super().check(projection)
-        rule, thread = projection.rule, projection.thread
-        for donor in self.repository.allocations(rule, thread):
-            rule.require_repository_donor(thread, self.repository.github, donor)
+        projection.require_repository_donors(self.repository)
 
 
 @dataclass(frozen=True)
@@ -152,15 +144,8 @@ class CreateCheckoutStorageEffect(CheckoutStorageEffect):
 class RemoveCheckoutStorageEffect(StorageEffect):
     path: Path
 
-    def check(self, projection: StorageProjection) -> None:
-        if self.path == projection.thread.project_path:
-            projection.rule.deny(f'{self.path} is where {projection.thread.name} runs; choose another existing project first: agent-comms set-project {projection.thread.name} <existing-project>')
-        if any(repository.checkout.resolve() == self.path
-               for repository in projection.snapshot.team_project.unique_repositories()):
-            projection.rule.deny(f'{self.path} is a registered repository, not a disposable checkout')
-        projection.rule.require_isolated_checkout(
-            projection.thread, self.path, projection.snapshot.threads.values(), projection.reads)
-        projection.storage = projection.storage.removing(Checkout(self.path))
+    def check(self, projection: StorageAdmission) -> None:
+        projection.remove_checkout(self.path)
 
 
 def physical_path(value: str, cwd: Path) -> Path:
@@ -249,8 +234,22 @@ class ProgramOutput(ShellOutput):
 
 @dataclass(frozen=True)
 class GitInvocation:
-    args: list[str]
-    cwd: Path
+    options: GitOptions
+    base: Path
+
+    @property
+    def args(self) -> list[str]:
+        return self.options.arguments
+
+    def directory(self) -> Path:
+        """Resolve Git's directory operands only when a storage effect requests them."""
+        cwd = self.base
+        for option, value in self.options.values:
+            if option in GitLaunch.directory_options:
+                resolved = physical_path(value, cwd)
+                if option == GitLaunch.chdir_option:
+                    cwd = resolved
+        return cwd
 
 
 class ForbidsCommands(ShellProgram):
@@ -330,7 +329,7 @@ class WritesWorkingTree(ShellProgram):
     )
 
     def effects(self, args: list[str], cwd: Path) -> tuple[StorageEffect, ...]:
-        selected = (WriteStorageEffect(cwd),) if self.matches(args, self.verbs) else ()
+        selected = (WorkingTreeStorageEffect(cwd),) if self.matches(args, self.verbs) else ()
         return super().effects(args, cwd) + selected
 
 
@@ -353,16 +352,12 @@ class GitProgram(GitLaunch, ForbidsCommands, WritesWorkingTree):
         except getopt.GetoptError as error:
             raise SelectedToolDenied(
                 f'StorageRule: incomplete or unknown git option: {error}') from error
-        for option, value in selected.values:
-            if option in cls.directory_options:
-                path = physical_path(value, cwd)
-                if option == cls.chdir_option:
-                    cwd = path
-        return GitInvocation(selected.arguments, cwd)
+        return GitInvocation(selected, cwd)
 
     def effects(self, args: list[str], cwd: Path) -> tuple[StorageEffect, ...]:
         invocation = self.git_invocation(args, cwd)
-        return super().effects(invocation.args, invocation.cwd)
+        effects = super().effects(invocation.args, cwd)
+        return tuple(effect.in_directory(invocation.directory) for effect in effects)
 
 
 class VersionedProgram(ShellProgram):

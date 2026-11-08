@@ -11,13 +11,14 @@ from .comms import Comms
 from .native_tool_call import CodingCall
 from .registry.registry_document import RegistrySnapshot
 from .registry.threads import Thread
-from .repo import Checkout, RepositoryReads
+from .repo import Checkout, RepositoryReads, RepositorySource
 from .shell_effects import StorageEffect
+from .storage_admission import StorageAdmission
 from .storage_rules import CheckoutAllocation, StorageRule, UnitStorage
 
 
 @dataclass
-class StorageProjection:
+class StorageProjection(StorageAdmission):
     """One call's lazy snapshot; ordinary writes never need a checkout inventory."""
 
     rule: StorageRule
@@ -72,6 +73,39 @@ class StorageProjection:
                 "`agent-comms-team order problem ORDER.json`, then "
                 f"`agent-comms repository-checkout --from {owner.name} add P<n> OWNER/REPO`."
             )
+
+    def deny(self, reason: str) -> None:
+        self.rule.deny(reason)
+
+    def require_floor(self) -> None:
+        self.rule.require_floor()
+
+    def require_checkout(self, path: Path, repository: RepositorySource) -> None:
+        rule, thread = self.rule, self.thread
+        rule.require_destination(thread, path)
+        rule.require_physical_allocation(path)
+        if not rule.owns_checkout(thread, path, repository.github, self.reads):
+            destination = rule.order_checkout(rule.roots_of(thread), "P<number>")
+            rule.deny(f'checkout destination must be {destination}')
+        selected = rule.reused_checkout(thread, repository.github, path, self.reads)
+        if selected != path:
+            rule.deny(f'Reuse {selected}; this agent already has a checkout of '
+                      f'{repository.github}. Do not create another for a new goal/order.')
+        self.storage = self.storage.adding(Checkout(path))
+
+    def require_repository_donors(self, repository: RepositorySource) -> None:
+        for donor in repository.allocations(self.rule, self.thread):
+            self.rule.require_repository_donor(self.thread, repository.github, donor)
+
+    def remove_checkout(self, path: Path) -> None:
+        if path == self.thread.project_path:
+            self.rule.deny(f'{path} is where {self.thread.name} runs; choose another existing project first: agent-comms set-project {self.thread.name} <existing-project>')
+        if any(repository.checkout.resolve() == path
+               for repository in self.snapshot.team_project.unique_repositories()):
+            self.rule.deny(f'{path} is a registered repository, not a disposable checkout')
+        self.rule.require_isolated_checkout(
+            self.thread, path, self.snapshot.threads.values(), self.reads)
+        self.storage = self.storage.removing(Checkout(path))
 
     def check_call(self, call: CodingCall) -> tuple[StorageEffect, ...]:
         """Check the call's declared effects against this same lazy owner snapshot."""
