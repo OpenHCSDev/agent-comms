@@ -77,7 +77,7 @@ from ..reservation_rules import ReservationRule, RuleCheck, ReservationViolation
 from ..turn_outcome import TurnOutcome
 from ..turn_input_source import NoTurnAcceptance
 if TYPE_CHECKING:
-    from ..goals import GoalDeclaration
+    from ..planning.goals import GoalDeclaration
     from agent_comms.following_inputs import OwnerFollowingInputs
 
 

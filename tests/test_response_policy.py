@@ -8,7 +8,7 @@ from agent_comms.messaging.messages import (
 from agent_comms.response_policy import ResponseEligibility, ResponsePolicy
 from agent_comms.routing import ScheduledTurn
 from agent_comms.registry.threads import NativeThread
-from agent_comms.goal_scope import OneGoal
+from agent_comms.planning.goal_scope import OneGoal
 
 
 def test_golden_policy_names():

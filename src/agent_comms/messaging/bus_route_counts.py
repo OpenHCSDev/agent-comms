@@ -22,6 +22,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
+from .bus_publication import Delivered
 from .messages import (
     BusProjectionTables,
     BusRow,
@@ -33,6 +34,7 @@ from .read_basis import ReadCursor
 from .bus_tables import ReceivedSource
 from ..class_fact import ClassFact
 from ..nominal.field_codec import ThreadLookup
+from ..page_traversal import PageTraversal
 from ..projection_source import ProducedRow
 from ..routing import DeliveryScope
 from ..storage.typed_table import (
@@ -42,9 +44,6 @@ from ..storage.typed_table import (
     TypedRow,
 )
 
-if TYPE_CHECKING:
-    from .bus_publication import Delivered
-    from ..page_traversal import PageTraversal
 
 
 @dataclass(frozen=True)

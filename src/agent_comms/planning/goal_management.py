@@ -1,51 +1,28 @@
-"""Goal state, input reviews and wait lifecycle operations."""
-
 from __future__ import annotations
 
-from .agent_events import (
-    GoalChange,
-    GoalChanged,
-    GoalUnchanged,
-)
-
-from .errors import StaleAttemptError
 import logging
-from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterator, Sequence
+from abc import (
+    ABC,
+    abstractmethod,
+)
+from collections.abc import (
+    Callable,
+    Iterator,
+    Sequence,
+)
 from contextlib import contextmanager
-from dataclasses import replace
+from dataclasses import (
+    dataclass,
+    replace,
+)
 from functools import cached_property
 
-from agent_comms.nominal.field_codec import GoalId
-from .agent_activity import AgentActivity
-from .coordination.errors import StaleFence
-from .errors import BirthChangedError, RelationViolationError, UnregisteredThreadError
-from .goal_records import GoalRecords
-from .context_segments.wake_values import NoWakeGoalContext, WakeGoalContext, WakeWorkContext
-from .goal_actions import (
-    GoalAction,
-    GoalActionContext,
-    GoalPublicationContext,
-    GoalPrecondition,
-    RuntimeInvocable,
-    SentBackOrderGoalAction,
-    SetGoalAction,
-)
-from .goal_attempts import Generation
-from .errors import UnresolvedAttemptError
-from .goal_history import GoalHistoryEntry, RecordedGoalHistory
-from .goal_scope import AllGoals, GoalScope, OneGoal
-from .planning.goal_waits import (
+from .goal_waits import (
     GoalWait,
     StandbyReview,
 )
-from .native_input_owner import GoalLaunchOwner
-from .owner_requests import NewestOpenRequest, RequestDirective
-
-from dataclasses import dataclass
-from .goal_failure_observation import GoalFailureEvidence
-from .planning.order_words import StrikeReason
-from .planning.orders import (
+from .order_words import StrikeReason
+from .orders import (
     JudgedCall,
     SendBackVerdict,
     Todo,
@@ -53,20 +30,80 @@ from .planning.orders import (
     TodoCommand,
     TodoStore,
 )
-from .registry.registry_document import RegistryDocument, RegistrySnapshot
-from .thread_identity import ThreadIncarnation
-from .messaging.messages import Message
-from .turn_lease import TurnDeclaration
-from .goal_presentation import GoalExecution, GoalPublicationSnapshot, GoalSnapshot, IdleGoalExecution
-from .goals import Goal, GoalDeclaration
-from .input_attempt import (
-    UNOBSERVED_DELIVERY_SCOPE,
+from ..agent_activity import AgentActivity
+from ..agent_events import (
+    GoalChange,
+    GoalChanged,
+    GoalUnchanged,
+)
+from ..context_segments.wake_values import (
+    NoWakeGoalContext,
+    WakeGoalContext,
+    WakeWorkContext,
+)
+from ..coordination.errors import StaleFence
+from ..errors import (
+    BirthChangedError,
+    RelationViolationError,
+    StaleAttemptError,
+    TodoError,
+    UnregisteredThreadError,
+    UnresolvedAttemptError,
+)
+from .goal_actions import (
+    GoalAction,
+    GoalActionContext,
+    GoalPrecondition,
+    GoalPublicationContext,
+    RuntimeInvocable,
+    SentBackOrderGoalAction,
+    SetGoalAction,
+)
+from .goal_attempts import Generation
+from .goal_failure_observation import GoalFailureEvidence
+from .goal_history import (
+    GoalHistoryEntry,
+    RecordedGoalHistory,
+)
+from .goal_presentation import (
+    GoalExecution,
+    GoalPublicationSnapshot,
+    GoalSnapshot,
+    IdleGoalExecution,
+)
+from .goal_records import GoalRecords
+from .goal_scope import (
+    AllGoals,
+    GoalScope,
+    OneGoal,
+)
+from .goals import (
+    Goal,
+    GoalDeclaration,
+)
+from ..input_attempt import (
     InputDeliveryScope,
+    UNOBSERVED_DELIVERY_SCOPE,
     UnresolvedInputReference,
 )
-from .input_disposition import DeliveryOverview
-from .registry.threads import NativeThread, Thread
-from .errors import TodoError
+from ..input_disposition import DeliveryOverview
+from ..messaging.messages import Message
+from ..native_input_owner import GoalLaunchOwner
+from ..nominal.field_codec import GoalId
+from ..owner_requests import (
+    NewestOpenRequest,
+    RequestDirective,
+)
+from ..registry.registry_document import (
+    RegistryDocument,
+    RegistrySnapshot,
+)
+from ..registry.threads import (
+    NativeThread,
+    Thread,
+)
+from ..thread_identity import ThreadIncarnation
+from ..turn_lease import TurnDeclaration
 
 _LOG = logging.getLogger(__name__)
 

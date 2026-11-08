@@ -70,7 +70,10 @@ from .read_ledger import (
     ReadLedger,
 )
 from .read_selection import CapturedSelection
+from ..registry.registration import Registration
 from ..registry.registry_document import RegistrySnapshot
+from ..registry.threads import Thread
+from ..relationships import PeerRelation
 from ..routing import DeliveryScope
 from ..storage.maintenance_barrier import (
     MaintenanceBarrier,
@@ -81,9 +84,6 @@ from ..watched import FileSource
 
 if TYPE_CHECKING:
     from ..comms import Comms
-    from ..registry.registration import Registration
-    from ..registry.threads import Thread
-    from ..relationships import PeerRelation
 
 
 class Watch(AsyncWork, WatchPhase, DeclaredFamily, ABC):

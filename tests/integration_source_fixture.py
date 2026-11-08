@@ -16,7 +16,7 @@ from agent_comms.planning.orders import (
 )
 from agent_comms.team.order import Team, TeamContext
 from agent_comms.comms import Comms
-from agent_comms.goal_actions import CreateProblemGoalAction
+from agent_comms.planning.goal_actions import CreateProblemGoalAction
 from agent_comms.head_review import CombinedInput, IntegrationInput, IntegrationSource, PullRequestHead
 from agent_comms.integration import IntegrationCheckout, IntegrationRun
 from agent_comms.recorded_time import RecordedEventTime

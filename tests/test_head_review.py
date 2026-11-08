@@ -65,7 +65,7 @@ from agent_comms.comms import Comms
 from agent_comms.connector_caller import DirectorCaller
 from agent_comms.closed_pull_requests import ClosedPullRequestWatch
 from agent_comms.team.publication_rules import ClosedUnmergedPullRequest
-from agent_comms.goal_actions import CreateProblemGoalAction
+from agent_comms.planning.goal_actions import CreateProblemGoalAction
 from agent_comms.build_identity import RepositoryCommit
 from agent_comms.head_review import (
     DraftMergeArm, HeadReview, IntegrationInput, LocalIntegrationSource, MergedIntegrationSource, MergeHeadReview, OrdinaryInput, PromotedHeadReview, PullRequestHead, ReadPullRequestHead,

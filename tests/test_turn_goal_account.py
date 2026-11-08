@@ -4,13 +4,18 @@ from agent_comms.lifecycle_capability import Terminal
 
 
 
-from agent_comms.goal_attempts import GoalAttemptStore
+from agent_comms.planning.goal_attempts import GoalAttemptStore
 from agent_comms.nominal.field_codec import TurnId, GoalId
-from agent_comms.goal_generation import (
-    CompletedGeneration, ReadyGeneration,
+from agent_comms.planning.goal_generation import (
+    CompletedGeneration,
+    ReadyGeneration,
 )
-from agent_comms.goal_states import ActiveGoal, CompletedGoal, PausedGoal
-from agent_comms.goals import Goal
+from agent_comms.planning.goal_states import (
+    ActiveGoal,
+    CompletedGoal,
+    PausedGoal,
+)
+from agent_comms.planning.goals import Goal
 from agent_comms.reported_turn import ReportedTurn
 from agent_comms.turn_goal_account import OriginGoalSettlement, VerifiedGoalSettlement
 

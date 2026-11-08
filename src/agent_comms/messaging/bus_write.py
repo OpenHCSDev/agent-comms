@@ -4,8 +4,9 @@ import asyncio
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from ..comms import Comms
+from ..comms import Comms
+
+
 
 
 class HeldBusWrite:

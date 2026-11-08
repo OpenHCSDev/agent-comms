@@ -500,7 +500,7 @@ def test_a_ledger_created_after_the_drain_is_refused_and_leaves_no_file(
         tmp_path: Path, monkeypatch) -> None:
     """Creation publishes the ledger by link before any store transaction exists, so it asks
     the same drain-settled policy its writes inherit, and the carry check meets no new file."""
-    from agent_comms.goal_attempts import GoalAttemptStore
+    from agent_comms.planning.goal_attempts import GoalAttemptStore
     from agent_comms.launch_runtime import LaunchRuntime
     from agent_comms.storage.maintenance_barrier import HOLDER_NONCE
 

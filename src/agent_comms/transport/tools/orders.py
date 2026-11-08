@@ -34,13 +34,13 @@ from ...messaging.bus_read import (
 from ...messaging.channel_targets import CommsTag
 from ...comms import Comms
 from ...coordination.coordinator import Coordination
-from ...goal_actions import (
+from ...planning.goal_actions import (
     CompliedGoalAction,
     CreateProblemGoalAction,
     OrderGoalAction,
     OwnerInvocable,
 )
-from ...goals import (
+from ...planning.goals import (
     Goal,
     OrderCheck,
 )

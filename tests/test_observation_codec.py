@@ -4,7 +4,11 @@ import pytest
 
 from agent_comms.coordination.errors import DeferredRead, ReadAgain, ReloadRequired, ReportedDeferredRead, Refused, StaleRevision, TranscriptChanged
 from agent_comms.errors import GoalRefused, RouteChangedError
-from agent_comms.goals import GoalChangedError, GoalConsentRequired, UnobservedGoalCheckpoint
+from agent_comms.planning.goals import (
+    GoalChangedError,
+    GoalConsentRequired,
+    UnobservedGoalCheckpoint,
+)
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import Thread
 from agent_comms_hooks import ToolRefusedError

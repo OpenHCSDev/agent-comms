@@ -8,10 +8,10 @@ from typing import TYPE_CHECKING
 
 from agent_comms.nominal.field_codec import GoalId
 
-from .goal_authority import GoalTurnAuthority
+from .planning.goal_authority import GoalTurnAuthority
 
 if TYPE_CHECKING:
-    from .goals import GoalDeclaration
+    from .planning.goals import GoalDeclaration
     from .planning.goal_waits import GoalWait
     from .turn_input_source import InputDependency
 

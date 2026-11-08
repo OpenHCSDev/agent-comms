@@ -110,7 +110,7 @@ def test_triage_frame_is_read_only_and_does_not_promote_message_body(tmp_path: P
 
 def test_channel_wake_frame_carries_declared_goal_state(tmp_path: Path) -> None:
     wake_goal_id = GoalId.mint()
-    from agent_comms.goals import Goal
+    from agent_comms.planning.goals import Goal
 
     root, _root_id, comms, initial, people = _root(tmp_path)
     owner = comms.registry.require("alpha")

@@ -10,6 +10,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
+from .channel_targets import NamedTarget
 from .message_reference import MessageReference
 from .messages import (
     Addressed,
@@ -20,6 +21,7 @@ from .messages import (
     MessageInput,
     MessageKind,
 )
+from .read_basis import RepliesDisplayScope
 from ..errors import RelationViolationError
 from ..nominal.field_codec import (
     FieldCodec,
@@ -37,8 +39,6 @@ from ..storage.typed_table import (
 )
 
 if TYPE_CHECKING:
-    from .channel_targets import NamedTarget
-    from .read_basis import RepliesDisplayScope
     from ..registry_provenance import RegistryProvenance
 
 

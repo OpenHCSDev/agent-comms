@@ -44,6 +44,7 @@ from .messages import (
     NoticeRole,
 )
 from ..nominal.field_codec import ThreadLookup
+from ..planning.goal_management import Goals
 from ..planning.orders import TodoStore
 from ..projects.checkouts import Checkout
 from ..registry.registration import Registration
@@ -72,8 +73,6 @@ from ..turn_item import (
 )
 from ..working_memory_policy import AnnotationDisclosureGrant
 
-if TYPE_CHECKING:
-    from ..goal_management import Goals
 
 
 class AnswerAuthority(ABC):

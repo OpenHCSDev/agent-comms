@@ -56,8 +56,11 @@ from agent_comms.nominal.field_codec import (
     RecordProblems,
     ToolCallId,
 )
-from agent_comms.goal_actions import SetGoalAction
-from agent_comms.goals import OrderCheck, ProblemGoalOrder
+from agent_comms.planning.goal_actions import SetGoalAction
+from agent_comms.planning.goals import (
+    OrderCheck,
+    ProblemGoalOrder,
+)
 from agent_comms.messaging.messages import (
     HandoffKind,
     Message,

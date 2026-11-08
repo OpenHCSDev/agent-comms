@@ -17,7 +17,7 @@ import pytest
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import FieldCodec, TurnId, GoalId
-from agent_comms.goals import Goal
+from agent_comms.planning.goals import Goal
 from agent_comms.messaging.messages import (
     Message,
     InfoKind,

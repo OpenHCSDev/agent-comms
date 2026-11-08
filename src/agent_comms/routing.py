@@ -17,7 +17,10 @@ from .projects.checkouts import Checkout
 from .nominal.field_codec import (
     ThreadLookup, FieldCodec, NullMember, PresentMember, RecordMember, SubclassUnion, WireOmitDefault,
 )
-from .goal_scope import AllGoals, GoalScope
+from .planning.goal_scope import (
+    AllGoals,
+    GoalScope,
+)
 from .messaging.message_reference import MessageReference
 from .messaging.messages import PublicSender
 from .messaging.read_basis import (

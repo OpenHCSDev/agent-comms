@@ -529,8 +529,8 @@ def ledger_one_failure_short(root: Path) -> Path:
     install must carry before any opening accepts it."""
     from contextlib import closing
 
-    from agent_comms.goal_attempts import GoalAttemptStore
-    from agent_comms.goal_failure_observation import FailedTurnEvidence
+    from agent_comms.planning.goal_attempts import GoalAttemptStore
+    from agent_comms.planning.goal_failure_observation import FailedTurnEvidence
     from agent_comms.turn_failure import TurnFailure
     from agent_comms.storage.typed_table import sql_literal
 

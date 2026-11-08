@@ -37,7 +37,7 @@ from agent_comms.messaging.channel_targets import TeammatesTag
 from agent_comms.team.package import TeamPackage
 from agent_comms.team.rule_file import RuleFile
 from agent_comms.team.standing import PlanIdle
-from agent_comms.goal_actions import CreateProblemGoalAction
+from agent_comms.planning.goal_actions import CreateProblemGoalAction
 from team_heartbeat_fixture import capture_frame
 from agent_comms.plan_phases import BusWriterPhase
 from agent_comms.repository_name import RepositoryName

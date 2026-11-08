@@ -5,9 +5,17 @@ import sqlite3
 import pytest
 
 from agent_comms.nominal.field_codec import GoalId, NoAttemptId, RetryDecisionId
-from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore, GoalWorkDecision
+from agent_comms.planning.goal_attempts import (
+    AttemptRecord,
+    GoalAttemptStore,
+    GoalWorkDecision,
+)
 from agent_comms.errors import UnresolvedAttemptError
-from agent_comms.goal_generation import BlockedGeneration, CancelledGeneration, ReadyGeneration
+from agent_comms.planning.goal_generation import (
+    BlockedGeneration,
+    CancelledGeneration,
+    ReadyGeneration,
+)
 from agent_comms.attempt_resolution import DecidedResolution, RetryDecision
 from agent_comms.turn_failure import BackendFailed, FailedTurnResolution
 

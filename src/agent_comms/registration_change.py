@@ -14,7 +14,10 @@ from typing import TYPE_CHECKING
 
 from .errors import RelationViolationError
 from .coordination.session import CoordinationSession
-from .goals import GoalDeclaration, NoGoal
+from .planning.goals import (
+    GoalDeclaration,
+    NoGoal,
+)
 from .participant_store import ParticipantStore
 from .thread_status import ThreadStatus
 from .registry.threads import Thread

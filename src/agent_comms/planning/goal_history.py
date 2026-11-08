@@ -1,36 +1,46 @@
-"""Durable goal revision history alongside the registry.
-
-The registry Goal remains the current-state authority. A history intent is
-synced before that registry changes; only a synced commit, or a later guarded
-reconciliation against the registry, makes the transition readable. Registry
-snapshots can change without erasing this journal.
-"""
-
 from __future__ import annotations
 
 import os
 import sqlite3
 import time
 from collections.abc import Iterator
-from contextlib import closing, contextmanager
-from dataclasses import dataclass, field, fields
+from contextlib import (
+    closing,
+    contextmanager,
+)
+from dataclasses import (
+    dataclass,
+    field,
+    fields,
+)
 from pathlib import Path
-from typing import Annotated, Self
+from typing import (
+    Annotated,
+    Self,
+)
 
-from agent_comms.nominal.field_codec import WireOmitDefault
-from agent_comms.owner_requests import NoRequestRevision, RequestRevision
-
-from .child_process import Platform
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import FieldCodec, HistoryExclude, MalformedRecord
+from ..child_process import Platform
 from .goal_failure_observation import FailedTurnEvidence
 from .goal_scope import GoalScope
-from .goals import GoalDeclaration, NoGoal
-from .storage.locked_store import DurableFile
-from .private_registry_guard import PrivateRegistryGuard
-from .storage.store_files import AtomicFile
-from .tool_result import ToolResult
-from .storage.typed_table import (
+from .goals import (
+    GoalDeclaration,
+    NoGoal,
+)
+from ..nominal.declared_family import DeclaredFamily
+from ..nominal.field_codec import (
+    FieldCodec,
+    HistoryExclude,
+    MalformedRecord,
+    WireOmitDefault,
+)
+from ..owner_requests import (
+    NoRequestRevision,
+    RequestRevision,
+)
+from ..private_registry_guard import PrivateRegistryGuard
+from ..storage.locked_store import DurableFile
+from ..storage.store_files import AtomicFile
+from ..storage.typed_table import (
     Column,
     DurableTables,
     Index,
@@ -38,6 +48,7 @@ from .storage.typed_table import (
     ReconciledFile,
     RowidSequenced,
 )
+from ..tool_result import ToolResult
 
 
 class GoalHistoryError(RuntimeError):

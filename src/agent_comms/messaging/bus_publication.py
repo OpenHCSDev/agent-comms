@@ -53,7 +53,7 @@ if TYPE_CHECKING:
         BusReader,
         RecordBuilder,
     )
-    from ..goal_management import Goals
+    from ..planning.goal_management import Goals
     from ..registry.registry_document import RegistrySnapshot
     from ..registry.threads import Thread
 

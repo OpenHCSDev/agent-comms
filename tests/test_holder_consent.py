@@ -7,9 +7,26 @@ import time
 import pytest
 
 from agent_comms.errors import RelationViolationError
-from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction, OwnerInvocable, PausedGoalAction, ReissuedOrderGoalAction, SetGoalAction
-from agent_comms.goal_states import ActiveGoal, BlockedGoal, CompletedGoal, ModelPause, PausedGoal
-from agent_comms.goals import Goal, GoalConsentRequired, NoGoal
+from agent_comms.planning.goal_actions import (
+    CreateProblemGoalAction,
+    OrderGoalAction,
+    OwnerInvocable,
+    PausedGoalAction,
+    ReissuedOrderGoalAction,
+    SetGoalAction,
+)
+from agent_comms.planning.goal_states import (
+    ActiveGoal,
+    BlockedGoal,
+    CompletedGoal,
+    ModelPause,
+    PausedGoal,
+)
+from agent_comms.planning.goals import (
+    Goal,
+    GoalConsentRequired,
+    NoGoal,
+)
 from agent_comms.nominal.field_codec import GoalId, OrderId
 from agent_comms.planning.order_words import StrikeReason
 from agent_comms.planning.orders import (

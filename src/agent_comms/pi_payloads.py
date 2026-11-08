@@ -38,7 +38,7 @@ from .nominal.field_codec import (
     WireRequired,
     WireValue,
 )
-from .goals import GoalDeclaration
+from .planning.goals import GoalDeclaration
 from .lifecycle_capability import Successful
 from .native_failures import NativePiUnavailable
 from .native_file_artifact import NativeFileArtifact

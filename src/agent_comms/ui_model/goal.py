@@ -6,8 +6,8 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from agent_comms.goal_presentation import GoalExecution
-    from agent_comms.goals import GoalDeclaration
+    from ..planning.goal_presentation import GoalExecution
+    from ..planning.goals import GoalDeclaration
 
 
 class GoalDisplay(ABC):

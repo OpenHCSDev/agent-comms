@@ -55,6 +55,7 @@ from .channel_targets import (
 )
 from ..class_fact import ClassFact
 from ..coordination.errors import IdentityConflict
+from ..display_references import ReferenceContext
 from ..envelope_claim_transitions import (
     ClaimOwner,
     ClaimProducer,
@@ -138,7 +139,6 @@ from ..wake_policy import (
 
 if TYPE_CHECKING:
     from .bus_publication import Delivered
-    from ..display_references import ReferenceContext
     from ..input_disposition import InputDispositions
     from ..registry.threads import Thread
     from ..retained_task_facts import ExactTaskFact

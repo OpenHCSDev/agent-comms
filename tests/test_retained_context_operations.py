@@ -33,7 +33,7 @@ pytestmark = pytest.mark.usefixtures("durable_home")
 def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
     """Export carries only the pinned human constraint; it neither admits nor rewrites facts."""
     original_goal_id = GoalId.mint()
-    from agent_comms.goals import Goal
+    from agent_comms.planning.goals import Goal
     from agent_comms.input_disposition import InputDispositions
     from test_task_decisions import saved_source
     import hashlib

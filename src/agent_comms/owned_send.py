@@ -19,8 +19,8 @@ from .coordination.session import NativeCapture, NativeCommit
 from .coordination.coordinator import Coordination
 from .envelope_claim_transitions import NativeClaim
 from .nominal.field_codec import AcpSessionId, ClaimId, InputId, TurnId
-from .goal_attempts import GoalAttemptStore
-from .goal_turn_permit import GoalTurnPermit
+from .planning.goal_attempts import GoalAttemptStore
+from .execution.goal_turn_permit import GoalTurnPermit
 from .input_attempt import InputAlreadyCleared
 from .execution.input_drain import InputDrain
 from .native_input_proof import NativeContextProof

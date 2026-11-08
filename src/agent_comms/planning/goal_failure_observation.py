@@ -1,35 +1,47 @@
-"""Passive failed-attempt evidence. No retry, scheduling, or input authority.
-
-The terminal caller supplies already-bound local evidence; this is not a tool
-or owner-control ingress. Historical diagnostics cannot reconstruct a binding.
-"""
-
 from __future__ import annotations
 
 import math
 import sqlite3
-from abc import ABC, abstractmethod
+from abc import (
+    ABC,
+    abstractmethod,
+)
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated
+from typing import (
+    Annotated,
+    TYPE_CHECKING,
+)
 
-from .turn_failure import TurnFailure
-from .nominal.field_codec import AttemptId, GoalId, TurnId
 from .goal_attempt_identity import GoalAttemptIdentity
-from .projects.checkouts import Checkout
-from .thread_identity import (
+from ..nominal.field_codec import (
+    AttemptId,
+    GoalId,
+    TurnId,
+)
+from ..projects.checkouts import Checkout
+from ..storage.typed_table import (
+    Column,
+    DurableTables,
+    ForeignKey,
+    TextStorage,
+    TypedTable,
+)
+from ..thread_identity import (
     ClaimedIdentity,
     RecordedThreadIncarnation,
     ThreadIncarnation,
     TurnFence,
     TurnIdentity,
 )
-from .storage.typed_table import Column, DurableTables, ForeignKey, TextStorage, TypedTable
+from ..turn_failure import TurnFailure
 
 if TYPE_CHECKING:
-    from agent_comms.goal_attempts import FailedTurnObservation
-    from .goal_attempts import Reservation
+    from .goal_attempts import (
+        FailedTurnObservation,
+        Reservation,
+    )
     from .goal_presentation import GoalExecution
-    from .registry.threads import Thread
+    from ..registry.threads import Thread
 
 
 class GoalLedgerTable(DurableTables):

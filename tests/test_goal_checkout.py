@@ -8,7 +8,7 @@ import pytest
 
 from agent_comms.cli_commands import GoalCheckoutGrant
 from agent_comms.comms import Comms
-from agent_comms.goals import Goal
+from agent_comms.planning.goals import Goal
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.checkouts import (
     Checkout,
@@ -24,7 +24,7 @@ from agent_comms.thread_creation import RecordedCreationTime
 from agent_comms.shell_effects import AcquireRepositoryStorageEffect
 from agent_comms.tool_denial import StorageDenied
 from agent_comms.projects.storage_projection import StorageProjection
-from agent_comms.goal_actions import SetGoalAction
+from agent_comms.planning.goal_actions import SetGoalAction
 from agent_comms.repository_name import RepositoryName
 from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.registry.threads import ExternalThread, NativeThread, Thread

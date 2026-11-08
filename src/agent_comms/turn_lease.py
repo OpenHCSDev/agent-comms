@@ -23,7 +23,7 @@ from .nominal.field_codec import (
     WireTransient,
     boundary_decoder,
 )
-from .goal_presentation import RunningExecution
+from .planning.goal_presentation import RunningExecution
 from .input_disposition import InputDispositions
 from .lifecycle_capability import Executing, LifecycleCapability
 from .storage.locked_store import (
@@ -44,8 +44,8 @@ from .thread_identity import (
 from .turn_phase import IdlePhase, PreparingPhase, TurnPhase
 
 if TYPE_CHECKING:
-    from agent_comms.goal_management import GoalExecutionSource
-    from .goal_presentation import GoalExecution
+    from .planning.goal_management import GoalExecutionSource
+    from .planning.goal_presentation import GoalExecution
     from .messaging.sending import Messaging
     from .registry.registry_document import RegistrySnapshot
     from .registry.registry_store import RegistryStore

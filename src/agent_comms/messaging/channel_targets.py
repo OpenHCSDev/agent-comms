@@ -40,6 +40,7 @@ from ..projects.checkouts import Checkout
 from ..response_policy import (
     DirectPolicy,
     MentionedPolicy,
+    ResponsePolicy,
 )
 from ..storage.typed_table import sql_literal
 from ..thread_identity import ThreadIncarnation
@@ -71,7 +72,6 @@ if TYPE_CHECKING:
     from .channels import Channel
     from ..cli_command import CliCommand
     from ..comms import Comms
-    from ..goal_management import Goals
     from ..historical_views import (
         ChannelHistory,
         ConversationHistoryView,
@@ -80,6 +80,7 @@ if TYPE_CHECKING:
     )
     from ..history_result import HistoryPageResult
     from ..history_views import HistoryViews
+    from ..planning.goal_management import Goals
     from ..registry.registry_document import (
         RegistrySnapshot,
         ResolvedChannel,
@@ -87,7 +88,6 @@ if TYPE_CHECKING:
     )
     from ..registry.threads import Thread
     from ..registry_provenance import RegistryProvenance
-    from ..response_policy import ResponsePolicy
 
 
 class ChannelSelection(SubclassUnion, affix="Channel"):

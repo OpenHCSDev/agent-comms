@@ -67,7 +67,7 @@ from ..thread_text import GivenThreadText, NoThreadText, ThreadText
 from ..registry.threads import NativeThread, Thread
 
 if TYPE_CHECKING:
-    from ..goal_management import Goals
+    from ..planning.goal_management import Goals
     from ..messaging.sending import Messaging
 
 _LOG = logging.getLogger(__name__)

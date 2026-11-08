@@ -48,7 +48,7 @@ from .collaboration_ledger import CollaborationLedger
 from .errors import UnknownChannelError
 from .exporting import WireExportBoundary, WireExportFormat, WireExportLimit, WireExportProvenance, WireExportScope, WireTranscriptExporter
 from .transport.progress import WireExportObserver
-from .goal_management import Goals
+from .planning.goal_management import Goals
 from .historical_views import ChannelDisplayHistory, ChannelHistory, DMDisplayHistory, DMHistory, HistorySource
 from .messaging.message_bus import MessageBus
 from .messaging.message_page import (

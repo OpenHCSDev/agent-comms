@@ -8,7 +8,7 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.nominal.field_codec import GoalWaitId, TurnId
-from agent_comms.goal_actions import (
+from agent_comms.planning.goal_actions import (
     EditGoalAction,
     GoalPrecondition,
     OwnerInvocable,
@@ -16,12 +16,16 @@ from agent_comms.goal_actions import (
     SetGoalAction,
     StandbyGoalAction,
 )
-from agent_comms.goal_presentation import RunnableExecution, StandbyExecution, GoalWaitTarget
+from agent_comms.planning.goal_presentation import (
+    RunnableExecution,
+    StandbyExecution,
+    GoalWaitTarget,
+)
 from agent_comms.planning.goal_waits import GoalWaits
 from goal_owner_fixture import canonical_goal_wire
 from agent_comms.planning.goal_waits import RecordedGoalWait, NoGoalWait
 from agent_comms.registry.threads import NativeThread
-from agent_comms.goal_scope import OneGoal
+from agent_comms.planning.goal_scope import OneGoal
 
 
 def live_wire(tmp_path, *names, working=()):

@@ -78,14 +78,18 @@ from agent_comms.errors import (
     TodoError,
 )
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, InputId, MessageId, OrderId, RecordProblems, TurnId
-from agent_comms.goal_actions import (
+from agent_comms.planning.goal_actions import (
     CreateProblemGoalAction,
     ReissuedOrderGoalAction,
     SetGoalAction,
 )
-from agent_comms.goal_presentation import RunnableExecution
-from agent_comms.goal_states import ActiveGoal
-from agent_comms.goals import CountCheckResult, OrderCheck, ProblemGoalOrder
+from agent_comms.planning.goal_presentation import RunnableExecution
+from agent_comms.planning.goal_states import ActiveGoal
+from agent_comms.planning.goals import (
+    CountCheckResult,
+    OrderCheck,
+    ProblemGoalOrder,
+)
 from agent_comms.transport.tools.orders import (
     CommsTeamStoryTool,
     CommsTodoListTool,
@@ -1218,12 +1222,12 @@ def test_a_compliant_answer_resumes_a_held_teammate_whose_attempt_was_interrupte
     """A held teammate whose last attempt failed refuses a status-only resume; the chokehold's
     release continues its generation the way a fresh order does, so one such teammate neither stays
     paused nor stops the release of the others (the heartbeat died on it, 2026-10-21 22:43)."""
-    from agent_comms.goal_actions import (
-        ActiveGoalAction,
-        ChokeholdPausedGoalAction,
-        CompliedGoalAction,
-        OwnerInvocable,
-    )
+    from agent_comms.planning.goal_actions import (
+    ActiveGoalAction,
+    ChokeholdPausedGoalAction,
+    CompliedGoalAction,
+    OwnerInvocable,
+)
 
     blocked_holder(held_bus, native_runtime_package)
     held_bus.goals.update_goal("worker", ChokeholdPausedGoalAction())
@@ -1237,11 +1241,11 @@ def test_a_compliant_answer_resumes_a_held_teammate_whose_attempt_was_interrupte
 def test_a_compliant_answer_resumes_a_held_teammate_whose_problems_closed_during_the_hold(held_bus):
     """The heartbeat died on every pass from 13:08 on 2026-10-24: a teammate whose problems were
     withdrawn while the chokehold held it refused the release, so no teammate after it resumed."""
-    from agent_comms.goal_actions import (
-        ChokeholdPausedGoalAction,
-        CompliedGoalAction,
-        OwnerInvocable,
-    )
+    from agent_comms.planning.goal_actions import (
+    ChokeholdPausedGoalAction,
+    CompliedGoalAction,
+    OwnerInvocable,
+)
     from agent_comms.planning.order_words import StrikeReason
     from agent_comms.planning.orders import (
     ReleaseTodo,

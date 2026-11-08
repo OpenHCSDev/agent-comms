@@ -15,14 +15,17 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, TurnId
 from agent_comms.coordination.errors import Refused
 from agent_comms.owner_protocol import OwnerFailure
-from agent_comms.goal_actions import ClearGoalAction, SetGoalAction
-from agent_comms.goal_attempts import ProviderUsageTotal
-from agent_comms.goal_attempt_phase import FailedAttempt
-from agent_comms.goal_generation import ReadyGeneration
+from agent_comms.planning.goal_actions import (
+    ClearGoalAction,
+    SetGoalAction,
+)
+from agent_comms.planning.goal_attempts import ProviderUsageTotal
+from agent_comms.planning.goal_attempt_phase import FailedAttempt
+from agent_comms.planning.goal_generation import ReadyGeneration
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
-from agent_comms.goal_turn_permit import NoLaunchPermit
-from agent_comms.goals import NoGoal
+from agent_comms.execution.goal_turn_permit import NoLaunchPermit
+from agent_comms.planning.goals import NoGoal
 from agent_comms.pi_wire import PiUsage
 from agent_comms.execution.owned_turn import TurnGoalAccount
 from agent_comms.turn_terminal import EndedWithoutResult, OperatorStopped

@@ -33,7 +33,7 @@ from agent_comms.projects.checkouts import (
     RepositoryReads,
 )
 from agent_comms.projects.repository_sources import LocalRepositorySource
-from agent_comms.goal_actions import SetGoalAction
+from agent_comms.planning.goal_actions import SetGoalAction
 from agent_comms.repository_name import RepositoryName
 from agent_comms.shell_effects import (
     CreateCheckoutStorageEffect,
@@ -59,7 +59,7 @@ from agent_comms.thread_storage import (
 )
 from agent_comms.registry.threads import Thread, NativeThread
 from agent_comms.tool_denial import SelectedToolDenied
-from agent_comms.goals import OrderCheck
+from agent_comms.planning.goals import OrderCheck
 from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime

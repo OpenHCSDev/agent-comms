@@ -11,8 +11,15 @@ import pytest
 
 from conftest import installed_comms
 from agent_comms.context_segments.partner_activity import PartnerActivitySegment
-from agent_comms.goal_actions import CompletedGoalAction, GoalPrecondition, SetGoalAction
-from agent_comms.goal_states import ActiveGoal, CompletedGoal
+from agent_comms.planning.goal_actions import (
+    CompletedGoalAction,
+    GoalPrecondition,
+    SetGoalAction,
+)
+from agent_comms.planning.goal_states import (
+    ActiveGoal,
+    CompletedGoal,
+)
 from agent_comms.peer_relevance import (
     AlwaysListed,
     ChannelmateRelevance,
@@ -27,7 +34,7 @@ from agent_comms.relationships import RelationshipEdit
 from agent_comms.thread_text import ForkedParent
 from agent_comms.registry.threads import NativeThread
 from agent_comms.turn_context import CoordinationSegment, NextContextTurn, TurnContext
-from agent_comms.goal_scope import OneGoal
+from agent_comms.planning.goal_scope import OneGoal
 
 
 def _wire(tmp_path, *threads):

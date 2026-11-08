@@ -15,6 +15,8 @@ from dataclasses import (
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .bus_publication import Delivered
+from .messages import Message
 from .read_basis import (
     AllConversation,
     ChannelConversation,
@@ -23,6 +25,7 @@ from .read_basis import (
     DMConversation,
     DisplayBasis,
     DisplayedConversation,
+    MessageDisplayScope,
     ReadCursor,
 )
 from .bus import (
@@ -43,6 +46,9 @@ from ..recorded_bus import (
     RecordedBus,
     RecordedBusIdentity,
 )
+from ..registry.registry_document import RegistrySnapshot
+from ..registry.threads import Thread
+from ..registry_provenance import RegistryProvenance
 from ..storage.locked_store import DocumentChange
 from ..storage.maintenance_barrier import CarriedDocument
 from ..storage.private_path import ObservedPath
@@ -53,13 +59,6 @@ from ..storage.store_files import (
 from ..thread_identity import RecordedThreadIncarnation
 from ..thread_owned_state import ThreadOwnedState
 
-if TYPE_CHECKING:
-    from .messages import Message
-    from .read_basis import MessageDisplayScope
-    from .bus_publication import Delivered
-    from ..registry.registry_document import RegistrySnapshot
-    from ..registry.threads import Thread
-    from ..registry_provenance import RegistryProvenance
 
 
 class ReadNotice(SubclassUnion, affix="ReadNotice"):

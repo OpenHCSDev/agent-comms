@@ -73,9 +73,9 @@ from agent_comms.team.standing import RetainedHolderWheelSpin, UnownedOrderWatch
 from agent_comms.team_heartbeat import TeamHeartbeat
 from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId
-from agent_comms.goal_actions import SetGoalAction
+from agent_comms.planning.goal_actions import SetGoalAction
 from agent_comms.held_orders import HeldOrders
-from agent_comms.goals import OrderCheck
+from agent_comms.planning.goals import OrderCheck
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.storage.locked_store import RootFile
 from agent_comms.installer.runtime_resolution import CorePackage, TextualPackage, ToadPackage
@@ -96,7 +96,10 @@ from agent_comms.work_branches import WorkBranches
 from source_revision_fixture import SourceRepository
 from agent_comms.plan_phases import RetainedStorePhase, UnplannedPhase
 from agent_comms.team.standing import ReassignedWheelSpin
-from agent_comms.goals import GoalChangedError, NoGoal
+from agent_comms.planning.goals import (
+    GoalChangedError,
+    NoGoal,
+)
 from conftest import team_as
 
 pytest_plugins = ("test_holder_standing_rules", "test_unowned_checkout_work", "test_proof_build", "github_fixture")

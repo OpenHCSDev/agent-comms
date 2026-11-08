@@ -48,7 +48,7 @@ def test_live_turn_never_presents_ready_between_activity_events(tmp_path):  # no
 
 def test_individual_view_keeps_alias_goal_and_active_owner_semantics(tmp_path):  # noqa: F811
     from agent_comms.activity import ActivityState
-    from agent_comms.goal_actions import SetGoalAction
+    from agent_comms.planning.goal_actions import SetGoalAction
 
     _path, _root_id, comms, _initial, _people = _root(tmp_path)
     comms.goals.update_goal('beta', SetGoalAction(text='Finish native delivery'))

@@ -162,8 +162,8 @@ from ..errors import (
     MissingSourceLine,
     TodoError,
 )
-from ..goal_scope import OneGoal
-from ..goals import (
+from .goal_scope import OneGoal
+from .goals import (
     CheckedCommit,
     OrderCheck,
 )
@@ -306,7 +306,7 @@ from ..work_branches import (
 
 if TYPE_CHECKING:
     from ..comms import Comms
-    from ..goal_management import Goals
+    from .goal_management import Goals
     from ..held_orders import LiveHold
     from ..team.order import (
         OrderFile,
@@ -3278,7 +3278,10 @@ class Assignment(TodoHolder):
 
     def record_review(self, goals: Goals, current: Todo,
                       operation: RecordOrderHeadVerdict) -> None:
-        from ..goal_actions import GoalPrecondition, HeadReviewedOrderGoalAction
+        from .goal_actions import (
+    GoalPrecondition,
+    HeadReviewedOrderGoalAction,
+)
 
         goals.update_goal(self.owner, HeadReviewedOrderGoalAction(
             expect=GoalPrecondition(goal_id=OneGoal(self.generation)),

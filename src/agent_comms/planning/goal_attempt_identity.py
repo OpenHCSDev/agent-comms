@@ -1,8 +1,9 @@
-"""Goal attempt identity without the reservation token or execution authority."""
-
 from dataclasses import dataclass
 
-from agent_comms.nominal.field_codec import AttemptId, GoalId
+from ..nominal.field_codec import (
+    AttemptId,
+    GoalId,
+)
 
 
 class FailureNotObserved(ValueError):

@@ -16,7 +16,10 @@ from functools import partial
 from typing import TYPE_CHECKING, NoReturn
 
 from agent_comms.following_inputs import OwnerFollowingInputs
-from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
+from .goal_turn_permit import (
+    GoalTurnPermit,
+    NoLaunchPermit,
+)
 
 from .. import agent_events as events
 from ..controller import NO_CONTROLLER
@@ -28,7 +31,7 @@ from ..coordination.errors import CoordinationError, Refused
 from ..coordination.coordinator import Coordination
 from ..cursor_publication import CursorDelivery
 from ..nominal.field_codec import AcpSessionId, FieldCodec, GoalId, TurnId
-from ..goals import Goal
+from ..planning.goals import Goal
 from ..image_input import ImageInput
 from ..input_attempt import ReservedInput
 from ..input_key import InputKey
@@ -71,7 +74,7 @@ from agent_comms.pi_wire import PiUsage
 from ..comms import Comms
 if TYPE_CHECKING:
     from ..turn_runner import TurnRunner
-    from ..goal_attempts import LaunchPermit
+    from ..planning.goal_attempts import LaunchPermit
 
 
 @dataclass(kw_only=True)

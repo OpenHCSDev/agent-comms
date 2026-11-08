@@ -10,7 +10,10 @@ from .messaging.channel_targets import CommandTarget
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .nominal.field_codec import FieldCodec, ThreadLookup, TurnId, WireOmitDefault
-from .goals import GoalDeclaration, GoalRevision
+from .planning.goals import (
+    GoalDeclaration,
+    GoalRevision,
+)
 from .messaging.message_reference import MessageReference
 from .owner_requests import OwnerRequestId, RequestDirective
 from .projection_source import ProjectionSource
@@ -34,7 +37,7 @@ if TYPE_CHECKING:
     from .context_segments.wake import MessageDelivery
     from .harness_delivery_states import Outcome
     from .task_attachments.team_pings import TeamUpdate
-    from .goal_management import Goals
+    from .planning.goal_management import Goals
     from .input_attempt import StoredInput
     from .input_disposition import InputDispositions
     from .messaging.messages import Message

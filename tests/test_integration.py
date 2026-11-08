@@ -38,7 +38,7 @@ from agent_comms.projects.git_errors import (
 )
 from agent_comms.projects.repo import Repo
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.goal_actions import CreateProblemGoalAction
+from agent_comms.planning.goal_actions import CreateProblemGoalAction
 from agent_comms.test_lease import TestLease
 from agent_comms.tool_denial import StorageDenied
 from agent_comms.tool_caller import PeerCaller

@@ -32,7 +32,11 @@ from typing import (
 )
 
 from .message_reference import MessageReference
-from .messages import MessageInput
+from .messages import (
+    Message,
+    MessageInput,
+    MessageKind,
+)
 from ..activity_clocks import ChannelActivity
 from .channel_targets import (
     CommandTarget,
@@ -87,10 +91,6 @@ if TYPE_CHECKING:
     from .message_page import (
         MessagePage,
         PageBounds,
-    )
-    from .messages import (
-        Message,
-        MessageKind,
     )
     from .bus import (
     Bus,

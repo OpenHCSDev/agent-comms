@@ -3,9 +3,13 @@
 import pytest
 
 from agent_comms.nominal.field_codec import GoalId
-from agent_comms.goal_states import ActiveGoal, BlockedGoal, PausedGoal
-from agent_comms.goal_authority import GoalAuthority
-from agent_comms.goals import NoGoal
+from agent_comms.planning.goal_states import (
+    ActiveGoal,
+    BlockedGoal,
+    PausedGoal,
+)
+from agent_comms.planning.goal_authority import GoalAuthority
+from agent_comms.planning.goals import NoGoal
 
 RUNNING, OTHER = GoalId.mint(), GoalId.mint()
 

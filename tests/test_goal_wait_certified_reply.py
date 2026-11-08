@@ -9,12 +9,16 @@ from dataclasses import replace
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.nominal.field_codec import TurnId
 from agent_comms.input_key import BusInputKey
-from agent_comms.goal_actions import GoalPrecondition, SetGoalAction, StandbyGoalAction
-from agent_comms.goal_presentation import GoalWaitTarget
+from agent_comms.planning.goal_actions import (
+    GoalPrecondition,
+    SetGoalAction,
+    StandbyGoalAction,
+)
+from agent_comms.planning.goal_presentation import GoalWaitTarget
 from goal_owner_fixture import canonical_goal_wire
 from agent_comms.planning.goal_waits import NoGoalWait
 from agent_comms.registry.threads import NativeThread
-from agent_comms.goal_scope import OneGoal
+from agent_comms.planning.goal_scope import OneGoal
 
 
 def register(comms, name):
@@ -26,7 +30,7 @@ def register(comms, name):
 
 def test_first_wait_ignores_unreserved_reply_before_goal_publication(tmp_path):
     from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.goals import Goal
+    from agent_comms.planning.goals import Goal
     from agent_comms.input_disposition import InputDispositions
 
     comms = canonical_goal_wire(tmp_path / "wire")

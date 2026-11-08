@@ -1,22 +1,34 @@
-"""Stored goal decisions; backend execution is read from the attempt ledger."""
-
 from __future__ import annotations
 
 from abc import abstractmethod
-from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, ClassVar
+from dataclasses import (
+    dataclass,
+    field,
+    replace,
+)
+from typing import (
+    ClassVar,
+    TYPE_CHECKING,
+)
 
-from .nominal.declared_family import DeclaredFamily
-from .lifecycle import LifecycleState
-from .lifecycle_capability import Active, Complete, Terminal
+from ..lifecycle import LifecycleState
+from ..lifecycle_capability import (
+    Active,
+    Complete,
+    Terminal,
+)
+from ..nominal.declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
-    from .goal_actions import GoalActionContext, ProblemOrderGoalAction
-    from agent_comms.goal_management import GoalExecutionSource
+    from .goal_actions import (
+        GoalActionContext,
+        ProblemOrderGoalAction,
+    )
+    from .goal_management import GoalExecutionSource
     from .goal_presentation import GoalExecution
     from .goals import Goal
-    from .thread_identity import ThreadIncarnation
-    from .registry.threads import Thread
+    from ..registry.threads import Thread
+    from ..thread_identity import ThreadIncarnation
 
 
 @dataclass(frozen=True)
@@ -39,7 +51,7 @@ class PauseSource(DeclaredFamily, affix="Pause"):
 
 class OwnerPause(PauseSource):
     def instruction(self) -> str:
-        from .turn_context import InstructionFile
+        from ..turn_context import InstructionFile
         return InstructionFile.read("owner-pause.md").content
 
 

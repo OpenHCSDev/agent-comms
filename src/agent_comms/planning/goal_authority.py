@@ -1,12 +1,15 @@
-"""The authority a running turn captures, independent of the goal document's lifecycle."""
-
 from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass
 
-from .nominal.field_codec import GoalId, NullMember, RecordMember, SubclassUnion
 from .goal_states import GoalState
+from ..nominal.field_codec import (
+    GoalId,
+    NullMember,
+    RecordMember,
+    SubclassUnion,
+)
 
 
 class GoalTurnAuthority(SubclassUnion, affix=""):

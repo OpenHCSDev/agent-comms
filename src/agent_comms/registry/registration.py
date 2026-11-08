@@ -15,8 +15,14 @@ from ..errors import RelationViolationError
 from ..nominal.field_codec import ThreadLookup, TurnId
 from ..repository_name import RepositoryName
 from ..thread_identity import ThreadIncarnation
-from ..goal_history import GoalHistoryEntry, GoalHistoryStore
-from ..goal_scope import AllGoals, GoalScope
+from ..planning.goal_history import (
+    GoalHistoryEntry,
+    GoalHistoryStore,
+)
+from ..planning.goal_scope import (
+    AllGoals,
+    GoalScope,
+)
 from ..native_input_owner import RegistryOwner
 from ..registration_change import RegistrationChange
 from .registry_document import FoundProjectThread, ProjectThreadSelection, RegistryDocument, RegistrySnapshot
@@ -41,9 +47,9 @@ from ..projects.checkouts import (
 
 if TYPE_CHECKING:
     from ..catalog_document import CatalogDocument
-    from ..goals import GoalDeclaration
+    from ..planning.goals import GoalDeclaration
     from ..agent_backend import RuntimeLocation
-    from ..goal_management import Goals
+    from ..planning.goal_management import Goals
     from ..selected_participant import SelectedParticipant
 
 _DEFAULT_PRESENCE = ProcessThreadStatus()

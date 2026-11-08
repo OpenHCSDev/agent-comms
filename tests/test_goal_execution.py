@@ -21,16 +21,16 @@ from agent_comms.acp_failure import NativeTurnError
 from agent_comms.child_process import ChildOutcome, ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, GoalId
-from agent_comms.goal_actions import (
+from agent_comms.planning.goal_actions import (
     ActiveGoalAction,
     GoalAction,
     PausedGoalAction,
     RetryGoalAction,
     SetGoalAction,
 )
-from agent_comms.goal_failure_observation import FailedTurnEvidence
-from agent_comms.goal_history import RecordedGoalHistory
-from agent_comms.goal_presentation import (
+from agent_comms.planning.goal_failure_observation import FailedTurnEvidence
+from agent_comms.planning.goal_history import RecordedGoalHistory
+from agent_comms.planning.goal_presentation import (
     AttemptFailedExecution,
     AttemptUnresolvedExecution,
     CompletedExecution,
@@ -43,8 +43,11 @@ from agent_comms.goal_presentation import (
     RunningExecution,
     StandbyExecution,
 )
-from agent_comms.goal_scope import OneGoal
-from agent_comms.goal_states import ActiveGoal, ModelPause
+from agent_comms.planning.goal_scope import OneGoal
+from agent_comms.planning.goal_states import (
+    ActiveGoal,
+    ModelPause,
+)
 from agent_comms.storage.maintenance_barrier import MaintenanceOperator
 from agent_comms.execution.owned_turn import OwnedTurn
 from agent_comms.registry.threads import NativeThread

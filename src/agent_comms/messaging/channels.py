@@ -44,12 +44,12 @@ from ..nominal.field_codec import (
     FieldCodec,
 )
 from ..projection_source import ProjectionSource
+from ..registry.threads import Thread
+from ..registry_provenance import RegistryProvenance
 from ..tool_result import ToolResult
 
 if TYPE_CHECKING:
     from ..registry.registry_document import RosterVisibility
-    from ..registry.threads import Thread
-    from ..registry_provenance import RegistryProvenance
 
 
 class ChannelMemberIndex(dict[str, tuple["Thread", ...]]):

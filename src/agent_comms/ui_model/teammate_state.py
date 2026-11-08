@@ -26,7 +26,7 @@ from agent_comms.nominal.field_codec import (
     MalformedRecord,
     ToolCallId,
 )
-from agent_comms.goal_presentation import GoalSnapshot
+from ..planning.goal_presentation import GoalSnapshot
 from agent_comms.heartbeat_subjects import HeartbeatSubject, TeammateSubject
 from ..messaging.messages import Message
 from agent_comms.native_failures import NativePiUnavailable

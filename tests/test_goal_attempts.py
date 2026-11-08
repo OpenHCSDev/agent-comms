@@ -24,12 +24,24 @@ from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import RecoveryBlocked
 from agent_comms.nominal.field_codec import AttemptId, GoalId, MalformedRecord, RetryDecisionId
-from agent_comms.goal_actions import SetGoalAction
-from agent_comms.goal_attempt_phase import ClaimedAttempt, FailedAttempt, SucceededAttempt
-from agent_comms.goal_failure_observation import FailedTurnEvidence
-from agent_comms.goal_attempts import AttemptRecord, Generation, GoalAttemptStore, GoalWorkDecision, ProviderUsageTotal, ReservationConflictError, StorageUncertainError
+from agent_comms.planning.goal_actions import SetGoalAction
+from agent_comms.planning.goal_attempt_phase import (
+    ClaimedAttempt,
+    FailedAttempt,
+    SucceededAttempt,
+)
+from agent_comms.planning.goal_failure_observation import FailedTurnEvidence
+from agent_comms.planning.goal_attempts import (
+    AttemptRecord,
+    Generation,
+    GoalAttemptStore,
+    GoalWorkDecision,
+    ProviderUsageTotal,
+    ReservationConflictError,
+    StorageUncertainError,
+)
 from agent_comms.errors import UnresolvedAttemptError
-from agent_comms.goal_generation import (
+from agent_comms.planning.goal_generation import (
     BlockedGeneration,
     CancelledGeneration,
     CompletedGeneration,

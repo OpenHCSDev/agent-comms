@@ -47,7 +47,10 @@ async def test_restore_owner_keeps_blocked_goal_unchanged(
     from agent_comms.cli_verbs.restore_owner import RestoreOwnerCliCommand
     from agent_comms.cli_verbs.target_action import TargetActionCliCommand
     from agent_comms.cli_command import TargetBatchResult
-    from agent_comms.goal_actions import SetGoalAction, BlockedGoalAction
+    from agent_comms.planning.goal_actions import (
+    SetGoalAction,
+    BlockedGoalAction,
+)
     from agent_comms.owner_connection import socket_path
 
     source_programs.bind(tmp_path)

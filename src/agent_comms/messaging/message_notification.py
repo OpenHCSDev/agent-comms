@@ -19,6 +19,8 @@ from itertools import batched
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .bus import Bus
+from .bus_publication import Delivered
 from .channel_targets import CommandTarget
 from .message_reference import MessageReference
 from .messages import Message
@@ -28,6 +30,7 @@ from .read_ledger import (
 )
 from ..agent_activity import (
     AgentActivity,
+    RecipientActivity,
     RecordedRecipientActivity,
 )
 from ..frozen_recipient import FrozenRecipient
@@ -55,19 +58,16 @@ from ..notification_progress import (
     DeliveryProgress,
     HumanReadProgress,
 )
+from ..registry.registration import Registration
 from ..registry.registry_document import RegistrySnapshot
+from ..registry_provenance import RegistryProvenance
 from ..revision_views import NotificationEvidenceView
 from ..thread_identity import ThreadIncarnation
 from ..transcript_sources import AssignedTranscriptSource
 
 if TYPE_CHECKING:
-    from ..agent_activity import RecipientActivity
-    from .bus import Bus
-    from .bus_publication import Delivered
     from ..comms import Comms
     from ..presentation import WireRevision
-    from ..registry.registration import Registration
-    from ..registry_provenance import RegistryProvenance
 
 
 @dataclass(frozen=True)

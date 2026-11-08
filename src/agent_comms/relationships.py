@@ -26,7 +26,10 @@ from .command import Command
 from .nominal.declared_family import DeclaredFamily
 from .display_order import CreatedThreadSort, LastActivityThreadSort, ThreadSort
 from .errors import RelationViolationError, UnregisteredThreadError
-from .goals import Goal, GoalMentionBinding
+from .planning.goals import (
+    Goal,
+    GoalMentionBinding,
+)
 from .storage.locked_store import DocumentChange
 from .storage.maintenance_barrier import CarriedDocument
 from .messaging.messages import (

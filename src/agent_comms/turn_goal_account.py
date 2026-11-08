@@ -17,12 +17,19 @@ from typing import TYPE_CHECKING
 
 
 from .nominal.field_codec import TurnId
-from .goal_states import ActiveGoal, CompletedGoal, PausedGoal
-from .goals import Goal
+from .planning.goal_states import (
+    ActiveGoal,
+    CompletedGoal,
+    PausedGoal,
+)
+from .planning.goals import Goal
 from .reported_turn import ReportedTurn
 from .attempt_resolution import VerifiedTurnDecision
 
-from .goal_attempts import GoalAttemptStore, LaunchPermit
+from .planning.goal_attempts import (
+    GoalAttemptStore,
+    LaunchPermit,
+)
 if TYPE_CHECKING:
     from .comms import Comms
     from .registry.threads import Thread

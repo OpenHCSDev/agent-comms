@@ -32,7 +32,10 @@ from .coordination.session import (
 from .coordination.coordinator import Coordination
 from .errors import RelationViolationError
 from .nominal.field_codec import AcpSessionId, InputId, GoalId, RootId
-from .goals import GoalDeclaration, NoGoal
+from .planning.goals import (
+    GoalDeclaration,
+    NoGoal,
+)
 from .coordination.tables.assignments import WakeAssignment
 from .messaging.messages import Message
 from .image_input import ImageInput

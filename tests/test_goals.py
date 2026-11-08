@@ -7,7 +7,7 @@ from agent_comms.comms import wire
 from conftest import installed_comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, TurnId
-from agent_comms.goal_actions import (
+from agent_comms.planning.goal_actions import (
     ActiveGoalAction,
     BlockedGoalAction,
     ClearGoalAction,
@@ -17,7 +17,10 @@ from agent_comms.goal_actions import (
     PausedGoalAction,
     SetGoalAction,
 )
-from agent_comms.goals import Goal, NoGoal
+from agent_comms.planning.goals import (
+    Goal,
+    NoGoal,
+)
 from agent_comms.context_segments.wake_values import NoWakeGoalContext, WakeGoalContext
 from agent_comms.task_sources import GoalTaskScope, TurnTaskScope
 from agent_comms.registry.threads import ChosenModel, NextTurnConfiguration, Thread, NativeThread
@@ -25,7 +28,7 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.transport.request import ToolRequest
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.reported_turn import NoReportedTurn, ReportedTurn, ReportedTurnState
-from agent_comms.goal_scope import OneGoal
+from agent_comms.planning.goal_scope import OneGoal
 
 
 @pytest.fixture

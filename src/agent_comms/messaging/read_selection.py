@@ -4,6 +4,8 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from .bus import BusSnapshot
+from .channels import Channels
 from .read_basis import (
     ChannelDisplayScope,
     DisplayViewer,
@@ -16,14 +18,11 @@ from .read_ledger import (
 )
 from ..activity_clocks import ActivityClocks
 from ..catalog_document import CatalogDocument
+from ..catalog_store import ChannelCatalog
+from ..registry.registration import Registration
 from ..registry.registry_document import RegistrySnapshot
 from ..registry_provenance import RegistryProvenance
 
-if TYPE_CHECKING:
-    from .bus import BusSnapshot
-    from ..catalog_store import ChannelCatalog
-    from .channels import Channels
-    from ..registry.registration import Registration
 
 
 @dataclass(frozen=True, slots=True)
