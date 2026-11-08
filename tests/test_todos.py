@@ -22,27 +22,18 @@ import pytest
 from agent_comms.bus import Bus
 from agent_comms.comms import wire
 from agent_comms.errors import TodoError
-from agent_comms.execution.child_process import (
-    NoProcess,
-    ProcessIdentity,
-)
-from agent_comms.execution.turn_item import (
-    NativeItemId,
-    NativeTurnId,
-)
+from agent_comms.execution.child_process import NoProcess, ProcessIdentity
+from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
 from agent_comms.held_orders import HeldOrders
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.installer.runtime_resolution import CorePackage, TextualPackage, ToadPackage
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId
+from agent_comms.order_phase import UnplannedPhase
 from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun, OrderRun
 from agent_comms.owner_requests import NewestOpenRequest
 from agent_comms.planning.goal_actions import SetGoalAction
-from agent_comms.planning.goals import (
-    GoalChangedError,
-    NoGoal,
-    OrderCheck,
-)
+from agent_comms.planning.goals import GoalChangedError, NoGoal, OrderCheck
 from agent_comms.planning.order_words import StrikeReason
 from agent_comms.planning.orders import (
     Assignment,
@@ -76,16 +67,9 @@ from agent_comms.planning.orders import (
     UnorderedProblemOrder,
     WithdrawTodo,
 )
-from agent_comms.planning.plan_phases import (
-    PlanPhase,
-    RetainedStorePhase,
-    UnplannedPhase,
-)
+from agent_comms.planning.plan_phases import PlanPhase, RetainedStorePhase
 from agent_comms.planning.problem_findings import ExpectedProblem
-from agent_comms.planning.pull_requests import (
-    PullRequestCommit,
-    PullRequestLink,
-)
+from agent_comms.planning.pull_requests import PullRequestCommit, PullRequestLink
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.recorded_time import RecordedEventTime
@@ -102,10 +86,7 @@ from agent_comms.team.standing import (
     UnownedOrderWatch,
     UnownedWheelSpin,
 )
-from agent_comms.team.standing_rules import (
-    OwedAnswer,
-    StandingRule,
-)
+from agent_comms.team.standing_rules import OwedAnswer, StandingRule
 from agent_comms.team_heartbeat import TeamHeartbeat
 from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.ui_model.teammate_state import AwaitingTeam

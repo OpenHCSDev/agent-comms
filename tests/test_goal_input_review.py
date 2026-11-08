@@ -7,6 +7,7 @@ import pytest
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.comms import wire
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.goal_execution import GoalExecution
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_key import AcpInputKey, BusInputKey, InputKeyText
 from agent_comms.lifecycle_capability import Unresolved
@@ -19,7 +20,6 @@ from agent_comms.planning.goal_actions import (
     SetGoalAction,
     StandbyGoalAction,
 )
-from agent_comms.planning.goal_presentation import GoalExecution
 from agent_comms.planning.goal_scope import OneGoal
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.messaging.read_basis import NamedViewer

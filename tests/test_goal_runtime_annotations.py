@@ -1,0 +1,291 @@
+"""Goal publication callbacks remain inspectable by runtime consumers."""
+
+from collections.abc import Callable
+from inspect import isfunction
+from pathlib import Path
+import subprocess
+import sys
+from types import NoneType
+from typing import get_args, get_origin, get_type_hints
+
+import pytest
+
+from agent_comms import agent_events
+from agent_comms.agent_event_updates import AcpEventConsumer, AcpToolAction
+from agent_comms.acp import AcpSelectedWriteAuthority, CommsAgent, SdkSessionConnection
+from agent_comms.execution.session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
+from agent_comms.turn_runner import TurnRunner
+from agent_comms.turn_progress import TurnProgress
+from agent_comms.route_client import ActivityClient
+from agent_comms.comms import Comms
+from agent_comms.acp_extension import AgentCommsUpdate, LiveQueueScope, PromptRequest, QueueScope
+from agent_comms.context_segments.wake_values import WakeWorkContext
+from agent_comms.execution.input_drain import InputDrain
+from agent_comms.following_inputs import FollowingInputs, OwnerFollowingInputs
+from agent_comms.private_send_claim import PrivateSendClaim
+from agent_comms.tracked_turn import TrackedTurnSession
+from agent_comms.config_options import ConfigOption, ConfigOptions
+from agent_comms.display_order import ChannelSort, ThreadSort
+from agent_comms.goal_attempts import LaunchPermit
+from agent_comms.goal_attempt_phase import GoalAttemptPhase
+from agent_comms.goal_generation import GenerationState
+from agent_comms.goal_ledger import FailedTurnEvidence, FailedTurnObservation, Generation
+from agent_comms.goal_failure_observation import NoFailedTurnEvidence
+from agent_comms.goal_turn_permit import GoalTurnPermit
+from agent_comms.goal_actions import GoalAction, SetGoalAction, StandbyGoalAction
+from agent_comms.goal_control import GoalControlSource
+from agent_comms.goal_scheduler import GoalScheduler
+from agent_comms.goal_mutation import GoalTurnProjection
+from agent_comms.turn_lease import TurnDeclaration
+from agent_comms.goal_wait_target import GoalWaitTarget
+from agent_comms.planning.goal_waits import GoalWait, NoGoalWait, RecordedGoalWait, GoalWaits
+from agent_comms.transport.tools.goals import GoalChangeTool, CommsGoalTool, CommsGoalHistoryTool
+from agent_comms.nominal.field_codec import ThreadLookup
+from agent_comms.goal_records import GoalRecords
+from agent_comms.goal_states import GoalState
+from agent_comms.goals import GoalDeclaration, GoalMentionBinding, GoalOrder, GoalUnavailable
+from agent_comms.goal_work import GoalFailureOwner, GoalOwner, GoalWorkSource
+from agent_comms.registry.threads import Thread
+from agent_comms.relationships import RelationshipSource, ThreadRelationships
+from agent_comms.session_config_options import SessionConfigOptions
+from agent_comms.thread_presentation import ThreadOwnerBinding
+from agent_comms.thread_identity import TurnFence
+from agent_comms.turn_failure import NativePiTerminalFailure, RetryableProviderFailure, TurnFailure
+
+
+@pytest.mark.parametrize(
+    ("callback", "result"),
+    (
+        (GoalUnavailable.heading, str),
+        (Thread.wake_context, WakeWorkContext),
+        (Thread.contains_worktree, bool),
+        (Thread.owner_binding, ThreadOwnerBinding),
+        *((member.owner_binding, ThreadOwnerBinding) for member in Thread.__subclasses__()),
+        (GoalDeclaration.settle, NoneType),
+        *((member.settle, NoneType) for member in GoalDeclaration.__subclasses__()),
+        (GoalDeclaration.clear_wait, bool),
+        *((member.clear_wait, bool) for member in GoalDeclaration.__subclasses__()),
+        (GoalDeclaration.stopped_permit, GoalTurnPermit),
+        *((member.stopped_permit, GoalTurnPermit) for member in GoalDeclaration.__subclasses__()),
+    ),
+)
+def test_goal_publication_callback_annotations_resolve(
+    callback: Callable[..., object], result: type,
+) -> None:
+    assert get_type_hints(callback)["return"] is result
+
+
+@pytest.mark.parametrize("callback", (GoalAction.prepare, StandbyGoalAction.prepare))
+def test_goal_preparation_uses_its_record_owner(callback: Callable[..., object]) -> None:
+    assert get_type_hints(callback)["goals"] is GoalRecords
+
+
+@pytest.mark.parametrize("declaration", (GoalDeclaration, *GoalDeclaration.__subclasses__()))
+def test_goal_scope_callback_keeps_its_scope_type(declaration: type[GoalDeclaration]) -> None:
+    hints = get_type_hints(declaration.task_scope)
+    assert hints["scope"] is hints["return"]
+    assert get_args(hints["scoped"])[1] is hints["return"]
+
+
+@pytest.mark.parametrize("order", (GoalOrder, *GoalOrder.__subclasses__()))
+def test_goal_order_reads_its_assignment_source(order: type[GoalOrder]) -> None:
+    assert get_type_hints(order.todos)["goals"] is GoalWorkSource
+
+
+@pytest.mark.parametrize("declaration", (GoalDeclaration, *GoalDeclaration.__subclasses__()))
+def test_goal_instructions_read_their_assignment_source(declaration: type[GoalDeclaration]) -> None:
+    assert get_type_hints(declaration.instructions_for)["goals"] is GoalWorkSource
+
+
+@pytest.mark.parametrize("declaration", (GoalDeclaration, *GoalDeclaration.__subclasses__()))
+def test_goal_context_callback_keeps_its_context_type(declaration: type[GoalDeclaration]) -> None:
+    hints = get_type_hints(declaration.add_context)
+    assert get_args(hints["prepend_goal"])[1] is hints["context"]
+    assert hints["return"] is hints["context"]
+
+
+@pytest.mark.parametrize("declaration", (GoalDeclaration, *GoalDeclaration.__subclasses__()))
+def test_goal_assignment_checks_use_their_owner_read_contract(declaration: type[GoalDeclaration]) -> None:
+    assert get_type_hints(declaration.require_work)["owner"] is GoalOwner
+
+
+@pytest.mark.parametrize("binding", (GoalMentionBinding, *GoalMentionBinding.__subclasses__()))
+def test_goal_mention_projection_constructor_contracts_resolve(binding: type[GoalMentionBinding]) -> None:
+    hints = get_type_hints(binding.project)
+    assert "make_contact" in hints and "make_diagnostic" in hints and "return" in hints
+
+
+@pytest.mark.parametrize("order", (*ThreadSort.members_with(ThreadSort), *ChannelSort.members_with(ChannelSort)))
+def test_display_choice_runtime_contracts_resolve(order: type[ThreadSort] | type[ChannelSort]) -> None:
+    assert get_type_hints(order.store_channel_order)
+    assert get_type_hints(order.key)
+
+
+def test_relationship_projection_contract_resolves() -> None:
+    assert get_type_hints(ThreadRelationships.__init__)["views"] is RelationshipSource
+    assert get_type_hints(RelationshipSource.thread_views)["return"]
+
+
+@pytest.mark.parametrize("state", GoalState.members_with(GoalState))
+def test_goal_state_boundary_contracts_resolve(state: type[GoalState]) -> None:
+    assert get_type_hints(state.execution)["return"]
+    hints = get_type_hints(state.accept_order)
+    assert hints["goal"] is hints["return"]
+
+
+@pytest.mark.parametrize("callback", (FailedTurnObservation.from_terminal, LaunchPermit.failure_observation))
+def test_failed_attempt_reads_original_identity_contracts(callback: Callable[..., object]) -> None:
+    hints = get_type_hints(callback)
+    assert hints["owner"] is GoalFailureOwner
+    assert hints["lease"] is TurnFence
+
+
+def test_attempt_context_callback_preserves_its_result_type() -> None:
+    hints = get_type_hints(LaunchPermit.add_context)
+    assert get_args(hints["context"])[-1] is hints["return"]
+
+
+@pytest.mark.parametrize("reading", (NoFailedTurnEvidence, FailedTurnEvidence))
+def test_failure_projection_contract_preserves_its_result(reading: type) -> None:
+    hints = get_type_hints(reading.execution)
+    assert get_args(hints["source"])[0] is hints["return"]
+
+
+def test_generation_failure_read_names_its_stored_row() -> None:
+    assert get_args(get_type_hints(Generation.failure_evidence)["return"]) == (FailedTurnEvidence,)
+
+
+@pytest.mark.parametrize(
+    "state",
+    (AcpEventConsumer, AcpToolAction, AgentCommsUpdate, LiveQueueScope, PromptRequest, QueueScope,
+     GoalScheduler, ConfigOption, ConfigOptions, SessionConfigOptions,
+     InputDrain, FollowingInputs, OwnerFollowingInputs, TrackedTurnSession, PrivateSendClaim,
+     SessionLifecycle, AttachedSessionLifecycle, TurnRunner, AcpSelectedWriteAuthority,
+     CommsAgent, SdkSessionConnection,
+     GoalWait, NoGoalWait, RecordedGoalWait, GoalWaits,
+     GoalChangeTool, CommsGoalTool, CommsGoalHistoryTool,
+     *GoalChangeTool.members_with(GoalChangeTool),
+     agent_events.InputStarted, *agent_events.InputStarted.__subclasses__(),
+     agent_events.InputRefused, *agent_events.InputRefused.__subclasses__(),
+     agent_events.Done, agent_events.CompactionEvent, agent_events.CompactionEnd,
+     agent_events.TextEvent, agent_events.Notice, agent_events.RuntimeInfoObservation,
+     agent_events.NativeMetadataObservation, agent_events.AgentEventConsumer,
+     TurnProgress, ActivityClient,
+     *ConfigOption.members_with(ConfigOption),
+     GenerationState, *GenerationState.members_with(GenerationState),
+     GoalAttemptPhase, *GoalAttemptPhase.members_with(GoalAttemptPhase),
+     TurnFailure, *TurnFailure.members_with(TurnFailure), RetryableProviderFailure),
+)
+def test_declared_method_annotations_resolve(state: type) -> None:
+    for name, member in vars(state).items():
+        match member:
+            case classmethod(__func__=callback) | staticmethod(__func__=callback):
+                pass
+            case _:
+                callback = member
+        if isfunction(callback) and callback.__annotations__:
+            assert get_type_hints(callback), f"{state.__name__}.{name}"
+
+
+def test_configuration_change_contract_keeps_its_launcher_type() -> None:
+    source = get_origin(get_type_hints(ConfigOption.change)["owner"])
+    assert get_type_hints(source.configure_thread)["configuration"] is source.__type_params__[0]
+
+
+def test_session_configuration_source_keeps_its_proxy_type() -> None:
+    source = get_origin(get_type_hints(SessionConfigOptions.__init__)["sessions"])
+    assert get_args(get_type_hints(source)["proxies"])[1] is source.__type_params__[0]
+
+
+def test_following_turn_source_keeps_its_sender_type() -> None:
+    source = get_origin(get_type_hints(FollowingInputs.open)["session"])
+    assert get_type_hints(source.forward_inbox)["sender"] is source.__type_params__[0]
+
+
+def test_native_terminal_failure_keeps_its_original_proof_type() -> None:
+    hints = get_type_hints(NativePiTerminalFailure.__init__)
+    assert hints["context"] is NativePiTerminalFailure.__type_params__[0]
+    assert hints["failure"] is TurnFailure
+
+
+@pytest.mark.parametrize("action", (GoalAction, SetGoalAction))
+def test_goal_client_uses_its_captured_control_source(action: type[GoalAction]) -> None:
+    source = get_type_hints(action.submit_control)["source"]
+    assert get_origin(source) is GoalControlSource
+    assert get_args(source)[1] == GoalAction[GoalDeclaration]
+
+
+@pytest.mark.parametrize(
+    "declaration", (TurnDeclaration, *TurnDeclaration.members_with(TurnDeclaration)),
+)
+def test_turn_execution_projection_contract_resolves(declaration: type[TurnDeclaration]) -> None:
+    hints = get_type_hints(declaration.execution)
+    assert get_origin(hints["source"]) is GoalTurnProjection
+    assert get_args(hints["source"])[0] is hints["return"]
+
+
+def test_event_recording_keeps_the_captured_client_type() -> None:
+    client = agent_events.AgentEventConsumer.__type_params__[0]
+    assert get_type_hints(agent_events.AgentEventConsumer.__init__)["comms"] is client
+    source = get_origin(client.__bound__)
+    assert source is not None and issubclass(ActivityClient, source)
+    assert get_type_hints(ActivityClient)["agents"] is get_type_hints(ActivityClient.activity_store)["return"]
+    assert get_args(client.__bound__) == (agent_events.RuntimeInfoObservation,)
+    assert any(
+        get_origin(base) is agent_events.AgentEventConsumer and get_args(base) == (Comms,)
+        for base in TurnProgress.__orig_bases__
+    )
+
+
+def test_event_notice_constructor_keeps_its_result_type() -> None:
+    hints = get_type_hints(agent_events.Notice.acp_updates)
+    assert get_args(hints["notice_update"])[-1] is get_args(hints["return"])[0]
+
+
+def test_dependency_owner_annotations_resolve() -> None:
+    assert get_type_hints(GoalRecords)["registry"]
+    assert get_type_hints(GoalRecords._release_reviewed_wait)["edit"]
+    assert get_type_hints(GoalRecords.consume_reply_wait)["owner"]
+
+
+def test_dependency_reply_reads_its_original_sender_identity() -> None:
+
+    assert get_type_hints(GoalWaitTarget.sent)["sender_lookup"] is ThreadLookup
+
+
+@pytest.mark.parametrize("first_module", (
+    "agent_comms.goal_presentation",
+    "agent_comms.goal_execution",
+    "agent_comms.goal_events",
+    "agent_comms.goal_management",
+    "agent_comms.agent_event_updates",
+    "agent_comms.goal_scheduler",
+    "agent_comms.session_config_options",
+    "agent_comms.session_reads",
+    "agent_comms.acp_extension",
+    "agent_comms.queue_publication",
+    "agent_comms.execution.input_drain",
+    "agent_comms.following_input_contracts",
+    "agent_comms.following_inputs",
+    "agent_comms.tracked_turn",
+    "agent_comms.private_send_claim",
+    "agent_comms.execution.session_tasks",
+    "agent_comms.session_owner_reads",
+    "agent_comms.execution.session_lifecycle",
+    "agent_comms.turn_runner",
+    "agent_comms.acp",
+    "agent_comms.planning.goal_waits",
+    "agent_comms.transport.tools.goals",
+    "agent_comms.agent_events",
+    "agent_comms.input_event_source",
+    "agent_comms.runtime_info_source",
+    "agent_comms.turn_progress_reads",
+    "agent_comms.turn_progress",
+    "agent_comms.route_client",
+))
+def test_goal_publication_contracts_resolve_cold(first_module: str) -> None:
+    completed = subprocess.run(
+        (sys.executable, str(Path(__file__).with_name("goal_publication_probe.py")), first_module),
+        capture_output=True, text=True, timeout=30,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr

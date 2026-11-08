@@ -23,25 +23,24 @@ from agent_comms.errors import GoalRefused, StaleAttemptError, UnresolvedAttempt
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput
 from agent_comms.execution.turn_failure import BackendFailed, FailedTurnResolution
+from agent_comms.goal_ledger import (
+    AttemptRecord,
+    FailedTurnEvidence,
+    Generation,
+    GoalWorkDecision,
+    StorageUncertainError,
+)
 from agent_comms.nominal.field_codec import AttemptId, GoalId, MalformedRecord, RetryDecisionId
 from agent_comms.pi_counts import PiCount, UnreportedCount
 from agent_comms.pi_wire import PiUsage
 from agent_comms.planning.goal_actions import SetGoalAction
-from agent_comms.planning.goal_attempt_phase import (
-    ClaimedAttempt,
-    FailedAttempt,
-    SucceededAttempt,
-)
+from agent_comms.planning.goal_attempt_phase import ClaimedAttempt, FailedAttempt, SucceededAttempt
 from agent_comms.planning.goal_attempts import (
-    AttemptRecord,
-    Generation,
     GoalAttemptStore,
-    GoalWorkDecision,
+    LaunchPermit,
     ProviderUsageTotal,
     ReservationConflictError,
-    StorageUncertainError,
 )
-from agent_comms.planning.goal_failure_observation import FailedTurnEvidence
 from agent_comms.planning.goal_generation import (
     BlockedGeneration,
     CancelledGeneration,
@@ -531,7 +530,7 @@ def test_stopped_reserved_generation_refuses_its_missing_attempt(store):
     attempt_id = AttemptId.mint()
     generation = Generation(goal_id, 1, ReservedGeneration(), attempt_id)
     with pytest.raises(StorageUncertainError, match=attempt_id):
-        generation.lifecycle.stopped_permit(store, generation)
+        generation.lifecycle.stopped_permit(store, generation, LaunchPermit)
 
 
 def test_incomplete_current_schema_is_not_repaired_or_regranted(store):

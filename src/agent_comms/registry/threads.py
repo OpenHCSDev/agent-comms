@@ -9,12 +9,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import Annotated, ClassVar
 
 from agent_comms.activity import ObservedActivity
 from agent_comms.agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
-from agent_comms.messaging.channel_targets import DeclaredTag, Tag
-from agent_comms.context_segments.wake_values import WakeWorkContext
+from agent_comms.context_segments.wake_values import WakeWorkContext, WakeWorkSource
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import NoProcess, ProcessIdentity, ProcessState
 from agent_comms.execution.turn_lease import (
@@ -25,10 +24,12 @@ from agent_comms.execution.turn_lease import (
     TurnRecord,
     TurnState,
 )
+from agent_comms.goal_mutation import GoalFork
 from agent_comms.heartbeat_delivery import HeartbeatDelivery, OffHeartbeatDelivery
 from agent_comms.launch_runtime import ThreadLaunch
 from agent_comms.lifecycle import LifecycleState
 from agent_comms.lifecycle_capability import Executing
+from agent_comms.messaging.channel_targets import DeclaredTag, Tag
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     Argument,
@@ -48,7 +49,7 @@ from agent_comms.pi_vocabulary import (
     ThinkingChoice,
     ThinkingLevelField,
 )
-from agent_comms.planning.goals import GoalDeclaration, NoGoal
+from agent_comms.planning.goals import GoalConsentRequired, GoalDeclaration, NoGoal
 from agent_comms.projects.checkouts import Checkout, RepositoryReads
 from agent_comms.registration_inheritance import InheritApplied, InheritEmpty, InheritPrevious
 from agent_comms.registry.thread_creation import (
@@ -81,6 +82,7 @@ from agent_comms.registry.thread_presentation import (
     ThreadPresentation,
     UnavailableThreadOwnerBinding,
 )
+from agent_comms.registry.thread_reads import ThreadCheckoutSource, ThreadOwnerSource
 from agent_comms.registry.thread_status import ServiceThreadStatus, ThreadStatus
 from agent_comms.registry.thread_storage import (
     AssignedStorageRoots,
@@ -91,11 +93,6 @@ from agent_comms.registry.thread_text import NoParent, NoThreadText, ThreadParen
 from agent_comms.session_file import NoSessionFile, SessionFile
 from agent_comms.storage.locked_store import DurableFile, PatternFile
 from agent_comms.task_sources import TaskScope
-
-if TYPE_CHECKING:
-    from agent_comms.planning.goal_management import Goals
-    from agent_comms.projects.storage_rules import StorageRule
-    from agent_comms.registry.registry_document import RegistrySnapshot
 
 
 class ThreadCommandAvailability:
@@ -425,7 +422,7 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread")
             for location, view in parent.runtime.history_locations(parent, registry, visited):
                 yield location, location.view_from_fork(view, self.incarnation.wire_birth)
 
-    def contains_worktree(self, worktree: Checkout, rule: StorageRule) -> bool:
+    def contains_worktree(self, worktree: Checkout, rule: ThreadCheckoutSource[Thread]) -> bool:
         """A project this conversation ran in, or this unit's physical home and extra checkouts."""
         return self.ran_in(worktree) or worktree.resolved().path in rule.checkouts_of(
             self, RepositoryReads())
@@ -533,7 +530,7 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread")
         """The thread when it is a fork working inside its teammate's turn."""
         return ()
 
-    def owner_binding(self, snapshot: RegistrySnapshot) -> ThreadOwnerBinding:
+    def owner_binding(self, snapshot: ThreadOwnerSource[Thread]) -> ThreadOwnerBinding:
         return UnavailableThreadOwnerBinding()
 
     def presentation(self, status: ThreadStatus, ordinary: ThreadPresentation,
@@ -568,6 +565,10 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread")
         """The same declaration under another execution; replace() keeps the class."""
         return member(**{**{item.name: getattr(self, item.name) for item in fields(self)
                             if item.init}, **changes})
+
+    def require_goal_assignment(self, actor: ThreadIncarnation) -> None:
+        if not actor.represents(self.incarnation):
+            raise GoalConsentRequired(self, actor)
 
     def require_restart_owner(self, status) -> None:
         if not self.restart_candidates(status):
@@ -661,7 +662,7 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread")
     def task_scope(self) -> TaskScope:
         return TaskScope.for_goal(self.worktree, self.goal)
 
-    def wake_context(self, goals: Goals) -> WakeWorkContext:
+    def wake_context(self, goals: WakeWorkSource[Thread]) -> WakeWorkContext:
         return goals.wake_context(self)
 
     def continuation_goal(self, original: Thread) -> GoalDeclaration:
@@ -811,7 +812,7 @@ class NativeThread(Thread):
     def prepare_conversation[T](self, preparation: ConversationPreparation[T]) -> T:
         return preparation.native()
 
-    def owner_binding(self, snapshot: RegistrySnapshot) -> ThreadOwnerBinding:
+    def owner_binding(self, snapshot: ThreadOwnerSource[Thread]) -> ThreadOwnerBinding:
         return snapshot.status(self.name).native_owner_binding(snapshot, self)
 
     def presentation(self, status: ThreadStatus, ordinary: ThreadPresentation,
@@ -907,7 +908,9 @@ class SubagentThread(ExternalThread, declared_name="subagent_execution"):
         return replace(child, tags=DeclaredTag.for_child(parent.tags))
 
     @classmethod
-    def child_goal(cls, goals: Goals, parent: Thread) -> Callable[[Thread], GoalDeclaration]:
+    def child_goal(
+        cls, goals: GoalFork[Thread, GoalDeclaration], parent: Thread,
+    ) -> Callable[[Thread], GoalDeclaration]:
         return lambda prepared: prepared.goal
 
 
@@ -931,7 +934,9 @@ class ForkThread(NoChannelInbox, SubagentThread, declared_name="fork_execution")
         return replace(child, tags=parent.tags)
 
     @classmethod
-    def child_goal(cls, goals: Goals, parent: Thread) -> Callable[[Thread], GoalDeclaration]:
+    def child_goal(
+        cls, goals: GoalFork[Thread, GoalDeclaration], parent: Thread,
+    ) -> Callable[[Thread], GoalDeclaration]:
         return lambda prepared: goals.fork_goal(parent, prepared)
 
 
@@ -950,6 +955,7 @@ def current_thread(registry) -> Thread:
 
 # Thread's backend field is the lookup boundary. Declare both implementations
 # after the record graph, then reject incomplete declarations before any lookup.
-from agent_comms import pi_durable_backend, pi_native_backend  # noqa: E402, F401
+# noqa: E402, F401
+from agent_comms import pi_durable_backend, pi_native_backend
 
 AgentBackend.seal()

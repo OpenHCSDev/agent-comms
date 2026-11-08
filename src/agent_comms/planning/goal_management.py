@@ -1,53 +1,119 @@
 from __future__ import annotations
 
 import logging
-from abc import (
-    ABC,
-    abstractmethod,
-)
-from collections.abc import (
-    Callable,
-    Iterator,
-    Sequence,
-)
+from abc import ABC, abstractmethod
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
-from dataclasses import (
-    dataclass,
-    replace,
-)
+from dataclasses import dataclass, replace
 from functools import cached_property
 
-from agent_comms.planning.goal_waits import GoalExecutionInputs, GoalWait, StandbyReview
-from agent_comms.planning.order_words import StrikeReason
-from agent_comms.planning.orders import ProblemGoals, Assignment, RecordOrderHeadVerdict, JudgedCall, SendBackVerdict, Todo, TodoBatch, TodoCommand, TodoStore
 from agent_comms.agent_events import GoalChange, GoalChanged, GoalUnchanged
-from agent_comms.context_segments.wake_values import NoWakeGoalContext, WakeGoalContext, WakeWorkContext
+from agent_comms.context_segments.wake_values import (
+    NoWakeGoalContext,
+    WakeGoalContext,
+    WakeWorkContext,
+    WakeWorkSource,
+)
 from agent_comms.coordination.errors import StaleFence
-from agent_comms.errors import BirthChangedError, RelationViolationError, StaleAttemptError, TodoError, UnregisteredThreadError, UnresolvedAttemptError
-from agent_comms.planning.goal_actions import GoalAction, GoalActionContext, HeadReviewedOrderGoalAction, GoalPrecondition, GoalPublicationContext, RuntimeInvocable, SentBackOrderGoalAction, SetGoalAction
-from agent_comms.planning.goal_attempts import Generation
-from agent_comms.planning.goal_history import GoalHistoryEntry, RecordedGoalHistory
-from agent_comms.planning.goal_presentation import GoalExecution, GoalPublicationSnapshot, GoalSnapshot, IdleGoalExecution
-from agent_comms.planning.goal_records import GoalRecords
-from agent_comms.planning.goal_scope import AllGoals, GoalScope, OneGoal
-from agent_comms.planning.goals import Goal, GoalDeclaration
-from agent_comms.input_attempt import InputDeliveryScope, UNOBSERVED_DELIVERY_SCOPE, UnresolvedInputReference
+from agent_comms.errors import (
+    BirthChangedError,
+    RelationViolationError,
+    StaleAttemptError,
+    TodoError,
+    UnregisteredThreadError,
+    UnresolvedAttemptError,
+)
+from agent_comms.execution.native_input_owner import GoalLaunchOwner
+from agent_comms.execution.turn_lease import ActiveTurn, TurnDeclaration
+from agent_comms.goal_events import GoalChange, GoalChanged, GoalUnchanged
+from agent_comms.goal_ledger import FailedTurnEvidence, Generation
+from agent_comms.goal_mutation import (
+    GoalFailureProjection,
+    GoalFork,
+    GoalGenerationProjection,
+    GoalReadyGrantSource,
+    GoalStateProjection,
+    GoalTurnProjection,
+    GoalWaitProjection,
+)
+from agent_comms.goal_permit_source import GoalStoreSource
+from agent_comms.goal_wait_target import GoalWaitTarget
+from agent_comms.input_attempt import (
+    UNOBSERVED_DELIVERY_SCOPE,
+    InputDeliveryScope,
+    UnresolvedInputReference,
+)
 from agent_comms.input_disposition import DeliveryOverview
 from agent_comms.messaging.messages import Message
-from agent_comms.execution.native_input_owner import GoalLaunchOwner
 from agent_comms.nominal.field_codec import GoalId
 from agent_comms.owner_requests import NewestOpenRequest, RequestDirective
+from agent_comms.planning.goal_actions import (
+    GoalAction,
+    GoalActionContext,
+    GoalPrecondition,
+    GoalPublicationContext,
+    HeadReviewedOrderGoalAction,
+    RuntimeInvocable,
+    SentBackOrderGoalAction,
+    SetGoalAction,
+)
+from agent_comms.planning.goal_attempts import GoalAttemptStore
+from agent_comms.planning.goal_failure_observation import GoalFailureEvidence
+from agent_comms.planning.goal_history import GoalHistoryEntry, RecordedGoalHistory
+from agent_comms.planning.goal_presentation import (
+    AttemptFailedExecution,
+    AttemptUnresolvedExecution,
+    CompletedExecution,
+    GoalExecutionControls,
+    GoalPublicationSnapshot,
+    GoalSnapshot,
+    IdleGoalExecution,
+    PausedExecution,
+    RetryableBlockExecution,
+    RunnableExecution,
+    RunningExecution,
+    StandbyExecution,
+)
+from agent_comms.planning.goal_records import GoalRecords
+from agent_comms.planning.goal_scope import AllGoals, GoalScope, OneGoal
+from agent_comms.planning.goal_states import PauseSource
+from agent_comms.planning.goal_waits import GoalWait, StandbyReview
+from agent_comms.planning.goals import Goal, GoalDeclaration
+from agent_comms.planning.order_words import StrikeReason
+from agent_comms.planning.orders import (
+    Assignment,
+    JudgedCall,
+    ProblemGoals,
+    RecordOrderHeadVerdict,
+    SendBackVerdict,
+    Todo,
+    TodoBatch,
+    TodoCommand,
+    TodoStore,
+)
 from agent_comms.registry.registry_document import RegistryDocument, RegistrySnapshot
-from agent_comms.registry.threads import NativeThread, Thread
 from agent_comms.registry.thread_identity import ThreadIncarnation
-from agent_comms.execution.turn_lease import TurnDeclaration
+from agent_comms.registry.threads import NativeThread, Thread
 
 _LOG = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class GoalExecutionSource(GoalExecutionInputs):
+class GoalExecutionSource(
+    GoalStateProjection[GoalExecutionControls, PauseSource],
+    GoalFailureProjection[GoalExecutionControls, FailedTurnEvidence],
+    GoalGenerationProjection[GoalExecutionControls], GoalWaitProjection[GoalExecutionControls],
+    GoalTurnProjection[GoalExecutionControls, ActiveTurn],
+):
     """One read's original owners; never persisted or used as launch authority."""
+
+    goal: Goal
+    wait: GoalWait
+    generation: Generation
+    evidence: GoalFailureEvidence[FailedTurnEvidence]
+    owner: Thread
+    snapshot: RegistrySnapshot
+    agents: AgentActivity
 
     @cached_property
     def turn(self) -> TurnDeclaration:
@@ -57,7 +123,56 @@ class GoalExecutionSource(GoalExecutionInputs):
     def owner_alive(self) -> bool:
         return self.owner.process_alive
 
-    def execution(self) -> GoalExecution:
+    def active(self) -> GoalExecutionControls:
+        return self.wait.execution(self)
+
+    def generation_execution(self) -> GoalExecutionControls:
+        return self.generation.lifecycle.execution(self)
+
+    def idle_execution(self) -> GoalExecutionControls:
+        return self.generation.lifecycle.idle_execution(self)
+
+    def active_turn_execution(self, turn: ActiveTurn) -> GoalExecutionControls:
+        if self.owner_alive and turn.owner == self.owner.process_identity:
+            return RunningExecution(self.goal.id)
+        return self.idle_execution()
+
+    def standby_execution(self) -> GoalExecutionControls:
+        targets = tuple(
+            GoalWaitTarget(target.incarnation.renamed(self.snapshot.canonical_name(target.incarnation.name)))
+            for target in self.wait.targets
+        )
+        inactive = tuple(
+            target for target in targets
+            if not self.agents.is_working(target.incarnation, self.snapshot)
+        )
+        return StandbyExecution(self.goal.id, targets, inactive)
+
+    def paused(self, source: PauseSource) -> GoalExecutionControls:
+        return PausedExecution(self.goal.id, source)
+
+    def blocked(self, reason: str) -> GoalExecutionControls:
+        return RetryableBlockExecution(self.goal.id, reason)
+
+    def completed(self) -> GoalExecutionControls:
+        return CompletedExecution(self.goal.id)
+
+    def turn_execution(self) -> GoalExecutionControls:
+        return self.turn.execution(self)
+
+    def unresolved(self) -> GoalExecutionControls:
+        return AttemptUnresolvedExecution(self.goal.id)
+
+    def runnable(self) -> GoalExecutionControls:
+        return RunnableExecution(self.goal.id)
+
+    def failed(self, evidence: FailedTurnEvidence) -> GoalExecutionControls:
+        return AttemptFailedExecution(self.goal.id, evidence)
+
+    def failed_execution(self) -> GoalExecutionControls:
+        return self.evidence.execution(self)
+
+    def execution(self) -> GoalExecutionControls:
         return self.goal.state.execution(self)
 
 
@@ -110,7 +225,10 @@ class BornGoalTarget(GoalTarget):
         return thread
 
 
-class Goals(GoalRecords, ProblemGoals):
+class Goals(
+    GoalRecords, ProblemGoals, WakeWorkSource[Thread], GoalFork[Thread, GoalDeclaration],
+    GoalStoreSource[GoalAttemptStore], GoalReadyGrantSource[NativeThread, Generation],
+):
     def fork_goal(self, parent: Thread, child: Thread) -> Goal:
         """Create a teammate's child goal from its parent's active work."""
         text = ('\n'.join(goal.text for goal in parent.goal.active())
@@ -268,7 +386,7 @@ class Goals(GoalRecords, ProblemGoals):
             original_assignment=owner.task, current_goal=current_goal,
         )
 
-    def goal_execution(self, name: str) -> GoalExecution:
+    def goal_execution(self, name: str) -> GoalExecutionControls:
         return self._goal_snapshot(name).execution
 
     def goal_changed(self, name: str, previous: GoalPublicationSnapshot) -> GoalChange:

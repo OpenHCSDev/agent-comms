@@ -6,6 +6,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.goal_wait_target import GoalWaitTarget
 from agent_comms.nominal.field_codec import GoalWaitId, TurnId
 from agent_comms.planning.goal_actions import (
     EditGoalAction,
@@ -15,14 +16,11 @@ from agent_comms.planning.goal_actions import (
     SetGoalAction,
     StandbyGoalAction,
 )
-from agent_comms.planning.goal_presentation import (
-    GoalWaitTarget,
-    RunnableExecution,
-    StandbyExecution,
-)
+from agent_comms.planning.goal_presentation import RunnableExecution, StandbyExecution
 from agent_comms.planning.goal_scope import OneGoal
 from agent_comms.planning.goal_waits import GoalWaits, NoGoalWait, RecordedGoalWait
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_status import PausedBridgeThreadStatus
 from agent_comms.registry.threads import NativeThread
 from goal_owner_fixture import canonical_goal_wire
 
@@ -198,8 +196,6 @@ def test_standby_refuses_canonical_reply_that_arrived_before_wait(tmp_path, read
 
 @pytest.mark.parametrize("bridge_alive", [True, False])
 def test_standby_on_a_paused_bridge_waits_only_while_its_process_lives(tmp_path, bridge_alive):
-    from agent_comms.registry.thread_status import PausedBridgeThreadStatus
-
     comms = live_wire(tmp_path, "waiter")
     teammate = NativeThread("teammate", frozenset(), Checkout(tmp_path))
     if bridge_alive:

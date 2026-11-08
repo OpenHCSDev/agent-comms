@@ -55,10 +55,7 @@ from agent_comms.publisher import InitialWrites, ParticipantPublisher
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.registry.thread_model import DeclaredModel
-from agent_comms.registry.thread_text import (
-    ForkedParent,
-    GivenThreadText,
-)
+from agent_comms.registry.thread_text import ForkedParent, GivenThreadText
 from agent_comms.registry.threads import NativeThread, Thread
 from agent_comms.rule_deal import ReadSpan, RuleDeal, SessionAudit, StartedDeal
 from agent_comms.storage.locked_store import RegistryFile
@@ -547,8 +544,8 @@ def ledger_one_failure_short(root: Path) -> Path:
     from contextlib import closing
 
     from agent_comms.execution.turn_failure import TurnFailure
+    from agent_comms.goal_ledger import FailedTurnEvidence
     from agent_comms.planning.goal_attempts import GoalAttemptStore
-    from agent_comms.planning.goal_failure_observation import FailedTurnEvidence
     from agent_comms.storage.typed_table import sql_literal
 
     directory = root / GoalAttemptStore.root_directory

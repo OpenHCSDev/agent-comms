@@ -7,110 +7,225 @@ import sqlite3
 import subprocess
 import sys
 import time
-from abc import (
-    ABC,
-    abstractmethod,
-)
-from collections.abc import (
-    Callable,
-    Collection,
-    Iterable,
-    Iterator,
-    Mapping,
-    Sequence,
-)
+from abc import ABC, abstractmethod
+from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from contextvars import copy_context
-from dataclasses import (
-    dataclass,
-    field,
-    fields,
-    replace,
-)
-from datetime import (
-    UTC,
-    datetime,
-)
-from functools import (
-    cached_property,
-    partial,
-)
-from itertools import (
-    batched,
-    islice,
-)
+from dataclasses import dataclass, field, fields, replace
+from datetime import UTC, datetime
+from functools import cached_property, partial
+from itertools import batched, islice
 from math import ceil
 from pathlib import Path
 from statistics import median
 from subprocess import TimeoutExpired
-from types import (
-    MappingProxyType,
-    get_original_bases,
-)
-from typing import (
-    Annotated,
-    ClassVar,
-    Self,
-    cast,
-    get_args,
-    get_origin,
-)
+from types import MappingProxyType, get_original_bases
+from typing import Annotated, ClassVar, Self, cast, get_args, get_origin
 
-from agent_comms_hooks import ToolRefusedError
-
-from agent_comms.planning.delivery_evidence import BranchPointCheck, DeliveryEvidence, EvidenceRequirements, FileDeliveryEvidence, FreshMainCheck, NoDeliveryEvidence, SOURCE_READ_FAILURES, TodoProblems, WorkingEvidence
-from agent_comms.planning.order_words import DirectiveText, GrowthReason, OrderCorrectionReason, PlainText, StrikeReason, VerdictReason
-from agent_comms.planning.problem_findings import ExpectedProblem, FixShape, NoOrderDeletion, NoSuccessor, OrderDeletion, ProblemFinding, Successor, UnlocatedProblemFinding
-from agent_comms.planning.progress_readings import DistanceReading, DistanceReadings, Moving, ProgressPoint
-from agent_comms.planning.pull_requests import BehindMergeBlock, BranchDeliveryMerge, ConflictMergeBlock, DeliveryMerge, FailedCheckMergeBlock, MainDeliveryMerge, MergeBlock, MergedLink, MissingReviewMergeBlock, PendingCheckMergeBlock, PullRequestCommit, PullRequestHeadRevision, PullRequestLink, PullRequestUpdatePage, RefusedCarryMergeBlock, UnmergedDeliveryMerge, WaitingMergeBlock, _github_time
-from agent_comms.planning.todo_refusals import ForeignRequest, HolderConsentRequired, SharedWorktreeRefusal, TeammateOccupied, TodoStoreUnwritable
-from agent_comms.build_identity import BuildIdentity, CommitInstallation, InstalledBuild, RecordedBuildIdentity, UnrecordedBuildIdentity
+from agent_comms.build_identity import (
+    BuildIdentity,
+    CommitInstallation,
+    InstalledBuild,
+    RecordedBuildIdentity,
+    UnrecordedBuildIdentity,
+)
 from agent_comms.bus import BusReader
 from agent_comms.bus_publication import AgentOrigin
-from agent_comms.change_report import CitationProject, CitedRevisions, CommitRevision, Declaration, FileLine, MainRevision, NoSourceReference, OrderRoots, SourceReference, SourceRevision, SourceRoots, SourceText, WorkingTree
+from agent_comms.change_report import (
+    CitationProject,
+    CitedRevisions,
+    CommitRevision,
+    Declaration,
+    FileLine,
+    MainRevision,
+    NoSourceReference,
+    OrderRoots,
+    SourceReference,
+    SourceRevision,
+    SourceRoots,
+    SourceText,
+    WorkingTree,
+)
+from agent_comms.command import Command
+from agent_comms.coordination.session import NativeCapture
+from agent_comms.errors import MissingSourceLine, TodoError
+from agent_comms.execution.child_process import ChildResult, OrderCheckFailedError
+from agent_comms.head_review import (
+    HeadReview,
+    HeadReviewOrder,
+    HeadReviewRelation,
+    HeadReviewStatus,
+    IntegrationInput,
+    MergeArm,
+    MergeHeadReview,
+    PreparedHeadReview,
+    PullRequestHead,
+    ReadPullRequestHead,
+    UnpromotedHeadReview,
+    UntouchedMergeArm,
+)
+from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.lifecycle_capability import LifecycleCapability, Pending
 from agent_comms.messaging.channel_targets import (
     CommandTarget,
     CommsTag,
     IncarnationThreadTarget,
     NamedTarget,
 )
-from agent_comms.execution.child_process import ChildResult, OrderCheckFailedError
-from agent_comms.command import Command
-from agent_comms.coordination.session import NativeCapture
-from agent_comms.messaging.published_bus import PublishedBus
-from agent_comms.errors import MissingSourceLine, TodoError
-from agent_comms.planning.goal_scope import OneGoal
-from agent_comms.planning.goals import CheckedCommit, OrderCheck
-from agent_comms.head_review import HeadReview, HeadReviewOrder, HeadReviewRelation, HeadReviewStatus, IntegrationInput, MergeArm, MergeHeadReview, PreparedHeadReview, PullRequestHead, ReadPullRequestHead, UnpromotedHeadReview, UntouchedMergeArm
-from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.lifecycle_capability import LifecycleCapability, Pending
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import InfoKind, Message
+from agent_comms.messaging.published_bus import PublishedBus
 from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.nominal.field_codec import DefaultNonNull, Description, DisclosedRecord, FieldCodec, GitCommitText, GoalId, HuntId, MalformedRecord, MessageId, NullMember, OrderId, RecordProblems, ThreadLookup, ToolCallId, WireOmitDefault, WireTransient, boundary_decoder
+from agent_comms.nominal.field_codec import (
+    DefaultNonNull,
+    Description,
+    DisclosedRecord,
+    FieldCodec,
+    GitCommitText,
+    GoalId,
+    HuntId,
+    MalformedRecord,
+    MessageId,
+    NullMember,
+    OrderId,
+    RecordProblems,
+    ThreadLookup,
+    ToolCallId,
+    WireOmitDefault,
+    WireTransient,
+    boundary_decoder,
+)
+from agent_comms.order_phase import OrderPhase, UnplannedPhase
 from agent_comms.order_runs import OrderRun
 from agent_comms.order_story import ProblemStory, StoryEvent, StoryLine, StorySource
-from agent_comms.owner_requests import OpenRequestState, OwnerRequestId, RequestAtRevision, RequestDirective, RequestLink, RequestSelection, RequestState
-from agent_comms.planning.plan_phases import OrderPhase, UnplannedPhase
+from agent_comms.owner_requests import (
+    OpenRequestState,
+    OwnerRequestId,
+    RequestAtRevision,
+    RequestDirective,
+    RequestLink,
+    RequestSelection,
+    RequestState,
+)
+from agent_comms.planning.delivery_evidence import (
+    SOURCE_READ_FAILURES,
+    BranchPointCheck,
+    DeliveryEvidence,
+    EvidenceRequirements,
+    FileDeliveryEvidence,
+    FreshMainCheck,
+    NoDeliveryEvidence,
+    TodoProblems,
+    WorkingEvidence,
+)
+from agent_comms.planning.goal_scope import OneGoal
+from agent_comms.planning.goals import CheckedCommit, OrderCheck
+from agent_comms.planning.order_words import (
+    DirectiveText,
+    GrowthReason,
+    OrderCorrectionReason,
+    PlainText,
+    StrikeReason,
+    VerdictReason,
+)
+from agent_comms.planning.problem_findings import (
+    ExpectedProblem,
+    FixShape,
+    NoOrderDeletion,
+    NoSuccessor,
+    OrderDeletion,
+    ProblemFinding,
+    Successor,
+    UnlocatedProblemFinding,
+)
+from agent_comms.planning.progress_readings import (
+    DistanceReading,
+    DistanceReadings,
+    Moving,
+    ProgressPoint,
+)
+from agent_comms.planning.pull_requests import (
+    BehindMergeBlock,
+    BranchDeliveryMerge,
+    ConflictMergeBlock,
+    DeliveryMerge,
+    FailedCheckMergeBlock,
+    MainDeliveryMerge,
+    MergeBlock,
+    MergedLink,
+    MissingReviewMergeBlock,
+    PendingCheckMergeBlock,
+    PullRequestCommit,
+    PullRequestHeadRevision,
+    PullRequestLink,
+    PullRequestUpdatePage,
+    RefusedCarryMergeBlock,
+    UnmergedDeliveryMerge,
+    WaitingMergeBlock,
+    _github_time,
+)
+from agent_comms.planning.todo_refusals import (
+    ForeignRequest,
+    HolderConsentRequired,
+    SharedWorktreeRefusal,
+    TeammateOccupied,
+    TodoStoreUnwritable,
+)
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.progress_claims import MergedClaim, ProgressClaim, WorkingClaim
+from agent_comms.projects.checkouts import (
+    Checkout,
+    CommitFilter,
+    CommitsNaming,
+    EveryCommit,
+    RepositoryReads,
+)
+from agent_comms.projects.git_errors import FailedGitCommand, SourceReadFailure
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.projects.storage_rules import CheckoutAllocation, StorageRule
 from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot, TeamProject
 from agent_comms.registry.registry_store import RegistryStore
+from agent_comms.registry.thread_identity import (
+    CoreWatcherIncarnation,
+    RecordedThreadIncarnation,
+    ThreadIncarnation,
+)
 from agent_comms.registry.threads import Thread
-from agent_comms.projects.git_errors import FailedGitCommand, SourceReadFailure
-from agent_comms.projects.repo import Repo
-from agent_comms.projects.checkouts import Checkout, CommitFilter, CommitsNaming, EveryCommit, RepositoryReads
-from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.slop import DeclarationDerivation, Slop
-from agent_comms.storage.typed_table import CapturedRows, Column, DurableStore, DurableTables, ExpressionIndex, ForeignKey, Generated, Index, NoDelete, NoUpdate, SharedFileTables, StoreRows, TableReference, TextStorage, TypedRow, TypedTable
-from agent_comms.projects.storage_rules import CheckoutAllocation, StorageRule
+from agent_comms.storage.typed_table import (
+    CapturedRows,
+    Column,
+    DurableStore,
+    DurableTables,
+    ExpressionIndex,
+    ForeignKey,
+    Generated,
+    Index,
+    NoDelete,
+    NoUpdate,
+    SharedFileTables,
+    StoreRows,
+    TableReference,
+    TextStorage,
+    TypedRow,
+    TypedTable,
+)
 from agent_comms.team.rule_file import RuleFile
-from agent_comms.registry.thread_identity import CoreWatcherIncarnation, RecordedThreadIncarnation, ThreadIncarnation
 from agent_comms.tool_result import ToolResult
-from agent_comms.work_branches import BranchComparison, BranchDifference, CommitBase, SourceGrowth, WorkBranchError, WorkBranches
+from agent_comms.work_branches import (
+    BranchComparison,
+    BranchDifference,
+    CommitBase,
+    SourceGrowth,
+    WorkBranchError,
+    WorkBranches,
+)
+from agent_comms_hooks import ToolRefusedError
+
 
 class ProblemGoals(ABC):
     """The goal-owner operations consumed by order transitions."""

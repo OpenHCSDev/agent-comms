@@ -13,9 +13,11 @@ from typing import Self
 
 from agent_comms.active_route import CommsRoute
 from agent_comms.agent_activity import AgentActivity
+from agent_comms.agent_events import RuntimeInfoObservation
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.registry.registration import Registration
 from agent_comms.root_runtime import RootRuntime
+from agent_comms.runtime_info_source import RuntimeInfoSource
 from agent_comms.storage.locked_store import RegistryFile
 
 
@@ -37,8 +39,10 @@ class RouteClient:
         yield cls(route, **stores)
 
 
-class ActivityClient(RouteClient):
+class ActivityClient(RouteClient, RuntimeInfoSource[RuntimeInfoObservation]):
     """The one store a turn-phase report writes."""
+
+    agents: AgentActivity
 
     def __init__(self, route: CommsRoute) -> None:
         super().__init__(route)

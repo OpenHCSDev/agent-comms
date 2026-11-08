@@ -23,6 +23,7 @@ from agent_comms.coordination.errors import DMPaintedBoundChanged, StaleRevision
 from agent_comms.display_order import ChannelSort, NameChannelSort
 from agent_comms.display_references import CurrentDisplayReferences
 from agent_comms.external_transcript import ExternalTranscript
+from agent_comms.goal_execution import GoalExecution
 from agent_comms.mentions import MentionCandidate
 from agent_comms.message_notification import MessageNotification, NotificationPass
 from agent_comms.messaging.message_reference import MessageReference
@@ -44,7 +45,6 @@ from agent_comms.nominal.field_codec import (
     projected,
 )
 from agent_comms.notification_assignment import NotificationAssignment
-from agent_comms.planning.goal_presentation import GoalExecution
 from agent_comms.planning.goal_waits import GoalWaits
 from agent_comms.planning.orders import TodoStore
 from agent_comms.messaging.read_basis import (

@@ -1,32 +1,18 @@
 from __future__ import annotations
 
 import time
-from abc import (
-    ABC,
-    abstractmethod,
-)
-from collections.abc import (
-    Callable,
-    Iterable,
-    Iterator,
-)
-from dataclasses import (
-    dataclass,
-    field,
-    replace,
-)
+from abc import ABC, abstractmethod
+from collections.abc import Callable, Iterable, Iterator
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import (
-    TYPE_CHECKING,
-    Annotated,
-    ClassVar,
-)
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from agent_comms.activity import ObservedActivity
 from agent_comms.coordination.session import NativeCapture
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity, ProcessState
 from agent_comms.execution.turn_phase import IdlePhase, PreparingPhase, TurnPhase
+from agent_comms.goal_mutation import GoalTurnProjection
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.lifecycle_capability import Executing, LifecycleCapability
 from agent_comms.messaging.message_reference import MessageReference
@@ -39,7 +25,6 @@ from agent_comms.nominal.field_codec import (
     WireTransient,
     boundary_decoder,
 )
-from agent_comms.planning.goal_presentation import RunningExecution
 from agent_comms.registry.thread_identity import (
     NoObservedTurn,
     ObservedTurn,
@@ -61,8 +46,6 @@ from agent_comms.storage.store_files import DependentStateTier, SingleFileStore
 
 if TYPE_CHECKING:
     from agent_comms.messaging.sending import Messaging
-    from agent_comms.planning.goal_management import GoalExecutionSource
-    from agent_comms.planning.goal_presentation import GoalExecution
     from agent_comms.registry.registry_document import RegistrySnapshot
     from agent_comms.registry.registry_store import RegistryStore
     from agent_comms.registry.threads import Thread
@@ -76,7 +59,7 @@ class TurnDeclaration(LifecycleCapability, SubclassUnion, affix=""):
     started_at: float | None
 
     @abstractmethod
-    def execution(self, source: GoalExecutionSource) -> GoalExecution: ...
+    def execution[Execution](self, source: GoalTurnProjection[Execution, ActiveTurn]) -> Execution: ...
 
     def project_activity(self, activity: ObservedActivity) -> ObservedActivity:
         return self.phase.project_activity(activity)
@@ -136,8 +119,8 @@ class NoTurn(NullMember, TurnDeclaration):
     started_at = None
     reported_turn: ClassVar[ReportedTurnState] = NoReportedTurn()
 
-    def execution(self, source: GoalExecutionSource) -> GoalExecution:
-        return source.generation.lifecycle.idle_execution(source)
+    def execution[Execution](self, source: GoalTurnProjection[Execution, ActiveTurn]) -> Execution:
+        return source.idle_execution()
 
     def require_active(self) -> ActiveTurn:
         raise RelationViolationError("registry owner has no active turn")
@@ -263,10 +246,8 @@ class ActiveTurn(Executing, RecordMember, TurnDeclaration):
     claimed_generation: TurnGeneration = UnrecordedGeneration()
     turn_generation: TurnGeneration = UnrecordedGeneration()
     phase: TurnPhase = field(default_factory=PreparingPhase)
-    def execution(self, source: GoalExecutionSource) -> GoalExecution:
-        if source.owner_alive and self.owner == source.owner.process_identity:
-            return RunningExecution(source.goal.id)
-        return source.generation.lifecycle.idle_execution(source)
+    def execution[Execution](self, source: GoalTurnProjection[Execution, ActiveTurn]) -> Execution:
+        return source.active_turn_execution(self)
 
     @property
     def reported_turn(self) -> ReportedTurnState:

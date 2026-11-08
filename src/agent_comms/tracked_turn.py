@@ -11,10 +11,10 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING
 
 from agent_comms import pi_commands as commands
 from agent_comms import pi_events as pi
+from agent_comms.acp_failure import ProviderRetryResult
 from agent_comms.agent_events import AgentEvent
 from agent_comms.backend import TurnSession
 from agent_comms.coordination.coordinator import Coordination
@@ -30,36 +30,27 @@ from agent_comms.execution.native_pi import (
     NativePiRpcLaunch,
     NativeTurnResult,
 )
-from agent_comms.execution.native_prompt_send import (
-    UNGUARDED_PROMPT,
-    PromptBoundary,
-    PromptSendFailure,
-)
+from agent_comms.execution.native_prompt_send import PromptSendFailure
 from agent_comms.execution.native_startup import NativeStartup
 from agent_comms.execution.selected.session import SelectedSession
 from agent_comms.execution.turn_context import InputContributionCoordinates
+from agent_comms.execution.turn_failure import TurnFailure
+from agent_comms.execution.turn_inbox import TurnInbox
 from agent_comms.execution.turn_watchdog import DEFAULT_MODEL_WAIT, TurnWait, TurnWaitExpired
 from agent_comms.external_transcript import DraftPublication, DraftRow
+from agent_comms.following_input_contracts import FollowingPromptBoundary, FollowingTurnSource
 from agent_comms.following_inputs import FollowingInputs
 from agent_comms.installer.native_package import VerifiedNativePackage
+from agent_comms.native_execution import NativeExecution
 from agent_comms.nominal.field_codec import InputId, MalformedRecord
+from agent_comms.owned_send import OwnedSend
+from agent_comms.pi_payloads import UserMessage
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.pi_vocabulary import NoThinkingOverride, ThinkingChoice
 from agent_comms.request_progress import NO_REQUEST_OBSERVER, RequestObserver
 from agent_comms.storage.maintenance_barrier import UNCOORDINATED_INGRESS, MaintenanceIngress
 from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.transport.native_tool_transport import NativeToolMode
-
-if TYPE_CHECKING:
-    from agent_comms.acp_failure import ProviderRetryResult
-    from agent_comms.coordinated_runtime import NativeExecution
-    from agent_comms.cursor_publication import CursorDelivery
-    from agent_comms.execution.turn_failure import TurnFailure
-    from agent_comms.execution.turn_inbox import TurnInbox
-    from agent_comms.owned_send import OwnedSend
-    from agent_comms.pi_native_backend import PersistentPiSession
-    from agent_comms.pi_payloads import UserMessage
-
 
 NativeObserver = Callable[[pi.PiEvent | AgentEvent | ObservedAttestation], Awaitable[None]]
 
@@ -198,7 +189,7 @@ class AmbiguousTrackedTerminal(PendingTrackedTerminal):
         return self
 
 
-class TrackedTurnSession(TurnSession):
+class TrackedTurnSession(TurnSession, FollowingTurnSource[OwnedSend]):
     """Own one strict input/proof exchange; never grant publication or retry authority."""
 
     def __init__(
@@ -208,14 +199,13 @@ class TrackedTurnSession(TurnSession):
         *,
         model: SelectedModel,
         model_wait: TurnWait,
-        prompt_send_boundary,
+        prompt_send_boundary: FollowingPromptBoundary,
         ingress: MaintenanceIngress,
         startup: NativeStartup,
         selected_tool_mode,
         observe_event: NativeObserver,
         request_observer: RequestObserver,
-        pi_session: PersistentPiSession,
-        cursor_delivery: CursorDelivery,
+        execution: NativeExecution,
         following: FollowingInputs,
     ):
         # The owner's Pi session child: an idle child left by its previous
@@ -224,11 +214,11 @@ class TrackedTurnSession(TurnSession):
             launch,
             command,
             tool_mode=selected_tool_mode,
-            cursor_delivery=cursor_delivery,
+            cursor_delivery=execution.cursor_delivery,
             model_wait=model_wait,
             startup=startup,
             request_observer=request_observer,
-            native_session=pi_session,
+            native_session=execution.pi_session,
         )
         self.retainable = False
         self.following = following
@@ -253,7 +243,7 @@ class TrackedTurnSession(TurnSession):
         thinking_level: type[ThinkingChoice] = NoThinkingOverride,
         environment: Mapping[str, str] = MappingProxyType({}),
         model_wait: TurnWait = DEFAULT_MODEL_WAIT,
-        prompt_send_boundary: PromptBoundary = UNGUARDED_PROMPT,
+        prompt_send_boundary: FollowingPromptBoundary,
         ingress: MaintenanceIngress = UNCOORDINATED_INGRESS,
         startup: NativeStartup,
         selected_tool_mode: NativeToolMode,
@@ -298,8 +288,7 @@ class TrackedTurnSession(TurnSession):
             selected_tool_mode=selected_tool_mode,
             observe_event=observe_event,
             request_observer=request_observer,
-            pi_session=execution.pi_session,
-            cursor_delivery=execution.cursor_delivery,
+            execution=execution,
             following=following,
         )
         return await turn.complete()

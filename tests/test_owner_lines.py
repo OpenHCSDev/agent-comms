@@ -5,6 +5,7 @@ import pytest
 
 from agent_comms.coordination.errors import Refused
 from agent_comms.errors import StaleAttemptError, UnresolvedAttemptError
+from agent_comms.goal_ledger import MissingGoalGenerationError, StorageUncertainError
 from agent_comms.nominal.field_codec import GoalId
 from agent_comms.owner_protocol import (
     ClientLine,
@@ -17,11 +18,7 @@ from agent_comms.owner_protocol import (
     OwnerRpcError,
     OwnerUpdate,
 )
-from agent_comms.planning.goal_attempts import (
-    MissingGoalGenerationError,
-    ReservationConflictError,
-    StorageUncertainError,
-)
+from agent_comms.planning.goal_attempts import ReservationConflictError
 from agent_comms.runtime_server import ClientPermissionResponse
 
 

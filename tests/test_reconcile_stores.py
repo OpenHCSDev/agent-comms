@@ -34,6 +34,7 @@ from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.session import CoordinationSession
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput
+from agent_comms.goal_ledger import FailedTurnEvidence
 from agent_comms.installer.backup import StoreBackup, bus_files
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.practice import PracticeCopy
@@ -48,7 +49,6 @@ from agent_comms.messaging.messages import (
 )
 from agent_comms.nominal.field_codec import ClaimId, FieldCodec, MessageId
 from agent_comms.planning.goal_attempts import GoalAttemptStore
-from agent_comms.planning.goal_failure_observation import FailedTurnEvidence
 from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
 from agent_comms.storage.locked_store import LiveFilesRequest, RegistryFile, SQLiteFile
 from agent_comms.storage.maintenance_barrier import (
@@ -467,10 +467,7 @@ def test_an_opening_refuses_a_drifted_store_and_reconcile_stores_carries_it(priv
 def test_a_dropped_closed_scan_column_is_named_by_the_refusal_and_carried(tmp_path):
     """Install of #3458: the closed scan stopped storing `oldest`. The refusal names the
     table and both shapes, and the reconcile drops the declared column, keeping the row."""
-    from agent_comms.planning.orders import (
-    StoredClosedRepository,
-    TodoStore,
-)
+    from agent_comms.planning.orders import StoredClosedRepository, TodoStore
 
     with TodoStore(tmp_path).writing():
         pass

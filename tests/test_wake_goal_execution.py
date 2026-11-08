@@ -11,6 +11,7 @@ from agent_comms.context_segments.wake_values import (
     WakeWorkContext,
 )
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.goal_execution import GoalExecution
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.planning.goal_actions import (
     BlockedGoalAction,
@@ -23,7 +24,6 @@ from agent_comms.planning.goal_actions import (
 )
 from agent_comms.planning.goal_presentation import (
     CompletedExecution,
-    GoalExecution,
     PausedExecution,
     RetryableBlockExecution,
     RunnableExecution,

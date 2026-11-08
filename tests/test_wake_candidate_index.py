@@ -6,7 +6,9 @@ import pytest
 
 from agent_comms.bus import BusRecord, PublicRecord
 from agent_comms.execution.input_drain import NoPrivateObservation, PrivateObservation
+from agent_comms.goal_wait_target import GoalWaitTarget
 from agent_comms.messaging.messages import InfoKind, Message, NoticeRole
+from agent_comms.messaging.read_basis import ChannelDisplayScope, ConversationCursor
 from agent_comms.messaging.read_ledger import ReadLedger
 from agent_comms.nominal.field_codec import GoalId, GoalWaitId
 from agent_comms.notification_assignment import (
@@ -16,11 +18,9 @@ from agent_comms.notification_assignment import (
 )
 from agent_comms.notification_evidence import AllOutcomes
 from agent_comms.notification_progress import AnsweredResponse
-from agent_comms.planning.goal_presentation import GoalWaitTarget
 from agent_comms.planning.goal_waits import RecordedGoalWait
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.proven_source_coverage import SourcePrefix
-from agent_comms.messaging.read_basis import ChannelDisplayScope, ConversationCursor
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.threads import NativeThread

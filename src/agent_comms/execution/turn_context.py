@@ -3,25 +3,13 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from abc import (
-    ABC,
-    abstractmethod,
-)
+from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from dataclasses import (
-    dataclass,
-    field,
-    replace,
-)
-from importlib.resources import files
+from dataclasses import dataclass, field, replace
+from functools import partial
 from pathlib import Path
 from types import MappingProxyType
-from typing import (
-    TYPE_CHECKING,
-    Annotated,
-    ClassVar,
-    Self,
-)
+from typing import TYPE_CHECKING, Annotated, Self
 
 from pydantic import JsonValue
 
@@ -31,6 +19,7 @@ from agent_comms.cli_result import CliResult
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity
 from agent_comms.execution.turn_item import NativeItemId, PiRequestKey
+from agent_comms.instruction_bytes import InstructionBytes
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
@@ -51,7 +40,6 @@ from agent_comms.tool_result import DeclaredReply, ToolResult
 from agent_comms.wake_policy import WakePolicy
 
 if TYPE_CHECKING:
-    from agent_comms.context_store import RecordedContextState
     from agent_comms.input_attempt import StoredInput
     from agent_comms.presentation import ThreadView
     from agent_comms.registry.threads import Thread
@@ -279,9 +267,8 @@ class InstructionFile:
 
     @classmethod
     def read(cls, name: str) -> InstructionFile:
-        path = files(instructions) / name
-        raw = path.read_bytes()
-        return cls(raw.decode(), FileProvenance(str(path), hashlib.sha256(raw).hexdigest()))
+        read = InstructionBytes.read(name)
+        return cls(read.text, FileProvenance(str(read.path), hashlib.sha256(read.raw).hexdigest()))
 
     def render(self, values: dict[str, object]) -> str:
         return self.content.format_map(values)
@@ -979,96 +966,6 @@ class SystemLayerSegment(PublicInstructionAnnotations, MeasuredNativeSegment):
 
 
 @dataclass(frozen=True, kw_only=True)
-class NativeMessages:
-    # These are the SDK's exact *provider* messages, including opaque extension
-    # and provider fields. Core does not decode them as its event/message subset.
-    messages: tuple[dict[str, JsonValue], ...]
-
-    @classmethod
-    def recorded_parts(cls, original: SegmentManifest) -> tuple[SegmentManifest, ...]:
-        # SDK capture emits one same-kind child per provider message. A single
-        # message's logical input-range annotations have other declared kinds.
-        if all(part.kind is cls for part in original.contributors):
-            return original.contributors
-        return ()
-
-    def provider_value(self):
-        return list(self.messages)
-
-    def public_text(self) -> str:
-        from agent_comms.pi_payloads import PiMessage
-
-        return "\n".join(PiMessage.from_wire(message).text for message in self.messages)
-
-    def source_ranges(self) -> tuple[ContributionCoordinates, ...]:
-        from agent_comms.pi_payloads import PiMessage
-
-        offset = 0
-        ranges = []
-        parts = self.recorded_parts(self.measured_manifest())
-        for index, message in enumerate(self.messages):
-            text = PiMessage.from_wire(message).text
-            provenance = parts[index].provenance if parts else self.provenance
-            ranges.append(ContributionCoordinates.capture(type(self), provenance, offset, text))
-            offset += len(text.encode("utf-8")) + 1
-        return tuple(ranges)
-
-    def render_into(self, prompt_parts, provider):
-        provider.setdefault("messages", []).extend(self.messages)
-
-
-class NativeAnnotations(NativeMessages):
-    """A transcript span keeps the disclosure policy of its original native message."""
-
-    def disclosure_for(self, span: ContextSpan):
-        from agent_comms.pi_payloads import PiMessage
-
-        for source, message in zip(self.source_ranges(), self.messages, strict=True):
-            if source.contains(span.coordinates):
-                return PiMessage.from_wire(message).disclosure_for(span)
-        raise ValueError("Annotation names no original native message")
-
-
-@dataclass(frozen=True, kw_only=True)
-class TranscriptSegment(NativeAnnotations, MeasuredNativeSegment):
-    keyframe_interval: ClassVar[int] = 32
-
-    @classmethod
-    def record_manifest(
-        cls, original: SegmentManifest, previous: SegmentRecording,
-        *, recording_turn: int = 1,
-    ) -> tuple[RecordedSegmentManifest, tuple[ContextEntryManifest, ...]]:
-        if not original.contributors:
-            return super().record_manifest(original, previous, recording_turn=recording_turn)
-        provenance = tuple(source for source in original.provenance
-                           for source in source.turn_recording())
-        header = replace(original, provenance=provenance, contributors=(), captured_text=())
-        references = tuple(ContextEntryReference.from_sources(child.sources)
-                           for child in original.contributors)
-        if not recording_turn % cls.keyframe_interval:
-            previous = UnrecordedSegment()
-        recorded = previous.record_entries(header, references)
-        entries = tuple(ContextEntryManifest(child)
-                        for child in original.contributors[recorded.inherited_entries:])
-        return recorded, entries
-
-
-@dataclass(frozen=True, kw_only=True)
-class TransformedInputSegment(NativeAnnotations, MeasuredNativeSegment):
-    """SDK values without original-entry correspondence carry no user-entry proof."""
-
-
-@dataclass(frozen=True, kw_only=True)
-class CompactionSummarySegment(PublicInstructionAnnotations, NativeMessages, MeasuredNativeSegment):
-    pass
-
-
-@dataclass(frozen=True, kw_only=True)
-class InjectionMessageSegment(NativeAnnotations, MeasuredNativeSegment):
-    pass
-
-
-@dataclass(frozen=True, kw_only=True)
 class ToolCatalogSegment(MeasuredNativeSegment):
     tools: tuple[dict[str, JsonValue], ...]
 
@@ -1355,6 +1252,16 @@ class ContextManifestChange(CliResult):
     added: tuple[SegmentManifest, ...]
 
 
+class ContextRecording(ABC):
+    """The original previous context supplies its recording sequence and segments."""
+
+    @abstractmethod
+    def next_recording_turn(self) -> int: ...
+
+    @abstractmethod
+    def segment(self, position: int, original: SegmentManifest) -> SegmentRecording: ...
+
+
 @dataclass(frozen=True)
 class RecordedContextIdentity:
     """The request identity shared by storage and restored context records."""
@@ -1384,7 +1291,7 @@ class RecordedContextManifest(RecordedContextIdentity):
     @classmethod
     def capture(
         cls, manifest: ContextManifest,
-        previous: RecordedContextState,
+        previous: ContextRecording,
     ) -> tuple[RecordedContextManifest, tuple[ContextEntryManifest, ...]]:
         recording_turn = previous.next_recording_turn()
         parts = []
@@ -1435,7 +1342,9 @@ class TurnContext(DeclaredReply):
         return context.with_goal(owner, comms.goals).with_awareness(comms, owner, relations)
 
     def with_goal(self, owner: Thread, goals) -> TurnContext:
-        return owner.goal.active().add_context(self, owner, goals)
+        return owner.goal.active().add_context(
+            self, partial(self.prepend_goal, owner, goals=goals),
+        )
 
     def prepend_goal(self, owner: Thread, goal: Goal, goals) -> TurnContext:
         return self.prepend(GoalSegment.capture(owner, goal, goals))

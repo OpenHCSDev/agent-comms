@@ -1,22 +1,11 @@
+"""Goal commands own behavior; one parent owns CAS, publication and actor checks."""
+
 from __future__ import annotations
 
 import time
 from abc import abstractmethod
-from collections.abc import (
-    Awaitable,
-    Callable,
-)
-from dataclasses import (
-    dataclass,
-    field,
-    replace,
-)
-from typing import (
-    TYPE_CHECKING,
-    Annotated,
-    ClassVar,
-    Self,
-)
+from dataclasses import dataclass, field, replace
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from pydantic import JsonValue
 
@@ -25,6 +14,8 @@ from agent_comms.change_report import CitationProject, FileLine, NoSourceReferen
 from agent_comms.command import Command
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.goal_control import GoalControlSource
+from agent_comms.goal_mutation import GoalMutation, GoalStateOrder
 from agent_comms.input_key import InputKey, InputKeyText
 from agent_comms.lifecycle_capability import Settled
 from agent_comms.nominal import field_codec
@@ -53,6 +44,7 @@ from agent_comms.planning.goal_states import (
     PauseSource,
     RuntimePause,
 )
+from agent_comms.planning.goal_wait_recovery import GoalInputReview
 from agent_comms.planning.goal_waits import GoalInputReview, GoalWaits, RecordedGoalWait
 from agent_comms.planning.goals import (
     Goal,
@@ -75,17 +67,13 @@ from agent_comms.planning.orders import (
 from agent_comms.planning.problem_findings import ExpectedProblem
 from agent_comms.progress_claims import ProgressClaim
 from agent_comms.recorded_time import EventTime
+from agent_comms.registry.registry_document import TeamProject
 from agent_comms.registry.registry_store import RegistryEdit
 from agent_comms.registry.thread_identity import CoreWatcherIncarnation, ThreadIncarnation
 from agent_comms.registry.threads import Thread
 from agent_comms.reported_turn import ReportedTurnState
 from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.transport.runtime_request import AttachedRuntimeRequest
-
-if TYPE_CHECKING:
-    from agent_comms.planning.goal_management import Goals
-    from agent_comms.planning.goal_presentation import GoalSnapshot
-    from agent_comms.registry.registry_document import TeamProject
 
 
 class GoalActor:
@@ -189,7 +177,8 @@ class GoalPublicationContext(GoalActionContext):
 
 @dataclass(frozen=True, kw_only=True)
 class GoalAction[Result: GoalDeclaration](
-    DeclaredFamily, Command[GoalPublicationContext, Result], affix="GoalAction"
+    DeclaredFamily, Command[GoalPublicationContext, Result],
+    GoalMutation[Goal, GoalActionContext, Result], affix="GoalAction"
 ):
     expect: GoalPrecondition = GoalPrecondition()
     preserve_wait: ClassVar[bool] = False
@@ -205,34 +194,25 @@ class GoalAction[Result: GoalDeclaration](
         return GoalPrecondition(goal_id=OneGoal(goal_id), expected_state=ActiveGoal())
 
     @classmethod
-    async def submit_control(
-        cls,
-        thread: ThreadIncarnation,
-        observe: Callable[[], Awaitable[GoalSnapshot]],
-        invoke: Callable[[AttachedRuntimeRequest], Awaitable[JsonValue]],
-        text: str = "",
+    async def submit_control[Authority](
+        cls, source: GoalControlSource[Authority, GoalAction[GoalDeclaration]],
+        authority: Authority, text: str = "",
     ) -> GoalDeclaration:
-        goal = (await observe()).goal.require()
-        return await cls.submit_checkpoint(thread, invoke, goal)
+        goal = (await source.observed_goal(authority)).require()
+        return await cls.submit_checkpoint(source, authority, goal)
 
     @classmethod
-    async def submit_checkpoint(
-        cls, thread: ThreadIncarnation,
-        invoke: Callable[[AttachedRuntimeRequest], Awaitable[JsonValue]], goal: Goal,
+    async def submit_checkpoint[Authority](
+        cls, source: GoalControlSource[Authority, GoalAction[GoalDeclaration]],
+        authority: Authority, goal: Goal,
     ) -> GoalDeclaration:
-        from agent_comms.runtime_requests import GoalSnapshotReply
-        from agent_comms.transport.runtime_requests import UpdateGoalRuntimeRequest
-
-        reply = await invoke(UpdateGoalRuntimeRequest(
-            thread=thread.name, captured=CapturedOwner(thread), status=cls, goal_id=goal.id, expected_revision=goal.revision,
-        ))
-        return FieldCodec.decode(GoalSnapshotReply, reply).goal
+        return await source.change_goal_control(authority, cls, goal)
 
     def require_actor(self, actor: type) -> None:
         if not isinstance(self, actor):
             raise ValueError(f"This actor cannot take goal action {self.declared_name!r}.")
 
-    def prepare(self, goals: Goals, name: str, actor: type) -> GoalAction[Result]:
+    def prepare(self, goals: GoalRecords, name: str, actor: type) -> GoalAction[Result]:
         return self
 
     def apply(self, ctx: GoalPublicationContext) -> Result:
@@ -249,7 +229,7 @@ class GoalAction[Result: GoalDeclaration](
         )
         ctx.goals.registry._commit_registration(ctx.edit, change)
         if not self.preserve_wait:
-            ctx.thread.goal.clear_wait(ctx.goals.waits)
+            ctx.thread.goal.clear_wait(ctx.goals.waits.clear)
         return goal
 
     @abstractmethod
@@ -327,7 +307,7 @@ class ActiveGoalAction(
 
     def before_transition(self, goal: Goal, ctx: GoalActionContext) -> None:
         generation = ctx.goals.open_goal_store().require_generation(goal.id)
-        generation.lifecycle.resume_status(generation, goal, ctx)
+        generation.lifecycle.resume_status(ctx.thread.executing)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -351,7 +331,7 @@ class CompliedGoalAction(TransitionGoalAction, OwnerInvocable):
         generation = store.require_generation(goal.id)
         generation.lifecycle.continue_work(store, generation, ComplianceDecision(self.witness))
         resumed = store.require_generation(goal.id)
-        resumed.lifecycle.resume_status(resumed, goal, ctx)
+        resumed.lifecycle.resume_status(ctx.thread.executing)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -363,7 +343,7 @@ class StandbyGoalAction(GoalReportAction, ModelInvocable, RuntimeInvocable):
     def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:
         return ActiveGoal()
 
-    def prepare(self, goals: Goals, name: str, actor: type) -> GoalAction[Goal]:
+    def prepare(self, goals: GoalRecords, name: str, actor: type) -> GoalAction[Goal]:
         ctx = GoalActionContext(goals, goals.registry.require(name), actor)
         self.expect.check(ctx)
         review = goals._goal_input_review(ctx.thread, ctx.thread.goal.require().id, self.wait_for)
@@ -582,16 +562,11 @@ class SetGoalAction(ReplacementGoalAction[Goal], OwnerInvocable, RuntimeInvocabl
     goal_id: GoalId = field(default_factory=GoalId.mint)
 
     @classmethod
-    async def submit_control(
-        cls, thread: ThreadIncarnation,
-        observe: Callable[[], Awaitable[GoalSnapshot]],
-        invoke: Callable[[AttachedRuntimeRequest], Awaitable[JsonValue]], text: str = "",
+    async def submit_control[Authority](
+        cls, source: GoalControlSource[Authority, GoalAction[GoalDeclaration]],
+        authority: Authority, text: str = "",
     ) -> GoalDeclaration:
-        from agent_comms.runtime_requests import GoalReply
-        from agent_comms.transport.runtime_requests import SetGoalRuntimeRequest
-
-        reply = await invoke(SetGoalRuntimeRequest(thread=thread.name, captured=CapturedOwner(thread), text=text))
-        return FieldCodec.decode(GoalReply, reply).goal
+        return await source.set_goal_control(authority, text)
 
     def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         if goal.id == self.goal_id:
@@ -617,7 +592,9 @@ class SetGoalAction(ReplacementGoalAction[Goal], OwnerInvocable, RuntimeInvocabl
 
 
 @dataclass(frozen=True, kw_only=True)
-class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
+class ProblemOrderGoalAction(
+    GoalAction[Goal], RuntimeInvocable, GoalStateOrder[Goal, GoalActionContext],
+):
     problem: str
     order: PendingProblemOrder
     request: OwnerRequestId
@@ -651,6 +628,13 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
 
     def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         return goal.state.accept_order(self, goal, ctx)
+
+    def reactivate_goal(self, goal: Goal, ctx: GoalActionContext) -> Goal:
+        return replace(self.continue_goal(goal, ctx), state=ActiveGoal())
+
+    def replace_goal(self, goal: Goal, ctx: GoalActionContext) -> Goal:
+        goal.order.require_replacement(goal, ctx.goals, ctx.thread.incarnation)
+        return self.create(ctx)
 
     def continue_goal(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         self.require_ready(ctx)
@@ -802,17 +786,11 @@ class RetryGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, Runt
         return GoalPrecondition(goal_id=OneGoal(goal_id))
 
     @classmethod
-    async def submit_checkpoint(
-        cls, thread: ThreadIncarnation,
-        invoke: Callable[[AttachedRuntimeRequest], Awaitable[JsonValue]], goal: Goal,
+    async def submit_checkpoint[Authority](
+        cls, source: GoalControlSource[Authority, GoalAction[GoalDeclaration]],
+        authority: Authority, goal: Goal,
     ) -> GoalDeclaration:
-        from agent_comms.runtime_requests import GoalReply
-        from agent_comms.transport.runtime_requests import RetryGoalRuntimeRequest
-
-        reply = await invoke(RetryGoalRuntimeRequest(
-            thread=thread.name, captured=CapturedOwner(thread), goal_id=goal.id, expected_revision=goal.revision,
-        ))
-        return FieldCodec.decode(GoalReply, reply).goal
+        return await source.retry_goal_control(authority, goal)
 
     def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:
         return ActiveGoal()

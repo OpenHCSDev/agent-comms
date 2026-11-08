@@ -7,25 +7,16 @@ commands do not own coordination, backend or identity lifecycles.
 
 from __future__ import annotations
 
-from abc import (
-    ABC,
-    abstractmethod,
-)
+from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from functools import partial
-from typing import (
-    TYPE_CHECKING,
-    ClassVar,
-    Self,
-)
+from pathlib import Path
+from typing import Annotated, ClassVar, Self
 
 from acp.exceptions import RequestError
-from acp.schema import (
-    PromptResponse,
-    SetSessionConfigOptionResponse,
-)
+from acp.schema import PromptResponse, SetSessionConfigOptionResponse
 from pydantic import BaseModel, JsonValue
 
 from agent_comms.acp_extension import GoalSnapshotReply
@@ -40,12 +31,14 @@ from agent_comms.execution.turn_context import ContextManifest, ContextSourceTex
 from agent_comms.manual_compaction_bridge import compact_context
 from agent_comms.messaging.bus_read import OwnerReadRuntimeRequest, OwnerScopedRead
 from agent_comms.nominal.field_codec import FieldCodec, WireValue
+from agent_comms.owner_connection import NoControllerToken, OwnerConnection
 from agent_comms.owner_protocol import ClientLine, OwnerAnnouncement, OwnerFailure, OwnerReady
 from agent_comms.pi_payloads import NativeContextData
 from agent_comms.planning.goal_history import RecordedGoalHistory
 from agent_comms.planning.goals import Goal
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.registry.threads import Thread
 from agent_comms.runtime_server import (
     AttachedRuntimeRequestContext,
     ServedAttachedResultRuntimeRequest,
@@ -109,14 +102,8 @@ class ServedOwnerReadRuntimeRequest(
         return await OwnedRead.serving(self.operation).owned(ctx)
 
 
-if TYPE_CHECKING:
-    from agent_comms.agent_backend import CompactionOutcome
-    from agent_comms.input_disposition import DeliveryOverview
-
-
-@dataclass(frozen=True)
-class ProjectReply(DeclaredReply):
-    worktree: Checkout
+from agent_comms.agent_backend import CompactionOutcome
+from agent_comms.input_disposition import DeliveryOverview
 
 
 @dataclass(frozen=True)
