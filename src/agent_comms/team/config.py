@@ -8,7 +8,10 @@ from pathlib import Path
 from typing import Self
 
 from ..nominal.field_codec import AbsolutePathText, DeclaredWireType, FieldCodec, NullMember, SubclassUnion
-from ..repo import Repo, RepositorySelection
+from ..projects.repo import (
+    Repo,
+    RepositorySelection,
+)
 
 
 class RepoChoice(RepositorySelection, SubclassUnion, affix="Repos"):

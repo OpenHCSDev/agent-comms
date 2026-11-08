@@ -6,7 +6,7 @@ from agent_comms.transcripts import (
     WireTranscriptCursor,
 )
 from agent_comms.bus_read import UiRead
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.transport.tools.served import invoke_tool
 from conftest import installed_comms, transcript_records
 from agent_comms.session_file import RegistrySessionLocation

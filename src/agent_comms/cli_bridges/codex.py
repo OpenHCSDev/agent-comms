@@ -23,7 +23,7 @@ from .shared import SessionBinding, IncomingFrame, TranscriptBridge, Options, ru
 from agent_comms.runtime_updates import (
     EarlierPublishedPage, OfferedToolsObserved, PublishedPage, RuntimeUpdate, SessionFacts, ThreadOutput,
 )
-from agent_comms.repo import Checkout
+from ..projects.checkouts import Checkout
 from agent_comms.thread_identity import UnreportedTools
 from .codex_connection import CodexConnection
 from .codex_protocol import (

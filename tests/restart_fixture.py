@@ -10,7 +10,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.nominal.field_codec import RestartId
 from agent_comms.launch_runtime import RestartEnvironment
 from agent_comms.execution.owner_lifecycle import OwnerRestartSelection
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 
 @pytest.fixture

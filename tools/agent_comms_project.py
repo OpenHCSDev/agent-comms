@@ -47,7 +47,8 @@ from agent_comms.nominal_census import NominalCensus
 from agent_comms.plan_reading import PlanReading
 from agent_comms.phase_evidence import MainTree
 from agent_comms.plan_phases import PlanPhase
-from agent_comms.repo import Checkout, Repo
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.checkouts import Checkout
 
 SOURCES = Path(inspect.getfile(agent_comms)).parents[1]
 REPOSITORY = SOURCES.parent

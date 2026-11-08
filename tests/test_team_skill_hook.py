@@ -12,7 +12,8 @@ from agent_comms.team.standing_rules import (
     ReviewTimerUp,
 )
 from agent_comms.transport.mcp import AnsweredCall
-from agent_comms.repo import Checkout, Repo
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.checkouts import Checkout
 import io
 import json
 from datetime import UTC, datetime

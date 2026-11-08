@@ -59,7 +59,7 @@ from .transport.tools.orders import (
     HeadVerdictTool,
 )
 from .ui_model.observation import RelayConnection, relay_frames, serve_encoded
-from .repo import Checkout
+from .projects.checkouts import Checkout
 from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from .nominal.field_codec import (
     Argument, FieldCodec, GitCommitText, MalformedRecord, PathText, WireTransient, boundary_decoder,

@@ -1,7 +1,7 @@
 """No-provider bounded human DM read evidence; never use global inbox ACK."""
 
 from __future__ import annotations
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.channel_targets import CommandTarget, ThreadTarget
 
 import os

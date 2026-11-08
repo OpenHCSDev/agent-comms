@@ -1,7 +1,7 @@
 """Later publication cannot broaden an acquired empty Bus snapshot."""
 from concurrent.futures import ThreadPoolExecutor
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.read_basis import NamedViewer
 from agent_comms.registry.threads import NativeThread
 

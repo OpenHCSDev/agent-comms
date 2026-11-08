@@ -1,6 +1,6 @@
 """A stored revision owns one immutable registry snapshot, including empty files."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.threads import NativeThread
 

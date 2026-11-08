@@ -1,5 +1,3 @@
-"""One call's acquired storage checks over the composition root, not a storage declaration."""
-
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -7,14 +5,22 @@ from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 
-from .comms import Comms
-from .native_tool_call import CodingCall
-from .registry.registry_document import RegistrySnapshot
-from .registry.threads import Thread
-from .repo import Checkout, RepositoryReads, RepositorySource
-from .shell_effects import StorageEffect
-from .storage_admission import StorageAdmission
-from .storage_rules import CheckoutAllocation, StorageRule, UnitStorage
+from .checkouts import (
+    Checkout,
+    RepositoryReads,
+)
+from .repository_sources import RepositorySource
+from .storage_rules import (
+    CheckoutAllocation,
+    StorageRule,
+    UnitStorage,
+)
+from ..comms import Comms
+from ..native_tool_call import CodingCall
+from ..registry.registry_document import RegistrySnapshot
+from ..registry.threads import Thread
+from ..shell_effects import StorageEffect
+from ..storage_admission import StorageAdmission
 
 
 @dataclass

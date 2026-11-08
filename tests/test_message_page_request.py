@@ -1,6 +1,6 @@
 """Declared display scopes select membership before the sequence-page limit."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from dataclasses import dataclass
 
 import pytest

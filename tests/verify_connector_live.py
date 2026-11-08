@@ -6,7 +6,7 @@ The caller selects scratch; each subprocess run retires its temporary directory.
 from __future__ import annotations
 
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.bus import Bus
 
 import json

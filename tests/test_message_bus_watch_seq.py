@@ -1,6 +1,6 @@
 """Ordinary committed appends drive the actual recipient watch, with no writer hints."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import asyncio
 from contextlib import AsyncExitStack, aclosing
 

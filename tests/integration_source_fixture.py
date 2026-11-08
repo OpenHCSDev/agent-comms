@@ -20,7 +20,7 @@ from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.head_review import CombinedInput, IntegrationInput, IntegrationSource, PullRequestHead
 from agent_comms.integration import IntegrationCheckout, IntegrationRun
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repo import Repo
+from agent_comms.projects.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.tool_caller import PeerCaller
 from agent_comms.transport.tools.orders import CommsTodoCreateTool

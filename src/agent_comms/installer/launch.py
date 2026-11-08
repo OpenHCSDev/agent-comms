@@ -57,9 +57,9 @@ from agent_comms.installer.upgrade import (
     TargetTree,
     upgrade,
 )
-from agent_comms.repo import Repo
+from ..projects.repo import Repo
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.storage_rules import StorageRule
+from ..projects.storage_rules import StorageRule
 from metaclass_registry.mro_dispatch import (
     MroDispatch,
     handles,

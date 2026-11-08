@@ -1,7 +1,7 @@
 """Real install-style stop on a copied private bus with a controlled provider."""
 
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import asyncio
 from contextlib import closing
 import shutil

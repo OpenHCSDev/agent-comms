@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 import pytest_session as sessions
-from agent_comms.storage_rules import StorageRule
+from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.test_lease import HostTestLease, NewTestRun
 
 pytest_plugins = ("pytester",)

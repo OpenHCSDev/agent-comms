@@ -9,7 +9,7 @@ import os
 import sqlite3
 from pathlib import Path
 
-from agent_comms.repo import Checkout
+from ..projects.checkouts import Checkout
 from typing import AsyncIterator, ClassVar, Self
 from urllib.parse import quote
 

@@ -28,7 +28,7 @@ from .read_basis import MemberActivityDisplayScope
 from .registry.registry_document import RosterVisibility
 from .session_file import RegistrySessionLocation
 from .thread_text import NoThreadText
-from .repo import Checkout
+from .projects.checkouts import Checkout
 from .registry.threads import Thread
 from .transcript_routes import TranscriptRoutes
 from .turn_lease import NoTurnRecord

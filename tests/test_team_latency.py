@@ -23,7 +23,7 @@ from agent_comms.installer.backup import StoreBackup
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import InfoKind, Message
 from agent_comms.registry.registry_document import RegistrySnapshot
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.wake import OrdinaryControl, resolve_wake_cohort

@@ -11,7 +11,8 @@ from agent_comms.planning.orders import (
 )
 from agent_comms.planning.problem_findings import FixShape
 from agent_comms.planning.pull_requests import PullRequestHeadRevision
-from agent_comms.repo import Checkout, Repo
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.checkouts import Checkout
 from pathlib import Path
 from dataclasses import replace
 import json

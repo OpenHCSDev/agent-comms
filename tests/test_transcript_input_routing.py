@@ -1,6 +1,6 @@
 """Native input IDs retain incoming attribution across steering and failed turns."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from bus_record_fixture import FIRST_INPUT_ID, SECOND_INPUT_ID, THIRD_INPUT_ID
 from conftest import transcript_records
 import json

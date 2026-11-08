@@ -5,7 +5,7 @@
 from agent_comms_hooks.watch import NoSessionBridge
 from agent_comms.cli_bridges.session_watch import LapsedWatch, LiveWatch, WatchClaim
 from agent_comms_hooks.watch import WatchRecord
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import json
 import os
 import signal
@@ -216,7 +216,7 @@ def send_as_peer(built, tmp_path, env, body, *, declare=False):
     """The bus belongs to the built runtime, so the sender attaches as that runtime."""
     code = (
         'import sys; from pathlib import Path; from agent_comms.comms import wire; '
-        'from agent_comms.repo import Checkout; from agent_comms.registry.threads import NativeThread; '
+        'from agent_comms.projects.repo import Checkout; from agent_comms.registry.threads import NativeThread; '
         'comms = wire(Path(sys.argv[1])); '
         + ('comms.registry.declare(NativeThread("peer", frozenset(), Checkout(Path(sys.argv[3])))); ' if declare else '')
         + 'comms.messaging.send("peer", "bridge-copy", sys.argv[2])'

@@ -1,7 +1,7 @@
 """Incarnation creation prepares an audience that publication only addresses."""
 
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from bus_record_fixture import prepare_native_comms
 
 import pytest

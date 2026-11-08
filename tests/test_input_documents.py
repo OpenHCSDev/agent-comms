@@ -1,6 +1,6 @@
 """Typed saved boundaries and durable acceptance precede process-local scheduling."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.comms import wire
 import json
 import sqlite3

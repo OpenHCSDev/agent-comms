@@ -1,5 +1,8 @@
 
-from agent_comms.repo import Checkout, LaunchCheckout
+from agent_comms.projects.checkouts import (
+    Checkout,
+    LaunchCheckout,
+)
 import os
 from dataclasses import replace
 

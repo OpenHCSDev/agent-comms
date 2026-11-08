@@ -1,7 +1,7 @@
 """The declared bus watch uses real native commit and replacement notifications."""
 
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import asyncio
 import errno
 from contextlib import aclosing

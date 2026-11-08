@@ -55,9 +55,16 @@ from ..registry_provenance import (
     RegistryProvenance,
     RetiredRecipient,
 )
-from ..repo import Checkout, Repo, RepositoryReads, RepositorySelection
+from ..projects.repo import (
+    Repo,
+    RepositorySelection,
+)
+from ..projects.checkouts import (
+    Checkout,
+    RepositoryReads,
+)
 from ..repository_name import RepositoryName
-from ..storage_rules import StorageRule
+from ..projects.storage_rules import StorageRule
 from ..snapshot_slices import (
     MappingRowsSlice,
     OwnRow,

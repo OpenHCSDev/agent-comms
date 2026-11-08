@@ -5,7 +5,7 @@ from agent_comms.cli_bridges.session_watch import WatchClaim
 
 
 from agent_comms_hooks.watch import WatchRecord
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import asyncio
 import fcntl
 import json
@@ -57,7 +57,7 @@ from agent_comms.cursor_publication import CursorDelivery
 from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.team.order import Team
 from agent_comms.tool_caller import PeerCaller
-from agent_comms.repo import Repo
+from agent_comms.projects.repo import Repo
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.installer.probes.interpreter import InterpreterBuildProbe, RecordedInterpreterBuild
 from source_programs import SourcePrograms
@@ -211,7 +211,7 @@ def pytest_sessionstart(session: pytest.Session) -> None:
         str(path) for path in session.config.getini("pythonpath"))
     if session.config.option.collectonly or is_xdist_worker(session):
         return
-    from agent_comms.repo import Checkout
+    from agent_comms.projects.checkouts import Checkout
 
     Checkout(Path(__file__).resolve().parents[1]).prepare()
 
@@ -381,7 +381,7 @@ def without_mutation_guards(db: sqlite3.Connection, table: type[TypedTable]) -> 
 @pytest.fixture
 def scratch_root(durable_home: Path) -> Path:
     """The test's own agent-scratch, derived from the storage rule under the test's HOME."""
-    from agent_comms.storage_rules import StorageRule
+    from agent_comms.projects.storage_rules import StorageRule
 
     root = StorageRule().scratch_base / "pytest" / "check-root"
     root.mkdir(parents=True)
@@ -428,7 +428,7 @@ def root(tmp_path: Path) -> Path:
 def configured_repository(durable_home: Path, github_cli) -> Callable[[Comms, *tuple[Repo, ...]], Team]:
     """Declare the temporary colleague on its bus and use its real plan-bearing checkout."""
     from agent_comms.team.order import Team
-    from agent_comms.repo import Repo
+    from agent_comms.projects.repo import Repo
 
     repository = Repo.of(Path(__file__).resolve().parents[1])
 
@@ -458,7 +458,7 @@ def installed_runtime(
     """A temporary installation record, executable and pointer, never the real home."""
     from agent_comms.installer.probes.packages import CommitRecord, GitRecord, PackageRecord
     from agent_comms.installer.runtime_resolution import RuntimePackage, RuntimeResolution
-    from agent_comms.repo import Repo
+    from agent_comms.projects.repo import Repo
 
     repository = Repo.of(Path(__file__).resolve().parents[1])
     packages = {}
@@ -543,7 +543,7 @@ def ledger_one_failure_short(root: Path) -> Path:
 def installed_comms(root: Path) -> Comms:
     """A root as the installer leaves it: its bus exists before any reader opens it. A test
     bus of a few megabytes declares no storage floor; tests of the floor declare their own."""
-    from agent_comms.storage_rules import StorageRule
+    from agent_comms.projects.storage_rules import StorageRule
 
     Bus.install(Bus.path_in(root))
     StorageRule(floor_gib=0).prepare_isolated(root)

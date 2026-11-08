@@ -11,7 +11,7 @@ from collections.abc import Callable
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 
 import pytest
 

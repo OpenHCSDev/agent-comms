@@ -13,7 +13,10 @@ from agent_comms.planning.orders import (
     VoidStrikeTodo,
 )
 from agent_comms.planning.problem_findings import ExpectedProblem
-from agent_comms.repo import Checkout, RepositoryReads
+from agent_comms.projects.checkouts import (
+    Checkout,
+    RepositoryReads,
+)
 from agent_comms.bus import Bus
 
 import asyncio
@@ -52,7 +55,7 @@ from agent_comms.launch_root import LaunchRoot
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
-from agent_comms.storage_rules import StorageRule
+from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.errors import TodoError

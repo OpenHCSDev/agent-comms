@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.errors import GoalRefused, StaleAttemptError
 import multiprocessing
 import os

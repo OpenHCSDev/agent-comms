@@ -76,7 +76,7 @@ from agent_comms.heartbeat_delivery import OnHeartbeatDelivery
 from agent_comms.heartbeat_subjects import TeamHistory, HeadSubject, UnlandedHeadSubject
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.task_attachments.team_pings import TeamDecisions, TeamUpdate, TeamUpdateStore, RulePing
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.registry.threads import NativeThread

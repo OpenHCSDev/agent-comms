@@ -1,6 +1,6 @@
 """Input decoding supplies behavior-bearing selections to command execution."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from pathlib import Path
 import pytest
 

@@ -1,7 +1,7 @@
 """Original nullable SQL groups cannot mint a partial recorded native reference."""
 
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import sqlite3
 from dataclasses import replace
 from functools import partial

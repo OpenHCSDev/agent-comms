@@ -1,6 +1,6 @@
 """Shadow-only wake and exact-route decisions; live compatibility stays unchanged."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from dataclasses import replace
 from pathlib import Path
 from typing import Type

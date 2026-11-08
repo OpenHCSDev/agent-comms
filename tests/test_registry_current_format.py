@@ -1,6 +1,6 @@
 """Registry persistence retains identity and goal behavior, never synthesizes authority."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import json
 import os
 import subprocess

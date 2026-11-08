@@ -1,7 +1,7 @@
 """Read real persisted notification assignments without scheduling a model."""
 from agent_comms.notification_assignment import NotificationSelection
 from agent_comms.notification_evidence import AllOutcomes
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from dataclasses import replace
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 from conftest import installed_comms

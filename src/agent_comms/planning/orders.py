@@ -249,15 +249,17 @@ from ..registry.registry_document import (
 )
 from ..registry.registry_store import RegistryStore
 from ..registry.threads import Thread
-from ..repo import (
+from ..projects.git_errors import (
+    FailedGitCommand,
+    SourceReadFailure,
+)
+from ..projects.repo import Repo
+from ..projects.checkouts import (
     Checkout,
     CommitFilter,
     CommitsNaming,
     EveryCommit,
-    FailedGitCommand,
-    Repo,
     RepositoryReads,
-    SourceReadFailure,
 )
 from ..repository_name import RepositoryName
 from ..slop import (
@@ -282,7 +284,7 @@ from ..storage.typed_table import (
     TypedRow,
     TypedTable,
 )
-from ..storage_rules import (
+from ..projects.storage_rules import (
     CheckoutAllocation,
     StorageRule,
 )

@@ -21,7 +21,7 @@ from agent_comms.cli_bridges.shared import Binding, MonitorProbe, Options, Serve
 from agent_comms.team_heartbeat import TeamHeartbeat
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.messages import Addressed
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import ExternalThread
 from agent_comms.thread_status import ConnectedThreadStatus
 

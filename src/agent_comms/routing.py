@@ -13,7 +13,7 @@ from typing import Annotated, TYPE_CHECKING
 
 
 from .channel_targets import CommandTarget
-from .repo import Checkout
+from .projects.checkouts import Checkout
 from .nominal.field_codec import (
     ThreadLookup, FieldCodec, NullMember, PresentMember, RecordMember, SubclassUnion, WireOmitDefault,
 )

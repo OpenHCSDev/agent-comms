@@ -1,6 +1,6 @@
 """An unfinished observation cannot keep a real sidebar from being answered."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from pathlib import Path
 from dataclasses import replace
 from itertools import count

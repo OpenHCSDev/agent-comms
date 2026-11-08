@@ -53,7 +53,12 @@ from agent_comms.launch_runtime import LaunchRoot
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repo import Checkout, Repo, RepositoryReads, UnpushedHead
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.checkouts import (
+    Checkout,
+    RepositoryReads,
+    UnpushedHead,
+)
 from agent_comms.repository_name import RepositoryName
 from agent_comms.thread_identity import ReportedTools, ToolName
 from agent_comms.thread_text import ForkedParent

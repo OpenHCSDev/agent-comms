@@ -3,7 +3,11 @@ from agent_comms.repository_name import RepositoryName
 
 import pytest
 
-from agent_comms.repo import GitCommandError, Repo, UnavailableCommitError
+from agent_comms.projects.git_errors import (
+    GitCommandError,
+    UnavailableCommitError,
+)
+from agent_comms.projects.repo import Repo
 from test_order_progress import git
 
 

@@ -9,7 +9,7 @@ from pathlib import Path
 from time import perf_counter
 
 from agent_comms import backend
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.turn_inbox import SteerInputPolicy
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination

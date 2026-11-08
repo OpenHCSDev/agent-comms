@@ -1,6 +1,6 @@
 """Session-owned parts, not stdout writes, confirm monitor delivery."""
 from pathlib import Path
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from collections.abc import Callable
 from contextlib import asynccontextmanager, contextmanager, suppress
 from agent_comms.cli_bridges.shared import CoreWatchEnded, core_watch_failure

@@ -1,5 +1,5 @@
 """The read index closes with its resources, before Python clears its modules."""
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import gc
 import json
 import os

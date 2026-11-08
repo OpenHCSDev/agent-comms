@@ -32,7 +32,11 @@ from agent_comms.transport.tools.orders import CommsTodoCreateTool
 from agent_comms_hooks import ToolRefusedError
 from agent_comms.head_review import BaseSide, CombinedInput, HeadReview, HeadSide, IntegrationInput, MergeHeadReview, PromotedHeadReview, PullRequestHead, ResolvedIntegrationSource
 from agent_comms.repository_name import RepositoryName
-from agent_comms.repo import GitCommandError, Repo, UnavailableCommitError
+from agent_comms.projects.git_errors import (
+    GitCommandError,
+    UnavailableCommitError,
+)
+from agent_comms.projects.repo import Repo
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.test_lease import TestLease

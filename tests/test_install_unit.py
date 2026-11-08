@@ -13,7 +13,7 @@ from agent_comms.nominal.field_codec import FieldCodec, Id128
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.launch import InstallRun
 from agent_comms.installer.logs import InstallLogs, InstallRunning, InstallUnit
-from agent_comms.repo import Repo
+from agent_comms.projects.repo import Repo
 from agent_comms.repository_name import RepositoryName
 
 FAKE = """#!{python}

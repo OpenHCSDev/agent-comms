@@ -1,6 +1,6 @@
 """Reply reads leave the registry free, and publication keeps its observed state."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import fcntl
 import os
 from contextlib import contextmanager

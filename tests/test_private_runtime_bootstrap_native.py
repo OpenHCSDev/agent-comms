@@ -1,7 +1,7 @@
 """Fresh production bootstrap wakes a real native owner before and after restart."""
 
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from bus_history import read_history
 from agent_comms.pi_vocabulary import OffThinkingLevel
 import json

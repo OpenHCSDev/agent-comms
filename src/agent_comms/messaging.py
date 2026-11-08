@@ -38,7 +38,7 @@ from .task_sources import (
     TaskChange,
     TaskScopeSelection,
 )
-from .repo import Checkout
+from .projects.checkouts import Checkout
 from .registry.threads import Thread
 from .working_memory_policy import AnnotationDisclosureGrant
 from .turn_context import ContextSegment

@@ -27,7 +27,9 @@ from .nominal.field_codec import (
     SubclassUnion,
     WireValue,
 )
-from .repo import Checkout, GitCommandError, Repo
+from .projects.git_errors import GitCommandError
+from .projects.repo import Repo
+from .projects.checkouts import Checkout
 from .repository_name import RepositoryName
 
 

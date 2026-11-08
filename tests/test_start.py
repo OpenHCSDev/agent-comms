@@ -6,12 +6,13 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.comms import wire
-from agent_comms.repo import Checkout, Repo
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.shell_effects import AllocateStorageEffect
 from agent_comms.tool_denial import StorageDenied
-from agent_comms.storage_projection import StorageProjection
-from agent_comms.storage_rules import StorageRule
+from agent_comms.projects.storage_projection import StorageProjection
+from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_caller import NoThreadCaller
 from agent_comms.transport.tools.served import invoke_tool

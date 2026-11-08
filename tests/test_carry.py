@@ -1,7 +1,7 @@
 """The carry family: one chain of idempotent steps whose dry runs say what a bus still needs."""
 
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import os
 import sqlite3
 import subprocess

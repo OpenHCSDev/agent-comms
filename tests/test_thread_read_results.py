@@ -1,5 +1,5 @@
 """Thread read answers own comparison, retry and status projection."""
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from dataclasses import replace
 from itertools import product
 

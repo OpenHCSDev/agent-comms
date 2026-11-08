@@ -17,7 +17,7 @@ from agent_comms.registry.registration import Registration
 from agent_comms.routing import NoTurnRouting
 from agent_comms.registry.registry_document import ThreadRows
 from agent_comms.snapshot_slices import ThreadSlice
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.storage.store_files import AtomicFile
 from agent_comms.registry.threads import ExternalThread, Thread, NativeThread

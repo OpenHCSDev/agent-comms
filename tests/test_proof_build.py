@@ -21,7 +21,7 @@ from agent_comms.planning.pull_requests import (
     PullRequestCommit,
     PullRequestLink,
 )
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import subprocess
 import time
 from dataclasses import dataclass, replace
@@ -58,7 +58,8 @@ from conftest import record_installed_runtime
 from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun
 from agent_comms.progress_claims import WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repo import GitCommandError, Repo
+from agent_comms.projects.git_errors import GitCommandError
+from agent_comms.projects.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.tool_caller import ThreadCaller
 from github_fixture import GitHubFixture

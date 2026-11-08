@@ -11,7 +11,7 @@ records a distinct incoming revision while retaining every declared carry depend
 from __future__ import annotations
 
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import json
 import os
 import sqlite3
@@ -44,9 +44,9 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
 from agent_comms.messages import TeamUpdatePosition, Message
 from agent_comms.registry.registry_store import RegistryStore
-from agent_comms.repo import ScratchCheckout
+from agent_comms.projects.checkouts import ScratchCheckout
 from agent_comms.root_runtime import RootRuntime
-from agent_comms.storage_rules import StorageRule
+from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.storage.typed_table import ReconciledFile
 from conftest import declare_test_bus, publish_initial
 from agent_comms.registry.threads import NativeThread

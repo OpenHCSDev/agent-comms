@@ -20,7 +20,9 @@ from .build_identity import RepositoryCommit
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import FieldCodec, GitCommitText, MalformedRecord, RecordProblems, boundary_decoder
 from .installer.runtime_resolution import PrivateUvProject, StackSources
-from .repo import Checkout, GitCommandError, Repo
+from .projects.git_errors import GitCommandError
+from .projects.repo import Repo
+from .projects.checkouts import Checkout
 from .repository_name import RepositoryName
 from .thread_identity import ThreadIncarnation
 from .work_branches import WorkBranches

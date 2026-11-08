@@ -5,7 +5,7 @@ from __future__ import annotations
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
-from agent_comms.repo import Checkout
+from .projects.checkouts import Checkout
 from agent_comms.working_memory_labels import HumanLabel, ModelLabel
 from agent_comms.working_memory_questions import SpanAnswer
 

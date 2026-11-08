@@ -15,7 +15,7 @@ from agent_comms.planning.orders import (
     UnorderedProblemOrder,
     WithdrawTodo,
 )
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import time
 from dataclasses import replace
 

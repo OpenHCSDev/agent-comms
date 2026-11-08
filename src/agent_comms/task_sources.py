@@ -14,7 +14,7 @@ from .goals import GoalDeclaration, GoalRevision
 from .message_reference import MessageReference
 from .owner_requests import OwnerRequestId, RequestDirective
 from .projection_source import ProjectionSource
-from .repo import Checkout
+from .projects.checkouts import Checkout
 from .thread_identity import (
     RecordedThreadIncarnation,
     ThreadIncarnation,

@@ -1,7 +1,7 @@
 """Native launcher identity, route and acquired package remain independent."""
 
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import shlex
 import sys
 from pathlib import Path

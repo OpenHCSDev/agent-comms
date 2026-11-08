@@ -4,7 +4,7 @@ from agent_comms.child_process import NoProcess
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.child_process import ProcessState
 from agent_comms.cli_command import CliCommand
-from agent_comms.repo import Checkout
+from ..projects.checkouts import Checkout
 from agent_comms.cli_commands import NameArgument
 from agent_comms.cli_commands import _tags
 from agent_comms.cli_result import CliResult

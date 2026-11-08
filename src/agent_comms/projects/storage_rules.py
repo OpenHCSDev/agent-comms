@@ -1,4 +1,3 @@
-"""Configured storage limits over current filesystem and Git worktrees."""
 from __future__ import annotations
 
 import json
@@ -6,54 +5,62 @@ import math
 import shutil
 import time
 from abc import abstractmethod
-from collections.abc import Iterable, Iterator, Mapping, Sequence
-from dataclasses import dataclass, field, replace
+from collections.abc import (
+    Iterable,
+    Iterator,
+    Mapping,
+    Sequence,
+)
+from dataclasses import (
+    dataclass,
+    field,
+    replace,
+)
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self
+from typing import (
+    Annotated,
+    ClassVar,
+    Self,
+    TYPE_CHECKING,
+)
 
-from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.child_process import ResidentMemory
-from agent_comms.nominal.field_codec import (
+from .checkouts import (
+    Checkout,
+    RepositoryReads,
+)
+from .git_errors import GitCommandError
+from .repo import Repo
+from ..child_process import ResidentMemory
+from ..errors import TodoError
+from ..nominal.declared_family import DeclaredFamily
+from ..nominal.field_codec import (
     FieldCodec,
     GoalId,
     MalformedRecord,
     ValueDirective,
 )
-from agent_comms.storage.locked_store import DurableFile
-from agent_comms.errors import TodoError
-from agent_comms.problem_number import ProblemNumber
-from agent_comms.repo import Checkout, GitCommandError, Repo, RepositoryReads
-from agent_comms.repository_name import RepositoryName
-from agent_comms.storage_room import RoomAllocation
-from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.work_branches import WorkBranches
-
-from .tool_denial import StorageDenied
-from .thread_storage import (
+from ..problem_number import ProblemNumber
+from ..registry.threads import Thread
+from ..repository_name import RepositoryName
+from ..storage.locked_store import DurableFile
+from ..storage.private_path import PrivateDirectoryRole
+from ..storage.store_files import ExclusiveAtomicFile
+from ..storage_room import RoomAllocation
+from ..thread_identity import ThreadIncarnation
+from ..thread_storage import (
     CheckoutReuse,
     StoragePath,
     StorageRoots,
 )
-from .registry.threads import Thread
-from .storage.store_files import ExclusiveAtomicFile
-from .storage.private_path import PrivateDirectoryRole
+from ..tool_denial import StorageDenied
+from ..work_branches import WorkBranches
 
 if TYPE_CHECKING:
-    from agent_comms.registry.registration import Registration
-
-    from .planning.orders import (
+    from ..planning.orders import (
         Todo,
         TodoStore,
     )
-
-
-
-
-
-
-
-
-
+    from ..registry.registration import Registration
 
 
 @dataclass(frozen=True)
@@ -764,6 +771,7 @@ class RuleCheckoutReuse(CheckoutReuse):
                       f'--from {owner.name} {repository.to_wire()} EXACT_OWNED_PATH. '
                       'Retire only completed disposable trees with goal-checkout --source.')
         return next(iter(candidates), self.fresh)
+
 
 @dataclass(frozen=True)
 class OrderCheckoutWork(WorkBranches):

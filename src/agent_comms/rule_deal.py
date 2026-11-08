@@ -35,7 +35,7 @@ from .nominal.field_codec import FieldCodec, MalformedRecord, MessageId
 from .storage.locked_store import DocumentChange, LockedStore
 from .storage.store_files import AtomicFile, DependentStateTier, SingleFileStore
 
-from .repo import Repo
+from .projects.repo import Repo
 from .rule_probes import Probe, ProbeContext
 from .team.rule_file import RuleFile
 from .context_reading import ContextUsage

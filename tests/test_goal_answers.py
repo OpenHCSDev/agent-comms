@@ -1,6 +1,6 @@
 """Goal absence is dispatched before work; a clear never revives a turn's goal."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import asyncio
 import os
 import pickle

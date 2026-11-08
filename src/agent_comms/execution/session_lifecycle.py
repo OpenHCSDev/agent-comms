@@ -59,7 +59,7 @@ from ..thread_identity import AcpThreadRole, ClaimedIdentity, OwnerIdentity, Thr
 from ..thread_model import ThreadModel
 from ..thread_status import ActiveThreadPresence
 from ..thread_text import NoThreadText, ThreadText
-from ..repo import Checkout
+from ..projects.checkouts import Checkout
 from ..registry.threads import NativeThread, Thread
 from ..transcript_updates import TranscriptReplay
 

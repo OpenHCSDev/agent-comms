@@ -1,7 +1,7 @@
 """Retained native execution, refusal, and canonical headless/runtime behavior."""
 
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import asyncio
 import os
 import sys

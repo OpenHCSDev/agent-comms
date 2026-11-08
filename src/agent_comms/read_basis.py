@@ -17,7 +17,7 @@ from itertools import product
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, NoReturn, Self, TextIO
 
-from agent_comms.repo import Checkout
+from .projects.checkouts import Checkout
 
 from .activity_clocks import ChannelActivity
 from .channel_targets import CommandTarget, ThreadTarget

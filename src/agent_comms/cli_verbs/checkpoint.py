@@ -9,8 +9,8 @@ from agent_comms.cli_commands import PushedCheckpoint
 from agent_comms.cli_commands import RefusedCheckpoint
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import Comms
-from agent_comms.repo import GitCommandError
-from agent_comms.repo import Repo
+from ..projects.git_errors import GitCommandError
+from ..projects.repo import Repo
 from dataclasses import dataclass
 from pathlib import Path
 

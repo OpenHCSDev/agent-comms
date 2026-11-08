@@ -26,7 +26,7 @@ from agent_comms.storage.maintenance_barrier import (
     MaintenanceBarrier, MaintenanceNotHeldError, MaintenanceOperator, NoMaintenanceHolder,
 )
 from agent_comms.nominal.field_codec import FieldCodec, TurnId
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.typed_table import WalStore
 from bus_record_fixture import prepare_native_comms

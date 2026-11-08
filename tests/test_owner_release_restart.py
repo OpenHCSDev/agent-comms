@@ -1,7 +1,7 @@
 """Real release-before-exit: a host's retirement keeps checking the exact owner fence."""
 
 from agent_comms.owner_release import NoRelease
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.restart_scope import OwnersNamed
 
 import os

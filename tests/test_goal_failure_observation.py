@@ -14,7 +14,7 @@ from agent_comms.goal_failure_observation import NoFailedTurnEvidence
 from agent_comms.goal_generation import BlockedGeneration
 from agent_comms.goals import Goal
 from agent_comms.nominal.field_codec import GoalId, TurnId
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.thread_identity import RecordedThreadIncarnation, TurnIdentity
 from agent_comms.registry.threads import NativeThread
 from agent_comms.turn_failure import BackendFailed, FailedTurnResolution, FinalStopMissing

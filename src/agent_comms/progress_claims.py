@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from .nominal.declared_family import DeclaredFamily
-from .repo import Repo
+from .projects.repo import Repo
 from .turn_context import FileProvenance
 
 if TYPE_CHECKING:

@@ -1,6 +1,6 @@
 """Declared goal dependencies control scheduling."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import os
 from dataclasses import replace
 

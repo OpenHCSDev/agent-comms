@@ -24,9 +24,19 @@ from pydantic.alias_generators import to_camel
 from .code_lines import CodeLines
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import GitCommitText, PathText, projected
-from .repo import (
-    BranchUpstream, Checkout, CheckoutHistory, DetachedHead, GitCommandError, GitHead,
-    Repo, RepositoryReads, SourceReadFailure, UnpushedHead,
+from .projects.git_errors import (
+    GitCommandError,
+    SourceReadFailure,
+)
+from .projects.repo import Repo
+from .projects.checkouts import (
+    BranchUpstream,
+    Checkout,
+    CheckoutHistory,
+    DetachedHead,
+    GitHead,
+    RepositoryReads,
+    UnpushedHead,
 )
 from .repository_name import RepositoryName
 from .wire_models import WireModel

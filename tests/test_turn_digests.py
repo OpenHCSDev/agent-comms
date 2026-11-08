@@ -1,7 +1,7 @@
 import sys
 """One query contract over the original native and external record owners."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import asyncio
 import hashlib
 from contextlib import aclosing, redirect_stdout, suppress

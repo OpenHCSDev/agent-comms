@@ -1,5 +1,5 @@
 """Durable-store thread location and history paging over a real store; no provider inputs."""
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import asyncio
 import subprocess
 from dataclasses import replace

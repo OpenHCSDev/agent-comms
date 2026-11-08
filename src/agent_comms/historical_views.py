@@ -13,7 +13,7 @@ from functools import cache, partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_comms.repo import Checkout
+from .projects.checkouts import Checkout
 
 from .bus import Bus
 from .catalog_store import ChannelCatalog

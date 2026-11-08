@@ -6,7 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.repo import Checkout, GitCommandError, Repo
+from agent_comms.projects.git_errors import GitCommandError
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.checkouts import Checkout
 
 
 def _commit(checkout: Path, message: str) -> str:

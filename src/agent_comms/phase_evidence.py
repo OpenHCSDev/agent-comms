@@ -24,7 +24,11 @@ from metaclass_registry.mro_dispatch import MroDispatch, handles
 
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.repo import Checkout, CheckoutHistory, Repo
+from .projects.repo import Repo
+from .projects.checkouts import (
+    Checkout,
+    CheckoutHistory,
+)
 
 if TYPE_CHECKING:
     from .plan_reading import PlanReading

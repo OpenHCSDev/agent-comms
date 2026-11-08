@@ -24,9 +24,19 @@ from agent_comms.planning.orders import (
 )
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.registry_document import RegisteredTeamProject
-from agent_comms.repo import Checkout, CheckoutHoldsWorkError, DetachedStart, GitCommandError, LaunchCheckout, NewBranchStart, Repo, RepositoryReads, ScratchCheckout
+from agent_comms.projects.git_errors import GitCommandError
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.checkouts import (
+    Checkout,
+    CheckoutHoldsWorkError,
+    DetachedStart,
+    LaunchCheckout,
+    NewBranchStart,
+    RepositoryReads,
+    ScratchCheckout,
+)
 from agent_comms.repository_name import RepositoryName
-from agent_comms.storage_rules import StorageRule
+from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.tool_denial import StorageDenied
 from agent_comms.thread_creation import RecordedCreationTime
 from agent_comms.registry.threads import ExternalThread, NativeThread

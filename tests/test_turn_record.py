@@ -1,6 +1,6 @@
 """Real registry/turn files and the public Comms phase entrypoint."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import json
 import os
 

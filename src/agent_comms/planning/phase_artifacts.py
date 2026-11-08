@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.phase_evidence import MainEvidence, MainTree, UnreadableEvidenceError
-from agent_comms.repo import Repo
+from ..projects.repo import Repo
 
 
 @dataclass(frozen=True)

@@ -1,7 +1,7 @@
 """The owner's own messages and claude-ai's are both directives on a thread holding owner
 requests, recorded once by the origin that speaks for the owner."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.channel_targets import CommandTarget
 
 import pytest

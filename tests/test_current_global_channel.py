@@ -1,4 +1,4 @@
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import pytest
 
 from agent_comms.channel_targets import CommandTarget

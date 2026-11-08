@@ -9,7 +9,8 @@ import pytest
 from agent_comms.native_build_inputs import (
     CloneShape, FullClone, GitLaunch, GitVersion, GitVersionUnsupported, PartialClone,
 )
-from agent_comms.repo import GitCommandError, Repo
+from agent_comms.projects.git_errors import GitCommandError
+from agent_comms.projects.repo import Repo
 
 
 def reporting_git(directory: Path, report: str) -> Path:

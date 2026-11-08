@@ -1,7 +1,7 @@
 """Typed values and prepared crash-test workers share their existing owners."""
 
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import json
 import os
 import sys

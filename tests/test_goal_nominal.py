@@ -1,6 +1,6 @@
 """Owner pause, goal CAS and goal-control wire contracts."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import json
 from dataclasses import replace
 

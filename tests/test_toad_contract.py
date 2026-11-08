@@ -1,5 +1,5 @@
 """Public agent-comms and ACP fields consumed by pinned Toad builds."""
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.controller import SessionUpdateSink
 
 from functools import partial

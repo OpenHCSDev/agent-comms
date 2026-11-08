@@ -3,7 +3,7 @@
 
 from agent_comms.historical_views import AllHistoricalSenders, NamedHistoricalSender
 from agent_comms.transcripts import RecordedPageSource
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import json
 import os
 from dataclasses import replace

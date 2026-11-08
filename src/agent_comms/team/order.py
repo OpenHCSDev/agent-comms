@@ -67,7 +67,8 @@ from agent_comms.notification_evidence import AllOutcomes
 from agent_comms.message_notification import MessageNotification
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.registry_document import RegisteredTeamProject
-from agent_comms.repo import Repo, RepositoryReads
+from ..projects.repo import Repo
+from ..projects.checkouts import RepositoryReads
 from agent_comms.repository_name import RepositoryName
 from agent_comms.team_hud import TeamPlanDocument
 from agent_comms.slop import Slop

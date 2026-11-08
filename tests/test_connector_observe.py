@@ -11,7 +11,7 @@ from agent_comms.connector import Connector
 from agent_comms.connector_store import ConnectorStore, UiReadAccess
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.registry.threads import NativeThread
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.ui_model.observation import ObservationRequest, ObserveSidebar, ServiceResult, SidebarResult
 
 

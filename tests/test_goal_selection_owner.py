@@ -1,6 +1,6 @@
 """An owner pause refuses goal input review and a precondition expecting an active goal."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import os
 
 import pytest

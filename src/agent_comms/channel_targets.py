@@ -14,7 +14,7 @@ from .frozen_recipient import FrozenRecipient
 from .errors import HumanSendRefusedError, RelationViolationError, UnregisteredThreadError
 from .nominal.field_codec import NullMember, SingleFieldValue, SubclassUnion
 from .projection_source import ProducedRow, ProjectionSource
-from .repo import Checkout
+from .projects.checkouts import Checkout
 from .response_policy import DirectPolicy, MentionedPolicy
 from .thread_identity import ThreadIncarnation
 from .storage.typed_table import sql_literal

@@ -21,7 +21,7 @@ from .nominal.field_codec import (
 from .repository_name import RepositoryName
 
 if TYPE_CHECKING:
-    from .storage_rules import StorageRule
+    from .projects.storage_rules import StorageRule
 
 StoragePath = Annotated[Path, PathText]
 

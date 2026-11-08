@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.repo import Repo
+from agent_comms.projects.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.rule_deal import AuditDue
 from agent_comms.rule_probes import FlinchProbe, HuntProbe, PriorProbe, Probe, ProbeContext

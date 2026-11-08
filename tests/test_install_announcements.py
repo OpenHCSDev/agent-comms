@@ -12,7 +12,8 @@ from agent_comms.cli_commands import BusReadBack
 from agent_comms.cli_verbs.history import HistoryCliCommand
 from agent_comms.installer.probes.harnesses import InstallResult
 from agent_comms.registry.registry_document import NoTeamProject
-from agent_comms.repo import Checkout, GitCommandError
+from agent_comms.projects.git_errors import GitCommandError
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.host_services import RestartedService
 from agent_comms.installer.backup import BackupReport, RestoreSpace

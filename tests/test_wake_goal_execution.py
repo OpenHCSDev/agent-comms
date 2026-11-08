@@ -27,7 +27,7 @@ from agent_comms.goal_presentation import (
 from agent_comms.goals import Goal
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.registry.threads import NativeThread
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from goal_owner_fixture import canonical_goal_wire
 
 

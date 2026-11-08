@@ -6,7 +6,7 @@ import shutil
 import pytest
 
 from agent_comms.comms import wire
-from agent_comms.storage_rules import StorageRule
+from agent_comms.projects.storage_rules import StorageRule
 
 
 def canonical_goal_wire(root):

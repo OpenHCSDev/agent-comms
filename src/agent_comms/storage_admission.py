@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from .repo import RepositorySource
+from .projects.repository_sources import RepositorySource
 
 
 class StorageAdmission(ABC):

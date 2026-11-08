@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from agent_comms.cli_command import TargetActionCommand
-from agent_comms.repo import Checkout
+from ..projects.checkouts import Checkout
 
 from typing import Self
 

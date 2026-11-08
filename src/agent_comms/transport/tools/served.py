@@ -191,7 +191,7 @@ from ...relationships import (
     RelationshipEdit,
     ThreadCommsSnapshot,
 )
-from ...repo import Checkout
+from ...projects.checkouts import Checkout
 from ...restart_queue import (
     QueuedRestart,
     RestartQueue,

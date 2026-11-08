@@ -1,6 +1,6 @@
 """Explicit human Mark read never acknowledges a persistent agent's inbox."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.read_basis import NamedViewer

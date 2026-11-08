@@ -1,5 +1,5 @@
 """Record-capped native reply counts, read marks, per-source publication and retirement."""
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import json
 import sqlite3
 from concurrent.futures import Future

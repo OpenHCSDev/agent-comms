@@ -2,7 +2,7 @@
 from pathlib import Path
 from agent_comms.controller import NO_CONTROLLER
 from agent_comms.nominal.field_codec import AcpSessionId
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.controller import CancelledOutcome, Controller, PermissionOutcome, SessionUpdateSink
 
 from agent_comms.channel_targets import CommandTarget

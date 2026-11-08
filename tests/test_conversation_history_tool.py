@@ -1,6 +1,6 @@
 """The connector reads one conversation through the existing bounded pager."""
 from pathlib import Path
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import pytest
 
 from agent_comms.errors import UnregisteredThreadError

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import os
 from pathlib import Path
 

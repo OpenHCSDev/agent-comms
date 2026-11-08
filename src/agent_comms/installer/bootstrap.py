@@ -21,7 +21,7 @@ from agent_comms.installer.interpreter_operation import LaunchedPhaseTiming
 from agent_comms.installer.runtime_stack import RuntimeStack
 from agent_comms.installer.target_tree import ScratchTree
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.repo import ScratchCheckout
+from ..projects.checkouts import ScratchCheckout
 
 
 def stopped(signum: int, frame: object) -> None:

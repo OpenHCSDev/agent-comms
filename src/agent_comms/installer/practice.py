@@ -30,7 +30,7 @@ from agent_comms.storage.locked_store import (
     LiveFilesRequest, RegistryFile, RetainedCopyRequest, RootFile, UndeclaredFile,
 )
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, NoMaintenanceHolder
-from agent_comms.storage_rules import StorageRule
+from ..projects.storage_rules import StorageRule
 from agent_comms.storage.private_path import PrivateDirectoryRole
 
 

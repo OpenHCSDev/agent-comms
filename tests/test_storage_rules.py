@@ -25,7 +25,14 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, RecordProblems
 from agent_comms.thread_creation import RecordedCreationTime
-from agent_comms.repo import Checkout, DetachedStart, GitCommandError, LocalRepositorySource, Repo, RepositoryReads
+from agent_comms.projects.git_errors import GitCommandError
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.checkouts import (
+    Checkout,
+    DetachedStart,
+    RepositoryReads,
+)
+from agent_comms.projects.repository_sources import LocalRepositorySource
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.repository_name import RepositoryName
 from agent_comms.shell_effects import (
@@ -34,8 +41,8 @@ from agent_comms.shell_effects import (
     StorageDenied,
     shell_storage_effects,
 )
-from agent_comms.storage_projection import StorageProjection
-from agent_comms.storage_rules import (
+from agent_comms.projects.storage_projection import StorageProjection
+from agent_comms.projects.storage_rules import (
     CheckoutAllocation,
     EditableCheckoutAllocation,
     GoalCheckoutAllocation,

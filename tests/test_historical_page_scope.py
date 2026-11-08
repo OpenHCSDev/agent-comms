@@ -1,6 +1,6 @@
 """Source-owned history predicates and sound sequence-indexed membership."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from dataclasses import replace
 
 import pytest

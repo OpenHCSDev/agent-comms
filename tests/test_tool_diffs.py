@@ -1,6 +1,6 @@
 """Native edit evidence survives RPC, ACP, paging and transcript serialization."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from bus_history import read_history
 import json
 from agent_comms.tool_caller import ThreadCaller

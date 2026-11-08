@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from xdist import is_xdist_worker
 
-from agent_comms.storage_rules import StorageRule
+from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.test_lease import (
     InheritedTestRun,
     LeaseStart,

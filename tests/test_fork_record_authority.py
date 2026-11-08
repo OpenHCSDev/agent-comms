@@ -20,7 +20,7 @@ from agent_comms.team.order import TeamContext
 from agent_comms.errors import UnreceivedAnswerError
 from agent_comms.head_review import PullRequestHead
 from agent_comms.messaging import TeamReceipts
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import ExternalThread, SubagentThread
 from agent_comms.team.standing_rules import DirectiveUnacted
 from agent_comms.thread_model import DeclaredModel

@@ -13,7 +13,7 @@ from agent_comms.nominal.field_codec import GitCommitText, WireOmitDefault
 from agent_comms.installer.runtime_resolution import RuntimePackage, RuntimeResolution
 from agent_comms.installer.probes.interpreter import InterpreterBuild, RecordedInterpreterBuild
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.repo import Repo
+from .projects.repo import Repo
 from agent_comms.repository_name import RepositoryName
 
 if TYPE_CHECKING:

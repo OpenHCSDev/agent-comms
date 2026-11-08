@@ -4,10 +4,13 @@ from agent_comms.cli_commands import CheckoutGrant
 from agent_comms.cli_verbs.checkout import CheckoutCliCommand
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument
-from agent_comms.repo import LocalRepositorySource, RepositorySource
+from ..projects.repository_sources import (
+    LocalRepositorySource,
+    RepositorySource,
+)
 from agent_comms.repository_name import RepositoryName
-from agent_comms.storage_rules import RepositoryCheckoutAllocation
-from agent_comms.storage_rules import StorageRule
+from ..projects.storage_rules import RepositoryCheckoutAllocation
+from ..projects.storage_rules import StorageRule
 from agent_comms.registry.threads import Thread
 from dataclasses import dataclass
 from pathlib import Path

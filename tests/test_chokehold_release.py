@@ -4,7 +4,7 @@ from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 
 from agent_comms.team.vibe_check import Chokehold, ChokeholdAnswer
 from agent_comms.goal_actions import ChokeholdPausedGoalAction, OwnerInvocable, PausedGoalAction

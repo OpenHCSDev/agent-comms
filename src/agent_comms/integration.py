@@ -62,7 +62,12 @@ from .head_review import (
 )
 from .launch_runtime import CheckoutSource, RestoredRuntime
 from .native_build_inputs import DetachedChildStdio
-from .repo import DetachedStart, GitCommandError, Repo, RepositoryReads
+from .projects.git_errors import GitCommandError
+from .projects.repo import Repo
+from .projects.checkouts import (
+    DetachedStart,
+    RepositoryReads,
+)
 from .repository_name import RepositoryName
 from .systemd_unit import AgentsSlice
 from .test_lease import LeaseStart, TestLease

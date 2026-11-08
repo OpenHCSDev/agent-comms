@@ -1,7 +1,7 @@
 """Selected check history is small, non-executable and scoped to the command."""
 
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import json
 from pathlib import Path
 import sys

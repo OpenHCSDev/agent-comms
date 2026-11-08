@@ -1,6 +1,6 @@
 """Idle observations avoid repeated work without becoming delivery authority."""
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import asyncio
 import os
 import sqlite3

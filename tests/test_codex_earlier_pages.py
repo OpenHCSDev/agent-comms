@@ -1,6 +1,6 @@
 """Real Unix WebSocket replies, watch frames and Core pager; no replaced transports."""
 from agent_comms.transcripts import EarlierThan, Through
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 import asyncio
 import json
 from contextlib import suppress

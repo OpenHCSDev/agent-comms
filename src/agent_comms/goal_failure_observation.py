@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Annotated
 from .turn_failure import TurnFailure
 from .nominal.field_codec import AttemptId, GoalId, TurnId
 from .goal_attempt_identity import GoalAttemptIdentity
-from .repo import Checkout
+from .projects.checkouts import Checkout
 from .thread_identity import (
     ClaimedIdentity,
     RecordedThreadIncarnation,
