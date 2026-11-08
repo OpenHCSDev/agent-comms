@@ -307,7 +307,7 @@ class OrderEditRead[Result](OrderRead[Result]):
         held = HeldOrders.of(comms.goals.todos, snapshot)
         history = comms.goals.todos.board_history()
         pulls = ProgressRead(history)
-        workplaces = EditWorkplaces.capture(comms, snapshot, held.live, pulls)
+        workplaces = EditWorkplaces.capture(comms, snapshot, held.holders, pulls)
         yield from cls.judgeable(
             comms.root, held.live, pulls.progress(held.todos, comms.registry), workplaces)
 

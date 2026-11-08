@@ -27,6 +27,7 @@ from .goal_actions import (
     GoalActionContext,
     GoalPublicationContext,
     GoalPrecondition,
+    HeadReviewedOrderGoalAction,
     RuntimeInvocable,
     SentBackOrderGoalAction,
     SetGoalAction,
@@ -58,7 +59,10 @@ from .input_attempt import (
 from .input_disposition import DeliveryOverview
 from .registry.threads import NativeThread, Thread
 from .errors import TodoError
-from .todos import SendBackVerdict, StrikeReason, Todo, JudgedCall, TodoBatch, TodoCommand, TodoStore
+from .todos import (
+    Assignment, JudgedCall, ProblemGoals, RecordOrderHeadVerdict, SendBackVerdict,
+    StrikeReason, Todo, TodoBatch, TodoCommand, TodoStore,
+)
 
 _LOG = logging.getLogger(__name__)
 
@@ -136,7 +140,7 @@ class BornGoalTarget(GoalTarget):
         return thread
 
 
-class Goals(GoalRecords):
+class Goals(GoalRecords, ProblemGoals):
     def fork_goal(self, parent: Thread, child: Thread) -> Goal:
         """Create a teammate's child goal from its parent's active work."""
         text = ('\n'.join(goal.text for goal in parent.goal.active())
@@ -183,6 +187,14 @@ class Goals(GoalRecords):
 
     def apply_problem(self, problem: str, operation: TodoCommand) -> Todo:
         return self.todos.apply(problem, operation)
+
+    def record_assignment_review(
+        self, assignment: Assignment, current: Todo, operation: RecordOrderHeadVerdict,
+    ) -> None:
+        self.update_goal(assignment.owner, HeadReviewedOrderGoalAction(
+            expect=GoalPrecondition(goal_id=OneGoal(assignment.generation)),
+            problem=current.id, operation=operation,
+        ))
 
     def send_back(self, problem: str, verdict: SendBackVerdict) -> Todo:
         """The verdict and strike land on the Todo in the write that revises the holder's Goal."""

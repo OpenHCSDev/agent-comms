@@ -12,6 +12,7 @@ from agent_comms_hooks import ToolRefusedError
 from pydantic import JsonValue
 
 from agent_comms.todos import (
+    DeliverTodo,
     AssignedClaimReviewer,
     ClaimReviewer,
     ClaimOrder,
@@ -474,7 +475,18 @@ class CommsOrderDoneTool(CommsTodoTool):
         return {"delivery": comms.goals.todos.get(problem).order.checked().scope.delivery_class}
 
     def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
-        return self.delivery.operation(todo, actor, comms, self.order_id, self.claims)
+        todo.require_maintainer(actor)
+        todo.state.require_open(todo)
+        order = todo.order.checked()
+        order.require_delivery(self.order_id)
+        problems = self.delivery.preparation_problems(todo)
+        if problems:
+            raise TodoProblems(problems)
+        delivery = self.delivery.resolved_delivery(todo)
+        required = order.scope.required_claims(
+            delivery, self.delivery.completion_claims(delivery, order, self.claims))
+        verified = ProgressClaim.require_all(required, comms, order.check.directory)
+        return DeliverTodo(todo.revision, actor, delivery, self.order_id, verified_claims=verified)
 
 
 @dataclass(frozen=True, kw_only=True)

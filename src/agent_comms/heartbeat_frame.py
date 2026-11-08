@@ -118,6 +118,6 @@ class HeartbeatFrame(TeamInputs):
                    }.values()),
             closed,
             reviews,
-            EditWorkplaces.capture(comms, snapshot, inputs.live, inputs.pulls),
+            EditWorkplaces.capture(comms, snapshot, inputs.holders, inputs.pulls),
             TodoStore.timers_up_in(inputs.todos, time.time(), inputs.pulls.progress(inputs.todos, comms.registry)),
         )

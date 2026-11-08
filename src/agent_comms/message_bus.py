@@ -40,6 +40,7 @@ from agent_comms.watch_phase import WatchPhase
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.peer_relevance import Prioritized
 from agent_comms.publisher import Publisher
+from agent_comms.published_bus import PublishedBus
 from agent_comms.read_basis import (
     AnonymousViewer,
     DisplayViewer,
@@ -144,42 +145,13 @@ class UnreadCut:
         return counts
 
 
-class MessageBus[Writes: Publisher]:
+class MessageBus[Writes: Publisher](PublishedBus[Writes]):
     def __init__(
         self, root: Path, registry: Registration, publisher: type[Writes],
     ):
-        self.bus = Bus(Bus.path_in(root))
-        self.reads = ReadLedger.at(root)
+        super().__init__(root, registry, publisher)
         self.history = HistoryArchive.at(self.bus.path.parent)
-        self._registry = registry
-        self._channels = ChannelCatalog.at(root)
         self._pending = HeldUnseenCounts()
-        self.publisher = publisher(self.bus, registry, self._channels, self.opened_activity)
-
-    @contextmanager
-    def opened_activity(self) -> Iterator[ActivityClocks]:
-        yield self.bus.activity_clocks()
-
-    def require_channel(self, target: str) -> Channel:
-        return self.channel_in(self._channels.read(), target)
-
-    def channel_in(self, catalog: CatalogAccess, target: str) -> Channel:
-        """A lookup needs its own channel's clocks only. Every inbox read makes several, and the
-        whole index is a thousand rows."""
-        name = ChannelTarget.normalize_name(target)
-        return catalog.require_channel(name, self.bus.channel_clocks(name))
-
-    def channel_declarations(self):
-        with self.opened_activity() as activity:
-            return self._channels.read().views(activity)
-
-    @contextmanager
-    def snapshot(self, viewer: DisplayViewer = AnonymousViewer()) -> Iterator[tuple[CapturedSelection, BusSnapshot]]:
-        with self.bus.reading() as source:
-            basis = CapturedSelection.load(
-                self._registry, self._channels, self.reads, viewer, source.activity_clocks(),
-            )
-            yield basis, source
 
     def inbox(
         self, name: str, target: NamedTarget = AnyChannel.target(), *,
