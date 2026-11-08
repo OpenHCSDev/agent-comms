@@ -174,7 +174,6 @@ class TeamBoardRead(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
         duty = self.duty(comms.registry, comms.goals)
         try:
             for observed in boards:
-                retention.reconcile(comms, observed)
                 recipients = self.served(comms.registry, comms.goals)
                 held = {recipient.incarnation: TeamUpdate.latest(comms, recipient.incarnation)
                         for recipient in recipients}
@@ -215,9 +214,18 @@ class TeamBoardRead(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
                     retention.published(comms, duty, delivery.packet, hud, now,
                                         announced[recipient])
                     completed.append(recipient)
-        finally:
-            # A later teammate's failure does not erase frames/passes already completed.
+                # After this teammate's board exists, because reconciling reads git: a merge
+                # check that cannot read one repo used to throw here with huds still empty.
+                retention.reconcile(comms, observed)
+            # Only a pass that got through every teammate may replace the team's frames.
+            # TeamFrame.replace_all unlinks every frame absent from huds, which is what a
+            # teammate that stopped beating deserves and the opposite of what a pass that
+            # threw deserves: on 2026-11-08 one Textual worktree could not read a blob for
+            # patch-id, the first reconcile raised with huds empty, and retaining that empty
+            # fragment deleted every board. Tristan's read said "frame missing" for 8 hours.
             retention.retain(comms, plan, tuple(huds.values()))
+        finally:
+            # Passes already completed stay completed, whether or not a later one raised.
             retention.completed(comms, tuple(completed))
         return plan, tuple(huds.values())
 

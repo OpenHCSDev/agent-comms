@@ -1,8 +1,10 @@
 """A board prepares off-loop, publishes once, and follows store revisions without beats."""
 
 import asyncio
+from contextlib import nullcontext
 from dataclasses import replace
 from multiprocessing import Pipe
+import os
 import threading
 
 import pytest
@@ -15,7 +17,11 @@ from agent_comms.revision_views import TeamBoardView
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import StandingRule
 from agent_comms.task_attachments.team_pings import TeamUpdateStore
-from agent_comms.team_heartbeat import TeamBoardRead, TeamObservation
+from pathlib import Path
+
+from agent_comms.child_process import NoProcess, ProcessIdentity
+from agent_comms.team_frame_file import TeamPlanFile
+from agent_comms.team_heartbeat import TeamBoardRead, TeamHeartbeat, TeamObservation
 from agent_comms.team_hud import CodexUsage, TeamFrame, TeamPlan, UnreadableUsage
 from agent_comms.todos import ProgressRead, TodoStore
 from agent_comms.ui_model.observation import (
@@ -171,3 +177,56 @@ def test_todo_commit_signal_is_a_board_input_not_a_database_mtime(held_bus):
 def test_frame_publication_and_expiry_do_not_request_another_preparation():
     before = WireRevision.empty()
     assert not replace(before, expiry_tick=60).changed_since(TeamBoardView(), before)
+
+
+def test_a_pass_that_throws_leaves_the_boards_it_could_not_replace(held_bus, account_read, monkeypatch):
+    """A pass that raised holds a fragment, not the team, so it may not replace the frames.
+
+    TeamFrame.replace_all unlinks every frame absent from the huds it is handed, which is
+    exactly what a teammate that stopped beating deserves and the opposite of what a pass
+    that threw deserves. On 2026-11-08 one Textual worktree could not read a blob for
+    patch-id, so the first reconcile raised while huds was still empty, the finally retained
+    that empty fragment, and every board on disk was deleted. Tristan's reads answered
+    "Tristan frame missing" for eight hours, with the alarm about the failing pass having
+    nowhere left to appear.
+    """
+    colleague = held_bus.registry.require("colleague")
+    held_bus.registry.register(
+        replace(colleague, process_identity=ProcessIdentity.capture(os.getpid())))
+    asyncio.run(TeamHeartbeat().run(lambda: nullcontext(held_bus)))
+
+    def on_disk() -> dict[Path, bytes]:
+        """The files themselves, because the claim is that the pass may not replace them."""
+        written = {path: path.read_bytes() for path in TeamFrame.matching_in(held_bus.root)}
+        plan = TeamPlanFile.path_in(held_bus.root)
+        return {**written, plan: plan.read_bytes()} if plan.exists() else written
+
+    retained = on_disk()
+    assert TeamFrame.matching_in(held_bus.root), "the fixture never gave Tristan a board to lose"
+
+    def unreadable(self, comms):
+        raise RuntimeError(
+            "Git in /home/ts/wt/codex-textual-keys: could not fetch blob from promisor remote")
+
+    monkeypatch.setattr(TeamObservation, "merges", unreadable)
+    # The failure stays loud: the pass raises rather than swallowing, which is what records
+    # it as a failing service pass. What it may not do is take the boards down with it.
+    with pytest.raises(RuntimeError, match="promisor remote"):
+        asyncio.run(TeamHeartbeat().run(lambda: nullcontext(held_bus)))
+
+    assert on_disk() == retained, (
+        "a failing merge check replaced Tristan's boards and plan with its own empty fragment"
+    )
+
+    # The other half, so the fix cannot degrade into never retaining at all: a pass that
+    # gets through still replaces the frames. Checked by removing them and requiring the
+    # next finished pass to put them back, which says nothing about who was beating. That a
+    # finished pass also unlinks the frame of a teammate that stopped is replace_all's own
+    # declared job (team_hud.py:374-376) and is not re-checked here.
+    for path in TeamFrame.matching_in(held_bus.root):
+        path.unlink()
+    monkeypatch.setattr(TeamObservation, "merges", lambda self, comms: ())
+    asyncio.run(TeamHeartbeat().run(lambda: nullcontext(held_bus)))
+    assert TeamFrame.matching_in(held_bus.root), (
+        "a finished pass wrote no frame, so this fix has degraded into never retaining"
+    )
