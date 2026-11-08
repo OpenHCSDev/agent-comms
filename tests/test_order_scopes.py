@@ -77,7 +77,7 @@ def requested(comms, scope, source, problem='P1', edits=('Fix the problem',), ow
         problem=problem, order=replace(order(source), scope=scope, edits=edits), request=request,
         review_at=RecordedEventTime(1000),
         assigner=comms.registry.require('colleague').incarnation,
-        repo=RepositoryName.from_wire('OpenHCSDev/agent-comms'),
+        repo=source.github,
         text='Classify the source without changing it',
     )).apply(comms, caller)
     return caller, comms.goals.todos.get(problem)
