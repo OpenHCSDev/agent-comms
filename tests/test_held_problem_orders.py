@@ -19,9 +19,9 @@ from agent_comms.errors import GoalRefused
 from agent_comms.goal_actions import ClearGoalAction, CreateProblemGoalAction, SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from agent_comms.owner_protocol import OwnerFailure, OwnerLine
-from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.todos import (
-    DeliveredProblemOrder, MergedListedPullRequest, OrderMessage, PullRequestCommit,
+    DeliveredProblemOrder, MeasuredReview, MergedListedPullRequest, OrderMessage, PullRequestCommit,
     DeliveryReport, PullRequestLink, SelectedClaimReviewer, StrikeTodo, TeammateOccupied,
 )
 from agent_comms.work_branches import WorkBranches
@@ -202,6 +202,29 @@ def test_second_unplanned_order_is_refused_without_recording(held_team, cited_so
     assert ctx.comms.goals.todos.board() == before
     assert ctx.comms.goals.todos.get("P1") == original
     assert ctx.comms.registry.require("worker").goal == goal
+
+
+@pytest.mark.parametrize("review_at", (UnrecordedEventTime(), RecordedEventTime(12345)))
+def test_native_problem_creation_uses_the_owned_review_measurement(
+    held_team, cited_source, review_at,
+):
+    """The native tool measures an omitted review time; recorded source times survive."""
+    ctx = held_team
+    worker = ctx.comms.registry.require("worker")
+    held = ctx.comms.goals.todos.get("P1")
+    pending = replace(order(cited_source), id=OrderId.mint())
+    measured = MeasuredReview.read(ctx.comms.goals.todos).review_at(pending)
+    creation = CreateProblemGoalAction(
+        problem="P2", repo=ctx.repos[0].github, text="Repair native order creation",
+        assigner=worker.acting_identity, request=held.request.require(),
+        review_at=review_at, order=pending,
+    )
+    ThreadCaller("worker").invoke(
+        CommsTodoCreateTool(owner="worker", order=creation), ctx.comms)
+    saved = ctx.comms.goals.todos.get("P2")
+    assert saved.review_at == review_at.continued_from(measured.at)
+    assert saved.order == pending
+    assert saved.held().owner_identity == worker.incarnation
 
 
 def test_a_teammate_files_its_own_second_row_beside_the_one_it_holds(held_team, cited_source):

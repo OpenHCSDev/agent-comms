@@ -22,6 +22,7 @@ from agent_comms.todos import (
     HeadVerdict,
     InstallTodo,
     JudgedCall,
+    MeasuredReview,
     NoHeadOrder,
     OrderClaim,
     OrderCompletion,
@@ -377,6 +378,8 @@ class CommsOrderTool(ThreadToolRequest):
     def apply(self, comms: Comms, caller: ThreadCaller) -> ProblemOrdered:
         order = self.order.bound_to(caller.identity(comms)).bound_in(
             comms.registry.snapshot().team_project)
+        order = replace(order, review_at=order.review_at.continued_from(
+            MeasuredReview.read(comms.goals.todos).review_at(order.order).at))
         goal = comms.goals.update_goal(self.owner, order)
         return ProblemOrdered(goal, tuple(comms.goals.todos.get(problem)
                                           for problem in self.order.problems()))
