@@ -32,9 +32,9 @@ from .nominal.field_codec import (
 )
 from .native_input_record import FullNativeExecution, NativeInputIdentity
 from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable, SelectedToolSlot
+from .native_tool_transport import NativeToolMode
 from .native_tool_call import (
     NativeToolCall,
-    NativeToolMode,
     SelectedToolBusy,
 )
 from .native_tool_transport import (

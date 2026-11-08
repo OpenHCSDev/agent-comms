@@ -40,7 +40,7 @@ from .native_input_proof import (
     NativeContextRecord,
     NativeInputLocation,
 )
-from .native_session_reopen import PiSessionId
+from .native_session_reopen import NativeReopenError, NativeSessionIdentity, PiSessionId
 from agent_comms.pi_wire import PiField, PiOmitted, PiPayload, PiReported, ReportedInputId, TaggedPayload
 from agent_comms.pi_wire import Opaque
 from .pi_payloads import PiMessage, ReportedText
@@ -399,6 +399,14 @@ class NativeEvidenceRead:
             self.close()
             raise NativePiUnavailable(f'Native Pi session evidence is invalid: {error}') from error
 
+    def session_identity(self) -> NativeSessionIdentity:
+        """The saved-session identity this already verified source declares."""
+        try:
+            session_id = self.header().require_reopen()
+        except (MalformedRecord, NativePiUnavailable) as error:
+            raise NativeReopenError("Saved native session identity cannot be read") from error
+        return NativeSessionIdentity(session_id, str(self.source.path))
+
     def observe(self):
         """Read the full history."""
         return self._observe(reverified=False)
@@ -580,6 +588,15 @@ class NativeEvidenceScope(ExitStack):
             self.for_source(path).observe(*(
                 context for context in contexts if context.session_file == path
             ))
+
+    @classmethod
+    def locate_session(cls, session_file: str) -> NativeSessionIdentity:
+        """One-shot callers own a bounded scope; selected callers borrow theirs."""
+        try:
+            with cls() as scope:
+                return scope.for_source(Path(session_file).absolute()).session_identity()
+        except NativePiUnavailable as error:
+            raise NativeReopenError("Saved native session source cannot be opened") from error
 
     def for_source(self, path: Path) -> NativeInputEvidenceRead:
         path = Path(path).absolute()

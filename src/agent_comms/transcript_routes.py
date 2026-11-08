@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Annotated, ClassVar, TYPE_CHECKING
 
 from agent_comms.native_session_files import NativeSessionFiles
-from agent_comms.native_session_reopen import NativeSessionIdentity
 
 from .errors import RelationViolationError
 from .nominal.field_codec import InputId, MalformedRecord, NominalSpelling, NominalText, NullMember, SingleFieldValue
@@ -249,6 +248,7 @@ class TranscriptRoutes(DurableStore):
         registry and input owners remain held until durable annotations commit.
         A partial successful send subset remains published if a later send fails.
         """
+        from .native_entries import NativeEvidenceScope
         from .native_input_owner import RegistryOwner
         from .native_transcript import NativeTranscript
 
@@ -267,7 +267,7 @@ class TranscriptRoutes(DurableStore):
         try:
             final, user = reader.publication_input(
                 after=floor, through=revision.size,
-                files=NativeSessionFiles.for_identity(NativeSessionIdentity.locate(str(path)),
+                files=NativeSessionFiles.for_identity(NativeEvidenceScope.locate_session(str(path)),
                                                       root=log.path.parent, owner=incarnation),
             )
         except MalformedRecord as error:

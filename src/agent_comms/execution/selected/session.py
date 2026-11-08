@@ -19,6 +19,7 @@ from agent_comms.native_arguments import (
     NativeArguments,
     NativeInputProofArgument,
 )
+from agent_comms.native_entries import NativeEvidenceScope
 from agent_comms.native_evidence_read import session_location
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.native_session_files import NativeSessionFiles
@@ -76,7 +77,7 @@ class SelectedSession:
         return self.attest(actual)
 
     def require_context(self, context) -> None:
-        self.attest(NativeSessionIdentity.from_context(context))
+        self.attest(context.session_identity)
 
     def continued(self, context) -> SelectedSession:
         raise NativePiUnavailable("An unselected session cannot own a tracked native continuation")
@@ -94,7 +95,7 @@ class SelectedSession:
         worktree: Path, owner: ParticipantIdentity,
     ) -> SelectedSession:
         identity = (create_fresh_private_session(root, worktree=worktree) if path is None
-                    else NativeSessionIdentity.locate(str(path)))
+                    else NativeEvidenceScope.locate_session(str(path)))
         return SavedSelectedSession(directory, owner=owner, identity=identity)
 
     @classmethod
@@ -139,7 +140,7 @@ class SavedSelectedSession(SelectedSession):
     def continued(self, context) -> SelectedSession:
         self.require_context(context)
         return SavedSelectedSession(self.directory, owner=self.owner,
-            identity=NativeSessionIdentity.from_context(context))
+            identity=context.session_identity)
 
     @property
     def path(self) -> Path:

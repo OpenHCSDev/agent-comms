@@ -5,7 +5,6 @@ from __future__ import annotations
 from agent_comms.lifecycle_capability import Active
 
 from agent_comms.native_session_files import NativeSessionFiles
-from agent_comms.native_session_reopen import NativeSessionIdentity
 
 import asyncio
 import sqlite3
@@ -189,7 +188,7 @@ class NativeSendStage(ABC):
             evidence = source_reads.for_source(context.session_file)
             if not evidence.corroborates_context(
                 context, input_id=input_id,
-                files=NativeSessionFiles.for_identity(NativeSessionIdentity.from_context(context),
+                files=NativeSessionFiles.for_identity(context.session_identity,
                                          root=store.session.path.parent,
                                          owner=owner.thread.incarnation.require_recorded()),
             ):

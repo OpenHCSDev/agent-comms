@@ -11,7 +11,10 @@ import struct
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from contextlib import AsyncExitStack, ExitStack
-from dataclasses import dataclass
+from dataclasses import (
+    dataclass,
+    field,
+)
 from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Generic, TypeVar
@@ -26,7 +29,6 @@ from .lifecycle_capability import Complete
 from .native_tool_call import (
     DuplicateToolCallIdentity,
     NativeToolCall,
-    OwnerToolConnection,
     SelectedToolBusy,
     ToolOutcomeUnknown,
 )
@@ -265,6 +267,29 @@ class UnboundToolTransport(Generic[Call]):
         transport = self.bind(pid)
         await transport.start()
         return transport
+
+
+@dataclass(frozen=True)
+class OwnerToolConnection:
+    """The private tool endpoint for one input, never a process setting."""
+
+    path: str
+    token: str = field(repr=False)
+
+
+class NativeToolMode(ABC):
+    """Owner-bound native tool policy shared by selected and normal coding turns."""
+
+    @abstractmethod
+    def launch_arguments(self, package: Path) -> tuple[str, ...]:
+        """Return the native tool selection and reviewed extension."""
+
+    @abstractmethod
+    async def open_transport(self, turn, ownership) -> UnboundToolTransport:
+        """Open the transport implementing this declared permission."""
+
+    def or_else(self, factory: Callable[[], NativeToolMode]) -> NativeToolMode:
+        return self
 
 
 class ToolTransport(Generic[Call]):

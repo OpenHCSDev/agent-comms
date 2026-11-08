@@ -39,6 +39,7 @@ from .native_fork import (
 )
 from .native_package import SYSTEM_PROMPT
 from .native_pi import NativePiRpcLaunch
+from .native_entries import NativeEvidenceScope
 from .native_session_reopen import NativeSessionIdentity
 from .native_transcript import NativeTranscript
 from .pi_commands import Compact, NativeQuery
@@ -97,9 +98,7 @@ class PiSessionFile(RuntimeLocation):
         path = Path(self.path).absolute()
         retained = execution.retained_source(path)
         identity = (retained.identity if retained is not None else
-                    NativeSessionIdentity.from_evidence(
-                        source_reads.for_source(path)
-                    ))
+                    source_reads.for_source(path).session_identity())
         return SavedSelectedSession(directory, identity=identity,
                                     owner=participant.owner.thread.incarnation.require_recorded())
 
@@ -118,7 +117,7 @@ class PiSessionFile(RuntimeLocation):
 
     def session_observation(self, root: Path, thread: Thread) -> SessionObservation:
         return SessionRevision.observe(NativeSessionFiles.for_identity(
-            NativeSessionIdentity.locate(self.path),
+            NativeEvidenceScope.locate_session(self.path),
             root=root, owner=thread.incarnation.require_recorded()))
 
     @property

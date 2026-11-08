@@ -15,15 +15,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Never
 
-from .nominal.declared_family import UnknownFamilyMember
-from .registry.thread_identity import (
-    OfferedTools,
-    UnobservedTools,
-)
 from .nominal.field_codec import (
-    FieldCodec,
     InputId,
-    MalformedRecord,
     SlotId,
     ToolCallId,
 )
@@ -33,7 +26,6 @@ from .tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
     from .envelope_claim_transitions import FileClaimPath
-    from .native_tool_transport import UnboundToolTransport
     from .pi_payloads import PiToolResult
     from .pi_rule_gate import PiRuleGate
     from .shell_effects import StorageEffect
@@ -327,27 +319,6 @@ class CodingCall(NativeToolCall):
         # consumed call cannot be retried; this grants no mutation authority.
         pass
 
-    @classmethod
-    def decode(cls, call_id: object, name: object, arguments: object,
-               offered: OfferedTools = UnobservedTools()) -> CodingCall:
-        """``offered`` is the thread's catalogue for this turn; without one only declared
-        members decode."""
-        try:
-            call_id = FieldCodec.decode(ToolCallId, call_id)
-        except MalformedRecord as error:
-            raise SelectedToolDenied("Malformed native coding call identity") from error
-        if type(name) is not str:
-            raise SelectedToolDenied("Malformed native coding call identity")
-        from .native_tools import NativeToolDeclaration
-
-        try:
-            return NativeToolDeclaration.from_call(name, arguments, call_id=call_id,
-                                                   offered=offered)
-        # A name no member declares is refused data too: answering "no" here keeps the
-        # call from dying with the socket, which Pi can only report as outcome UNKNOWN.
-        except (MalformedRecord, UnknownFamilyMember) as error:
-            return RefusedCodingCall(call_id, name, arguments, str(error))
-
 
 
 
@@ -387,27 +358,3 @@ class RefusedCodingCall(CodingCall):
         if (self.call_id, self.declared_name) != (existing.call_id, existing.declared_name):
             raise SelectedToolDenied("Refused coding call identity changed")
         existing.progress.claim_scope.refuse(existing, self.progress.claim_scope)
-
-
-
-@dataclass(frozen=True)
-class OwnerToolConnection:
-    """The private tool endpoint for one input, never a process setting."""
-
-    path: str
-    token: str = field(repr=False)
-
-
-class NativeToolMode(ABC):
-    """Owner-bound native tool policy shared by selected and normal coding turns."""
-
-    @abstractmethod
-    def launch_arguments(self, package: Path) -> tuple[str, ...]:
-        """Return the native tool selection and reviewed extension."""
-
-    @abstractmethod
-    async def open_transport(self, turn, ownership) -> UnboundToolTransport:
-        """Open the transport implementing this declared permission."""
-
-    def or_else(self, factory: Callable[[], NativeToolMode]) -> NativeToolMode:
-        return self

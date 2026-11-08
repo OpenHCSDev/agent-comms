@@ -31,7 +31,7 @@ from .native_failures import NativePiUnavailable, NativeRequestFailure
 from .native_input_proof import NativeContextProof
 from .native_package import MANIFEST, SYSTEM_PROMPT, VerifiedNativePackage
 from .native_session_files import NativeAgentSettings, NativeSessionFiles
-from .native_tool_call import NativeToolMode
+from .native_tool_transport import NativeToolMode
 from .pi_vocabulary import NoThinkingOverride, ThinkingChoice
 
 from .native_evidence_read import NativeInputUncommitted

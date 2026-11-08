@@ -76,7 +76,7 @@ from .native_pi import NativePiRpcLaunch, read_tracked_input_commitment
 from .native_session_files import NativeSessionFiles
 from .native_session_reopen import PiSessionId
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartup
-from .native_tool_call import NativeToolMode
+from .native_tool_transport import NativeToolMode
 from .native_tool_transport import ToolTransport, UnboundToolTransport
 from .pi_rpc import PiRpcChannel
 from .private_sidecar import native_request_digest

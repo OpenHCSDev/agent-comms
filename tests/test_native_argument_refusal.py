@@ -8,7 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from agent_comms.native_tool_call import ArgumentRefusal, CodingCall
+from agent_comms.native_tool_call import ArgumentRefusal
+from agent_comms.native_tools import NativeToolDeclaration
 from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.channel_coding_tools import CodingToolSocket
@@ -20,7 +21,7 @@ from agent_comms.pi_payloads import AssistantMessage, ReportedParts, ToolCallCon
     ("read", {"path": "x", "offset": None, "limit": None}, {"path": "x"}),
 ])
 def test_pi_optional_nulls_are_omitted_by_the_existing_codec(name, arguments, encoded):
-    call = CodingCall.decode("optional-null", name, arguments)
+    call = NativeToolDeclaration.decode("optional-null", name, arguments)
     assert call.allowed_claim() is None
     assert call.arguments == encoded
 
