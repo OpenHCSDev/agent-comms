@@ -2068,12 +2068,6 @@ class AttachedChild(ChildProcess):
         self.send(data)
         await self.drain()
 
-    async def send_fenced(self, data: bytes, boundary, *, measurements) -> None:
-        """Keep the independent raw writer on this child's original input."""
-        from .native_prompt_send import send_fenced_prompt
-
-        await send_fenced_prompt(self.stdin, data, boundary, measurements=measurements)
-
     @property
     def returncode(self) -> int | None:
         return self.process.returncode
