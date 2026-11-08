@@ -206,6 +206,16 @@ cProfile finalization did not save its profile. A separate 30-second launch-time
 attribution probe saves the profile before that exit; it is diagnostic evidence,
 not a replacement baseline or a successful scan.
 
+`nra-p0-full-51d17a5cb.json` is the full/raw `src` scan that completed. NRA `main`
+at `8989beb71eb5` runs every one of its 110 detectors on its exact compact-global
+path, so the scan never falls back to the stage that exhausted both deadlines:
+`complete: true`, 0 detectors omitted, 686 source files, 521 raw findings over 25
+patterns, 89 s wall time with the analysis cache disabled. It ran on a read-only
+`git archive` of `51d17a5cb` extracted under a scratch root, which prefixes every
+path in the file; strip everything before `src/`. Command, from that root:
+`nominal-refactor-advisor --json --raw-findings --no-auto-context-root --no-cache
+--scan-budget-seconds 2300 src`.
+
 `ModuleMapPhase` requires the source census, full/raw scan, static import map and
 first-batch ownership trace at their recorded Git blob contents. Its manifest is
 written only after the artifacts are checked; absent artifacts, absent entries
