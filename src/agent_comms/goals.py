@@ -528,10 +528,17 @@ class ProblemGoalOrder(GoalOrder):
     text: ClassVar[str] = "Complete the assigned problems."
 
     def require_completion(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
-        raise GoalRefused("Complete each problem with its checked delivered commit.")
+        """Every assigned problem is delivered or closed; the Goal then completes.
+
+        A problem Goal used to refuse completion outright, so the only way out of one was to
+        replace it. Its problems are the condition: while one is still pending the Goal stays
+        open, and once none is, the unit's work is done and the Goal says so.
+        """
+        if goals.todos.for_goal(owner, goal.id):
+            raise GoalRefused("Complete each problem with its checked delivered commit.")
 
     def require_order(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
-        if not goals.todos.for_goal(owner, goal.id):
+        if not goals.todos.closed_for_goal(owner, goal.id):
             raise ValueError("The problem Goal has no assigned Todos.")
 
     def require_replacement(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:

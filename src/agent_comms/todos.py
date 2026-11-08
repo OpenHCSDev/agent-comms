@@ -6616,6 +6616,15 @@ class TodoStore(OwnerRequestStore, TodoHistory):
                          (unit.wire_birth, *parameters))
 
     @classmethod
+    def every_in(cls, db: sqlite3.Connection, where: str, parameters: tuple,
+                 *, unit: ThreadIncarnation) -> CapturedRows[Todo]:
+        """The unit's rows under one condition whatever their state, for a finished Goal."""
+        terms = Todo.unit_index.terms[:-1]
+        match = f"({', '.join(terms)})=({','.join('?' for term in terms)})"
+        return Todo.capture_rows(db, f'{match} AND ({where})',
+                                 (unit.wire_birth, *parameters))
+
+    @classmethod
     def _one(cls, rows: tuple[Todo, ...], todo_id: str) -> Todo:
         if not rows:
             raise TodoError(f"Unknown todo: {todo_id}.")
@@ -6659,6 +6668,15 @@ class TodoStore(OwnerRequestStore, TodoHistory):
     def for_goal(self, owner: ThreadIncarnation, goal_id: GoalId) -> tuple[Todo, ...]:
         return self._select(Assignment.sql_field('generation') + '=?', (goal_id,),
                             reader=partial(self.held_in, unit=owner))
+
+    def closed_for_goal(self, owner: ThreadIncarnation, goal_id: GoalId) -> tuple[Todo, ...]:
+        """Every problem this Goal once assigned, closed ones included.
+
+        A finished Goal owns the problems it delivered; asking only for open ones made a
+        completed Goal look like one that was never assigned anything.
+        """
+        return self._select(Assignment.sql_field('generation') + '=?', (goal_id,),
+                            reader=partial(self.every_in, unit=owner))
 
     def require_input_sources(self, inputs: IntegrationInput) -> None:
         """Current Todo links or an exact saved accepted orderless decision own each source."""
