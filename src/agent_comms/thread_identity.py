@@ -41,9 +41,9 @@ if TYPE_CHECKING:
     from .child_process import ProcessIdentity
     from .messages import Message
     from .messaging.read_ledger import (
-    ReadDocument,
-    ReadLedger,
-)
+        ReadDocument,
+        ReadLedger,
+    )
     from .registry.threads import Thread
     from .registry_provenance import RegistryProvenance
 

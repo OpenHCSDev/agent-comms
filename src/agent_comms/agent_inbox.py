@@ -28,9 +28,9 @@ from .read_basis import ReadCursor
 
 if TYPE_CHECKING:
     from .messaging.read_ledger import (
-    ReadDocument,
-    ReadLedger,
-)
+        ReadDocument,
+        ReadLedger,
+    )
     from .registry.registry_document import RegistrySnapshot
 
 

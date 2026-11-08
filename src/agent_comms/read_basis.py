@@ -353,16 +353,16 @@ if TYPE_CHECKING:
     from .history_views import HistoryViews
     from .messaging.message_bus import MessageBus
     from .messaging.message_page import (
-    MessagePage,
-    PageBounds,
-)
+        MessagePage,
+        PageBounds,
+    )
     from .messages import Message, MessageKind
     from .presentation import BusPresentation
     from .private_registry_guard import RegistryPrivacy
     from .messaging.read_ledger import (
-    ReadDocument,
-    ReadLedger,
-)
+        ReadDocument,
+        ReadLedger,
+    )
     from .registry.registration import Registration
     from .registry.registry_document import RegistrySnapshot, UserThreadLookup
     from .registry_provenance import RegistryProvenance
