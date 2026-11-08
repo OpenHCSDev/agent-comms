@@ -11,7 +11,6 @@ from agent_comms.head_review import PullRequestHead
 from agent_comms.heartbeat_subjects import HeartbeatSubject, UnlandedHeadSubject
 from agent_comms.repo import UnpushedHead
 from agent_comms.repository_name import RepositoryName
-from agent_comms.todos import PullRequestLink
 from agent_comms.work_branches import CommitBase, WorkBranches
 
 from .standing_rules import (
@@ -21,6 +20,7 @@ from .standing_rules import (
     HeldOrderBranchRule,
     UndatedStandingRule,
 )
+from ..planning.pull_requests import PullRequestLink
 
 
 if TYPE_CHECKING:

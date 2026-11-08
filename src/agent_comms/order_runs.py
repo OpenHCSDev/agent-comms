@@ -12,7 +12,11 @@ from agent_comms_hooks import ToolRefusedError
 
 
 if TYPE_CHECKING:
-    from agent_comms.todos import MergedProblemOrder, Todo
+
+    from .planning.orders import (
+        MergedProblemOrder,
+        Todo,
+    )
 
 
 class OrderRun(DeclaredFamily, affix="OrderRun"):

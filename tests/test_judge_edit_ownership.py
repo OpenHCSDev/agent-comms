@@ -14,11 +14,15 @@ from agent_comms.nominal.field_codec import (
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import ProblemGoalOrder
 from agent_comms.owner_requests import NewestOpenRequest
+from agent_comms.planning.order_words import StrikeReason
+from agent_comms.planning.orders import (
+    AcceptedVerdict,
+    Assignment,
+    SendBackVerdict,
+    Todo,
+)
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.storage_rules import StorageRule
-from agent_comms.todos import (
-    AcceptedVerdict, Assignment, SendBackVerdict, StrikeReason, Todo,
-)
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.transport.tools.orders import CommsVerdictTool
 from test_judge_dropped import recorded_edit, unjudged
@@ -104,7 +108,7 @@ def test_an_edit_in_an_unknown_problems_checkout_joins_no_held_order(two_orders,
 
 def test_reading_a_stored_reason_never_flags_its_words(capsys):
     from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.todos import VerdictReason
+    from agent_comms.planning.order_words import VerdictReason
 
     FieldCodec.decode(VerdictReason, "the store cutover happened before this verdict was written")
     assert capsys.readouterr().err == ""

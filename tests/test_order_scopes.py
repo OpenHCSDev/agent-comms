@@ -1,4 +1,16 @@
 """Order scope is decoded once and owns its allowed delivery all the way to storage."""
+from agent_comms.planning.orders import (
+    CommitDelivery,
+    DoneTodoState,
+    OrderScope,
+    PendingProblemOrder,
+    ReportDelivery,
+    ReportedProblemOrder,
+    TodoStore,
+    TriageScope,
+)
+from agent_comms.planning.problem_findings import FixShape
+from agent_comms.planning.pull_requests import PullRequestHeadRevision
 from agent_comms.repo import Checkout, Repo
 from pathlib import Path
 from dataclasses import replace
@@ -14,7 +26,6 @@ from agent_comms.transport.tools.orders import (
 from order_scope_fixture import FIX_SCOPE
 from test_todos import order
 from source_revision_fixture import SourceRepository
-from agent_comms.todos import PullRequestHeadRevision
 from agent_comms.change_report import FileLine
 from agent_comms.goals import OrderCheck
 from agent_comms.registry.registry_document import NoTeamProject, RegisteredTeamProject
@@ -28,10 +39,6 @@ from agent_comms.held_orders import HeldOrders
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.todos import (
-    CommitDelivery, DoneTodoState, FixShape, OrderScope,
-    PendingProblemOrder, ReportDelivery, ReportedProblemOrder, TodoStore, TriageScope,
-)
 from agent_comms.registry.threads import NativeThread
 
 

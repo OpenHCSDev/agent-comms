@@ -3,6 +3,44 @@
 from __future__ import annotations
 
 
+from agent_comms.planning.order_words import StrikeReason
+from agent_comms.planning.orders import (
+    Assignment,
+    ChangeTodoState,
+    ClaimOrder,
+    ClosedListedPullRequest,
+    CommitDelivery,
+    DeliverTodo,
+    DoneTodoState,
+    DraftListedPullRequest,
+    FoldedProblemOrder,
+    MergedListedPullRequest,
+    MergedProgress,
+    NotWorkMaintainer,
+    OperationDelivery,
+    OrderClaim,
+    OrderMessage,
+    PendingProblemOrder,
+    ProgressRead,
+    PullRequestSource,
+    PullRequests,
+    RecordPullRequest,
+    ReleaseTodo,
+    StoredOrderStory,
+    Todo,
+    TodoCommand,
+    TodoConflict,
+    TodoState,
+    TodoStore,
+    UnmergedListedPullRequest,
+    UnorderedProblemOrder,
+    WithdrawTodo,
+)
+from agent_comms.planning.problem_findings import ExpectedProblem
+from agent_comms.planning.pull_requests import (
+    PullRequestCommit,
+    PullRequestLink,
+)
 from agent_comms.repo import Checkout
 from agent_comms.bus import Bus
 
@@ -54,44 +92,9 @@ from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.errors import TodoError
-from agent_comms.todos import (
-    Assignment,
-    ChangeTodoState,
-    ClaimOrder,
-    ClosedListedPullRequest,
-    CommitDelivery,
-    DeliverTodo,
-    DoneTodoState,
-    DraftListedPullRequest,
-    ExpectedProblem,
-    MergedListedPullRequest,
-    MergedProgress,
-    NotWorkMaintainer,
-    OperationDelivery,
-    OrderClaim,
-    OrderMessage,
-    PendingProblemOrder,
-    ProgressRead,
-    PullRequestCommit,
-    PullRequestLink,
-    PullRequestSource,
-    PullRequests,
-    RecordPullRequest,
-    ReleaseTodo,
-    StoredOrderStory,
-    StrikeReason,
-    Todo,
-    TodoCommand,
-    TodoConflict,
-    TodoState,
-    TodoStore,
-    UnmergedListedPullRequest,
-    WithdrawTodo,
-)
 from agent_comms.work_branches import WorkBranches
 from source_revision_fixture import SourceRepository
 from agent_comms.plan_phases import RetainedStorePhase, UnplannedPhase
-from agent_comms.todos import FoldedProblemOrder, UnorderedProblemOrder
 from agent_comms.team.standing import ReassignedWheelSpin
 from agent_comms.goals import GoalChangedError, NoGoal
 from conftest import team_as

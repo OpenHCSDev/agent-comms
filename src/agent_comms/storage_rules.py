@@ -40,7 +40,11 @@ from .storage.private_path import PrivateDirectoryRole
 
 if TYPE_CHECKING:
     from agent_comms.registry.registration import Registration
-    from agent_comms.todos import Todo, TodoStore
+
+    from .planning.orders import (
+        Todo,
+        TodoStore,
+    )
 
 
 

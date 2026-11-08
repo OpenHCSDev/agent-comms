@@ -22,6 +22,7 @@ from agent_comms.owner_requests import NewestOpenRequest
 
 from .native_settings import NativeThreadDefaults
 from .phase_tasks import PhaseTask
+from .planning.orders import PendingProblemOrder
 from .recorded_time import RecordedEventTime
 from .repo import Checkout, CheckoutStart, LocalRepositorySource, Repo
 from .repository_name import RepositoryName
@@ -31,7 +32,6 @@ from .thread_status import StoppedThreadStatus
 from .session_file import RegistrySessionLocation
 
 from .registry.threads import NativeThread, Thread
-from .todos import PendingProblemOrder
 
 if TYPE_CHECKING:
     from .comms import Comms

@@ -1,6 +1,10 @@
 """The real SessionStart command works before a teammate connects to the bus."""
 
 
+from agent_comms.planning.orders import (
+    ProgressRead,
+    ReviewedHeadVerdict,
+)
 from agent_comms.team.standing_rules import (
     DirectiveUnacted,
     OrderlessUnreviewedHead,
@@ -48,7 +52,6 @@ from agent_comms.task_attachments.team_pings import TeamDecisions, TeamUpdate, R
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.registry.threads import ForkThread, NativeThread
 from agent_comms.ui_model.teammate_state import AwaitingTeam
-from agent_comms.todos import ProgressRead, ReviewedHeadVerdict
 from agent_comms_hooks.board import (
     BoardEntry,
 )

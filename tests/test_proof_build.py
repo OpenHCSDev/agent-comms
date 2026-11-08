@@ -1,6 +1,26 @@
 """Build-bound close uses real repositories and a retained-history bus copy."""
 
 
+from agent_comms.planning.delivery_evidence import FileDeliveryEvidence
+from agent_comms.planning.orders import (
+    CheckedCommitDelivery,
+    CommitDelivery,
+    DoneTodoState,
+    MergedListedPullRequest,
+    OpenTodoState,
+    OperationDelivery,
+    PendingProblemOrder,
+    ProgressRead,
+    ReportDelivery,
+    ReportedProblemOrder,
+    Todo,
+    UnmergedListedPullRequest,
+)
+from agent_comms.planning.pull_requests import (
+    MainDeliveryMerge,
+    PullRequestCommit,
+    PullRequestLink,
+)
 from agent_comms.repo import Checkout
 import subprocess
 import time
@@ -40,24 +60,6 @@ from agent_comms.progress_claims import WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import GitCommandError, Repo
 from agent_comms.repository_name import RepositoryName
-from agent_comms.todos import (
-    CheckedCommitDelivery,
-    CommitDelivery,
-    DoneTodoState,
-    MainDeliveryMerge,
-    FileDeliveryEvidence,
-    MergedListedPullRequest,
-    OpenTodoState,
-    OperationDelivery,
-    PendingProblemOrder,
-    ProgressRead,
-    ReportDelivery,
-    ReportedProblemOrder,
-    PullRequestCommit,
-    PullRequestLink,
-    Todo,
-    UnmergedListedPullRequest,
-)
 from agent_comms.tool_caller import ThreadCaller
 from github_fixture import GitHubFixture
 import fixture_git

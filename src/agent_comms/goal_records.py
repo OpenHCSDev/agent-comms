@@ -14,6 +14,7 @@ from .planning.goal_waits import (
     GoalWaitReview,
     GoalWaits,
 )
+from .planning.orders import TodoStore
 from .registry.registration import Registration
 from .goal_presentation import GoalWaitTarget
 from .input_attempt import (
@@ -22,7 +23,6 @@ from .input_attempt import (
 from .input_disposition import InputDispositions
 from .message_bus import MessageBus
 from .registry.threads import Thread
-from .todos import TodoStore
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:

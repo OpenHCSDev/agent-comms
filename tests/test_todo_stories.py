@@ -5,6 +5,29 @@ import time
 from dataclasses import replace
 
 import pytest
+from agent_comms.planning.order_words import StrikeReason
+from agent_comms.planning.orders import (
+    AcceptedVerdict,
+    Assignment,
+    CheckedProblemOrder,
+    DroppedVerdict,
+    EditSendBackVerdict,
+    FailedCheckStrike,
+    OrderMessage,
+    PeerAcceptedVerdict,
+    ReleaseTodo,
+    RewrittenVerdict,
+    SendBackStrike,
+    SendBackVerdict,
+    StoredOrderStory,
+    StrikeTodo,
+    SupersededVerdict,
+    Todo,
+    TodoCommand,
+    VoidStrikeTodo,
+    WaivedVerdict,
+    WordingCorrection,
+)
 from agent_comms.transport.tools.orders import CommsTodoListTool
 from cutover.carry_todo_stories import INLINE_FIELDS, TodoStories
 
@@ -24,29 +47,6 @@ from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.threads import NativeThread
-from agent_comms.todos import (
-    AcceptedVerdict,
-    Assignment,
-    CheckedProblemOrder,
-    DroppedVerdict,
-    EditSendBackVerdict,
-    FailedCheckStrike,
-    OrderMessage,
-    PeerAcceptedVerdict,
-    ReleaseTodo,
-    RewrittenVerdict,
-    SendBackStrike,
-    SendBackVerdict,
-    StoredOrderStory,
-    StrikeReason,
-    StrikeTodo,
-    SupersededVerdict,
-    WaivedVerdict,
-    Todo,
-    TodoCommand,
-    VoidStrikeTodo,
-    WordingCorrection,
-)
 from agent_comms.tool_caller import NoThreadCaller
 from test_todos import order
 

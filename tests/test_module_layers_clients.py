@@ -12,10 +12,10 @@ from pathlib import Path
 import pytest
 import tomli_w
 
+from agent_comms.planning.orders import DraftListedPullRequest
 from module_layers import MaterializedClients, OutgoingWire, Package, StackClient
 from agent_comms_project import AgentCommsProject, ClientTypeErrors
 from agent_comms.head_review import BaseSide, HeadSide, IntegrationInput, Side
-from agent_comms.todos import DraftListedPullRequest
 from github_fixture import GitHubFixture
 from integration_source_fixture import MutualSources
 

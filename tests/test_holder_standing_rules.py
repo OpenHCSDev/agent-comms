@@ -2,6 +2,26 @@
 from pathlib import Path
 
 
+from agent_comms.planning.order_words import StrikeReason
+from agent_comms.planning.orders import (
+    ClaimOrder,
+    CorrectLinkTodo,
+    CorrectMergedLinkTodo,
+    DoneTodoState,
+    DraftListedPullRequest,
+    OrderClaim,
+    OrderMessage,
+    PendingProblemOrder,
+    ProgressRead,
+    ReleaseTodo,
+    ResumeClaimOrder,
+    TodoConflict,
+)
+from agent_comms.planning.problem_findings import ExpectedProblem
+from agent_comms.planning.pull_requests import (
+    MergedLink,
+    PullRequestLink,
+)
 from agent_comms.repo import Checkout
 import asyncio
 import json
@@ -24,10 +44,6 @@ from agent_comms.messaging import TeamReceipts
 from agent_comms.team.standing_rules import (
     OwedAnswer,
     StandingRule,
-)
-from agent_comms.todos import (
-    DoneTodoState,
-    TodoConflict,
 )
 from agent_comms.team.order import Team, ListedProblems, OrderFile, SayVerb, SendVerb
 from agent_comms.team.questions import UnansweredTeammateAsks
@@ -88,22 +104,6 @@ from agent_comms.storage.store_files import ExclusiveLock, StoreLockContention, 
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.registry.threads import NativeThread
-from agent_comms.todos import (
-    ClaimOrder,
-    DraftListedPullRequest,
-    CorrectLinkTodo,
-    CorrectMergedLinkTodo,
-    MergedLink,
-    PullRequestLink,
-    ReleaseTodo,
-    ResumeClaimOrder,
-    StrikeReason,
-    ExpectedProblem,
-    OrderClaim,
-    OrderMessage,
-    PendingProblemOrder,
-    ProgressRead,
-)
 from agent_comms.tool_caller import ForkCaller, NoThreadCaller, PeerCaller
 from agent_comms.connector import ConnectorSendTool
 from agent_comms.connector_caller import DirectorCaller
@@ -1224,7 +1224,11 @@ def test_a_compliant_answer_resumes_a_held_teammate_whose_problems_closed_during
         CompliedGoalAction,
         OwnerInvocable,
     )
-    from agent_comms.todos import ReleaseTodo, StrikeReason, WithdrawTodo
+    from agent_comms.planning.order_words import StrikeReason
+    from agent_comms.planning.orders import (
+    ReleaseTodo,
+    WithdrawTodo,
+)
 
     held_bus.goals.update_goal("worker", ChokeholdPausedGoalAction())
     colleague = held_bus.registry.require("colleague").incarnation

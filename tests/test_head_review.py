@@ -10,6 +10,41 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from functools import partial
+from agent_comms.planning.order_words import (
+    GrowthReason,
+    StrikeReason,
+    VerdictReason,
+)
+from agent_comms.planning.orders import (
+    AbandonedHeadVerdict,
+    CarriedHeadVerdict,
+    ClosedListedPullRequest,
+    DraftListedPullRequest,
+    GrownHeadVerdict,
+    HeadReviewed,
+    HeadVerdict,
+    LinkedHeadReview,
+    NoHeadOrder,
+    OrderClaim,
+    OrderHeadReview,
+    ProgressRead,
+    PullRequests,
+    QualifiedHeadVerdict,
+    RecordPullRequest,
+    RejectedHeadVerdict,
+    ReviewedHeadVerdict,
+    StoredHeadReview,
+    SupersededHeadVerdict,
+    UnderReviewHeadVerdict,
+    UnmergedListedPullRequest,
+    UnquotedHeadReview,
+    WithdrawTodo,
+)
+from agent_comms.planning.pull_requests import (
+    ConflictMergeBlock,
+    FailedCheckMergeBlock,
+    PullRequestLink,
+)
 from agent_comms.team.standing_rules import (
     HeadReviewTimerUp,
     IdlePullRequest,
@@ -51,12 +86,6 @@ from agent_comms.tool_caller import PeerCaller, ThreadCaller
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.work_branches import (
     SourceGrowth, ThreadBranchCheckout, UnregisteredBranchCheckout, WorkBranches,
-)
-from agent_comms.todos import (
-    CarriedHeadVerdict, ClosedListedPullRequest, ConflictMergeBlock, DraftListedPullRequest, FailedCheckMergeBlock, GrownHeadVerdict, GrowthReason, OrderHeadReview, LinkedHeadReview,
-    NoHeadOrder, OrderClaim, ProgressRead, PullRequestLink, PullRequests, RecordPullRequest, RejectedHeadVerdict,
-    HeadVerdict, HeadReviewed, QualifiedHeadVerdict, ReviewedHeadVerdict, StoredHeadReview, UnquotedHeadReview,
-    AbandonedHeadVerdict, StrikeReason, SupersededHeadVerdict, UnderReviewHeadVerdict, UnmergedListedPullRequest, VerdictReason, WithdrawTodo,
 )
 from agent_comms_hooks import ToolRefusedError
 from github_fixture import GitHubFixture
@@ -1481,7 +1510,7 @@ def test_a_request_still_red_a_day_after_it_opened_churns_however_often_it_moved
     import math
 
     from agent_comms.team.standing_rules import ChurningPullRequest
-    from agent_comms.todos import FailedCheckMergeBlock
+    from agent_comms.planning.pull_requests import FailedCheckMergeBlock
 
     now = time.time()
     pushed = datetime.fromtimestamp(now - 60, UTC).strftime('%Y-%m-%dT%H:%M:%SZ')

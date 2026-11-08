@@ -9,6 +9,20 @@ from pathlib import Path
 import pytest
 
 from agent_comms.build_identity import RecordedBuildIdentity
+from agent_comms.planning.orders import (
+    DeliveredProblemOrder,
+    DoneTodoState,
+    InstalledMergedProblemOrder,
+    MergedProblemOrder,
+    OperationDelivery,
+    ProblemOrder,
+    ProgressRead,
+    ReportDelivery,
+    ReportedProblemOrder,
+    Todo,
+    TriageScope,
+)
+from agent_comms.planning.pull_requests import PullRequestLink
 from agent_comms.team.order import Team, main
 from agent_comms.team.standing import HolderGone
 from agent_comms.goals import CountCheckResult, OrderCheck
@@ -19,20 +33,6 @@ from agent_comms.installer.runtime_resolution import CorePackage, RuntimeResolut
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.order_runs import ApplicationOrderRun
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.todos import (
-    DeliveredProblemOrder,
-    DoneTodoState,
-    InstalledMergedProblemOrder,
-    MergedProblemOrder,
-    OperationDelivery,
-    ProgressRead,
-    ProblemOrder,
-    PullRequestLink,
-    Todo,
-    ReportDelivery,
-    ReportedProblemOrder,
-    TriageScope,
-)
 from agent_comms.ui_model.teammate_state import AwaitingApplicationRun, TeammateObservation
 from agent_comms.work_branches import WorkBranches
 

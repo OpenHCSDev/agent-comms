@@ -5,10 +5,15 @@ import shutil
 
 import pytest
 
+from agent_comms.planning.orders import FixScope
+from agent_comms.planning.problem_findings import (
+    FixShape,
+    LocatedProblemFinding,
+)
+from agent_comms.planning.pull_requests import PullRequestHeadRevision
 from source_revision_fixture import SourceRepository
 from test_todos import order
 from agent_comms.change_report import OrderRoots, RegisteredRoots
-from agent_comms.todos import PullRequestHeadRevision
 from agent_comms.change_report import CitedRevisions, FileLine, MainRevision
 from agent_comms.repository_name import RepositoryName
 from agent_comms.errors import MissingSourceLine
@@ -18,7 +23,6 @@ from agent_comms.repo import GitCommandError
 from agent_comms.owner_requests import OwnerRequestId
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.todos import FixScope, FixShape, LocatedProblemFinding
 
 
 def test_source_creation_does_not_reuse_a_retired_directory(tmp_path):

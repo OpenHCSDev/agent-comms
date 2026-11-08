@@ -72,39 +72,6 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.team_hud import TeamPlanDocument
 from agent_comms.slop import Slop
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.todos import (
-    BluntText,
-    CheckedDelivery,
-    CleanHunt,
-    CorrectLinkTodo,
-    DeliveryEvidence,
-    DeliverySource,
-    DirectiveText,
-    ExpectedProblem,
-    LocatedProblemFinding,
-    NoSuccessor,
-    OperationDelivery,
-    OrderedHunt,
-    OrderProgress,
-    OrderText,
-    OrderWords,
-    PendingProblemOrder,
-    ProblemFinding,
-    PullRequestLink,
-    PullRequests,
-    RecordPullRequest,
-    SourceCompletion,
-    StrikeReason,
-    WorkingEvidence,
-    StrikeTodo,
-    Successor,
-    Todo,
-    TodoProblems,
-    UnlocatedProblemFinding,
-    VerdictAudience,
-    VoidStrikeTodo,
-    WithdrawTodo,
-)
 from agent_comms.tool_caller import ForkCaller, PeerCaller, NoThreadCaller
 from agent_comms.storage.typed_table import RowNotFoundError
 
@@ -113,6 +80,45 @@ from .standing_rules import (
     HuntDue,
     OwedAnswer,
 )
+from ..planning.delivery_evidence import (
+    DeliveryEvidence,
+    TodoProblems,
+    WorkingEvidence,
+)
+from ..planning.order_words import (
+    BluntText,
+    DirectiveText,
+    OrderText,
+    OrderWords,
+    StrikeReason,
+)
+from ..planning.orders import (
+    CheckedDelivery,
+    CleanHunt,
+    CorrectLinkTodo,
+    DeliverySource,
+    OperationDelivery,
+    OrderProgress,
+    OrderedHunt,
+    PendingProblemOrder,
+    PullRequests,
+    RecordPullRequest,
+    SourceCompletion,
+    StrikeTodo,
+    Todo,
+    VerdictAudience,
+    VoidStrikeTodo,
+    WithdrawTodo,
+)
+from ..planning.problem_findings import (
+    ExpectedProblem,
+    LocatedProblemFinding,
+    NoSuccessor,
+    ProblemFinding,
+    Successor,
+    UnlocatedProblemFinding,
+)
+from ..planning.pull_requests import PullRequestLink
 from ..transport.tools.orders import (
     CommsChangeProblemTool,
     CommsFireTool,

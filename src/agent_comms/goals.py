@@ -55,6 +55,7 @@ if TYPE_CHECKING:
     from .goal_actions import GoalAction, GoalActionContext
     from .goal_presentation import GoalExecution
     from .planning.goal_waits import GoalWaits
+    from .planning.orders import Todo
     from .registry.threads import Thread
     from .task_sources import TaskScope
     from .turn_context import TurnContext
@@ -62,7 +63,6 @@ if TYPE_CHECKING:
 if TYPE_CHECKING:
     from .goal_attempts import GoalAttemptStore, LaunchPermit
     from .goal_management import Goals
-    from .todos import Todo
     from .turn_goal_account import VerifiedGoalSettlement
 
 

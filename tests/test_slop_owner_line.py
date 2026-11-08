@@ -1,4 +1,12 @@
 """A slop citation's owner is either a line on main or a line the order itself creates."""
+from agent_comms.planning.orders import (
+    CommitDelivery,
+    MergedListedPullRequest,
+)
+from agent_comms.planning.pull_requests import (
+    PullRequestCommit,
+    PullRequestLink,
+)
 from agent_comms.repo import Checkout
 import asyncio
 import json
@@ -14,9 +22,6 @@ from agent_comms.progress_claims import MergedClaim
 from agent_comms.slop import CreatedLine, DeclarationDerivation, ExistingLine, OwnerLine, Slop
 from agent_comms.registry.threads import ForkThread, NativeThread
 from agent_comms.errors import TodoError
-from agent_comms.todos import (
-    CommitDelivery, MergedListedPullRequest, PullRequestCommit, PullRequestLink,
-)
 from github_fixture import GitHubFixture
 from agent_comms.work_branches import WorkBranches
 from test_order_scopes import assigned

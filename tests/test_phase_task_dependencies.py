@@ -6,7 +6,7 @@ import sys
 
 import pytest
 
-from agent_comms.todos import UnorderedProblemOrder
+from agent_comms.planning.orders import UnorderedProblemOrder
 
 
 @pytest.mark.parametrize("module", ("plan_phases", "work_dispatch", "goal_actions", "todos"))

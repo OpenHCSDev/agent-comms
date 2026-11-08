@@ -44,6 +44,15 @@ from .owner_requests import NewestOpenRequest, RequestDirective
 
 from dataclasses import dataclass
 from .goal_failure_observation import GoalFailureEvidence
+from .planning.order_words import StrikeReason
+from .planning.orders import (
+    JudgedCall,
+    SendBackVerdict,
+    Todo,
+    TodoBatch,
+    TodoCommand,
+    TodoStore,
+)
 from .registry.registry_document import RegistryDocument, RegistrySnapshot
 from .thread_identity import ThreadIncarnation
 from .messages import Message
@@ -58,7 +67,6 @@ from .input_attempt import (
 from .input_disposition import DeliveryOverview
 from .registry.threads import NativeThread, Thread
 from .errors import TodoError
-from .todos import SendBackVerdict, StrikeReason, Todo, JudgedCall, TodoBatch, TodoCommand, TodoStore
 
 _LOG = logging.getLogger(__name__)
 

@@ -75,6 +75,24 @@ from ..plan_reading import (
     PlanReading,
     PlanReadings,
 )
+from ..planning.orders import (
+    ClosedHeadReading,
+    EditWorkplaces,
+    HeadReviewRecord,
+    HeadVerdict,
+    OrderClaim,
+    OwnerRequest,
+    PresentCheckout,
+    ProgressRead,
+    ProgressSource,
+    PullRequest,
+    StoredClosedHead,
+    StoredHeadReview,
+    Todo,
+    TodoConflict,
+    TodoStore,
+)
+from ..planning.pull_requests import MergeBlock
 from ..recorded_time import (
     EventTime,
     RecordedEventTime,
@@ -104,24 +122,6 @@ from ..task_attachments.owner_notices import OrderNotice
 from ..team_service import TeamService
 from ..text_digest import TextDigest
 from ..thread_identity import ThreadIncarnation
-from ..todos import (
-    ClosedHeadReading,
-    EditWorkplaces,
-    HeadReviewRecord,
-    HeadVerdict,
-    MergeBlock,
-    OrderClaim,
-    OwnerRequest,
-    PresentCheckout,
-    ProgressRead,
-    ProgressSource,
-    PullRequest,
-    StoredClosedHead,
-    StoredHeadReview,
-    Todo,
-    TodoConflict,
-    TodoStore,
-)
 from ..transcript_events import TurnDigest
 from ..turn_digests import (
     LastTurns,

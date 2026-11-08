@@ -6,6 +6,12 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.change_report import FileLine, NamedRepository
+from agent_comms.planning.orders import (
+    DroppedVerdict,
+    FixScope,
+    RewrittenVerdict,
+)
+from agent_comms.planning.problem_findings import FixShape
 from agent_comms.team.judge import Edit, main
 from agent_comms.errors import TodoError
 from agent_comms.external_transcript import ExternalTranscript
@@ -14,7 +20,6 @@ from agent_comms.nominal.field_codec import (
     ToolCallId,
 )
 from agent_comms.registry.registry_document import RegisteredTeamProject
-from agent_comms.todos import DroppedVerdict, FixScope, FixShape, RewrittenVerdict
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId

@@ -13,7 +13,7 @@ import tomllib
 
 import pytest
 
-FACADE = ("agent_comms.comms", "agent_comms.todos", "agent_comms.cli_commands")
+FACADE = ("agent_comms.comms", "agent_comms.planning.orders", "agent_comms.cli_commands")
 
 
 @pytest.mark.parametrize("hook", sorted({

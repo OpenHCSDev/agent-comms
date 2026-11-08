@@ -1,6 +1,6 @@
 """The goal tools: what a caller publishes about a goal, and the verbs that change one.
 
-Separate from ``agent_comms.tools`` because every consumer of these classes is a goal writer or
+Separate from ``agent_comms.transport.tools.served`` because every consumer of these classes is a goal writer or
 the goal snapshot a heartbeat publishes; the served wiring for the other tools stays there.
 """
 

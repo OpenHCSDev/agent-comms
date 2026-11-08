@@ -26,9 +26,13 @@ from .thread_identity import ThreadIncarnation
 from .work_branches import WorkBranches
 
 if TYPE_CHECKING:
+    from .planning.orders import (
+        HeadReviewRecord,
+        HeadVerdict,
+        Todo,
+    )
     from .team.order import TeamContext
     from .goal_management import Goals
-    from .todos import HeadReviewRecord, HeadVerdict, Todo
 
 
 @dataclass(frozen=True, kw_only=True)

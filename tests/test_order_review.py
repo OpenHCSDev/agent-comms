@@ -3,9 +3,12 @@
 import pytest
 from dataclasses import replace
 
+from agent_comms.planning.orders import (
+    MeasuredReview,
+    TodoStore,
+)
 from agent_comms.recorded_time import RecordedEventTime
 
-from agent_comms.todos import MeasuredReview, TodoStore
 from test_team_problem_orders import order
 
 

@@ -21,8 +21,8 @@ from .bus import DisplayUnread
 from .channel_targets import CommandTarget
 from .channels import Channel, ChannelMemberIndex, Channels
 from .cli_result import CliResult
+from .planning.orders import TodoStore
 from .team_frame_file import TeamFrameFile
-from .todos import TodoStore
 from .coordination.errors import DMPaintedBoundChanged, StaleRevision
 from .nominal.declared_family import DeclaredFamily
 from .display_order import ChannelSort, NameChannelSort

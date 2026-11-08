@@ -35,16 +35,16 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.thread_status import ThreadStatus
 from agent_comms.registry.threads import Thread
-from agent_comms.todos import (
+from agent_comms.transcript_events import OrderCall, TurnDigest
+from agent_comms.work_branches import WorkBranchError
+
+from ..planning.orders import (
     MergedProgress,
     NoCommitProgress,
     OrderProgress,
     ProgressSource,
     Todo,
 )
-from agent_comms.transcript_events import OrderCall, TurnDigest
-from agent_comms.work_branches import WorkBranchError
-
 from ..team.standing_rules import (
     FamilyScan,
     HeartbeatFrame,

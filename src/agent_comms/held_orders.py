@@ -7,10 +7,12 @@ from textwrap import shorten
 from typing import TYPE_CHECKING
 
 from agent_comms.registry.threads import Thread
-from agent_comms.todos import (
+
+from .planning.orders import (
     Todo,
     TodoStore,
 )
+
 
 if TYPE_CHECKING:
     from collections.abc import Sequence

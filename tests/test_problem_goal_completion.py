@@ -20,21 +20,21 @@ from agent_comms.goal_scope import OneGoal
 from agent_comms.goal_states import CompletedGoal
 from agent_comms.goals import Goal
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.registry.threads import NativeThread, Thread
-from agent_comms.repo import Checkout
-from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.todos import (
+from agent_comms.planning.order_words import StrikeReason
+from agent_comms.planning.orders import (
     AssignTodo,
     DeliverTodo,
     InstallTodo,
     OperationDelivery,
     ReleaseTodo,
-    StrikeReason,
     StoredOrderStory,
     Todo,
     TodoStore,
 )
+from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.registry.threads import NativeThread, Thread
+from agent_comms.repo import Checkout
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from conftest import installed_comms, maintenance_held
 from source_revision_fixture import SourceRepository
 from test_reconcile_stores import reconcile

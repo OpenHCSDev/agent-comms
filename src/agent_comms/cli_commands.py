@@ -34,13 +34,13 @@ from .input_origin import InputProvenance
 from .message_reference import MessageReference
 from .execution.owner_lifecycle import OwnerRestartResult
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
+from .planning.orders import Todo
 from .presentation import ThreadRecord, ThreadView
 from .repo import Checkout, CheckoutStart, LocalRepositorySource, Repo, RepositorySource
 from .storage_projection import StorageProjection
 from .shell_effects import AcquireRepositoryStorageEffect, CreateCheckoutStorageEffect, RemoveCheckoutStorageEffect
 from .thread_model import ThreadModel
 from .registry.threads import Thread
-from .todos import Todo
 from .head_review import PullRequestHead
 from .turn_context import CodexRolloutProvenance, ContextManifest, ContextSegment, ContributionCoordinates, Provenance, TurnContext
 from .storage.typed_table import SQLiteSchemaDifference, StoreRewrite

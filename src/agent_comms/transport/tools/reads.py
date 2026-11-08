@@ -1,5 +1,5 @@
 """The reads a display constructs: their fields, wire names and results. Serving them is in
-agent_comms.order_tools, which only the server imports."""
+agent_comms.transport.tools.orders, which only the server imports."""
 
 from __future__ import annotations
 
