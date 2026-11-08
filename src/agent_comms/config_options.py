@@ -20,7 +20,7 @@ from .launch_root import LaunchRoot
 from .bus import Bus
 from .nominal.declared_family import DeclaredFamily
 from .launch_runtime import LaunchRuntime, ThreadLaunch
-from .owner_launch import RetainedOwnerLaunch
+from .transport.owner_requests import RetainedOwnerLaunch
 from .native_arguments import NativeArguments
 from .native_pi import NativePiRpcLaunch
 from .pi_vocabulary import ServiceTier, ThinkingChoice

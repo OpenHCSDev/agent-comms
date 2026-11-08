@@ -15,7 +15,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.messages import AlertKind, InfoKind, Message, NoticeRole
 from agent_comms.execution.owned_turn import OwnedTurn
-from agent_comms.owner_launch import RetainedOwnerLaunch
+from agent_comms.transport.owner_requests import RetainedOwnerLaunch
 from agent_comms.storage.private_path import FileRevision
 from agent_comms.registry.threads import NativeThread
 from agent_comms.execution.turn_input_source import NoTurnAcceptance

@@ -1,6 +1,6 @@
 """Single-owner attachment and idle wakeup through real processes and sockets."""
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.runtime_requests import QueueActionRuntimeRequest
+from agent_comms.transport.runtime_requests import QueueActionRuntimeRequest
 from agent_comms.owner_connection import (
     CapturedOwner, OwnerIdentityChangedError, OwnerReplyConnection, OwnerReplyLostError, socket_path,
 )
@@ -30,7 +30,7 @@ from agent_comms.input_key import BusInputKey
 from agent_comms.bus_read import OwnerReadRuntimeRequest
 from agent_comms.transport.tools.orders import ServedInputDeliveryRead
 from agent_comms.transport.tools.reads import InputDeliveryRead
-from agent_comms.runtime_server import RuntimeRequest
+from agent_comms.transport.runtime_request import RuntimeRequest
 from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.tool_caller import ToolCaller
 from agent_comms.comms import wire

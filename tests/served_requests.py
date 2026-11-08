@@ -2,7 +2,7 @@
 through the family, which yields the served class wherever the served module is imported."""
 
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.runtime_server import RuntimeRequest
+from agent_comms.transport.runtime_request import RuntimeRequest
 
 
 def served[Request: RuntimeRequest](request: Request) -> Request:
