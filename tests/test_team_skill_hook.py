@@ -307,8 +307,9 @@ def test_a_recorded_verdict_drops_its_board_line_on_the_next_tool_call(
     worker = RecordedThreadIncarnation("worker", 1.0)
     colleague = comms.registry.require("colleague").incarnation
     rules = (*OrderlessUnreviewedHead.scan_reviews(comms.goals, ProgressRead(())),
-             ReviewTimerUp("P1", colleague, "order-P1", RecordedEventTime(1000.0)),
-             SpinningTeammate("P2", worker, 92))
+             ReviewTimerUp(holder=colleague, problem="P1", order="order-P1",
+                           since=RecordedEventTime(1000.0)),
+             SpinningTeammate(holder=worker, problem="P2", call_count=92))
     beat(comms, rules)
     beat(comms, rules)
     head_line = f"--pr {request.pr} --head {request.head}"

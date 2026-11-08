@@ -466,9 +466,11 @@ class LostTools(UndatedStandingRule):
                 " who took them, and why? -> restore its required tools")
 
 
+@dataclass(frozen=True)
 class HolderBranch:
     """A holder's branch difference; two of them may write the same files in parallel."""
 
+    todo: Todo
     holder: ThreadIncarnation
     difference: BranchDifference
 
@@ -491,9 +493,6 @@ class HolderBranch:
 class PreparedBranch(HolderBranch):
     """One held order's captured branch difference, before the cut, in its repository."""
 
-    holder: ThreadIncarnation
-    todo: Todo
-    difference: BranchDifference
     repository: Path
 
 
@@ -504,9 +503,6 @@ class HeldBranch(HolderBranch):
     may retire it mid-frame. Later PR comparisons use the order's repository, which outlives
     the worktree, never its possibly different local branch/upstream configuration."""
 
-    todo: Todo
-    holder: ThreadIncarnation
-    difference: BranchDifference
     worktree: Path
     repository: PresentCheckout = field(compare=False, repr=False)
     source: TeammateObservation = field(compare=False, repr=False)
@@ -517,6 +513,7 @@ class HeldBranch(HolderBranch):
         return self.todo.id
 
 
+@dataclass(frozen=True)
 class HolderLine(StandingRule, declared_name=None):
     """A rule about one holder's order: a recorded action reaching the holder disposes its line."""
 
@@ -524,6 +521,20 @@ class HolderLine(StandingRule, declared_name=None):
 
     def subjects(self) -> tuple[HeartbeatSubject, ...]:
         return (TeammateSubject(self.holder),)
+
+
+@dataclass(frozen=True)
+class HolderProblemLine(HolderLine, declared_name=None):
+    """A rule about the board problem a holder is working."""
+
+    problem: str
+
+
+@dataclass(frozen=True)
+class HeldOrderLine(HolderProblemLine, declared_name=None):
+    """A rule about the order a holder holds for its problem."""
+
+    order: OrderId
 
 
 class HeadLine(StandingRule, declared_name=None):
@@ -535,7 +546,7 @@ class HeadLine(StandingRule, declared_name=None):
         return (HeadSubject(self.request),)
 
 
-class HeldBranchRule(HolderLine, UndatedStandingRule, FamilyScan, declared_name=None):
+class HeldBranchRule(HolderProblemLine, UndatedStandingRule, FamilyScan, declared_name=None):
     """Branch rules share the heartbeat's existing progress frame and one scan."""
 
     @classmethod
@@ -553,8 +564,10 @@ class HeldBranchRule(HolderLine, UndatedStandingRule, FamilyScan, declared_name=
                 path = storage.order_checkout(storage.roots_of(held.holder), todo.id)
                 if path.is_dir():
                     pulls.checkout(path).branches.prepare_upstreams()
-                    prepared.append(PreparedBranch(held.holder, todo, pulls.branch_difference(path),
-                                                   pulls.checkout(directory).path))
+                    prepared.append(PreparedBranch(
+                        todo=todo, holder=held.holder.incarnation,
+                        difference=pulls.branch_difference(path),
+                        repository=pulls.checkout(directory).path))
             except (OSError, GitCommandError,
                     WorkBranchError, TimeoutExpired) as error:
                 pulls.unread((todo,), error)
@@ -600,14 +613,23 @@ class HeldBranchRule(HolderLine, UndatedStandingRule, FamilyScan, declared_name=
 
 
 @dataclass(frozen=True)
-class BranchBehindMain(CoreActsStandingRule, HeldBranchRule):
+class RepositoryBranchRule(HeldBranchRule, declared_name=None):
+    """A rule about one named branch of a held order's repository."""
+
+    repository: RepositoryName
+    branch: str
+
+
+@dataclass(frozen=True)
+class HeldOrderBranchRule(HeldOrderLine, HeldBranchRule, declared_name=None):
+    """A branch rule that names the held order it is about."""
+
+
+@dataclass(frozen=True)
+class BranchBehindMain(CoreActsStandingRule, RepositoryBranchRule):
     """Outstanding branch changes need a new base when main passes them. Core tells
     the holder directly; an empty historical checkout owes no new publication."""
 
-    problem: str
-    holder: ThreadIncarnation
-    repository: RepositoryName
-    branch: str
     behind: int = field(compare=False)
 
     def enforce(self, comms: Comms) -> None:
@@ -640,13 +662,9 @@ class BranchBehindMain(CoreActsStandingRule, HeldBranchRule):
 
 
 @dataclass(frozen=True)
-class BranchGrowth(HeldBranchRule):
+class BranchGrowth(RepositoryBranchRule):
     """A held branch's source growth needs an explanation in its verdict."""
 
-    problem: str
-    holder: ThreadIncarnation
-    repository: RepositoryName
-    branch: str
     growth: SourceGrowth = field(compare=False)
 
     @classmethod
@@ -668,13 +686,9 @@ class BranchGrowth(HeldBranchRule):
 
 
 @dataclass(frozen=True)
-class UnparsedBranch(HeldBranchRule):
+class UnparsedBranch(RepositoryBranchRule):
     """A held branch pushed src that Python cannot parse; its growth cannot be counted."""
 
-    problem: str
-    holder: ThreadIncarnation
-    repository: RepositoryName
-    branch: str
     unparsed: tuple[UnparsedSource, ...] = field(compare=False)
 
     @classmethod
@@ -695,20 +709,16 @@ class UnparsedBranch(HeldBranchRule):
 
 
 @dataclass(frozen=True)
-class ConflictingBranches(HeldBranchRule):
+class ConflictingBranches(RepositoryBranchRule):
     """Two held branches that Git cannot merge: one row per pair, only for a real conflict.
 
     Two branches touching the same file is ordinary parallel work; the row exists only
     when ``git merge-tree`` of their heads conflicts, and merging one into the other clears
     it, so no row asks a question nothing can answer."""
 
-    problem: str
-    holder: ThreadIncarnation
-    branch: str
     other_problem: str
     other_holder: ThreadIncarnation
     other_branch: str
-    repository: RepositoryName
     paths: tuple[str, ...] = field(compare=False)
 
     @classmethod
@@ -889,12 +899,9 @@ class ReasonedStandingRule(StandingRule, declared_name=None):
 
 
 @dataclass(frozen=True)
-class HeldOrderDue(HolderLine, DatedStandingRule, declared_name=None):
+class HeldOrderDue(HeldOrderLine, DatedStandingRule, declared_name=None):
     """Each held order supplies one dated condition; the rule owns its wording."""
 
-    problem: str
-    holder: ThreadIncarnation
-    order: OrderId
     since: EventTime
 
     @classmethod
@@ -999,12 +1006,9 @@ class HeadReviewTimerUp(OrderHeadReviewCommands, ReviewTimerUp):
 
 
 @dataclass(frozen=True)
-class DeliveredHeadReview(HolderLine, DatedStandingRule):
+class DeliveredHeadReview(HeldOrderLine, DatedStandingRule):
     """A recorded delivery waits on a review of its current ready PR head."""
 
-    problem: str
-    holder: ThreadIncarnation
-    order: OrderId
     repo: RepositoryName
     pr: int
     head: str

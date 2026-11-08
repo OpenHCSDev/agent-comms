@@ -6,15 +6,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Self
 
-from agent_comms.nominal.field_codec import OrderId, PathText
+from agent_comms.nominal.field_codec import PathText
 from agent_comms.head_review import PullRequestHead
 from agent_comms.heartbeat_subjects import HeartbeatSubject, UnlandedHeadSubject
 from agent_comms.repo import UnpushedHead
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import (
-    DatedStandingRule, HeadLine, HeldBranch, HeldBranchRule, UndatedStandingRule,
+    DatedStandingRule, HeadLine, HeldBranch, HeldOrderBranchRule, UndatedStandingRule,
 )
-from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import PullRequestLink
 from agent_comms.work_branches import CommitBase, WorkBranches
 
@@ -26,18 +25,16 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class UnpushedBranch(HeldBranchRule):
-    problem: str
-    order: OrderId
-    holder: ThreadIncarnation
+class UnpushedBranch(HeldOrderBranchRule):
     worktree: Annotated[Path, PathText]
     # One decision per order branch: a new local commit moves the head, never the decision.
     unpublished: UnpushedHead = field(compare=False)
 
     @classmethod
     def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
-        return tuple(cls(held.problem, held.todo.order.checked().id, held.holder,
-                         held.worktree, unpublished)
+        return tuple(cls(holder=held.holder, problem=held.problem,
+                         order=held.todo.order.checked().id, worktree=held.worktree,
+                         unpublished=unpublished)
                      for held in branches
                      for unpublished in held.difference.unpublished)
 
@@ -49,10 +46,7 @@ class UnpushedBranch(HeldBranchRule):
 
 
 @dataclass(frozen=True)
-class EmptyPullRequest(HeldBranchRule):
-    problem: str
-    order: OrderId
-    holder: ThreadIncarnation
+class EmptyPullRequest(HeldOrderBranchRule):
     pull_request: PullRequestLink
     base: str = field(compare=False)
     head: str
@@ -65,9 +59,10 @@ class EmptyPullRequest(HeldBranchRule):
             todo = held.todo
             for pull in held.source.frame.pulls.open_for(todo):
                 for compared in pull.empty_changes(reader):
-                    found.append(cls(held.problem, todo.order.checked().id, held.holder,
-                                     PullRequestLink(todo.repo, pull.number),
-                                     compared.base, compared.head))
+                    found.append(cls(holder=held.holder, problem=held.problem,
+                                     order=todo.order.checked().id,
+                                     pull_request=PullRequestLink(todo.repo, pull.number),
+                                     base=compared.base, head=compared.head))
         return tuple(found)
 
     def line(self) -> str:

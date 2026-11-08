@@ -109,7 +109,6 @@ class TeammateTalkRule(HolderLine, FamilyScan, declared_name=None):
 class Ceremony(TeammateTalkRule, UndatedStandingRule):
     """A unit publishes far more text than it commits: the report has become the work."""
 
-    holder: ThreadIncarnation
     characters: int = field(compare=False)
     commits: int = field(compare=False)
     per_commit: ClassVar[int] = 6000
@@ -118,7 +117,7 @@ class Ceremony(TeammateTalkRule, UndatedStandingRule):
     def derive(cls, talk: TeammateTalk) -> Iterator[Self]:
         # Only a unit holding pending work owes commits; an idle or review-only unit does not.
         if talk.source.pending and talk.characters > cls.per_commit * max(talk.commits, 1):
-            yield cls(talk.unit, talk.characters, talk.commits)
+            yield cls(holder=talk.unit, characters=talk.characters, commits=talk.commits)
 
     def line(self) -> str:
         return (

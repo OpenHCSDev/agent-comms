@@ -233,11 +233,11 @@ class BranchBehindMainSeed(IncidentSeed):
         fleet.push(worktree)
         todo = fleet.unit("behind", worktree)
         return BranchBehindMain(
-            todo.id,
-            todo.held().owner_identity,
-            fleet.repository,
-            "behind",
-            1,
+            holder=todo.held().owner_identity,
+            problem=todo.id,
+            repository=fleet.repository,
+            branch="behind",
+            behind=1,
         )
 
 
@@ -254,14 +254,14 @@ class ConflictingBranchesSeed(IncidentSeed):
             held.append(fleet.unit(branch, worktree))
         left, right = held
         return ConflictingBranches(
-            left.id,
-            left.held().owner_identity,
-            "shared-left",
-            right.id,
-            right.held().owner_identity,
-            "shared-right",
-            fleet.repository,
-            ("shared.py",),
+            holder=left.held().owner_identity,
+            problem=left.id,
+            repository=fleet.repository,
+            branch="shared-left",
+            other_problem=right.id,
+            other_holder=right.held().owner_identity,
+            other_branch="shared-right",
+            paths=("shared.py",),
         )
 
 
@@ -278,8 +278,9 @@ class BranchGrowthSeed(IncidentSeed):
         fleet.push(worktree)
         todo = fleet.unit("growing", worktree)
         return BranchGrowth(
-            todo.id, todo.held().owner_identity, fleet.repository,
-            "growing", SourceGrowth((("src/agent_comms/grown.py", SourceGrowth.limit + 1),)),
+            holder=todo.held().owner_identity, problem=todo.id, repository=fleet.repository,
+            branch="growing",
+            growth=SourceGrowth((("src/agent_comms/grown.py", SourceGrowth.limit + 1),)),
         )
 
 
@@ -292,7 +293,8 @@ class UnparsedBranchSeed(IncidentSeed):
         fleet.commit(worktree, "src/agent_comms/unparsed.py", "<<<<<<< HEAD\n")
         fleet.push(worktree)
         todo = fleet.unit("unparsed", worktree)
-        return UnparsedBranch(todo.id, todo.held().owner_identity, fleet.repository, "unparsed", ())
+        return UnparsedBranch(holder=todo.held().owner_identity, problem=todo.id,
+                              repository=fleet.repository, branch="unparsed", unparsed=())
 
 
 class UnpushedBranchSeed(IncidentSeed):
@@ -305,12 +307,12 @@ class UnpushedBranchSeed(IncidentSeed):
         todo = fleet.unit("unpushed", worktree)
         unit = fleet.thread("unpushed")
         return UnpushedBranch(
-            todo.id,
-            todo.order.checked().id,
-            unit.incarnation,
-            fleet.comms.registry.storage_rule.order_checkout(
+            holder=unit.incarnation,
+            problem=todo.id,
+            order=todo.order.checked().id,
+            worktree=fleet.comms.registry.storage_rule.order_checkout(
                 fleet.comms.registry.storage_rule.initial_roots(unit.name), todo.id),
-            UnpushedHead(head, 1, ""),
+            unpublished=UnpushedHead(head, 1, ""),
         )
 
 
@@ -327,12 +329,12 @@ class EmptyPullRequestSeed(IncidentSeed):
         fleet.pull_request(11, "empty", fleet.main)
         fleet.claim(todo, 11, fleet.main, at=time.time())
         return EmptyPullRequest(
-            todo.id,
-            todo.order.checked().id,
-            todo.held().owner_identity,
-            PullRequestLink(fleet.repository, 11),
-            fleet.main,
-            fleet.main,
+            holder=todo.held().owner_identity,
+            problem=todo.id,
+            order=todo.order.checked().id,
+            pull_request=PullRequestLink(fleet.repository, 11),
+            base=fleet.main,
+            head=fleet.main,
         )
 
 
@@ -350,13 +352,13 @@ class DeliveredHeadReviewSeed(IncidentSeed):
             todo, 12, head, at=time.time() - DeliveredHeadReview.minutes * 60 - 60
         )
         return DeliveredHeadReview(
-            todo.id,
-            todo.held().owner_identity,
-            todo.order.checked().id,
-            fleet.repository,
-            12,
-            head,
-            claimed.message.timestamp + DeliveredHeadReview.minutes * 60,
+            holder=todo.held().owner_identity,
+            problem=todo.id,
+            order=todo.order.checked().id,
+            repo=fleet.repository,
+            pr=12,
+            head=head,
+            due_at=claimed.message.timestamp + DeliveredHeadReview.minutes * 60,
         )
 
 
@@ -385,7 +387,8 @@ class SpinningTeammateSeed(IncidentSeed):
                     ),
                 ),
             )
-        return SpinningTeammate(todo.id, todo.held().owner_identity, SpinningTeammate.calls)
+        return SpinningTeammate(holder=todo.held().owner_identity, problem=todo.id,
+                                call_count=SpinningTeammate.calls)
 
 
 class StaleUncommittedEditsSeed(IncidentSeed):
@@ -400,8 +403,9 @@ class StaleUncommittedEditsSeed(IncidentSeed):
         path = storage.order_checkout(storage.initial_roots("uncommitted"), todo.id) / "repair.py"
         path.write_text("repair = 1\n")
         os.utime(path, (edited, edited))
-        return StaleUncommittedEdits(todo.id, todo.order.checked().id,
-                                     todo.held().owner_identity, edited, time.time())
+        return StaleUncommittedEdits(holder=todo.held().owner_identity, problem=todo.id,
+                                     order=todo.order.checked().id, edited_at=edited,
+                                     now=time.time())
 
 
 class LostToolsSeed(IncidentSeed):
@@ -527,8 +531,8 @@ def test_branch_rules_read_the_order_checkout_instead_of_the_behind_home(fleet):
                  ''.join(f'order_value_{index} = {index}\n' for index in range(growth)))
     assert built.git(home, 'rev-parse', 'HEAD') == built.old_main
     assert BranchGrowth(
-        todo.id, todo.held().owner_identity, built.repository, 'current-order',
-        SourceGrowth((('src/agent_comms/order_growth.py', growth),)),
+        holder=todo.held().owner_identity, problem=todo.id, repository=built.repository,
+        branch='current-order', growth=SourceGrowth((('src/agent_comms/order_growth.py', growth),)),
     ) in built.observe().rules
 
 
