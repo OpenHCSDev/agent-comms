@@ -42,7 +42,7 @@ from ..input_origin import WireInputOrigin
 from ..messages import Message
 from ..native_failures import NativeRequestFailure
 from ..native_input_owner import RegistryOwner
-from ..native_tool_call import NativeToolMode
+from ..native_tool_transport import NativeToolMode
 from ..owned_send import OwnedSend
 from ..pi_events import (
     DialogUiRequest,

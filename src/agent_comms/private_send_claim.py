@@ -36,7 +36,7 @@ from .native_prompt_binding import bind_expected_prompt
 from .native_prompt_send import PromptBoundary
 from .native_session_reopen import NativeSessionIdentity
 from .native_startup import NativeStartup
-from .native_tool_call import NativeToolMode
+from .native_tool_transport import NativeToolMode
 from .owned_send import OwnedSend
 from .publication_measurements import PublicationMeasurements
 from .registry.registry_document import RegistrySnapshot

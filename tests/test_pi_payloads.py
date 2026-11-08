@@ -1,6 +1,7 @@
 """Typed Pi boundaries exercised through the actual JSON-line codec and stream."""
 
 import json
+from agent_comms.native_tools import NativeToolDeclaration
 from dataclasses import dataclass
 
 import pytest
@@ -326,7 +327,7 @@ def test_pi_usage_and_its_token_total_are_reported_or_not_once_decoded():
 
 
 def test_raw_tool_arguments_reach_the_declared_call_refusal():
-    from agent_comms.native_tool_call import CodingCall, RefusedCodingCall
+    from agent_comms.native_tool_call import RefusedCodingCall
     from agent_comms.tool_denial import SelectedToolDenied
 
     event = decode({"type": "message_end", "message": {
@@ -335,7 +336,7 @@ def test_raw_tool_arguments_reach_the_declared_call_refusal():
     }})
     raw, = event.message.tool_calls
     assert raw.arguments == []
-    call = CodingCall.decode(raw.id, raw.name, raw.arguments)
+    call = NativeToolDeclaration.decode(raw.id, raw.name, raw.arguments)
     assert isinstance(call, RefusedCodingCall)
     with pytest.raises(SelectedToolDenied):
         call.allowed_claim()

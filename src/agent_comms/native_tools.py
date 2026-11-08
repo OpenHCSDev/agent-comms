@@ -11,15 +11,16 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
 from .nominal.declared_family import UnknownFamilyMember
-from .registry.thread_identity import OfferedTools
+from .registry.thread_identity import OfferedTools, UnobservedTools
 from .nominal.field_codec import (
     FieldCodec,
+    MalformedRecord,
     NullMember,
     ToolCallId,
     WireContext,
     WireOmitDefault,
 )
-from .native_tool_call import CodingCall
+from .native_tool_call import CodingCall, RefusedCodingCall
 from agent_comms.pi_wire import PiReported
 from .recorded_time import EventTime
 from .rule_deal import ReadSpan
@@ -80,6 +81,24 @@ class NativeToolDeclaration(ToolDeclaration):
         if any(not extension.is_file() for extension in extensions):
             raise SelectedToolDenied("Native tool extension is not installed")
         return tuple(argument for extension in extensions for argument in ("-e", str(extension)))
+
+    @classmethod
+    def decode(cls, call_id: object, name: object, arguments: object,
+               offered: OfferedTools = UnobservedTools()) -> CodingCall:
+        """``offered`` is the thread's catalogue for this turn; without one only declared
+        members decode."""
+        try:
+            call_id = FieldCodec.decode(ToolCallId, call_id)
+        except MalformedRecord as error:
+            raise SelectedToolDenied("Malformed native coding call identity") from error
+        if type(name) is not str:
+            raise SelectedToolDenied("Malformed native coding call identity")
+        try:
+            return cls.from_call(name, arguments, call_id=call_id, offered=offered)
+        # A name no member declares is refused data too: answering "no" here keeps the
+        # call from dying with the socket, which Pi can only report as outcome UNKNOWN.
+        except (MalformedRecord, UnknownFamilyMember) as error:
+            return RefusedCodingCall(call_id, name, arguments, str(error))
 
     @classmethod
     def from_call(cls, name: str, arguments: object, *, call_id: ToolCallId,

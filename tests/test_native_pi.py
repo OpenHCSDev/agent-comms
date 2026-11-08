@@ -23,8 +23,8 @@ from agent_comms.native_pi import (
     NativePiTerminalFailure,
 )
 from agent_comms.native_session_files import NativeSessionFiles
-from agent_comms.native_session_reopen import NativeSessionIdentity, PiSessionId
-from agent_comms.execution.turn_item import FreshNativeId
+from agent_comms.native_entries import NativeEvidenceScope
+from agent_comms.native_session_reopen import PiSessionId
 from agent_comms.native_startup import NATIVE_STARTUP_POLICY
 from agent_comms.native_transcript import NativeTranscript
 from agent_comms.execution.selected.actions import NoSelectedTools
@@ -51,7 +51,7 @@ def _evidence(tmp_path: Path) -> NativeSessionFiles:
     ]
     session.write_text(''.join(json.dumps(row)+'\n' for row in entries))
     session.chmod(0o600)
-    files = NativeSessionFiles.for_identity(NativeSessionIdentity.locate(str(session)),
+    files = NativeSessionFiles.for_identity(NativeEvidenceScope.locate_session(str(session)),
                                             root=tmp_path, owner=PROOF_OWNER)
     write_proof_rows(files, [{
         'schema':2,'type':'context_committed','sessionId':'sid','inputId':INPUT_ID,

@@ -44,11 +44,11 @@ from agent_comms.native_runtime_input import (
 )
 from agent_comms.native_tool_call import (
     NativeToolCall,
-    NativeToolMode,
     SelectedToolBusy,
 )
 from agent_comms.native_tool_transport import (
     GatedToolTransport,
+    NativeToolMode,
     NativeToolRound,
     ToolListener,
     UnboundToolTransport,

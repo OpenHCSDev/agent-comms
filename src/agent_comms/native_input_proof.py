@@ -29,7 +29,7 @@ from .nominal.field_codec import (
 from .storage.locked_store import DurableFile, PatternFile, SQLiteFile
 from .native_failures import NativePiUnavailable
 from .native_integer import PositiveNativeIntegerBounds
-from .native_session_reopen import PiSessionId
+from .native_session_reopen import NativeSessionIdentity, PiSessionId
 from .storage.private_path import FileIdentity, PrivateFileRole
 from .execution.turn_item import FreshNativeId
 from .storage.typed_table import (
@@ -245,6 +245,11 @@ class NativeInputProof(DurableFile, ReconciledFile, PatternFile, DurableTables):
 @dataclass(frozen=True, slots=True)
 class NativeContextProof(NativeContextRecord, NativeInputLocation):
     session_file: Annotated[Path, PathText]
+
+    @property
+    def session_identity(self) -> NativeSessionIdentity:
+        """The saved session this proof's entry belongs to."""
+        return NativeSessionIdentity(self.session_id, str(self.session_file))
 
     def require_continuation(self, context: NativeContextProof) -> None:
         """Repeated requests may include this input; its first proof stays immutable.

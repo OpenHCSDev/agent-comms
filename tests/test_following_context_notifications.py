@@ -27,7 +27,7 @@ from agent_comms.input_origin import WireInputOrigin
 from agent_comms.message_reference import MessageReference
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.native_input_proof import NativeContextJournal, NativeContextProof
-from agent_comms.native_tool_call import OwnerToolConnection
+from agent_comms.native_tool_transport import OwnerToolConnection
 from agent_comms.notification_progress import DeliveryProgress, ShownToModelProgress
 from agent_comms.pi_commands import FollowingPrompt
 from agent_comms.backend import ObservedNativeCommit, TrackedInputContext

@@ -16,6 +16,7 @@ import pytest
 
 import agent_comms.execution.selected.tool_broker as broker
 from agent_comms.native_tool_call import SelectedToolBusy
+from agent_comms.native_tools import NativeToolDeclaration
 from agent_comms.channel_coding_tools import CodingToolSocket
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.coordinator import Coordination
@@ -30,10 +31,9 @@ from agent_comms.nominal.field_codec import (
     TurnId,
 )
 from agent_comms.native_runtime_input import AcknowledgedSlot, ConsumedSlot, SelectedToolSlot
+from agent_comms.native_tool_transport import OwnerToolConnection
 from agent_comms.native_tool_call import (
-    CodingCall,
     DuplicateToolCallIdentity,
-    OwnerToolConnection,
 )
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import AssistantMessage, ReportedParts, ToolCallContent
@@ -155,7 +155,7 @@ async def test_prebegin_busy_keeps_native_socket_for_the_next_fresh_call(
         try:
             writer.execute("BEGIN EXCLUSIVE")
             for round_number, call_id in enumerate(("busy", "after-busy")):
-                call = CodingCall.decode(call_id, "read", arguments)
+                call = NativeToolDeclaration.decode(call_id, "read", arguments)
                 server.announce(AssistantMessage(content=ReportedParts((
                     ToolCallContent(id=call_id, name="read", arguments=arguments),
                 ))))
@@ -190,14 +190,14 @@ def test_openai_responses_call_id_is_consumed_as_the_provider_spells_it(slot_sto
     provider_id = (
         "call_082e4aa2372a4cb2872b5eaa6920b3d1|fc_061e57fb77d34295016ad6e0376e78819eb0dc71a4eb1a6725"
     )
-    call = CodingCall.decode(provider_id, "read", {"path": "README.md"})
+    call = NativeToolDeclaration.decode(provider_id, "read", {"path": "README.md"})
     slot_id = call.slot(InputId.mint(), 0)
     broker.consume_selected_slot(slot_store, slot_id, call.call_id)
     row = SelectedToolSlot.require(slot_store.session._connection, slot_id=slot_id)
     assert row.call_id == provider_id
     for malformed in ("", "call one", "x" * 257):
         with pytest.raises(SelectedToolDenied):
-            CodingCall.decode(malformed, "read", {"path": "README.md"})
+            NativeToolDeclaration.decode(malformed, "read", {"path": "README.md"})
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="selected tool storage requires POSIX dirfd")
