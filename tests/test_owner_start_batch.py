@@ -77,8 +77,9 @@ def test_failed_binding_retires_without_stopping_its_shared_host(
     for name in ("healthy", "failed"):
         comms.registry.declare(NativeThread(name, frozenset(), Checkout(tmp_path)))
     gate = PiRedeal.of(comms, comms.registry.require("failed"))
-    gate.record.parent.mkdir(parents=True, exist_ok=True)
-    gate.record.write_text("{")  # Fail before an ACP session is published, not a model input.
+    # Malformed JSON is deliberately renewed as an undealt session. An unreadable
+    # record path fails at the same real read boundary, before ACP publication.
+    gate.record.mkdir(parents=True)
     try:
         comms.owners.start_many(("healthy",))
         host = attached_launch(comms, "healthy").process
@@ -91,7 +92,7 @@ def test_failed_binding_retires_without_stopping_its_shared_host(
         assert not comms.registry.require("failed").process_alive
         assert attached_launch(comms, "healthy").process == host
         assert host.alive()
-        gate.record.unlink()
+        gate.record.rmdir()
         comms.owners.start_many(("failed",))
         assert attached_launch(comms, "failed").process == host
     finally:
