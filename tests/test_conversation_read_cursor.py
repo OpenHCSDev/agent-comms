@@ -1,12 +1,8 @@
 from agent_comms.projects.checkouts import Checkout
 from dataclasses import replace
 
-from agent_comms.messaging.channel_targets import CommandTarget
-from agent_comms.messaging.read_basis import (
-    ChannelConversation,
-    ConversationCursor,
-    ReadCursor,
-)
+from agent_comms.channel_targets import CommandTarget
+from agent_comms.read_basis import ChannelConversation, ConversationCursor, ReadCursor
 from agent_comms.messaging.read_ledger import ReadDocument
 from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.nominal.field_codec import FieldCodec

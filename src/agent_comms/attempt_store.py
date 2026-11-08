@@ -20,7 +20,7 @@ from agent_comms.coordination.snapshot import RecoverySnapshot
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.coordination.tables.attempts import AttemptRecord
 from agent_comms.owner_fence import OwnerFence
-from agent_comms.turn_failure import TurnFailure
+from .execution.turn_failure import TurnFailure
 from agent_comms.recovery_reader import RecoveryReader
 
 

@@ -41,8 +41,8 @@ from .coordination.coordinator import Coordination
 from .errors import RelationViolationError
 from .storage.maintenance_barrier import MaintenanceHeldError
 from .harness_delivery_states import EmittedOutcome, PrintLedgerId, TakingLedger, UnconfirmedOutcome
-from .messaging.message_reference import MessageReference
-from .messaging.messages import Message
+from .message_reference import MessageReference
+from .messages import Message
 from .package_stamp import STAMP
 from .nominal.field_codec import FieldCodec, ThreadLookup
 from .open_viewer import OpenViewer

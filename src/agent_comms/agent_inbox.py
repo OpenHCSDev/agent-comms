@@ -15,21 +15,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-from .messaging.bus_tables import MessageIdentitySource
+from .bus_tables import MessageIdentitySource
 from .coordination.database import CoordinationStore
 from .coordination.tables.assignments import WakeAssignment
 from .coordination.tables.harness_deliveries import HarnessDelivery
 from .messaging.message_page import DisplayedMessagePage
 from .nominal.field_codec import NullMember, RecordMember, SingleFieldValue, SubclassUnion
 from .watched import Watched
-from .messaging.message_reference import (
-    AfterMessageStart,
-    InboxStart,
-    MessageReference,
-    StreamBeginning,
-)
+from .message_reference import AfterMessageStart, InboxStart, MessageReference, StreamBeginning
 from .private_registry_guard import RegistryPrivacy
-from .messaging.read_basis import ReadCursor
+from .read_basis import ReadCursor
 
 if TYPE_CHECKING:
     from .messaging.read_ledger import (

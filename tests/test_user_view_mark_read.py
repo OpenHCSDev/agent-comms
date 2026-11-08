@@ -2,8 +2,8 @@
 
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.messaging.channel_targets import CommandTarget
-from agent_comms.messaging.read_basis import NamedViewer
+from agent_comms.channel_targets import CommandTarget
+from agent_comms.read_basis import NamedViewer
 import json
 
 import pytest

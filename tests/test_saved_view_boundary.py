@@ -3,7 +3,7 @@
 
 import pytest
 
-from agent_comms.messaging.channels import (
+from agent_comms.channels import (
     AllOfMatch,
     AnyOfMatch,
     ViewMatch,

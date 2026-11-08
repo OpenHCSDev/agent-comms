@@ -41,8 +41,8 @@ from ..comms import Comms
 from ..config_options import ConfigOptions
 from ..input_key import InputKey, InputKeyText
 from ..launch_runtime import ThreadLaunch
-from ..owner_launch import RetainedOwnerLaunch
-from ..turn_input_source import NoTurnAcceptance
+from ..transport.owner_requests import RetainedOwnerLaunch
+from .turn_input_source import NoTurnAcceptance
 from ..session_config_options import SessionConfigOptions
 from ..coordination.coordinator import Coordination
 from ..errors import RelationViolationError
@@ -52,7 +52,10 @@ from ..pi_rule_gate import PiRedeal
 from ..registry.registry_document import RegistryEntry
 from ..runtime_server import RuntimeServer
 from ..runtime import RuntimeProxy
-from ..runtime_requests import FreshSubscribeRuntimeRequest, SubscribeRuntimeRequest
+from ..transport.runtime_requests import (
+    FreshSubscribeRuntimeRequest,
+    SubscribeRuntimeRequest,
+)
 from ..session_effects import SessionEffects
 from ..session_load import ExistingSessionLoadPlan, FailedSessionLoadPlan, SessionLoadPlan
 from ..thread_identity import AcpThreadRole, ClaimedIdentity, OwnerIdentity, ThreadIncarnation

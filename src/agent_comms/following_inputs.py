@@ -8,18 +8,18 @@ from typing import TYPE_CHECKING
 
 from .nominal.field_codec import AcpSessionId, InputId
 from .acp_extension import LiveQueueScope
-from .turn_inbox import TurnInbox
+from .execution.turn_inbox import TurnInbox
 from .coordination.coordinator import Coordination
 from .queued_input import DeliveredInput, InputHandoffRefused
 from .owned_send import OwnedSend
 from .thread_identity import ClaimedIdentity
-from .turn_input_source import AcceptedFollowingInput
+from .execution.turn_input_source import AcceptedFollowingInput
 from .registry.threads import Thread
 from .execution.input_drain import InputDrain
 
 if TYPE_CHECKING:
     from .agent_events import InputRefused
-    from .turn_runner import TurnRunner
+    from .execution.turn_runner import TurnRunner
     from .tracked_turn import TrackedTurnSession
 
 

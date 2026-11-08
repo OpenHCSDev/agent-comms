@@ -34,7 +34,7 @@ from .nominal.field_codec import (
     WireOmitDefault,
     WireRequired,
 )
-from .messaging.message_reference import MessageReference
+from .message_reference import MessageReference
 from .projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
 from .thread_identity import GenerationCounter, RecordedThreadIncarnation
 
@@ -151,7 +151,7 @@ class ClaimScope(SubclassUnion, ABC, ProjectionSource, affix=""):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .messaging.messages import ClaimOperations
+        from .messages import ClaimOperations
         return (ClaimOperations,)
 
 
@@ -291,10 +291,7 @@ class ClaimProducer(ProjectionOutputs):
     @ClassFact
     @staticmethod
     def writes(cls: type[ClaimProducer]) -> tuple[type[ProducedRow], ...]:
-        from .messaging.messages import (
-    HeldResources,
-    ClaimOperations,
-)
+        from .messages import HeldResources, ClaimOperations
         return (HeldResources, ClaimOperations)
 
 
@@ -486,7 +483,7 @@ class ClaimProjection(Mapping[str, ClaimOwner], ProjectionSource):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .messaging.messages import HeldResources
+        from .messages import HeldResources
         return (HeldResources,)
 
 

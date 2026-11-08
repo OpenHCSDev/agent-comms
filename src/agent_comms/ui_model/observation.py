@@ -67,12 +67,12 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.history_views import RetiredViews
 from agent_comms.input_disposition import DeliveryOverview
 from agent_comms.launch_root import started
-from ..messaging.message_notification import (
+from agent_comms.message_notification import (
     MessageNotification,
     NotificationPass,
     NotificationWindow,
 )
-from ..messaging.message_reference import MessageReference
+from agent_comms.message_reference import MessageReference
 from agent_comms.nominal.field_codec import (
     DeclaredError,
     FieldCodec,
@@ -88,10 +88,7 @@ from agent_comms.notification_read import (
 )
 from agent_comms.notification_reads import NotificationRead
 from agent_comms.presentation import CoordinationSnapshot, NoRevision, ReadState, WireRevision
-from ..messaging.read_basis import (
-    DisplayCut,
-    NoDisplaySelection,
-)
+from agent_comms.read_basis import DisplayCut, NoDisplaySelection
 from agent_comms.registry.registry_document import (
     RegistrySnapshot,
     RosterVisibility,

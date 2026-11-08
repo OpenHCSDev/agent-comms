@@ -14,7 +14,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.attempt_start import AttemptStart
-from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.context_store import UNREAD_CONTEXT
@@ -30,15 +30,9 @@ from agent_comms.messaging.message_page import (
     ConversationMessagePageRequest,
     MessagePageRequest,
 )
-from agent_comms.messaging.messages import (
-    ClaimMessage,
-    ClaimNoticeKind,
-)
+from agent_comms.messages import ClaimMessage, ClaimNoticeKind
 from agent_comms.owner_fence import prepare_fence_token
-from agent_comms.messaging.read_basis import (
-    AllChannelDisplayScope,
-    DMDisplayScope,
-)
+from agent_comms.read_basis import AllChannelDisplayScope, DMDisplayScope
 from agent_comms.reason_codes import NoReasonCode
 from agent_comms.selected_claim import (
     publish_selected_resource_claim,
@@ -47,7 +41,7 @@ from agent_comms.selected_claim import (
 from agent_comms.selected_source_batch import SelectedSource
 from agent_comms.thread_identity import TurnIdentity
 from agent_comms.registry.threads import NativeThread
-from agent_comms.turn_context import (
+from agent_comms.execution.turn_context import (
     ContextManifest,
     OwnerProvenance,
     RecordedContextTurn,

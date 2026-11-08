@@ -14,13 +14,19 @@ from agent_comms.nominal.field_codec import FieldCodec, TurnId
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_turn_context import NativeContextManifestData
 from agent_comms.pi_payloads import NativeContextData
-from agent_comms.runtime_server import RuntimeRequest
-from agent_comms.runtime_requests import (ContextRecordedSegmentRuntimeRequest,
-    ContextCoreRuntimeRequest, ContextCoreSourceRuntimeRequest)
+from agent_comms.transport.runtime_request import RuntimeRequest
+from agent_comms.transport.runtime_requests import (
+    ContextRecordedSegmentRuntimeRequest,
+    ContextCoreRuntimeRequest,
+    ContextCoreSourceRuntimeRequest,
+)
 from agent_comms.thread_identity import TurnIdentity
 from agent_comms.thread_identity import RecordedThreadIncarnation, ReportedTools
-from agent_comms.turn_context import ObservedDispatchRequest, UnobservedDispatchRequest
-from agent_comms.turn_context import (
+from agent_comms.execution.turn_context import (
+    ObservedDispatchRequest,
+    UnobservedDispatchRequest,
+)
+from agent_comms.execution.turn_context import (
     ContextManifest,
     ContextSourceText,
     ContributionCoordinates,
@@ -37,7 +43,7 @@ from agent_comms.turn_context import (
     UserInputSegment,
 )
 from bus_record_fixture import context_comms
-from agent_comms.turn_item import PiRequestKey
+from agent_comms.execution.turn_item import PiRequestKey
 from agent_comms.native_session_reopen import PiSessionId
 
 
@@ -341,19 +347,19 @@ def test_cold_client_acquires_current_and_recorded_contributor_declarations():
     import subprocess
     import sys
     from agent_comms.context_segments.awareness import AwarenessSegment
-    from agent_comms.turn_context import InstructionFile
+    from agent_comms.execution.turn_context import InstructionFile
 
     source = FileProvenance("/original/instructions/awareness.md", "a" * 64)
     original = "Original awareness instruction"
     contributor = AwarenessSegment(
         provenance=(source,), instruction=InstructionFile(original, source), bus="bus", sources=())
-    from agent_comms.turn_context import NextContextTurn
+    from agent_comms.execution.turn_context import NextContextTurn
     payload = FieldCodec.encode(TurnContext(RecordedThreadIncarnation("original-owner", 17002.0),
                                          NextContextTurn(), (contributor,)))
     result = subprocess.run([sys.executable, "-c", '''
 import hashlib, json, sys
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.turn_context import ContextSegment, SegmentManifest, TurnContext
+from agent_comms.execution.turn_context import ContextSegment, SegmentManifest, TurnContext
 assert "agent_comms.context_segments.awareness" not in sys.modules
 preview = FieldCodec.decode(TurnContext, json.load(sys.stdin))
 contributor = preview.segments[0]

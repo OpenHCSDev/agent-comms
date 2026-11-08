@@ -12,7 +12,7 @@ from .nominal.field_codec import (
     WireName,
 )
 from .native_session_reopen import NativeSessionIdentity
-from .turn_item import NativeItemId
+from .execution.turn_item import NativeItemId
 
 if TYPE_CHECKING:
     from .native_entries import NativeEntry

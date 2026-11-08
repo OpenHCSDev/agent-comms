@@ -32,7 +32,10 @@ from agent_comms.selected_tool_broker import SelectedToolIntent
 from test_coordinated_runtime import _root
 from test_coordinated_runtime import tmp_path as private_root_fixture
 from agent_comms.thread_model import DeclaredModel
-from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase
+from agent_comms.execution.turn_phase import (
+    ModelWaitPhase,
+    ToolRunningPhase,
+)
 
 tmp_path = private_root_fixture
 
@@ -90,7 +93,7 @@ async def test_native_full_four_tools_publish_and_release(
         assert not selected_write
         inspection = (
             'from pathlib import Path; from agent_comms.comms import wire; from agent_comms.publisher import Publisher; '
-            'from agent_comms.turn_phase import ToolRunningPhase; '
+            'from agent_comms.execution.turn_phase import ToolRunningPhase; '
             f'c=wire(Path({str(root)!r}), Publisher); '
             'assert isinstance(c.registry.require("beta").turn_record.read().require_active().phase, ToolRunningPhase); '
             'print("CANONICAL_TOOL_RUNNING")'

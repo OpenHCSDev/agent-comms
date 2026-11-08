@@ -1,10 +1,7 @@
 """The stored registry revision owns human identity and UI history uses it."""
 
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.messaging.channel_targets import (
-    CommandTarget,
-    ThreadTarget,
-)
+from agent_comms.channel_targets import CommandTarget, ThreadTarget
 
 
 from dataclasses import replace

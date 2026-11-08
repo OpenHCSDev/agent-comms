@@ -5,20 +5,28 @@ import json
 
 import pytest
 
-from agent_comms.turn_inbox import FollowUpInputPolicy, InputContent, InputRequest
+from agent_comms.execution.turn_inbox import (
+    FollowUpInputPolicy,
+    InputContent,
+    InputRequest,
+)
 from agent_comms.nominal.field_codec import FieldCodec, InputId
 from agent_comms.image_input import ImageInput
 from agent_comms.native_tool_call import OwnerToolConnection
 from agent_comms.pi_commands import ClearQueue, FollowingPrompt, GetSessionStats, GetState, PiCommand, Prompt, SettingCommand
 from agent_comms.pi_wire import AnonymousRequest, RequestId
 from agent_comms.pi_rpc import PiRpcChannel
-from agent_comms.turn_inputs import InputForwarding
-from agent_comms.turn_stats import ReadingStats, RequestingStats, StatsRequest
-from agent_comms.turn_failure import PromptSendFailed
+from agent_comms.execution.turn_inputs import InputForwarding
+from agent_comms.execution.turn_stats import (
+    ReadingStats,
+    RequestingStats,
+    StatsRequest,
+)
+from agent_comms.execution.turn_failure import PromptSendFailed
 from agent_comms.agent_events import FollowingInputRefused, InputCleared
 from agent_comms.native_session_prepare import NativeSessionPreparation
 from native_response_fixture import native_response_session
-from agent_comms.turn_item import PiRequestKey
+from agent_comms.execution.turn_item import PiRequestKey
 
 
 def prompt(**options):

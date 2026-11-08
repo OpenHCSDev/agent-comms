@@ -9,18 +9,11 @@ from dataclasses import dataclass
 from functools import partial
 from typing import cast
 
-from .read_basis import (
-    NoDisplaySelection,
-    ReadAuthority,
-)
 from ..acp_extension import TranscriptSnapshotUpdate
 from ..comms import Comms
 from ..coordination.coordinator import Coordination
 from ..coordination.errors import StaleFence
-from ..errors import (
-    RelationViolationError,
-    UnregisteredThreadError,
-)
+from ..errors import UnregisteredThreadError
 from ..nominal.field_codec import FieldCodec
 from ..owner_connection import (
     OwnerConnection,
@@ -28,14 +21,13 @@ from ..owner_connection import (
     OwnerReading,
     OwnerReplyConnection,
 )
+from ..read_basis import (
+    NoDisplaySelection,
+    ReadAuthority,
+)
 from ..registry.registry_document import RegistrySnapshot
 from ..registry.registry_store import RegistryCut
 from ..registry.threads import Thread
-from ..runtime_server import (
-    AttachedResultRuntimeRequest,
-    AttachedRuntimeRequestContext,
-    ServedAttachedResultRuntimeRequest,
-)
 from ..storage.private_path import (
     FileRevision,
     ObservedPath,
@@ -45,6 +37,7 @@ from ..tool_declaration import ToolDeclaration
 from ..tool_request import ThreadReadTool
 from ..tool_result import ToolResult
 from ..transcripts import TranscriptRead
+from ..transport.runtime_request import AttachedResultRuntimeRequest
 
 
 class BusRead[Result](ToolDeclaration, ABC):
@@ -128,19 +121,9 @@ class OwnerScopedRead[Result: ToolResult = ToolResult](
     @abstractmethod
     def unavailable(self, comms: Comms, owner: ThreadIncarnation) -> Result: ...
 
-    @abstractmethod
-    async def owned(self, ctx: AttachedRuntimeRequestContext) -> Result: ...
-
     def decode_reply(self, raw: object) -> Result:
         """The owner's reply, decoded into the result the declaration binds."""
         return cast(Result, FieldCodec.decode(self.result_type(), raw))
-
-
-class OwnerLiveRead[Result: ToolResult = ToolResult](OwnerScopedRead[Result], ABC):
-    """This subfamily has no answer without the selected live native owner."""
-
-    def unavailable(self, comms: Comms, owner: ThreadIncarnation) -> Result:
-        raise RelationViolationError("The read requires the live native owner.")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -149,11 +132,3 @@ class OwnerReadRuntimeRequest(OwnerReading[object], AttachedResultRuntimeRequest
 
     async def read(self, owner: OwnerConnection) -> object:
         return await owner.request(self.declared_name, operation=self.operation)
-
-
-class ServedOwnerReadRuntimeRequest(
-    ServedAttachedResultRuntimeRequest,
-    OwnerReadRuntimeRequest,
-):
-    async def result(self, ctx: AttachedRuntimeRequestContext) -> ToolResult:
-        return await self.operation.owned(ctx)

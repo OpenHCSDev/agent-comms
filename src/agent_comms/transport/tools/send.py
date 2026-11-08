@@ -9,17 +9,10 @@ from __future__ import annotations
 import threading
 from typing import TYPE_CHECKING, Annotated, Type
 
-from ...messaging.channel_targets import (
-    CommandTarget,
-    NamedTarget,
-)
+from agent_comms.channel_targets import CommandTarget, NamedTarget
 from agent_comms.coordination.tables.refusals import SendRefusal
-from ...messaging.message_reference import MessageReference
-from ...messaging.messages import (
-    InfoKind,
-    MessageKind,
-    SendableMessageKind,
-)
+from agent_comms.message_reference import MessageReference
+from agent_comms.messages import InfoKind, MessageKind, SendableMessageKind
 from agent_comms.native_tools import CommunicationCall
 from agent_comms.nominal.field_codec import WireChoices, WireName
 from agent_comms.send_result import MessagePublished

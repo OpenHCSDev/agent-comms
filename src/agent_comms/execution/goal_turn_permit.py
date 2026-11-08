@@ -14,7 +14,7 @@ from ..nominal.field_codec import (
     GoalId,
     TurnId,
 )
-from ..turn_item import UsageChargeId
+from .turn_item import UsageChargeId
 
 if TYPE_CHECKING:
     from .owned_turn import TurnGoalAccount
@@ -26,9 +26,9 @@ if TYPE_CHECKING:
     from ..planning.goal_management import Goals
     from ..planning.goals import GoalDeclaration
     from ..registry.threads import Thread
-    from ..turn_context import TurnContext
-    from ..turn_goal_account import VerifiedGoalSettlement
-    from ..turn_terminal import TurnTerminal
+    from .turn_context import TurnContext
+    from .turn_goal_account import VerifiedGoalSettlement
+    from .turn_terminal import TurnTerminal
 
 
 class GoalTurnPermit(ABC):

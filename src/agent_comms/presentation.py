@@ -17,13 +17,9 @@ from .activity_clocks import ChannelActivity
 from .agent_activity import (
     AgentActivity,
 )
-from .messaging.bus import DisplayUnread
-from .messaging.channel_targets import CommandTarget
-from .messaging.channels import (
-    Channel,
-    ChannelMemberIndex,
-    Channels,
-)
+from .bus import DisplayUnread
+from .channel_targets import CommandTarget
+from .channels import Channel, ChannelMemberIndex, Channels
 from .cli_result import CliResult
 from .planning.orders import TodoStore
 from .team_frame_file import TeamFrameFile
@@ -54,17 +50,12 @@ from .messaging.message_page import (
     MessagePage,
     PageBounds,
 )
-from .messaging.message_reference import MessageReference
+from .message_reference import MessageReference
 from .notification_assignment import NotificationAssignment
-from .messaging.message_notification import NotificationPass
+from agent_comms.message_notification import NotificationPass
 from .storage.private_path import FileRevision
 from .messaging.read_selection import CapturedSelection
-from .messaging.read_basis import (
-    AnonymousViewer,
-    ChannelDisplayScope,
-    DisplayViewer,
-    NamedViewer,
-)
+from .read_basis import AnonymousViewer, ChannelDisplayScope, DisplayViewer, NamedViewer
 from .messaging.read_ledger import (
     NoReadNotice,
     ReadNotice,
@@ -94,11 +85,11 @@ from .registry.threads import Thread
 from .tool_result import ToolResult
 from .ui_model.unread import ExactUnread, IndexingUnread, UnobservedUnread, UnreadPresentation
 
-from .messaging.message_notification import MessageNotification
+from .message_notification import MessageNotification
 
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity
-    from .messaging.bus import BusSnapshot
+    from .bus import BusSnapshot
     from .catalog_document import CatalogDocument
     from .catalog_store import ChannelCatalog
     from .comms import Comms

@@ -33,7 +33,7 @@ from ..thread_identity import (
     TurnFence,
     TurnIdentity,
 )
-from ..turn_failure import TurnFailure
+from ..execution.turn_failure import TurnFailure
 
 if TYPE_CHECKING:
     from .goal_attempts import (

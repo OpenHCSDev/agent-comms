@@ -15,13 +15,10 @@ from typing import TYPE_CHECKING
 
 from .projects.checkouts import Checkout
 
-from .messaging.bus import Bus
+from .bus import Bus
 from .catalog_store import ChannelCatalog
-from .messaging.channel_targets import (
-    NamedTarget,
-    ThreadTarget,
-)
-from .messaging.channels import Channel
+from .channel_targets import NamedTarget, ThreadTarget
+from .channels import Channel
 from .child_process import Platform
 from .coordination.errors import HistoricalSourceChanged
 from .errors import UnregisteredThreadError
@@ -38,19 +35,15 @@ from .messaging.message_page import (
     MessagePageRequest,
     PageBounds,
 )
-from .messaging.message_reference import MessageReference
-from .messaging.messages import (
-    CarriesEnvelope,
-    Message,
-    MessageHistory,
-)
-from .messaging.message_notification import NotificationWindow
+from .message_reference import MessageReference
+from .messages import CarriesEnvelope, Message, MessageHistory
+from agent_comms.message_notification import NotificationWindow
 from .notification_evidence import FirstRecipient, OutcomeViewer, RecipientCursor, RecipientLimit
 from .page_traversal import HistoryCursor, HistorySourceKey, OlderTraversal
-from .messaging.message_notification import MessageNotification
+from .message_notification import MessageNotification
 from .presentation import WireRevision
 from .storage.private_path import FileObservation, FileRevision, ObservedPath, PrivateDirectoryRole
-from .messaging.read_basis import (
+from .read_basis import (
     AnonymousViewer,
     ChannelDisplayIdentity,
     ChannelDisplayScope,
@@ -80,7 +73,7 @@ from .transcript_routes import TranscriptRoutes
 from collections.abc import Collection
 from typing import Self
 from .coordination.errors import DMScopeChanged
-from .messaging.read_basis import SelectedDisplay
+from agent_comms.read_basis import SelectedDisplay
 if TYPE_CHECKING:
     from .catalog_document import CatalogDocument
     from .history_views import HistoryViews

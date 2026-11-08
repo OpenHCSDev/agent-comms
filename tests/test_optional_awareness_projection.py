@@ -10,14 +10,14 @@ from agent_comms.nominal.field_codec import FieldCodec, MessageId, TurnId
 from agent_comms.lifecycle_capability import Executing
 
 from conftest import accept_initial, publish_initial, without_mutation_guards
-from agent_comms.messaging.messages import NoticeRole
+from agent_comms.messages import NoticeRole
 import os
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from agent_comms.messaging.bus_publication import Delivered
+from agent_comms.bus_publication import Delivered
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import AwarenessClaimGenerations, ClaimBatchAcknowledgements
 from agent_comms.comms import Comms, wire

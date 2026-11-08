@@ -21,7 +21,11 @@ from agent_comms.pi_payloads import (
 )
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.pi_vocabulary import ErrorStopReason
-from agent_comms.turn_failure import ModelRequestFailed, ProviderTransportFailed, RetryableProviderFailure
+from agent_comms.execution.turn_failure import (
+    ModelRequestFailed,
+    ProviderTransportFailed,
+    RetryableProviderFailure,
+)
 
 
 FIXTURE = Path(__file__).with_name("fixtures") / "native_provider_transport_1011.json"

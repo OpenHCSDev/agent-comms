@@ -12,17 +12,17 @@ from dataclasses import (
 )
 from typing import ClassVar
 
-from .messages import (
+from ..bus import BusReader
+from ..messages import (
     Message,
     MessageKind,
 )
-from .bus import BusReader
 from ..page_traversal import (
     OlderTraversal,
     PageCursor,
     PageTraversal,
 )
-from .read_basis import (
+from ..read_basis import (
     DisplayBasis,
     ListedDeliveries,
     MessageDisplayScope,

@@ -16,7 +16,7 @@ from agent_comms.thread_text import NamedSession, NoThreadText, ThreadText
 from ..session_receipts import SessionReceipts
 from ..cli_protocol import TaggedWire
 from ..harness_delivery_states import PrintLedgerId, TakingLedger
-from ..messaging.message_reference import MessageReference
+from ..message_reference import MessageReference
 from ..wire_models import WireModel
 from .shared import WireReference
 from .claude_protocol import CLAUDE_RECORD, ClaudeRecord, ClaudeSession, SubagentProgress

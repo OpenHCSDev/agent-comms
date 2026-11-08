@@ -8,18 +8,14 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.messaging.bus import Bus
+from agent_comms.bus import Bus
 from agent_comms.channel_management import (
     ArchiveThreadsTagDisposition,
     DeleteExclusiveInactiveThreadsTagDisposition,
     DeleteThreadsTagDisposition,
 )
-from agent_comms.messaging.channel_targets import (
-    CommandTarget,
-    CommsTag,
-    DeclaredTag,
-)
-from agent_comms.messaging.channels import (
+from agent_comms.channel_targets import CommandTarget, CommsTag, DeclaredTag
+from agent_comms.channels import (
     AllOfMatch,
     AnyOfMatch,
     BuiltinChannelView,
@@ -71,11 +67,8 @@ def setup_wire(path):
 
 
 def test_current_membership_cannot_create_an_unfrozen_delivery(tmp_path):
-    from agent_comms.messaging.messages import PublicRecord
-    from agent_comms.messaging.messages import (
-    InfoKind,
-    Message,
-)
+    from agent_comms.bus import PublicRecord
+    from agent_comms.messages import InfoKind, Message
 
     comms = setup_wire(tmp_path)
     before_join = comms.messaging.send("a", "#api", "before other joined").message
@@ -246,7 +239,7 @@ async def test_new_tag_disposition_is_declared_in_original_editor_and_tool_catal
     from agent_comms.launch_root import LaunchRoot
 
     from agent_comms.config_options import ConfigOptions
-    from agent_comms.owner_launch import RetainedOwnerLaunch
+    from agent_comms.transport.owner_requests import RetainedOwnerLaunch
 
     with LaunchRoot.from_path(comms.root).selected():
         prepared = await action.prepared(ConfigOptions(RetainedOwnerLaunch.configured(), comms.route))

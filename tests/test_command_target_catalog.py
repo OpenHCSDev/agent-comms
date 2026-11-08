@@ -6,11 +6,7 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from agent_comms.messaging.channel_targets import (
-    CommandTarget,
-    IncarnationThreadTarget,
-    ProjectTarget,
-)
+from agent_comms.channel_targets import CommandTarget, IncarnationThreadTarget, ProjectTarget
 from agent_comms.cli_command import (
     TargetActionCommand,
     CliCommand, OneTarget, TargetBatch, TargetBatchResult, TargetCompleted, TargetFailed,

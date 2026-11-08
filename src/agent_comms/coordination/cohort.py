@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Annotated
 
 from agent_comms.assignment_states import AssignmentState, PendingNotification
-from ..messaging.bus_publication import Delivered
+from agent_comms.bus_publication import Delivered
 from agent_comms.private_registry_guard import RegistryPrivacy
 from agent_comms.cohort_schema import (
     AwarenessClaimGenerations,

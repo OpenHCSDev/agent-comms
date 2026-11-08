@@ -5,13 +5,13 @@ from agent_comms.input_key import AcpInputKey
 from agent_comms.nominal.field_codec import InputId, TurnId
 from agent_comms.input_attempt import NotSentInput, ReservedInput
 from agent_comms.input_disposition import InputDocument
-from agent_comms.turn_failure import (
+from agent_comms.execution.turn_failure import (
     InputIdUnavailable,
     NativePreflightExit,
     NativePreflightTimeout,
     PromptSendFailed,
 )
-from agent_comms.turn_output import TurnOutput
+from agent_comms.execution.turn_output import TurnOutput
 from stored_inputs import stored_inputs
 
 

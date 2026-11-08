@@ -2,12 +2,12 @@
 
 
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.channel_targets import CommandTarget
 
 
 from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.messaging.bus_publication import AgentOrigin
-from agent_comms.messaging.messages import NoticeRole
+from agent_comms.bus_publication import AgentOrigin
+from agent_comms.messages import NoticeRole
 import os
 import json
 from dataclasses import replace
@@ -18,14 +18,11 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import FieldCodec, TurnId, GoalId
 from agent_comms.planning.goals import Goal
-from agent_comms.messaging.messages import (
-    Message,
-    InfoKind,
-)
+from agent_comms.messages import Message, InfoKind
 from agent_comms.task_sources import Decision
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.transport.tools.served import invoke_tool
-from agent_comms.turn_lease import NoTurnLease
+from agent_comms.execution.turn_lease import NoTurnLease
 from functools import partial
 from bus_history import read_history
 from agent_comms.registry.threads import NativeThread

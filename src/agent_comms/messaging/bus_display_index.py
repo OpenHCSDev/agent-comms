@@ -6,8 +6,8 @@ from dataclasses import (
 )
 from typing import Annotated
 
-from .bus_activity_index import ActivityMaximum
 from ..activity_clocks import ChannelActivity
+from ..bus_activity_index import ActivityMaximum
 from ..storage.typed_table import Column
 
 

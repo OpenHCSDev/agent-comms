@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.channel_targets import CommandTarget
 
 
 from bus_history import read_history
@@ -19,7 +19,7 @@ from agent_comms.cli_commands import ConstraintPinnedResult
 from agent_comms.nominal.field_codec import InputId, FieldCodec, GoalId
 from agent_comms.input_key import AcpInputKey
 from agent_comms.context_segments.retained import RetainedSegment
-from agent_comms.turn_lease import NoTurnLease
+from agent_comms.execution.turn_lease import NoTurnLease
 from stored_inputs import stored_inputs
 from agent_comms.registry.threads import NativeThread
 

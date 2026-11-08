@@ -37,7 +37,7 @@ from ..thread_presentation import ThreadPresentation
 
 if TYPE_CHECKING:
     from .goal_actions import GoalAction
-    from ..messaging.bus_publication import Delivered
+    from ..bus_publication import Delivered
 
 
 @dataclass(frozen=True, slots=True)

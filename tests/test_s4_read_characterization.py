@@ -5,7 +5,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.coordination.errors import DMScopeChanged
-from agent_comms.messaging.read_basis import NamedViewer
+from agent_comms.read_basis import NamedViewer
 from agent_comms.messaging.read_ledger import ReadLedger
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread

@@ -18,7 +18,7 @@ from agent_comms.rule_probes import Probe
 from agent_comms.nominal.field_codec import FieldCodec, MessageId
 
 from agent_comms import agent_events as events
-from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.team.package import TeamPackage
 from agent_comms.context_reading import ContextUsage
 from agent_comms.native_tool_call import CodingCall

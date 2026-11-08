@@ -65,7 +65,7 @@ from .nominal.field_codec import (
     Argument, FieldCodec, GitCommitText, MalformedRecord, PathText, WireTransient, boundary_decoder,
 )
 from .transport.progress import CancellableWireExport, WireExportObserver
-from .messaging.channel_targets import NamedTarget
+from agent_comms.channel_targets import NamedTarget
 from agent_comms.owner_requests import NewestOpenRequest, RequestSelection
 from .host_services import HostService
 from .connector_caller import CALLER, ConnectorCaller, ConnectorTool, GrantRefusedError
@@ -81,11 +81,11 @@ from .connector_store import (
     RegisteredClient, TrustedBrowser, UiGrantAccess, UiReadAccess, digest,
 )
 from .storage.locked_store import DocumentChange
-from .messaging.messages import QuestionKind
+from .messages import QuestionKind
 from .team.standing import UnownedOrderWatch
 from .team_heartbeat import TeamHeartbeat
 from .closed_pull_requests import ClosedPullRequestWatch
-from .messaging.message_bus import Watch
+from .execution.watch_passes import Watch
 from .coordination.coordinator import Coordination
 from .service_passes import ServicePassStore
 from .tool_result import ToolResult

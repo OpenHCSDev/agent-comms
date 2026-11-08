@@ -11,7 +11,11 @@ import sqlite3
 
 import pytest
 
-from agent_comms.turn_inbox import InputContent, InputRequest, SteerInputPolicy
+from agent_comms.execution.turn_inbox import (
+    InputContent,
+    InputRequest,
+    SteerInputPolicy,
+)
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
@@ -20,15 +24,15 @@ from agent_comms.lifecycle_capability import Unresolved
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_key import InputKey
 from agent_comms.input_origin import WireInputOrigin
-from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.message_reference import MessageReference
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.native_input_proof import NativeContextJournal, NativeContextProof
 from agent_comms.native_tool_call import OwnerToolConnection
 from agent_comms.notification_progress import DeliveryProgress, ShownToModelProgress
 from agent_comms.pi_commands import FollowingPrompt
 from agent_comms.backend import ObservedNativeCommit, TrackedInputContext
-from agent_comms.turn_item import FreshNativeId
-from agent_comms.turn_lease import TurnLeaseFence
+from agent_comms.execution.turn_item import FreshNativeId
+from agent_comms.execution.turn_lease import TurnLeaseFence
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.pi_events import ContextCommitted, InputCommitted
 from agent_comms.private_send_claim import PrivateSendClaim

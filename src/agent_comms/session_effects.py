@@ -12,7 +12,7 @@ from .runtime import RuntimeProxy
 if TYPE_CHECKING:
     from .cursor_publication import CursorPublication
     from .execution.input_drain import InputDrain
-    from .turn_runner import TurnRunner
+    from .execution.turn_runner import TurnRunner
 
 
 class SessionEffects(ABC):

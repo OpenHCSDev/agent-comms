@@ -59,7 +59,7 @@ if TYPE_CHECKING:
     )
     from .session_lifecycle import SessionLifecycle
     from ..comms import Comms
-    from ..turn_effects import TurnEffects
+    from .turn_effects import TurnEffects
 
 GOAL_CONTINUE_PROMPT = "Continue working toward the active goal."
 

@@ -14,7 +14,7 @@ from pathlib import Path
 from agent_comms import errors
 
 from .active_route import CommsRoute, resolve_comms_route
-from .messaging.bus import Bus
+from .bus import Bus
 from .launch_root import LaunchRoot
 from .recorded_bus import RecordedBusIdentity
 

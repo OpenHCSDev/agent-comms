@@ -16,7 +16,7 @@ from queue import Empty
 
 import pytest
 
-from agent_comms.turn_failure import BackendFailed
+from agent_comms.execution.turn_failure import BackendFailed
 
 from agent_comms.attempt_recovery import RecoveryMonitorCapability
 from agent_comms.child_process import ProcessIdentity
@@ -54,7 +54,7 @@ from agent_comms.pi_wire import PiUsage
 from agent_comms.registry.threads import NativeThread
 from agent_comms.thread_creation import RecordedCreationTime
 from agent_comms.attempt_resolution import OperatorStopped, RetryDecision
-from agent_comms.turn_failure import FailedTurnResolution
+from agent_comms.execution.turn_failure import FailedTurnResolution
 
 pytestmark = pytest.mark.skipif(
     os.name != "posix", reason="POSIX fork and directory fsync crash instrumentation."
@@ -345,7 +345,7 @@ def test_provider_reported_responses_are_attributed_once_and_survive_reopen(stor
     second = PiUsage.from_wire(
         {"input": 40, "output": 10, "totalTokens": 50, "cost": {"total": 0.2}})
 
-    from agent_comms.turn_item import ProviderResponseId
+    from agent_comms.execution.turn_item import ProviderResponseId
 
     first_response, second_response = ProviderResponseId("resp-a"), ProviderResponseId("resp-b")
     permit.record_provider_usage(store, first_response, first)

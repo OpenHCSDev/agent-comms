@@ -13,11 +13,23 @@ from dataclasses import (
     replace,
 )
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-from .bus_publication import Delivered
-from .messages import Message
-from .read_basis import (
+from ..bus import (
+    Bus,
+    BusReader,
+)
+from ..bus_publication import Delivered
+from ..channel_targets import CommandTarget
+from ..coordination.errors import DMScopeChanged
+from ..messages import Message
+from ..nominal.field_codec import (
+    FieldCodec,
+    NullMember,
+    SingleFieldValue,
+    SubclassUnion,
+)
+from ..nominal.sealed import Sealed
+from ..read_basis import (
     AllConversation,
     ChannelConversation,
     Conversation,
@@ -28,19 +40,6 @@ from .read_basis import (
     MessageDisplayScope,
     ReadCursor,
 )
-from .bus import (
-    Bus,
-    BusReader,
-)
-from .channel_targets import CommandTarget
-from ..coordination.errors import DMScopeChanged
-from ..nominal.field_codec import (
-    FieldCodec,
-    NullMember,
-    SingleFieldValue,
-    SubclassUnion,
-)
-from ..nominal.sealed import Sealed
 from ..recorded_bus import (
     NoRecordedBus,
     RecordedBus,

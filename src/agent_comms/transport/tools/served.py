@@ -74,11 +74,11 @@ from ...channel_management import (
     ListTagEdit,
     TagEdit,
 )
-from ...messaging.channel_targets import (
+from ...channel_targets import (
     ChannelTarget,
     CommandTarget,
 )
-from ...messaging.channels import (
+from ...channels import (
     Channel,
     SavedView,
     ViewMatch,
@@ -127,10 +127,10 @@ from ...importing import (
     ThreadImported,
 )
 from ...input_origin import HumanInputOrigin
-from ...messaging.message_notification import MessageNotification
+from ...message_notification import MessageNotification
 from ...messaging.message_page import MessagePage
-from ...messaging.message_reference import MessageReference
-from ...messaging.messages import (
+from ...message_reference import MessageReference
+from ...messages import (
     Message,
     NoticeRole,
 )
@@ -197,7 +197,7 @@ from ...restart_queue import (
     RestartQueue,
     RestartQueued,
 )
-from ...runtime_requests import QueueActionRuntimeRequest
+from ..runtime_requests import QueueActionRuntimeRequest
 from ...send_result import (
     CorrectionComplete,
     CorrectionResult,
@@ -248,7 +248,7 @@ from ...tool_request import (
     ThreadToolRequest,
 )
 from ...tool_result import ToolResult
-from ...turn_context import (
+from ...execution.turn_context import (
     ContextManifest,
     ContextSourceText,
     SegmentManifest,

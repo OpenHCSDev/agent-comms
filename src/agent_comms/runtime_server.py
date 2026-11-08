@@ -16,7 +16,11 @@ from contextlib import ExitStack, suppress
 from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import partial
-from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Self
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Self,
+)
 
 from pydantic import BaseModel
 
@@ -28,25 +32,30 @@ from .coordination.coordinator import Coordination
 from .coordination.errors import CoordinationError, IdentityConflict, Refused
 from .errors import RelationViolationError
 from .native_failures import NativeRequestFailure
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import AcpSessionId, FieldCodec, WireOmitDefault
-from .nominal.served_declaration import ServesDeclaration
-from .owner_connection import (
-    AnyOwner, NoControllerToken, OwnerConnection, RequestedOwner, socket_path,
+from .nominal.field_codec import (
+    AcpSessionId,
+    FieldCodec,
 )
+from .nominal.served_declaration import ServesDeclaration
+from .owner_connection import socket_path
 from .owner_protocol import (
     ClientLine, OwnerFailure, OwnerLine, OwnerPermissionRequest, OwnerResult, OwnerUpdate,
 )
-from .storage.maintenance_barrier import MaintenanceHolder, NoMaintenanceHolder
 from .storage.private_path import PrivateSocketRole
 from .registry.registry_document import RegistryEntry
-from .thread_identity import ThreadIncarnation
 from .registry.threads import Thread
 from .tool_result import DeclaredReply
+from .transport.runtime_request import (
+    AttachedResultRuntimeRequest,
+    AttachedRuntimeRequest,
+    ResultRuntimeRequest,
+    RuntimeRequest,
+)
+
 
 if TYPE_CHECKING:
     from .acp import AcpSelectedWriteAuthority, CommsAgent
-    from .turn_runner import TurnRunner
+    from .execution.turn_runner import TurnRunner
 
 
 _LOG = logging.getLogger(__name__)
@@ -385,27 +394,9 @@ class AttachedRuntimeRequestContext(RuntimeRequestContext):
     session: AcpSessionId
 
 
-@dataclass(frozen=True, kw_only=True)
-class RuntimeRequest[Ctx: RuntimeRequestContext](
-    DeclaredFamily,
-    affix='RuntimeRequest',
-):
-    family_discriminator: ClassVar[str] = "action"
-    thread: str
-    holder: Annotated[MaintenanceHolder, WireOmitDefault()] = NoMaintenanceHolder()
-    captured: Annotated[RequestedOwner, WireOmitDefault()] = AnyOwner()
-
-    @classmethod
-    def proxy_payload(
-        cls, owner: ThreadIncarnation, controller_token: str | NoControllerToken,
-        parameters: dict[str, object],
-    ) -> dict[str, object]:
-        return OwnerConnection.wire_request(cls.declared_name, owner, parameters)
-
-
 class ServedRuntimeRequest[Ctx: RuntimeRequestContext](
     Command[Ctx, Awaitable[None]],
-    RuntimeRequest[Ctx],
+    RuntimeRequest,
     metaclass=ServesDeclaration,
     declared_name=None,
 ):
@@ -413,13 +404,6 @@ class ServedRuntimeRequest[Ctx: RuntimeRequestContext](
     async def bind(
         self, server: RuntimeServer, reader: asyncio.StreamReader, client: SocketClient,
     ) -> Ctx: ...
-
-
-class AttachedRuntimeRequest(
-    RuntimeRequest[AttachedRuntimeRequestContext],
-    declared_name=None,
-):
-    pass
 
 
 class ServedAttachedRuntimeRequest(
@@ -444,16 +428,9 @@ class ServedAttachedRuntimeRequest(
         return AttachedRuntimeRequestContext(server, reader, client, owner.name, session_id)
 
 
-class ResultRuntimeRequest[Ctx: RuntimeRequestContext](
-    RuntimeRequest[Ctx],
-    declared_name=None,
-):
-    pass
-
-
 class ServedResultRuntimeRequest[Ctx: RuntimeRequestContext](
     ServedRuntimeRequest[Ctx],
-    ResultRuntimeRequest[Ctx],
+    ResultRuntimeRequest,
 ):
     async def apply(self, ctx: Ctx) -> None:
         reply = await self.result(ctx)
@@ -461,14 +438,6 @@ class ServedResultRuntimeRequest[Ctx: RuntimeRequestContext](
 
     @abstractmethod
     async def result(self, ctx: Ctx) -> DeclaredReply: ...
-
-
-class AttachedResultRuntimeRequest(
-    ResultRuntimeRequest[AttachedRuntimeRequestContext],
-    AttachedRuntimeRequest,
-    declared_name=None,
-):
-    pass
 
 
 class ServedAttachedResultRuntimeRequest(

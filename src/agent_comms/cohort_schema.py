@@ -42,7 +42,7 @@ from .storage.typed_table import (
 from .wake_candidate_index import ProjectionUnavailableError
 
 if TYPE_CHECKING:
-    from .messaging.bus_publication import Delivered
+    from .bus_publication import Delivered
     from .coordination.coordinator import Coordination
     from .private_registry_guard import RegistryPrivacy
 

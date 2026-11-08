@@ -15,15 +15,11 @@ from dataclasses import dataclass
 from functools import cached_property
 from typing import Final
 
-from .messaging.channel_targets import exact_stored_target
+from .channel_targets import exact_stored_target
 from .nominal.field_codec import FieldCodec, MalformedRecord, ThreadLookup
 from .frozen_recipient import FrozenRecipient
 from .participant_identity import ParticipantIdentity
-from .messaging.messages import (
-    BusCapability,
-    CarriesEnvelope,
-    Message,
-)
+from .messages import BusCapability, CarriesEnvelope, Message
 
 AUDIENCE_VERSION: Final = 1
 MAX_RECIPIENTS: Final = 4096

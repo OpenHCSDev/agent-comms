@@ -26,7 +26,7 @@ from ..registry.registration import Registration
 from ..registry.threads import Thread
 
 if TYPE_CHECKING:
-    from ..messaging.messages import Message
+    from ..messages import Message
 
 
 class GoalRecords(GoalWaitRecovery):

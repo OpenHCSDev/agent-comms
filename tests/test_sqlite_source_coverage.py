@@ -3,9 +3,7 @@
 
 import pytest
 
-from agent_comms.messaging.bus import PrivateRecord
-from agent_comms.messaging.messages import PublicRecord
-from agent_comms.messaging.messages import BusRecord
+from agent_comms.bus import BusRecord, PrivateRecord, PublicRecord
 from agent_comms.messaging.bus_source_page import CoveragePage
 from agent_comms.comms import wire
 from agent_comms.coordination.database import CoordinationStore
@@ -14,10 +12,7 @@ from agent_comms.coordination.session import NativeCapture
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.cursor_owner import UnstartedCursor
 from agent_comms.nominal.field_codec import ThreadLookup
-from agent_comms.messaging.messages import (
-    InfoKind,
-    Message,
-)
+from agent_comms.messages import InfoKind, Message
 from agent_comms.proven_source_coverage import SourceCoverage, SourcePrefix
 from bus_record_fixture import prepare_native_comms, record_from
 

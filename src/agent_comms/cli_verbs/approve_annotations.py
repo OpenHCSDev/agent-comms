@@ -3,9 +3,9 @@ from __future__ import annotations
 from agent_comms.cli_verbs.pin_constraint import PinConstraintCliCommand
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument
-from ..messaging.message_reference import MessageReference
-from ..messaging.messages import Message
-from agent_comms.turn_context import ContextSegment
+from agent_comms.message_reference import MessageReference
+from agent_comms.messages import Message
+from ..execution.turn_context import ContextSegment
 from dataclasses import dataclass
 from typing import Annotated
 import json

@@ -111,16 +111,16 @@ from ..storage.typed_table import (
     TableSource,
     TypedTable,
 )
-from ..turn_failure import TurnFailure
-from ..turn_item import UsageChargeId
+from ..execution.turn_failure import TurnFailure
+from ..execution.turn_item import UsageChargeId
 
 if TYPE_CHECKING:
     from .goal_management import Goals
     from .goal_scope import GoalScope
     from .goals import Goal
     from ..registry.threads import Thread
-    from ..turn_context import TurnContext
-    from ..turn_lease import TurnLeaseFence
+    from ..execution.turn_context import TurnContext
+    from ..execution.turn_lease import TurnLeaseFence
 
 
 @dataclass(frozen=True)

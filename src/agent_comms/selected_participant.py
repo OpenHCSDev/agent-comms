@@ -14,7 +14,7 @@ from metaclass_registry.mro_dispatch import (
     handles,
 )
 
-from agent_comms.turn_phase import NativePhaseChanged
+from .execution.turn_phase import NativePhaseChanged
 from .agent_events import CompactionEvent
 from .cohort_schema import CohortTable
 from .comms import Comms
@@ -31,24 +31,27 @@ from .cursor_publication import CursorDelivery
 from .errors import RelationViolationError
 from .nominal.field_codec import TurnId, RootId, ThreadLookup
 from .messaging.message_bus import MessageBus
-from .messaging.message_reference import MessageReference
+from .message_reference import MessageReference
 from .native_arguments import SelectedModel
 from .native_attestation import ObservedAttestation
 from .native_input_owner import ParticipantOwner, RegistryOwner
 from .notification_assignment import NotificationAssignment
-from .messaging.message_notification import NotificationWindow
+from agent_comms.message_notification import NotificationWindow
 from agent_comms.notification_assignment import NotificationAssignmentRead
 from .participant_store import ParticipantSnapshot
 from .pi_events import TurnContextObserved
 from .notification_evidence import OwnerOutcomes
-from .messaging.message_notification import (
-    MessageNotification,
-    SentMessageOutcome,
-)
+from .message_notification import MessageNotification, SentMessageOutcome
 from .publisher import ParticipantPublisher
 from .selected_source_batch import SelectedSource, SelectedSourceBatch
-from .turn_phase import PreparingPhase, TurnPhase
-from .turn_goal_permission import OwnerGoalPermission, TurnGoalPermission
+from .execution.turn_phase import (
+    PreparingPhase,
+    TurnPhase,
+)
+from .execution.turn_goal_permission import (
+    OwnerGoalPermission,
+    TurnGoalPermission,
+)
 
 
 class NoLivePublication(MroDispatch):

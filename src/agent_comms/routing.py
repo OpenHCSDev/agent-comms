@@ -4,15 +4,15 @@ from __future__ import annotations
 
 from .errors import RelationViolationError
 
+from .execution.turn_origin import TurnOrigin
 from .input_key import InputKey
 
-from . import turn_origin
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, replace
 from typing import Annotated, TYPE_CHECKING
 
 
-from .messaging.channel_targets import CommandTarget
+from .channel_targets import CommandTarget
 from .projects.checkouts import Checkout
 from .nominal.field_codec import (
     ThreadLookup, FieldCodec, NullMember, PresentMember, RecordMember, SubclassUnion, WireOmitDefault,
@@ -21,26 +21,23 @@ from .planning.goal_scope import (
     AllGoals,
     GoalScope,
 )
-from .messaging.message_reference import MessageReference
-from .messaging.messages import PublicSender
-from .messaging.read_basis import (
-    DMDisplayScope,
-    MessageDisplayScope,
-)
+from .message_reference import MessageReference
+from .messages import PublicSender
+from .read_basis import DMDisplayScope, MessageDisplayScope
 from .response_policy import NO_ALIASES
 
 if TYPE_CHECKING:
-    from .messaging.bus_publication import Delivered
+    from .bus_publication import Delivered
     from .catalog_document import CatalogDocument
     from .registry_provenance import RegistryProvenance
     from .thread_identity import ThreadIncarnation
     from .input_disposition import InputDispositions
-    from .messaging.messages import Message
+    from .messages import Message
     from .registry.threads import Thread
     from .transcript_routes import NoSentInputText, SentInputText
 
 
-class NoTurnOrigin(NullMember, turn_origin.TurnOrigin):
+class NoTurnOrigin(NullMember, TurnOrigin):
     """An autonomous turn has no message, delivery key or reply destination."""
 
     separate_turn = False
@@ -168,7 +165,7 @@ class TurnRouting(RecordMember, Routing):
 @dataclass(frozen=True, slots=True)
 class ScheduledTurn:
     prompt: str
-    origin: turn_origin.TurnOrigin = NO_TURN_ORIGIN
+    origin: TurnOrigin = NO_TURN_ORIGIN
     goal_id: GoalScope = AllGoals()
 
     @property

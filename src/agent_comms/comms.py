@@ -24,9 +24,9 @@ from .history_views import HistoryViews
 from .storage.maintenance_barrier import MaintenanceBarrier
 from .messaging.message_bus import MessageBus
 from .messaging.message_page import InboxPage
-from .messaging.message_reference import InboxStart
+from .message_reference import InboxStart
 from .agent_inbox import TakenInputStart
-from .messaging.messages import Message
+from .messages import Message
 from .messaging.sending import Messaging
 from .execution.owner_lifecycle import OwnerLifecycle
 from .publisher import OwnerPublisher

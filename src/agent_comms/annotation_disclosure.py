@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, ClassVar
 from .nominal.declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
-    from .turn_context import ContextSpan
+    from .execution.turn_context import ContextSpan
 
 
 class DisclosureWithheld(ValueError):  # noqa: N818 - nominal refusal state

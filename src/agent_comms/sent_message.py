@@ -10,9 +10,9 @@ from dataclasses import dataclass
 from typing import Self
 from collections.abc import Mapping
 
-from .messaging.messages import Message
+from .messages import Message
 
-from .messaging.message_reference import MessageReference
+from .message_reference import MessageReference
 from .thread_identity import ThreadIncarnation
 from .transcript_events import SentTranscript
 

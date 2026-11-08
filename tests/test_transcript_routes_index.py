@@ -8,7 +8,7 @@ from agent_comms.errors import RelationViolationError
 from bus_record_fixture import INPUT_ID
 from agent_comms.routing import MessageRoute, TurnRouting
 from agent_comms.text_digest import TextDigest
-from agent_comms.turn_item import FreshNativeId
+from agent_comms.execution.turn_item import FreshNativeId
 from agent_comms.transcript_routes import DisplayText, InputDisplay, NoDisplayText, SentInputText, TranscriptRoutes
 
 

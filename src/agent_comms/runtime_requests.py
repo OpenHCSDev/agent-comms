@@ -7,20 +7,30 @@ commands do not own coordination, backend or identity lifecycles.
 
 from __future__ import annotations
 
+from .comms import Comms
 from .controller import NO_CONTROLLER
+from .errors import RelationViolationError
 from .projects.checkouts import Checkout
 
-import json
-from abc import abstractmethod
+from abc import (
+    ABC,
+    abstractmethod,
+)
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from functools import partial
-from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self
+from typing import (
+    TYPE_CHECKING,
+    ClassVar,
+    Self,
+)
 
 from acp.exceptions import RequestError
-from acp.schema import PromptRequest, PromptResponse, SetSessionConfigOptionResponse
+from acp.schema import (
+    PromptResponse,
+    SetSessionConfigOptionResponse,
+)
 from pydantic import BaseModel, JsonValue
 
 from .acp_extension import (
@@ -29,51 +39,95 @@ from .acp_extension import (
 
 from .agent_event_updates import AcpEventConsumer
 from .acp_request_consumer import AcpRequestConsumer
-from .annotation_correction import CorrectsAnnotation
-from .context_store import ContextManifestReference
 from .coordination.coordinator import Coordination
-from .nominal.field_codec import FieldCodec, WireName, WireValue, GoalId
-from .planning.goal_actions import GoalAction
-from .planning.goal_history import RecordedGoalHistory
-from .planning.goal_scope import (
-    AllGoals,
-    OneGoal,
+from .nominal.field_codec import (
+    FieldCodec,
+    WireValue,
 )
+from .planning.goal_history import RecordedGoalHistory
 from .planning.goals import Goal
 from .manual_compaction_bridge import compact_context
-from .messaging.bus_read import OwnerScopedRead
+from .messaging.bus_read import (
+    OwnerReadRuntimeRequest,
+    OwnerScopedRead,
+)
+from .thread_identity import ThreadIncarnation
+from .transport.project_request import ProjectRuntimeRequest
+from .transport.runtime_requests import (
+    CancelRuntimeRequest,
+    ClearQueueRuntimeRequest,
+    CompactRuntimeRequest,
+    ContextAnnotationCorrectionRuntimeRequest,
+    ContextAnnotationsRuntimeRequest,
+    ContextCoreRuntimeRequest,
+    ContextCoreSourceRuntimeRequest,
+    ContextRecordedSegmentRuntimeRequest,
+    ContextReferenceRuntimeRequest,
+    ContextRuntimeRequest,
+    ContextSourceRuntimeRequest,
+    DismissHistoricalInputsRuntimeRequest,
+    EditGoalRuntimeRequest,
+    FreshSubscribeRuntimeRequest,
+    GoalHistoryRuntimeRequest,
+    GoalRevisionRuntimeRequest,
+    GoalSnapshotResultRuntimeRequest,
+    GoalTextRuntimeRequest,
+    PromptRuntimeRequest,
+    RecordedContextRuntimeRequest,
+    RetryGoalRuntimeRequest,
+    SendNowRuntimeRequest,
+    SetConfigOptionRuntimeRequest,
+    SetGoalRuntimeRequest,
+    SubscribeRuntimeRequest,
+    UpdateGoalRuntimeRequest,
+)
 from .transport.tools.reads import OwnerGoalRead
-from .transport.tools.sidebar import ClearQueueQueueAction, QueueAction, SendNowQueueAction
+from .transport.tools.sidebar import (
+    ClearQueueQueueAction,
+    SendNowQueueAction,
+)
 from .ui_model.observation import SubscribeTranscript
 from agent_comms.runtime_server import (
-    AttachedResultRuntimeRequest,
-    AttachedRuntimeRequest,
     AttachedRuntimeRequestContext,
     ServedAttachedResultRuntimeRequest,
     ServedAttachedRuntimeRequest,
     SubscriberClosed,
 )
 from .coordination.errors import Refused
-from .owner_connection import NoControllerToken, OwnerConnection, socket_path
 from .owner_protocol import ClientLine, OwnerAnnouncement, OwnerFailure, OwnerReady
 from .pi_payloads import NativeContextData
-from .thread_identity import ThreadIncarnation
-from .registry.threads import Thread
-from .thread_presentation import LiveThreadOwnerBinding
-from .tool_result import DeclaredReply
-from .turn_context import (
+from .tool_result import (
+    DeclaredReply,
+    ToolResult,
+)
+from .execution.turn_context import (
     ContextManifest,
     ContextSourceText,
-    DispatchRequest,
-    PreviewProvenance,
-    Provenance,
-    RecordedContextTurn,
-    SegmentManifest,
     TurnContext,
 )
 from .working_memory_annotations import WorkingMemoryAnnotations
-from .working_memory_labels import ClassifierVersion, ModelLabel
-from .working_memory_questions import SpanAnswer
+from .working_memory_labels import ModelLabel
+
+
+class OwnedRead[Result: ToolResult = ToolResult](OwnerScopedRead[Result], ABC):
+    @abstractmethod
+    async def owned(self, ctx: AttachedRuntimeRequestContext) -> Result: ...
+
+
+class OwnerLiveRead[Result: ToolResult = ToolResult](OwnedRead[Result], ABC):
+    """This subfamily has no answer without the selected live native owner."""
+
+    def unavailable(self, comms: Comms, owner: ThreadIncarnation) -> Result:
+        raise RelationViolationError("The read requires the live native owner.")
+
+
+class ServedOwnerReadRuntimeRequest(
+    ServedAttachedResultRuntimeRequest,
+    OwnerReadRuntimeRequest,
+):
+    async def result(self, ctx: AttachedRuntimeRequestContext) -> ToolResult:
+        return await OwnedRead.serving(self.operation).owned(ctx)
+
 
 if TYPE_CHECKING:
     from .agent_backend import CompactionOutcome
@@ -140,29 +194,6 @@ class AnnotationsReply(DeclaredReply, WireValue):
         return cls(FieldCodec.decode(tuple[ModelLabel, ...], data))
 
 
-@dataclass(frozen=True, kw_only=True)
-class ProjectRuntimeRequest(AttachedResultRuntimeRequest):
-    """Current project observation through the original native launch binding.
-
-    This command grants no input or tool execution. A retained native process
-    must still observe its original registry lease before each project check.
-    """
-    binding: LiveThreadOwnerBinding
-
-    @classmethod
-    def for_native(cls, snapshot, thread):
-        process = thread.require_process()
-        owner = snapshot.owner_identity(thread.name)
-        snapshot.require_owner_process(owner, process)
-        return cls(thread=thread.name, binding=LiveThreadOwnerBinding(owner, process))
-
-    def environment(self, root):
-        return {
-            "AGENT_COMMS_PROJECT_SOCKET": str(socket_path(root, self.binding.process.pid)),
-            "AGENT_COMMS_PROJECT_REQUEST": json.dumps(FieldCodec.encode(self)),
-        }
-
-
 class ServedProjectRuntimeRequest(
     ServedAttachedResultRuntimeRequest,
     ProjectRuntimeRequest,
@@ -182,11 +213,6 @@ class ServedProjectRuntimeRequest(
         ))).entry
         current = self.require_original(entry)
         return ProjectReply(current.worktree)
-
-
-@dataclass(frozen=True, kw_only=True)
-class SubscribeRuntimeRequest(AttachedRuntimeRequest):
-    pass
 
 
 class ServedSubscribeRuntimeRequest(
@@ -229,10 +255,6 @@ class ServedSubscribeRuntimeRequest(
                     ClientLine.read(line).answer(ctx.client)
 
 
-class FreshSubscribeRuntimeRequest(SubscribeRuntimeRequest):
-    pass
-
-
 class ServedFreshSubscribeRuntimeRequest(
     ServedSubscribeRuntimeRequest,
     FreshSubscribeRuntimeRequest,
@@ -243,23 +265,6 @@ class ServedFreshSubscribeRuntimeRequest(
         await self.ready(ctx)
         async with self.observing(ctx):
             yield
-
-
-@dataclass(frozen=True, kw_only=True)
-class PromptRuntimeRequest(AttachedResultRuntimeRequest):
-    request: PromptRequest
-    controller_token: Annotated[str | NoControllerToken, WireName("controllerToken")] = (
-        NoControllerToken()
-    )
-
-    @classmethod
-    def proxy_payload(
-        cls, owner: ThreadIncarnation, controller_token: str | NoControllerToken,
-        parameters: dict[str, object],
-    ) -> dict[str, object]:
-        return super().proxy_payload(
-            owner, controller_token, {"controllerToken": controller_token, **parameters}
-        )
 
 
 class ServedPromptRuntimeRequest(
@@ -297,11 +302,6 @@ class ServedPromptRuntimeRequest(
             raise
 
 
-@dataclass(frozen=True, kw_only=True)
-class CancelRuntimeRequest(AttachedResultRuntimeRequest):
-    pass
-
-
 class ServedCancelRuntimeRequest(
     ServedAttachedResultRuntimeRequest,
     CancelRuntimeRequest,
@@ -309,32 +309,6 @@ class ServedCancelRuntimeRequest(
     async def result(self, ctx: AttachedRuntimeRequestContext) -> CancelReply:
         await ctx.server.agent.turns.cancel(ctx.session)
         return CancelReply()
-
-
-@dataclass(frozen=True, kw_only=True)
-class QueueActionRuntimeRequest(AttachedResultRuntimeRequest, declared_name=None):
-    """A queue action any client asks of a thread's owner, attached over ACP or not. Each
-    member names the declared QueueAction it serves."""
-
-    serves: ClassVar[dict[type[QueueAction], type[QueueActionRuntimeRequest]]] = {}
-
-    def __init_subclass__(cls, *, action: type[QueueAction], **kwargs: object) -> None:
-        super().__init_subclass__(**kwargs)
-        QueueActionRuntimeRequest.serves[action] = cls
-
-    @classmethod
-    def serving(cls, action: type[QueueAction]) -> type[QueueActionRuntimeRequest]:
-        return cls.serves[action]
-
-    @classmethod
-    def at_owner(cls, root: Path, thread: Thread) -> None:
-        """Ask the thread's live owner process to apply this action to its queued inputs."""
-        OwnerConnection.exchange_at(root, thread, cls(thread=thread.name))
-
-
-@dataclass(frozen=True, kw_only=True)
-class SendNowRuntimeRequest(QueueActionRuntimeRequest, action=SendNowQueueAction):
-    pass
 
 
 class ServedSendNowRuntimeRequest(
@@ -347,11 +321,6 @@ class ServedSendNowRuntimeRequest(
         return QueueActionReply()
 
 
-@dataclass(frozen=True, kw_only=True)
-class ClearQueueRuntimeRequest(QueueActionRuntimeRequest, action=ClearQueueQueueAction):
-    pass
-
-
 class ServedClearQueueRuntimeRequest(
     ServedAttachedResultRuntimeRequest,
     ClearQueueRuntimeRequest,
@@ -360,12 +329,6 @@ class ServedClearQueueRuntimeRequest(
     async def result(self, ctx: AttachedRuntimeRequestContext) -> QueueActionReply:
         await ctx.server.agent.inputs.clear_queued_inputs(ctx.session)
         return QueueActionReply()
-
-
-@dataclass(frozen=True, kw_only=True)
-class SetConfigOptionRuntimeRequest(AttachedResultRuntimeRequest):
-    config_id: str
-    value: str | bool
 
 
 class ServedSetConfigOptionRuntimeRequest(
@@ -379,22 +342,12 @@ class ServedSetConfigOptionRuntimeRequest(
         return ConfigOptionReply(result)
 
 
-@dataclass(frozen=True, kw_only=True)
-class CompactRuntimeRequest(AttachedResultRuntimeRequest):
-    instructions: str | None = None
-
-
 class ServedCompactRuntimeRequest(
     ServedAttachedResultRuntimeRequest,
     CompactRuntimeRequest,
 ):
     async def result(self, ctx: AttachedRuntimeRequestContext) -> CompactionOutcome:
         return await compact_context(ctx.server.agent.turns, ctx.session, self.instructions)
-
-
-@dataclass(frozen=True, kw_only=True)
-class DismissHistoricalInputsRuntimeRequest(AttachedResultRuntimeRequest):
-    pass
 
 
 class ServedDismissHistoricalInputsRuntimeRequest(
@@ -410,11 +363,6 @@ class ServedDismissHistoricalInputsRuntimeRequest(
         return result
 
 
-@dataclass(frozen=True, kw_only=True)
-class GoalHistoryRuntimeRequest(AttachedResultRuntimeRequest):
-    goal_id: OneGoal | AllGoals = AllGoals()
-
-
 class ServedGoalHistoryRuntimeRequest(
     ServedAttachedResultRuntimeRequest,
     GoalHistoryRuntimeRequest,
@@ -423,13 +371,6 @@ class ServedGoalHistoryRuntimeRequest(
         return await Coordination.run_worker(partial(
             ctx.server.agent._comms.goals.recorded_history, ctx.name, self.goal_id,
         ))
-
-
-class GoalSnapshotResultRuntimeRequest(
-    AttachedResultRuntimeRequest,
-    declared_name=None,
-):
-    pass
 
 
 class ServedGoalSnapshotResultRuntimeRequest(
@@ -441,13 +382,7 @@ class ServedGoalSnapshotResultRuntimeRequest(
 
     async def result(self, ctx: AttachedRuntimeRequestContext) -> GoalSnapshotReply:
         await self.change(ctx)
-        return await OwnerScopedRead[GoalSnapshotReply].serving(OwnerGoalRead()).owned(ctx)
-
-
-@dataclass(frozen=True, kw_only=True)
-class GoalRevisionRuntimeRequest(AttachedResultRuntimeRequest, declared_name=None):
-    goal_id: GoalId
-    expected_revision: int
+        return await OwnedRead[GoalSnapshotReply].serving(OwnerGoalRead()).owned(ctx)
 
 
 class ServedGoalRevisionRuntimeRequest(
@@ -457,25 +392,9 @@ class ServedGoalRevisionRuntimeRequest(
     pass
 
 
-@dataclass(frozen=True, kw_only=True)
-class GoalTextRuntimeRequest(AttachedResultRuntimeRequest, declared_name=None):
-    text: str = ""
-
-    def __post_init__(self) -> None:
-        if not self.text.strip():
-            raise ValueError("A goal requires text.")
-
-
 class ServedGoalTextRuntimeRequest(
     ServedAttachedResultRuntimeRequest,
     GoalTextRuntimeRequest,
-):
-    pass
-
-
-@dataclass(frozen=True, kw_only=True)
-class EditGoalRuntimeRequest(
-    GoalTextRuntimeRequest, GoalRevisionRuntimeRequest, GoalSnapshotResultRuntimeRequest
 ):
     pass
 
@@ -492,11 +411,6 @@ class ServedEditGoalRuntimeRequest(
         )
 
 
-@dataclass(frozen=True, kw_only=True)
-class UpdateGoalRuntimeRequest(GoalRevisionRuntimeRequest, GoalSnapshotResultRuntimeRequest):
-    status: type[GoalAction]
-
-
 class ServedUpdateGoalRuntimeRequest(
     ServedGoalRevisionRuntimeRequest,
     ServedGoalSnapshotResultRuntimeRequest,
@@ -506,11 +420,6 @@ class ServedUpdateGoalRuntimeRequest(
         await ctx.server.agent.turns.goals.update_goal(
             ctx.session, self.status, self.goal_id, self.expected_revision
         )
-
-
-@dataclass(frozen=True, kw_only=True)
-class RetryGoalRuntimeRequest(GoalRevisionRuntimeRequest):
-    pass
 
 
 class ServedRetryGoalRuntimeRequest(
@@ -524,20 +433,10 @@ class ServedRetryGoalRuntimeRequest(
         return GoalReply(goal)
 
 
-@dataclass(frozen=True, kw_only=True)
-class SetGoalRuntimeRequest(GoalTextRuntimeRequest):
-    pass
-
-
 class ServedSetGoalRuntimeRequest(ServedGoalTextRuntimeRequest, SetGoalRuntimeRequest):
     async def result(self, ctx: AttachedRuntimeRequestContext) -> GoalReply:
         goal = await ctx.server.agent.turns.goals.set_goal(ctx.session, self.text)
         return GoalReply(goal)
-
-
-@dataclass(frozen=True, kw_only=True)
-class ContextRuntimeRequest(AttachedResultRuntimeRequest):
-    pass
 
 
 class ServedContextRuntimeRequest(
@@ -552,13 +451,6 @@ class ServedContextRuntimeRequest(
 
     async def result(self, ctx: AttachedRuntimeRequestContext):
         return await self.inspect(ctx)
-
-
-@dataclass(frozen=True, kw_only=True)
-class ContextSourceRuntimeRequest(ContextRuntimeRequest):
-    observation: PreviewProvenance
-    segment: int
-    source: Provenance
 
 
 class ServedContextSourceRuntimeRequest(
@@ -578,11 +470,6 @@ class ServedContextSourceRuntimeRequest(
         return await Coordination.run_worker(partial(self.read_source, ctx, context))
 
 
-@dataclass(frozen=True, kw_only=True)
-class ContextCoreRuntimeRequest(AttachedResultRuntimeRequest):
-    pass
-
-
 class ServedContextCoreRuntimeRequest(
     ServedAttachedResultRuntimeRequest,
     ContextCoreRuntimeRequest,
@@ -599,14 +486,6 @@ class ServedContextCoreRuntimeRequest(
         return await self.inspect(ctx)
 
 
-@dataclass(frozen=True, kw_only=True)
-class ContextCoreSourceRuntimeRequest(ContextCoreRuntimeRequest):
-    owner: ThreadIncarnation
-    segment: int
-    manifest: SegmentManifest
-    source: Provenance
-
-
 class ServedContextCoreSourceRuntimeRequest(
     ServedContextCoreRuntimeRequest,
     ContextCoreSourceRuntimeRequest,
@@ -618,14 +497,6 @@ class ServedContextCoreSourceRuntimeRequest(
 
     async def result(self, ctx: AttachedRuntimeRequestContext):
         return await Coordination.run_worker(partial(self.read_source, ctx))
-
-
-@dataclass(frozen=True, kw_only=True)
-class RecordedContextRuntimeRequest(AttachedResultRuntimeRequest, declared_name=None):
-    turn: RecordedContextTurn
-    request_id: DispatchRequest
-    record: ContextManifestReference
-    segment: int
 
 
 class ServedRecordedContextRuntimeRequest(
@@ -641,11 +512,6 @@ class ServedRecordedContextRuntimeRequest(
         return await Coordination.run_worker(partial(self.read_manifest, ctx))
 
 
-@dataclass(frozen=True, kw_only=True)
-class ContextReferenceRuntimeRequest(RecordedContextRuntimeRequest):
-    source: Provenance
-
-
 class ServedContextReferenceRuntimeRequest(
     ServedRecordedContextRuntimeRequest,
     ContextReferenceRuntimeRequest,
@@ -656,11 +522,6 @@ class ServedContextReferenceRuntimeRequest(
             manifest.public_source_text, ctx.server.agent._comms, self.segment, self.source,
         ))
         return text
-
-
-@dataclass(frozen=True, kw_only=True)
-class ContextRecordedSegmentRuntimeRequest(RecordedContextRuntimeRequest):
-    contributors: tuple[int, ...] = ()
 
 
 class ServedContextRecordedSegmentRuntimeRequest(
@@ -683,11 +544,6 @@ class ServedContextRecordedSegmentRuntimeRequest(
         return ContextSourceText(segment.public_description(), text)
 
 
-@dataclass(frozen=True, kw_only=True)
-class ContextAnnotationsRuntimeRequest(ContextRecordedSegmentRuntimeRequest):
-    classifier: ClassifierVersion
-
-
 class ServedContextAnnotationsRuntimeRequest(
     ServedContextRecordedSegmentRuntimeRequest,
     ContextAnnotationsRuntimeRequest,
@@ -698,13 +554,6 @@ class ServedContextAnnotationsRuntimeRequest(
             ctx.server.agent._comms.registry.store.coordinator_reader,
             segment, self.classifier))
         return AnnotationsReply(labels)
-
-
-@dataclass(frozen=True, kw_only=True)
-class ContextAnnotationCorrectionRuntimeRequest(CorrectsAnnotation, ContextRecordedSegmentRuntimeRequest):
-    label: ModelLabel
-    answer: type[SpanAnswer]
-    worktree: Checkout
 
 
 class ServedContextAnnotationCorrectionRuntimeRequest(

@@ -21,7 +21,7 @@ from agent_comms.registration_inheritance import PredicateInheritance
 from agent_comms.registry.threads import Thread, NativeThread
 from agent_comms.thread_text import GivenThreadText
 from agent_comms.thread_model import DeclaredModel
-from agent_comms.turn_lease import NoTurnLease
+from agent_comms.execution.turn_lease import NoTurnLease
 
 
 def test_unchanged_registration_retains_creation_allocation():

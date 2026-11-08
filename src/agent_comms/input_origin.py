@@ -8,18 +8,18 @@ from typing import TYPE_CHECKING, Annotated
 
 
 from .controller import NO_CONTROLLER
-from .messaging.bus_publication import HumanOrigin
+from .bus_publication import HumanOrigin
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .nominal.field_codec import RootId
 from .planning.goals import GoalCheckpoint
 from .harness_install import HarnessSession
 from .input_key import InputKey, InputKeyText
-from .messaging.message_reference import MessageReference
+from .message_reference import MessageReference
 from .tool_result import ToolResult
 from .projects.checkouts import Checkout
 from .thread_identity import ClaimScoped, ClaimedIdentity
-from .turn_context import Provenance
+from .execution.turn_context import Provenance
 
 if TYPE_CHECKING:
     from .comms import Comms

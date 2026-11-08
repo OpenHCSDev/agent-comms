@@ -3,7 +3,7 @@ calls must declare a concrete one. CommsUserSendTool once inherited the abstract
 PublishingToolRequest: Core posted the owner's message, the remote Toad could not decode the
 reply, and its composer stayed held as if the send had failed."""
 
-from agent_comms.messaging.channels import Channel
+from agent_comms.channels import Channel
 from agent_comms.cli_commands import ThreadArchivedResult
 from agent_comms.send_result import MessagePublished
 from agent_comms.tool_declaration import ToolDeclaration

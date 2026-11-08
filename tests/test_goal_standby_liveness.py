@@ -2,16 +2,13 @@
 
 
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.messaging.messages import (
-    ConversationRole,
-    NoticeRole,
-)
+from agent_comms.messages import ConversationRole, NoticeRole
 import os
 from dataclasses import replace
 
 import pytest
 
-from agent_comms.turn_lease import NoFinishedTurn
+from agent_comms.execution.turn_lease import NoFinishedTurn
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire

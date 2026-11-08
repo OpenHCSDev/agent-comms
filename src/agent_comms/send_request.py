@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from agent_comms.nominal import field_codec
+from agent_comms import messages
 from agent_comms.change_report import NoChangeReport
 from agent_comms.change_report import ReportEvidence
 from agent_comms.declared_verb import DeclaredOptions
@@ -11,15 +12,6 @@ from dataclasses import dataclass
 from typing import Annotated
 from typing import TYPE_CHECKING
 import builtins
-
-from .messaging.messages import (
-    ConversationRole,
-    InfoKind,
-    MessageKind,
-    SendableMessageKind,
-    SendableRole,
-)
-
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
@@ -32,15 +24,15 @@ class SendRequest(DeclaredOptions):
     target: Annotated[str, field_codec.Argument(flags=("--to",))]
     body: Annotated[str, field_codec.Argument(flags=("--body",))]
     type: Annotated[
-        builtins.type[MessageKind],
+        builtins.type[messages.MessageKind],
         field_codec.Editor(ChoiceTargetField),
         field_codec.Argument(
-            flags=("--type",), options={"choices": SendableMessageKind.names()}
+            flags=("--type",), options={"choices": messages.SendableMessageKind.names()}
         ),
-    ] = InfoKind
+    ] = messages.InfoKind
     role: Annotated[
-        builtins.type[SendableRole], field_codec.Argument(flags=("--role",))
-    ] = ConversationRole
+        builtins.type[messages.SendableRole], field_codec.Argument(flags=("--role",))
+    ] = messages.ConversationRole
     report: Annotated[
         ReportEvidence,
         field_codec.Argument(

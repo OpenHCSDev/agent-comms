@@ -25,13 +25,16 @@ from ...acp_extension import (
     TurnChangedUpdate,
     UpdateMetadata,
 )
+from ...runtime_requests import (
+    OwnedRead,
+    OwnerLiveRead,
+)
 from ...messaging.bus_read import (
     CapturesTranscriptPage,
-    OwnerLiveRead,
     OwnerScopedRead,
     UiRead,
 )
-from ...messaging.channel_targets import CommsTag
+from ...channel_targets import CommsTag
 from ...comms import Comms
 from ...coordination.coordinator import Coordination
 from ...planning.goal_actions import (
@@ -98,7 +101,7 @@ from ...planning.orders import (
 from ...planning.pull_requests import PullRequestLink
 from ...problem_number import ProblemNumber
 from ...progress_claims import ProgressClaim
-from ...messaging.read_basis import ReadAuthority
+from ...read_basis import ReadAuthority
 from ...runtime_server import AttachedRuntimeRequestContext
 from ...send_result import MessagePublished
 from ...service_passes import ServicePassStore
@@ -127,7 +130,7 @@ from ...tool_request import (
 )
 from ...tool_result import ToolResult
 from ...transcripts import TranscriptRead
-from ...turn_digests import (
+from ...execution.turn_digests import (
     ActivityTurnView,
     LastTurns,
     OrderEditsRead,
@@ -611,7 +614,7 @@ class CommsTurnsTool(ThreadReadTool):
                        detail=self.detail)
 
 
-class ServedInputDeliveryRead(OwnerScopedRead, InputDeliveryRead):
+class ServedInputDeliveryRead(OwnedRead, InputDeliveryRead):
     """Serving the delivery projection: the owner's queue when observed, else the stored one."""
 
     def unavailable(self, comms: Comms, owner: ThreadIncarnation) -> DeliveryOverview:

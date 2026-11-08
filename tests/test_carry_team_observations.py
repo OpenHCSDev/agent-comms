@@ -6,7 +6,7 @@ import time
 
 import pytest
 
-from agent_comms.messaging.bus import Bus
+from agent_comms.bus import Bus
 from agent_comms.team.standing_rules import ServicePassFailing
 from agent_comms.team.vibe_check import OverloadDegradation
 from agent_comms.team_hud import TeamFrame, TeamHud, TeamPlan, CodexUsage, UnreadableUsage

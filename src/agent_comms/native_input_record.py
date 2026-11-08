@@ -48,7 +48,7 @@ if TYPE_CHECKING:
     from .coordination.tables.assignments import WakeAssignment
     from .cursor_owner import CursorOwner
     from .historical_native_inputs import HistoricalNativeInput
-    from .messaging.message_reference import MessageReference
+    from .message_reference import MessageReference
     from .native_entries import MessageEntry, RecordedEntry, TranscriptProjection
     from .native_runtime_input import NativeRuntimeInput
     from .transcript_events import TranscriptEvent

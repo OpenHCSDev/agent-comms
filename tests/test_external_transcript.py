@@ -4,15 +4,18 @@ import asyncio
 
 import pytest
 
-from agent_comms.messaging.bus import Bus
+from agent_comms.bus import Bus
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript
 from agent_comms.transcripts import LatestPage, TranscriptReadIdentity, UnreadTranscriptCursor
-from agent_comms.turn_digests import LastTurns
+from agent_comms.execution.turn_digests import LastTurns
 from agent_comms.registry.threads import NativeThread
-from agent_comms.turn_item import NativeItemId, NativeTurnId
+from agent_comms.execution.turn_item import (
+    NativeItemId,
+    NativeTurnId,
+)
 
 
 @pytest.fixture(autouse=True)

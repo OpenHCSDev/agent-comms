@@ -11,7 +11,10 @@ from .shared import Binding
 from ..comms import Comms
 from ..registry.threads import Thread
 from ..tool_caller import ForkCaller, ForkRecordOwed
-from ..turn_phase import ModelWaitPhase, TurnPhase
+from ..execution.turn_phase import (
+    ModelWaitPhase,
+    TurnPhase,
+)
 
 
 @dataclass(frozen=True)

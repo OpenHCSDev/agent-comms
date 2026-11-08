@@ -16,11 +16,8 @@ from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.coordination.coordinator import Coordination
 
 from .cohort_schema import CohortTable
-from .messaging.bus import (
-    BusReader,
-    BusSnapshot,
-)
-from .messaging.bus_publication import Delivered
+from .bus import BusReader, BusSnapshot
+from .bus_publication import Delivered
 from .comms import Comms
 from .coordination.cohort import _claim_record
 from .coordination.database import CoordinationStore

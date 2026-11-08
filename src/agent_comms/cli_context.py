@@ -17,9 +17,9 @@ from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.pi_payloads import NativeContextData
 from agent_comms.owner_connection import OwnerConnection
 from agent_comms.owner_connection import socket_path
-from agent_comms.turn_context import ContextManifest
-from agent_comms.turn_context import NextContextTurn
-from agent_comms.turn_context import TurnContext
+from .execution.turn_context import ContextManifest
+from .execution.turn_context import NextContextTurn
+from .execution.turn_context import TurnContext
 from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Annotated

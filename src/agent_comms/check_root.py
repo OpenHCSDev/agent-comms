@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from .attempt_recovery import RecoveryMonitorCapability
-from .messaging.bus import Bus
+from .bus import Bus
 from .cli_result import CliResult
 from .comms import Comms, wire
 from .cohort_schema import AcceptanceFrontier
@@ -24,14 +24,14 @@ from .launch_root import LaunchRoot
 from .launch_runtime import ThreadLaunch
 from .native_entries import ImportedSessionWriter, NativeEntry
 from .native_session_files import CheckSession
-from .messaging.read_basis import MemberActivityDisplayScope
+from .read_basis import MemberActivityDisplayScope
 from .registry.registry_document import RosterVisibility
 from .session_file import RegistrySessionLocation
 from .thread_text import NoThreadText
 from .projects.checkouts import Checkout
 from .registry.threads import Thread
 from .transcript_routes import TranscriptRoutes
-from .turn_lease import NoTurnRecord
+from .execution.turn_lease import NoTurnRecord
 
 
 @dataclass(frozen=True)

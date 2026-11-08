@@ -13,7 +13,7 @@ from .nominal.declared_family import DeclaredFamily
 from .thread_identity import OwnerIdentity
 from .child_process import ProcessIdentity
 
-from .messaging.message_reference import MessageReference
+from .message_reference import MessageReference
 from .tool_result import ToolResult
 import agent_comms.session_load as session_load
 

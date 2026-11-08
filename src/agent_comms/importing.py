@@ -21,8 +21,8 @@ from .nominal.field_codec import FieldCodec, WireName
 from .harness_install import Harness
 from .thread_text import NoThreadText, ThreadText
 from .transcript_events import ImportedInput, ImportedMessage, NoRetainedRequest
-from .turn_context import CodexRolloutProvenance
-from .turn_item import NativeItemId
+from .execution.turn_context import CodexRolloutProvenance
+from .execution.turn_item import NativeItemId
 
 if TYPE_CHECKING:
     from .cli_bridges.history import History

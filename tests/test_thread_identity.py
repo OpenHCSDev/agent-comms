@@ -7,12 +7,12 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.messaging.channel_targets import ThreadTarget
+from agent_comms.channel_targets import ThreadTarget
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, RootId, TurnId
-from agent_comms.messaging.read_basis import Conversation
+from agent_comms.read_basis import Conversation
 from agent_comms.messaging.read_ledger import ReadDocument
 from agent_comms.registry.registration import Registration
 from agent_comms.session_file import RegistrySessionLocation
@@ -32,7 +32,11 @@ from agent_comms.thread_status import (
     StoppedThreadStatus,
 )
 from agent_comms.thread_text import GivenThreadText, NoThreadText
-from agent_comms.turn_lease import FinishedTurnFence, NoFinishedTurn, NoTurnLease
+from agent_comms.execution.turn_lease import (
+    FinishedTurnFence,
+    NoFinishedTurn,
+    NoTurnLease,
+)
 from bus_record_fixture import OWNER_LOOKUP
 from conftest import installed_comms
 

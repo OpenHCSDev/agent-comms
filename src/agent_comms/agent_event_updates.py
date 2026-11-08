@@ -50,7 +50,7 @@ from .tool_declaration import (
 from .tool_results import tool_result_content
 from .transcript_updates import TranscriptUpdate
 from .routing import MessageRoute, NoMessageRoute
-from .turn_effects import TurnEffects
+from .execution.turn_effects import TurnEffects
 
 if TYPE_CHECKING:
     from .acp_extension import AgentCommsUpdate

@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from ...messaging.channels import SavedView
+from agent_comms.channels import SavedView
 from agent_comms.display_order import ChannelSort
 from agent_comms.presentation import ChannelView
 from agent_comms.tool_caller import ToolCaller

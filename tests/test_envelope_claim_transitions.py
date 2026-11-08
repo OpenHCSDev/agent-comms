@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from bus_record_fixture import RECIPIENT_LOOKUP, ROOT_ID
 
-from agent_comms.messaging.bus import ClaimRecord
+from agent_comms.bus import ClaimRecord
 from agent_comms.envelope_claim_transitions import (
     ClaimConflict,
     ClaimProjection,
@@ -22,11 +22,7 @@ from agent_comms.envelope_claim_transitions import (
     WakeClaims,
 )
 from agent_comms.nominal.field_codec import AssignmentId, ClaimId, FieldCodec, InputId, MalformedRecord, MessageId, TurnId
-from agent_comms.messaging.messages import (
-    ClaimMessage,
-    ClaimNoticeKind,
-    Message,
-)
+from agent_comms.messages import ClaimMessage, ClaimNoticeKind, Message
 
 G1 = ClaimId("a" * 32)
 G2 = ClaimId("b" * 32)

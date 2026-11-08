@@ -1,0 +1,44 @@
+from __future__ import annotations
+
+import json
+from dataclasses import (
+    dataclass,
+    replace,
+)
+
+from .runtime_request import AttachedResultRuntimeRequest
+from ..nominal.field_codec import FieldCodec
+from ..owner_connection import socket_path
+from ..thread_presentation import LiveThreadOwnerBinding
+
+
+@dataclass(frozen=True, kw_only=True)
+class ProjectRuntimeRequest(AttachedResultRuntimeRequest):
+    """Current project observation through the original native launch binding.
+
+    This command grants no input or tool execution. A retained native process
+    must still observe its original registry lease before each project check.
+    """
+    binding: LiveThreadOwnerBinding
+
+    @classmethod
+    def for_native(cls, snapshot, thread):
+        process = thread.require_process()
+        owner = snapshot.owner_identity(thread.name)
+        snapshot.require_owner_process(owner, process)
+        return cls(thread=thread.name, binding=LiveThreadOwnerBinding(owner, process))
+
+    def environment(self, root):
+        return {
+            "AGENT_COMMS_PROJECT_SOCKET": str(socket_path(root, self.binding.process.pid)),
+            "AGENT_COMMS_PROJECT_REQUEST": json.dumps(FieldCodec.encode(self)),
+        }
+
+    @classmethod
+    def native_environment(cls, thread, root, snapshot) -> dict[str, str]:
+        """Project this captured owner through the original native binding."""
+        project = cls.for_native(snapshot, thread)
+        return {
+            **replace(thread.launch(), managed=True).encode(),
+            **project.environment(root),
+        }

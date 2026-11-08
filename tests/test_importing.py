@@ -62,7 +62,7 @@ from agent_comms.registry.threads import ThreadProvenance, ExternalThread, Nativ
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.runtime_updates import FinishedItem, TurnEnded
 from agent_comms.ui_model.message_category import AgentCategory, ThinkingCategory, UserCategory
-from agent_comms.turn_context import CodexRolloutProvenance
+from agent_comms.execution.turn_context import CodexRolloutProvenance
 from agent_comms.child_process import NO_PROCESS
 from agent_comms.errors import RelationViolationError
 from agent_comms.native_failures import NativePiUnavailable

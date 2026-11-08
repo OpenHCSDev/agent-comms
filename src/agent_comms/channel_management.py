@@ -8,27 +8,17 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-from .messaging.channel_targets import CommandTarget
+from agent_comms.channel_targets import CommandTarget
 
-from .messaging.bus_publication import AgentOrigin
-from .messaging.channel_targets import (
-    ChannelTarget,
-    Tag,
-)
-from .messaging.channels import (
-    Channel,
-    SavedView,
-)
+from .bus_publication import AgentOrigin
+from .channel_targets import ChannelTarget, Tag
+from .channels import Channel, SavedView
 from .cli_result import TargetEditResult
 from .nominal.field_codec import RecordMember
 from .nominal.declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
 from .messaging.message_bus import MessageBus
-from .messaging.messages import (
-    InfoKind,
-    MembershipConversationRole,
-    Message,
-)
+from .messages import InfoKind, MembershipConversationRole, Message
 from .registry.registration import Registration
 from .thread_identity import ThreadIncarnation
 from .thread_management import ChangedTags, GivenTags

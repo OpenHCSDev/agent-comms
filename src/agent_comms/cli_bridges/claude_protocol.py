@@ -35,7 +35,7 @@ from agent_comms.nominal.field_codec import (
     ToolCallId,
     TranscriptRecordId,
 )
-from ..messaging.message_reference import MessageReference
+from agent_comms.message_reference import MessageReference
 from agent_comms.pi_counts import PiCount, PiCountWire
 from agent_comms.recorded_time import EventTime
 from agent_comms.runtime_updates import (
@@ -69,8 +69,18 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
-from agent_comms.turn_item import NativeItemId, NativeTurnId, NamedSourceTurn, NoSourceTurn, SourceTurn
-from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
+from ..execution.turn_item import (
+    NativeItemId,
+    NativeTurnId,
+    NamedSourceTurn,
+    NoSourceTurn,
+    SourceTurn,
+)
+from ..execution.turn_phase import (
+    ModelWaitPhase,
+    ToolRunningPhase,
+    TurnPhase,
+)
 
 from ..session_receipts import SessionReceipts
 from ..tool_declaration import ContextRows

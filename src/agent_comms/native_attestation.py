@@ -10,20 +10,24 @@ from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.pi_wire import RequestId
 
 from . import pi_commands as commands
-from . import turn_failure as failures
+from .execution.turn_failure import (
+    IdentityUncertain,
+    InputIdUnavailable,
+    TurnFailure,
+)
 from .native_pi import CAPABILITY
 from .native_failures import NativePiUnavailable
 from .native_session_reopen import NativeSessionIdentity, NoSessionRetention, SessionRetention
 from .pi_events import PiEvent
 from .pi_payloads import NativeSessionSnapshot, SnapshotAttestation, StateData
-from .turn_item import PiRequestKey
+from .execution.turn_item import PiRequestKey
 
 if TYPE_CHECKING:
     from .backend import TurnSession
 
 
 class AttestationError(ValueError):
-    def __init__(self, failure: failures.TurnFailure):
+    def __init__(self, failure: TurnFailure):
         super().__init__(failure.text)
         self.failure = failure
 
@@ -97,16 +101,16 @@ class PendingAttestation(NativeAttestation):
                 data = response.require_data().require_state()
             except (NativePiUnavailable, ValueError) as error:
                 raise AttestationError(
-                    failures.InputIdUnavailable("Pi native input-ID capability preflight failed.")
+                    InputIdUnavailable("Pi native input-ID capability preflight failed.")
                 ) from error
             if data.native_input_proof_capability != CAPABILITY:
                 raise AttestationError(
-                    failures.InputIdUnavailable("Pi native input-ID capability preflight failed.")
+                    InputIdUnavailable("Pi native input-ID capability preflight failed.")
                 )
             observed = ObservedAttestation(data)
             if self.expected.conflicts_with(observed.identity):
                 raise IdentityAttestationError(
-                    failures.IdentityUncertain("Pi session identity changed during this turn.")
+                    IdentityUncertain("Pi session identity changed during this turn.")
                 )
             return observed
         return self

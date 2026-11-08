@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 import agent_comms.native_package as native_package
-from agent_comms.messaging.bus import Bus
+from agent_comms.bus import Bus
 from agent_comms.core_stamp import WheelStamp
 from agent_comms.native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
 from agent_comms.native_failures import NativePiUnavailable

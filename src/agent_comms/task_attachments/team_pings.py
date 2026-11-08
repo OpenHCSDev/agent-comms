@@ -12,7 +12,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
-from ..messaging.channel_targets import ThreadTarget
+from agent_comms.channel_targets import ThreadTarget
 from agent_comms.storage.locked_store import DocumentChange, DurableFile, LockedStore, PatternFile
 from agent_comms.storage.store_files import DependentStateTier, SingleFileStore
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -22,14 +22,10 @@ from agent_comms.disclosure_text import AccentTone, ViewHeading, ViewTable, Warn
 from agent_comms.nominal.field_codec import (
     FieldCodec, HudExclude, OrderId, PublicationExclude, ThreadLookup,
 )
-from ..messaging.message_reference import MessageReference
+from agent_comms.message_reference import MessageReference
 from agent_comms.heartbeat_subjects import TeamHistory, HeartbeatSubject
-from ..messaging.messages import (
-    TeamUpdatePosition,
-    ConversationRole,
-    Message,
-    MessageRole,
-    NoticeRole,
+from agent_comms.messages import (
+    TeamUpdatePosition, ConversationRole, Message, MessageRole, NoticeRole,
 )
 from agent_comms.projection_source import ProducedRow
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime

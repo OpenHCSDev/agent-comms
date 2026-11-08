@@ -14,11 +14,8 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.nominal.field_codec import FieldCodec, TurnId
-from agent_comms.messaging.messages import (
-    Message,
-    InfoKind,
-)
-from agent_comms.turn_phase import CancellingPhase
+from agent_comms.messages import Message, InfoKind
+from agent_comms.execution.turn_phase import CancellingPhase
 from native_backend_fixture import native_backend_fixture
 from agent_comms.registry.threads import NativeThread
 

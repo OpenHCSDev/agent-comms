@@ -12,11 +12,11 @@ from functools import partial
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.build_identity import InstalledBuild, RecordedBuildIdentity, RepositoryCommit
-from ..messaging.bus import BusReader
+from agent_comms.bus import BusReader
 from agent_comms import team
 from agent_comms.team.questions import UnansweredTeammateAsks
 from agent_comms.team_service import TeamService
-from ..messaging.channel_targets import ThreadTarget
+from agent_comms.channel_targets import ThreadTarget
 from agent_comms.task_attachments.owner_notices import OrderNotice, TeamNotice
 from agent_comms.comms import Comms
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -40,8 +40,8 @@ from agent_comms.installer.request import InstallRequest
 from agent_comms.installer.interpreter_operation import InstallPhase, LauncherPhase
 from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.installer.upgrade import RehearsedUpgrade
-from ..messaging.message_bus import WatchPass
-from ..messaging.messages import Message
+from ..execution.watch_passes import WatchPass
+from agent_comms.messages import Message
 from agent_comms.owner_requests import OwnerRequestId
 from agent_comms.plan_reading import PlanReading
 from ..planning.plan_phases import PlanPhase
@@ -52,7 +52,10 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.service_passes import ServicePassStore, TeamPass
 from agent_comms.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from agent_comms.registry.threads import Thread
-from agent_comms.turn_digests import TurnDigestRead, TurnsSince
+from ..execution.turn_digests import (
+    TurnDigestRead,
+    TurnsSince,
+)
 from agent_comms.ui_model.teammate_state import AwaitingTeam, TeammateState
 from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
 from agent_comms_hooks import SubagentId

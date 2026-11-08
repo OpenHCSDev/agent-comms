@@ -18,8 +18,8 @@ from agent_comms.coordination.tables.executions import ExecutionRecord
 from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, MessageId, WireName
-from ...messaging.message_reference import MessageReference
-from ...messaging.messages import Message
+from agent_comms.message_reference import MessageReference
+from agent_comms.messages import Message
 from agent_comms.response_acknowledgement import canonical_publication_key
 from agent_comms.storage.typed_table import (
     Column,
@@ -33,7 +33,7 @@ from agent_comms.storage.typed_table import (
 )
 
 if TYPE_CHECKING:
-    from ...messaging.bus import BusReader
+    from agent_comms.bus import BusReader
 
 
 @dataclass(frozen=True, slots=True)

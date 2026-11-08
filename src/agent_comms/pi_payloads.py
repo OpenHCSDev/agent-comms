@@ -61,9 +61,13 @@ from .thread_identity import ThreadIncarnation
 from .thread_model import ThreadModel, UndeclaredModel
 from .tool_declaration import ToolDeclaration
 from .tool_result import DeclaredReply
-from .turn_context import (
-    ContextTurn, MeasuredNativeSegment, PreviewProvenance, Provenance,
-    SegmentManifest, TurnContext,
+from .execution.turn_context import (
+    ContextTurn,
+    MeasuredNativeSegment,
+    PreviewProvenance,
+    Provenance,
+    SegmentManifest,
+    TurnContext,
 )
 from .tool_results import NoSentMessage, NoToolDiff, ToolDiff
 from .transcript_events import (
@@ -76,11 +80,15 @@ from .transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
-from .turn_failure import (
+from .execution.turn_failure import (
     ModelRequestFailed,
     ProviderTransportFailed,
 )
-from .turn_item import CompactionChargeId, ProviderResponseId, UsageChargeId
+from .execution.turn_item import (
+    CompactionChargeId,
+    ProviderResponseId,
+    UsageChargeId,
+)
 
 
 @dataclass(frozen=True)
@@ -150,8 +158,8 @@ if TYPE_CHECKING:
     from .pi_events import AutoRetryEnd
     from .routing import Routing
     from .transcript_routes import SentTextDigest
-    from .turn_goal_permission import TurnGoalPermission
-    from .turn_phase import TurnPhase
+    from .execution.turn_goal_permission import TurnGoalPermission
+    from .execution.turn_phase import TurnPhase
 
 
 # A Pi payload field is omitted from the wire while it holds its default.
@@ -534,7 +542,7 @@ class ProviderTransportFailureDiagnostic(PiDiagnostic):
     timestamp: PiField[ReportedTimestamp | PiOmitted] = PiOmitted()
 
     def turn_phase(self, phase: TurnPhase) -> TurnPhase:
-        from .turn_phase import FailedPhase
+        from .execution.turn_phase import FailedPhase
         return FailedPhase(error=self.error)
 
     def refine_model_request_failure(self, failure):

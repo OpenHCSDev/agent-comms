@@ -5,7 +5,7 @@ from itertools import product
 
 import pytest
 
-from agent_comms.messaging.message_notification import NotificationPass
+from agent_comms.message_notification import NotificationPass
 
 from agent_comms.presentation import WireRevision
 from agent_comms.thread_presentation import NoThreadPresentation

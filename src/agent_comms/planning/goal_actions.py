@@ -97,7 +97,7 @@ from ..registry.registry_store import RegistryEdit
 from ..registry.threads import Thread
 from ..reported_turn import ReportedTurnState
 from ..repository_name import RepositoryName
-from ..runtime_server import AttachedRuntimeRequest
+from ..transport.runtime_request import AttachedRuntimeRequest
 from ..thread_identity import (
     CoreWatcherIncarnation,
     ThreadIncarnation,
@@ -241,7 +241,8 @@ class GoalAction[Result: GoalDeclaration](
         cls, thread: ThreadIncarnation,
         invoke: Callable[[AttachedRuntimeRequest], Awaitable[JsonValue]], goal: Goal,
     ) -> GoalDeclaration:
-        from ..runtime_requests import GoalSnapshotReply, UpdateGoalRuntimeRequest
+        from ..transport.runtime_requests import UpdateGoalRuntimeRequest
+        from ..runtime_requests import GoalSnapshotReply
 
         reply = await invoke(UpdateGoalRuntimeRequest(
             thread=thread.name, captured=CapturedOwner(thread), status=cls, goal_id=goal.id, expected_revision=goal.revision,
@@ -607,7 +608,8 @@ class SetGoalAction(ReplacementGoalAction[Goal], OwnerInvocable, RuntimeInvocabl
         observe: Callable[[], Awaitable[GoalSnapshot]],
         invoke: Callable[[AttachedRuntimeRequest], Awaitable[JsonValue]], text: str = "",
     ) -> GoalDeclaration:
-        from ..runtime_requests import GoalReply, SetGoalRuntimeRequest
+        from ..transport.runtime_requests import SetGoalRuntimeRequest
+        from ..runtime_requests import GoalReply
 
         reply = await invoke(SetGoalRuntimeRequest(thread=thread.name, captured=CapturedOwner(thread), text=text))
         return FieldCodec.decode(GoalReply, reply).goal
@@ -825,7 +827,8 @@ class RetryGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, Runt
         cls, thread: ThreadIncarnation,
         invoke: Callable[[AttachedRuntimeRequest], Awaitable[JsonValue]], goal: Goal,
     ) -> GoalDeclaration:
-        from ..runtime_requests import GoalReply, RetryGoalRuntimeRequest
+        from ..transport.runtime_requests import RetryGoalRuntimeRequest
+        from ..runtime_requests import GoalReply
 
         reply = await invoke(RetryGoalRuntimeRequest(
             thread=thread.name, captured=CapturedOwner(thread), goal_id=goal.id, expected_revision=goal.revision,

@@ -16,7 +16,7 @@ from urllib.parse import quote
 import aiohttp
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from ..messaging.messages import Message
+from agent_comms.messages import Message
 from agent_comms.send_result import SendResult
 from agent_comms.cli_arguments import CliArguments
 from agent_comms.harness_delivery_states import Outcome, PersistedOutcome

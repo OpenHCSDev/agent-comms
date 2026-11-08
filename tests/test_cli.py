@@ -5,7 +5,7 @@ from agent_comms.projects.checkouts import (
     Checkout,
     LaunchCheckout,
 )
-from agent_comms.messaging.bus import Bus
+from agent_comms.bus import Bus
 import json
 import os
 from pathlib import Path
@@ -14,13 +14,7 @@ import pytest
 
 from agent_comms.nominal.field_codec import FieldCodec, MessageId, TurnId, compile_decoder
 from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.messaging.channel_targets import (
-    CommandTarget,
-    NoChannel,
-    PerTargetChannels,
-    ChannelTarget,
-    ProjectTarget,
-)
+from agent_comms.channel_targets import CommandTarget, NoChannel, PerTargetChannels, ChannelTarget, ProjectTarget
 from agent_comms.catalog_document import NoCatalog
 from agent_comms.cli import build_parser, CliInvocation
 from agent_comms.registry.threads import (
@@ -51,16 +45,17 @@ from agent_comms.cli_verbs.start import StartCliCommand
 from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.comms import wire
 from agent_comms.errors import UnregisteredThreadError
-from agent_comms.messaging.messages import (
-    SendableRole,
-    NoticeRole,
-)
+from agent_comms.messages import SendableRole, NoticeRole
 from agent_comms.execution.owner_lifecycle import OwnerStartResult
 from agent_comms.pi_vocabulary import ServiceTier
 from agent_comms.restart_scope import OneOwner
 from agent_comms.thread_identity import TurnIdentity, UserThreadRole
 from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus, RunningThreadStatus
-from agent_comms.turn_lease import ActiveTurn, RecordedGeneration, StoredTurnRecord
+from agent_comms.execution.turn_lease import (
+    ActiveTurn,
+    RecordedGeneration,
+    StoredTurnRecord,
+)
 from agent_comms.ui_model.unread import ReplyUnread
 from agent_comms.wake_policy import BoundedTriageWake, PassiveWake
 from dataclasses import replace

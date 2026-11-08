@@ -19,23 +19,22 @@ from typing import (
     Annotated,
     ClassVar,
     Self,
-    TYPE_CHECKING,
 )
 
-from .bus_publication import Delivered
-from .messages import (
+from ..bus_publication import Delivered
+from ..bus_tables import ReceivedSource
+from ..class_fact import ClassFact
+from ..messages import (
     BusProjectionTables,
     BusRow,
     MessageInput,
     PublicRecord,
     PublicSender,
 )
-from .read_basis import ReadCursor
-from .bus_tables import ReceivedSource
-from ..class_fact import ClassFact
 from ..nominal.field_codec import ThreadLookup
 from ..page_traversal import PageTraversal
 from ..projection_source import ProducedRow
+from ..read_basis import ReadCursor
 from ..routing import DeliveryScope
 from ..storage.typed_table import (
     Column,

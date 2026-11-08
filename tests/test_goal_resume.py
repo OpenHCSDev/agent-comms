@@ -10,7 +10,7 @@ from hashlib import sha256
 import pytest
 
 from agent_comms.transport.tools.served import invoke_tool
-from agent_comms.turn_failure import FailedTurnResolution
+from agent_comms.execution.turn_failure import FailedTurnResolution
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, TurnId
@@ -44,7 +44,7 @@ from agent_comms.reported_turn import ReportedTurn
 from agent_comms.registry.threads import NativeThread
 from agent_comms.planning.goal_scope import OneGoal
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.turn_failure import BackendFailed
+from agent_comms.execution.turn_failure import BackendFailed
 
 # Every case in this module exercises the explicitly declared owner.
 invoke_tool = partial(invoke_tool, caller=ThreadCaller("owner"))

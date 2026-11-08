@@ -13,17 +13,14 @@ from typing import TYPE_CHECKING
 
 from .errors import RelationViolationError
 from .input_attempt import StoredInput
-from .messaging.message_reference import MessageReference
-from .messaging.messages import (
-    ClaimMessage,
-    Message,
-)
+from .message_reference import MessageReference
+from .messages import ClaimMessage, Message
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import FieldCodec
 from .text_digest import TextDigest
 
 if TYPE_CHECKING:
-    from .messaging.bus import BusReader
+    from .bus import BusReader
     from .input_disposition import InputDispositions
     from .registry.registry_document import RegistrySnapshot
     from .registry.threads import Thread

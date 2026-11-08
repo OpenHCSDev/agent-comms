@@ -23,7 +23,7 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.registry.threads import NativeThread
 from agent_comms.native_session_reopen import PiSessionId
 from agent_comms.storage.typed_table import ReconciledFile
-from agent_comms.turn_item import FreshNativeId
+from agent_comms.execution.turn_item import FreshNativeId
 from bus_record_fixture import prepare_native_comms
 from test_todos import order
 

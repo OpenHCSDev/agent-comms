@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 
-from .messaging.channel_targets import ThreadTarget
+from .channel_targets import ThreadTarget
 from .comms import Comms
 from .rule_deal import Asked, RuleDeal, Speaking
 from .task_attachments.owner_notices import MeantNotice

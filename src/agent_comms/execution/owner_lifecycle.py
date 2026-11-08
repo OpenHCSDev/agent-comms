@@ -28,10 +28,14 @@ from ..child_process import (
 )
 from ..cli_result import TargetEditResult
 from ..owner_connection import OwnerConnection
-from ..owner_launch import RetainedOwnerLaunch, StartOwnerRuntimeRequest, StopOwnerRuntimeRequest
+from ..transport.owner_requests import (
+    RetainedOwnerLaunch,
+    StartOwnerRuntimeRequest,
+    StopOwnerRuntimeRequest,
+)
 from ..owner_release import OwnerReleaseStore
 from ..root_runtime import RootRuntimeStore
-from ..messaging.channel_targets import ThreadTarget
+from ..channel_targets import ThreadTarget
 from ..task_attachments.owner_notices import RestartNotice
 from ..diagnostics import OwnerProcessOutput
 from ..errors import RelationViolationError

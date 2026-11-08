@@ -10,7 +10,7 @@ from functools import cached_property, partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
-from ..messaging.bus import StoredBusReader
+from agent_comms.bus import StoredBusReader
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import (
     CoordinationReadUnavailable,

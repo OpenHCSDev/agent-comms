@@ -31,13 +31,13 @@ from agent_comms.cli_bridges.inbox_watch_client import (
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.comms import Comms
-from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.connector import Connector
 from agent_comms.connector_caller import GrantRefusedError
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.inbox_watch import OpenWatch
 from agent_comms.launch_runtime import InstalledSource, LaunchRuntime
-from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.message_reference import MessageReference
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.thread_status import ConnectedThreadStatus, NoBridgeThreadStatus

@@ -42,7 +42,7 @@ from agent_comms.planning.pull_requests import (
     PullRequestLink,
 )
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.messaging.bus import Bus
+from agent_comms.bus import Bus
 
 import argparse
 import asyncio
@@ -90,7 +90,10 @@ from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.registry.threads import ExternalThread, Thread, NativeThread
 from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.transcript_events import AssistantTranscript
-from agent_comms.turn_item import NativeItemId, NativeTurnId
+from agent_comms.execution.turn_item import (
+    NativeItemId,
+    NativeTurnId,
+)
 from agent_comms.errors import TodoError
 from agent_comms.work_branches import WorkBranches
 from source_revision_fixture import SourceRepository

@@ -9,10 +9,8 @@ from typing import TYPE_CHECKING
 
 from .activity import ObservedActivity
 from .notification_assignment import NotificationAssignment
-from .messaging.message_notification import (
-    NoNotificationWindow,
-    NotificationPass,
-    NotificationWindow,
+from agent_comms.message_notification import (
+    NoNotificationWindow, NotificationPass, NotificationWindow,
 )
 from .registry_provenance import DeletedThread
 from .revision_views import ActivityView, NotificationEvidenceView

@@ -7,9 +7,8 @@ from abc import (
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-from .bus_publication import (
+from ..bus_publication import (
     AgentOrigin,
     AutomatedOrigin,
     HumanOrigin,
@@ -19,7 +18,7 @@ from ..change_report import (
     NoChangeReport,
     ReportEvidence,
 )
-from .channel_targets import (
+from ..channel_targets import (
     CommandTarget,
     IncarnationThreadTarget,
     NamedTarget,
@@ -32,10 +31,15 @@ from ..errors import (
     UnreceivedAnswerError,
     UnregisteredThreadError,
 )
+from ..execution.turn_context import ContextSegment
+from ..execution.turn_item import (
+    NoSourceTurn,
+    SourceTurn,
+)
 from ..external_transcript import ExternalTranscript
 from .message_bus import MessageBus
-from .message_reference import MessageReference
-from .messages import (
+from ..message_reference import MessageReference
+from ..messages import (
     ConversationRole,
     InfoKind,
     Message,
@@ -66,11 +70,6 @@ from ..task_sources import (
     TaskScopeSelection,
 )
 from ..thread_identity import ThreadIncarnation
-from ..turn_context import ContextSegment
-from ..turn_item import (
-    NoSourceTurn,
-    SourceTurn,
-)
 from ..working_memory_policy import AnnotationDisclosureGrant
 
 

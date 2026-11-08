@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent_comms.turn_input_source import OriginalTurnInput
+from agent_comms.execution.turn_input_source import OriginalTurnInput
 
 pytestmark = pytest.mark.refactor_guard
 

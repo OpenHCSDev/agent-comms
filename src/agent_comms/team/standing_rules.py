@@ -30,8 +30,8 @@ from typing import (
     cast,
 )
 
-from ..messaging.bus import BusReader
-from ..messaging.channel_targets import ThreadTarget
+from ..bus import BusReader
+from ..channel_targets import ThreadTarget
 from ..child_process import (
     ProcessIdentity,
     ResidentMemory,
@@ -54,8 +54,8 @@ from ..heartbeat_subjects import (
     TeammateSubject,
 )
 from ..held_orders import HeldOrders
-from ..messaging.message_reference import MessageReference
-from ..messaging.messages import Message
+from ..message_reference import MessageReference
+from ..messages import Message
 from ..nominal.declared_family import (
     DeclaredFamily,
     RegisteredFamily,
@@ -121,7 +121,7 @@ from ..team_service import TeamService
 from ..text_digest import TextDigest
 from ..thread_identity import ThreadIncarnation
 from ..transcript_events import TurnDigest
-from ..turn_digests import (
+from ..execution.turn_digests import (
     LastTurns,
     OrderEditCountRead,
     RecentTurnsSince,

@@ -9,15 +9,10 @@ from typing import Annotated
 
 from pydantic import JsonValue
 
-from ...messaging.channel_targets import (
-    ChannelSelection,
-    CommandTarget,
-    NamedTarget,
-    NoChannel,
-)
+from agent_comms.channel_targets import ChannelSelection, CommandTarget, NamedTarget, NoChannel
 
 from ...acp_extension import CoordinationChangedUpdate
-from ...messaging.channels import Channel
+from ...channels import Channel
 from ...child_process import ProcessIdentity
 from ...cli_command import PreparedTargetAction, TargetAction, TargetEdit
 from ...cli_result import TargetEditResult
@@ -61,7 +56,7 @@ from ...registry.registry_document import (
 from ...registry.threads import Thread
 from ...relationships import SortableRelationshipGroup, ThreadCommsSnapshot
 from ...projects.checkouts import Checkout
-from ...runtime_server import RuntimeRequest
+from ..runtime_request import RuntimeRequest
 from ...send_result import MessagePublished
 from ...served_bus import ServedBus, UnidentifiedBus
 from ...session_revision import SessionObservation
@@ -71,7 +66,12 @@ from ...thread_presentation import ThreadPresentation
 from ...thread_text import ExpectedSession
 from ...tool_result import ToolResult
 from ...transcripts import TranscriptCursor
-from ...turn_context import CodexRolloutProvenance, ContextSourceText, Provenance, SegmentManifest
+from ...execution.turn_context import (
+    CodexRolloutProvenance,
+    ContextSourceText,
+    Provenance,
+    SegmentManifest,
+)
 from ...working_memory_labels import ModelLabel
 from ..request import ObservedRequest, ReadRequest, ToolRequest, tool_field
 

@@ -28,10 +28,7 @@ from agent_comms.execution_states import (
 )
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.response_acknowledgement import canonical_publication_key
-from agent_comms.messaging.messages import (
-    InfoKind,
-    Message,
-)
+from agent_comms.messages import InfoKind, Message
 from agent_comms.obligation_states import PublishedResponse, ResponseState
 from agent_comms.wake_policy import MessageAudience, RecipientDecision, WakePolicy
 from test_coordination_store import ready, started

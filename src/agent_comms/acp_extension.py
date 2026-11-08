@@ -22,7 +22,10 @@ from .acp_failure import (
     FailureSource,
     UnrecordedFailureSource,
 )
-from .turn_inbox import SendNow, TurnInbox
+from .execution.turn_inbox import (
+    SendNow,
+    TurnInbox,
+)
 from .agent_events import CompactionEvent
 from .child_process import ProcessIdentity
 from .context_reading import ContextReading
@@ -61,8 +64,8 @@ from .tool_result import ToolResult
 from .transcripts import (
     LivePageSource, NativeCommittedPrefix, PageSource, TranscriptCursor, TranscriptPage, TranscriptRead, TranscriptReadIdentity,
 )
-from .turn_context import ContextManifest
-from .turn_lease import TurnState
+from .execution.turn_context import ContextManifest
+from .execution.turn_lease import TurnState
 from .working_memory_labels import ModelLabel
 
 if TYPE_CHECKING:

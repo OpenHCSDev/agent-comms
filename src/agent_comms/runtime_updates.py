@@ -17,7 +17,7 @@ from .agent_activity import AgentActivity
 from .agent_events import RuntimeInfoObservation
 from .cli_protocol import EarlierItems
 from .external_transcript import ExternalPage, ExternalTranscript
-from .messaging.message_reference import MessageReference
+from .message_reference import MessageReference
 from .messaging.sending import Messaging
 from .recorded_time import EventTime, UnrecordedEventTime
 from .transcript_events import (
@@ -27,8 +27,17 @@ from .transcript_events import (
 )
 from .thread_text import NoThreadText, ThreadText
 from .thread_identity import OfferedTools
-from .turn_phase import IdlePhase, ModelWaitPhase, TurnPhase
-from .turn_item import NativeItemId, NativeTurnId, NoSourceTurn, TurnItem
+from .execution.turn_phase import (
+    IdlePhase,
+    ModelWaitPhase,
+    TurnPhase,
+)
+from .execution.turn_item import (
+    NativeItemId,
+    NativeTurnId,
+    NoSourceTurn,
+    TurnItem,
+)
 
 if TYPE_CHECKING:
     from .cli_bridges.shared import TranscriptBridge

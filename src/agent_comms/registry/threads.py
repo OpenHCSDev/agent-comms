@@ -13,10 +13,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from ..activity import ObservedActivity
 from ..agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
-from ..messaging.channel_targets import (
-    DeclaredTag,
-    Tag,
-)
+from ..channel_targets import DeclaredTag, Tag
 from ..child_process import NoProcess, ProcessIdentity, ProcessState
 from ..context_segments.wake_values import WakeWorkContext
 from ..errors import RelationViolationError
@@ -92,7 +89,7 @@ from ..thread_storage import (
     UnassignedThreadStorage,
 )
 from ..thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
-from ..turn_lease import (
+from ..execution.turn_lease import (
     FinishedTurn,
     NoTurnRecord,
     TurnLease,
@@ -581,16 +578,6 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread")
     def require_restart_owner(self, status) -> None:
         if not self.restart_candidates(status):
             raise RelationViolationError("Restart requires another live owner")
-
-    def native_environment(self, root, snapshot) -> dict[str, str]:
-        """Project this captured owner through the original native binding."""
-        from ..runtime_requests import ProjectRuntimeRequest
-
-        project = ProjectRuntimeRequest.for_native(snapshot, self)
-        return {
-            **replace(self.launch(), managed=True).encode(),
-            **project.environment(root),
-        }
 
     def launch(self) -> ThreadLaunch:
         """The launch environment this thread's owner process carries."""

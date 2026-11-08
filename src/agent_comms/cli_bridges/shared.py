@@ -27,9 +27,10 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Literal, Self, T
 from pydantic import Field, InstanceOf, PlainSerializer, PlainValidator, model_validator
 
 from agent_comms.nominal import field_codec
+from agent_comms import messages
 from agent_comms.agent_runtime import DeliversInput, ExternalRuntime, PublishesTranscript
-from ..messaging.bus import Bus
-from ..messaging.bus_tables import MessageIdentitySource
+from agent_comms.bus import Bus
+from agent_comms.bus_tables import MessageIdentitySource
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.native_build_inputs import DetachedChildStdio
 from agent_comms.child_process import (
@@ -60,7 +61,7 @@ from agent_comms.launch_runtime import LaunchRuntime, RunningSource
 from agent_comms.storage.maintenance_barrier import MaintenanceHeldError
 from agent_comms.storage.private_path import PrivateDirectoryRole, PrivateFileRole, TrustedAncestorRole
 from agent_comms.storage.store_files import ExclusiveDirectoryAtomicFile
-from ..messaging.message_reference import (
+from agent_comms.message_reference import (
     BridgeBeginning,
     BridgePosition,
     BridgeStart,
@@ -70,7 +71,10 @@ from ..messaging.message_reference import (
 from agent_comms.registry.registration import Registration
 from agent_comms.runtime_updates import HiddenItem, ReplyingThreadOutput, RuntimeUpdate, ThreadOutput
 from agent_comms.transcript_publication import PublishesToBus, WaitsOnBusyStore
-from agent_comms.turn_item import NoSourceTurn, SourceTurn
+from ..execution.turn_item import (
+    NoSourceTurn,
+    SourceTurn,
+)
 from agent_comms.send_result import SendResult
 from agent_comms.registry.threads import ExternalThread
 from agent_comms.thread_identity import ThreadIncarnation
@@ -115,7 +119,7 @@ from .monitor import (
 
 import secrets
 from agent_comms.nominal.field_codec import MalformedRecord
-from ..messaging.messages import Message
+from agent_comms.messages import Message
 from agent_comms.thread_status import ConnectedThreadStatus, PausedBridgeThreadStatus
 from .monitor import PeerGone, RequestFailure, SessionReady, SessionRefused, SessionReply
 if TYPE_CHECKING:
@@ -1107,7 +1111,7 @@ class Enrol(Operation):
 
 @dataclass(frozen=True)
 class IncomingFrame(ABC):
-    message: Message
+    message: messages.Message
 
     @property
     def text(self) -> str:
@@ -1153,7 +1157,7 @@ class HarnessDeliveryRecords(WaitsOnBusyStore, ABC):
     def delivery_kind(self) -> type[HarnessSession]:
         """The harness route an attempt is keyed by."""
 
-    def attempt(self, message: Message, outcome: type[Outcome]) -> HarnessDelivery:
+    def attempt(self, message: messages.Message, outcome: type[Outcome]) -> HarnessDelivery:
         reference = message.reference
         return HarnessDelivery(self.delivery_kind, self.recipient_lookup, reference.message_id,
                                reference.seq, outcome)
@@ -1190,7 +1194,7 @@ class HarnessDeliveryRecords(WaitsOnBusyStore, ABC):
         return await self.coordinator_read(lambda db: tuple(HarnessDelivery.select(
             db, bridge=self.delivery_kind, recipient_lookup=self.recipient_lookup, message_id=message_id)))
 
-    async def message(self, reference: MessageReference) -> Message:
+    async def message(self, reference: MessageReference) -> messages.Message:
         message, = await self.comms.bus.when_open(
             partial(self.comms.bus.bus.messages_for_references, (reference,)))
         return message
@@ -1298,15 +1302,15 @@ class CliBridge(HarnessDeliveryRecords, ExternalRuntime, DeliversInput, HarnessS
     async def prepare_delivery(self) -> None:
         """A transport may prepare its harness after the operation bound its reader."""
 
-    async def deliver_board(self, update: TeamUpdate, message: Message) -> type[Outcome]:
+    async def deliver_board(self, update: TeamUpdate, message: messages.Message) -> type[Outcome]:
         """Every transport honors the packet's wake decision; passive display is not input."""
         return await update.wake(self, message)
 
-    async def wake(self, message: Message) -> type[Outcome]:
+    async def wake(self, message: messages.Message) -> type[Outcome]:
         """The packet already owns its HUD text; every harness receives that original message."""
         return await self.deliver(message)
 
-    async def accept(self, message: Message) -> None:
+    async def accept(self, message: messages.Message) -> None:
         """Before its durable begin the message is held, never skipped: a store busy while the
         begin is still being acquired waits and reacquires for the same message. After the
         begin, the attempt is exactly as stored; contention leaves it uncertain, never re-sent."""
@@ -1850,7 +1854,7 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
             MonitorBridgeSwapping.announce, Serve.relaunch,
         )
 
-    async def accept(self, message: Message) -> None:
+    async def accept(self, message: messages.Message) -> None:
         try:
             await super().accept(message)
         except (BrokenPipeError, ConnectionResetError) as error:
@@ -1893,10 +1897,10 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
     def new_attachment(self, peer: MonitorPeer, token: str) -> MonitorAttachment:
         return MonitorAttachment(peer, MonitorProbe(session=self.binding.thread, token=token))
 
-    async def deliver(self, message: Message) -> type[Outcome]:
+    async def deliver(self, message: messages.Message) -> type[Outcome]:
         return await self.reader.deliver(self, message)
 
-    async def deliver_to(self, attachment: MonitorAttachment, message: Message) -> type[Outcome]:
+    async def deliver_to(self, attachment: MonitorAttachment, message: messages.Message) -> type[Outcome]:
         frame = self.incoming_frame(message)
         receiving = partial(replace, monitor=frame.shown_evidence(TakingLedger()))
         attempt = self.attempt(message, UnconfirmedOutcome)

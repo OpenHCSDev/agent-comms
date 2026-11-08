@@ -18,7 +18,10 @@ from agent_comms.runtime_updates import (
     TurnEnded,
     TurnStarted,
 )
-from agent_comms.turn_item import NativeItemId, NativeTurnId
+from ..execution.turn_item import (
+    NativeItemId,
+    NativeTurnId,
+)
 
 from ..wire_models import DeclaredWireFamily, WireModel
 from .opencode_parts import MessageInfo, Part, SavedMessage, UserMessage

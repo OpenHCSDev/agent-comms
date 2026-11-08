@@ -5,10 +5,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.messaging.channel_targets import (
-    TeammatesTag,
-    CommandTarget,
-)
+from agent_comms.channel_targets import TeammatesTag, CommandTarget
 from agent_comms.cli_bridges.claude_protocol import (
     ClaudeUserHeader, HumanPrompt, TaskNotification, TaskUserRecord,
 )

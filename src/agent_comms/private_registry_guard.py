@@ -53,7 +53,7 @@ if TYPE_CHECKING:
     from .acp_extension import CursorAdvancedUpdate, CursorScope
     from .cursor_publication import CursorPublication
     from .historical_native_inputs import HistoricalNativeAnswers
-    from .messaging.message_reference import MessageReference
+    from .messages import MessageReference
     from .private_nk_entrypoint import RootLaunch
     from .registry.registry_document import RegistrySnapshot
     from .storage.typed_table import TableSchema

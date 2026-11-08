@@ -6,7 +6,7 @@ from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated
 
-from .messaging.channel_targets import CommandTarget
+from .channel_targets import CommandTarget
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .nominal.field_codec import FieldCodec, ThreadLookup, TurnId, WireOmitDefault
@@ -14,7 +14,7 @@ from .planning.goals import (
     GoalDeclaration,
     GoalRevision,
 )
-from .messaging.message_reference import MessageReference
+from .message_reference import MessageReference
 from .owner_requests import OwnerRequestId, RequestDirective
 from .projection_source import ProjectionSource
 from .projects.checkouts import Checkout
@@ -24,7 +24,10 @@ from .thread_identity import (
     TurnIdentity,
     UserThreadRole,
 )
-from .turn_context import Provenance, WireProvenance
+from .execution.turn_context import (
+    Provenance,
+    WireProvenance,
+)
 from .ui_model.message_category import MessageCategory
 from .working_memory_requests import AnnotationBudgetExhausted
 
@@ -32,7 +35,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from typing import Self
 
-    from .messaging.bus import BusReader
+    from .bus import BusReader
     from .cli_bridges.shared import CliBridge
     from .context_segments.wake import MessageDelivery
     from .harness_delivery_states import Outcome
@@ -40,12 +43,12 @@ if TYPE_CHECKING:
     from .planning.goal_management import Goals
     from .input_attempt import StoredInput
     from .input_disposition import InputDispositions
-    from .messaging.messages import Message
+    from .messages import Message
     from .registry.registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
     from .retained_task_facts import RetainedTaskFacts
     from .registry.threads import Thread
-    from .turn_context import ContextSegment
+    from .execution.turn_context import ContextSegment
     from .storage.typed_table import TypedTable
 
 
@@ -700,7 +703,7 @@ class Constraint(ModelTaskDeclaration):
         return (ConstraintTaskFact(message),)
 
 
-from .turn_context import ContextSegment
+from .execution.turn_context import ContextSegment
 from .working_memory_labels import ClassifierVersion, JevClassifier
 
 

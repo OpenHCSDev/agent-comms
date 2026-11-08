@@ -16,7 +16,7 @@ from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import ClassVar, Self
 
-from ..messaging.bus import BusReader
+from agent_comms.bus import BusReader
 from agent_comms.team.package import TeamPackage
 from agent_comms.team_service import TeamService
 from agent_comms.comms import Comms
@@ -27,7 +27,7 @@ from ..planning.goal_actions import (
     OwnerInvocable,
 )
 from agent_comms.errors import BirthChangedError
-from ..messaging.messages import Message
+from agent_comms.messages import Message
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.threads import Thread

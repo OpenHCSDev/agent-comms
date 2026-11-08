@@ -9,23 +9,19 @@ from typing import TYPE_CHECKING, Annotated
 from agent_comms_hooks import ToolRefusedError
 from agent_comms_hooks.watch import SessionEndpoint
 
-from .messaging.bus_publication import AgentOrigin
+from .bus_publication import AgentOrigin
 from .cli_result import ThreadToolCatalogResult, ToolCatalogResult
 from .coordination.tables.board_delivery import ReaderBoardDelivery
 from .nominal.field_codec import FieldCodec, WireForm
 from .launch_root import LaunchRoot
-from .messaging.read_basis import (
-    DisplayViewer,
-    OperatorOutcomes,
-    ReadAuthority,
-)
+from .read_basis import DisplayViewer, OperatorOutcomes, ReadAuthority
 from .registry.registration import Registration
 from .notification_evidence import OutcomeViewer, OwnerOutcomes
 from .presentation import SentMessageSummary, ThreadRecord
 from .registry.threads import ForkThread, SubagentThread, Thread
 from .thread_identity import ThreadIncarnation
 from .tool_result import ToolResult
-from .turn_phase import IdlePhase
+from .execution.turn_phase import IdlePhase
 
 if TYPE_CHECKING:
     from .comms import Comms

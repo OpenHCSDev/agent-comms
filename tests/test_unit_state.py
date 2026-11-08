@@ -41,7 +41,10 @@ from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.thread_text import ForkedParent
 from agent_comms.task_attachments.team_pings import TeamUpdate, TeammatePing
 from agent_comms.transcript_events import ToolStartTranscript
-from agent_comms.turn_item import NativeItemId, NativeTurnId
+from agent_comms.execution.turn_item import (
+    NativeItemId,
+    NativeTurnId,
+)
 from agent_comms.ui_model.teammate_state import (
     AwaitingApplicationRun,
     AwaitingTeam,

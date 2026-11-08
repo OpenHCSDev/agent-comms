@@ -22,7 +22,7 @@ from agent_comms.active_route import (
     ActiveRouteFile,
     route_new_bus,
 )
-from agent_comms.messaging.bus import Bus
+from agent_comms.bus import Bus
 from agent_comms.child_process import (
     NoResidentManager,
     ResidentManager,

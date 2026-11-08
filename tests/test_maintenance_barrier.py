@@ -38,7 +38,10 @@ from agent_comms.storage.store_files import (
     _store_lock,
 )
 from agent_comms.registry.threads import NativeThread
-from agent_comms.turn_item import NativeItemId, NativeTurnId
+from agent_comms.execution.turn_item import (
+    NativeItemId,
+    NativeTurnId,
+)
 
 
 def test_nested_holds_restore_the_previous_authority_on_failure(tmp_path, monkeypatch):
@@ -350,7 +353,7 @@ def test_phase_change_waits_for_final_native_write_lock(tmp_path: Path) -> None:
 def test_activity_updates_runtime_state_without_publication_while_draining(tmp_path: Path, capsys) -> None:
     """Derived activity remains writable; maintenance still holds new bus publication."""
     from agent_comms.activity import ActivityState, ActivityStore
-    from agent_comms.messaging.bus import Bus
+    from agent_comms.bus import Bus
     from agent_comms.cli import CliInvocation
 
     def cli(*argv: str) -> tuple[int, str]:
@@ -377,7 +380,7 @@ async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> N
     turn_turn_id = NativeTurnId('turn')
     from functools import partial
     from agent_comms.runtime_updates import AppendDraftItem, StartedItem, TextDraft, ThreadOutput
-    from agent_comms.turn_phase import ModelWaitPhase
+    from agent_comms.execution.turn_phase import ModelWaitPhase
     from agent_comms.recorded_time import RecordedEventTime
     from agent_comms.transcript_events import AssistantTranscript
 

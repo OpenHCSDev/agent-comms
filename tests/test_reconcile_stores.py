@@ -20,8 +20,8 @@ import pytest
 
 from agent_comms.storage.locked_store import LiveFilesRequest
 from agent_comms.activity import ActivityStore
-from agent_comms.messaging.bus import Bus
-from agent_comms.messaging.bus_tables import MessageIdentitySource
+from agent_comms.bus import Bus
+from agent_comms.bus_tables import MessageIdentitySource
 from agent_comms.cli_command import CliCommand
 from agent_comms.cli_verbs.planned_reconcile import PlannedReconcileCliCommand
 from agent_comms.cli_commands import PlannedStoresResult
@@ -46,12 +46,7 @@ from agent_comms.storage.locked_store import RegistryFile, SQLiteFile
 from agent_comms.storage.maintenance_barrier import (
     MaintenanceBarrier, MaintenanceHolder, MaintenanceOperator, NoMaintenanceHolder,
 )
-from agent_comms.messaging.messages import (
-    BusProjectionTables,
-    BusRow,
-    ClaimOperations,
-    HeldResources,
-)
+from agent_comms.messages import BusProjectionTables, BusRow, ClaimOperations, HeldResources
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.cohort_schema import PrivateCoordinatorSchema
 from agent_comms.root_runtime import RootRuntime, RootRuntimeStore

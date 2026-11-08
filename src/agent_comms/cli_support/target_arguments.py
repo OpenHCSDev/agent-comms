@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from ..messaging.channel_targets import NoChannel
-from ..messaging.channel_targets import SurroundingChannel
+from agent_comms.channel_targets import NoChannel
+from agent_comms.channel_targets import SurroundingChannel
 from agent_comms.cli_command import CliCommand
 from ..projects.checkouts import Checkout
 from agent_comms.nominal.field_codec import Argument

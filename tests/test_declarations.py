@@ -20,11 +20,7 @@ from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.nominal.field_codec import FieldCodec, TurnId, GoalId
 from agent_comms.planning.goals import Goal
 from agent_comms.launch_runtime import CallingThreadUnavailable
-from agent_comms.messaging.messages import (
-    HandoffKind,
-    InfoKind,
-    Message,
-)
+from agent_comms.messages import HandoffKind, InfoKind, Message
 from agent_comms.native_input_owner import RegistryOwner
 from agent_comms.pi_counts import PiCount
 from agent_comms.registry.registration import Registration

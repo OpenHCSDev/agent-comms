@@ -15,10 +15,7 @@ from .input_key import BusInputKey, InputKey, OwnedBusInputKey
 from .projection_source import ProducedRow, ProjectionSource
 
 if TYPE_CHECKING:
-    from .messaging.messages import (
-    Message,
-    MessageInput,
-)
+    from .messages import Message, MessageInput
     from .registry.threads import Thread
 
 
@@ -31,7 +28,7 @@ class ResponsePolicy(DeclaredFamily, ProjectionSource, affix="Policy"):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .messaging.bus_tables import AwaitingAnswerSource
+        from .bus_tables import AwaitingAnswerSource
         return (AwaitingAnswerSource,)
 
     starts_turn = False
@@ -149,7 +146,7 @@ class ResponseEligibility(ProjectionSource):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .messaging.bus_tables import AwaitingAnswerSource
+        from .bus_tables import AwaitingAnswerSource
         return (AwaitingAnswerSource,)
 
     policy: ResponsePolicy

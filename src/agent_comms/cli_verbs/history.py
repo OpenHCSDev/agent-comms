@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from ..messaging.channel_targets import CommandTarget
-from ..messaging.channels import AnyChannel
+from agent_comms.channel_targets import CommandTarget
+from agent_comms.channels import AnyChannel
 from agent_comms.cli_command import CliCommand
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument
@@ -9,8 +9,8 @@ from agent_comms.history_result import DmHistoryPageResult, HistoryPageResult
 from ..messaging.message_page import PageBounds
 from agent_comms.page_traversal import NewestCursor
 from agent_comms.page_traversal import PageCursor
-from ..messaging.read_basis import AnonymousViewer
-from ..messaging.read_basis import DisplayViewer
+from agent_comms.read_basis import AnonymousViewer
+from agent_comms.read_basis import DisplayViewer
 from dataclasses import dataclass
 from typing import Annotated
 import json

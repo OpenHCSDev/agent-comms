@@ -26,7 +26,7 @@ from .nominal.field_codec import (
     ThreadLookup,
     boundary_decoder,
 )
-from .messaging.message_reference import MessageReference
+from .message_reference import MessageReference
 from .recorded_bus import RecordedBusIdentity
 from .thread_identity import ThreadIncarnation
 
@@ -40,12 +40,12 @@ class ConsumptionEvidence(ABC):
 
 if TYPE_CHECKING:
     from agent_comms.notification_progress import AssignmentResponse, UnansweredResponse
-    from .messaging.bus_publication import Delivered
+    from .bus_publication import Delivered
     from .comms import Comms
     from .coordination.tables.assignments import WakeAssignment
     from .notification_assignment import AssignmentActivityEvidence
     from .notification_progress import AssignmentProgress, DeliveryProgress
-    from .messaging.message_notification import MessageNotification
+    from .message_notification import MessageNotification
     from .presentation import WireRevision
 
 

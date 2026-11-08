@@ -15,7 +15,7 @@ from .native_failures import NativeRequestFailure
 from .private_send_claim import PrivateSendClaim
 from .selected_participant import SelectedParticipant
 from .selected_result import publish_native_failure
-from .turn_context import RenderedInput
+from .execution.turn_context import RenderedInput
 
 
 @dataclass(frozen=True)

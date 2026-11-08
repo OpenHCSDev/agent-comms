@@ -37,7 +37,7 @@ from agent_comms.transcript_events import (
     ToolStartTranscript,
     UserTranscript,
 )
-from agent_comms.turn_context import CodexRolloutProvenance
+from ..execution.turn_context import CodexRolloutProvenance
 
 from ..wire_models import WireModel
 from .history import CodexHistory, JsonLinesFile, OfflineHistory

@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .harness_delivery_states import Outcome
-    from .messaging.messages import Message
+    from .messages import Message
     from .runtime_updates import RuntimeUpdate
 
 

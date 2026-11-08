@@ -87,7 +87,7 @@ from ..input_attempt import (
     UnresolvedInputReference,
 )
 from ..input_disposition import DeliveryOverview
-from ..messaging.messages import Message
+from ..messages import Message
 from ..native_input_owner import GoalLaunchOwner
 from ..nominal.field_codec import GoalId
 from ..owner_requests import (
@@ -103,7 +103,7 @@ from ..registry.threads import (
     Thread,
 )
 from ..thread_identity import ThreadIncarnation
-from ..turn_lease import TurnDeclaration
+from ..execution.turn_lease import TurnDeclaration
 
 _LOG = logging.getLogger(__name__)
 

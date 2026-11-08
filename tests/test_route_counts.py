@@ -9,17 +9,11 @@ import pytest
 
 from agent_comms.audience_manifest import freeze_audience
 from agent_comms.frozen_recipient import FrozenRecipient
-from agent_comms.messaging.bus import (
-    Bus,
-    PrivateRecord,
-)
+from agent_comms.bus import Bus, PrivateRecord
 from agent_comms.comms import Comms
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.nominal.field_codec import ThreadLookup
-from agent_comms.messaging.messages import (
-    InfoKind,
-    Message,
-)
+from agent_comms.messages import InfoKind, Message
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
 from agent_comms.registry.threads import NativeThread
 from agent_comms.wake import OrdinaryControl, resolve_wake_cohort

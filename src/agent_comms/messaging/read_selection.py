@@ -2,23 +2,22 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
-from .bus import BusSnapshot
-from .channels import Channels
-from .read_basis import (
-    ChannelDisplayScope,
-    DisplayViewer,
-    ReadCursor,
-    UnreadQuery,
-)
 from .read_ledger import (
     ReadDocument,
     ReadLedger,
 )
 from ..activity_clocks import ActivityClocks
+from ..bus import BusSnapshot
 from ..catalog_document import CatalogDocument
 from ..catalog_store import ChannelCatalog
+from ..channels import Channels
+from ..read_basis import (
+    ChannelDisplayScope,
+    DisplayViewer,
+    ReadCursor,
+    UnreadQuery,
+)
 from ..registry.registration import Registration
 from ..registry.registry_document import RegistrySnapshot
 from ..registry_provenance import RegistryProvenance

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.messaging.bus import Bus
+from agent_comms.bus import Bus
 
 import json
 import os

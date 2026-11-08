@@ -48,7 +48,7 @@ from agent_comms.ui_model.observation import (
     UnreadableHistory,
 )
 from agent_comms.ui_model.status import OpenThreadStatus
-from agent_comms.turn_context import RecordedContextManifest
+from agent_comms.execution.turn_context import RecordedContextManifest
 from agent_comms_hooks import ToolRefusedError
 from observed_queue import ObservedQueue
 from test_turn_context_wire import corrupt_context_kind, manifest

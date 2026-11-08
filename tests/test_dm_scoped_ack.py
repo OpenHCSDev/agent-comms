@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.messaging.channel_targets import (
-    CommandTarget,
-    ThreadTarget,
-)
+from agent_comms.channel_targets import CommandTarget, ThreadTarget
 
 import os
 import shutil
@@ -14,10 +11,7 @@ from pathlib import Path
 import pytest
 
 from conftest import installed_comms
-from agent_comms.messaging.read_basis import (
-    DMSelection,
-    EmptyTail,
-)
+from agent_comms.read_basis import DMSelection, EmptyTail
 from agent_comms.coordination.errors import DMPaintedBoundChanged, DMScopeChanged, TranscriptChanged
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.registry.threads import Thread, NativeThread

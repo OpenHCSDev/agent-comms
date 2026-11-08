@@ -23,7 +23,7 @@ if sys.platform == "linux":
     import fcntl
     import termios
 
-from agent_comms.messaging.bus import Bus
+from agent_comms.bus import Bus
 from agent_comms.child_process import AttachedChild, ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.coordination.database import CoordinationStore

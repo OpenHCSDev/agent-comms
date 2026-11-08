@@ -43,7 +43,7 @@ from .transport.request import ArgumentTool
 if TYPE_CHECKING:
     from .pi_payloads import PiToolResult
     from .pi_rule_gate import PiRuleGate
-    from .turn_goal_permission import TurnGoalPermission
+    from .execution.turn_goal_permission import TurnGoalPermission
 
 
 @dataclass(frozen=True, slots=True)

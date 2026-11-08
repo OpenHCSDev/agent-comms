@@ -83,7 +83,7 @@ from ..thread_identity import (
     RecordedThreadIncarnation,
     ThreadIncarnation,
 )
-from ..turn_goal_permission import (
+from ..execution.turn_goal_permission import (
     ContinuationGoalPermission,
     GoalPermission,
     InactiveGoalPermission,
@@ -105,8 +105,8 @@ if TYPE_CHECKING:
     from .orders import Todo
     from ..registry.threads import Thread
     from ..task_sources import TaskScope
-    from ..turn_context import TurnContext
-    from ..turn_goal_account import VerifiedGoalSettlement
+    from ..execution.turn_context import TurnContext
+    from ..execution.turn_goal_account import VerifiedGoalSettlement
 
 
 @dataclass(frozen=True)

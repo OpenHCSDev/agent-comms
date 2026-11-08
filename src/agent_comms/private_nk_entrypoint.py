@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 
 from agent_comms.coordination.errors import IdentityConflict, PublicationActivationBlocked
 
-from .messaging.bus import Bus
+from .bus import Bus
 from .storage.locked_store import RegistryFile
 
 from .native_arguments import NativeArguments

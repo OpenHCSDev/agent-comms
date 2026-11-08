@@ -31,7 +31,7 @@ from .planning.goals import Goal
 from .lifecycle_capability import Complete
 from .importing import ThreadImported
 from .input_origin import InputProvenance
-from .messaging.message_reference import MessageReference
+from .message_reference import MessageReference
 from .execution.owner_lifecycle import OwnerRestartResult
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
 from .planning.orders import Todo
@@ -50,7 +50,14 @@ from .shell_effects import AcquireRepositoryStorageEffect, CreateCheckoutStorage
 from .thread_model import ThreadModel
 from .registry.threads import Thread
 from .head_review import PullRequestHead
-from .turn_context import CodexRolloutProvenance, ContextManifest, ContextSegment, ContributionCoordinates, Provenance, TurnContext
+from .execution.turn_context import (
+    CodexRolloutProvenance,
+    ContextManifest,
+    ContextSegment,
+    ContributionCoordinates,
+    Provenance,
+    TurnContext,
+)
 from .storage.typed_table import SQLiteSchemaDifference, StoreRewrite
 
 from agent_comms.session_file import SessionFile

@@ -9,14 +9,11 @@ from .messaging.bus_read import UiRead
 from .comms import Comms
 from .historical_views import HistorySource
 from .page_traversal import HistorySourceKey
-from .messaging.message_reference import MessageReference
-from .messaging.message_notification import (
-    NotificationPass,
-    NotificationWindow,
-)
+from .message_reference import MessageReference
+from agent_comms.message_notification import NotificationPass, NotificationWindow
 from .notification_evidence import FirstRecipient, RecipientCursor, RecipientLimit
 from .notification_read import NotificationsRead
-from .messaging.read_basis import ReadAuthority
+from .read_basis import ReadAuthority
 
 
 @dataclass(frozen=True)

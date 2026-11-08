@@ -10,10 +10,10 @@ from .thread_presentation import ThreadPresentationStatus, WorkingThreadPresenta
 
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import FieldCodec, MalformedRecord, MessageId, boundary_decoder
-from .messaging.message_reference import MessageReference
+from .message_reference import MessageReference
 if TYPE_CHECKING:
-    from .messaging.message_notification import MessageNotification
-    from .messaging.bus_publication import Delivered
+    from .message_notification import MessageNotification
+    from .bus_publication import Delivered
 
 
 @dataclass(frozen=True)

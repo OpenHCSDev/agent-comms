@@ -2,7 +2,7 @@
 requests, recorded once by the origin that speaks for the owner."""
 
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.channel_targets import CommandTarget
 
 import pytest
 

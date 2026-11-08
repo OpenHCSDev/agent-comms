@@ -37,7 +37,7 @@ from agent_comms.active_route import (
     RouteFileSelection,
     active_route_path,
 )
-from ..messaging.bus import Bus
+from agent_comms.bus import Bus
 from agent_comms.cli_bridges.shared import BridgeResume, Serve, SessionBridgeResumes
 from agent_comms.cli_commands import BusReadBack, StoreDifference
 from agent_comms.cli_command import CliCommand

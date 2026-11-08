@@ -1,5 +1,5 @@
 """A holder claims through the real tool boundary on a copied bus."""
-from agent_comms.messaging.bus_tables import AuthoredAnswers
+from agent_comms.bus_tables import AuthoredAnswers
 import json
 import shlex
 import sqlite3
@@ -61,11 +61,7 @@ from agent_comms.planning.goals import (
     OrderCheck,
     ProblemGoalOrder,
 )
-from agent_comms.messaging.messages import (
-    HandoffKind,
-    Message,
-    QuestionKind,
-)
+from agent_comms.messages import HandoffKind, Message, QuestionKind
 from agent_comms.order_runs import ApplicationOrderRun
 from agent_comms.storage.locked_store import SQLiteFile
 from agent_comms.recorded_time import RecordedEventTime

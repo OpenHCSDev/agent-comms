@@ -37,7 +37,7 @@ from bus_record_fixture import prepare_native_comms
 from connector_readiness import ConnectorReadiness
 from conftest import transcript_records
 
-from agent_comms.messaging.bus import Bus
+from agent_comms.bus import Bus
 from agent_comms.comms import Comms, wire
 from agent_comms.transport.progress import WireExportObserver
 from agent_comms.connector import (
@@ -68,7 +68,7 @@ from agent_comms.connector_store import (
 from agent_comms.coordination.errors import TranscriptChanged
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.storage.locked_store import DocumentChange
-from agent_comms.messaging.message_bus import WatchPass
+from agent_comms.execution.watch_passes import WatchPass
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, RecordProblems, RootId
 from agent_comms.host_services.connector import ConnectorService
@@ -95,10 +95,7 @@ from agent_comms.projects.git_errors import FailedGitCommand
 import site
 import socket
 import sys
-from agent_comms.messaging.channel_targets import (
-    CommandTarget,
-    ThreadTarget,
-)
+from agent_comms.channel_targets import CommandTarget, ThreadTarget
 
 LIST = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
 

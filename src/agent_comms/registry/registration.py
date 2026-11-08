@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Concatenate
 
 from ..catalog_store import ChannelCatalog
-from ..messaging.channel_targets import DeclaredTag
+from ..channel_targets import DeclaredTag
 from ..child_process import NoProcess, ProcessIdentity
 from ..errors import RelationViolationError
 from ..nominal.field_codec import ThreadLookup, TurnId

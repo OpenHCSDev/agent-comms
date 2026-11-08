@@ -9,12 +9,9 @@ from __future__ import annotations
 
 from .audience_manifest import AudiencedMessage
 from .frozen_recipient import FrozenRecipient
-from .messaging.channel_targets import (
-    CommandTarget,
-    NamedTarget,
-)
+from .channel_targets import CommandTarget, NamedTarget
 from .nominal.declared_family import DeclaredFamily
-from .messaging.messages import Message
+from .messages import Message
 from .wake_policy import NoWakeDecision, PassiveWake, RecipientDecision, WakePolicy
 
 

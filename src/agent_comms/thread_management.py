@@ -18,7 +18,7 @@ from agent_comms_hooks.process_claim import (
     ProcessSingleton,
 )
 
-from .messaging.channel_targets import DeclaredTag
+from .channel_targets import DeclaredTag
 from .child_process import NO_PROCESS, ProcessIdentity, ProcessState
 from .cli_result import CliResult
 from .planning.goal_waits import GoalWaits

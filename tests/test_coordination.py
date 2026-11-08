@@ -68,10 +68,7 @@ from agent_comms.execution_states import (
 )
 from agent_comms.attempt_states import AttemptState, LiveAttempt
 from agent_comms.storage.typed_table import HeldBusFile, JsonStorage
-from agent_comms.messaging.messages import (
-    InfoKind,
-    Message,
-)
+from agent_comms.messages import InfoKind, Message
 from agent_comms.obligation_states import (
     PendingResponse,
     ResponseState,

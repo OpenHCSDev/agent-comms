@@ -3,12 +3,12 @@ publication protocol."""
 
 from __future__ import annotations
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.messaging.messages import NoticeRole
+from agent_comms.messages import NoticeRole
 
 import os
 
 
-from agent_comms.messaging.channel_targets import ThreadTarget
+from agent_comms.channel_targets import ThreadTarget
 from agent_comms.child_process import ProcessIdentity
 from conftest import installed_comms
 from test_coordinated_runtime import tmp_path as private_root_fixture

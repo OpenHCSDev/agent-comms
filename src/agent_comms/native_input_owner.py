@@ -23,14 +23,17 @@ from .private_send_rules import (
     RunningTurnRegistryCheck,
 )
 from .reservation_rules import ReservationViolationError
-from .turn_goal_permission import GoalPermission, OwnerGoalPermission
+from .execution.turn_goal_permission import (
+    GoalPermission,
+    OwnerGoalPermission,
+)
 from .registry.threads import NativeThread, Thread
 
 if TYPE_CHECKING:
     from .planning.goals import Goal
     from .registry.registration import Registration
     from .registry.registry_document import RegistrySnapshot
-    from .turn_lease import TurnLeaseFence
+    from .execution.turn_lease import TurnLeaseFence
 
 
 @dataclass(frozen=True, kw_only=True)

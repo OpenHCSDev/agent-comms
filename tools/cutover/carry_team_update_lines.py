@@ -12,13 +12,13 @@ from contextlib import closing
 from dataclasses import dataclass, field
 from typing import ClassVar, Self
 
-from agent_comms.messaging.bus import Bus
+from agent_comms.bus import Bus
 from agent_comms.task_attachments.team_pings import TeamDecisions, TeamUpdateNotice, TeamUpdate, Ping
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.storage.locked_store import RootFile
-from agent_comms.messaging.messages import Message
+from agent_comms.messages import Message
 from agent_comms.thread_identity import ThreadIncarnation
 from cutover.carry_team_observations import TeamObservations
 

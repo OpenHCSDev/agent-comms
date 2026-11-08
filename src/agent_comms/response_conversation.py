@@ -6,7 +6,7 @@ import hashlib
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
-from .messaging.bus import KeyedPrivateRecord
+from agent_comms.bus import KeyedPrivateRecord
 from agent_comms.delivery_policy import ResponseDeliveryPolicy
 
 from agent_comms.response_acknowledgement import (
@@ -17,16 +17,16 @@ from agent_comms.wake import OrdinaryControl
 
 from .audience_manifest import freeze_audience
 from .frozen_recipient import FrozenRecipient
-from .messaging.bus_publication import Delivered
+from .bus_publication import Delivered
 from .private_registry_guard import RegistryPrivacy
-from .messaging.channel_targets import CommandTarget
+from .channel_targets import CommandTarget
 from .coordination.errors import IdentityConflict
 from .coordination.tables.responses import ResponseObligation
-from .messaging.message_reference import MessageReference
-from .messaging.messages import Message
+from .message_reference import MessageReference
+from .messages import Message
 
 if TYPE_CHECKING:
-    from .messaging.bus import KeyedPrivateRecord
+    from agent_comms.bus import KeyedPrivateRecord
 
 
 @dataclass(frozen=True)

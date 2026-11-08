@@ -11,7 +11,7 @@ from dataclasses import dataclass, replace
 from functools import partial
 from typing import TYPE_CHECKING
 
-from .messaging.message_reference import MessageReference
+from .message_reference import MessageReference
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import TranscriptRecordId
 from .notification_evidence import ConsumptionEvidence

@@ -47,7 +47,7 @@ from .pi_rule_gate import PiRuleGate
 from .selected_actions import SelectedAction
 from .selected_claim import publish_selected_resource_claim, write_selected_claimed_file
 from .tool_denial import SelectedToolDenied
-from .turn_context import InstructionFile
+from .execution.turn_context import InstructionFile
 
 # Stay well below the existing native RPC record cap (1 MiB, including JSON).
 _MAX_CONTENT = 128 * 1024

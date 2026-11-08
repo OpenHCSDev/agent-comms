@@ -27,7 +27,7 @@ from .standing_rules import (
 
 
 if TYPE_CHECKING:
-    from ..messaging.bus_publication import Delivered
+    from agent_comms.bus_publication import Delivered
     from agent_comms.ui_model.teammate_state import TeammateState
 
     from .standing_rules import HeartbeatFrame

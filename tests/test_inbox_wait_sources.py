@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from agent_comms.agent_inbox import SecondsWait
-from agent_comms.messaging.bus import Bus
+from agent_comms.bus import Bus
 
 
 def waited(tmp_path: Path, touched: str) -> int:

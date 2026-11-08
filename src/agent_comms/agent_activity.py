@@ -16,9 +16,9 @@ from .notification_progress import TakenProgress, WorkingTakenProgress
 if TYPE_CHECKING:
     from .agent_backend import AgentBackend
     from .agent_events import RuntimeInfoObservation
-    from .messaging.bus_publication import Delivered
+    from .bus_publication import Delivered
     from .notification_progress import AssignmentProgress, DeliveryProgress
-    from .messaging.message_notification import MessageNotification
+    from .message_notification import MessageNotification
     from .registry.registration import Registration
     from .registry.registry_document import RegistrySnapshot
     from .thread_status import ThreadStatus
@@ -41,8 +41,17 @@ from .routing import NoTurnRouting, Routing
 from .runtime_info import RuntimeInfo, RuntimeInfoStore
 from .thread_identity import OwnerIdentity, ThreadIncarnation
 from .registry.threads import Thread
-from .turn_lease import NoFinishedTurn, TurnCompletion, TurnLeaseFence, TurnState
-from .turn_phase import IdlePhase, PreparingPhase, TurnPhase
+from .execution.turn_lease import (
+    NoFinishedTurn,
+    TurnCompletion,
+    TurnLeaseFence,
+    TurnState,
+)
+from .execution.turn_phase import (
+    IdlePhase,
+    PreparingPhase,
+    TurnPhase,
+)
 
 _LOG = logging.getLogger(__name__)
 

@@ -24,7 +24,7 @@ from agent_comms.pi_payloads import PiResponseData
 
 from .agent_backend import CompactionOutcome, FailedCompaction, Forks, Interrupts, NewThreadBackend, NothingToCompaction, PlacedCompaction, RuntimeLocation
 from .thread_model import ThreadModel, UndeclaredModel
-from .turn_inbox import InputContent
+from .execution.turn_inbox import InputContent
 from .coordination.coordinator import Coordination
 from .nominal.field_codec import AcpSessionId
 from .fresh_private_session import create_fresh_private_session
@@ -57,7 +57,7 @@ if TYPE_CHECKING:
     from .execution.owned_turn import TurnDelivery
     from .pi_payloads import StateData
     from .registry.threads import Thread
-    from .turn_runner import TurnRunner
+    from .execution.turn_runner import TurnRunner
 
 
 # The event kinds Pi 0.85.1 writes to RPC stdout, as built for Core. Sources,

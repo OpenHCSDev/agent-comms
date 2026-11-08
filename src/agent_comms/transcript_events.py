@@ -25,14 +25,17 @@ from .nominal.field_codec import (
     WireOmitDefault,
     projected,
 )
-from .messaging.message_reference import MessageReference
+from .message_reference import MessageReference
 from .pi_wire import PiOmitted, ReportedInputId
-from .messaging.messages import Message
+from .messages import Message
 from .recorded_time import EventTime, UnrecordedEventTime
 from .routing import MessageRoute, NoTurnRouting, Routing, TurnRouting
 from .tool_results import SENT_MESSAGE_MIME, NoSentMessage, NoToolDiff, ToolDiff, ToolText
 from .transcript_merge import EventMerge, StreamingMerge
-from .turn_item import NativeItemId, NativeTurnId
+from .execution.turn_item import (
+    NativeItemId,
+    NativeTurnId,
+)
 from .ui_model.message_category import (
     AgentCategory,
     InboundCategory,

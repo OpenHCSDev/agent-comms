@@ -33,7 +33,7 @@ from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.session import CoordinationSession
 from agent_comms.coordination.tables.board_delivery import ReaderBoardDelivery
 from agent_comms.heartbeat_subjects import TeammateSubject
-from agent_comms.messaging.channel_targets import TeammatesTag
+from agent_comms.channel_targets import TeammatesTag
 from agent_comms.team.package import TeamPackage
 from agent_comms.team.rule_file import RuleFile
 from agent_comms.team.standing import PlanIdle

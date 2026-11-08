@@ -18,7 +18,10 @@ from .coordination.errors import Refused
 
 from .acp_extension import QueueItem
 
-from .turn_inbox import InputContent, InputRequest
+from .execution.turn_inbox import (
+    InputContent,
+    InputRequest,
+)
 from .assignment_states import DeferredAssignment, DeliveredAssignment
 from .child_process import ProcessIdentity
 from .context_segments.wake import MessageDelivery
@@ -37,7 +40,7 @@ from .planning.goals import (
     NoGoal,
 )
 from .coordination.tables.assignments import WakeAssignment
-from .messaging.messages import Message
+from .messages import Message
 from .image_input import ImageInput
 from .input_attempt import InputAttempt, ReservedInput
 from .input_key import AcpInputKey, InputKey
@@ -46,24 +49,33 @@ from .input_origin import InputOrigin, UnattributedInputOrigin, WireInputOrigin
 from .routing import ScheduledTurn
 from .thread_identity import ClaimedIdentity, ClaimScoped
 from .registry.threads import Thread
-from .turn_context import TurnContext
-from .turn_goal_permission import AcceptedGoalPermission, TurnGoalPermission
-from .turn_input_source import AcceptedFollowingInput, DeliveredFollowingInput
+from .execution.turn_context import TurnContext
+from .execution.turn_goal_permission import (
+    AcceptedGoalPermission,
+    TurnGoalPermission,
+)
+from .execution.turn_input_source import (
+    AcceptedFollowingInput,
+    DeliveredFollowingInput,
+)
 
 from .acp_extension import InputStartedUpdate
 from .ordinary_turn_rules import MissingAcceptedInputCheck
 from .reservation_rules import ReservationRule, RuleCheck
-from agent_comms.turn_input_source import TurnAcceptance
+from .execution.turn_input_source import TurnAcceptance
 if TYPE_CHECKING:
     from .acp_extension import QueueItem, QueueScope
-    from .turn_inbox import InputContent, TurnInbox
-    from .messaging.bus_publication import Delivered
+    from .execution.turn_inbox import (
+    InputContent,
+    TurnInbox,
+)
+    from .bus_publication import Delivered
     from .comms import Comms
     from .execution.input_drain import DrainedSession, InputDrain
     from .messaging.message_bus import MessageBus
     from .registry.registry_document import RegistryEntry, RegistrySnapshot
-    from .turn_input_source import TurnInputSource
-    from .turn_runner import TurnRunner
+    from .execution.turn_input_source import TurnInputSource
+    from .execution.turn_runner import TurnRunner
     from .runtime_server import RuntimeServer
 
 
@@ -630,7 +642,10 @@ class InitialInput(QueuedInput):
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> None:
         """Own original reservation, dispatch and unbound retirement as one lifetime."""
-        from .turn_context import TurnContext, UserRequestSegment
+        from .execution.turn_context import (
+    TurnContext,
+    UserRequestSegment,
+)
 
         request = UserRequestSegment.capture(task)
         async with AsyncExitStack() as resources:

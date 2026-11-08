@@ -51,10 +51,16 @@ from .pi_vocabulary import (
 from .thread_model import ThreadModel, UndeclaredModel
 from .tool_declaration import OtherAction, ToolAction, ToolDeclaration
 from .tool_results import NoSentMessage, NoToolDiff, ToolDiff
-from .turn_failure import NoTurnFailure, TurnFailure
-from .turn_goal_account import OriginGoalSettlement, VerifiedGoalSettlement
-from .turn_item import UsageChargeId
-from .turn_terminal import FailedGoalTurn
+from .execution.turn_failure import (
+    NoTurnFailure,
+    TurnFailure,
+)
+from .execution.turn_goal_account import (
+    OriginGoalSettlement,
+    VerifiedGoalSettlement,
+)
+from .execution.turn_item import UsageChargeId
+from .execution.turn_terminal import FailedGoalTurn
 from .planning.goal_presentation import GoalSnapshot
 from .transcript_events import SentTranscript
 
@@ -68,8 +74,8 @@ if TYPE_CHECKING:
     from .rule_deal import Redeals
     from .runtime_info import AgentRuntimeInfo
     from .started_input import StartedInput
-    from .turn_input_source import OriginalTurnInput
-    from .turn_progress import TurnProgress
+    from .execution.turn_input_source import OriginalTurnInput
+    from .execution.turn_progress import TurnProgress
 
 
 class AgentEvent:

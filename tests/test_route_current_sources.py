@@ -1,7 +1,7 @@
 """Current delivery queries skip retired sender incarnations."""
 
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.messaging.read_basis import NamedViewer
+from agent_comms.read_basis import NamedViewer
 from agent_comms.page_traversal import OlderTraversal
 import pytest
 

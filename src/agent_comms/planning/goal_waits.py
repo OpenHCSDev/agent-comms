@@ -9,8 +9,8 @@ from pathlib import Path
 from sqlite3 import Connection
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from ..messaging.bus import BusReader
-from ..messaging.bus_publication import Delivered
+from ..bus import BusReader
+from ..bus_publication import Delivered
 from ..nominal.declared_family import DeclaredFamily
 from ..errors import UnregisteredThreadError
 from ..nominal.field_codec import GoalId, GoalWaitId, NullMember, ThreadLookup, TurnId
@@ -30,7 +30,10 @@ from ..thread_identity import RecordedThreadIncarnation
 from ..thread_owned_state import ThreadOwnedState
 from ..registry.registry_document import RegistrySnapshot
 from ..registry.threads import Thread
-from ..turn_lease import TurnCompletion, TurnLease
+from ..execution.turn_lease import (
+    TurnCompletion,
+    TurnLease,
+)
 from ..storage.typed_table import (
     Column, DurableStore, ForeignKey, FULL_SCHEMA_REBUILD, Index, SchemaRebuild,
     StoreRows, TypedTable,
@@ -41,7 +44,7 @@ if TYPE_CHECKING:
     from ..agent_activity import AgentActivity
     from ..registry.registration import Registration
     from ..messaging.message_bus import MessageBus
-    from ..messaging.message_reference import MessageReference
+    from ..message_reference import MessageReference
     from ..native_input_owner import RegistryOwner
     from ..registry.registry_store import RegistryEdit
 

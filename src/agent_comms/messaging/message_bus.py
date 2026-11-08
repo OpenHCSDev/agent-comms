@@ -1,10 +1,6 @@
 from __future__ import annotations
 
 import inspect
-from abc import (
-    ABC,
-    abstractmethod,
-)
 from collections.abc import (
     Awaitable,
     Callable,
@@ -14,33 +10,30 @@ from collections.abc import (
     Sequence,
 )
 from contextlib import (
-    AbstractContextManager,
     aclosing,
     contextmanager,
 )
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from ..activity_clocks import ActivityClocks
 from ..agent_inbox import TakenInputCursor
-from .bus import (
+from ..bus import (
     Bus,
     BusSnapshot,
 )
 from .bus_route_counts import HeldUnseenCounts
 from ..catalog_document import CatalogAccess
 from ..catalog_store import ChannelCatalog
-from .channel_targets import (
+from ..channel_targets import (
     ChannelTarget,
     NamedTarget,
 )
-from .channels import (
+from ..channels import (
     AnyChannel,
     Channel,
 )
-from ..child_process import AsyncWork
 from ..context_segments.awareness import AwarenessSegment
 from ..coordination.coordinator import Coordination
 from ..historical_views import HistoryArchive
@@ -50,15 +43,14 @@ from .message_page import (
     MessagePageRequest,
     PageBounds,
 )
-from .message_reference import (
+from ..message_reference import (
     FirstUnreadStart,
     InboxStart,
     NewestUnreadStart,
 )
-from ..nominal.declared_family import DeclaredFamily
 from ..peer_relevance import Prioritized
 from ..publisher import Publisher
-from .read_basis import (
+from ..read_basis import (
     AnonymousViewer,
     DisplayViewer,
     ListedDeliveries,
@@ -79,68 +71,8 @@ from ..storage.maintenance_barrier import (
     MaintenanceBarrier,
     MaintenanceHeldError,
 )
-from ..watch_phase import WatchPhase
 from ..watched import FileSource
 
-if TYPE_CHECKING:
-    from ..comms import Comms
-
-
-class Watch(AsyncWork, WatchPhase, DeclaredFamily, ABC):
-    """Observe, then apply the result while the bus is open.
-
-    A hold is waited out on the service's own loop, where its stop cancels the wait. Waiting
-    in the pass's worker thread kept the connector alive after SIGTERM: the install holding
-    maintenance waits for that stop, so systemd killed it at 90 s (installs 17 and 18).
-    """
-
-    @abstractmethod
-    async def run(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None: ...
-
-    def failed(self, opened_wire: Callable[[], AbstractContextManager[Comms]],
-               error: Exception) -> None:
-        """A service may report its failed pass; ordinary watches need no extra action."""
-
-
-class JoinedWatch(Watch):
-    """The whole pass is one joined operation under maintenance."""
-
-    async def run(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
-        with opened_wire() as comms:
-            await comms.bus.when_open(partial(
-                self.enter_phase, comms.root, partial(self.watch_pass, opened_wire)))
-
-    @abstractmethod
-    def watch_pass(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None: ...
-
-
-class PreparedWatchPass[Prepared, Observed](Watch):
-    """Joined effects finish; a source-proved safe read can drop observation."""
-
-    async def run(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
-        with opened_wire() as comms:
-            prepared = await comms.bus.when_open(partial(
-                self.enter_phase, comms.root, partial(self.prepare, comms)))
-            observed = await self.run_async(partial(
-                self.enter_phase, comms.root, partial(self.observe, comms, prepared)))
-            await comms.bus.when_open(partial(
-                self.enter_phase, comms.root, partial(self.pass_body, comms, observed)))
-
-    @abstractmethod
-    def prepare(self, comms: Comms) -> Prepared: ...
-
-    @abstractmethod
-    def observe(self, comms: Comms, prepared: Prepared) -> Observed: ...
-
-    @abstractmethod
-    def pass_body(self, comms: Comms, observed: Observed) -> None: ...
-
-
-class WatchPass[Observed](PreparedWatchPass[None, Observed]):
-    """A phased watch with no acquisition; only watches with real inputs override preparation."""
-
-    def prepare(self, comms: Comms) -> None:
-        pass
 
 
 @dataclass(frozen=True)

@@ -8,8 +8,11 @@ from dataclasses import dataclass, field
 from typing import Annotated, ClassVar, Self
 
 from agent_comms.coordination.schema import CoordinatorRow
-from ...messaging.message_reference import MessageReference
-from agent_comms.turn_context import ContextSpan, SegmentManifest
+from agent_comms.message_reference import MessageReference
+from ...execution.turn_context import (
+    ContextSpan,
+    SegmentManifest,
+)
 from agent_comms.storage.typed_table import (
     LOCAL_TABLE_SOURCE,
     AttachedPracticeRebuild,

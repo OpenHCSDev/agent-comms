@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.messaging.message_notification import NotificationPass
+from agent_comms.message_notification import NotificationPass
 
 from agent_comms.messaging.bus_read import (
     BusRead,
@@ -17,7 +17,7 @@ from agent_comms.comms import Comms
 from agent_comms.coordination.errors import ReloadRequired
 from agent_comms.nominal.field_codec import FieldCodec, MessageId
 from agent_comms.history_views import HistoryViews
-from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.message_reference import MessageReference
 from agent_comms.notification_read import NotificationsRead, UnreadableNotificationsRead
 from agent_comms.notification_reads import (
     LiveNotificationRead, NotificationRead, RecordedNotificationRead,

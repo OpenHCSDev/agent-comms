@@ -13,20 +13,17 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import BinaryIO, ClassVar
 
-from .messaging.channels import Channel
+from .channels import Channel
 from .errors import ExportDestinationExists
 from .cli_result import CliResult
 from .transport.progress import WireExportObserver, WireExportProgress
 from .tool_result import ToolResult
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
-from .messaging.message_reference import MessageReference
-from .messaging.messages import (
-    Message,
-    StoredWireHistory,
-)
-from .messaging.bus_tables import MessageIdentitySource
-from .messaging.read_basis import DMDisplayScope
+from .message_reference import MessageReference
+from .messages import Message, StoredWireHistory
+from .bus_tables import MessageIdentitySource
+from .read_basis import DMDisplayScope
 from .registry.registration import Registration
 from .storage.store_files import AtomicFile, ExclusiveAtomicFile
 

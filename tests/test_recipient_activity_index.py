@@ -14,19 +14,13 @@ from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.notification_assignment import NotificationAssignment
 from agent_comms.notification_evidence import AllOutcomes, OwnerOutcomes
-from agent_comms.messaging.message_notification import MessageNotification
-from agent_comms.messaging.messages import (
-    InfoKind,
-    Message,
-)
+from agent_comms.message_notification import MessageNotification
+from agent_comms.messages import InfoKind, Message
 from agent_comms.messaging.read_ledger import (
     ReadDocument,
     ReadLedger,
 )
-from agent_comms.messaging.read_basis import (
-    ConversationCursor,
-    ReadCursor,
-)
+from agent_comms.read_basis import ConversationCursor, ReadCursor
 from agent_comms.registry_provenance import RegistryProvenance
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.thread_identity import (

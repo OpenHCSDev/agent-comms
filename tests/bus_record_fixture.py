@@ -10,23 +10,15 @@ from pathlib import Path
 
 from agent_comms.audience_manifest import freeze_audience
 from agent_comms.frozen_recipient import FrozenRecipient
-from agent_comms.messaging.bus import PrivateRecord
-from agent_comms.messaging.bus_publication import (
-    Delivered,
-    KeyedPublication,
-)
+from agent_comms.bus import PrivateRecord
+from agent_comms.bus_publication import Delivered, KeyedPublication
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.envelope_claim_transitions import UnscopedClaims
 from agent_comms.launch_runtime import RestoredRuntime
 from agent_comms.native_arguments import NativeArguments
 from agent_comms.nominal.field_codec import ClaimId, InputId, RootId, ThreadLookup
-from agent_comms.messaging.messages import (
-    ClaimMessage,
-    ConversationRole,
-    InfoKind,
-    Message,
-)
+from agent_comms.messages import ClaimMessage, ConversationRole, InfoKind, Message
 from agent_comms.response_acknowledgement import (
     KeyedResponseAcknowledgement,
     canonical_publication_key,

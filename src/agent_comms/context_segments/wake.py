@@ -13,11 +13,11 @@ from dataclasses import dataclass
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.nominal.field_codec import FieldCodec
-from ..messaging.message_notification import SentMessageOutcome
+from agent_comms.message_notification import SentMessageOutcome
 
-from ..messaging.bus_publication import Delivered
+from ..bus_publication import Delivered
 from ..registry.threads import Thread
-from ..turn_context import (
+from ..execution.turn_context import (
     InstructionFile,
     InstructionSegment,
     NextContextTurn,

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.messaging.bus import Bus
+from agent_comms.bus import Bus
 from agent_comms.change_report import FileLine
 from agent_comms.cli_commands import OrderCheckoutGrant
 from agent_comms.comms import wire

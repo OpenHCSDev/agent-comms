@@ -9,7 +9,7 @@ from agent_comms_hooks import ToolRefusedError
 
 
 if TYPE_CHECKING:
-    from .messaging.messages import BusRecord
+    from agent_comms.messages import BusRecord
 
 
 class RejectedEnforcementError(ValueError):

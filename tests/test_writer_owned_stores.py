@@ -8,10 +8,7 @@ from typing import Annotated, ClassVar
 import pytest
 
 from agent_comms.storage.locked_store import LiveFilesRequest, RetainedCopyRequest
-from agent_comms.messaging.channel_targets import (
-    ChannelTarget,
-    CommandTarget,
-)
+from agent_comms.channel_targets import ChannelTarget, CommandTarget
 from agent_comms.cli import build_parser
 from agent_comms.cli_verbs.planned_reconcile import PlannedReconcileCliCommand
 from agent_comms.nominal.field_codec import FieldCodec

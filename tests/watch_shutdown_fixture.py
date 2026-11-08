@@ -15,7 +15,7 @@ from agent_comms.comms import Comms
 from agent_comms.connector import Connector, ServeVerb
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.launch_root import LaunchRoot, started
-from agent_comms.messaging.message_bus import (
+from agent_comms.execution.watch_passes import (
     Watch,
     WatchPass,
 )

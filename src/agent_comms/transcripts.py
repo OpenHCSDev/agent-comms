@@ -14,8 +14,8 @@ from typing import TYPE_CHECKING, Annotated, Callable, ClassVar, NoReturn
 
 from .history_view import HistoryView, OwnHistory
 from .agent_backend import RuntimeLocation
-from .messaging.bus import Bus
-from .messaging.bus_publication import Delivered
+from .bus import Bus
+from .bus_publication import Delivered
 from .coordination.database import CoordinationStore
 from .coordination.errors import CoordinationReadUnavailable, ReloadRequired, StaleRevision, TranscriptChanged
 from .nominal.declared_family import DeclaredFamily
@@ -25,14 +25,14 @@ from .nominal.field_codec import ContentExclude, FieldCodec, WireName, projected
 from .historical_views import HistorySource
 from .page_traversal import HistorySourceKey
 from .messaging.message_bus import MessageBus
-from .messaging.message_reference import MessageReference
+from .message_reference import MessageReference
 from .native_runtime_input import PublishedReplyRevision
 from .native_transcript import NativeTranscript, RecordsCut, SessionCut
 from .native_output import NativeRecordLocation
 from .notification_assignment import NotificationAssignment
-from .messaging.message_notification import NotificationWindow
+from agent_comms.message_notification import NotificationWindow
 from .notification_evidence import OwnerOutcomes
-from .messaging.message_notification import MessageNotification
+from .message_notification import MessageNotification
 from .thread_presentation import ThreadPresentation
 from .storage.private_path import FileIdentity, FileObservation, FileRevision, MissingFile
 from .private_registry_guard import RegistryPrivacy
@@ -57,8 +57,13 @@ from .transcript_sources import (
     TranscriptTraversal,
     WireFrontier,
 )
-from .turn_digests import InputAnswerRead, ThreadTurns, TurnBound, TurnDigestRead
-from .turn_lease import TurnLeaseFence
+from .execution.turn_digests import (
+    InputAnswerRead,
+    ThreadTurns,
+    TurnBound,
+    TurnDigestRead,
+)
+from .execution.turn_lease import TurnLeaseFence
 
 if TYPE_CHECKING:
     from sqlite3 import Connection
