@@ -284,7 +284,7 @@ class ActiveTurn(Executing, RecordMember, TurnDeclaration):
     turn_generation: TurnGeneration = UnrecordedGeneration()
     phase: TurnPhase = field(default_factory=PreparingPhase)
     def execution(self, source: GoalExecutionSource) -> GoalExecution:
-        if source.owner_alive and source.owner.process_identity.owns_turn(self):
+        if source.owner_alive and self.owner == source.owner.process_identity:
             return RunningExecution(source.goal.id)
         return source.generation.lifecycle.idle_execution(source)
 
@@ -299,7 +299,7 @@ class ActiveTurn(Executing, RecordMember, TurnDeclaration):
         return self.claimed_generation.matches(claim_scope)
 
     def validate_owner(self, process: ProcessState, generation: int) -> None:
-        if not process.owns_turn(self):
+        if self.owner != process:
             raise RelationViolationError("A turn must belong to the registered executor.")
         if not self.turn_generation.owns_generation(generation):
             raise RelationViolationError("Active turn generation differs from its owner.")
@@ -364,7 +364,7 @@ class ActiveTurn(Executing, RecordMember, TurnDeclaration):
     def owned_by(self, process: ProcessState, claimed_generation: int) -> bool:
         """Check that this turn's local process and registered input generation agree."""
         return (
-            process.owns_turn(self)
+            self.owner == process
             and self.claimed_generation.matches(claimed_generation)
             and claimed_generation > 0
         )

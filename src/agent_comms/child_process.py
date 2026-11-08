@@ -67,21 +67,20 @@ from .native_build_inputs import (
     StdioOptions,
 )
 from .nominal.sealed import Sealed
+from .registry.thread_identity import (
+    ThreadIncarnation,
+    ThreadRole,
+)
 from .systemd_unit import AgentsSlice, SystemdUnit
 
 if TYPE_CHECKING:
     from .registration_change import RegistrationChange, UpdatedRegistration
-    from .registry.thread_identity import (
-    ThreadIncarnation,
-    ThreadRole,
-)
     from .registry.thread_presentation import ThreadOwnerBinding
     from .registry.thread_presentation import ThreadPresentation
     from .registry.thread_status import (
     ActiveThreadPresence,
     ThreadStatus,
 )
-    from .execution.turn_lease import ActiveTurn
 
 STOP_GRACE_SECONDS = 2.0
 
@@ -220,8 +219,6 @@ class ProcessState(SubclassUnion, affix=""):
 
     @abstractmethod
     def runs_here(self) -> bool: ...
-    @abstractmethod
-    def owns_turn(self, turn: ActiveTurn) -> bool: ...
 
     @abstractmethod
     def signal(self, signum: int) -> None: ...
@@ -282,9 +279,6 @@ class NoProcess(NullMember, ProcessState):
         return stopped
 
     def runs_here(self) -> bool:
-        return False
-
-    def owns_turn(self, turn: ActiveTurn) -> bool:
         return False
 
     def signal(self, signum: int) -> None:
@@ -385,9 +379,6 @@ class ProcessIdentity(RecordMember, ProcessState):
 
     def runs_here(self) -> bool:
         return os.getpid() == self.pid
-
-    def owns_turn(self, turn: ActiveTurn) -> bool:
-        return turn.owner == self
 
     def signal(self, signum: int) -> None:
         Platform.current().send(self, signum)
