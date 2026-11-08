@@ -389,7 +389,7 @@ class JsonDocument(RootFile, ABC, Generic[T]):
         )
 
     def _write_unlocked(self, text: str) -> None:
-        """Stage before publication; retain the old inode until directory sync.
+        """Stage before publication; retain the old bytes and mode until directory sync.
 
         A reported staging/publication/fsync failure restores the old bytes and
         mode while the exclusive lock is held. A second failure during rollback
@@ -403,7 +403,7 @@ class JsonDocument(RootFile, ABC, Generic[T]):
         backup = StoreOwner.rollback_file(staged)
         try:
             mode = stat.S_IMODE(self.path.stat().st_mode)
-            os.link(self.path, backup)
+            Platform.current().snapshot_file(self.path, backup)
         except FileNotFoundError:
             mode = PrivateFileRole.permissions
         try:

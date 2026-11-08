@@ -380,8 +380,8 @@ class RouteFile(ABC):
             f"{name.stem}.{time.strftime('%Y%m%dT%H%M%S')}-{ScratchName.mint()}.bak{name.suffix}")
         OwnedDirectoryRole.held(directory, path.parent,
                                 ValueError("active comms route directory changed"))
-        os.link(path.name, backup.name, src_dir_fd=directory, dst_dir_fd=directory,
-                follow_symlinks=False)
+        Platform.current().snapshot_file(path.name, backup.name, src_dir_fd=directory,
+                                         dst_dir_fd=directory)
         try:
             publish()
         except (OSError, ValueError) as error:

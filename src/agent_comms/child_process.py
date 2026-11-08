@@ -17,6 +17,7 @@ import pwd
 import re
 import select
 import signal
+import shutil
 import stat
 import subprocess
 import sys
@@ -585,6 +586,27 @@ class Platform(DeclaredFamily, affix="Platform"):
         """Directory write permissions granted outside the owner's trusted principals."""
         return info.st_mode & 0o022
 
+    def publish_new_file(
+        self, staged: str | Path, destination: str | Path, *,
+        src_dir_fd: int | None = None, dst_dir_fd: int | None = None,
+    ) -> None:
+        """Publish a closed stage without replacing a winner; the stage may be consumed."""
+        os.link(staged, destination, src_dir_fd=src_dir_fd, dst_dir_fd=dst_dir_fd,
+                follow_symlinks=False)
+
+    def snapshot_file(
+        self, source: str | Path, destination: str | Path, *,
+        src_dir_fd: int | None = None, dst_dir_fd: int | None = None,
+    ) -> None:
+        """Retain an immutable file's bytes and mode under a new, exclusive name."""
+        os.link(source, destination, src_dir_fd=src_dir_fd, dst_dir_fd=dst_dir_fd,
+                follow_symlinks=False)
+
+    def share_file(self, source: Path, destination: Path) -> bool:
+        """Share an immutable artifact's inode, or report that no sharing occurred."""
+        os.link(source, destination, follow_symlinks=False)
+        return True
+
     def make_private(self, path: Path, permissions: int) -> None:
         with suppress(FileNotFoundError):
             if stat.S_IMODE(path.lstat().st_mode) != permissions:
@@ -898,6 +920,44 @@ class AndroidPlatform(LinuxPlatform):
         if info.st_gid in (0, self.system_identity, os.getegid()):
             writes &= ~0o020
         return writes
+
+    def publish_new_file(
+        self, staged: str | Path, destination: str | Path, *,
+        src_dir_fd: int | None = None, dst_dir_fd: int | None = None,
+    ) -> None:
+        # Android forbids hard links. renameat2 supplies the same no-replace decision
+        # without opening the published SQLite inode and releasing another fd's locks.
+        function = ctypes.CDLL(None, use_errno=True).renameat2
+        function.argtypes = (ctypes.c_int, ctypes.c_char_p, ctypes.c_int,
+                             ctypes.c_char_p, ctypes.c_uint)
+        function.restype = ctypes.c_int
+        if function(-100 if src_dir_fd is None else src_dir_fd, os.fsencode(staged),
+                    -100 if dst_dir_fd is None else dst_dir_fd, os.fsencode(destination), 1) < 0:
+            code = ctypes.get_errno()
+            raise OSError(code, os.strerror(code), os.fspath(destination))
+
+    def snapshot_file(
+        self, source: str | Path, destination: str | Path, *,
+        src_dir_fd: int | None = None, dst_dir_fd: int | None = None,
+    ) -> None:
+        with os.fdopen(os.open(source, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=src_dir_fd), 'rb') as original:
+            observed = os.fstat(original.fileno())
+            if not stat.S_ISREG(observed.st_mode):
+                raise ValueError('A retained snapshot requires a regular source file')
+            descriptor = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                                 0o600, dir_fd=dst_dir_fd)
+            try:
+                with os.fdopen(descriptor, 'wb') as retained:
+                    shutil.copyfileobj(original, retained)
+                    self.make_private_descriptor(retained.fileno(), stat.S_IMODE(observed.st_mode))
+                    retained.flush()
+                    os.fsync(retained.fileno())
+            except BaseException:
+                os.unlink(destination, dir_fd=dst_dir_fd)
+                raise
+
+    def share_file(self, source: Path, destination: Path) -> bool:
+        return False  # A byte copy would not deliver the inode sharing this operation promises.
 
 
 class DarwinPlatform(Platform):

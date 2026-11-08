@@ -155,9 +155,9 @@ class CoordinationStore(FileStore, CarriedWriter, ReconciledFile, InputCaptureFi
                 os.close(descriptor)
                 # Another initializer may win; never overwrite its inode.
                 with suppress(FileExistsError):
-                    os.link(staging, self.path, follow_symlinks=False)
+                    Platform.current().publish_new_file(staging, self.path)
             finally:
-                os.unlink(staging)
+                Path(staging).unlink(missing_ok=True)
         self._private_file()
         Platform.current().make_private(self.path, 0o600)
 
