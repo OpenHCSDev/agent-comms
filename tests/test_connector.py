@@ -1445,7 +1445,16 @@ async def test_the_connector_names_work_neither_collection_holds(tmp_path, comms
     async def stuck_handler() -> None:
         await held.wait()
 
-    task = asyncio.create_task(stuck_handler(), name="a-request-nobody-tracks")
+    async def body_read() -> None:
+        await held.wait()
+
+    async def session_claim() -> None:
+        await body_read()
+
+    async def stuck_handler_nested() -> None:
+        await session_claim()
+
+    task = asyncio.create_task(stuck_handler_nested(), name="a-request-nobody-tracks")
     await asyncio.sleep(0)
     try:
         assert task not in connector.calls, "a request task is not a tool call"
@@ -1454,8 +1463,13 @@ async def test_the_connector_names_work_neither_collection_holds(tmp_path, comms
         report = connector.still_running()
 
         assert "a-request-nobody-tracks" in report, report
-        assert "stuck_handler at" in report, report
         assert "test_connector.py:" in report, "the frame must name where it is sitting"
+        # The leaf is the phase, and it is the whole point: Task.get_stack returns
+        # stuck_handler_nested alone for this task, which names what is stuck and not where.
+        assert task.get_stack(limit=6)[0].f_code.co_name == "stuck_handler_nested"
+        assert report.index("body_read") < report.index("session_claim") < report.index(
+            "stuck_handler_nested"
+        ), f"leaf first, so the phase reads before its callers: {report}"
     finally:
         held.set()
         await task
