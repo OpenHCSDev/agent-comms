@@ -19,6 +19,7 @@ from .annotation_disclosure import PublicInstructionAnnotations, WithheldAnnotat
 from .cli_result import CliResult
 from .errors import RelationViolationError
 from .goals import Goal, NoGoal
+from .instruction_bytes import InstructionBytes
 from .message_reference import MessageReference
 from .native_session_reopen import NativeSessionIdentity
 from .nominal.declared_family import DeclaredFamily
@@ -268,9 +269,8 @@ class InstructionFile:
 
     @classmethod
     def read(cls, name: str) -> InstructionFile:
-        path = Path(__file__).with_name("instructions") / name
-        raw = path.read_bytes()
-        return cls(raw.decode(), FileProvenance(str(path), hashlib.sha256(raw).hexdigest()))
+        read = InstructionBytes.read(name)
+        return cls(read.text, FileProvenance(str(read.path), hashlib.sha256(read.raw).hexdigest()))
 
     def render(self, values: dict[str, object]) -> str:
         return self.content.format_map(values)

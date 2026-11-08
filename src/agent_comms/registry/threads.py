@@ -19,6 +19,7 @@ from ..context_segments.wake_values import WakeWorkContext, WakeWorkSource
 from ..goal_mutation import GoalFork
 from ..errors import RelationViolationError
 from ..goals import (
+    GoalConsentRequired,
     GoalDeclaration,
     NoGoal,
 )
@@ -569,6 +570,10 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, affix="Thread")
         """The same declaration under another execution; replace() keeps the class."""
         return member(**{**{item.name: getattr(self, item.name) for item in fields(self)
                             if item.init}, **changes})
+
+    def require_goal_assignment(self, actor: ThreadIncarnation) -> None:
+        if not actor.represents(self.incarnation):
+            raise GoalConsentRequired(self, actor)
 
     def require_restart_owner(self, status) -> None:
         if not self.restart_candidates(status):

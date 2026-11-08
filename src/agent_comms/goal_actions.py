@@ -36,7 +36,7 @@ from .goal_mentions import bind_goal_mentions
 from .goal_records import GoalRecords
 from .goal_presentation import GoalSnapshot
 from .registry.registry_document import TeamProject
-from .goal_mutation import GoalMutation
+from .goal_mutation import GoalMutation, GoalStateOrder
 from .goal_scope import AllGoals, OneGoal
 from .goal_states import (
     ActiveGoal,
@@ -595,7 +595,9 @@ class SetGoalAction(ReplacementGoalAction[Goal], OwnerInvocable, RuntimeInvocabl
 
 
 @dataclass(frozen=True, kw_only=True)
-class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
+class ProblemOrderGoalAction(
+    GoalAction[Goal], RuntimeInvocable, GoalStateOrder[Goal, GoalActionContext],
+):
     problem: str
     order: PendingProblemOrder
     request: OwnerRequestId
@@ -629,6 +631,13 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
 
     def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         return goal.state.accept_order(self, goal, ctx)
+
+    def reactivate_goal(self, goal: Goal, ctx: GoalActionContext) -> Goal:
+        return replace(self.continue_goal(goal, ctx), state=ActiveGoal())
+
+    def replace_goal(self, goal: Goal, ctx: GoalActionContext) -> Goal:
+        goal.order.require_replacement(goal, ctx.goals, ctx.thread.incarnation)
+        return self.create(ctx)
 
     def continue_goal(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         self.require_ready(ctx)

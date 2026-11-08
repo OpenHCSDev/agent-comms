@@ -11,6 +11,7 @@ from agent_comms.display_order import ChannelSort, ThreadSort
 from agent_comms.goal_turn_permit import GoalTurnPermit
 from agent_comms.goal_actions import GoalAction, StandbyGoalAction
 from agent_comms.goal_records import GoalRecords
+from agent_comms.goal_states import GoalState
 from agent_comms.goals import GoalDeclaration, GoalMentionBinding, GoalOrder, GoalUnavailable
 from agent_comms.goal_work import GoalOwner, GoalWorkSource
 from agent_comms.registry.threads import Thread
@@ -89,3 +90,10 @@ def test_display_choice_runtime_contracts_resolve(order: type[ThreadSort] | type
 def test_relationship_projection_contract_resolves() -> None:
     assert get_type_hints(ThreadRelationships.__init__)["views"] is RelationshipSource
     assert get_type_hints(RelationshipSource.thread_views)["return"]
+
+
+@pytest.mark.parametrize("state", GoalState.members_with(GoalState))
+def test_goal_state_boundary_contracts_resolve(state: type[GoalState]) -> None:
+    assert get_type_hints(state.execution)["return"]
+    hints = get_type_hints(state.accept_order)
+    assert hints["goal"] is hints["return"]

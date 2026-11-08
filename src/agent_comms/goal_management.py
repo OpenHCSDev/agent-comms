@@ -24,7 +24,8 @@ from .goal_records import GoalRecords
 from .context_segments.wake_values import (
     NoWakeGoalContext, WakeGoalContext, WakeWorkContext, WakeWorkSource,
 )
-from .goal_mutation import GoalFork
+from .goal_mutation import GoalFork, GoalStateProjection
+from .goal_states import PauseSource
 from .goal_actions import (
     GoalAction,
     GoalActionContext,
@@ -52,7 +53,10 @@ from .registry.registry_document import RegistryDocument, RegistrySnapshot
 from .thread_identity import ThreadIncarnation
 from .messages import Message
 from .turn_lease import TurnDeclaration
-from .goal_presentation import GoalExecution, GoalPublicationSnapshot, GoalSnapshot, IdleGoalExecution
+from .goal_presentation import (
+    CompletedExecution, GoalExecution, GoalPublicationSnapshot, GoalSnapshot,
+    IdleGoalExecution, PausedExecution, RetryableBlockExecution,
+)
 from .goals import Goal, GoalDeclaration
 from .input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
@@ -68,7 +72,7 @@ _LOG = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class GoalExecutionSource:
+class GoalExecutionSource(GoalStateProjection[GoalExecution, PauseSource]):
     """One read's original owners; never persisted or used as launch authority."""
 
     goal: Goal
@@ -86,6 +90,18 @@ class GoalExecutionSource:
     @cached_property
     def owner_alive(self) -> bool:
         return self.owner.process_alive
+
+    def active(self) -> GoalExecution:
+        return self.wait.execution(self)
+
+    def paused(self, source: PauseSource) -> GoalExecution:
+        return PausedExecution(self.goal.id, source)
+
+    def blocked(self, reason: str) -> GoalExecution:
+        return RetryableBlockExecution(self.goal.id, reason)
+
+    def completed(self) -> GoalExecution:
+        return CompletedExecution(self.goal.id)
 
     def execution(self) -> GoalExecution:
         return self.goal.state.execution(self)

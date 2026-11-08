@@ -3,20 +3,16 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, ClassVar
+from dataclasses import dataclass, field
+from typing import ClassVar
 
 from .nominal.declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Active, Complete, Terminal
 from .goal_work import GoalOwner
+from .goal_mutation import GoalStateOrder, GoalStateProjection
+from .instruction_bytes import InstructionBytes
 from .thread_identity import ThreadIncarnation
-
-if TYPE_CHECKING:
-    from .goal_actions import GoalActionContext, ProblemOrderGoalAction
-    from agent_comms.goal_management import GoalExecutionSource
-    from .goal_presentation import GoalExecution
-    from .goals import Goal
 
 
 @dataclass(frozen=True)
@@ -39,8 +35,7 @@ class PauseSource(DeclaredFamily, affix="Pause"):
 
 class OwnerPause(PauseSource):
     def instruction(self) -> str:
-        from .turn_context import InstructionFile
-        return InstructionFile.read("owner-pause.md").content
+        return InstructionBytes.read("owner-pause.md").text
 
 
 class ModelPause(PauseSource):
@@ -70,15 +65,17 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
     acp_plan_status: ClassVar[str] = "in_progress"
 
     @abstractmethod
-    def execution(self, source: GoalExecutionSource) -> GoalExecution: ...
+    def execution[Execution](
+        self, source: GoalStateProjection[Execution, PauseSource],
+    ) -> Execution: ...
 
-    def accept_order(self, action: ProblemOrderGoalAction, goal: Goal, ctx: GoalActionContext) -> Goal:
+    def accept_order[Subject, Context](
+        self, action: GoalStateOrder[Subject, Context], goal: Subject, ctx: Context,
+    ) -> Subject:
         return action.continue_goal(goal, ctx)
 
     def require_work(self, actor: ThreadIncarnation, owner: GoalOwner) -> None:
-        from .goals import GoalConsentRequired
-        if not actor.represents(owner.incarnation):
-            raise GoalConsentRequired(owner, actor)
+        owner.require_goal_assignment(actor)
 
     def work_candidates[Owner](self, thread: Owner) -> tuple[Owner, ...]:
         return ()
@@ -144,8 +141,10 @@ class OpenGoal(GoalState):
 @dataclass(frozen=True)
 class ActiveGoal(Active, OpenGoal, FromOpenGoal):
 
-    def execution(self, source: GoalExecutionSource) -> GoalExecution:
-        return source.wait.execution(source)
+    def execution[Execution](
+        self, source: GoalStateProjection[Execution, PauseSource],
+    ) -> Execution:
+        return source.active()
 
     def continues_turn_from(self, captured: GoalState) -> bool:
         """An order or retry that makes the goal active never ends a running turn."""
@@ -161,9 +160,10 @@ class ActiveGoal(Active, OpenGoal, FromOpenGoal):
 class PausedGoal(OpenGoal, FromOpenGoal):
     source: PauseSource = field(default_factory=OwnerPause)
 
-    def execution(self, source: GoalExecutionSource) -> GoalExecution:
-        from .goal_presentation import PausedExecution
-        return PausedExecution(source.goal.id, self.source)
+    def execution[Execution](
+        self, source: GoalStateProjection[Execution, PauseSource],
+    ) -> Execution:
+        return source.paused(self.source)
 
     @property
     def pause_source(self) -> PauseSource:
@@ -193,9 +193,9 @@ class PausedGoal(OpenGoal, FromOpenGoal):
         self.require_model_resume()
         super().require_work(actor, owner)
 
-    def accept_order(
-        self, action: ProblemOrderGoalAction, goal: Goal, ctx: GoalActionContext,
-    ) -> Goal:
+    def accept_order[Subject, Context](
+        self, action: GoalStateOrder[Subject, Context], goal: Subject, ctx: Context,
+    ) -> Subject:
         """A pause holds off every order, a correction of one the goal already serves included."""
         self.require_model_resume()
         return super().accept_order(action, goal, ctx)
@@ -206,15 +206,18 @@ class BlockedState(GoalState, FromOpenGoal, declared_name=None):
     def reason(self) -> str:
         return "reason unavailable"
 
-    def execution(self, source: GoalExecutionSource) -> GoalExecution:
-        from .goal_presentation import RetryableBlockExecution
-        return RetryableBlockExecution(source.goal.id, self.reason)
+    def execution[Execution](
+        self, source: GoalStateProjection[Execution, PauseSource],
+    ) -> Execution:
+        return source.blocked(self.reason)
 
     def blocked_reasons(self) -> tuple[str, ...]:
         return (self.reason,)
 
-    def accept_order(self, action: ProblemOrderGoalAction, goal: Goal, ctx: GoalActionContext) -> Goal:
-        return replace(action.continue_goal(goal, ctx), state=ActiveGoal())
+    def accept_order[Subject, Context](
+        self, action: GoalStateOrder[Subject, Context], goal: Subject, ctx: Context,
+    ) -> Subject:
+        return action.reactivate_goal(goal, ctx)
 
     @classmethod
     def successors(cls) -> tuple[type[GoalState], ...]:
@@ -256,13 +259,15 @@ class CompletedGoal(Complete, Terminal, GoalState, FromOpenGoal):
     def work_candidates[Owner](self, thread: Owner) -> tuple[Owner, ...]:
         return (thread,)
 
-    def execution(self, source: GoalExecutionSource) -> GoalExecution:
-        from .goal_presentation import CompletedExecution
-        return CompletedExecution(source.goal.id)
+    def execution[Execution](
+        self, source: GoalStateProjection[Execution, PauseSource],
+    ) -> Execution:
+        return source.completed()
 
-    def accept_order(self, action: ProblemOrderGoalAction, goal: Goal, ctx: GoalActionContext) -> Goal:
-        goal.order.require_replacement(goal, ctx.goals, ctx.thread.incarnation)
-        return action.create(ctx)
+    def accept_order[Subject, Context](
+        self, action: GoalStateOrder[Subject, Context], goal: Subject, ctx: Context,
+    ) -> Subject:
+        return action.replace_goal(goal, ctx)
 
     @classmethod
     def successors(cls) -> tuple[type[GoalState], ...]:
