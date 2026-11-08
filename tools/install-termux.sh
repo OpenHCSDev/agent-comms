@@ -61,7 +61,7 @@ export PIP_ONLY_BINARY=maturin
 "$PREFIX/bin/python" -m venv --system-site-packages .venv
 uv export --project . --python "$PREFIX/bin/python" --no-managed-python \
     --no-python-downloads --no-dev --no-hashes --no-emit-project \
-    --index "$termux_wheels" \
+    --index "$termux_wheels" --index-strategy unsafe-best-match \
     --no-build-package maturin \
     "${upgrades[@]}" --output-file "$installation/requirements.txt" >/dev/null
 .venv/bin/python -m pip install --prefer-binary -r "$installation/requirements.txt"
