@@ -9,6 +9,8 @@ from importlib.metadata import PathDistribution
 from pathlib import Path
 from zipfile import ZipFile
 
+from packaging.requirements import Requirement
+from packaging.utils import canonicalize_name
 import pytest
 
 from agent_comms.build_artifact import BuildArtifact
@@ -22,7 +24,8 @@ from agent_comms.installer.probes.packages import (
 )
 from agent_comms.installer.probes.resolution import InstalledPackagesProbe
 from agent_comms.installer.runtime_resolution import (
-    CorePackage, ResolvedLock, RuntimeResolution, ToadPackage,
+    CorePackage, PrivateUvProject, ResolvedLock, RuntimeResolution, StackSources,
+    ToadPackage,
 )
 from agent_comms.installer.runtime_stack import RuntimeStack
 from agent_comms.launch_runtime import LaunchRuntime
@@ -310,6 +313,18 @@ def test_missing_and_ambiguous_lock_evidence_refuses():
         ambiguous.pins({"agent-comms": "1"}, "core")
 
 
+@pytest.mark.parametrize("package", ("nominal-refactor-advisor", "python-introspect"))
+def test_core_main_dependencies_have_tracked_stack_sources(package: str) -> None:
+    stack = Path(__file__).resolve().parents[1] / "stack" / "pyproject.toml"
+    document = PrivateUvProject.read(stack)
+
+    assert package in StackSources.declared_sources(document)
+    assert any(
+        canonicalize_name(Requirement(text).name) == package
+        for text in document.tool.uv.overrides
+    )
+
+
 def test_the_stack_relocks_every_branch_tracking_package_and_refuses_a_unit_branch():
     """resolve() upgraded only stack/pyproject.toml's sources, so transitive metaclass-registry
     stayed at fb7c871 before MroDispatch; Toad pinned to work/unit-toad--P694 after its merge
@@ -318,6 +333,7 @@ def test_the_stack_relocks_every_branch_tracking_package_and_refuses_a_unit_bran
     lock = ResolvedLock.read(path)
     tracked = lock.tracked()
     assert {"batrachian-toad", "metaclass-registry", "textual"} <= set(tracked)
+    assert set(StackSources.sources(path.parent)) <= set(tracked)
     document = tomllib.loads(path.read_text())
     toad = next(entry for entry in document["package"] if entry["name"] == "batrachian-toad")
     toad["source"]["git"] = toad["source"]["git"].replace("branch=main", "branch=work/unit-toad--P694")
