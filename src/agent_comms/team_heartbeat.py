@@ -7,9 +7,9 @@ from collections.abc import Callable, Mapping
 from contextlib import AbstractContextManager
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 from agent_comms.cli_bridges.codex_connection import CodexConnection
+from agent_comms.comms import Comms
 from agent_comms.team_hud import TeamFrame, TeamHud, TeamPlan
 
 from agent_comms.team_hud_records import HudUnavailableGroup
@@ -28,10 +28,6 @@ from agent_comms.service_passes import TeamPass, ServicePassStore
 from agent_comms.standing_rules import ServicePassFailing, StandingRule
 from agent_comms.todos import ProgressRead, Todo
 from agent_comms.ui_model.teammate_state import TeammateState
-
-if TYPE_CHECKING:
-    from agent_comms.comms import Comms
-
 
 @dataclass(frozen=True)
 class TeamObservation:
@@ -82,6 +78,18 @@ class BoardRetention(DeclaredFamily, affix="Retention"):
     def published(self, comms: Comms, duty: TeamService, packet: TeamUpdate, hud: TeamHud,
                   now: float, latest: PublishedFacts) -> None: ...
 
+    def prepare(self, comms: Comms, inputs: tuple[TeamInputs, ...]) -> None:
+        """A display acquires inputs without carrying forge verdicts."""
+
+    def reconcile(self, comms: Comms, observed: TeamObservation) -> None:
+        """A display does not run merge checks or close orders."""
+
+    def record(self, comms: Comms, packet: TeamUpdate) -> None:
+        """A display retains frames, never service delivery records."""
+
+    def retain(self, comms: Comms, plan: TeamPlan, huds: tuple[TeamHud, ...]) -> None:
+        """A preparation returns its result without publishing from a droppable read."""
+
     @abstractmethod
     def advance_clock(self) -> bool:
         """Whether this pass advances the heartbeat's own completion clock."""
@@ -101,6 +109,21 @@ class HeartbeatRetention(BoardRetention, declared_name="heartbeat"):
         facts = PublishedFacts.of(hud.display_facts)
         if packet.should_publish(facts, latest):
             duty.publish(lambda: packet.send(comms, hud.hud_text(now), publication=facts))
+
+    def prepare(self, comms, inputs):
+        repositories = comms.registry.snapshot().team_project.require().repository_names()
+        for board in inputs:
+            for repository in repositories:
+                board.pulls.carry_reviews(comms.goals, repository)
+
+    def reconcile(self, comms, observed):
+        comms.goals.todos.record_merges(observed.merges(comms))
+
+    def record(self, comms, packet):
+        TeamUpdateStore.record(comms.root, packet)
+
+    def retain(self, comms, plan, huds):
+        TeamFrame.replace_all(comms.root, plan, huds)
 
     def advance_clock(self):
         return True
@@ -152,20 +175,22 @@ class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
                         *TeamHud.alarm_text(sections, now),
                     )))
 
-    def retain_board(self, comms: Comms) -> None:
-        """Derive and retain the board a view displays, enforcing and publishing nothing.
-
-        A reader that shows the board owns the view, not the service: it refreshes the frames
-        every reader already shares, and leaves standing-rule enforcement and packet publishing
-        to the pass that owns them.
-        """
-        self.pass_body(comms, self.observe(comms, self.prepare(comms)), ReadRetention())
+    def read_board(self, comms: Comms) -> tuple[TeamPlan, tuple[TeamHud, ...]]:
+        """Prepare the shared board without service effects or retained-frame writes."""
+        retention = ReadRetention()
+        return self.pass_body(
+            comms, self.observe(comms, self.prepare_board(comms, retention)), retention)
 
     def prepare(self, comms: Comms) -> tuple[TeamInputs, ...]:
-        """The bus's one team board, or none on a bus with no registered team project."""
+        return self.prepare_board(comms, HeartbeatRetention())
+
+    def prepare_board(self, comms: Comms, retention: BoardRetention) -> tuple[TeamInputs, ...]:
+        """Acquire one shared board; only the service carries its forge verdicts."""
         self.begin_pass()
-        return tuple(TeamInputs.prepare(comms, project, ProgressRead(), self)
-                     for project in comms.registry.snapshot().team_project.boards())
+        inputs = tuple(TeamInputs.prepare(comms, project, ProgressRead(), self)
+                       for project in comms.registry.snapshot().team_project.boards())
+        retention.prepare(comms, inputs)
+        return inputs
 
     def observe(self, comms: Comms,
                 prepared: tuple[TeamInputs, ...]) -> tuple[TeamObservation, ...]:
@@ -174,7 +199,8 @@ class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
         return observed
 
     def pass_body(self, comms: Comms, boards: tuple[TeamObservation, ...],
-                  retention: BoardRetention = HeartbeatRetention()) -> None:
+                  retention: BoardRetention = HeartbeatRetention(),
+                  ) -> tuple[TeamPlan, tuple[TeamHud, ...]]:
         """Derive the team board once, then let ``retention`` say what happens to it."""
         huds = {}
         plan = TeamPlan()
@@ -183,7 +209,7 @@ class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
         duty = self.duty(comms.registry, comms.goals)
         try:
             for observed in boards:
-                comms.goals.todos.record_merges(observed.merges(comms))
+                retention.reconcile(comms, observed)
                 recipients = self.served(comms.registry, comms.goals)
                 held = {recipient.incarnation: TeamUpdate.latest(comms, recipient.incarnation)
                         for recipient in recipients}
@@ -219,16 +245,17 @@ class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
                 for delivery in deliveries:
                     hud = board.for_delivery(delivery)
                     recipient = delivery.packet.teammate
-                    TeamUpdateStore.record(comms.root, delivery.packet)
+                    retention.record(comms, delivery.packet)
                     huds[recipient] = hud
                     retention.published(comms, duty, delivery.packet, hud, now,
                                         announced[recipient])
                     completed.append(recipient)
         finally:
             # A later teammate's failure does not erase frames/passes already completed.
-            TeamFrame.replace_all(comms.root, plan, tuple(huds.values()))
+            retention.retain(comms, plan, tuple(huds.values()))
             if retention.advance_clock():
                 ServicePassStore.at(comms.root).heartbeat_passed(
                     completed,
                     (thread.incarnation for thread in comms.registry.all_threads().values()),
                 )
+        return plan, tuple(huds.values())

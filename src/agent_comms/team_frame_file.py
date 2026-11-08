@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from agent_comms.service_passes import ServicePassStore
-from agent_comms.todos import TodoStore
 from agent_comms.storage.locked_store import PatternFile, RuntimeFile
 
 
@@ -34,4 +33,4 @@ class TeamFrameFile(RuntimeFile, PatternFile):
         """Frame readers hydrate service health and the team plan too; each file wakes
         their open view."""
         return (*sorted(cls.matching_in(root)), ServicePassStore.path_in(root),
-                TeamPlanFile.path_in(root), TodoStore.path_in(root))
+                TeamPlanFile.path_in(root))

@@ -27,13 +27,14 @@ import time
 import traceback
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterator, Mapping
+from concurrent.futures import Future
 from contextlib import AbstractAsyncContextManager, AsyncExitStack, ExitStack, aclosing
 from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
 from multiprocessing.connection import Connection
 from multiprocessing.process import BaseProcess
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Self, cast, final
+from typing import ClassVar, Self, cast, final
 
 from aiohttp import ClientWebSocketResponse, WSMsgType, web
 from metaclass_registry.mro_dispatch import MroDispatch, handles
@@ -46,7 +47,7 @@ from agent_comms.acp_extension import (
 from agent_comms.active_route import CommsRoute
 from agent_comms.activity import ObservedActivity
 from agent_comms.bus_read import CapturesTranscriptPage, OwnerScopedRead, UiRead
-from agent_comms.child_process import HelperStart, SpawnedHelper, join_retirement
+from agent_comms.child_process import ReadWork, HelperStart, SpawnedHelper, join_retirement
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import (
@@ -99,13 +100,15 @@ from agent_comms.revision_views import (
     StatusView,
     StoresView,
     TeamFramesView,
+    TeamBoardView,
 )
 from agent_comms.team_heartbeat import TeamHeartbeat
 from agent_comms.team_hud import TeamFrame, TeamHud
 from agent_comms.team_hud_records import TeammateDetail
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.thread_presentation import ThreadPresentation
-from agent_comms.transcripts import AcquiredThreadPresentation, TranscriptReadIdentity
+from agent_comms.transcripts import AcquiredThreadPresentation, TranscriptReadIdentity, TranscriptRead
+from agent_comms.tool_result import ToolResult
 from agent_comms.transport.request import ToolRequest
 from agent_comms.transport.tools.reads import TranscriptPageRead
 from agent_comms.ui_model.sidebar import (
@@ -121,13 +124,6 @@ from agent_comms.work_branches import WorkBranchError
 from agent_comms_hooks import ToolRefusedError
 
 type WebSocketFrames = ClientWebSocketResponse | web.WebSocketResponse
-
-if TYPE_CHECKING:
-    from concurrent.futures import Future
-
-    from agent_comms.tool_result import ToolResult
-    from agent_comms.transcripts import TranscriptRead
-
 
 class ObservationRequest(TaggedUnion, affix=""):
     """A UI request; each declares how the service receives it. A remote UI sends it over
@@ -162,7 +158,7 @@ class ObservationInterest(ABC):
     def remove(self, kind: type[Observation]) -> None:
         pass
 
-    def prepared(self, observation: SidebarReading, service: ObservationService) -> None:
+    def prepared(self, observation: ReadingObservation, service: ObservationService) -> None:
         pass
 
     async def observe(self, service: ObservationService, revision: WireRevision,
@@ -197,7 +193,7 @@ class LiveObservationInterest(ObservationInterest):
     def remove(self, kind: type[Observation]) -> None:
         self.observations.pop(kind, NotObserved()).close()
 
-    def prepared(self, observation: SidebarReading, service: ObservationService) -> None:
+    def prepared(self, observation: ReadingObservation, service: ObservationService) -> None:
         if self.observations.get(type(observation)) is observation:
             observation.invalidate()
             service.observe_again()
@@ -803,7 +799,7 @@ class ObserveThreads(InterestRequest):
 
 @dataclass(frozen=True)
 class ObserveTeamHud(InterestRequest):
-    """Each teammate's newest heartbeat frame; Core derived it, a view only shows it."""
+    """The retained team board, prepared on demand independently of heartbeat publication."""
 
     def observation(self) -> TeamHudReading:
         return TeamHudReading(self)
@@ -815,30 +811,50 @@ class StopTeamHud(TaggedRecordMember, ObservationRequest):
         service.interest.remove(TeamHudReading)
 
 
-class TeamHudReading(ReadingObservation[ObserveTeamHud]):
-    """Reads the frames, rebuilding the board off the paint path when its stores moved.
-
-    The frames stay the one retained board. A store newer than them means the held board
-    describes a team that has since changed, and the rebuild happens here, in the read the
-    service runs between steps, never in the paint that shows the previous answer.
-    """
+class TeamHudReading(ReadWork, ReadingObservation[ObserveTeamHud]):
+    """Serve held frames immediately; prepare changed stores outside the service loop."""
 
     view = TeamFramesView()
 
-    @staticmethod
-    def refreshed(comms: Comms) -> tuple[TeamHud, ...]:
-        """The held board.
+    def __init__(self, request: ObserveTeamHud):
+        super().__init__(request)
+        self.board = TeamHeartbeat()
+        self.preparation: set[asyncio.Task[None]] = set()
+        self.prepared_revision: ReadState = NoRevision()
 
-        A store newer than the frames is reported by `TeamFrame.owed`, and the rebuild it
-        asks for belongs to the heartbeat's own worker: `retain_board` reads the account
-        through `CodexConnection.usage`, which calls `asyncio.run`, so it cannot run inside
-        the observation service's loop (ObserverProcessDied, 2026-11-07 20:08).
-        """
-        return TeamFrame.read_all(comms.root)
+    def close(self) -> None:
+        super().close()
+        for task in tuple(self.preparation):
+            task.cancel()
+
+    def after_read(self, service: ObservationService) -> None:
+        if self.preparation or not service.revision.changed_since(
+            TeamBoardView(), self.prepared_revision,
+        ):
+            return
+        self.prepared_revision = service.revision
+        task = service.tasks.create_task(self.prepare(service))
+        self.preparation.add(task)
+        task.add_done_callback(self.preparation.discard)
+
+    async def prepare(self, service: ObservationService) -> None:
+        """Only the short retained-frame publication joins shutdown; preparation can retire."""
+        try:
+            plan, huds = await service.comms.bus.when_open(
+                lambda: self.run_async(partial(
+                    self.board.enter_phase, service.comms,
+                    partial(self.board.read_board, service.comms))))
+            await service.comms.bus.when_open(partial(
+                self.board.enter_phase, service.comms,
+                partial(TeamFrame.replace_all, service.comms.root, plan, huds)))
+        except Exception as error:
+            service.send(TeamHudUnreadable(service.revision, UnreadableHistory.capture(error)))
+        else:
+            service.interest.prepared(self, service)
 
     def read(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:
         yield UnreadableHistory.outcome(
-            lambda: TeamHudObserved(revision, self.refreshed(comms)),
+            lambda: TeamHudObserved(revision, TeamFrame.read_all(comms.root)),
         ).answer(
             lambda observed: observed,
             lambda error: ObservationPending(),  # Keep the interest until its source can be read.

@@ -6,8 +6,9 @@ from collections.abc import Mapping
 import time
 from dataclasses import dataclass
 from functools import cached_property
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import ClassVar, Self
 
+from agent_comms.comms import Comms
 from agent_comms.head_review import PullRequestHead
 from agent_comms.held_orders import HeldOrders
 from agent_comms.plan_reading import PlanReading, PlanReadings
@@ -26,10 +27,6 @@ from agent_comms.todos import (
     EditWorkplaces, Todo, TodoStore,
 )
 
-if TYPE_CHECKING:
-    from agent_comms.comms import Comms
-
-
 @dataclass(frozen=True)
 class TeamInputs(HeldOrders):
     """The live hold cut and acquired inputs that observation must not reopen."""
@@ -44,8 +41,6 @@ class TeamInputs(HeldOrders):
         pulls.register(holds.todos)
         repositories = project.repository_names()
         pulls.read_open(repositories)
-        for repo in repositories:
-            pulls.carry_reviews(comms.goals, repo)
         repository = Repo.declaring(project.repos, PlanPhase.__module__)
         plan = plans.prepare_reading(
             repository,
