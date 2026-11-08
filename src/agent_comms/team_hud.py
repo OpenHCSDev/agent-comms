@@ -364,6 +364,22 @@ class TeamFrame(TeamFrameFile, JsonDocument[TeamHud]):
             stale.unlink(missing_ok=True)
 
     @classmethod
+    def owed(cls, root: Path, *, now: float | None = None) -> bool:
+        """Whether a store the board derives from is newer than every frame it published.
+
+        A frame can equal the last completed pass and still describe a team that moved after
+        it: a completed pass is a clock, and the board is a function of the stores. Comparing
+        the two ages is the only question a reader can answer without a heartbeat.
+        """
+        frames = cls.matching_in(root)
+        if not frames:
+            return True
+        inputs = TeamFrameFile.source_paths(root)
+        newest_frame = max(path.stat().st_mtime for path in frames if path.exists())
+        newest_input = max((path.stat().st_mtime for path in inputs if path.exists()), default=0.0)
+        return newest_input > newest_frame
+
+    @classmethod
     def read_all(cls, root: Path) -> tuple[TeamHud, ...]:
         passes = ServicePassStore.at(root).read()
         health = ServiceReading(services=passes)

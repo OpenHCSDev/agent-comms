@@ -100,6 +100,7 @@ from agent_comms.revision_views import (
     StoresView,
     TeamFramesView,
 )
+from agent_comms.team_heartbeat import TeamHeartbeat
 from agent_comms.team_hud import TeamFrame, TeamHud
 from agent_comms.team_hud_records import TeammateDetail
 from agent_comms.thread_identity import ThreadIncarnation
@@ -815,13 +816,25 @@ class StopTeamHud(TaggedRecordMember, ObservationRequest):
 
 
 class TeamHudReading(ReadingObservation[ObserveTeamHud]):
-    """Reads the frame files only when the heartbeat replaced one of them."""
+    """Reads the frames, rebuilding the board off the paint path when its stores moved.
+
+    The frames stay the one retained board. A store newer than them means the held board
+    describes a team that has since changed, and the rebuild happens here, in the read the
+    service runs between steps, never in the paint that shows the previous answer.
+    """
 
     view = TeamFramesView()
 
+    @staticmethod
+    def refreshed(comms: Comms) -> tuple[TeamHud, ...]:
+        """The held board, rebuilt first when a store it derives from is newer than it."""
+        if TeamFrame.owed(comms.root):
+            TeamHeartbeat().retain_board(comms)
+        return TeamFrame.read_all(comms.root)
+
     def read(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:
         yield UnreadableHistory.outcome(
-            lambda: TeamHudObserved(revision, TeamFrame.read_all(comms.root)),
+            lambda: TeamHudObserved(revision, self.refreshed(comms)),
         ).answer(
             lambda observed: observed,
             lambda error: ObservationPending(),  # Keep the interest until its source can be read.
