@@ -12,7 +12,6 @@ from .controller import NO_CONTROLLER
 from .errors import RelationViolationError
 from .projects.checkouts import Checkout
 
-import json
 from abc import (
     ABC,
     abstractmethod,
@@ -53,6 +52,7 @@ from .bus_read import (
     OwnerScopedRead,
 )
 from .thread_identity import ThreadIncarnation
+from .transport.project_request import ProjectRuntimeRequest
 from .transport.runtime_requests import (
     CancelRuntimeRequest,
     ClearQueueRuntimeRequest,
@@ -87,7 +87,6 @@ from .transport.tools.sidebar import (
     SendNowQueueAction,
 )
 from .ui_model.observation import SubscribeTranscript
-from .transport.runtime_request import AttachedResultRuntimeRequest
 from agent_comms.runtime_server import (
     AttachedRuntimeRequestContext,
     ServedAttachedResultRuntimeRequest,
@@ -95,10 +94,8 @@ from agent_comms.runtime_server import (
     SubscriberClosed,
 )
 from .coordination.errors import Refused
-from .owner_connection import socket_path
 from .owner_protocol import ClientLine, OwnerAnnouncement, OwnerFailure, OwnerReady
 from .pi_payloads import NativeContextData
-from .thread_presentation import LiveThreadOwnerBinding
 from .tool_result import (
     DeclaredReply,
     ToolResult,
@@ -195,29 +192,6 @@ class AnnotationsReply(DeclaredReply, WireValue):
     @classmethod
     def from_wire(cls, data: list[JsonValue]) -> Self:
         return cls(FieldCodec.decode(tuple[ModelLabel, ...], data))
-
-
-@dataclass(frozen=True, kw_only=True)
-class ProjectRuntimeRequest(AttachedResultRuntimeRequest):
-    """Current project observation through the original native launch binding.
-
-    This command grants no input or tool execution. A retained native process
-    must still observe its original registry lease before each project check.
-    """
-    binding: LiveThreadOwnerBinding
-
-    @classmethod
-    def for_native(cls, snapshot, thread):
-        process = thread.require_process()
-        owner = snapshot.owner_identity(thread.name)
-        snapshot.require_owner_process(owner, process)
-        return cls(thread=thread.name, binding=LiveThreadOwnerBinding(owner, process))
-
-    def environment(self, root):
-        return {
-            "AGENT_COMMS_PROJECT_SOCKET": str(socket_path(root, self.binding.process.pid)),
-            "AGENT_COMMS_PROJECT_REQUEST": json.dumps(FieldCodec.encode(self)),
-        }
 
 
 class ServedProjectRuntimeRequest(

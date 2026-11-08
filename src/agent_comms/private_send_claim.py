@@ -56,6 +56,7 @@ if TYPE_CHECKING:
 from .private_send_stage import NativeSendStage
 from .selected_participant import SelectedParticipant
 from .selected_session import SelectedSession
+from .transport.project_request import ProjectRuntimeRequest
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -200,7 +201,8 @@ class PrivateSendClaim(PromptBoundary):
                 session=self.session,
                 model=model,
                 thinking_level=self.owner.thread.thinking_level,
-                environment=self.owner.thread.native_environment(
+                environment=ProjectRuntimeRequest.native_environment(
+                    self.owner.thread,
                     self.bus.bus.path.parent, registry,
                 ),
                 ingress=MaintenanceBarrier(self.bus._registry.store.path),
