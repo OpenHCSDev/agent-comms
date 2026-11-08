@@ -12,7 +12,7 @@ from typing import Annotated, ClassVar
 
 from pydantic import JsonValue
 
-from agent_comms.disclosure_text import AccentTone, ErrorTone, ViewTable
+from agent_comms.disclosure_text import ViewTable
 from agent_comms.nominal.field_codec import (
     DisclosedRecord,
     DisclosureIdentity,
@@ -26,7 +26,11 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import OrderProgress, ProgressPoint, PullRequest
 from agent_comms.tool_result import ToolResult
-from agent_comms.ui_model.teammate_state import HudGroup, TeammateClock, TeammateState, UrgentGroup
+from agent_comms.ui_model.hud_groups import (
+    HudGroup, HudUnavailableGroup, PhasesDoneByPlanGroup, PlanPhasesGroup,
+    ProblemsGroup, UrgentGroup,
+)
+from agent_comms.ui_model.teammate_state import TeammateClock, TeammateState
 
 
 @dataclass(frozen=True)
@@ -43,19 +47,6 @@ class TeamOrder(DisclosedRecord):
     unjudged_edits: int
 
 
-class PlanPhasesGroup(HudGroup):
-    tone = AccentTone
-
-
-class PhasesDoneByPlanGroup(HudGroup):
-    """Each live plan's finished-phase count, folded to its heading: finished work is not what
-    the board asks anyone to read. A plan with no unfinished phase leaves the board."""
-
-
-class HudUnavailableGroup(HudGroup):
-    tone = ErrorTone
-
-
 class HudRecord(DisclosedRecord, ABC):
     """Native rows expose their declared group, not another hand-joined renderer."""
 
@@ -65,6 +56,74 @@ class HudRecord(DisclosedRecord, ABC):
 
     def needs_hand(self) -> bool:
         return self.hud_group.needs_hand()
+
+
+@dataclass(frozen=True)
+class ProblemCard(HudRecord):
+    """One problem, named first and beside the unit holding it.
+
+    Every problem was already in the frame, inside whichever unit card held it, and
+    Teammate.work flattened the lot into one newline-joined cell - on screen and
+    unreadable, which is why Tristan said there is no way to view all of the problems
+    (BOUND-4, structure flattened to text). The TeamOrder stays the one declaration of
+    what a problem is; this names its holder and projects the cells a problems-first
+    table shows, the way Teammate projects work, change and next from its own fields.
+    """
+
+    card: Annotated[TeamOrder, DisclosureIdentity(), HudExclude()]
+    holders: Annotated[tuple[ThreadIncarnation, ...], HudExclude()]
+    """Every unit holding this one problem, not one row each.
+
+    Orders have holders, plural, and a board that made a row per holder would show one
+    problem three times and read as three problems - which is the opposite of being able
+    to see all of them. A declared table also requires unique row identities, so a row
+    per holder refuses outright the moment two units hold the same order.
+    """
+
+    @property
+    def hud_group(self) -> type[HudGroup]:
+        return ProblemsGroup
+
+    def needs_hand(self) -> bool:
+        """The problem's own facts, not its section's.
+
+        HudRecord answers this from the group, which would make every problem report the
+        same thing and leave the board's Needs-hand filter hiding all of them or none.
+        A review timer that is up, a strike or an unjudged edit is a problem waiting on a
+        person, whoever holds it.
+        """
+        return bool(self.card.review_timers_up or self.card.strikes or self.card.unjudged_edits)
+
+    @projected(view=HudExclude)
+    def problem(self) -> str:
+        return self.card.problem
+
+    @projected(view=HudExclude)
+    def held_by(self) -> str:
+        return ", ".join(holder.name for holder in self.holders) or "nobody"
+
+    @projected(view=HudExclude)
+    def state(self) -> str:
+        return self.card.state
+
+    @projected(view=HudExclude)
+    def change(self) -> str:
+        return self.card.progress.line
+
+    @projected(view=HudExclude)
+    def waiting(self) -> str:
+        """Why this problem wants a person, named by whichever fact says so.
+
+        Label and count, like the status strip above it, so no count here needs a plural
+        rule: CollectionText already owns "a count with its noun" and keys it off a
+        collection's length, and these are plain ints, so spelling the plural here would
+        be a third copy of that rule rather than a use of it.
+        """
+        return " · ".join((
+            *(("review timer up",) if self.card.review_timers_up else ()),
+            *((f"strikes: {self.card.strikes}",) if self.card.strikes else ()),
+            *((f"unjudged: {self.card.unjudged_edits}",) if self.card.unjudged_edits else ()),
+        ))
 
 
 @dataclass(frozen=True)
