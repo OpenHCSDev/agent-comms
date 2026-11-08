@@ -17,7 +17,7 @@ from ..channel_targets import DeclaredTag, Tag
 from ..child_process import NoProcess, ProcessIdentity, ProcessState
 from ..context_segments.wake_values import WakeWorkContext
 from ..errors import RelationViolationError
-from ..goals import (
+from ..planning.goals import (
     GoalDeclaration,
     NoGoal,
 )
@@ -99,7 +99,7 @@ from ..turn_lease import (
 )
 
 if TYPE_CHECKING:
-    from ..goal_management import Goals
+    from ..planning.goal_management import Goals
     from ..projects.storage_rules import StorageRule
     from .registry_document import RegistrySnapshot
 

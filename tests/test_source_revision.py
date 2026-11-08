@@ -18,7 +18,7 @@ from agent_comms.change_report import CitedRevisions, FileLine, MainRevision
 from agent_comms.repository_name import RepositoryName
 from agent_comms.errors import MissingSourceLine
 from agent_comms.nominal.field_codec import OwnerRequestKey
-from agent_comms.goal_actions import OrderGoalAction
+from agent_comms.planning.goal_actions import OrderGoalAction
 from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.owner_requests import OwnerRequestId
 from agent_comms.recorded_time import RecordedEventTime

@@ -13,7 +13,7 @@ from agent_comms.turn_lease import NoFinishedTurn
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import TurnId
-from agent_comms.goal_actions import (
+from agent_comms.planning.goal_actions import (
     EditGoalAction,
     GoalPrecondition,
     OwnerInvocable,
@@ -28,7 +28,7 @@ from agent_comms.planning.goal_waits import NoGoalWait
 from agent_comms.planning.goal_waits import RecordedGoalWait
 from agent_comms.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
-from agent_comms.goal_scope import OneGoal
+from agent_comms.planning.goal_scope import OneGoal
 
 
 

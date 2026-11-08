@@ -44,7 +44,7 @@ from .working_memory_policy import AnnotationDisclosureGrant
 from .turn_context import ContextSegment
 
 if TYPE_CHECKING:
-    from .goal_management import Goals
+    from .planning.goal_management import Goals
 from .errors import TodoError
 
 

@@ -1,32 +1,32 @@
-"""What goal actions read and write: the stores a goal changes against, below the actions."""
-
 from __future__ import annotations
 
 from collections.abc import Sequence
 from functools import cached_property
 from pathlib import Path
-from agent_comms.nominal.field_codec import GoalId
-from .agent_activity import AgentActivity
-from .goal_attempts import GoalAttemptFile, GoalAttemptStore
-from .planning.goal_waits import (
+from typing import TYPE_CHECKING
+
+from .goal_waits import (
     GoalInputReview,
     GoalWaitRecovery,
     GoalWaitReview,
     GoalWaits,
 )
-from .planning.orders import TodoStore
-from .registry.registration import Registration
-from .goal_presentation import GoalWaitTarget
-from .input_attempt import (
-    ReservedInput,
+from .orders import TodoStore
+from ..agent_activity import AgentActivity
+from .goal_attempts import (
+    GoalAttemptFile,
+    GoalAttemptStore,
 )
-from .input_disposition import InputDispositions
-from .message_bus import MessageBus
-from .registry.threads import Thread
-from typing import TYPE_CHECKING
+from .goal_presentation import GoalWaitTarget
+from ..input_attempt import ReservedInput
+from ..input_disposition import InputDispositions
+from ..message_bus import MessageBus
+from ..nominal.field_codec import GoalId
+from ..registry.registration import Registration
+from ..registry.threads import Thread
 
 if TYPE_CHECKING:
-    from .messages import Message
+    from ..messages import Message
 
 
 class GoalRecords(GoalWaitRecovery):

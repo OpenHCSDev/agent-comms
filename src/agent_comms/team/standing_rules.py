@@ -42,7 +42,7 @@ from ..errors import (
     RejectedEnforcementError,
     RelationViolationError,
 )
-from ..goal_management import Goals
+from ..planning.goal_management import Goals
 from ..head_review import (
     HeadReviewOrder,
     PullRequestHead,

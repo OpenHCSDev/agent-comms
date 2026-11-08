@@ -16,7 +16,7 @@ from agent_comms.bus_tables import ReceivedSource
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.coordination.errors import StaleFence
 from agent_comms.nominal.field_codec import GoalWaitId, TurnId
-from agent_comms.goal_actions import (
+from agent_comms.planning.goal_actions import (
     EditGoalAction,
     GoalPublicationContext,
     GoalPrecondition,
@@ -35,7 +35,7 @@ from agent_comms.transport.request import ToolRequest
 from agent_comms.reported_turn import NoReportedTurn
 from goal_owner_fixture import canonical_goal_wire
 from agent_comms.registry.threads import NativeThread
-from agent_comms.goal_scope import OneGoal
+from agent_comms.planning.goal_scope import OneGoal
 
 
 class RegistryProbeBus(Bus, declared_name=None):

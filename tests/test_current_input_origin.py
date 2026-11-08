@@ -19,8 +19,18 @@ from acp.schema import TextContentBlock
 from agent_comms.acp_extension import QueuePromptRequest, decode_request, encode_request
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import FieldCodec, InputId, MessageId, TurnId, GoalId
-from agent_comms.goal_states import ActiveGoal, CompletedGoal, PausedGoal
-from agent_comms.goals import AbsentGoalCheckpoint, Goal, GoalRevision, NoGoal, PresentGoalCheckpoint
+from agent_comms.planning.goal_states import (
+    ActiveGoal,
+    CompletedGoal,
+    PausedGoal,
+)
+from agent_comms.planning.goals import (
+    AbsentGoalCheckpoint,
+    Goal,
+    GoalRevision,
+    NoGoal,
+    PresentGoalCheckpoint,
+)
 from agent_comms.input_attempt import ReservedInput
 from agent_comms.input_key import AcpInputKey
 from agent_comms.input_origin import HumanInputOrigin, UnattributedInputOrigin, WireInputOrigin

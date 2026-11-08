@@ -288,7 +288,7 @@ def test_live_alias_resolves_but_deleted_alias_does_not_erase_note(tmp_path, mon
 
 
 def test_retained_alias_contact_without_projected_person_is_unavailable(tmp_path):
-    from agent_comms.goal_actions import SetGoalAction
+    from agent_comms.planning.goal_actions import SetGoalAction
 
     comms = setup_wire(tmp_path)
     peer = comms.registry.require("peer")

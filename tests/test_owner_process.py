@@ -294,8 +294,8 @@ def test_failed_real_worker_startup_retains_private_trace(tmp_path: Path, monkey
 @pytest.mark.skipif(sys.platform != "linux", reason="Exact retained launch uses Linux /proc")
 async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, monkeypatch, native_workers):
     """One provider-free installed worker batch, with original distinct settings."""
-    from agent_comms.goal_states import BlockedGoal
-    from agent_comms.goals import Goal
+    from agent_comms.planning.goal_states import BlockedGoal
+    from agent_comms.planning.goals import Goal
     from agent_comms.owner_cutover import PreserveOwnerRuntime
     from agent_comms.owner_launch import RetainedOwnerLaunch
 

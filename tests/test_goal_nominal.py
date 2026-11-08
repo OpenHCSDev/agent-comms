@@ -10,7 +10,7 @@ from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.nominal.field_codec import GoalId
 from agent_comms.agent_events import GoalChanged, GoalUnchanged
 from agent_comms.comms import wire
-from agent_comms.goal_actions import (
+from agent_comms.planning.goal_actions import (
     ActiveGoalAction,
     BlockedGoalAction,
     CompletedGoalAction,
@@ -22,7 +22,7 @@ from agent_comms.goal_actions import (
     SetGoalAction,
     StandbyGoalAction,
 )
-from agent_comms.goal_states import (
+from agent_comms.planning.goal_states import (
     OwnerPause,
     PausedGoal,
 )
@@ -100,7 +100,7 @@ def test_goal_changed_compares_goal_snapshots(owner):
 
 
 def test_owner_declaration_routes_without_claiming_complete_projection_equality(owner):
-    from agent_comms.goal_presentation import UnpublishedGoalSnapshot
+    from agent_comms.planning.goal_presentation import UnpublishedGoalSnapshot
 
     comms, goal = owner
     assert UnpublishedGoalSnapshot().goal_changed(goal)

@@ -11,8 +11,11 @@ import pytest
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
-from agent_comms.goal_states import BlockedGoal, GoalState
-from agent_comms.goals import Goal
+from agent_comms.planning.goal_states import (
+    BlockedGoal,
+    GoalState,
+)
+from agent_comms.planning.goals import Goal
 from agent_comms.registry.registration import Registration
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.registry.threads import NativeThread
@@ -39,7 +42,7 @@ def test_goal_family_survives_registry_and_history_reopen(tmp_path):
 import sys
 from pathlib import Path
 from agent_comms.comms import wire
-from agent_comms.goal_states import GoalState
+from agent_comms.planning.goal_states import GoalState
 registry = wire(Path(sys.argv[1]).parent).registry
 for name in GoalState.names():
     goal = registry.require(name).goal

@@ -12,7 +12,7 @@ from .registry.threads import Thread
 
 
 if TYPE_CHECKING:
-    from .goal_management import Goals
+    from .planning.goal_management import Goals
     from .registry.registration import Registration
     from .registry.registry_document import RegistrySnapshot
 

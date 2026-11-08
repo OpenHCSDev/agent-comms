@@ -1,26 +1,26 @@
-"""Owner-local goal scheduling/control over the sole durable attempt ledger.
-
-The runner owns turn lifetimes. This owner holds goal origin and projection state,
-and checks the declared start rules before recovering any unused READY grant.
-"""
-
 from __future__ import annotations
 
-from .errors import GoalAttemptError, GoalRefused
 import asyncio
 import os
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import (
+    dataclass,
+    field,
+)
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_comms.nominal.field_codec import AcpSessionId, GoalId
-from .agent_event_updates import AcpEventConsumer
-from .child_process import ProcessIdentity
-from .coordination.coordinator import Coordination
-from .errors import RelationViolationError
-from .goal_actions import (
+from .input_drain import WakeScheduleCheck
+from ..agent_event_updates import AcpEventConsumer
+from ..child_process import ProcessIdentity
+from ..coordination.coordinator import Coordination
+from ..errors import (
+    GoalAttemptError,
+    GoalRefused,
+    RelationViolationError,
+)
+from ..planning.goal_actions import (
     EditGoalAction,
     GoalAction,
     GoalPrecondition,
@@ -29,22 +29,37 @@ from .goal_actions import (
     RetryGoalAction,
     SetGoalAction,
 )
-from .goal_presentation import GoalPublicationSnapshot, UnpublishedGoalSnapshot
-from .storage.locked_store import GoalWakeFile
-from .goal_scope import OneGoal
-from .goals import Goal, GoalDeclaration, GoalRevision
-from .registry.registry_document import RegistryDocument, RegistrySnapshot
-from .reservation_rules import ReservationViolationError
-from .routing import ScheduledTurn
-from agent_comms.execution.input_drain import WakeScheduleCheck
-
-from .registry.threads import NativeThread
+from ..planning.goal_presentation import (
+    GoalPublicationSnapshot,
+    UnpublishedGoalSnapshot,
+)
+from ..planning.goal_scope import OneGoal
+from ..planning.goals import (
+    Goal,
+    GoalDeclaration,
+    GoalRevision,
+)
+from ..nominal.field_codec import (
+    AcpSessionId,
+    GoalId,
+)
+from ..registry.registry_document import (
+    RegistryDocument,
+    RegistrySnapshot,
+)
+from ..registry.threads import NativeThread
+from ..reservation_rules import ReservationViolationError
+from ..routing import ScheduledTurn
+from ..storage.locked_store import GoalWakeFile
 
 if TYPE_CHECKING:
-    from .comms import Comms
-    from .execution.input_drain import InputDrain, OwnerSession
-    from .execution.session_lifecycle import SessionLifecycle
-    from .turn_effects import TurnEffects
+    from .input_drain import (
+        InputDrain,
+        OwnerSession,
+    )
+    from .session_lifecycle import SessionLifecycle
+    from ..comms import Comms
+    from ..turn_effects import TurnEffects
 
 GOAL_CONTINUE_PROMPT = "Continue working toward the active goal."
 

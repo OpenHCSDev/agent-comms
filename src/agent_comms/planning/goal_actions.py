@@ -1,16 +1,70 @@
-"""Goal commands own behavior; one parent owns CAS, publication and actor checks."""
-
 from __future__ import annotations
 
 import time
 from abc import abstractmethod
-from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self
+from collections.abc import (
+    Awaitable,
+    Callable,
+)
+from dataclasses import (
+    dataclass,
+    field,
+    replace,
+)
+from typing import (
+    Annotated,
+    ClassVar,
+    Self,
+    TYPE_CHECKING,
+)
 
-from agent_comms.nominal.field_codec import GoalId, GoalWaitId, MessageId, RetryDecisionId
-from agent_comms.nominal import field_codec
-from agent_comms.goals import (
+from pydantic import JsonValue
+
+from .goal_waits import (
+    GoalInputReview,
+    GoalWaits,
+    RecordedGoalWait,
+)
+from .orders import (
+    PendingProblemOrder,
+    RecordOrderHeadVerdict,
+    SendBackVerdict,
+    Todo,
+    TodoCommand,
+)
+from .problem_findings import ExpectedProblem
+from ..attempt_resolution import (
+    ComplianceDecision,
+    OrderDecision,
+    RetryDecision,
+)
+from ..change_report import (
+    CitationProject,
+    FileLine,
+    NoSourceReference,
+)
+from ..child_process import ProcessIdentity
+from ..command import Command
+from ..errors import RelationViolationError
+from .goal_mentions import bind_goal_mentions
+from .goal_records import GoalRecords
+from .goal_scope import (
+    AllGoals,
+    OneGoal,
+)
+from .goal_states import (
+    ActiveGoal,
+    BlockedGoal,
+    ChokeholdPause,
+    CompletedGoal,
+    GoalState,
+    ModelPause,
+    OwnerPause,
+    PauseSource,
+    PausedGoal,
+    RuntimePause,
+)
+from .goals import (
     Goal,
     GoalChangedError,
     GoalCheckpoint,
@@ -21,60 +75,38 @@ from agent_comms.goals import (
     UnobservedGoalCheckpoint,
     UnorderedGoalOrder,
 )
-
-from .nominal.field_codec import FieldCodec
-from .input_key import InputKey, InputKeyText
-
-from .change_report import FileLine, NoSourceReference
-from .child_process import ProcessIdentity
-from .command import Command
-from .nominal.declared_family import DeclaredFamily
-from .errors import RelationViolationError
-from .goal_mentions import bind_goal_mentions
-from .goal_records import GoalRecords
-from .goal_scope import AllGoals, OneGoal
-from .goal_states import (
-    ActiveGoal,
-    BlockedGoal,
-    ChokeholdPause,
-    CompletedGoal,
-    GoalState,
-    ModelPause,
-    OwnerPause,
-    PausedGoal,
-    PauseSource,
-    RuntimePause,
+from ..input_key import (
+    InputKey,
+    InputKeyText,
 )
-from .planning.goal_waits import GoalInputReview, GoalWaits, RecordedGoalWait
-from .lifecycle_capability import Settled
-from .owner_requests import OwnerRequestId
-from .planning.orders import (
-    PendingProblemOrder,
-    RecordOrderHeadVerdict,
-    SendBackVerdict,
-    Todo,
-    TodoCommand,
-    TodoOperation,
+from ..lifecycle_capability import Settled
+from ..nominal import field_codec
+from ..nominal.declared_family import DeclaredFamily
+from ..nominal.field_codec import (
+    FieldCodec,
+    GoalId,
+    GoalWaitId,
+    MessageId,
+    RetryDecisionId,
 )
-from .planning.problem_findings import ExpectedProblem
-from .progress_claims import ProgressClaim
-from .recorded_time import EventTime
-from .change_report import CitationProject
-from .repository_name import RepositoryName
-from .thread_identity import CoreWatcherIncarnation, ThreadIncarnation
-from .registry.threads import Thread
-from .reported_turn import ReportedTurnState
-from .registry.registry_store import RegistryEdit
-from .attempt_resolution import ComplianceDecision, OrderDecision, RetryDecision
-from .owner_connection import CapturedOwner
-from .runtime_server import AttachedRuntimeRequest
-from pydantic import JsonValue
+from ..owner_connection import CapturedOwner
+from ..owner_requests import OwnerRequestId
+from ..progress_claims import ProgressClaim
+from ..recorded_time import EventTime
+from ..registry.registry_store import RegistryEdit
+from ..registry.threads import Thread
+from ..reported_turn import ReportedTurnState
+from ..repository_name import RepositoryName
+from ..runtime_server import AttachedRuntimeRequest
+from ..thread_identity import (
+    CoreWatcherIncarnation,
+    ThreadIncarnation,
+)
 
 if TYPE_CHECKING:
     from .goal_management import Goals
-    from .registry.registry_document import TeamProject
     from .goal_presentation import GoalSnapshot
-
+    from ..registry.registry_document import TeamProject
 
 
 class GoalActor:
@@ -209,7 +241,7 @@ class GoalAction[Result: GoalDeclaration](
         cls, thread: ThreadIncarnation,
         invoke: Callable[[AttachedRuntimeRequest], Awaitable[JsonValue]], goal: Goal,
     ) -> GoalDeclaration:
-        from .runtime_requests import GoalSnapshotReply, UpdateGoalRuntimeRequest
+        from ..runtime_requests import GoalSnapshotReply, UpdateGoalRuntimeRequest
 
         reply = await invoke(UpdateGoalRuntimeRequest(
             thread=thread.name, captured=CapturedOwner(thread), status=cls, goal_id=goal.id, expected_revision=goal.revision,
@@ -575,7 +607,7 @@ class SetGoalAction(ReplacementGoalAction[Goal], OwnerInvocable, RuntimeInvocabl
         observe: Callable[[], Awaitable[GoalSnapshot]],
         invoke: Callable[[AttachedRuntimeRequest], Awaitable[JsonValue]], text: str = "",
     ) -> GoalDeclaration:
-        from .runtime_requests import GoalReply, SetGoalRuntimeRequest
+        from ..runtime_requests import GoalReply, SetGoalRuntimeRequest
 
         reply = await invoke(SetGoalRuntimeRequest(thread=thread.name, captured=CapturedOwner(thread), text=text))
         return FieldCodec.decode(GoalReply, reply).goal
@@ -793,7 +825,7 @@ class RetryGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, Runt
         cls, thread: ThreadIncarnation,
         invoke: Callable[[AttachedRuntimeRequest], Awaitable[JsonValue]], goal: Goal,
     ) -> GoalDeclaration:
-        from .runtime_requests import GoalReply, RetryGoalRuntimeRequest
+        from ..runtime_requests import GoalReply, RetryGoalRuntimeRequest
 
         reply = await invoke(RetryGoalRuntimeRequest(
             thread=thread.name, captured=CapturedOwner(thread), goal_id=goal.id, expected_revision=goal.revision,

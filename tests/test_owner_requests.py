@@ -24,7 +24,7 @@ from agent_comms.comms import Comms
 from agent_comms.connector import ConnectorSendTool
 from agent_comms.connector_caller import CALLER, DirectorCaller
 from agent_comms.errors import RelationViolationError
-from agent_comms.goals import OrderCheck
+from agent_comms.planning.goals import OrderCheck
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.owner_requests import NewestOpenRequest
 from agent_comms.recorded_time import RecordedEventTime

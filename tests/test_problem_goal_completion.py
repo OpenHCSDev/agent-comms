@@ -10,15 +10,15 @@ import pytest
 from agent_comms.cli_commands import ReconciledStoresResult
 from agent_comms.comms import Comms
 from agent_comms.errors import GoalRefused
-from agent_comms.goal_actions import (
+from agent_comms.planning.goal_actions import (
     CompletedGoalAction,
     CreateProblemGoalAction,
     GoalPrecondition,
     OrderGoalAction,
 )
-from agent_comms.goal_scope import OneGoal
-from agent_comms.goal_states import CompletedGoal
-from agent_comms.goals import Goal
+from agent_comms.planning.goal_scope import OneGoal
+from agent_comms.planning.goal_states import CompletedGoal
+from agent_comms.planning.goals import Goal
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId
 from agent_comms.planning.order_words import StrikeReason
 from agent_comms.planning.orders import (

@@ -14,7 +14,7 @@ from agent_comms.relationships import CollaboratingRelationshipGroup, Relationsh
 from agent_comms.comms import Comms, wire
 from agent_comms.transport.tools.served import invoke_tool
 from conftest import installed_comms
-from agent_comms.goal_actions import (
+from agent_comms.planning.goal_actions import (
     ActiveGoalAction,
     CompletedGoalAction,
     EditGoalAction,
@@ -23,13 +23,19 @@ from agent_comms.goal_actions import (
     PausedGoalAction,
     SetGoalAction,
 )
-from agent_comms.goals import (
-    AliasMentionBinding, LimitExceededMentionBinding, MalformedMentionBinding, NonExecutableMentionBinding, ResolvedMentionBinding, SelfMentionBinding, UnknownMentionBinding,
+from agent_comms.planning.goals import (
+    AliasMentionBinding,
+    LimitExceededMentionBinding,
+    MalformedMentionBinding,
+    NonExecutableMentionBinding,
+    ResolvedMentionBinding,
+    SelfMentionBinding,
+    UnknownMentionBinding,
 )
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.registry.threads import NativeThread
-from agent_comms.goal_scope import OneGoal
+from agent_comms.planning.goal_scope import OneGoal
 
 
 def _wire(tmp_path: Path) -> Comms:

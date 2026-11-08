@@ -1,24 +1,43 @@
-"""Goal execution is a read of the decisions, wait, ledger and live owner."""
-
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, fields
-from typing import TYPE_CHECKING, ClassVar, Self
+from abc import (
+    ABC,
+    abstractmethod,
+)
+from collections.abc import (
+    Awaitable,
+    Callable,
+)
+from dataclasses import (
+    dataclass,
+    fields,
+)
+from typing import (
+    ClassVar,
+    Self,
+    TYPE_CHECKING,
+)
 
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import NullMember, WireValue, GoalId
 from .goal_failure_observation import FailedTurnEvidence
 from .goal_states import PauseSource
-from .goals import Goal, GoalCheckpoint, GoalDeclaration
-from .lifecycle_capability import Active
-from .thread_identity import RecordedThreadIncarnation
-from .thread_presentation import ThreadPresentation
+from .goals import (
+    Goal,
+    GoalCheckpoint,
+    GoalDeclaration,
+)
+from ..lifecycle_capability import Active
+from ..nominal.declared_family import DeclaredFamily
+from ..nominal.field_codec import (
+    GoalId,
+    NullMember,
+    WireValue,
+)
+from ..thread_identity import RecordedThreadIncarnation
+from ..thread_presentation import ThreadPresentation
 
 if TYPE_CHECKING:
-    from .bus_publication import Delivered
     from .goal_actions import GoalAction
+    from ..bus_publication import Delivered
 
 
 @dataclass(frozen=True, slots=True)
@@ -244,6 +263,7 @@ class AttemptUnresolvedExecution(BlockedExecution):
     def unit_block_line(self, unit: str, orders: tuple[str, ...]) -> str:
         return (f"UNRESOLVED BLOCK {unit}: orders {', '.join(orders)}; "
                 f"goal {self.goal_id} -> {self.reason}")
+
 
 @dataclass(frozen=True)
 class AttemptFailedExecution(BlockedExecution, RetryableExecution):

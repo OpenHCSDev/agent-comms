@@ -41,7 +41,7 @@ from .nominal.field_codec import (
     WireOmitDefault,
     projected,
 )
-from .goal_presentation import GoalExecution
+from .planning.goal_presentation import GoalExecution
 from .planning.goal_waits import GoalWaits
 from .storage.locked_store import GoalWakeFile
 from .mentions import MentionCandidate
@@ -90,7 +90,7 @@ if TYPE_CHECKING:
     from .catalog_document import CatalogDocument
     from .catalog_store import ChannelCatalog
     from .comms import Comms
-    from .goal_management import Goals
+    from .planning.goal_management import Goals
     from .history_views import HistoryViews
     from .message_bus import MessageBus
     from .pi_counts import PiCount

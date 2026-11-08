@@ -27,7 +27,7 @@ from .comms import Comms
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import Argument, PathText, RecordMember, WireForm, WireOmitDefault, boundary_decoder
 from .history_result import HistoryPageResult
-from .goals import Goal
+from .planning.goals import Goal
 from .lifecycle_capability import Complete
 from .importing import ThreadImported
 from .input_origin import InputProvenance

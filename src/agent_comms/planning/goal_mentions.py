@@ -1,35 +1,31 @@
-"""Registry-bound goal mentions identify contacts; they never permit starting work.
-
-Only goal set/text-edit binds names. Reads do not resolve a fresh name to an
-old token: a deleted peer's replacement cannot inherit its predecessor's goal.
-"""
-
 from __future__ import annotations
 
 import hashlib
 import re
 
-from agent_comms.nominal.field_codec import GoalId
 from .goals import (
+    AliasMentionBinding,
     GoalMentionBinding,
     GoalMentionSource,
     LimitExceededMentionBinding,
     MalformedMentionBinding,
-    SelfMentionBinding,
-    AliasMentionBinding,
-    UnknownMentionBinding,
     NonExecutableMentionBinding,
     ResolvedMentionBinding,
+    SelfMentionBinding,
+    UnknownMentionBinding,
 )
-from .registry.registry_document import RegistrySnapshot
-from .registry.threads import Thread
+from ..nominal.field_codec import GoalId
+from ..registry.registry_document import RegistrySnapshot
+from ..registry.threads import Thread
 
-# Unlike message mentions, a dotted/path/email suffix must not yield a partial
-# thread name. Aliases are diagnostics at authoring, not new peer identities.
 _GOAL_TOKEN = re.compile(
     r"(?<![\w@/\\])@([A-Za-z0-9_-]+(?:[./\\@][A-Za-z0-9_-]+)*)(?![\w@/\\]|\.[A-Za-z0-9_.-])"
 )
+
+
 _MAX_BINDINGS = 128
+
+
 _MAX_TOKEN_CHARS = 512
 
 

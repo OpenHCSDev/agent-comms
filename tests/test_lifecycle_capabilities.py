@@ -7,8 +7,8 @@ from agent_comms.attempt_states import AttemptState
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.execution_states import ExecutionState
-from agent_comms.goal_generation import GenerationState
-from agent_comms.goal_states import GoalState
+from agent_comms.planning.goal_generation import GenerationState
+from agent_comms.planning.goal_states import GoalState
 from agent_comms.lifecycle_capability import (
     Active, Complete, Deferred, Executing, Failed, LifecycleCapability, Pending,
     Successful, Terminal, Unresolved,

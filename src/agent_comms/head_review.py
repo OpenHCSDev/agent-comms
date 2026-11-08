@@ -34,7 +34,7 @@ if TYPE_CHECKING:
         Todo,
     )
     from .team.order import TeamContext
-    from .goal_management import Goals
+    from .planning.goal_management import Goals
 
 
 @dataclass(frozen=True, kw_only=True)

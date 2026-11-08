@@ -12,7 +12,7 @@ import time
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Self
 
-from agent_comms.goal_actions import (
+from .planning.goal_actions import (
     CreateProblemGoalAction,
     GoalActionContext,
     OrderGoalAction,

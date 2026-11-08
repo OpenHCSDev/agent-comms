@@ -14,14 +14,14 @@ from agent_comms.acp import CommsAgent
 from agent_comms.turn_inbox import InputContent
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.nominal.field_codec import AcpSessionId, InputId, OrderId
-from agent_comms.goal_actions import (
+from agent_comms.planning.goal_actions import (
     BlockedGoalAction,
     CreateProblemGoalAction,
     OrderGoalAction,
     OwnerInvocable,
     PausedGoalAction,
 )
-from agent_comms.goal_states import ActiveGoal
+from agent_comms.planning.goal_states import ActiveGoal
 from agent_comms.owned_send import OwnedSend
 from agent_comms.execution.owned_turn import OwnedTurn
 from agent_comms.queued_input import InitialInput, QueuedInput

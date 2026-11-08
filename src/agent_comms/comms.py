@@ -19,7 +19,7 @@ from .context_store import ContextStore
 from .coordination.database import CoordinationStore
 from .coordination.coordinator import Coordination
 from .errors import UnregisteredThreadError
-from .goal_management import Goals
+from .planning.goal_management import Goals
 from .history_views import HistoryViews
 from .storage.maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus

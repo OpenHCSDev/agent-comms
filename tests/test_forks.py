@@ -76,8 +76,15 @@ from agent_comms.nominal.field_codec import (
     OrderId,
     ToolCallId,
 )
-from agent_comms.goal_actions import OrderGoalAction, SetGoalAction
-from agent_comms.goals import CountCheckResult, GoalConsentRequired, OrderCheck
+from agent_comms.planning.goal_actions import (
+    OrderGoalAction,
+    SetGoalAction,
+)
+from agent_comms.planning.goals import (
+    CountCheckResult,
+    GoalConsentRequired,
+    OrderCheck,
+)
 from agent_comms.held_orders import HeldOrders
 from agent_comms.native_transcript import NativeTranscript
 from agent_comms.repository_name import RepositoryName
@@ -108,7 +115,7 @@ from agent_comms_hooks import forks
 from hook_session_fixture import resident_hook, resident_session, resident_stdout
 from cli_command import team
 from source_revision_fixture import SourceRepository
-from agent_comms.goal_actions import ReissuedOrderGoalAction
+from agent_comms.planning.goal_actions import ReissuedOrderGoalAction
 from agent_comms.thread_identity import CoreWatcherIncarnation
 
 

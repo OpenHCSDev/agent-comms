@@ -1,5 +1,3 @@
-"""Goals: declaration and persistence owners."""
-
 from __future__ import annotations
 
 import getopt
@@ -7,17 +5,27 @@ import signal
 import subprocess
 import tempfile
 from abc import abstractmethod
-from collections.abc import Iterator, Sequence
-from dataclasses import dataclass, field, replace
+from collections.abc import (
+    Iterator,
+    Sequence,
+)
+from dataclasses import (
+    dataclass,
+    field,
+    replace,
+)
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
+from typing import (
+    Annotated,
+    ClassVar,
+    Literal,
+    TYPE_CHECKING,
+)
 
-from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
-from agent_comms.lifecycle_capability import Active
 from agent_comms_hooks.shell_commands import ShellCommand
 
-from .change_report import CitationProject
-from .child_process import (
+from ..change_report import CitationProject
+from ..child_process import (
     BoundedRun,
     CheckPrinted,
     ChildOutcome,
@@ -27,11 +35,27 @@ from .child_process import (
     SignaledOutcome,
     TimedOutOutcome,
 )
-from .errors import GoalRefused, RejectedEnforcementError, RelationViolationError
-from .goal_authority import GoalAuthority, GoalTurnAuthority, NoGoalAuthority
-from .goal_states import ActiveGoal, GoalState
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import (
+from ..errors import (
+    GoalRefused,
+    RejectedEnforcementError,
+    RelationViolationError,
+)
+from .goal_authority import (
+    GoalAuthority,
+    GoalTurnAuthority,
+    NoGoalAuthority,
+)
+from .goal_states import (
+    ActiveGoal,
+    GoalState,
+)
+from ..execution.goal_turn_permit import (
+    GoalTurnPermit,
+    NoLaunchPermit,
+)
+from ..lifecycle_capability import Active
+from ..nominal.declared_family import DeclaredFamily
+from ..nominal.field_codec import (
     FieldCodec,
     GoalId,
     MalformedRecord,
@@ -42,33 +66,47 @@ from .nominal.field_codec import (
     SubclassUnion,
     TurnId,
 )
-from .registration_inheritance import RegistrationInheritance
-from .projects.git_errors import GitCommandError
-from .projects.repo import Repo
-from .projects.checkouts import (
+from ..projects.checkouts import (
     DetachedStart,
     ScratchCheckout,
 )
-from .reported_turn import NoReportedTurn, ReportedTurnState
-from .shell_effects import shell_storage_effects
-from .text_digest import TextDigest
-from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
-from .turn_goal_permission import ContinuationGoalPermission, GoalPermission, InactiveGoalPermission
-from .ui_model.goal import GoalDisplay
+from ..projects.git_errors import GitCommandError
+from ..projects.repo import Repo
+from ..registration_inheritance import RegistrationInheritance
+from ..reported_turn import (
+    NoReportedTurn,
+    ReportedTurnState,
+)
+from ..shell_effects import shell_storage_effects
+from ..text_digest import TextDigest
+from ..thread_identity import (
+    RecordedThreadIncarnation,
+    ThreadIncarnation,
+)
+from ..turn_goal_permission import (
+    ContinuationGoalPermission,
+    GoalPermission,
+    InactiveGoalPermission,
+)
+from ..ui_model.goal import GoalDisplay
 
 if TYPE_CHECKING:
-    from .goal_actions import GoalAction, GoalActionContext
-    from .goal_presentation import GoalExecution
-    from .planning.goal_waits import GoalWaits
-    from .planning.orders import Todo
-    from .registry.threads import Thread
-    from .task_sources import TaskScope
-    from .turn_context import TurnContext
-
-if TYPE_CHECKING:
-    from .goal_attempts import GoalAttemptStore, LaunchPermit
+    from .goal_actions import (
+        GoalAction,
+        GoalActionContext,
+    )
+    from .goal_attempts import (
+        GoalAttemptStore,
+        LaunchPermit,
+    )
     from .goal_management import Goals
-    from .turn_goal_account import VerifiedGoalSettlement
+    from .goal_presentation import GoalExecution
+    from .goal_waits import GoalWaits
+    from .orders import Todo
+    from ..registry.threads import Thread
+    from ..task_sources import TaskScope
+    from ..turn_context import TurnContext
+    from ..turn_goal_account import VerifiedGoalSettlement
 
 
 @dataclass(frozen=True)
@@ -113,7 +151,7 @@ class UnresolvedMention:
     peer_created_at: Literal[None] = None
 
     def project(self, registry, owner, goal, source):
-        from .relationships import GoalMentionDiagnostic
+        from ..relationships import GoalMentionDiagnostic
 
         return (), (
             GoalMentionDiagnostic(
@@ -166,7 +204,7 @@ class ResolvedMentionBinding(GoalMentionBinding):
         return RecordedThreadIncarnation(self.peer_name, self.peer_created_at)
 
     def project(self, registry, owner, goal, source):
-        from .relationships import GoalDerivedContact, GoalMentionDiagnostic
+        from ..relationships import GoalDerivedContact, GoalMentionDiagnostic
 
         diagnostic = GoalMentionDiagnostic(
             owner.name, goal.id, source.text_revision, self.token, "stale_incarnation"

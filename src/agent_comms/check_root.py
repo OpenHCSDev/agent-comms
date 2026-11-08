@@ -19,7 +19,7 @@ from .cohort_schema import AcceptanceFrontier
 from .coordination.coordinator import Coordination
 from .coordination.database import CoordinationStore
 from .fresh_private_session import create_fresh_private_session
-from .goals import NoGoal
+from .planning.goals import NoGoal
 from .launch_root import LaunchRoot
 from .launch_runtime import ThreadLaunch
 from .native_entries import ImportedSessionWriter, NativeEntry

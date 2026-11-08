@@ -32,8 +32,8 @@ from agent_comms.cli_bridges.shared import BridgeDeliveryStore, BridgeStateTable
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import ClaimId, FieldCodec, MessageId
-from agent_comms.goal_attempts import GoalAttemptStore
-from agent_comms.goal_failure_observation import FailedTurnEvidence
+from agent_comms.planning.goal_attempts import GoalAttemptStore
+from agent_comms.planning.goal_failure_observation import FailedTurnEvidence
 from agent_comms.coordination.session import CoordinationSession
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.installer.backup import StoreBackup, bus_files

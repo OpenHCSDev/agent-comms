@@ -34,8 +34,16 @@ from agent_comms.installer.practice import PracticeCopy
 from agent_comms.storage.locked_store import RootFile
 from agent_comms.coordination.errors import Refused
 from agent_comms.errors import GoalRefused
-from agent_comms.goal_actions import ClearGoalAction, CreateProblemGoalAction, SetGoalAction
-from agent_comms.goals import CountCheckResult, OrderCheck, ProblemGoalOrder
+from agent_comms.planning.goal_actions import (
+    ClearGoalAction,
+    CreateProblemGoalAction,
+    SetGoalAction,
+)
+from agent_comms.planning.goals import (
+    CountCheckResult,
+    OrderCheck,
+    ProblemGoalOrder,
+)
 from agent_comms.owner_protocol import OwnerFailure, OwnerLine
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.work_branches import WorkBranches

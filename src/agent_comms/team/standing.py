@@ -23,7 +23,7 @@ from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.cli_bridges.claude_protocol import OwedProgress
 from agent_comms.cli_bridges.claude_transcript import ClaudeTranscript
 from agent_comms.cli_bridges.shared import Serve
-from agent_comms.goal_actions import ReissuedOrderGoalAction
+from ..planning.goal_actions import ReissuedOrderGoalAction
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, Id128
 from agent_comms.head_review import PullRequestHead
 from agent_comms.heartbeat_subjects import (
