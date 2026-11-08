@@ -802,7 +802,7 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_team, monkeypatch):
             report = root / "after-merge.txt"
             report.write_text("Merged; installation evidence is still pending")
             SayVerb(units="#comms", body_file=str(report)).apply(team_as(root, ctx.actor_name))
-            assert copied.goals.todos.get(released.id).holder_state == released.holder_state
+            assert copied.goals.todos.get(released.id).holder_state == released.holder_state.previous_assignment()
             assert any(line.startswith("gh ") for line in observed)
             assert any(line.startswith("git ") for line in observed)
             held = [line for line in observed if line.split()[1] != "free"]

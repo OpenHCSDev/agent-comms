@@ -4067,10 +4067,19 @@ class TodoCommand(Command[DirectedTodo, DirectedTodo], DeclaredFamily, StorySour
         if result != current:
             self.validate(db, current, store)
             StoredOrderStory.archive(db, current, result.order)
-            for event in self.history_events(current):
+            events = self.history_events(current)
+            for event in (*events, *self.assignment_events(current, result, events)):
                 StoredOrderStory.append(db, current.id, event)
             result.upsert(db)
         return result
+
+    def assignment_events(
+        self, current: Todo, following: Todo, events: Sequence[TodoCommand],
+    ) -> tuple[ReleaseTodo, ...]:
+        return ()
+
+    def remembers_assignment(self, assignment: Assignment) -> bool:
+        return False
 
     def apply(self, current: Todo) -> Todo:
         self.require_current(current)
@@ -4127,7 +4136,24 @@ class TodoBatch:
         return (*written, *(call.operation.record(goals, call.problem) for call in self.alone))
 
 
-class TodoOperation(TodoCommand, declared_name=None):
+class RecordsAssignmentHistory:
+    """An authored transition records the exact hold it removes, once."""
+
+    actor: ThreadIncarnation
+
+    def assignment_events(
+        self, current: Todo, following: Todo, events: Sequence[TodoCommand],
+    ) -> tuple[ReleaseTodo, ...]:
+        return tuple(
+            ReleaseTodo(current.revision, self.actor, assignment, StrikeReason(
+                "The assignment ended and its original owner and Goal remain in this history."))
+            for assignment in current.current_holder.current_assignments()
+            if not following.current_holder.owned_by(assignment.owner_identity, assignment.generation)
+            and not any(event.remembers_assignment(assignment) for event in events)
+        )
+
+
+class TodoOperation(RecordsAssignmentHistory, TodoCommand, declared_name=None):
     """Commands the ordinary teammate's tools accept."""
 
     def authored_by(self, actor: ThreadIncarnation) -> Self:
@@ -4135,7 +4161,7 @@ class TodoOperation(TodoCommand, declared_name=None):
 
 
 @dataclass(frozen=True)
-class ReleasesHold(TodoCommand, declared_name=None):
+class ReleasesHold(RecordsAssignmentHistory, TodoCommand, declared_name=None):
     """Changing held work needs its holder's consent, decided in the write transaction against
     the registry cut it commits under."""
 
@@ -5329,6 +5355,9 @@ class VoidStrikeTodo(TodoOperation, StoryEvent):
 class ReleaseTodo(ReleasesHold, TodoOperation, StoryEvent, TodoHolder):
     """The teammate takes an open problem off its unit; the order and its strikes stay."""
 
+    def remembers_assignment(self, assignment: Assignment) -> bool:
+        return self.previous == assignment
+
     def previous_assignment(self) -> Assignment:
         """The release keeps the assignment of the holder it removed."""
         return self.previous
@@ -6152,7 +6181,13 @@ class StoredOrderStory(TodoStoreRows, NoUpdate, NoDelete, TypedTable):
         f"json_extract({{event}}, '$.{FieldCodec.record_key(StrikeTodo, 'previous')}')"))
     actor: ClassVar[Generated] = Generated(ThreadIncarnation, Column(nullable=True, generated=
         f"json_extract({{event}}, '$.{FieldCodec.record_key(ReleaseTodo, 'actor')}')"))
-    indexes = (Index(("problem", "kind", "seq")),)
+    assignment_goal: ClassVar[str] = (
+        f"json_extract({{strike_assignment}}, '$.{FieldCodec.record_key(Assignment, 'generation')}')"
+    )
+    assignment_index: ClassVar[ExpressionIndex] = ExpressionIndex((
+        "{strike_created}", assignment_goal, "{problem}",
+    ))
+    indexes = (Index(("problem", "kind", "seq")), assignment_index)
 
     @classmethod
     def references(cls) -> tuple[ForeignKey, ...]:
@@ -6532,6 +6567,17 @@ class OwnerRequestStore(DurableStore):
             db, tuple(todo.id for todo in rows)))
 
 
+@dataclass(frozen=True)
+class RecordMergedTodo(RecordsAssignmentHistory, TodoCommand, declared_name=None):
+    """Persist an observed merge through the same history write as authored changes."""
+
+    following: Todo
+    actor: ThreadIncarnation = field(default_factory=CoreWatcherIncarnation.watcher)
+
+    def changed(self, current: Todo) -> Todo:
+        return self.following
+
+
 @dataclass(frozen=True, slots=True)
 class TodoStore(OwnerRequestStore, TodoHistory):
     """One SQLite row owns both todo state and its exclusive assignment.
@@ -6645,13 +6691,22 @@ class TodoStore(OwnerRequestStore, TodoHistory):
                          (unit.wire_birth, *parameters))
 
     @classmethod
-    def every_in(cls, db: sqlite3.Connection, where: str, parameters: tuple,
-                 *, unit: ThreadIncarnation) -> CapturedRows[Todo]:
-        """The unit's rows under one condition whatever their state, for a finished Goal."""
-        terms = Todo.unit_index.terms[:-1]
-        match = f"({', '.join(terms)})=({','.join('?' for term in terms)})"
-        return Todo.capture_rows(db, f'{match} AND ({where})',
-                                 (unit.wire_birth, *parameters))
+    def goal_members_in(
+        cls, db: sqlite3.Connection, where: str, parameters: tuple, *,
+        unit: ThreadIncarnation, goal: GoalId,
+    ) -> CapturedRows[Todo]:
+        """Both keys match one current assignment or one recorded release."""
+        historical = StoredOrderStory._sql(
+            f"SELECT {{problem}} FROM {StoredOrderStory.declared_name} "
+            f"WHERE {{kind}} IN {ReleaseTodo.sql_choices()} AND {{strike_created}}=? "
+            f"AND {StoredOrderStory.assignment_goal}=?"
+        )
+        current = (f"{Assignment.sql_field('owner_created')}=? AND "
+                   f"{Assignment.sql_field('generation')}=?")
+        return Todo.capture_rows(
+            db, f"(({current}) OR {{id}} IN ({historical})) AND ({where})",
+            (unit.wire_birth, goal, unit.wire_birth, goal, *parameters),
+        )
 
     @classmethod
     def _one(cls, rows: tuple[Todo, ...], todo_id: str) -> Todo:
@@ -6704,8 +6759,9 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         A finished Goal owns the problems it delivered; asking only for open ones made a
         completed Goal look like one that was never assigned anything.
         """
-        return self._select(Assignment.sql_field('generation') + '=?', (goal_id,),
-                            reader=partial(self.every_in, unit=owner))
+        return self._select(
+            "1", (), reader=partial(self.goal_members_in, unit=owner, goal=goal_id),
+        )
 
     def require_input_sources(self, inputs: IntegrationInput) -> None:
         """Current Todo links or an exact saved accepted orderless decision own each source."""
@@ -6741,7 +6797,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
             for result in completed:
                 current = self._current(db, result.id)
                 if current.revision + 1 == result.revision:
-                    result.upsert(db)
+                    RecordMergedTodo(current.revision, result).write(db, current, self)
 
     def holds_pending(self, owner: ThreadIncarnation) -> bool:
         """Whether a problem assigned to owner pends, under any generation; its Goal stays open."""
