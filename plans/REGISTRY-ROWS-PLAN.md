@@ -33,8 +33,13 @@ Readers do not read the file; they read revisions of it. `RegistryCut`, `Registr
   that counter; a pair cut opens both stores' transactions in one declared order.
 - The private guard (`registry/private_registry_guard.py`) has two roles. Its two-slot digest of
   registry.json's bytes is a crash-consistency protocol for atomically replacing a whole file
-  (pending digest, rename, commit); SQLite's transaction is that atomicity, so this role is deleted
-  with the JSON path, not rebuilt. Its native-namespace and coordinator-cohort ownership stays.
+  (pending digest, rename, commit). Its slots hold (root_id, seq, phase, digest) and
+  `registry_digest(path)` rehashes all 5.6 MB per uncached check. The guard's format and two-phase
+  protocol stay; only what it digests changes: the row store's committed revision instead of the
+  file's bytes. A write is guard `prepare(digest(r + 1))`, the row transaction, guard `commit`; a
+  crash between them is today's abandoned-rename case and recovers the same way, and a write
+  outside the store shows a revision the guard never committed, so it is refused. No guard carry.
+  Its native-namespace and coordinator-cohort ownership stays.
 - `RegistryDocument` stops being the stored form. Readers that need many rows ask the table
   (children of a parent, threads in a project) instead of walking a decoded document.
 
