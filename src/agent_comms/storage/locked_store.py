@@ -760,7 +760,7 @@ class RegistryFile(RollbackRetained, GoalWakeFile):
     """Registry location usable by record types without importing their decoder."""
 
     __slots__ = ()
-    filename = "registry.json"
+    filename = "registry.sqlite3"
 
     @classmethod
     def execution_paths(cls, root: Path) -> tuple[Path, ...]:

@@ -1,22 +1,27 @@
 """The registry as rows: one thread, status, alias or generation per row, so a change writes the
 rows it changes and nothing else (plans/REGISTRY-ROWS-PLAN.md).
 
-The whole-document registry.json rewrote every row on every change: 5.6 MB and 2,933 threads on
-the live bus to change one. These tables hold the same facts the document's fields hold, keyed by
-the name the document keys them by; the document's scalar fields are the one header row.
+The whole-document registry rewrote every row on every change: 5.6 MB and 2,933 threads on the
+live bus to change one. Each mapping section of the document is one table of (name, value) rows,
+the value in its wire form, so a reader keeps decoding only the rows it reads (ThreadRows); the
+header row holds the rest of the document. A commit stamps the rows it writes with its revision,
+and a reader holding revision r reads only what changed after r.
 """
 
 from __future__ import annotations
 
-import sqlite3
-from collections.abc import Iterable
-from dataclasses import dataclass, replace
+from collections.abc import Iterator, Mapping
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, ClassVar
+from typing import Annotated, ClassVar, Self
 
-from agent_comms.registry.registry_document import RootPurpose, TeamProject
-from agent_comms.registry.thread_status import ThreadStatus
-from agent_comms.registry.threads import Thread
+from pydantic import JsonValue
+
+from agent_comms.coordination.errors import StaleFence
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.registry.registry_document import RegistryDocument
+from agent_comms.registry.thread_identity import GenerationCounter
+from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.typed_table import (
     Column,
     DurableStore,
@@ -26,57 +31,11 @@ from agent_comms.storage.typed_table import (
     TypedTable,
 )
 
+type RawDocument = dict[str, JsonValue]
+
 
 class RegistryRows(StoreRows):
     """The registry store discovers its rows through this membership declaration."""
-
-
-@dataclass(frozen=True, slots=True)
-class RegistryRowStore(DurableStore):
-    """The registry's rows, one owner-only SQLite file beside the bus: every installation
-    carries it, and nothing else can rebuild it."""
-
-    root: Path
-    filename: ClassVar[str] = "registry.sqlite3"
-    tables = RegistryRows
-
-    def revision(self) -> int:
-        with self.snapshot() as db:
-            return self.revision_in(db)
-
-    @staticmethod
-    def revision_in(db: sqlite3.Connection) -> int:
-        """The last committed revision; 0 before the first commit."""
-        return max((header.revision for header in RegistryHeader.select(db)), default=0)
-
-    def commit(
-        self, header: RegistryHeader, rows: Iterable[RegistryNamedRow],
-        removals: Iterable[tuple[type[RegistryNamedRow], str]],
-    ) -> int:
-        """Write only these rows and removals, stamped with the next revision, in one
-        transaction: the cost is the change, never the registry's size."""
-        with self.writing() as db:
-            revision = self.revision_in(db) + 1
-            replace(header, revision=revision).upsert(db)
-            for row in rows:
-                replace(row, changed_at=revision).upsert(db)
-            for family, name in removals:
-                family.delete(db, **{family.key_field(): name})
-                RegistryRemovals(changed_at=revision, family=family, name=name).upsert(db)
-            return revision
-
-    def changes_since(self, revision: int) -> RegistryChanges:
-        """Every row written and every row removed after ``revision``, read in one snapshot."""
-        with self.snapshot() as db:
-            return RegistryChanges(
-                revision=self.revision_in(db),
-                rows=tuple(
-                    row for family in RegistryNamedRow.families()
-                    for row in family.select(db, where="changed_at > ?", parameters=(revision,))
-                ),
-                removals=tuple(RegistryRemovals.select(
-                    db, where="changed_at > ?", parameters=(revision,))),
-            )
 
 
 class RegistryRow(RegistryRows, TypedTable, declared_name=None):
@@ -94,70 +53,84 @@ class RevisionStamped(RegistryRow, declared_name=None):
 
 @dataclass(frozen=True)
 class RegistryNamedRow(RevisionStamped, declared_name=None):
-    """A row keyed by a thread name or alias."""
+    """One entry of a mapping section of the registry document, under its key; each family
+    declares its section's place in the document and its value's wire type."""
 
-    @classmethod
-    def key_field(cls) -> str:
-        """The one field the row declares as its primary key."""
-        (key,) = (item.name for item in cls._fields if item.column.primary_key)
-        return key
+    section: ClassVar[tuple[str, ...]]
+    name: Annotated[str, FrozenColumn(primary_key=True)]
 
     @classmethod
     def families(cls) -> tuple[type[RegistryNamedRow], ...]:
         return tuple(member for member in TypedTable.members_with(RegistryRows)
                      if issubclass(member, RegistryNamedRow))
 
+    @classmethod
+    def mapping_in(cls, raw: Mapping[str, JsonValue]) -> dict[str, JsonValue]:
+        value: JsonValue = raw
+        for key in cls.section:
+            value = value[key]
+        return value
+
+    @classmethod
+    def placed(cls, raw: RawDocument, mapping: dict[str, JsonValue]) -> RawDocument:
+        """``raw`` with this section replaced by ``mapping``, copying only the dicts on its path."""
+        return cls._placed(raw, cls.section, mapping)
+
+    @staticmethod
+    def _placed(raw: RawDocument, path: tuple[str, ...], mapping: dict[str, JsonValue]) -> RawDocument:
+        head, *rest = path
+        return {**raw, head: RegistryNamedRow._placed(raw[head], tuple(rest), mapping) if rest else mapping}
+
 
 @dataclass(frozen=True)
 class RegistryHeader(RegistryRow):
-    """The document's scalar fields: one row, keyed by a constant."""
+    """The document without its mapping sections, and the revision that last committed it."""
 
     header: Annotated[int, FrozenColumn(primary_key=True, check="header = 1")]
-    revision: Annotated[int, Column(check="revision >= 0")]
-    purpose: RootPurpose
-    team_project: TeamProject
-    owner_counter: Annotated[int, Column(check="owner_counter >= 0")]
-    claim_counter: Annotated[int, Column(check="claim_counter >= 0")]
+    revision: Annotated[int, Column(check="revision > 0")]
+    scalars: dict[str, JsonValue]
 
 
 @dataclass(frozen=True)
 class RegistryThreads(RegistryNamedRow):
-    """A thread's declaration, under its name."""
+    """A thread's stored declaration, under its name."""
 
-    name: Annotated[str, FrozenColumn(primary_key=True)]
-    thread: Thread
+    section = (FieldCodec.record_key(RegistryDocument, "threads"),)
+    value: dict[str, JsonValue]
 
 
 @dataclass(frozen=True)
 class RegistryStatuses(RegistryNamedRow):
-    """A thread's status, under its name."""
+    """A thread's stored status, under its name."""
 
-    name: Annotated[str, FrozenColumn(primary_key=True)]
-    status: ThreadStatus
+    section = (FieldCodec.record_key(RegistryDocument, "statuses"),)
+    value: dict[str, JsonValue]
 
 
 @dataclass(frozen=True)
 class RegistryAliases(RegistryNamedRow):
-    """An alias and the thread name it resolves to."""
+    """An alias, and the thread name it resolves to."""
 
-    alias: Annotated[str, FrozenColumn(primary_key=True)]
-    name: str
+    section = (FieldCodec.record_key(RegistryDocument, "aliases"),)
+    value: str
 
 
 @dataclass(frozen=True)
 class RegistryOwnerGenerations(RegistryNamedRow):
     """A name's owner generation; deleted names keep theirs as a tombstone."""
 
-    name: Annotated[str, FrozenColumn(primary_key=True)]
-    generation: Annotated[int, Column(check="generation > 0")]
+    section = (FieldCodec.record_key(RegistryDocument, "owners"),
+               FieldCodec.record_key(GenerationCounter, "generations"))
+    value: Annotated[int, Column(check="value > 0")]
 
 
 @dataclass(frozen=True)
 class RegistryClaimGenerations(RegistryNamedRow):
     """A name's claim generation; deleted names keep theirs as a tombstone."""
 
-    name: Annotated[str, FrozenColumn(primary_key=True)]
-    generation: Annotated[int, Column(check="generation > 0")]
+    section = (FieldCodec.record_key(RegistryDocument, "claims"),
+               FieldCodec.record_key(GenerationCounter, "generations"))
+    value: Annotated[int, Column(check="value > 0")]
 
 
 @dataclass(frozen=True)
@@ -169,10 +142,126 @@ class RegistryRemovals(RevisionStamped):
     name: Annotated[str, FrozenColumn(primary_key=True)]
 
 
-@dataclass(frozen=True)
-class RegistryChanges:
-    """What changed after a revision: the rows written and the rows removed."""
+@dataclass(frozen=True, slots=True)
+class RegistryRevisionMark:
+    """A committed registry revision: the row store's counter, never a file stat."""
 
     revision: int
-    rows: tuple[RegistryNamedRow, ...]
+
+    def successor(self) -> RegistryRevisionMark:
+        return RegistryRevisionMark(self.revision + 1)
+
+
+@dataclass(frozen=True, slots=True)
+class RegistryCapture:
+    """One committed revision of the registry document, in its wire form."""
+
+    mark: RegistryRevisionMark
+    raw: RawDocument
+
+    @property
+    def revision(self) -> RegistryRevisionMark:
+        return self.mark
+
+    @classmethod
+    def empty(cls) -> Self:
+        return cls(RegistryRevisionMark(0), FieldCodec.encode(RegistryDocument()))
+
+    def changed(self, changes: RegistryChanges) -> RegistryCapture:
+        """This revision with ``changes`` applied: removals first, then rows, so a name removed
+        and declared again after this revision ends declared. Unchanged sections stay shared."""
+        if changes.mark == self.mark:
+            return self
+        raw = changes.header.scalars
+        for family in RegistryNamedRow.families():
+            removed = changes.removed(family)
+            written = changes.written(family)
+            mapping = family.mapping_in(self.raw)
+            if removed or written:
+                mapping = {name: value for name, value in mapping.items() if name not in removed}
+                mapping.update(written)
+            raw = family.placed(raw, mapping)
+        return RegistryCapture(changes.mark, raw)
+
+
+@dataclass(frozen=True)
+class RegistryChanges:
+    """What changed after a revision: the header, the rows written and the rows removed."""
+
+    mark: RegistryRevisionMark
+    header: RegistryHeader
+    rows: Mapping[type[RegistryNamedRow], tuple[RegistryNamedRow, ...]]
     removals: tuple[RegistryRemovals, ...]
+
+    def written(self, family: type[RegistryNamedRow]) -> dict[str, JsonValue]:
+        return {row.name: row.value for row in self.rows[family]}
+
+    def removed(self, family: type[RegistryNamedRow]) -> frozenset[str]:
+        return frozenset(removal.name for removal in self.removals if removal.family is family)
+
+
+@dataclass(frozen=True, slots=True)
+class RegistryRowStore(DurableStore, RegistryFile):
+    """The registry's rows: one owner-only SQLite file beside the bus, which every installation
+    carries and nothing else can rebuild."""
+
+    root: Path
+    tables = RegistryRows
+
+    def mark(self) -> RegistryRevisionMark:
+        with self.snapshot() as db:
+            return self.mark_in(db)
+
+    @staticmethod
+    def mark_in(db) -> RegistryRevisionMark:
+        """The last committed revision; 0 before the first commit."""
+        return RegistryRevisionMark(
+            max((header.revision for header in RegistryHeader.select(db)), default=0))
+
+    def captured(self, earlier: RegistryCapture) -> RegistryCapture:
+        """The committed revision, read as the rows changed after ``earlier``: a reader pays for
+        the change, never for the registry's size."""
+        with self.snapshot() as db:
+            mark = self.mark_in(db)
+            if mark == earlier.mark:
+                return earlier
+            if mark.revision == 0:
+                return RegistryCapture.empty()
+            since = (earlier.mark.revision,)
+            return earlier.changed(RegistryChanges(
+                mark=mark,
+                header=RegistryHeader.select(db)[0],
+                rows={family: tuple(family.select(db, where="changed_at > ?", parameters=since))
+                      for family in RegistryNamedRow.families()},
+                removals=tuple(RegistryRemovals.select(
+                    db, where="changed_at > ?", parameters=since)),
+            ))
+
+    def commit(self, raw: RawDocument, previous: RegistryCapture) -> RegistryRevisionMark:
+        """Write the rows of ``raw`` that differ from ``previous`` as its successor, in one
+        transaction; refused if another revision committed since ``previous``."""
+        with self.writing() as db:
+            if self.mark_in(db) != previous.mark:
+                raise StaleFence("registry rows changed after this write read them")
+            mark = previous.mark.successor()
+            scalars = raw
+            for family in RegistryNamedRow.families():
+                scalars = family.placed(scalars, {})
+                for row in self.differences(family, raw, previous.raw, mark):
+                    row.upsert(db)
+                for name in family.mapping_in(previous.raw).keys() - family.mapping_in(raw).keys():
+                    family.delete(db, name=name)
+                    RegistryRemovals(changed_at=mark.revision, family=family, name=name).upsert(db)
+            RegistryHeader(header=1, revision=mark.revision, scalars=scalars).upsert(db)
+            return mark
+
+    @staticmethod
+    def differences(
+        family: type[RegistryNamedRow], raw: RawDocument, previous: RawDocument,
+        mark: RegistryRevisionMark,
+    ) -> Iterator[RegistryNamedRow]:
+        """The rows ``raw`` writes: identity first, so an unchanged row costs one pointer test."""
+        earlier = family.mapping_in(previous)
+        for name, value in family.mapping_in(raw).items():
+            if name not in earlier or (earlier[name] is not value and earlier[name] != value):
+                yield family(changed_at=mark.revision, name=name, value=value)

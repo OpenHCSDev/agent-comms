@@ -39,7 +39,7 @@ from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from agent_comms.execution.private_nk_entrypoint import PrivateNkLaunch, SharedRootLaunch
 from agent_comms.nominal.field_codec import RootId, ThreadLookup
-from agent_comms.registry.registry_tables import RegistryRowStore
+from agent_comms.registry.registry_tables import RegistryRevisionMark, RegistryRowStore
 from agent_comms.registry.thread_identity import ClaimedIdentity
 from agent_comms.storage.locked_store import RollbackRetained, WireWakeFile
 from agent_comms.storage.private_path import FileObservation, PrivateFileRole
@@ -90,11 +90,17 @@ def _reject(detail: str) -> NoReturn:
 def registry_digest(path: Path) -> bytes:
     """The committed registry revision this guard vouches for, read from its row store: one
     indexed read, never a hash of every row. No committed rows is the empty registry."""
-    return revision_digest(RegistryRowStore(path.parent).revision())
+    return revision_digest(RegistryRowStore(path.parent).mark())
 
 
-def revision_digest(revision: int) -> bytes:
-    return _EMPTY if not revision else hashlib.sha256(b"rows\0" + revision.to_bytes(8, "big")).digest()
+def document_digest(content: bytes) -> bytes:
+    """The digest the guard kept for the retired registry.json's bytes."""
+    return hashlib.sha256(b"present\0" + content).digest()
+
+
+def revision_digest(mark: RegistryRevisionMark) -> bytes:
+    return (_EMPTY if not mark.revision
+            else hashlib.sha256(b"rows\0" + mark.revision.to_bytes(8, "big")).digest())
 
 
 def _record(root_id: bytes, seq: int, phase: int, digest: bytes) -> bytes:
@@ -152,8 +158,11 @@ class RegistryPrivacy(ABC):
         """Require the original native namespace; a public registry has none."""
 
     @abstractmethod
-    def write(self, registry_path: Path, revision: int, commit: Callable[[], int]) -> None:
-        """Commit the registry's rows as ``revision``; a private guard brackets the commit."""
+    def write(
+        self, registry_path: Path, mark: RegistryRevisionMark,
+        commit: Callable[[], RegistryRevisionMark],
+    ) -> None:
+        """Commit the registry's rows as ``mark``; a private guard brackets the commit."""
 
     @abstractmethod
     def launch(self, root: Path) -> RootLaunch: ...
@@ -238,7 +247,10 @@ class PublicRegistry(RegistryPrivacy):
     def namespace(self) -> RootId:
         _reject("native namespace requires the original registry guard")
 
-    def write(self, registry_path: Path, revision: int, commit: Callable[[], int]) -> None:
+    def write(
+        self, registry_path: Path, mark: RegistryRevisionMark,
+        commit: Callable[[], RegistryRevisionMark],
+    ) -> None:
         commit()
 
     def launch(self, root: Path) -> RootLaunch:
@@ -477,13 +489,43 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
         finally:
             os.close(fd)
 
-    def write(self, registry_path: Path, revision: int, commit: Callable[[], int]) -> None:
+    def write(
+        self, registry_path: Path, mark: RegistryRevisionMark,
+        commit: Callable[[], RegistryRevisionMark],
+    ) -> None:
         # A pending guard after any failed write MUST remain fail-closed.
-        digest = revision_digest(revision)
+        digest = revision_digest(mark)
         sequence, slot = self.prepare(digest)
-        if commit() != revision:
+        if commit() != mark:
             _reject("row commit landed on another revision than the one it prepared")
         self.commit(sequence, slot, digest)
+
+    @classmethod
+    def recommit_carried(cls, registry_path: Path, previous: bytes, mark: RegistryRevisionMark) -> None:
+        """tools/cutover/carry_registry_rows.py only, and deleted with it: re-point a guard that
+        vouches for the retired registry.json bytes (digest ``previous``) at the row revision
+        those bytes were carried into. Refuses a guard that vouched for anything else."""
+        descriptor = PrivateFileRole.read(cls.path_in(registry_path.parent),
+            RelationViolationError("Private registry guard file is not a fixed owner-only regular file"))
+        try:
+            raw = os.pread(descriptor, _SIZE, 0)
+        finally:
+            os.close(descriptor)
+        _, _, root_id, _, _, _ = _HEADER.unpack(raw[:_HEADER.size])
+        guard = cls(registry_path, RootId(root_id.hex()))
+        fd = guard._open(PrivateFileRole.update)
+        try:
+            slots = guard._slots(fd)
+            latest = 0 if slots[0][0] > slots[1][0] else 1
+            seq, phase, digest = slots[latest]
+            carried = revision_digest(mark)
+            if (phase, digest) == (_COMMITTED, carried):
+                return
+            if (phase, digest) != (_COMMITTED, previous):
+                _reject("does not vouch for the carried registry")
+            guard._write(fd, latest, _record(guard.root_id, seq, _COMMITTED, carried))
+        finally:
+            os.close(fd)
 
     def create_pending(self) -> None:
         """The registry lock covers explicit native preparation before coordinator setup."""
