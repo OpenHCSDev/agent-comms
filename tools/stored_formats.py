@@ -17,6 +17,7 @@ import json
 from collections.abc import Iterator, Mapping
 
 from nominal_refactor_advisor import audit
+from nominal_refactor_advisor.json_reports import json_report_object
 
 from agent_comms.nominal.field_codec import FieldCodec
 
@@ -92,7 +93,7 @@ def main(modules: list[str]) -> None:
     print(
         json.dumps(
             {
-                name: form.wire()
+                name: json_report_object(form)
                 for module in modules
                 for name, form in stored_formats(module).items()
             }
