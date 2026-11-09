@@ -5,14 +5,16 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 import os
 from pathlib import Path
+import socket
 import time
+from multiprocessing.connection import Connection
 
 import pytest
 from yarl import URL
 
 from agent_comms.connector_profile import BearerSecret, HttpsMcpEndpoint, UiCredential, UiGrantId
-from agent_comms.nominal.field_codec import RootId
-from agent_comms.remote_core_process import ProcessRemoteCoreAccess
+from agent_comms.nominal.field_codec import FieldCodec, RootId
+from agent_comms.remote_core_process import ProcessRemoteCoreAccess, ProcessViewerEnd
 from agent_comms.tool_result import ToolResult
 from agent_comms.transport.progress import WireExportObserver, WireExportProgress
 from agent_comms.transport.request import ObservedRequest, ReadRequest, ToolRequest
@@ -43,6 +45,29 @@ class CpuRead(ReadRequest[CpuReply], declared_name="test_process_cpu_read"):
 class FailedRead(ReadRequest[CpuReply], declared_name="test_process_failed_read"):
     def posted(self, remote):
         raise ValueError("remote read failed")
+
+
+@dataclass(frozen=True)
+class HeldRead(ReadRequest[CpuReply], declared_name="test_process_held_read"):
+    release: Path
+
+    def posted(self, remote):
+        self.release.with_name(f"read-{os.getpid()}.ready").touch()
+        deadline = time.monotonic() + 45
+        while not self.release.exists():
+            if time.monotonic() >= deadline:
+                raise TimeoutError("The test did not release its read")
+            time.sleep(.01)
+        return {"produced_pid": os.getpid(), "checksum": 1}
+
+
+class ProbedViewerEnd(ProcessViewerEnd):
+    receives = CpuReply
+
+
+def reply_packet():
+    return FieldCodec.compact(FieldCodec.encode_document(
+        CpuReply(os.getpid(), 42), CpuReply)).encode()
 
 
 _writes = []
@@ -131,3 +156,39 @@ def test_a_closed_client_refuses_a_new_read(access):
     access.close()
     with pytest.raises(RuntimeError, match="shutdown"):
         access.call(CpuRead())
+
+
+def test_received_packets_use_their_declared_decoder_in_a_child(access):
+    incoming, outgoing = socket.socketpair()
+    with ProbedViewerEnd(incoming.detach(), access.read_process) as viewer, Connection(outgoing.detach()) as sender:
+        sender.send_bytes(reply_packet())
+        reply = viewer.recv()
+        assert reply.checksum == 42
+        assert reply.decoded_pid != os.getpid()
+
+
+def test_malformed_packets_fail_and_the_next_packet_can_still_be_decoded(access):
+    incoming, outgoing = socket.socketpair()
+    with ProbedViewerEnd(incoming.detach(), access.read_process) as viewer, Connection(outgoing.detach()) as sender:
+        sender.send_bytes(b"not JSON")
+        with pytest.raises(ValueError):
+            viewer.recv()
+        sender.send_bytes(reply_packet())
+        assert viewer.recv().checksum == 42
+
+
+def test_slow_reads_leave_an_interpreter_available_for_arrived_packets(access, tmp_path):
+    release = tmp_path / "release"
+    with ThreadPoolExecutor(max_workers=5) as callers:
+        reads = [callers.submit(access.call, HeldRead(release)) for _ in range(4)]
+        try:
+            deadline = time.monotonic() + 30
+            while len(tuple(tmp_path.glob("read-*.ready"))) < 3:
+                assert time.monotonic() < deadline, "Read workers did not start"
+                time.sleep(.01)
+            decoded = callers.submit(access.read_process.decode, ProbedViewerEnd.decode, reply_packet())
+            assert decoded.result(timeout=30).decoded_pid != os.getpid()
+            assert all(not read.done() for read in reads)
+        finally:
+            release.touch()
+        assert all(read.result(timeout=30).produced_pid != os.getpid() for read in reads)

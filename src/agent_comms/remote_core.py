@@ -90,7 +90,7 @@ class ConnectorObservationPeer(ObservationPeer):
         # much as for the calls: aiohttp resolves the name itself otherwise.
         self.route = access.route
         viewer, relay = socket.socketpair()
-        self.connection = ViewerEnd(viewer.detach())
+        self.connection = access.viewer_end(viewer.detach())
         self.ending: RelayEnding = ConnectorClosed()
         # The relay's loop and task exist before its thread starts, so retiring the peer can
         # cancel it at any point, connection setup included.
@@ -157,6 +157,10 @@ class ConnectorClient(ObservationSource):
     endpoint: HttpsMcpEndpoint
     credential: UiCredential
     route: EndpointRoute
+
+    def viewer_end(self, handle: int) -> Connection:
+        """The caller owns how received observation records are decoded."""
+        return ViewerEnd(handle)
 
     @cached_property
     def tls(self) -> ssl.SSLContext:
