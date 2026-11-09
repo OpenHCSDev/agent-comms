@@ -25,7 +25,7 @@ from agent_comms.execution.owned_turn import OwnedTurn, TurnGoalAccount
 from agent_comms.execution.turn_failure import TurnFailure
 from agent_comms.execution.turn_inputs import InputForwarding
 from agent_comms.execution.turn_output import TurnOutput
-from agent_comms.goal_ledger import AttemptRecord, Generation, Reservation
+from agent_comms.planning.goal_ledger import AttemptRecord, Generation, Reservation
 from agent_comms.goal_work import (
     GoalAssignment, GoalAssignments, GoalFailureOwner, GoalObservation, GoalOwner,
 )
@@ -51,12 +51,12 @@ from agent_comms.registry.thread_reads import ThreadCheckoutSource, ThreadOwnerS
 from agent_comms.registry.thread_status import ThreadStatus
 from agent_comms.registry.threads import Thread
 from agent_comms.relationships import RelationshipSource
-from agent_comms.runtime_info_source import RuntimeInfoWrites
+from agent_comms.execution.runtime_info_source import RuntimeInfoWrites
 from agent_comms.turn_failure_reads import (
     GoalFailurePermit, GoalFailureReservation, ModelFailureDiagnostic, ReplayPreparation,
     TerminalInputsRead, TerminalOutputRead, TerminalPromptRead, TerminalSessionRead,
 )
-from agent_comms.turn_progress_reads import ProgressGoalAccount, ProgressTurn
+from agent_comms.execution.turn_progress_reads import ProgressGoalAccount, ProgressTurn
 
 
 @pytest.mark.parametrize("provider, contract", (

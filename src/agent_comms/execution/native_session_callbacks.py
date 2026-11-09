@@ -16,10 +16,13 @@ from agent_comms.execution.session_retention import NativeSessionRetention
 from agent_comms.execution.turn_failure import TurnFailure
 from agent_comms.execution.pi_wire import PiDiagnostic
 from agent_comms.execution.send_outcome import SendBoundary
-from agent_comms.transport.native_tool_transport import ToolTransport
-from agent_comms.turn_failure_reads import (
-    TerminalInputsRead, TerminalOutputRead, TerminalPromptRead, TerminalSessionRead,
+from agent_comms.execution.turn_failure_reads import (
+    TerminalInputsRead,
+    TerminalOutputRead,
+    TerminalPromptRead,
+    TerminalSessionRead,
 )
+from agent_comms.transport.native_tool_transport import ToolTransport
 
 
 class SessionInputsCallbacks(TerminalInputsRead):

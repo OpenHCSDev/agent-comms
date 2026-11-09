@@ -9,7 +9,6 @@ import pytest
 from agent_comms.cli import main
 from agent_comms.comms import wire
 from agent_comms.execution.root_runtime import RootRuntime
-from agent_comms.goal_events import GoalChanged, GoalUnchanged
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.planning.goal_actions import (
     ActiveGoalAction,
@@ -23,6 +22,7 @@ from agent_comms.planning.goal_actions import (
     SetGoalAction,
     StandbyGoalAction,
 )
+from agent_comms.planning.goal_events import GoalChanged, GoalUnchanged
 from agent_comms.planning.goal_presentation import UnpublishedGoalSnapshot
 from agent_comms.planning.goal_states import OwnerPause, PausedGoal
 from agent_comms.projects.checkouts import Checkout

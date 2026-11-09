@@ -84,6 +84,7 @@ from agent_comms.execution.turn_failure import (
     NativePreflightExit,
     TurnFailure,
 )
+from agent_comms.execution.turn_failure_reads import TerminalSessionRead
 from agent_comms.execution.turn_inbox import TurnInbox, TurnInboxItem
 from agent_comms.execution.turn_inputs import InputForwarding
 from agent_comms.execution.turn_item import PiRequestKey
@@ -106,7 +107,6 @@ from agent_comms.transport.native_tool_transport import (
     UnboundToolTransport,
 )
 from agent_comms.transport.tool_denial import SelectedToolDenied
-from agent_comms.turn_failure_reads import TerminalSessionRead
 
 # Pi 0.85.1 owns provider-idle detection and defaults it to 300 seconds. This
 # transport backstop must remain strictly longer so Pi can emit its authoritative

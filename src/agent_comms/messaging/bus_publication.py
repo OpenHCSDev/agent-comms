@@ -9,23 +9,23 @@ from typing import ClassVar, Self
 
 from agent_comms.bus_record_builder import RecordBuilder
 from agent_comms.coordination.response_acknowledgement import KeyedResponseAcknowledgement
-from agent_comms.delivery_recipients import DeliveryRecipients
 from agent_comms.errors import RelationViolationError
-from agent_comms.initial_origin import InitialOrigin, OwnerVoiceOrigin
-from agent_comms.message_directions import MessageDirections
-from agent_comms.message_reads import MessageDeliveryRead, MessageIdentityRead
-from agent_comms.message_send_reads import PublishedMessageRead
-from agent_comms.message_writer import MessageWriter
 from agent_comms.messaging.audience_manifest import AudiencedMessage
 from agent_comms.messaging.bus_tables import AwaitingAnswerSource, ReceivedSource, SentSource
 from agent_comms.messaging.channel_targets import ThreadTarget
+from agent_comms.messaging.delivery_recipients import DeliveryRecipients
+from agent_comms.messaging.initial_origin import InitialOrigin, OwnerVoiceOrigin
+from agent_comms.messaging.message_directions import MessageDirections
+from agent_comms.messaging.message_reads import MessageDeliveryRead, MessageIdentityRead
+from agent_comms.messaging.message_send_reads import PublishedMessageRead
+from agent_comms.messaging.message_writer import MessageWriter
 from agent_comms.messaging.messages import BusRecord, BusRow, Message
 from agent_comms.messaging.projection_source import ProducedRow
 from agent_comms.nominal.class_fact import ClassFact
 from agent_comms.nominal.field_codec import FieldCodec, MessageId, ThreadLookup
+from agent_comms.registry.task_owner import TaskOwner
+from agent_comms.registry.task_registry import TaskRegistry
 from agent_comms.storage.typed_table import Column, Generated, sql_literal
-from agent_comms.task_owner import TaskOwner
-from agent_comms.task_registry import TaskRegistry
 from agent_comms.waking.wake_policy import RecipientDecision
 
 

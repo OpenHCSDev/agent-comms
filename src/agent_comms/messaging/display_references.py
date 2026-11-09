@@ -22,10 +22,10 @@ from agent_comms.messaging.snapshot_slices import (
 )
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import SlicePolicy
+from agent_comms.registry.registry_names import RegistryNames
 from agent_comms.registry.thread_identity import ThreadIncarnation
-from agent_comms.registry_names import RegistryNames
+from agent_comms.registry.thread_identity_source import ThreadIdentitySource
 from agent_comms.storage.private_path import FileObservation
-from agent_comms.thread_identity_source import ThreadIdentitySource
 from agent_comms.transport.tool_result import ToolResult
 
 

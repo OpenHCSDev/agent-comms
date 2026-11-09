@@ -17,8 +17,6 @@ from agent_comms.execution.acp_failure import NativeTurnError
 from agent_comms.execution.child_process import ChildOutcome, ProcessIdentity
 from agent_comms.execution.owned_turn import OwnedTurn
 from agent_comms.execution.turn_failure import NativeChildSignaled
-from agent_comms.goal_execution import GoalExecution
-from agent_comms.goal_ledger import FailedTurnEvidence
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.planning.goal_actions import (
     ActiveGoalAction,
@@ -27,7 +25,9 @@ from agent_comms.planning.goal_actions import (
     RetryGoalAction,
     SetGoalAction,
 )
+from agent_comms.planning.goal_execution import GoalExecution
 from agent_comms.planning.goal_history import RecordedGoalHistory
+from agent_comms.planning.goal_ledger import FailedTurnEvidence
 from agent_comms.planning.goal_presentation import (
     AttemptFailedExecution,
     AttemptUnresolvedExecution,

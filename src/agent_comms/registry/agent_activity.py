@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from agent_comms.execution.runtime_info_projection import RuntimeInfoProjection
+from agent_comms.execution.runtime_info_source import RuntimeInfoWrites
+from agent_comms.messaging.assignment_notice import AssignmentNotice
+from agent_comms.messaging.delivery_recipients import DeliveryRecipients
 from agent_comms.messaging.notification_contracts import RecipientActivityRead
 
 import logging
@@ -12,11 +16,8 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_comms.activity_registry_reads import ActivityRegistration, ActivityRegistryRead
 from agent_comms.agent_backend import AgentBackend
-from agent_comms.assignment_notice import AssignmentNotice
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.delivery_recipients import DeliveryRecipients
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.diagnostics import record_drain_failure
 from agent_comms.execution.native_input_owner import RegistryOwner
@@ -48,11 +49,10 @@ from agent_comms.registry.activity import (
     NoDrainDiagnostic,
     ObservedActivity,
 )
+from agent_comms.registry.activity_registry_reads import ActivityRegistration, ActivityRegistryRead
 from agent_comms.registry.thread_identity import OwnerIdentity, ThreadIncarnation
 from agent_comms.registry.thread_status import ThreadStatus
 from agent_comms.registry.threads import Thread
-from agent_comms.runtime_info_projection import RuntimeInfoProjection
-from agent_comms.runtime_info_source import RuntimeInfoWrites
 
 if TYPE_CHECKING:
     from agent_comms.agent_backend import AgentBackend

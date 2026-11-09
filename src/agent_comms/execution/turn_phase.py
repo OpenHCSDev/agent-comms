@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from agent_comms.agent_event import AgentEvent
+from agent_comms.execution.agent_event import AgentEvent
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import ToolCallId

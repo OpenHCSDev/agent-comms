@@ -21,7 +21,6 @@ from agent_comms.errors import (
     RelationViolationError,
     UnregisteredThreadError,
 )
-from agent_comms.initial_origin import InitialOrigin
 from agent_comms.messaging.activity_clocks import ActivityClocks
 from agent_comms.messaging.audience_manifest import freeze_audience
 from agent_comms.messaging.bus import Bus, BusReader, BusSnapshot, ClaimRecord, PrivateRecord
@@ -36,6 +35,7 @@ from agent_comms.messaging.envelope_claim_transitions import (
     WakeClaims,
 )
 from agent_comms.messaging.frozen_recipient import FrozenRecipient
+from agent_comms.messaging.initial_origin import InitialOrigin
 from agent_comms.messaging.mentions import ThreadMention
 from agent_comms.messaging.messages import BusRecord, ClaimNoticeKind, Message
 from agent_comms.messaging.wake import OrdinaryControl, resolve_wake_cohort

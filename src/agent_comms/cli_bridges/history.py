@@ -29,9 +29,9 @@ from agent_comms.cli_bridges.runtime_updates import (
     RuntimeUpdate,
     SessionFacts,
 )
-from agent_comms.import_history_source import ImportHistorySource
-from agent_comms.imported_conversation import ImportedConversation
-from agent_comms.imported_messages import ImportLimits
+from agent_comms.execution.import_history_source import ImportHistorySource
+from agent_comms.execution.imported_conversation import ImportedConversation
+from agent_comms.execution.imported_messages import ImportLimits
 from agent_comms.importing import ImportSnapshot
 from agent_comms.installer.harness_install import (
     ClaudeCodeHarness,

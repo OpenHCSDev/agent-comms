@@ -17,16 +17,15 @@ from typing import Annotated, ClassVar, Literal
 
 from agent_comms import presentation
 from agent_comms.display_order import CreatedThreadSort, LastActivityThreadSort, ThreadSort
-from agent_comms.display_sources import SentHistorySource
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.display_sources import SentHistorySource
 from agent_comms.messaging.messages import Message, MessageInput, MessageRole
 from agent_comms.messaging.published_bus import BusResources
 from agent_comms.messaging.routing import DeliveryScope
 from agent_comms.nominal import field_codec
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import GoalId
-from agent_comms.peer_relation import PeerRelation, RelationRecord, RelationRevision
 from agent_comms.peer_relevance import (
     ChannelmateRelevance,
     CollaboratorRelevance,
@@ -36,13 +35,14 @@ from agent_comms.peer_relevance import (
 )
 from agent_comms.planning.command import Command
 from agent_comms.planning.goals import Goal, GoalMentionBinding
+from agent_comms.registry.peer_relation import PeerRelation, RelationRecord, RelationRevision
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.relationship_catalog_source import RelationshipCatalogSource
 from agent_comms.registry.roster_visibility import RosterVisibility
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from agent_comms.registry.thread_owned_state import ThreadOwnedState
 from agent_comms.registry.threads import Thread
-from agent_comms.relationship_catalog_source import RelationshipCatalogSource
 from agent_comms.storage.locked_store import DocumentChange
 from agent_comms.storage.maintenance_barrier import CarriedDocument
 from agent_comms.storage.store_files import DependentStateTier, SingleFileStore

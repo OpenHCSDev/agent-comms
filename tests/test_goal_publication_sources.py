@@ -16,10 +16,10 @@ from agent_comms.comms import wire
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.turn_phase import IdlePhase, ToolRunningPhase
-from agent_comms.goal_ledger import Generation, StorageUncertainError
 from agent_comms.nominal.field_codec import AcpSessionId, TurnId
 from agent_comms.planning.goal_actions import EditGoalAction, SetGoalAction, StandbyGoalAction
 from agent_comms.planning.goal_attempts import GoalAttemptStore
+from agent_comms.planning.goal_ledger import Generation, StorageUncertainError
 from agent_comms.planning.goal_presentation import StandbyExecution
 from agent_comms.planning.goal_waits import GoalWaits
 from agent_comms.projects.checkouts import Checkout

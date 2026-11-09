@@ -38,9 +38,6 @@ from agent_comms.execution.turn_goal_permission import (
     GoalPermission,
     InactiveGoalPermission,
 )
-from agent_comms.goal_mutation import GoalMutation
-from agent_comms.goal_permit_source import GoalPermitSource
-from agent_comms.goal_work import GoalAssignment, GoalObservation, GoalOwner, GoalWorkSource
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -57,7 +54,15 @@ from agent_comms.nominal.lifecycle_capability import Active
 from agent_comms.nominal.registration_inheritance import RegistrationInheritance
 from agent_comms.nominal.text_digest import TextDigest
 from agent_comms.planning.goal_authority import GoalAuthority, GoalTurnAuthority, NoGoalAuthority
+from agent_comms.planning.goal_mutation import GoalMutation
+from agent_comms.planning.goal_permit_source import GoalPermitSource
 from agent_comms.planning.goal_states import ActiveGoal, GoalState
+from agent_comms.planning.goal_work import (
+    GoalAssignment,
+    GoalObservation,
+    GoalOwner,
+    GoalWorkSource,
+)
 from agent_comms.projects.change_report import CitationProject
 from agent_comms.projects.checkouts import DetachedStart, ScratchCheckout
 from agent_comms.projects.git_errors import GitCommandError

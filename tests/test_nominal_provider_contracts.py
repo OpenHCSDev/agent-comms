@@ -5,30 +5,53 @@ from typing import get_type_hints
 
 import pytest
 
+from agent_comms.execution.native_failure_reads import (
+    NativeOperationFailureRead,
+    NativeResponseErrorRead,
+    NativeResponseFailureRead,
+)
+from agent_comms.execution.runtime_info_source import RuntimeInfoWrites
+from agent_comms.execution.turn_failure_reads import (
+    GoalFailurePermit,
+    GoalFailureReservation,
+    ModelFailureDiagnostic,
+    ReplayPreparation,
+    TerminalInputsRead,
+    TerminalOutputRead,
+    TerminalPromptRead,
+    TerminalSessionRead,
+)
+from agent_comms.execution.turn_progress_reads import ProgressGoalAccount, ProgressTurn
 from agent_comms.messaging.activity_clocks import ActivityClocks
+from agent_comms.messaging.display_sources import (
+    ActivitySource,
+    ChannelOrderSource,
+    ChannelSortView,
+    SentClocks,
+    SentHistorySource,
+    SortedChannel,
+    StoredThreadOrder,
+)
+from agent_comms.planning.goal_ledger import AttemptRecord, Generation, Reservation
+from agent_comms.planning.goal_work import (
+    GoalAssignment,
+    GoalAssignments,
+    GoalFailureOwner,
+    GoalObservation,
+    GoalOwner,
+)
 from agent_comms.registry.agent_activity import AgentActivity
 from agent_comms.execution.backend import NativeSession
 from agent_comms.messaging.channel_management import ChannelManagement
 from agent_comms.coordination.tables.executions import ReplayAssessments
-from agent_comms.display_sources import (
-    ActivitySource, ChannelOrderSource, ChannelSortView, SentClocks, SentHistorySource,
-    SortedChannel, StoredThreadOrder,
-)
 from agent_comms.execution.goal_turn_permit import NoLaunchPermit
 from agent_comms.execution.owned_turn import OwnedTurn, TurnGoalAccount
 from agent_comms.execution.turn_failure import TurnFailure
 from agent_comms.execution.turn_inputs import InputForwarding
 from agent_comms.execution.turn_output import TurnOutput
-from agent_comms.goal_ledger import AttemptRecord, Generation, Reservation
-from agent_comms.goal_work import (
-    GoalAssignment, GoalAssignments, GoalFailureOwner, GoalObservation, GoalOwner,
-)
 from agent_comms.history_views import HistoryViews
 from agent_comms.messaging.channels import Channel
 from agent_comms.messaging.published_bus import BusResources
-from agent_comms.native_failure_reads import (
-    NativeOperationFailureRead, NativeResponseErrorRead, NativeResponseFailureRead,
-)
 from agent_comms.execution.pi_events import NativeOperationError
 from agent_comms.execution.pi_events import Response
 from agent_comms.pi_payloads import ReportedText
@@ -47,12 +70,6 @@ from agent_comms.registry.thread_reads import ThreadCheckoutSource, ThreadOwnerS
 from agent_comms.registry.thread_status import ThreadStatus
 from agent_comms.registry.threads import Thread
 from agent_comms.registry.relationships import RelationshipSource
-from agent_comms.runtime_info_source import RuntimeInfoWrites
-from agent_comms.turn_failure_reads import (
-    GoalFailurePermit, GoalFailureReservation, ModelFailureDiagnostic, ReplayPreparation,
-    TerminalInputsRead, TerminalOutputRead, TerminalPromptRead, TerminalSessionRead,
-)
-from agent_comms.turn_progress_reads import ProgressGoalAccount, ProgressTurn
 
 
 @pytest.mark.parametrize("provider, contract", (

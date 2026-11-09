@@ -4,8 +4,6 @@ from collections.abc import Sequence
 from functools import cached_property
 from pathlib import Path
 
-from agent_comms.goal_wait_target import GoalWaitTarget
-from agent_comms.goal_work import GoalWorkSource
 from agent_comms.input_attempt import ReservedInput
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.messaging.message_bus import MessageBus
@@ -17,7 +15,9 @@ from agent_comms.planning.goal_wait_recovery import (
     GoalWaitRecovery,
     GoalWaitReview,
 )
+from agent_comms.planning.goal_wait_target import GoalWaitTarget
 from agent_comms.planning.goal_waits import GoalWaits
+from agent_comms.planning.goal_work import GoalWorkSource
 from agent_comms.planning.orders import TodoStore
 from agent_comms.registry.agent_activity import AgentActivity
 from agent_comms.registry.registration import Registration

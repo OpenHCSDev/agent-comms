@@ -25,8 +25,8 @@ def main() -> None:
         ("    name: str\n", "    name: str\n    created_at: CreationTime\n"),
     ])
     patch("src/agent_comms/messages.py", [
-        ("from agent_comms.message_sender import PublicSender",
-         "from agent_comms.message_sender import PublicSender\nfrom agent_comms.thread_identity_source import ThreadIdentitySource"),
+        ("from agent_comms.messaging.message_sender import PublicSender",
+         "from agent_comms.messaging.message_sender import PublicSender\nfrom agent_comms.registry.thread_identity_source import ThreadIdentitySource"),
         ("    from agent_comms.input_disposition import InputDispositions\n", ""),
         ("    from agent_comms.registry.threads import Thread\n", ""),
         ("    def claimed(cls, owner: Thread) -> Message:",
@@ -38,7 +38,7 @@ def main() -> None:
     ])
     patch("src/agent_comms/execution/turn_origin.py", [
         ("from agent_comms.input_key import InputKey",
-         "from agent_comms.input_key import InputKey\nfrom agent_comms.thread_identity_source import ThreadIdentitySource"),
+         "from agent_comms.input_key import InputKey\nfrom agent_comms.registry.thread_identity_source import ThreadIdentitySource"),
         ("    from agent_comms.input_disposition import InputDispositions\n", ""),
         ("    from agent_comms.registry.threads import Thread\n", ""),
         ("def bus_keys(self, dispositions: InputDispositions, owner: Thread)",
@@ -46,7 +46,7 @@ def main() -> None:
     ])
     patch("src/agent_comms/routing.py", [
         ("from agent_comms.response_policy import NO_ALIASES",
-         "from agent_comms.response_policy import NO_ALIASES\nfrom agent_comms.thread_identity_source import ThreadIdentitySource"),
+         "from agent_comms.response_policy import NO_ALIASES\nfrom agent_comms.registry.thread_identity_source import ThreadIdentitySource"),
         ("    from agent_comms.input_disposition import InputDispositions\n", ""),
         ("    from agent_comms.registry.threads import Thread\n", ""),
         ("def bus_keys(self, dispositions: InputDispositions, owner: Thread)",
@@ -54,7 +54,7 @@ def main() -> None:
     ])
     patch("src/agent_comms/response_policy.py", [
         ("from agent_comms.projection_source import ProducedRow, ProjectionSource",
-         "from agent_comms.projection_source import ProducedRow, ProjectionSource\nfrom agent_comms.thread_identity_source import ThreadIdentitySource"),
+         "from agent_comms.projection_source import ProducedRow, ProjectionSource\nfrom agent_comms.registry.thread_identity_source import ThreadIdentitySource"),
         ("    from agent_comms.registry.threads import Thread\n", ""),
         ("    def disposition_key(self, message: MessageInput, owner: Thread) -> InputKey:\n        return OwnedBusInputKey(message.seq, float(owner.created_at))",
          "    def disposition_key(self, message: MessageInput, owner: ThreadIdentitySource) -> InputKey:\n        return OwnedBusInputKey(message.seq, float(owner.created_at))"),

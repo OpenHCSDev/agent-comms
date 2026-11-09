@@ -31,10 +31,10 @@ def main() -> None:
     before = tasks.read_text()
     after = before.replace(
         "from agent_comms.registry.registry_document import RegistrySnapshot",
-        "from agent_comms.task_registry import TaskRegistry",
+        "from agent_comms.registry.task_registry import TaskRegistry",
     ).replace(
         "from agent_comms.registry_provenance import RegistryProvenance",
-        "from agent_comms.registry_names import RegistryNames",
+        "from agent_comms.registry.registry_names import RegistryNames",
     ).replace(
         "from agent_comms.registry.threads import Thread\n",
         "from agent_comms.registry.threads import Thread, ThreadProvenance\n",
@@ -73,7 +73,7 @@ def main() -> None:
         "live snapshot/provenance assembly backwards. Cold imports, actual identity/refusal "
         "paths and original sender-binding bytes must qualify this authored decision.",
         [{"operation": "create_file", "file_path": str(source / "task_registry.py"),
-          "source": '"""The original live namespace reads consumed by authored task declarations."""\n\nfrom abc import abstractmethod\n\nfrom agent_comms.registry_names import RegistryNames\nfrom agent_comms.registry.threads import Thread\n\n\nclass TaskRegistry(RegistryNames[Thread]):\n    __slots__ = ()\n\n    @abstractmethod\n    def claim_generation(self, name: str) -> int: ...\n'},
+          "source": '"""The original live namespace reads consumed by authored task declarations."""\n\nfrom abc import abstractmethod\n\nfrom agent_comms.registry.registry_names import RegistryNames\nfrom agent_comms.registry.threads import Thread\n\n\nclass TaskRegistry(RegistryNames[Thread]):\n    __slots__ = ()\n\n    @abstractmethod\n    def claim_generation(self, name: str) -> int: ...\n'},
          patch(source / "registry/registry_document.py", [
              {"old_source": "class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thread]):",
               "new_source": "class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](TaskRegistry):"},
@@ -81,7 +81,7 @@ def main() -> None:
               "new_source": ""},
          ]),
          {"operation": "ensure_import", "file_path": str(source / "registry/registry_document.py"),
-          "import_source": "from agent_comms.task_registry import TaskRegistry"},
+          "import_source": "from agent_comms.registry.task_registry import TaskRegistry"},
          patch(tasks, [{"old_source": before, "new_source": after}]),
          {"operation": "remove_import_names", "file_path": str(source / "registry_provenance.py"),
           "module_name": ".registry_names", "import_names": ["Member", "DeletedThread"]},

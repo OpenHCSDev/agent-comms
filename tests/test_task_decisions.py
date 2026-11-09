@@ -34,9 +34,9 @@ from agent_comms.messaging.task_sources import (
 )
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, TurnId
 from agent_comms.planning.goals import Goal
+from agent_comms.planning.task_scope import ExplicitTaskScopeSelection, GoalTaskScope, TurnTaskScope
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.task_scope import ExplicitTaskScopeSelection, GoalTaskScope, TurnTaskScope
 from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tools.served import invoke_tool
 from bus_history import read_history

@@ -24,27 +24,13 @@ from agent_comms.errors import (
 )
 from agent_comms.execution.native_input_owner import GoalLaunchOwner
 from agent_comms.execution.turn_lease import ActiveTurn, TurnDeclaration
-from agent_comms.goal_events import GoalChange, GoalChanged, GoalUnchanged
-from agent_comms.goal_ledger import FailedTurnEvidence, Generation
-from agent_comms.goal_mutation import (
-    GoalFailureProjection,
-    GoalFork,
-    GoalGenerationProjection,
-    GoalReadyGrantSource,
-    GoalStateProjection,
-    GoalTurnProjection,
-    GoalWaitProjection,
-)
-from agent_comms.goal_permit_source import GoalStoreSource
-from agent_comms.goal_snapshots import GoalSnapshots
-from agent_comms.goal_wait_target import GoalWaitTarget
 from agent_comms.input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
     InputDeliveryScope,
     UnresolvedInputReference,
 )
 from agent_comms.input_disposition import DeliveryOverview
-from agent_comms.message_directions import MessageDirections
+from agent_comms.messaging.message_directions import MessageDirections
 from agent_comms.messaging.messages import Message
 from agent_comms.nominal.field_codec import GoalId
 from agent_comms.planning.goal_actions import (
@@ -58,8 +44,20 @@ from agent_comms.planning.goal_actions import (
     SetGoalAction,
 )
 from agent_comms.planning.goal_attempts import GoalAttemptStore
+from agent_comms.planning.goal_events import GoalChange, GoalChanged, GoalUnchanged
 from agent_comms.planning.goal_failure_observation import GoalFailureEvidence
 from agent_comms.planning.goal_history import GoalHistoryEntry, RecordedGoalHistory
+from agent_comms.planning.goal_ledger import FailedTurnEvidence, Generation
+from agent_comms.planning.goal_mutation import (
+    GoalFailureProjection,
+    GoalFork,
+    GoalGenerationProjection,
+    GoalReadyGrantSource,
+    GoalStateProjection,
+    GoalTurnProjection,
+    GoalWaitProjection,
+)
+from agent_comms.planning.goal_permit_source import GoalStoreSource
 from agent_comms.planning.goal_presentation import (
     AttemptFailedExecution,
     AttemptUnresolvedExecution,
@@ -76,7 +74,9 @@ from agent_comms.planning.goal_presentation import (
 )
 from agent_comms.planning.goal_records import GoalRecords
 from agent_comms.planning.goal_scope import AllGoals, GoalScope, OneGoal
+from agent_comms.planning.goal_snapshots import GoalSnapshots
 from agent_comms.planning.goal_states import PauseSource
+from agent_comms.planning.goal_wait_target import GoalWaitTarget
 from agent_comms.planning.goal_waits import GoalWait, StandbyReview
 from agent_comms.planning.goals import Goal, GoalDeclaration
 from agent_comms.planning.order_words import StrikeReason

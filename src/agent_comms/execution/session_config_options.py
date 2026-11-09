@@ -31,13 +31,13 @@ from agent_comms.execution.owner_protocol import IncompatibleOwner
 from agent_comms.execution.pi_commands import SettingCommand
 from agent_comms.execution.runtime import RuntimeProxy
 from agent_comms.execution.session_effects import SessionEffects
+from agent_comms.execution.session_reads import OwnedObservation, SessionConfigurationSource
 from agent_comms.execution.turn_inbox import UseSettings
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.watched import FileSource
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec
 from agent_comms.registry.thread_model import CatalogSelection
 from agent_comms.registry.threads import ChosenModel, NextTurnConfiguration, Thread
-from agent_comms.session_reads import OwnedObservation, SessionConfigurationSource
 from agent_comms.transport.runtime_server import RuntimeServer
 
 

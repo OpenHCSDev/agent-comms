@@ -6,8 +6,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field, fields
 from typing import Self
 
-from agent_comms.display_sources import SentClocks
-from agent_comms.message_clock_source import MessageClockSource
+from agent_comms.messaging.display_sources import SentClocks
+from agent_comms.messaging.message_clock_source import MessageClockSource
 from agent_comms.messaging.projection_source import ProducedRow, ProjectionSource
 from agent_comms.nominal.class_fact import ClassFact
 from agent_comms.nominal.field_codec import FieldCodec

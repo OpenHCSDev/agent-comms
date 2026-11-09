@@ -12,8 +12,6 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.input_key import InputKey, InputKeyText
 from agent_comms.execution.reported_turn import ReportedTurnState
-from agent_comms.goal_control import GoalControlSource
-from agent_comms.goal_mutation import GoalMutation, GoalStateOrder
 from agent_comms.nominal import field_codec
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
@@ -26,7 +24,9 @@ from agent_comms.nominal.field_codec import (
 from agent_comms.nominal.lifecycle_capability import Settled
 from agent_comms.planning.attempt_resolution import ComplianceDecision, OrderDecision, RetryDecision
 from agent_comms.planning.command import Command
+from agent_comms.planning.goal_control import GoalControlSource
 from agent_comms.planning.goal_mentions import bind_goal_mentions
+from agent_comms.planning.goal_mutation import GoalMutation, GoalStateOrder
 from agent_comms.planning.goal_records import GoalRecords
 from agent_comms.planning.goal_scope import AllGoals, OneGoal
 from agent_comms.planning.goal_states import (

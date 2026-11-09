@@ -41,10 +41,10 @@ class ContextProvenanceSource[Source](ABC):
          "new_source": "class StoredInput(InputAttempt, ContextProvenanceSource[InputProvenance]):"},
     ])
     ensure("src/agent_comms/input_attempt.py",
-           "from agent_comms.context_provenance_source import ContextProvenanceSource")
+           "from agent_comms.execution.context_provenance_source import ContextProvenanceSource")
     patch("src/agent_comms/execution/turn_context.py", [
-        {"old_source": "from agent_comms.context_owner import ContextOwner",
-         "new_source": "from agent_comms.context_owner import ContextOwner\nfrom agent_comms.context_provenance_source import ContextProvenanceSource"},
+        {"old_source": "from agent_comms.execution.context_owner import ContextOwner",
+         "new_source": "from agent_comms.execution.context_owner import ContextOwner\nfrom agent_comms.execution.context_provenance_source import ContextProvenanceSource"},
         {"old_source": "from agent_comms.peer_relevance import AlwaysListed, GoalShown, PeerRelevance",
          "new_source": "from agent_comms.peer_relevance import AlwaysListed, PeerRelevance"},
         {"old_source": "from typing import TYPE_CHECKING, Annotated, Self",

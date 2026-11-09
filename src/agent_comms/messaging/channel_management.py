@@ -10,16 +10,17 @@ from typing import ClassVar
 
 from agent_comms.cli_verbs.cli_result import TargetEditResult
 from agent_comms.display_order import ChannelSort, ThreadSort
-from agent_comms.display_sources import ChannelOrderSource
 from agent_comms.messaging.bus_publication import AgentOrigin
 from agent_comms.messaging.channel_targets import ChannelTarget, CommandTarget, Tag
 from agent_comms.messaging.channels import Channel, SavedView
+from agent_comms.messaging.display_sources import ChannelOrderSource
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messaging.messages import InfoKind, MembershipConversationRole, Message
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import RecordMember
 from agent_comms.registry.catalog_document import CatalogDocument
 from agent_comms.registry.registration import Registration
+from agent_comms.registry.relationship_catalog_source import RelationshipCatalogSource
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_management import (
     ChangedTags,
@@ -28,7 +29,6 @@ from agent_comms.registry.thread_management import (
     ThreadManagement,
 )
 from agent_comms.registry.threads import Thread
-from agent_comms.relationship_catalog_source import RelationshipCatalogSource
 
 
 @dataclass(frozen=True)

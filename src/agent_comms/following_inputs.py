@@ -8,12 +8,15 @@ from functools import partial
 from agent_comms.acp_extension import LiveQueueScope
 from agent_comms.agent_events import InputRefused
 from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.following_input_contracts import (
+    FollowingInputRetirement,
+    FollowingTurnSource,
+)
 from agent_comms.execution.input_drain import InputDrain
 from agent_comms.execution.owned_send import OwnedSend
 from agent_comms.execution.queued_input import DeliveredInput, InputHandoffRefused
 from agent_comms.execution.turn_inbox import TurnInbox
 from agent_comms.execution.turn_input_source import AcceptedFollowingInput
-from agent_comms.following_input_contracts import FollowingInputRetirement, FollowingTurnSource
 from agent_comms.nominal.field_codec import AcpSessionId, InputId
 from agent_comms.registry.thread_identity import ClaimedIdentity
 from agent_comms.registry.threads import Thread

@@ -101,11 +101,11 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.work_branches import WorkBranchError
 from agent_comms.registry.activity import ObservedActivity
 from agent_comms.registry.registry_document import RegistrySnapshot, UnreadRegistry
+from agent_comms.registry.registry_names import DeletedThread
 from agent_comms.registry.roster_visibility import RosterVisibility
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_presentation import ThreadPresentation
 from agent_comms.registry.view_unread import ReplyIndexResult
-from agent_comms.registry_names import DeletedThread
 from agent_comms.team.team_heartbeat import TeamBoardRead
 from agent_comms.team.team_hud import TeamFrame, TeamHud, TeamPlan
 from agent_comms.team.team_hud_records import TeammateDetail

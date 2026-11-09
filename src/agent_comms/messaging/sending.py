@@ -13,20 +13,20 @@ from agent_comms.errors import (
     UnreceivedAnswerError,
     UnregisteredThreadError,
 )
+from agent_comms.execution.input_ingress import InputUserIdentity
 from agent_comms.execution.turn_context import ContextSegment
 from agent_comms.execution.turn_item import NoSourceTurn, SourceTurn
-from agent_comms.initial_origin import HumanOrigin, InitialOrigin
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.input_ingress import InputUserIdentity
-from agent_comms.message_send_reads import PresenceMessageSender
 from agent_comms.messaging.bus_publication import AgentOrigin, AutomatedOrigin
 from agent_comms.messaging.channel_targets import (
     CommandTarget,
     IncarnationThreadTarget,
     NamedTarget,
 )
+from agent_comms.messaging.initial_origin import HumanOrigin, InitialOrigin
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.message_send_reads import PresenceMessageSender
 from agent_comms.messaging.messages import (
     ConversationRole,
     InfoKind,
@@ -53,12 +53,12 @@ from agent_comms.messaging.task_sources import (
 from agent_comms.nominal.field_codec import ThreadLookup
 from agent_comms.planning.goal_management import Goals
 from agent_comms.planning.orders import TodoStore
+from agent_comms.planning.task_scope import CurrentTaskScopeSelection, TaskScopeSelection
 from agent_comms.projects.change_report import NoChangeReport, ReportEvidence
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.threads import Thread
-from agent_comms.task_scope import CurrentTaskScopeSelection, TaskScopeSelection
 from agent_comms.transcript.external_transcript import ExternalTranscript
 
 

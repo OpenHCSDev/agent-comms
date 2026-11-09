@@ -19,24 +19,8 @@ from agent_comms.execution.goal_turn_permit import GoalTurnPermit
 from agent_comms.execution.pi_wire import PiUsage
 from agent_comms.execution.reservation_rules import ReservationRule, RuleCheck
 from agent_comms.execution.turn_failure import TurnFailure
+from agent_comms.execution.turn_failure_reads import GoalFailurePermit
 from agent_comms.execution.turn_item import UsageChargeId
-from agent_comms.goal_ledger import (
-    AttemptRecord,
-    FailedTurnEvidence,
-    FailedTurnObservation,
-    Generation,
-    GoalLedgerTable,
-    GoalLedgerWriter,
-    GoalProviderUsage,
-    GoalWorkDecision,
-    LedgerAttempt,
-    NoAttempt,
-    Reservation,
-    StorageUncertainError,
-)
-from agent_comms.goal_mutation import GoalContextSource, GoalGenerationChanges, GoalGenerationGrants
-from agent_comms.goal_permit_source import GoalPermitSource, GoalStoreSource
-from agent_comms.goal_work import GoalFailureOwner
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     AttemptId,
@@ -75,14 +59,34 @@ from agent_comms.planning.goal_generation import (
     ReadyGeneration,
     ReservedGeneration,
 )
+from agent_comms.planning.goal_ledger import (
+    AttemptRecord,
+    FailedTurnEvidence,
+    FailedTurnObservation,
+    Generation,
+    GoalLedgerTable,
+    GoalLedgerWriter,
+    GoalProviderUsage,
+    GoalWorkDecision,
+    LedgerAttempt,
+    NoAttempt,
+    Reservation,
+    StorageUncertainError,
+)
+from agent_comms.planning.goal_mutation import (
+    GoalContextSource,
+    GoalGenerationChanges,
+    GoalGenerationGrants,
+)
+from agent_comms.planning.goal_permit_source import GoalPermitSource, GoalStoreSource
 from agent_comms.planning.goal_scope import GoalScope
+from agent_comms.planning.goal_work import GoalFailureOwner
 from agent_comms.planning.goals import Goal
 from agent_comms.registry.thread_identity import TurnFence
 from agent_comms.storage.locked_store import FileStore, GoalWakeFile, SQLiteReader
 from agent_comms.storage.maintenance_barrier import DrainSettledFile
 from agent_comms.storage.store_files import AtomicFile
 from agent_comms.storage.typed_table import ReconciledFile, SQLiteJournalMode, StoreWriter
-from agent_comms.turn_failure_reads import GoalFailurePermit
 
 
 @dataclass(frozen=True, kw_only=True)

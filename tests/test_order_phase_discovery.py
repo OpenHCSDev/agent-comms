@@ -4,7 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from agent_comms.order_phase import UnplannedPhase
+from agent_comms.planning.order_phase import UnplannedPhase
 from agent_comms.planning.plan_phases import RetainedStorePhase
 
 

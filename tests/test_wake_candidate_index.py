@@ -6,7 +6,6 @@ import pytest
 
 from agent_comms.execution.input_drain import NoPrivateObservation, PrivateObservation
 from agent_comms.execution.proven_source_coverage import SourcePrefix
-from agent_comms.goal_wait_target import GoalWaitTarget
 from agent_comms.messaging.bus import BusRecord, PublicRecord
 from agent_comms.messaging.messages import InfoKind, Message, NoticeRole
 from agent_comms.messaging.notification_evidence import AllOutcomes
@@ -19,6 +18,7 @@ from agent_comms.notification_assignment import (
     NotificationAssignmentRead,
     NotificationSelection,
 )
+from agent_comms.planning.goal_wait_target import GoalWaitTarget
 from agent_comms.planning.goal_waits import RecordedGoalWait
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration

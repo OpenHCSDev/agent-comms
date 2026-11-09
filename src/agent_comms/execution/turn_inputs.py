@@ -26,6 +26,7 @@ from agent_comms.execution.pi_commands import (
 from agent_comms.execution.pi_events import MessageStart, Response
 from agent_comms.execution.prompt_state import PreparedSession, UnwrittenPrompt
 from agent_comms.execution.turn_failure import PromptSendFailed
+from agent_comms.execution.turn_failure_reads import TerminalInputsRead
 from agent_comms.execution.turn_inbox import (
     ClearQueuedInputs,
     InputRequest,
@@ -37,7 +38,6 @@ from agent_comms.execution.turn_inbox import (
 from agent_comms.nominal.field_codec import InputId
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
-from agent_comms.turn_failure_reads import TerminalInputsRead
 
 
 class NoCurrentItem(TurnInboxItem):

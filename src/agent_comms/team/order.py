@@ -53,11 +53,11 @@ from agent_comms.nominal.field_codec import (
     SubclassUnion,
     boundary_decoder,
 )
-from agent_comms.order_phase import OrderPhase
 from agent_comms.planning.delivery_evidence import DeliveryEvidence, TodoProblems, WorkingEvidence
 from agent_comms.planning.goal_actions import CreateProblemGoalAction, OrderGoalAction
 from agent_comms.planning.goals import CheckCommand, CheckResult, CountCheckResult, OrderCheck
 from agent_comms.planning.held_orders import HeldOrders
+from agent_comms.planning.order_phase import OrderPhase
 from agent_comms.planning.order_words import (
     BluntText,
     DirectiveText,

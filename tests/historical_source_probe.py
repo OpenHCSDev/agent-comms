@@ -3,7 +3,7 @@
 import json
 import sys
 
-from agent_comms.imported_session_metadata import ImportedSessionMetadata
+from agent_comms.execution.imported_session_metadata import ImportedSessionMetadata
 from agent_comms.nominal.field_codec import FieldCodec
 
 

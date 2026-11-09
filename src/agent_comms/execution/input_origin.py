@@ -8,20 +8,20 @@ from typing import Annotated
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.controller import NO_CONTROLLER
+from agent_comms.execution.input_ingress import InputIngressContext, InputRegistry
 from agent_comms.execution.input_key import InputKey, InputKeyText
+from agent_comms.execution.input_lookup import InputLookup
 from agent_comms.execution.input_text_context import InputTextContext
 from agent_comms.execution.turn_context import Provenance
-from agent_comms.input_ingress import InputIngressContext, InputRegistry
-from agent_comms.input_lookup import InputLookup
 from agent_comms.installer.harness_install import HarnessSession
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import RootId
 from agent_comms.planning.goals import GoalCheckpoint
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.task_owner import TaskOwner
+from agent_comms.registry.task_registry import TaskRegistry
 from agent_comms.registry.thread_identity import ClaimedIdentity, ClaimScoped
-from agent_comms.task_owner import TaskOwner
-from agent_comms.task_registry import TaskRegistry
 from agent_comms.transport.tool_result import ToolResult
 
 
@@ -206,4 +206,4 @@ class HumanInputOrigin(InputOrigin, ClaimScoped, ToolResult):
 
 import agent_comms.input_attempt as input_attempt
 import agent_comms.messaging.retained_task_facts as task_facts
-from agent_comms import initial_origin
+from agent_comms.messaging import initial_origin

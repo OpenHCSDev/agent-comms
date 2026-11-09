@@ -37,11 +37,14 @@ from agent_comms.execution.drain_failures import (
     drain_failures,
     record_drain_failure,
 )
+from agent_comms.execution.following_input_contracts import FollowingInputRetirement
 from agent_comms.execution.image_input import ImageInput
 from agent_comms.execution.input_effects import InputEffects
+from agent_comms.execution.input_event_source import InputEventSource, InputEventState
 from agent_comms.execution.input_key import InputKey
 from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.execution.proven_source_coverage import SourcePrefix
+from agent_comms.execution.queue_publication import QueuePublication
 from agent_comms.execution.queued_input import DeliveredInput, InputHandoffRefused, QueuedInput
 from agent_comms.execution.reservation_rules import (
     ReservationRule,
@@ -49,6 +52,7 @@ from agent_comms.execution.reservation_rules import (
     RuleCheck,
 )
 from agent_comms.execution.session_lifecycle import SessionLifecycle
+from agent_comms.execution.session_owner_reads import OwnedSessionLifetime, SessionTaskOwner
 from agent_comms.execution.session_tasks import (
     BackgroundTask,
     RunningBackgroundTask,
@@ -71,14 +75,12 @@ from agent_comms.execution.turn_input_source import (
 )
 from agent_comms.execution.turn_outcome import TurnOutcome
 from agent_comms.execution.turn_terminal import OwnerStop
-from agent_comms.following_input_contracts import FollowingInputRetirement
 from agent_comms.input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
     InputDeliveryScope,
     OwnerQueueInputDeliveryScope,
 )
 from agent_comms.input_disposition import InputDispositions, InputDocument
-from agent_comms.input_event_source import InputEventSource, InputEventState
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.routing import ScheduledTurn
 from agent_comms.messaging.watched import ChangeSignal, FileLifetimeSource, FileSource
@@ -86,13 +88,11 @@ from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import AcpSessionId, InputId, RootId, ThreadLookup
 from agent_comms.nominal.lifecycle_capability import Executing
 from agent_comms.planning.goals import GoalDeclaration
-from agent_comms.queue_publication import QueuePublication
 from agent_comms.registry.activity import FailedWakeDiagnostic, StoppedDrainDiagnostic
 from agent_comms.registry.registry_document import RegistryDocument, RegistryEntry
 from agent_comms.registry.registry_store import RegistryEntryRevision
 from agent_comms.registry.thread_identity import ClaimedIdentity, OwnerIdentity
 from agent_comms.registry.threads import NativeThread, Thread
-from agent_comms.session_owner_reads import OwnedSessionLifetime, SessionTaskOwner
 from agent_comms.storage.locked_store import GoalWakeFile
 from agent_comms.storage.maintenance_barrier import MaintenanceIngress, MaintenanceStatus
 from agent_comms.transport.owner_requests import OwnerRetiredReply, StopOwnerRuntimeRequest

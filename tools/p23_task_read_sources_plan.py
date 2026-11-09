@@ -69,14 +69,14 @@ from agent_comms.bus import Bus, BusReader, BusSnapshot
 from agent_comms.bus_publication import Delivered
 from agent_comms.input_attempt import InputAttempt, StoredInput
 from agent_comms.input_disposition import InputDispositions, InputDocument
-from agent_comms.input_lookup import InputLookup
-from agent_comms.message_reads import ConversationRead, MessageIdentityRead, MessageReferencesRead
+from agent_comms.execution.input_lookup import InputLookup
+from agent_comms.messaging.message_reads import ConversationRead, MessageIdentityRead, MessageReferencesRead
 from agent_comms.messaging.messages import ClaimMessage, Message
 from agent_comms.retained_task_facts import (
     ClaimTaskFact, InputTaskFact, RetainedTaskFacts, UserSourceTaskFact,
 )
-from agent_comms.task_owner import TaskOwner
-from agent_comms.task_registry import TaskRegistry
+from agent_comms.registry.task_owner import TaskOwner
+from agent_comms.registry.task_registry import TaskRegistry
 
 
 def test_retained_read_uses_the_actual_message_and_input_providers():
@@ -132,19 +132,19 @@ source_stage = stage(
             ("    def revision(self) -> int:\n        with self.observing() as db:\n            return BusRow.last_seq(db)",
              "    def contains_message_identity(self, sender: str, message_id: MessageId) -> bool:\n        with self.observing() as db:\n            return MessageIdentitySource.exists(db, sender=sender, message_id=message_id)\n\n    def revision(self) -> int:\n        with self.observing() as db:\n            return BusRow.last_seq(db)"),
         ]),
-        imported(bus, "from agent_comms.message_reads import ConversationRead, MessageIdentityRead, MessageReferencesRead"),
+        imported(bus, "from agent_comms.messaging.message_reads import ConversationRead, MessageIdentityRead, MessageReferencesRead"),
         imported(bus, "from agent_comms.nominal.field_codec import MessageId"),
         patch(inputs, [
             ("class InputDocument(OriginalInputs):", "class InputDocument(OriginalInputs, InputLookup[InputAttempt]):"),
             ("class InputDispositions(DurableStore, CompleteInputReader):",
              "class InputDispositions(DurableStore, CompleteInputReader, InputLookup[InputAttempt]):"),
         ]),
-        imported(inputs, "from agent_comms.input_lookup import InputLookup"),
+        imported(inputs, "from agent_comms.execution.input_lookup import InputLookup"),
         patch(facts, [(facts_before, facts_after)]),
-        imported(facts, "from agent_comms.message_reads import ConversationRead"),
-        imported(facts, "from agent_comms.input_lookup import InputLookup"),
-        imported(facts, "from agent_comms.task_owner import TaskOwner"),
-        imported(facts, "from agent_comms.task_registry import TaskRegistry"),
+        imported(facts, "from agent_comms.messaging.message_reads import ConversationRead"),
+        imported(facts, "from agent_comms.execution.input_lookup import InputLookup"),
+        imported(facts, "from agent_comms.registry.task_owner import TaskOwner"),
+        imported(facts, "from agent_comms.registry.task_registry import TaskRegistry"),
         patch(publication, [
             ("        with source.observing() as db:\n            if MessageIdentitySource.exists(db, sender=sender, message_id=message_id):\n                raise HumanSendRefusedError(RelationViolationError(\n                    \"Human message identity was already published.\"))",
              "        if source.contains_message_identity(sender, message_id):\n            raise HumanSendRefusedError(RelationViolationError(\n                \"Human message identity was already published.\"))"),

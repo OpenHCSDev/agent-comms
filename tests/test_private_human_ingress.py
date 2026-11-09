@@ -22,8 +22,8 @@ from agent_comms.errors import (
     UnregisteredThreadError,
 )
 from agent_comms.execution.launch_root import LaunchRoot
-from agent_comms.initial_origin import HumanOrigin
 from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.initial_origin import HumanOrigin
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import InfoKind, Message
 from agent_comms.messaging.read_basis import NamedViewer

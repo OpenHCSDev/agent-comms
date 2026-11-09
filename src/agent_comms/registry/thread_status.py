@@ -20,8 +20,8 @@ from agent_comms.execution.turn_lease import (
     TurnCompletion,
     TurnLeaseFence,
 )
-from agent_comms.message_send_reads import PresenceMessageSender
 from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.message_send_reads import PresenceMessageSender
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, TextRepresentation
 from agent_comms.nominal.lifecycle_capability import LifecycleCapability

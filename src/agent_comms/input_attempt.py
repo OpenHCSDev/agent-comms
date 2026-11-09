@@ -7,8 +7,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, fields, replace
 from typing import Annotated, ClassVar, Self
 
-from agent_comms.context_provenance_source import ContextProvenanceSource
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.context_provenance_source import ContextProvenanceSource
 from agent_comms.execution.input_key import InputKey, InputKeyText, PublicInputKeyText
 from agent_comms.execution.input_origin import (
     InputDelivery,
@@ -37,9 +37,9 @@ from agent_comms.nominal.field_codec import (
 )
 from agent_comms.nominal.lifecycle_capability import LifecycleCapability, Unresolved
 from agent_comms.nominal.text_digest import TextDigest
+from agent_comms.registry.registry_names import RegistryNames
 from agent_comms.registry.thread_identity import GenerationCounter, ThreadIncarnation, TurnFence
-from agent_comms.registry_names import RegistryNames
-from agent_comms.thread_identity_source import ThreadIdentitySource
+from agent_comms.registry.thread_identity_source import ThreadIdentitySource
 
 
 class InputAlreadyCleared(RelationViolationError):

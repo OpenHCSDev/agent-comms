@@ -13,7 +13,6 @@ from agent_comms.bus_record_builder import RecordBuilder
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.errors import CommittedMessageError
 from agent_comms.execution.child_process import NoProcess, ProcessIdentity
-from agent_comms.initial_origin import HumanOrigin
 from agent_comms.messaging.bus import Bus, ClaimRecord, KeyedPrivateRecord, PublicRecord
 from agent_comms.messaging.bus_tables import MessageIdentitySource
 from agent_comms.messaging.envelope_claim_transitions import (
@@ -26,6 +25,7 @@ from agent_comms.messaging.envelope_claim_transitions import (
     UnclaimedResource,
     WakeClaims,
 )
+from agent_comms.messaging.initial_origin import HumanOrigin
 from agent_comms.messaging.messages import (
     BusCapability,
     BusProjectionTables,

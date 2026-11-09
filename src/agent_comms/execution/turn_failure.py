@@ -13,9 +13,7 @@ from typing import TYPE_CHECKING, ClassVar
 from agent_comms.errors import StaleAttemptError
 from agent_comms.execution.native_arguments import SelectedModel
 from agent_comms.execution.native_failures import NativePiUnavailable
-from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.planning.attempt_resolution import RecordedResolution
-from agent_comms.turn_failure_reads import (
+from agent_comms.execution.turn_failure_reads import (
     GoalFailurePermit,
     ModelFailureDiagnostic,
     ReplayPreparation,
@@ -23,6 +21,8 @@ from agent_comms.turn_failure_reads import (
     TerminalOutputRead,
     TerminalSessionRead,
 )
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.planning.attempt_resolution import RecordedResolution
 
 
 @dataclass(frozen=True)

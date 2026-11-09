@@ -11,11 +11,11 @@ from agent_comms.errors import StaleAttemptError, UnresolvedAttemptError
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.turn_failure import BackendFailed, FailedTurnResolution, FinalStopMissing
 from agent_comms.execution.turn_lease import FinishedTurn, StoredTurnRecord, TurnLeaseFence
-from agent_comms.goal_ledger import AttemptRecord, FailedTurnObservation, Generation
 from agent_comms.nominal.field_codec import GoalId, TurnId
 from agent_comms.planning.goal_attempts import GoalAttemptStore
 from agent_comms.planning.goal_failure_observation import NoFailedTurnEvidence
 from agent_comms.planning.goal_generation import BlockedGeneration
+from agent_comms.planning.goal_ledger import AttemptRecord, FailedTurnObservation, Generation
 from agent_comms.planning.goals import Goal
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_store import RegistryStore

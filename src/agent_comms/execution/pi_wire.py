@@ -12,8 +12,9 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, Self
 
 from pydantic import JsonValue
 
+from agent_comms.execution.native_failure_reads import NativeResponseErrorRead
+from agent_comms.execution.turn_failure_reads import ModelFailureDiagnostic
 from agent_comms.execution.turn_item import PiRequestKey, UsageChargeId
-from agent_comms.native_failure_reads import NativeResponseErrorRead
 from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.nominal.field_codec import (
     ExternalField,
@@ -30,7 +31,6 @@ from agent_comms.nominal.field_codec import (
     boundary_decoder,
 )
 from agent_comms.pi_counts import NonnegativePiCount, TotalPiCount, UnreportedCount
-from agent_comms.turn_failure_reads import ModelFailureDiagnostic
 
 if TYPE_CHECKING:
     from agent_comms.execution.pending_requests import PendingRequest, PendingRequests

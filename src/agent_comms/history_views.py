@@ -77,6 +77,7 @@ from agent_comms.registry.catalog_store import ChannelCatalog
 from agent_comms.registry.collaboration_ledger import CollaborationLedger
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.registry_names import DeletedThread
 from agent_comms.registry.relationships import RelationshipSource
 from agent_comms.registry.roster_visibility import DEFAULT_ROSTER, RosterVisibility
 from agent_comms.registry.shared_ledger import LedgerDocument
@@ -84,7 +85,6 @@ from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_presentation import NoThreadPresentation, ThreadPresentation
 from agent_comms.registry.threads import ConversationPreparation, Thread, current_thread
 from agent_comms.registry.view_unread import transcript_read_state
-from agent_comms.registry_names import DeletedThread
 from agent_comms.storage.private_path import FileRevision
 from agent_comms.transcript.transcripts import TranscriptCursor, Transcripts
 from agent_comms.transport.progress import WireExportObserver

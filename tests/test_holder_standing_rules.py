@@ -27,7 +27,6 @@ from agent_comms.execution.input_key import AcpInputKey
 from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.execution.native_arguments import GivenBinary
 from agent_comms.execution.turn_digests import OrderEditCountRead
-from agent_comms.initial_origin import HumanOrigin
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.messaging.bus_publication import AgentOrigin
@@ -37,6 +36,7 @@ from agent_comms.messaging.channel_targets import (
     TeammatesTag,
     ThreadTarget,
 )
+from agent_comms.messaging.initial_origin import HumanOrigin
 from agent_comms.messaging.message_page import MessagePageRequest
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import (

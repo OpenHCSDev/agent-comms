@@ -6,10 +6,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from agent_comms.execution.input_key import InputKey
+from agent_comms.execution.original_inputs import OriginalInputs
 from agent_comms.input_attempt import StoredInput
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.messages import Message
-from agent_comms.original_inputs import OriginalInputs
 from agent_comms.registry.thread_creation import ThreadCreationSource
 
 

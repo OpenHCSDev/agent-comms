@@ -14,17 +14,15 @@ from typing import Annotated, Self
 from pydantic import JsonValue
 
 from agent_comms.cli_verbs.cli_result import CliResult
-from agent_comms.context_owner import ContextOwner
-from agent_comms.context_provenance_source import ContextProvenanceSource
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.annotation_disclosure import (
     PublicInstructionAnnotations,
     WithheldAnnotations,
 )
+from agent_comms.execution.context_owner import ContextOwner
+from agent_comms.execution.context_provenance_source import ContextProvenanceSource
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity
 from agent_comms.execution.turn_item import NativeItemId, PiRequestKey
-from agent_comms.goal_mutation import GoalContextSource
-from agent_comms.goal_work import GoalWorkSource
 from agent_comms.instruction_bytes import InstructionBytes
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -38,10 +36,12 @@ from agent_comms.nominal.field_codec import (
     TurnId,
     WireOmitDefault,
 )
-from agent_comms.peer_relation import PeerRelation
 from agent_comms.peer_relevance import AlwaysListed, PeerRelevance
+from agent_comms.planning.goal_mutation import GoalContextSource
+from agent_comms.planning.goal_work import GoalWorkSource
 from agent_comms.planning.goals import Goal, NoGoal
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.peer_relation import PeerRelation
 from agent_comms.registry.thread_identity import ThreadIncarnation, TurnIdentity
 from agent_comms.transport.tool_result import DeclaredReply, ToolResult
 from agent_comms.waking.wake_policy import WakePolicy

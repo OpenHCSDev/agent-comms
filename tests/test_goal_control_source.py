@@ -9,7 +9,7 @@ from agent_comms.planning.goal_actions import GoalAction
 from agent_comms.planning.goal_actions import PausedGoalAction
 from agent_comms.planning.goal_actions import RetryGoalAction
 from agent_comms.planning.goal_actions import SetGoalAction
-from agent_comms.goal_control import GoalControlSource
+from agent_comms.planning.goal_control import GoalControlSource
 from agent_comms.planning.goals import Goal
 from agent_comms.planning.goals import GoalDeclaration
 from agent_comms.planning.goals import NoGoal

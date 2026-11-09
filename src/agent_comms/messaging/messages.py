@@ -19,10 +19,6 @@ from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.input_key import InputKey
 from agent_comms.execution.turn_origin import TurnOrigin
-from agent_comms.message_clock_source import MessageClockSource
-from agent_comms.message_reads import MessageDeliveryRead
-from agent_comms.message_send_reads import MessageReferenceRead
-from agent_comms.message_sender import PublicSender
 from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.messaging.display_references import NO_HISTORY_SOURCE, MessageHistory
 from agent_comms.messaging.envelope_claim_transitions import (
@@ -35,9 +31,14 @@ from agent_comms.messaging.envelope_claim_transitions import (
     UnclaimedResource,
 )
 from agent_comms.messaging.mentions import ThreadMention
+from agent_comms.messaging.message_clock_source import MessageClockSource
+from agent_comms.messaging.message_reads import MessageDeliveryRead
 from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.message_send_reads import MessageReferenceRead
+from agent_comms.messaging.message_sender import PublicSender
 from agent_comms.messaging.page_traversal import LiveCursor, PageCursor
 from agent_comms.messaging.projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
+from agent_comms.messaging.response_message_source import ResponseMessageSource
 from agent_comms.messaging.response_policy import (
     NO_ALIASES,
     InformationalPolicy,
@@ -65,7 +66,7 @@ from agent_comms.nominal.field_codec import (
 from agent_comms.projects.change_report import NoChangeReport, ReportEvidence, SourceRoots
 from agent_comms.registry.thread_creation import ThreadCreationSource
 from agent_comms.registry.thread_identity import AgentThreadRole, ThreadRole
-from agent_comms.response_message_source import ResponseMessageSource
+from agent_comms.registry.thread_identity_source import ThreadIdentitySource
 from agent_comms.storage.typed_table import (
     LOCAL_TABLE_SOURCE,
     AppendOnlyTables,
@@ -81,7 +82,6 @@ from agent_comms.storage.typed_table import (
     TypedRow,
     TypedTable,
 )
-from agent_comms.thread_identity_source import ThreadIdentitySource
 from agent_comms.transport.progress import InterruptibleRead
 from agent_comms.ui_model.message_category import InboundCategory, MessageCategory, OtherCategory
 from agent_comms.waking.wake_policy import BoundedTriageWake, PassiveWake

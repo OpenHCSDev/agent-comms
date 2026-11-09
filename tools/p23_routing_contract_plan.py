@@ -71,9 +71,9 @@ def test_routing_presence_contract_keeps_original_sent_value_identity() -> None:
         "NoTurnOrigin/ScheduledTurn and runtime tests; migrate all bindings together."
     ), [
         {"operation": "create_file", "file_path": str(args.root / "src/agent_comms/tagged_thread_source.py"),
-         "source": '"""Original identity and tags consumed by namespace delivery selection."""\n\nfrom agent_comms.thread_identity_source import ThreadIdentitySource\n\n\nclass TaggedThreadSource(ThreadIdentitySource):\n    __slots__ = ()\n\n    tags: frozenset[str]\n'},
+         "source": '"""Original identity and tags consumed by namespace delivery selection."""\n\nfrom agent_comms.registry.thread_identity_source import ThreadIdentitySource\n\n\nclass TaggedThreadSource(ThreadIdentitySource):\n    __slots__ = ()\n\n    tags: frozenset[str]\n'},
         patch("src/agent_comms/registry/threads.py", [
-            ("from agent_comms.thread_identity_source import ThreadIdentitySource", "from agent_comms.tagged_thread_source import TaggedThreadSource"),
+            ("from agent_comms.registry.thread_identity_source import ThreadIdentitySource", "from agent_comms.registry.tagged_thread_source import TaggedThreadSource"),
             ("class ThreadProvenance(ThreadIdentitySource):", "class ThreadProvenance(TaggedThreadSource):"),
         ]),
         patch("src/agent_comms/execution/turn_origin.py", [
@@ -105,7 +105,7 @@ def test_routing_presence_contract_keeps_original_sent_value_identity() -> None:
         patch("src/agent_comms/routing.py", [
             ("from typing import TYPE_CHECKING, Annotated", "from typing import Annotated"),
             ("if TYPE_CHECKING:\n    from agent_comms.bus_publication import Delivered\n    from agent_comms.catalog_document import CatalogDocument\n    from agent_comms.messages import Message\n    from agent_comms.registry_provenance import RegistryProvenance\n    from agent_comms.transcript_routes import NoSentInputText, SentInputText",
-             "from agent_comms.bus_publication import Delivered\nfrom agent_comms.catalog_document import CatalogDocument\nfrom agent_comms.messages import Message\nfrom agent_comms.registry_names import RegistryNames\nfrom agent_comms.tagged_thread_source import TaggedThreadSource"),
+             "from agent_comms.bus_publication import Delivered\nfrom agent_comms.catalog_document import CatalogDocument\nfrom agent_comms.messages import Message\nfrom agent_comms.registry.registry_names import RegistryNames\nfrom agent_comms.registry.tagged_thread_source import TaggedThreadSource"),
             ("class NoTurnOrigin(NullMember, TurnOrigin):", "class NoTurnOrigin(NullMember, TurnOrigin[Message]):"),
             ("origin: TurnOrigin = NO_TURN_ORIGIN", "origin: TurnOrigin[Message] = NO_TURN_ORIGIN"),
             ("name: str, snapshot: RegistryProvenance, catalog: CatalogDocument", "name: str, snapshot: RegistryNames[TaggedThreadSource], catalog: CatalogDocument"),
@@ -124,7 +124,7 @@ def test_routing_presence_contract_keeps_original_sent_value_identity() -> None:
         "separate behavior proof; these positive contract checks replace no such assertion."
     ), [patch("tests/test_goal_runtime_annotations.py", [
         ("from agent_comms.nominal.field_codec import ThreadLookup", "from agent_comms.nominal.field_codec import NullMember, PresentMember, ThreadLookup"),
-        ("from agent_comms.routing import NoTurnOrigin", "from agent_comms.routing import DeliveryScope, NoTurnOrigin, Routing, ScheduledTurn, TurnRouting\nfrom agent_comms.registry_names import RegistryNames\nfrom agent_comms.transcript_routes import NoSentInputText, SentInputText"),
+        ("from agent_comms.routing import NoTurnOrigin", "from agent_comms.routing import DeliveryScope, NoTurnOrigin, Routing, ScheduledTurn, TurnRouting\nfrom agent_comms.registry.registry_names import RegistryNames\nfrom agent_comms.transcript_routes import NoSentInputText, SentInputText"),
         ("def test_declared_policy_keys_keep_their_original_message_and_identity_sources() -> None:",
          tests + "def test_declared_policy_keys_keep_their_original_message_and_identity_sources() -> None:"),
     ])]))

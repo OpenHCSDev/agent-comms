@@ -4,8 +4,8 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.nominal.field_codec import OrderId
-from agent_comms.order_phase import UnplannedPhase
 from agent_comms.planning.nominal_census import NominalCensus
+from agent_comms.planning.order_phase import UnplannedPhase
 from agent_comms.planning.order_words import StrikeReason
 from agent_comms.planning.orders import ReleaseTodo, StoredOrderStory
 from agent_comms.planning.phase_evidence import MainTree

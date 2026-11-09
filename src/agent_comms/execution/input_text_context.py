@@ -4,7 +4,7 @@ from abc import ABC
 from collections.abc import Callable
 from pathlib import Path
 
-from agent_comms.input_lookup import InputLookup
+from agent_comms.execution.input_lookup import InputLookup
 
 
 class InputTextContext[Attempt](ABC):

@@ -20,7 +20,7 @@ def main() -> None:
 
     assembly = '''"""Core context assembly on the same owner as its goals, views, relations and bus."""
 
-from agent_comms.context_owner import ContextOwner
+from agent_comms.execution.context_owner import ContextOwner
 from agent_comms.context_segments.partner_activity import PartnerActivitySegment
 from agent_comms.context_segments.relationships import RelationshipsSegment
 from agent_comms.execution.turn_context import NextContextTurn, TurnContext
@@ -60,7 +60,7 @@ class ContextAssembly:
          "new_source": "class Comms(ActivityClient, ContextAssembly):"},
     ])
     operations.append({"operation": "ensure_import", "file_path": str(args.root / "src/agent_comms/comms.py"),
-                       "import_source": "from agent_comms.context_assembly import ContextAssembly"})
+                       "import_source": "from agent_comms.execution.context_assembly import ContextAssembly"})
     patch("src/agent_comms/execution/turn_context.py", [
         {"old_source": '''    @classmethod
     def for_inspection(cls, comms, owner: ContextOwner) -> TurnContext:

@@ -15,12 +15,14 @@ from agent_comms.coordination.database import CoordinationStore, ReadableStore
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.input_key import InputKey, InputKeyText, TurnInputKey
+from agent_comms.execution.input_lookup import InputLookup
 from agent_comms.execution.input_origin import (
     HarnessAttemptOrigin,
     InputOrigin,
     UnattributedInputOrigin,
 )
 from agent_comms.execution.native_input_proof import NativeContextProof
+from agent_comms.execution.original_inputs import OriginalInputs
 from agent_comms.execution.reported_turn import ReportedTurnState
 from agent_comms.execution.turn_lease import TurnLeaseFence
 from agent_comms.input_attempt import (
@@ -35,13 +37,11 @@ from agent_comms.input_attempt import (
     StoredInput,
     UnresolvedInput,
 )
-from agent_comms.input_lookup import InputLookup
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal import field_codec
 from agent_comms.nominal.field_codec import GoalId, InputId, RootId, ThreadLookup, TurnId
 from agent_comms.nominal.lifecycle_capability import Unresolved
-from agent_comms.original_inputs import OriginalInputs
 from agent_comms.registry.private_registry_guard import RegistryPrivacy
 from agent_comms.registry.registry_document import RegistryEntry, RegistrySnapshot
 from agent_comms.storage.locked_store import CompleteInputReader, DocumentChange, PublishedProperty

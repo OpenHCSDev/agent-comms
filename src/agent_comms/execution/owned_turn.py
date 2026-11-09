@@ -60,6 +60,7 @@ from agent_comms.execution.turn_item import UsageChargeId
 from agent_comms.execution.turn_lease import TurnLeaseFence
 from agent_comms.execution.turn_phase import CancellingPhase, PromptAcceptancePhase
 from agent_comms.execution.turn_progress import TurnProgress
+from agent_comms.execution.turn_progress_reads import ProgressGoalAccount, ProgressTurn
 from agent_comms.execution.turn_terminal import EndedWithoutResult, TurnTerminal
 from agent_comms.following_inputs import OwnerFollowingInputs
 from agent_comms.input_attempt import ReservedInput
@@ -70,7 +71,6 @@ from agent_comms.planning.goals import Goal
 from agent_comms.registry.threads import NativeThread, Thread
 from agent_comms.transport.native_tool_transport import NativeToolMode
 from agent_comms.transport.tools.goals import CommsSetGoalTool
-from agent_comms.turn_progress_reads import ProgressGoalAccount, ProgressTurn
 
 from agent_comms.execution.owned_turn_runner import OwnedTurnRunner
 from agent_comms.planning.goal_attempts import LaunchPermit

@@ -10,10 +10,10 @@ from types import MappingProxyType
 
 from agent_comms.execution.input_key import BusInputKey, InputKey, OwnedBusInputKey
 from agent_comms.messaging.projection_source import ProducedRow, ProjectionSource
+from agent_comms.messaging.response_message_source import ResponseMessageSource
 from agent_comms.nominal.class_fact import ClassFact
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.registry.thread_creation import ThreadCreationSource
-from agent_comms.response_message_source import ResponseMessageSource
 
 NO_ALIASES: Mapping[str, str] = MappingProxyType({})
 """No thread has been renamed: every mention keeps its committed name."""

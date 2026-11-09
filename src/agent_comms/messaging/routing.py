@@ -27,9 +27,9 @@ from agent_comms.nominal.field_codec import (
 from agent_comms.planning.goal_scope import AllGoals, GoalScope
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.catalog_document import CatalogDocument
+from agent_comms.registry.registry_names import RegistryNames
+from agent_comms.registry.tagged_thread_source import TaggedThreadSource
 from agent_comms.registry.thread_creation import ThreadCreationSource
-from agent_comms.registry_names import RegistryNames
-from agent_comms.tagged_thread_source import TaggedThreadSource
 
 
 class NoTurnOrigin(NullMember, TurnOrigin[Message]):

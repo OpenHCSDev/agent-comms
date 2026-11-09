@@ -40,17 +40,17 @@ from agent_comms.cli_bridges.runtime_updates import FinishedItem, TurnEnded
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import NO_PROCESS
-from agent_comms.execution.native_entries import ImportedMetadataEntry, NativeEntry
-from agent_comms.execution.native_failures import NativePiUnavailable
-from agent_comms.execution.session_file import RegistrySessionLocation
-from agent_comms.execution.turn_context import FileProvenance
-from agent_comms.imported_messages import (
+from agent_comms.execution.imported_messages import (
     ImportedMessage,
     ImportedReply,
     ImportedRequest,
     ImportLimits,
 )
-from agent_comms.imported_session_metadata import ImportedSessionMetadata
+from agent_comms.execution.imported_session_metadata import ImportedSessionMetadata
+from agent_comms.execution.native_entries import ImportedMetadataEntry, NativeEntry
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.session_file import RegistrySessionLocation
+from agent_comms.execution.turn_context import FileProvenance
 from agent_comms.importing import ImportBuffer, ImportSnapshot, ThreadImported
 from agent_comms.installer.harness_install import (
     ClaudeCodeHarness,

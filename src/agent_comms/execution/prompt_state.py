@@ -13,8 +13,8 @@ from agent_comms.execution.native_session_callbacks import (
 )
 from agent_comms.execution.pi_events import AgentSettled, MessageStart, Response
 from agent_comms.execution.turn_failure import TerminalFailure
+from agent_comms.execution.turn_failure_reads import TerminalPromptRead
 from agent_comms.execution.turn_inbox import TurnInboxItem
-from agent_comms.turn_failure_reads import TerminalPromptRead
 
 
 class PromptState(SessionPromptCallbacks):

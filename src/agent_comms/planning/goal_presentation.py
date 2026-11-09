@@ -5,15 +5,6 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, fields
 from typing import ClassVar, Self
 
-from agent_comms.goal_execution import (
-    BlockedExecution,
-    BoundGoalExecution,
-    GoalExecution,
-    WaitingExecution,
-)
-from agent_comms.goal_execution_snapshot import GoalExecutionSnapshot
-from agent_comms.goal_ledger import FailedTurnEvidence
-from agent_comms.goal_wait_target import GoalWaitTarget
 from agent_comms.nominal.field_codec import NullMember
 from agent_comms.nominal.lifecycle_capability import Active
 from agent_comms.planning.goal_actions import (
@@ -22,7 +13,16 @@ from agent_comms.planning.goal_actions import (
     PausedGoalAction,
     RetryGoalAction,
 )
+from agent_comms.planning.goal_execution import (
+    BlockedExecution,
+    BoundGoalExecution,
+    GoalExecution,
+    WaitingExecution,
+)
+from agent_comms.planning.goal_execution_snapshot import GoalExecutionSnapshot
+from agent_comms.planning.goal_ledger import FailedTurnEvidence
 from agent_comms.planning.goal_states import PauseSource
+from agent_comms.planning.goal_wait_target import GoalWaitTarget
 from agent_comms.planning.goals import Goal, GoalCheckpoint, GoalDeclaration
 
 

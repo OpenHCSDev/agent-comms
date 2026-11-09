@@ -17,10 +17,12 @@ from pathlib import Path
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import IdentityConflict, RetryScheduled
 from agent_comms.execution.diagnostics import record_acquisition_progress, record_request_progress
+from agent_comms.execution.following_input_contracts import FollowingPromptBoundary
 from agent_comms.execution.goal_turn_permit import NoLaunchPermit
 from agent_comms.execution.input_drain import InputDrain
 from agent_comms.execution.native_arguments import SelectedModel
 from agent_comms.execution.native_entries import NativeEvidenceScope
+from agent_comms.execution.native_execution import PackagedNativeExecution
 from agent_comms.execution.native_input_owner import ParticipantOwner, RegistryOwner
 from agent_comms.execution.native_input_proof import NativeContextProof
 from agent_comms.execution.native_pi import NativeTurnResult
@@ -42,10 +44,8 @@ from agent_comms.execution.tracked_turn import (
 from agent_comms.execution.turn_context import RenderedInput
 from agent_comms.execution.turn_failure import NativePiTerminalFailure
 from agent_comms.execution.turn_input_source import SelectedOriginalInput
-from agent_comms.following_input_contracts import FollowingPromptBoundary
 from agent_comms.following_inputs import FollowingInputs
 from agent_comms.messaging.message_bus import MessageBus
-from agent_comms.native_execution import PackagedNativeExecution
 from agent_comms.nominal.field_codec import AcpSessionId, InputId, RootId
 from agent_comms.nominal.text_digest import TextDigest
 from agent_comms.registry.registry_document import RegistrySnapshot

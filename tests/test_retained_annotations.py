@@ -41,10 +41,10 @@ from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.task_sources import AnnotationDisclosureGrant
 from agent_comms.nominal.field_codec import MessageId, TurnId
+from agent_comms.planning.task_scope import ProjectTaskScope
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation, TurnIdentity
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
-from agent_comms.task_scope import ProjectTaskScope
 from agent_comms.working_memory.working_memory_labels import (
     HumanLabel,
     JevChoice,

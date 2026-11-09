@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from agent_comms.messaging.assignment_notice import AssignmentNotice
+from agent_comms.messaging.message_reads import MessageDeliveryRead, MessageReferencesRead
 from agent_comms.messaging.notification_contracts import NotificationEvidenceSource, RevisionChanges, RecipientActivityRead
-from agent_comms.message_reads import MessageDeliveryRead, MessageReferencesRead
 
-from agent_comms.assignment_notice import AssignmentNotice
 
 from abc import abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
@@ -47,7 +47,7 @@ from agent_comms.registry.agent_activity import AgentActivity, RecordedRecipient
 from agent_comms.registry.namespace_reads import NamespaceRead
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.thread_identity import ThreadIncarnation
-from agent_comms.thread_identity_source import ThreadIdentitySource
+from agent_comms.registry.thread_identity_source import ThreadIdentitySource
 
 if TYPE_CHECKING:
     from agent_comms.registry.registration import Registration

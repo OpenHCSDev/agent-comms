@@ -12,7 +12,7 @@ for relative in ("src/agent_comms/cli_bridges/history.py", "src/agent_comms/cli_
     imports.extend((
         {"operation": "remove_import_names", "file_path": str(path),
          "module_name": "agent_comms.importing", "import_names": ["ImportLimits"]},
-        imported(path, "from agent_comms.imported_messages import ImportLimits"),
+        imported(path, "from agent_comms.execution.imported_messages import ImportLimits"),
     ))
 for relative, names in (("src/agent_comms/importing.py", ["ImportedInput", "ImportedMessage", "NoRetainedRequest"]),
                         ("tests/test_importing.py", ["ImportedMessage", "ImportedReply", "ImportedRequest"])):
@@ -22,7 +22,7 @@ for relative, names in (("src/agent_comms/importing.py", ["ImportedInput", "Impo
          "module_name": "agent_comms.transcript_events", "import_names": names},
         imported(path, "from agent_comms.imported_messages import " + ", ".join(names)),
     ))
-imports.append(imported(SRC / "importing.py", "from agent_comms.imported_messages import ImportLimits"))
+imports.append(imported(SRC / "importing.py", "from agent_comms.execution.imported_messages import ImportLimits"))
 removed = '''@dataclass(frozen=True, slots=True)
 class ImportLimits:
     messages: int = 200

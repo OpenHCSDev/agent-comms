@@ -25,6 +25,7 @@ from agent_comms.messaging.messages import (
     TeamUpdatePosition,
 )
 from agent_comms.messaging.projection_source import ProducedRow
+from agent_comms.messaging.task_callbacks import TeamObservation
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -45,7 +46,6 @@ from agent_comms.task_attachments.disclosure_text import (
     WarningTone,
 )
 from agent_comms.task_attachments.owner_notices import OwnerNotice
-from agent_comms.task_callbacks import TeamObservation
 from agent_comms.team.standing_rules import ServicePassFailing, StandingRule
 from agent_comms.ui_model.message_category import HeartbeatCategory, MessageCategory
 from agent_comms.ui_model.teammate_state import AwaitingTeam, TeammateState

@@ -5,12 +5,12 @@ from dataclasses import replace
 
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.input_key import BusInputKey
-from agent_comms.goal_wait_target import GoalWaitTarget
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.messaging.messages import NoticeRole
 from agent_comms.nominal.field_codec import FieldCodec, TurnId
 from agent_comms.planning.goal_actions import GoalPrecondition, SetGoalAction, StandbyGoalAction
 from agent_comms.planning.goal_scope import OneGoal
+from agent_comms.planning.goal_wait_target import GoalWaitTarget
 from agent_comms.planning.goal_waits import NoGoalWait
 from agent_comms.planning.goals import Goal
 from agent_comms.projects.checkouts import Checkout

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from agent_comms.runtime_info_projection import RuntimeInfoProjection
+from agent_comms.execution.runtime_info_projection import RuntimeInfoProjection
+from agent_comms.registry.thread_identity_source import ThreadIdentitySource
 
 from abc import abstractmethod
 from collections.abc import Iterable, Sequence
@@ -21,7 +22,6 @@ from agent_comms.storage.maintenance_barrier import CarriedDocument
 from agent_comms.storage.store_files import DependentStateTier, SingleFileStore
 
 
-from agent_comms.thread_identity_source import ThreadIdentitySource
 
 
 class RuntimeInfo(DeclaredFamily, affix="RuntimeInfo"):

@@ -88,7 +88,6 @@ from agent_comms.coordination.errors import (
     DeferredRead,
 )
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
-from agent_comms.delivers_input import DeliversInput
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.execution.child_process import (
     OutlivesLauncherLifetime,
@@ -96,6 +95,7 @@ from agent_comms.execution.child_process import (
     ProcessIdentity,
     SpawnedProcess,
 )
+from agent_comms.execution.delivers_input import DeliversInput
 from agent_comms.execution.launch_runtime import LaunchRuntime, RunningSource
 from agent_comms.execution.turn_item import NoSourceTurn, SourceTurn
 from agent_comms.installer.harness_install import HarnessSession

@@ -17,11 +17,11 @@ from itertools import product
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, NoReturn, Self, TextIO
 
-from agent_comms.channel_sources import ChannelHistorySource
 from agent_comms.coordination.errors import DMPaintedBoundChanged, DMScopeChanged
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.execution.launch_runtime import CallingThreadUnavailable
 from agent_comms.messaging.activity_clocks import ChannelActivity
+from agent_comms.messaging.channel_sources import ChannelHistorySource
 from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.messaging.mentions import ThreadMention
 from agent_comms.messaging.message_reference import MessageReference
@@ -41,11 +41,11 @@ from agent_comms.nominal.field_codec import (
     TaggedUnion,
 )
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.registry_names import RegistryNames
+from agent_comms.registry.tagged_thread_source import TaggedThreadSource
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
-from agent_comms.registry_names import RegistryNames
 from agent_comms.storage.bound_set import BoundSet
 from agent_comms.storage.private_path import FileObservation, MissingFile
-from agent_comms.tagged_thread_source import TaggedThreadSource
 
 if TYPE_CHECKING:
     import sqlite3

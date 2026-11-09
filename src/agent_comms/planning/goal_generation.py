@@ -8,14 +8,6 @@ from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.errors import GoalRefused, UnresolvedAttemptError
 from agent_comms.execution.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
-from agent_comms.goal_mutation import (
-    GoalAttemptRead,
-    GoalGenerationChanges,
-    GoalGenerationGrants,
-    GoalGenerationProjection,
-    GoalGenerationRead,
-    GoalReadyGrantSource,
-)
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import AttemptId, NoAttemptId
 from agent_comms.nominal.lifecycle import LifecycleState
@@ -26,6 +18,14 @@ from agent_comms.planning.goal_failure_observation import (
     GenerationFailureSource,
     GoalFailureEvidence,
     NoFailedTurnEvidence,
+)
+from agent_comms.planning.goal_mutation import (
+    GoalAttemptRead,
+    GoalGenerationChanges,
+    GoalGenerationGrants,
+    GoalGenerationProjection,
+    GoalGenerationRead,
+    GoalReadyGrantSource,
 )
 
 

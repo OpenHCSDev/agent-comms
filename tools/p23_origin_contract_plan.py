@@ -109,16 +109,16 @@ changes = [
 ]
 imports = [
     imported(origin, "from agent_comms.bus_record_builder import RecordBuilder"),
-    imported(origin, "from agent_comms.message_directions import MessageDirections"),
-    imported(origin, "from agent_comms.message_reads import MessageIdentityRead"),
-    imported(origin, "from agent_comms.message_writer import MessageWriter"),
-    imported(origin, "from agent_comms.task_owner import TaskOwner"),
-    imported(origin, "from agent_comms.task_registry import TaskRegistry"),
-    imported(SRC / "bus.py", "from agent_comms.message_writer import MessageWriter"),
-    imported(SRC / "planning/goal_management.py", "from agent_comms.message_directions import MessageDirections"),
-    imported(SRC / "planning/orders.py", "from agent_comms.message_directions import DirectiveWriter"),
+    imported(origin, "from agent_comms.messaging.message_directions import MessageDirections"),
+    imported(origin, "from agent_comms.messaging.message_reads import MessageIdentityRead"),
+    imported(origin, "from agent_comms.messaging.message_writer import MessageWriter"),
+    imported(origin, "from agent_comms.registry.task_owner import TaskOwner"),
+    imported(origin, "from agent_comms.registry.task_registry import TaskRegistry"),
+    imported(SRC / "bus.py", "from agent_comms.messaging.message_writer import MessageWriter"),
+    imported(SRC / "planning/goal_management.py", "from agent_comms.messaging.message_directions import MessageDirections"),
+    imported(SRC / "planning/orders.py", "from agent_comms.messaging.message_directions import DirectiveWriter"),
     imported(SRC / "registry/registration.py", "from collections.abc import Container"),
-    imported(SRC / "channel_management.py", "from agent_comms.relationship_catalog_source import RelationshipCatalogSource"),
+    imported(SRC / "channel_management.py", "from agent_comms.registry.relationship_catalog_source import RelationshipCatalogSource"),
 ]
 reason = (
     "Keep the moved original InitialOrigin/OwnerVoiceOrigin/HumanOrigin fields, constructors and bodies. "

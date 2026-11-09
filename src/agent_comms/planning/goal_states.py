@@ -4,12 +4,12 @@ from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar
 
-from agent_comms.goal_mutation import GoalStateOrder, GoalStateProjection
-from agent_comms.goal_work import GoalOwner
 from agent_comms.instruction_bytes import InstructionBytes
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.lifecycle import LifecycleState
 from agent_comms.nominal.lifecycle_capability import Active, Complete, Terminal
+from agent_comms.planning.goal_mutation import GoalStateOrder, GoalStateProjection
+from agent_comms.planning.goal_work import GoalOwner
 from agent_comms.registry.thread_identity import ThreadIncarnation
 
 

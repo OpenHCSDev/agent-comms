@@ -16,9 +16,9 @@ from agent_comms.execution.owner_protocol import (
     OwnerRpcError,
     OwnerUpdate,
 )
-from agent_comms.goal_ledger import MissingGoalGenerationError, StorageUncertainError
 from agent_comms.nominal.field_codec import GoalId
 from agent_comms.planning.goal_attempts import ReservationConflictError
+from agent_comms.planning.goal_ledger import MissingGoalGenerationError, StorageUncertainError
 from agent_comms.transport.runtime_server import ClientPermissionResponse
 
 

@@ -30,19 +30,19 @@ def main() -> None:
         ("    created_at: CreationTime\n", ""),
     ])
     patch("src/agent_comms/messages.py", [
-        ("from agent_comms.thread_identity_source import ThreadIdentitySource",
-         "from agent_comms.thread_identity_source import ThreadIdentitySource\nfrom agent_comms.registry.thread_creation import ThreadCreationSource"),
+        ("from agent_comms.registry.thread_identity_source import ThreadIdentitySource",
+         "from agent_comms.registry.thread_identity_source import ThreadIdentitySource\nfrom agent_comms.registry.thread_creation import ThreadCreationSource"),
         ("def bus_key(self, owner: ThreadIdentitySource)", "def bus_key(self, owner: ThreadCreationSource)"),
         ("def bus_keys(self, owner: ThreadIdentitySource)", "def bus_keys(self, owner: ThreadCreationSource)"),
     ])
     for file in ("src/agent_comms/execution/turn_origin.py", "src/agent_comms/routing.py"):
         patch(file, [
-            ("from agent_comms.thread_identity_source import ThreadIdentitySource",
+            ("from agent_comms.registry.thread_identity_source import ThreadIdentitySource",
              "from agent_comms.registry.thread_creation import ThreadCreationSource"),
             ("def bus_keys(self, owner: ThreadIdentitySource)", "def bus_keys(self, owner: ThreadCreationSource)"),
         ])
     patch("src/agent_comms/response_policy.py", [
-        ("from agent_comms.thread_identity_source import ThreadIdentitySource",
+        ("from agent_comms.registry.thread_identity_source import ThreadIdentitySource",
          "from agent_comms.registry.thread_creation import ThreadCreationSource"),
         ("    def disposition_key(self, message: ResponseMessageSource, owner: ThreadIdentitySource) -> InputKey:\n        return OwnedBusInputKey(message.seq, float(owner.created_at))",
          "    def disposition_key(self, message: ResponseMessageSource, owner: ThreadCreationSource) -> InputKey:\n        return OwnedBusInputKey(message.seq, float(owner.created_at))"),
@@ -50,8 +50,8 @@ def main() -> None:
          "    def disposition_key(self, message: ResponseMessageSource, owner: ThreadCreationSource) -> InputKey:\n        return BusInputKey(message.seq)"),
     ])
     patch("tests/test_goal_runtime_annotations.py", [
-        ("from agent_comms.thread_identity_source import ThreadIdentitySource",
-         "from agent_comms.thread_identity_source import ThreadIdentitySource\nfrom agent_comms.registry.thread_creation import ThreadCreationSource"),
+        ("from agent_comms.registry.thread_identity_source import ThreadIdentitySource",
+         "from agent_comms.registry.thread_identity_source import ThreadIdentitySource\nfrom agent_comms.registry.thread_creation import ThreadCreationSource"),
         ("    assert Message.bus_key is MessageInput.bus_key\n",
          "    assert Message.bus_key is MessageInput.bus_key\n    assert issubclass(ThreadIdentitySource, ThreadCreationSource)\n    assert issubclass(Thread, ThreadCreationSource)\n"),
         ("    for callback in (MessageInput.bus_key, Message.bus_keys, NoTurnOrigin.bus_keys,\n                     TurnOrigin.bus_keys, ClaimNoticeKind.claimed):\n        assert get_type_hints(callback)[\"owner\"] is ThreadIdentitySource",

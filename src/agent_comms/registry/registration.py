@@ -8,11 +8,10 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Concatenate
 
-from agent_comms.activity_registry_reads import ActivityRegistration
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import NoProcess, ProcessIdentity
+from agent_comms.execution.input_ingress import InputRegistration
 from agent_comms.execution.native_input_owner import RegistryOwner
-from agent_comms.input_ingress import InputRegistration
 from agent_comms.messaging.channel_targets import DeclaredTag
 from agent_comms.messaging.routing import NoTurnRouting, Routing
 from agent_comms.nominal.field_codec import ThreadLookup, TurnId
@@ -22,6 +21,7 @@ from agent_comms.projects.checkouts import Checkout, CheckoutTransfer, Repositor
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.storage_rules import StorageRule
+from agent_comms.registry.activity_registry_reads import ActivityRegistration
 from agent_comms.registry.catalog_store import ChannelCatalog
 from agent_comms.registry.registration_change import RegistrationChange
 from agent_comms.registry.registry_document import (

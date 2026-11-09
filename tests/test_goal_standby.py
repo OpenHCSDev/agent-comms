@@ -6,7 +6,6 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.execution.child_process import ProcessIdentity
-from agent_comms.goal_wait_target import GoalWaitTarget
 from agent_comms.nominal.field_codec import GoalWaitId, TurnId
 from agent_comms.planning.goal_actions import (
     EditGoalAction,
@@ -18,6 +17,7 @@ from agent_comms.planning.goal_actions import (
 )
 from agent_comms.planning.goal_presentation import RunnableExecution, StandbyExecution
 from agent_comms.planning.goal_scope import OneGoal
+from agent_comms.planning.goal_wait_target import GoalWaitTarget
 from agent_comms.planning.goal_waits import GoalWaits, NoGoalWait, RecordedGoalWait
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_status import PausedBridgeThreadStatus

@@ -10,13 +10,13 @@ from sqlite3 import Connection
 from typing import Annotated, ClassVar
 
 from agent_comms.execution.input_key import InputKey, InputKeyText
-from agent_comms.goal_mutation import GoalWaitProjection
-from agent_comms.goal_wait_target import GoalWaitTarget
 from agent_comms.input_attempt import StoredInput, UnresolvedInput
 from agent_comms.messaging.bus import BusReader
 from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import GoalId, GoalWaitId, NullMember, ThreadLookup, TurnId
+from agent_comms.planning.goal_mutation import GoalWaitProjection
+from agent_comms.planning.goal_wait_target import GoalWaitTarget
 from agent_comms.planning.goals import Goal, GoalDeclaration
 from agent_comms.registry.agent_activity import AgentActivity
 from agent_comms.registry.registry_document import RegistrySnapshot

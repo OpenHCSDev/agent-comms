@@ -12,9 +12,9 @@ import pytest
 from agent_comms.cli_bridges.history import History, OfflineHistory
 from agent_comms.cli_verbs.restore_owner import RestoreOwnerCliCommand
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.imported_conversation import KeptPiSession
+from agent_comms.execution.imported_messages import ImportLimits
 from agent_comms.execution.session_file import RegistrySessionLocation
-from agent_comms.imported_conversation import KeptPiSession
-from agent_comms.imported_messages import ImportLimits
 from agent_comms.installer.harness_install import Harness, PiHarness
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_status import StoppedThreadStatus

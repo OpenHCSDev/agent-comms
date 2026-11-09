@@ -18,8 +18,8 @@ from agent_comms.execution.native_session_callbacks import (
 )
 from agent_comms.execution.pi_wire import PiDiagnostic
 from agent_comms.execution.turn_failure import NoTurnFailure, TurnFailure
+from agent_comms.execution.turn_failure_reads import TerminalOutputRead
 from agent_comms.pi_payloads import AssistantMessage, NativeMessageFailureSource
-from agent_comms.turn_failure_reads import TerminalOutputRead
 
 
 @dataclass

@@ -127,7 +127,7 @@ print(json.dumps({"stages": [
           "BusResources owns the original bus/reads declarations and exact opened_activity body once. PublishedBus and BusReadSource share that provider through MI; MessageBus retains its concrete snapshot/count methods and original constructor. Goals retains the exact owning snapshot implementation. Prove C3, concreteness, field annotations, held-capture lifetime and original consumers at runtime; no automatic equivalence claim follows from source simulation.", [
               imported(message_bus, "from agent_comms.messaging.bus_read_source import BusReadSource"),
               patch(message_bus, [("class MessageBus[Writes: Publisher](PublishedBus[Writes]):", "class MessageBus[Writes: Publisher](PublishedBus[Writes], BusReadSource):")]),
-              imported(goals, "from agent_comms.goal_snapshots import GoalSnapshots"),
+              imported(goals, "from agent_comms.planning.goal_snapshots import GoalSnapshots"),
               patch(goals, [("    GoalStoreSource[GoalAttemptStore], GoalReadyGrantSource[NativeThread, Generation],", "    GoalStoreSource[GoalAttemptStore], GoalReadyGrantSource[NativeThread, Generation], GoalSnapshots,")]),
           ]),
     stage("p23-presentation-runtime-binding-and-original-provider-proof",
@@ -135,7 +135,7 @@ print(json.dumps({"stages": [
               patch(presentation, [(before, after)]),
               {"operation": "remove_import_names", "file_path": str(presentation), "module_name": "typing", "import_names": ["TYPE_CHECKING"]},
               imported(presentation, "from agent_comms.messaging.bus_read_source import BusReadSource"),
-              imported(presentation, "from agent_comms.goal_snapshots import GoalSnapshots"),
+              imported(presentation, "from agent_comms.planning.goal_snapshots import GoalSnapshots"),
               patch(runtime_test, [(original_test, updated_test)]),
           ]),
 ]}, indent=2))

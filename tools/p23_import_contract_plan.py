@@ -86,7 +86,7 @@ def main() -> None:
         "publication, external source read, context-manager lifetime and cancellation remain."
     ), [{"operation": "ensure_import",
          "file_path": str(args.root / "src/agent_comms/execution/native_entries.py"),
-         "import_source": "from agent_comms.imported_conversation import ImportedConversation"}]))
+         "import_source": "from agent_comms.execution.imported_conversation import ImportedConversation"}]))
     stages.append(stage("p23-compose-existing-import-history-capabilities", (
         "ImportSnapshot.read consumes only a history stream and its existing harness identity. "
         "Compose the original ReadsHistory and HarnessSession as one unnamed nominal parent; "
@@ -99,7 +99,7 @@ def main() -> None:
          "source": '"""The existing stream and harness capabilities consumed by portable import."""\n\nfrom agent_comms.agent_runtime import ReadsHistory\nfrom agent_comms.harness_install import HarnessSession\n\n\nclass ImportHistorySource(ReadsHistory, HarnessSession, declared_name=None):\n    """An original harness session that can supply its retained transcript updates."""\n'},
         patch("src/agent_comms/cli_bridges/history.py", [
             ("from agent_comms.agent_runtime import ReadsHistory\n", ""),
-            ("from agent_comms.importing import", "from agent_comms.import_history_source import ImportHistorySource\nfrom agent_comms.importing import"),
+            ("from agent_comms.importing import", "from agent_comms.execution.import_history_source import ImportHistorySource\nfrom agent_comms.importing import"),
             ("class History(ReadsHistory, HarnessSession, declared_name=None):", "class History(ImportHistorySource, declared_name=None):"),
         ]),
     ]))
@@ -115,7 +115,7 @@ def main() -> None:
             ("from typing import TYPE_CHECKING\n", ""),
             ("if TYPE_CHECKING:\n    from agent_comms.cli_bridges.history import History\n    from agent_comms.runtime_updates import SessionFacts\n    from agent_comms.transcript_events import TranscriptEvent\n\n", ""),
             ("from agent_comms.execution.turn_item import NativeItemId",
-             "from agent_comms.execution.turn_item import NativeItemId\nfrom agent_comms.execution.native_entries import ImportedSessionWriter, NativeEntry, SessionEntry\nfrom agent_comms.import_history_source import ImportHistorySource\nfrom agent_comms.runtime_updates import SessionFacts\nfrom agent_comms.transcript_events import TranscriptEvent"),
+             "from agent_comms.execution.turn_item import NativeItemId\nfrom agent_comms.execution.native_entries import ImportedSessionWriter, NativeEntry, SessionEntry\nfrom agent_comms.execution.import_history_source import ImportHistorySource\nfrom agent_comms.runtime_updates import SessionFacts\nfrom agent_comms.transcript_events import TranscriptEvent"),
             ("def read(cls, history: History, limits: ImportLimits)", "def read(cls, history: ImportHistorySource, limits: ImportLimits)"),
             ("        from agent_comms.execution.native_entries import (\n            ImportedSessionWriter,\n            NativeEntry,\n            SessionEntry,\n        )\n\n", ""),
         ]),

@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from sqlite3 import Connection
 
-from agent_comms.goal_mutation import GoalFailureProjection
+from agent_comms.planning.goal_mutation import GoalFailureProjection
 
 
 class GoalFailureEvidence[Failure](ABC):

@@ -3,7 +3,7 @@
 import sys
 
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.order_phase import OrderPhase
+from agent_comms.planning.order_phase import OrderPhase
 from agent_comms.planning.orders import PendingProblemOrder
 
 

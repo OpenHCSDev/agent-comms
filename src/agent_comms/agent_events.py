@@ -1,4 +1,4 @@
-from agent_comms.runtime_info_projection import RuntimeInfoProjection
+from agent_comms.execution.runtime_info_projection import RuntimeInfoProjection
 
 """Nominal, in-process backend events and the reactions shared by consumers.
 
@@ -15,7 +15,7 @@ from typing import ClassVar
 
 from metaclass_registry.mro_dispatch import MroDispatch, handles
 
-from agent_comms.agent_event import AgentEvent as AgentEvent
+from agent_comms.execution.agent_event import AgentEvent as AgentEvent
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution.acp_failure import (
     FailureSource,
@@ -49,12 +49,12 @@ from agent_comms.execution.turn_goal_account import OriginGoalSettlement, Verifi
 from agent_comms.execution.turn_item import UsageChargeId
 from agent_comms.execution.turn_terminal import FailedGoalTurn
 from agent_comms.input_attempt import InputAttempt
-from agent_comms.input_event_source import InputEventSource
+from agent_comms.execution.input_event_source import InputEventSource
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import AcpSessionId, InputId, ToolCallId, TurnId
 from agent_comms.pi_counts import PiCount, UnreportedCount
 from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
-from agent_comms.runtime_info_source import RuntimeInfoSource
+from agent_comms.execution.runtime_info_source import RuntimeInfoSource
 from agent_comms.team.rule_deal import CompactedDeal, Redeals
 from agent_comms.transcript.transcript_events import SentTranscript
 from agent_comms.transport.tool_declaration import OtherAction, ToolAction, ToolDeclaration

@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Annotated, Self
 
 from agent_comms.execution.child_process import Platform
-from agent_comms.goal_ledger import FailedTurnEvidence
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -18,6 +17,7 @@ from agent_comms.nominal.field_codec import (
     MalformedRecord,
     WireOmitDefault,
 )
+from agent_comms.planning.goal_ledger import FailedTurnEvidence
 from agent_comms.planning.goal_scope import GoalScope
 from agent_comms.planning.goals import GoalDeclaration, NoGoal
 from agent_comms.planning.owner_requests import NoRequestRevision, RequestRevision

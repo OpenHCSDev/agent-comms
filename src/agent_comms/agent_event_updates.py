@@ -38,9 +38,9 @@ from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.native_output import NativeRecordLocation
 from agent_comms.execution.tool_results import tool_result_content
 from agent_comms.execution.turn_effects import TurnEffects
-from agent_comms.goal_events import GoalChanged
 from agent_comms.messaging.routing import MessageRoute, NoMessageRoute
 from agent_comms.nominal.field_codec import AcpSessionId, TurnId
+from agent_comms.planning.goal_events import GoalChanged
 from agent_comms.transcript.transcript_updates import TranscriptUpdate
 from agent_comms.transcript.transcripts import NativeCommittedPrefix
 from agent_comms.transport.tool_declaration import (

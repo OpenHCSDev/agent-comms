@@ -14,12 +14,12 @@ regression = '''"""Original providers own the admitted goal read contracts and t
 from inspect import isabstract
 from typing import get_args, get_origin, get_type_hints
 
-from agent_comms.context_owner import ContextOwner
+from agent_comms.execution.context_owner import ContextOwner
 from agent_comms.execution.goal_turn_permit import GoalTurnPermit
 from agent_comms.execution.turn_context import TurnContext
-from agent_comms.goal_ledger import Generation, LedgerAttempt, Reservation
-from agent_comms.goal_mutation import GoalContextSource, GoalGenerationRead, GoalStoppedAttempt
-from agent_comms.goal_work import GoalWorkSource
+from agent_comms.planning.goal_ledger import Generation, LedgerAttempt, Reservation
+from agent_comms.planning.goal_mutation import GoalContextSource, GoalGenerationRead, GoalStoppedAttempt
+from agent_comms.planning.goal_work import GoalWorkSource
 from agent_comms.nominal.field_codec import GoalId
 from agent_comms.planning.goal_attempt_identity import GoalAttemptIdentity
 
@@ -69,15 +69,15 @@ print(json.dumps({"stages": [stage(
              "class GoalContextSource[Owner, Goals, Context](ABC):\n    __slots__ = ()\n\n    @abstractmethod\n    def with_goal(self, owner: Owner, goals: Goals) -> Context: ..."),
         ]),
         patch(ledger, [
-            ("from agent_comms.goal_mutation import GoalFailureProjection",
-             "from agent_comms.goal_mutation import GoalFailureProjection, GoalGenerationRead, GoalStoppedAttempt"),
+            ("from agent_comms.planning.goal_mutation import GoalFailureProjection",
+             "from agent_comms.planning.goal_mutation import GoalFailureProjection, GoalGenerationRead, GoalStoppedAttempt"),
             ("class Generation(GoalLedgerTable, TypedTable):", "class Generation(GoalLedgerTable, TypedTable, GoalGenerationRead):"),
             ("class LedgerAttempt(DeclaredFamily, affix=\"Attempt\"):",
              "class LedgerAttempt(DeclaredFamily, GoalStoppedAttempt[Reservation], affix=\"Attempt\"):"),
         ]),
         patch(context, [
             ("from agent_comms.instruction_bytes import InstructionBytes",
-             "from agent_comms.goal_mutation import GoalContextSource\nfrom agent_comms.goal_work import GoalWorkSource\nfrom agent_comms.instruction_bytes import InstructionBytes"),
+             "from agent_comms.planning.goal_mutation import GoalContextSource\nfrom agent_comms.planning.goal_work import GoalWorkSource\nfrom agent_comms.instruction_bytes import InstructionBytes"),
             ("class TurnContext(DeclaredReply):",
              "class TurnContext(DeclaredReply, GoalContextSource[ContextOwner, GoalWorkSource, \"TurnContext\"]):"),
             ("def with_goal(self, owner: ContextOwner, goals) -> TurnContext:",

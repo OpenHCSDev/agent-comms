@@ -12,15 +12,19 @@ from agent_comms.acp_extension import AgentCommsUpdate, LiveQueueScope, PromptRe
 from agent_comms.execution.input_drain import DrainedSession, InputDrain, OwnerSession
 from agent_comms.execution.session_lifecycle import SessionLifecycle
 from agent_comms.execution.acp import SdkSessionConnection
-from agent_comms.session_owner_reads import OwnedSessionLifetime, SessionTaskOwner
-from agent_comms.session_reads import SessionClient
+from agent_comms.execution.session_owner_reads import OwnedSessionLifetime, SessionTaskOwner
+from agent_comms.execution.session_reads import SessionClient
 from agent_comms.execution.turn_runner import TurnRunner
-from agent_comms.following_input_contracts import FollowingInputRetirement, FollowingPromptBoundary, FollowingTurnSource
+from agent_comms.execution.following_input_contracts import (
+    FollowingInputRetirement,
+    FollowingPromptBoundary,
+    FollowingTurnSource,
+)
 from agent_comms.following_inputs import OwnerFollowingInputs
-from agent_comms.native_execution import NativeExecution
+from agent_comms.execution.native_execution import NativeExecution
 from agent_comms.private_send_claim import PrivateSendClaim
 from agent_comms.execution.tracked_turn import TrackedTurnSession
-from agent_comms.queue_publication import QueuePublication
+from agent_comms.execution.queue_publication import QueuePublication
 from agent_comms.planning.goal_waits import GoalWait
 from agent_comms.planning.goal_records import GoalRecords
 from agent_comms.transport.tools.goals import CommsGoalTool

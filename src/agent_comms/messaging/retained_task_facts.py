@@ -12,16 +12,16 @@ from dataclasses import dataclass
 
 from agent_comms import input_attempt
 from agent_comms.errors import RelationViolationError
-from agent_comms.input_lookup import InputLookup
-from agent_comms.message_reads import ConversationRead
+from agent_comms.execution.input_lookup import InputLookup
+from agent_comms.messaging.message_reads import ConversationRead
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.sending import messages
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.nominal.text_digest import TextDigest
+from agent_comms.registry.task_owner import TaskOwner
+from agent_comms.registry.task_registry import TaskRegistry
 from agent_comms.registry.thread_identity import ThreadIncarnation
-from agent_comms.task_owner import TaskOwner
-from agent_comms.task_registry import TaskRegistry
 
 
 class ExactTaskFact(DeclaredFamily, affix="TaskFact"):

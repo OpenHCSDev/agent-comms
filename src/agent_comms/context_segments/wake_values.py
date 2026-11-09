@@ -6,8 +6,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Annotated
 
-from agent_comms.goal_execution import GoalExecution
 from agent_comms.nominal.field_codec import NullMember, RecordMember, SubclassUnion, WireName
+from agent_comms.planning.goal_execution import GoalExecution
 from agent_comms.registry.thread_text import ThreadText
 
 

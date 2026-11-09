@@ -22,6 +22,7 @@ from pydantic import JsonValue
 from agent_comms.cli_support.cli_failures import CLI_FAILURES
 from agent_comms.cli_verbs.cli_result import CliResult, ResultShower, TargetEditResult
 from agent_comms.cli_verbs.declared_verb import DeclaredCommand
+from agent_comms.cli_verbs.target_command_bindings import TargetCommandBindings
 from agent_comms.cli_verbs.target_fields import TargetField
 from agent_comms.comms import Comms
 from agent_comms.config_options import CatalogChoice, ConfigOptions
@@ -54,7 +55,6 @@ from agent_comms.registry.catalog_document import CatalogAccess, NoCatalog
 from agent_comms.registry.registry_document import RegistrySnapshot, ResolvedChannel
 from agent_comms.registry.thread_status import ThreadStatus
 from agent_comms.registry.threads import Thread
-from agent_comms.target_command_bindings import TargetCommandBindings
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms_hooks import ToolRefusedError
 

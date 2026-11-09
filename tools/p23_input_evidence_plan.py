@@ -21,7 +21,7 @@ def main() -> None:
             {"old_source": "from typing import TYPE_CHECKING, Annotated, ClassVar, Self", "new_source": "from typing import Annotated, ClassVar, Self"},
             {"old_source": "if TYPE_CHECKING:\n    from agent_comms.execution.turn_lease import TurnLeaseFence\n    from agent_comms.registry.registry_document import RegistrySnapshot\n\n", "new_source": ""},
             {"old_source": "from agent_comms.registry.thread_identity import GenerationCounter, ThreadIncarnation",
-             "new_source": "from agent_comms.registry.thread_identity import GenerationCounter, ThreadIncarnation, TurnFence\nfrom agent_comms.registry_names import RegistryNames\nfrom agent_comms.thread_identity_source import ThreadIdentitySource"},
+             "new_source": "from agent_comms.registry.thread_identity import GenerationCounter, ThreadIncarnation, TurnFence\nfrom agent_comms.registry.registry_names import RegistryNames\nfrom agent_comms.registry.thread_identity_source import ThreadIdentitySource"},
         ],
     }]
     selected = []

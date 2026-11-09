@@ -36,8 +36,8 @@ class ResponseMessageSource(ABC):
     }, {
         "operation": "patch_target", "file_path": str(args.root / "src/agent_comms/messages.py"),
         "replacements": [{
-            "old_source": "from agent_comms.message_sender import PublicSender",
-            "new_source": "from agent_comms.message_sender import PublicSender\nfrom agent_comms.response_message_source import ResponseMessageSource",
+            "old_source": "from agent_comms.messaging.message_sender import PublicSender",
+            "new_source": "from agent_comms.messaging.message_sender import PublicSender\nfrom agent_comms.messaging.response_message_source import ResponseMessageSource",
         }, {
             "old_source": "class MessageInput(Timestamped, Addressed, BusCapability):",
             "new_source": "class MessageInput(Timestamped, Addressed, BusCapability, ResponseMessageSource):",
@@ -49,7 +49,7 @@ class ResponseMessageSource(ABC):
             "new_source": "",
         }, {
             "old_source": "from agent_comms.projection_source import ProducedRow, ProjectionSource",
-            "new_source": "from agent_comms.projection_source import ProducedRow, ProjectionSource\nfrom agent_comms.response_message_source import ResponseMessageSource",
+            "new_source": "from agent_comms.projection_source import ProducedRow, ProjectionSource\nfrom agent_comms.messaging.response_message_source import ResponseMessageSource",
         }],
     }]
     selected = []

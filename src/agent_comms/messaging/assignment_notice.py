@@ -1,7 +1,10 @@
 """The actual notification lends only the facts used by progress/activity callbacks."""
+
 from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from typing import Self
+
 from agent_comms.messaging.frozen_recipient import FrozenRecipient
 
 

@@ -34,7 +34,6 @@ from agent_comms.nominal.field_codec import (
     RecordProblems,
     ToolCallId,
 )
-from agent_comms.order_phase import OrderPhase
 from agent_comms.planning.delivery_evidence import TodoProblems
 from agent_comms.planning.goal_actions import (
     CompliedGoalAction,
@@ -44,6 +43,7 @@ from agent_comms.planning.goal_actions import (
 )
 from agent_comms.planning.goals import Goal, OrderCheck
 from agent_comms.planning.held_orders import HeldOrders
+from agent_comms.planning.order_phase import OrderPhase
 from agent_comms.planning.order_story import OrderStory, TeamStory
 from agent_comms.planning.order_words import DeliveryReport, PlainText, StrikeReason
 from agent_comms.planning.order_work import OrderWork

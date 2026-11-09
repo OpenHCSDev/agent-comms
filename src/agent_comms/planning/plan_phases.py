@@ -7,7 +7,7 @@ from agent_comms.execution.pi_events import PiEvent
 from agent_comms.installer.probes.carry import Carry
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import Id128, MessageId, NominalSpelling, NominalText
-from agent_comms.order_phase import OrderPhase
+from agent_comms.planning.order_phase import OrderPhase
 from agent_comms.planning.orders import Todo
 from agent_comms.planning.phase_artifacts import RecordedArtifact
 from agent_comms.planning.phase_evidence import (

@@ -568,7 +568,7 @@ def ledger_one_failure_short(root: Path) -> Path:
     from contextlib import closing
 
     from agent_comms.execution.turn_failure import TurnFailure
-    from agent_comms.goal_ledger import FailedTurnEvidence
+    from agent_comms.planning.goal_ledger import FailedTurnEvidence
     from agent_comms.planning.goal_attempts import GoalAttemptStore
     from agent_comms.storage.typed_table import sql_literal
 

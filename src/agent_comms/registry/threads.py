@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Annotated, ClassVar
 
 from agent_comms.agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
-from agent_comms.channel_sources import ChannelMemberSource
 from agent_comms.context_segments.wake_values import WakeWorkContext, WakeWorkSource
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import NoProcess, ProcessIdentity, ProcessState
@@ -32,8 +31,7 @@ from agent_comms.execution.turn_lease import (
     TurnRecord,
     TurnState,
 )
-from agent_comms.goal_mutation import GoalFork
-from agent_comms.goal_work import GoalFailureOwner
+from agent_comms.messaging.channel_sources import ChannelMemberSource
 from agent_comms.messaging.channel_targets import DeclaredTag, Tag
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
@@ -55,11 +53,16 @@ from agent_comms.nominal.registration_inheritance import (
     InheritEmpty,
     InheritPrevious,
 )
+from agent_comms.planning.goal_mutation import GoalFork
+from agent_comms.planning.goal_work import GoalFailureOwner
 from agent_comms.planning.goals import GoalConsentRequired, GoalDeclaration, NoGoal
+from agent_comms.planning.task_scope import TaskScope
 from agent_comms.projects.checkouts import Checkout, RepositoryReads
 from agent_comms.registry.activity import ObservedActivity
 from agent_comms.registry.heartbeat_delivery import HeartbeatDelivery, OffHeartbeatDelivery
 from agent_comms.registry.presence_reads import PresenceThread
+from agent_comms.registry.tagged_thread_source import TaggedThreadSource
+from agent_comms.registry.task_owner import TaskOwner
 from agent_comms.registry.thread_creation import (
     CreationSeconds,
     CreationTime,
@@ -99,9 +102,6 @@ from agent_comms.registry.thread_storage import (
 )
 from agent_comms.registry.thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
 from agent_comms.storage.locked_store import DurableFile, PatternFile
-from agent_comms.tagged_thread_source import TaggedThreadSource
-from agent_comms.task_owner import TaskOwner
-from agent_comms.task_scope import TaskScope
 
 
 class ThreadCommandAvailability:

@@ -13,7 +13,7 @@ capability = '''"""The execution read from an owning goal snapshot, without its 
 
 from abc import ABC
 
-from agent_comms.goal_execution import GoalExecution
+from agent_comms.planning.goal_execution import GoalExecution
 
 
 class GoalExecutionSnapshot(ABC):
@@ -66,13 +66,13 @@ print(json.dumps({"stages": [stage(
     [
         {"operation": "create_file", "file_path": str(SRC / "goal_execution_snapshot.py"), "source": capability},
         patch(snapshots, [(old_source, new_source)]),
-        imported(snapshots, "from agent_comms.goal_execution_snapshot import GoalExecutionSnapshot"),
-        imported(controls, "from agent_comms.goal_execution_snapshot import GoalExecutionSnapshot"),
+        imported(snapshots, "from agent_comms.planning.goal_execution_snapshot import GoalExecutionSnapshot"),
+        imported(controls, "from agent_comms.planning.goal_execution_snapshot import GoalExecutionSnapshot"),
         {"operation": "remove_import_names", "file_path": str(controls), "module_name": "typing", "import_names": ["TYPE_CHECKING"]},
         patch(controls, [("class GoalSnapshot(GoalPublicationSnapshot):", "class GoalSnapshot(GoalPublicationSnapshot, GoalExecutionSnapshot):")]),
         patch(goals, [("GoalReadyGrantSource[NativeThread, Generation], GoalSnapshots,", "GoalReadyGrantSource[NativeThread, Generation], GoalSnapshots[Thread, GoalSnapshot],")]),
         patch(presentation, [(presentation_before, presentation_after)]),
-        imported(presentation, "from agent_comms.goal_execution_snapshot import GoalExecutionSnapshot"),
+        imported(presentation, "from agent_comms.planning.goal_execution_snapshot import GoalExecutionSnapshot"),
         patch(test, [(test_before, test_after)]),
     ],
 )]}, indent=2))

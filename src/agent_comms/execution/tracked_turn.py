@@ -12,16 +12,21 @@ from functools import partial
 from pathlib import Path
 from types import MappingProxyType
 
-from agent_comms.agent_event import AgentEvent
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution import pi_commands as commands
 from agent_comms.execution import pi_events as pi
 from agent_comms.execution.acp_failure import ProviderRetryResult
+from agent_comms.execution.agent_event import AgentEvent
 from agent_comms.execution.backend import TurnSession
+from agent_comms.execution.following_input_contracts import (
+    FollowingPromptBoundary,
+    FollowingTurnSource,
+)
 from agent_comms.execution.native_arguments import SelectedModel
 from agent_comms.execution.native_attestation import AttestationError, ObservedAttestation
 from agent_comms.execution.native_entries import NativeEvidenceScope
+from agent_comms.execution.native_execution import NativeExecution
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_input_proof import NativeContextProof, NativeInputCommit
 from agent_comms.execution.native_pi import (
@@ -41,10 +46,8 @@ from agent_comms.execution.turn_context import InputContributionCoordinates
 from agent_comms.execution.turn_failure import TurnFailure
 from agent_comms.execution.turn_inbox import TurnInbox
 from agent_comms.execution.turn_watchdog import DEFAULT_MODEL_WAIT, TurnWait, TurnWaitExpired
-from agent_comms.following_input_contracts import FollowingPromptBoundary, FollowingTurnSource
 from agent_comms.following_inputs import FollowingInputs
 from agent_comms.installer.native_package import VerifiedNativePackage
-from agent_comms.native_execution import NativeExecution
 from agent_comms.nominal.field_codec import InputId, MalformedRecord
 from agent_comms.pi_payloads import UserMessage
 from agent_comms.storage.maintenance_barrier import UNCOORDINATED_INGRESS, MaintenanceIngress

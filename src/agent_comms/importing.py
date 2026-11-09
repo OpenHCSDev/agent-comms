@@ -14,18 +14,18 @@ from pathlib import Path
 
 from agent_comms.cli_bridges.runtime_updates import SessionFacts
 from agent_comms.cli_verbs.cli_result import CliResult
-from agent_comms.execution.native_entries import ImportedSessionWriter, NativeEntry, SessionEntry
-from agent_comms.execution.turn_context import HistoricalInstructionProvenance
-from agent_comms.execution.turn_item import NativeItemId
-from agent_comms.import_history_source import ImportHistorySource
-from agent_comms.imported_conversation import ImportedConversation
-from agent_comms.imported_messages import (
+from agent_comms.execution.import_history_source import ImportHistorySource
+from agent_comms.execution.imported_conversation import ImportedConversation
+from agent_comms.execution.imported_messages import (
     ImportedInput,
     ImportedMessage,
     ImportLimits,
     NoRetainedRequest,
 )
-from agent_comms.imported_session_metadata import ImportedSessionMetadata
+from agent_comms.execution.imported_session_metadata import ImportedSessionMetadata
+from agent_comms.execution.native_entries import ImportedSessionWriter, NativeEntry, SessionEntry
+from agent_comms.execution.turn_context import HistoricalInstructionProvenance
+from agent_comms.execution.turn_item import NativeItemId
 from agent_comms.installer.harness_install import Harness
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.registry.thread_text import NoThreadText, ThreadText

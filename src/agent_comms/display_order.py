@@ -5,7 +5,11 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import ClassVar
 
-from agent_comms.display_sources import ChannelOrderSource, ChannelSortView, SentHistorySource
+from agent_comms.messaging.display_sources import (
+    ChannelOrderSource,
+    ChannelSortView,
+    SentHistorySource,
+)
 from agent_comms.nominal.declared_choice import DeclaredChoice, TitledChoice
 from agent_comms.nominal.declared_family import DeclaredFamily
 

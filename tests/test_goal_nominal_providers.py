@@ -3,14 +3,18 @@
 from inspect import isabstract
 from typing import get_args, get_origin, get_type_hints
 
-from agent_comms.context_owner import ContextOwner
+from agent_comms.execution.context_owner import ContextOwner
 from agent_comms.execution.goal_turn_permit import GoalTurnPermit
 from agent_comms.execution.turn_context import TurnContext
-from agent_comms.goal_ledger import Generation, LedgerAttempt, Reservation
-from agent_comms.goal_mutation import GoalContextSource, GoalGenerationRead, GoalStoppedAttempt
-from agent_comms.goal_work import GoalWorkSource
 from agent_comms.nominal.field_codec import GoalId
 from agent_comms.planning.goal_attempt_identity import GoalAttemptIdentity
+from agent_comms.planning.goal_ledger import Generation, LedgerAttempt, Reservation
+from agent_comms.planning.goal_mutation import (
+    GoalContextSource,
+    GoalGenerationRead,
+    GoalStoppedAttempt,
+)
+from agent_comms.planning.goal_work import GoalWorkSource
 
 
 def test_original_generation_declares_its_read_contract_without_changing_fields():

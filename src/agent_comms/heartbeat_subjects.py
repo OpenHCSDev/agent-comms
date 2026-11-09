@@ -16,7 +16,7 @@ from agent_comms.comms import Comms
 from agent_comms.coordination.service_passes import ServicePasses, ServicePassStore
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import MessageId
-from agent_comms.order_phase import OrderPhase
+from agent_comms.planning.order_phase import OrderPhase
 from agent_comms.planning.orders import HeadVerdict, StoredHeadReview
 from agent_comms.planning.owner_requests import OwnerRequestId
 from agent_comms.planning.plan_phases import PlanPhase

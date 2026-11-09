@@ -17,9 +17,9 @@ guarded = '''if TYPE_CHECKING:
 if guarded not in new_refs:
     raise ValueError("The original display-reference guarded block changed")
 new_refs = new_refs.replace(guarded, '''from agent_comms.page_traversal import HistorySourceKey
-from agent_comms.registry_names import RegistryNames
+from agent_comms.registry.registry_names import RegistryNames
 from agent_comms.storage.private_path import FileObservation
-from agent_comms.thread_identity_source import ThreadIdentitySource
+from agent_comms.registry.thread_identity_source import ThreadIdentitySource
 ''')
 new_refs = new_refs.replace("source: HistorySource", "source: HistoryReferenceSource")
 new_refs = new_refs.replace("registry: RegistrySnapshot", "registry: RegistryNames[ThreadIdentitySource]")
@@ -49,7 +49,7 @@ new_messages = new_messages.replace(old_tail, "from agent_comms import retained_
 new_messages = new_messages.replace("from __future__ import annotations\n", '''from __future__ import annotations
 
 from agent_comms.display_references import ReferenceContext
-from agent_comms.message_reads import MessageDeliveryRead
+from agent_comms.messaging.message_reads import MessageDeliveryRead
 ''', 1)
 reason = (
     "messages imports bus_publication solely for BusCapability.deliveries' postponed return annotation. "

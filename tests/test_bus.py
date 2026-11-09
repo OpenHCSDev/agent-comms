@@ -22,7 +22,6 @@ from agent_comms.errors import (
     RelationViolationError,
     UnclaimedError,
 )
-from agent_comms.initial_origin import HumanOrigin
 from agent_comms.messaging.bus import (
     Bus,
     BusRecord,
@@ -38,6 +37,7 @@ from agent_comms.messaging.bus_tables import (
     BusSchema,
     MessageIdentitySource,
 )
+from agent_comms.messaging.initial_origin import HumanOrigin
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import (
     BusProjectionTables,

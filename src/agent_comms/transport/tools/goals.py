@@ -13,7 +13,6 @@ from pydantic import JsonValue
 
 from agent_comms.comms import Comms
 from agent_comms.execution.input_key import InputKeyText
-from agent_comms.goal_execution import GoalExecution
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     GoalId,
@@ -40,6 +39,7 @@ from agent_comms.planning.goal_actions import (
     SetGoalAction,
     TransitionGoalAction,
 )
+from agent_comms.planning.goal_execution import GoalExecution
 from agent_comms.planning.goal_history import RecordedGoalHistory
 from agent_comms.planning.goal_presentation import GoalSnapshot
 from agent_comms.planning.goal_scope import AllGoals, OneGoal

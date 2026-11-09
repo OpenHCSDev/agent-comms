@@ -19,10 +19,10 @@ from agent_comms.planning.goal_actions import (
 )
 from agent_comms.planning.goal_scope import OneGoal
 from agent_comms.planning.goals import Goal, NoGoal
+from agent_comms.planning.task_scope import GoalTaskScope, TurnTaskScope
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import ChosenModel, NativeThread, NextTurnConfiguration, Thread
-from agent_comms.task_scope import GoalTaskScope, TurnTaskScope
 from agent_comms.transport.request import ToolRequest
 from agent_comms.transport.tool_caller import ThreadCaller
 from conftest import installed_comms

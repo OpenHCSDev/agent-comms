@@ -21,12 +21,12 @@ from agent_comms.execution.publication_measurements import PublicationMeasuremen
 from agent_comms.execution.turn_failure import ModelRequestFailed, NoTurnFailure, TurnFailure
 from agent_comms.execution.turn_lease import TurnState
 from agent_comms.execution.turn_phase import NativePhaseChanged, PublishingPhase
+from agent_comms.execution.turn_progress_reads import ProgressGoalAccount, ProgressTurn
 from agent_comms.messaging.messages import AlertKind, NoticeRole
 from agent_comms.messaging.send_result import SendResult
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.registry.thread_identity import ClaimedIdentity
 from agent_comms.transcript.transcript_updates import TurnTranscriptUpdate
-from agent_comms.turn_progress_reads import ProgressGoalAccount, ProgressTurn
 
 
 @dataclass(kw_only=True)

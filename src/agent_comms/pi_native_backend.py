@@ -59,10 +59,10 @@ from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
 from agent_comms.team.rule_deal import SystemPromptDelivery
 
 if TYPE_CHECKING:
-    from agent_comms.agent_event import AgentEvent
     from agent_comms.agent_events import AgentInfo
     from agent_comms.comms import Comms
     from agent_comms.config_options import ConfigOptions
+    from agent_comms.execution.agent_event import AgentEvent
     from agent_comms.execution.launch_runtime import LaunchRuntime
     from agent_comms.execution.owned_turn import TurnDelivery
     from agent_comms.execution.turn_runner import TurnRunner

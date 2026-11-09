@@ -40,7 +40,7 @@ for statement in (
     "from agent_comms.pi_counts import PiCount",
     "from agent_comms.registry.registration import Registration",
     "from agent_comms.registry.registry_document import RegistrySnapshot",
-    "from agent_comms.registry_names import DeletedThread",
+    "from agent_comms.registry.registry_names import DeletedThread",
 ):
     operations.append(imported(presentation, statement))
 print(json.dumps({"stages": [stage(

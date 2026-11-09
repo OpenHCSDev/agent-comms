@@ -46,7 +46,7 @@ class ThreadIdentitySource(ABC):
 
 from abc import abstractmethod
 
-from agent_comms.context_owner import ContextOwner
+from agent_comms.execution.context_owner import ContextOwner
 from agent_comms.execution.turn_lease import TurnLeaseFence, TurnRecord
 from agent_comms.nominal.field_codec import TurnId
 from agent_comms.registry.thread_identity import ThreadRole, TurnIdentity
@@ -74,12 +74,12 @@ class TaskOwner(ContextOwner):
           "class ContextOwner(TaskScopeOwner[TaskScope], ThreadIdentitySource):")
     patch("context_owner.py", "    @property\n    @abstractmethod\n    def incarnation(self) -> ThreadIncarnation: ...\n\n", "")
     remove("context_owner.py", "agent_comms.registry.thread_identity", "ThreadIncarnation")
-    ensure("context_owner.py", "from agent_comms.thread_identity_source import ThreadIdentitySource")
+    ensure("context_owner.py", "from agent_comms.registry.thread_identity_source import ThreadIdentitySource")
     patch("registry/threads.py", "class ThreadProvenance:", "class ThreadProvenance(ThreadIdentitySource):")
     patch("registry/threads.py", "DeclaredFamily, ContextOwner, affix=\"Thread\"", "DeclaredFamily, TaskOwner, affix=\"Thread\"")
     remove("registry/threads.py", "agent_comms.context_owner", "ContextOwner")
-    ensure("registry/threads.py", "from agent_comms.task_owner import TaskOwner")
-    ensure("registry/threads.py", "from agent_comms.thread_identity_source import ThreadIdentitySource")
+    ensure("registry/threads.py", "from agent_comms.registry.task_owner import TaskOwner")
+    ensure("registry/threads.py", "from agent_comms.registry.thread_identity_source import ThreadIdentitySource")
     patch("registry_names.py", 'Member = TypeVar("Member", bound=ThreadProvenance, covariant=True)',
           'Member = TypeVar("Member", bound=ThreadIdentitySource, covariant=True)')
     patch("registry_names.py", "def answering_thread(self, reader: Thread) -> Thread:",
@@ -90,7 +90,7 @@ class TaskOwner(ContextOwner):
 '''
     patch("registry_names.py", narrowing, "")
     remove("registry_names.py", "agent_comms.registry.threads", "Thread", "ThreadProvenance")
-    ensure("registry_names.py", "from agent_comms.thread_identity_source import ThreadIdentitySource")
+    ensure("registry_names.py", "from agent_comms.registry.thread_identity_source import ThreadIdentitySource")
     patch("registry/registry_document.py", "class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](TaskRegistry):",
           "class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](TaskRegistry[Thread]):")
     patch("registry/registry_document.py", '    """Presence reads shared by the acquired document and its detached cut."""\n\n    __slots__ = ()\n',
@@ -99,12 +99,12 @@ class TaskOwner(ContextOwner):
     patch("task_registry.py", "class TaskRegistry(RegistryNames[Thread]):",
           "class TaskRegistry[Owner: TaskOwner](RegistryNames[Owner]):")
     remove("task_registry.py", "agent_comms.registry.threads", "Thread")
-    ensure("task_registry.py", "from agent_comms.task_owner import TaskOwner")
+    ensure("task_registry.py", "from agent_comms.registry.task_owner import TaskOwner")
     tasks = source / "task_sources.py"
     before = tasks.read_text()
     after = before.replace(
         "from agent_comms.registry.threads import Thread, ThreadProvenance\n",
-        "from agent_comms.task_owner import TaskOwner\nfrom agent_comms.thread_identity_source import ThreadIdentitySource\n",
+        "from agent_comms.registry.task_owner import TaskOwner\nfrom agent_comms.registry.thread_identity_source import ThreadIdentitySource\n",
     )
     after = re.sub(r"\bThreadProvenance\b", "ThreadIdentitySource", after)
     after = re.sub(r"\bThread\b", "TaskOwner", after)

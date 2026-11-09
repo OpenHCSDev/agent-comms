@@ -8,9 +8,9 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from typing import Annotated, ClassVar, Self
 
-from agent_comms.message_sender import PublicSender
 from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.messaging.bus_tables import ReceivedSource
+from agent_comms.messaging.message_sender import PublicSender
 from agent_comms.messaging.messages import BusProjectionTables, BusRow, MessageInput, PublicRecord
 from agent_comms.messaging.page_traversal import PageTraversal
 from agent_comms.messaging.projection_source import ProducedRow

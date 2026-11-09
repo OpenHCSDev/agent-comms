@@ -23,6 +23,7 @@ from agent_comms.coordination.errors import (
     RetryScheduled,
 )
 from agent_comms.coordination.snapshot import RecoverySnapshot
+from agent_comms.execution.native_execution import NativeExecution, PackagedNativeExecution
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_pi import NativePiRpcLaunch
 from agent_comms.execution.native_session_files import NativeSessionFiles
@@ -40,7 +41,6 @@ from agent_comms.execution.selected.turn import SelectedAttempt, SelectedConside
 from agent_comms.execution.turn_failure import RetryableProviderFailure
 from agent_comms.following_inputs import FollowingInputs
 from agent_comms.installer.native_package import VerifiedNativePackage
-from agent_comms.native_execution import NativeExecution, PackagedNativeExecution
 from agent_comms.nominal.field_codec import RootId
 
 

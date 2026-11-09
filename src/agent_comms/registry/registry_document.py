@@ -1,6 +1,6 @@
-from agent_comms.activity_registry_reads import ActivityRegistryRead
+from agent_comms.cli_verbs.target_command_bindings import TargetCommandBindings
+from agent_comms.registry.activity_registry_reads import ActivityRegistryRead
 from agent_comms.registry.presence_reads import PresenceEntry, PresenceSnapshot
-from agent_comms.target_command_bindings import TargetCommandBindings
 
 """One registry document: thread facts, identity domains and lifecycle behavior."""
 
@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, Annotated, Literal, Self
 
 from pydantic import JsonValue
 
-from agent_comms.delivery_recipients import DeliveryRecipients
+from agent_comms.messaging.delivery_recipients import DeliveryRecipients
 from agent_comms.errors import OutsideRegistrySlice, RelationViolationError, UnregisteredThreadError
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.restart_refusals import (
@@ -42,7 +42,7 @@ from agent_comms.execution.turn_lease import (
     TurnLeaseFence,
     TurnRecord,
 )
-from agent_comms.input_ingress import InputRegistry
+from agent_comms.execution.input_ingress import InputRegistry
 from agent_comms.messaging.channel_targets import ResolvedTarget, SurroundingChannel, TeammatesTag
 from agent_comms.messaging.channels import Channel, ChannelMemberIndex
 from agent_comms.messaging.frozen_recipient import FrozenRecipient
@@ -112,8 +112,8 @@ from agent_comms.registry.thread_status import (
 from agent_comms.registry.thread_text import ForkedParent, NoParent
 from agent_comms.registry.threads import Thread, ThreadWorkState
 from agent_comms.registry.user_thread_lookup import FoundUserThread, NoUserThread, UserThreadLookup
-from agent_comms.registry_names import DeletedThread
-from agent_comms.task_registry import TaskRegistry
+from agent_comms.registry.registry_names import DeletedThread
+from agent_comms.registry.task_registry import TaskRegistry
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms_hooks import ToolRefusedError
 

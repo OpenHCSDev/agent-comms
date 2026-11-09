@@ -13,12 +13,12 @@ from functools import cached_property, partial
 from pathlib import Path
 from typing import ClassVar, Self
 
-from agent_comms.activity_registry_reads import RegistryPathRead
 from agent_comms.coordination.database import CoordinationStore, ReadableStore
 from agent_comms.coordination.errors import StaleFence
 from agent_comms.coordination.private_runtime_schema import PrivateCoordinatorTable
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import NoProcess, Platform
+from agent_comms.execution.input_ingress import InputAuthorityCut, InputRegistryStore
 from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.turn_lease import (
@@ -31,9 +31,10 @@ from agent_comms.execution.turn_lease import (
     TurnDeclaration,
     TurnRecord,
 )
-from agent_comms.input_ingress import InputAuthorityCut, InputRegistryStore
+from agent_comms.execution.turn_registry import TurnRegistry
 from agent_comms.messaging.routing import Routing
 from agent_comms.nominal.field_codec import FieldCodec, NullMember, TurnId
+from agent_comms.registry.activity_registry_reads import RegistryPathRead
 from agent_comms.registry.presence import PresenceStore
 from agent_comms.registry.private_registry_guard import (
     PrivateRegistryGuard,
@@ -63,7 +64,6 @@ from agent_comms.storage.maintenance_barrier import CarriedDocument
 from agent_comms.storage.private_path import FileObservation, FileRevision, MissingFile
 from agent_comms.storage.store_files import RegistryLocking
 from agent_comms.storage.typed_table import TableSchema
-from agent_comms.turn_registry import TurnRegistry
 
 
 class CachedRegistry(ABC):

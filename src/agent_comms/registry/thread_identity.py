@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self, TypeVar
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.participant_identity import ParticipantIdentity
-from agent_comms.message_clock_source import SenderClockSource
+from agent_comms.messaging.message_clock_source import SenderClockSource
 from agent_comms.messaging.projection_source import ProducedRow, ProjectionSource
 from agent_comms.messaging.response_policy import (
     CollectivePolicy,

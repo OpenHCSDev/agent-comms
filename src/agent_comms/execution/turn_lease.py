@@ -11,7 +11,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity, ProcessState
 from agent_comms.execution.reported_turn import NoReportedTurn, ReportedTurn, ReportedTurnState
 from agent_comms.execution.turn_phase import IdlePhase, PreparingPhase, TurnPhase
-from agent_comms.goal_mutation import GoalTurnProjection
+from agent_comms.execution.turn_registry import TurnRegistry
 from agent_comms.messaging.routing import NoTurnRouting, Routing
 from agent_comms.nominal.field_codec import (
     NullMember,
@@ -23,6 +23,7 @@ from agent_comms.nominal.field_codec import (
     boundary_decoder,
 )
 from agent_comms.nominal.lifecycle_capability import Executing, LifecycleCapability
+from agent_comms.planning.goal_mutation import GoalTurnProjection
 from agent_comms.registry.activity import ObservedActivity
 from agent_comms.registry.thread_identity import (
     NoObservedTurn,
@@ -40,7 +41,6 @@ from agent_comms.storage.locked_store import (
     PatternFile,
 )
 from agent_comms.storage.store_files import DependentStateTier, SingleFileStore
-from agent_comms.turn_registry import TurnRegistry
 
 
 class TurnDeclaration(LifecycleCapability, SubclassUnion, affix=""):

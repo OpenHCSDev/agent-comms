@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from agent_comms.execution.context_assembly import ContextAssembly
+from agent_comms.execution.input_ingress import InputIngressContext
+from agent_comms.execution.input_lookup import InputLookup
 from agent_comms.execution.input_text_context import InputTextContext
 from agent_comms.messaging.notification_contracts import NotificationEvidenceSource
 from agent_comms.messaging.message_notification import CapturedNotificationEvidence
@@ -15,7 +18,6 @@ from functools import cached_property, partial
 from pathlib import Path
 from typing import ClassVar
 
-from agent_comms.context_assembly import ContextAssembly
 from agent_comms.context_store import ContextStore
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
@@ -25,8 +27,6 @@ from agent_comms.execution.transcript_sources import TranscriptSource
 from agent_comms.history_views import HistoryViews
 from agent_comms.input_attempt import InputAttempt
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.input_ingress import InputIngressContext
-from agent_comms.input_lookup import InputLookup
 from agent_comms.installer.active_route import CommsRoute, resolve_comms_route
 from agent_comms.messaging.agent_inbox import TakenInputStart
 from agent_comms.messaging.channel_management import ChannelManagement

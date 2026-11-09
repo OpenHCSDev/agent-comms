@@ -23,13 +23,6 @@ from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput
 from agent_comms.execution.pi_wire import PiUsage
 from agent_comms.execution.turn_failure import BackendFailed, FailedTurnResolution
-from agent_comms.goal_ledger import (
-    AttemptRecord,
-    FailedTurnEvidence,
-    Generation,
-    GoalWorkDecision,
-    StorageUncertainError,
-)
 from agent_comms.nominal.field_codec import AttemptId, GoalId, MalformedRecord, RetryDecisionId
 from agent_comms.pi_counts import PiCount, UnreportedCount
 from agent_comms.planning.attempt_resolution import OperatorStopped, RetryDecision
@@ -47,6 +40,13 @@ from agent_comms.planning.goal_generation import (
     CompletedGeneration,
     ReadyGeneration,
     ReservedGeneration,
+)
+from agent_comms.planning.goal_ledger import (
+    AttemptRecord,
+    FailedTurnEvidence,
+    Generation,
+    GoalWorkDecision,
+    StorageUncertainError,
 )
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_creation import RecordedCreationTime

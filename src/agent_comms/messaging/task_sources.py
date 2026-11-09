@@ -9,32 +9,32 @@ from functools import partial
 from typing import Annotated, Self
 
 from agent_comms.cli_bridges.harness_delivery_states import Outcome
-from agent_comms.delivers_input import DeliversInput
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.delivers_input import DeliversInput
+from agent_comms.execution.input_lookup import InputLookup
+from agent_comms.execution.input_publication_read import InputPublicationRead
 from agent_comms.execution.turn_context import ContextSegment, Provenance, WireProvenance
-from agent_comms.input_lookup import InputLookup
-from agent_comms.input_publication_read import InputPublicationRead
-from agent_comms.message_directions import MessageDirections
-from agent_comms.message_reads import MessageReferencesRead
 from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.message_directions import MessageDirections
+from agent_comms.messaging.message_reads import MessageReferencesRead
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.projection_source import ProjectionSource
+from agent_comms.messaging.task_callbacks import DeliveredContext, TeamObservation
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup, TurnId, WireOmitDefault
 from agent_comms.planning.owner_requests import OwnerRequestId, RequestDirective
+from agent_comms.planning.task_scope import TaskScope, TaskScopeSelection
+from agent_comms.registry.registry_names import RegistryNames
+from agent_comms.registry.task_owner import TaskOwner
+from agent_comms.registry.task_registry import TaskRegistry
 from agent_comms.registry.thread_identity import (
     RecordedThreadIncarnation,
     ThreadIncarnation,
     TurnIdentity,
     UserThreadRole,
 )
-from agent_comms.registry_names import RegistryNames
+from agent_comms.registry.thread_identity_source import ThreadIdentitySource
 from agent_comms.storage.typed_table import TypedTable
-from agent_comms.task_callbacks import DeliveredContext, TeamObservation
-from agent_comms.task_owner import TaskOwner
-from agent_comms.task_registry import TaskRegistry
-from agent_comms.task_scope import TaskScope, TaskScopeSelection
-from agent_comms.thread_identity_source import ThreadIdentitySource
 from agent_comms.ui_model.message_category import MessageCategory
 from agent_comms.working_memory.working_memory_requests import AnnotationBudgetExhausted
 

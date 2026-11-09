@@ -36,9 +36,9 @@ from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
 from agent_comms.messaging.read_selection import CapturedSelection
 from agent_comms.messaging.routing import DeliveryScope
 from agent_comms.messaging.watched import FileSource
-from agent_comms.peer_relation import PeerRelation
 from agent_comms.peer_relevance import Prioritized
 from agent_comms.registry.catalog_store import ChannelCatalog
+from agent_comms.registry.peer_relation import PeerRelation
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.threads import Thread

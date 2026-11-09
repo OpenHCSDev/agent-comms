@@ -19,7 +19,7 @@ from agent_comms.execution.history_view import HistoryView
 from agent_comms.execution.native_entries import TranscriptProjection
 from agent_comms.execution.native_records import TranscriptRecord
 from agent_comms.messaging.messages import Message
-from agent_comms.published_messages import ReadsPublishedMessages
+from agent_comms.messaging.published_messages import ReadsPublishedMessages
 
 if TYPE_CHECKING:
     from agent_comms.context_store import ContextStore

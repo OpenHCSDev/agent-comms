@@ -21,12 +21,12 @@ from agent_comms.channel_input_batch import InputBatch
 from agent_comms.cli_bridges.history import History
 from agent_comms.comms import Comms
 from agent_comms.config_options import ConfigOption, ConfigOptions
-from agent_comms.context_assembly import ContextAssembly
-from agent_comms.context_owner import ContextOwner
-from agent_comms.context_provenance_source import ContextProvenanceSource
 from agent_comms.context_segments.wake_values import WakeWorkContext
-from agent_comms.delivers_input import DeliversInput
 from agent_comms.display_order import ChannelSort, ThreadSort
+from agent_comms.execution.context_assembly import ContextAssembly
+from agent_comms.execution.context_owner import ContextOwner
+from agent_comms.execution.context_provenance_source import ContextProvenanceSource
+from agent_comms.execution.delivers_input import DeliversInput
 from agent_comms.execution.goal_scheduler import GoalScheduler
 from agent_comms.execution.goal_turn_permit import GoalTurnPermit
 from agent_comms.execution.input_drain import InputDrain
@@ -48,11 +48,6 @@ from agent_comms.execution.turn_origin import TurnOrigin
 from agent_comms.execution.turn_progress import TurnProgress
 from agent_comms.execution.turn_runner import TurnRunner
 from agent_comms.following_inputs import FollowingInputs, OwnerFollowingInputs
-from agent_comms.goal_control import GoalControlSource
-from agent_comms.goal_ledger import FailedTurnEvidence, FailedTurnObservation, Generation
-from agent_comms.goal_mutation import GoalTurnProjection
-from agent_comms.goal_wait_target import GoalWaitTarget
-from agent_comms.goal_work import GoalFailureOwner, GoalOwner, GoalWorkSource
 from agent_comms.cli_bridges.harness_delivery_states import Outcome
 from agent_comms.installer.harness_install import HarnessSession
 from agent_comms.importing import ImportBuffer, ImportSnapshot
@@ -61,17 +56,22 @@ from agent_comms.input_disposition import InputDispositions, InputDocument
 from agent_comms.execution.input_key import InputKey
 from agent_comms.execution.input_origin import InputProvenance
 from agent_comms.messaging.messages import ClaimNoticeKind, Message, MessageInput
+from agent_comms.messaging.response_message_source import ResponseMessageSource
 from agent_comms.messaging.sending import Messaging
 from agent_comms.nominal.field_codec import NullMember, PresentMember, ThreadLookup
-from agent_comms.peer_relation import PeerRelation
 from agent_comms.planning.goal_actions import GoalAction, SetGoalAction, StandbyGoalAction
 from agent_comms.planning.goal_attempt_phase import GoalAttemptPhase
 from agent_comms.planning.goal_attempts import LaunchPermit
+from agent_comms.planning.goal_control import GoalControlSource
 from agent_comms.planning.goal_failure_observation import NoFailedTurnEvidence
 from agent_comms.planning.goal_generation import GenerationState
+from agent_comms.planning.goal_ledger import FailedTurnEvidence, FailedTurnObservation, Generation
+from agent_comms.planning.goal_mutation import GoalTurnProjection
 from agent_comms.planning.goal_records import GoalRecords
 from agent_comms.planning.goal_states import GoalState
+from agent_comms.planning.goal_wait_target import GoalWaitTarget
 from agent_comms.planning.goal_waits import GoalWait, GoalWaits, NoGoalWait, RecordedGoalWait
+from agent_comms.planning.goal_work import GoalFailureOwner, GoalOwner, GoalWorkSource
 from agent_comms.planning.goals import (
     GoalDeclaration,
     GoalMentionBinding,
@@ -79,22 +79,25 @@ from agent_comms.planning.goals import (
     GoalUnavailable,
 )
 from agent_comms.private_send_claim import PrivateSendClaim
+from agent_comms.registry.peer_relation import PeerRelation
 from agent_comms.registry.registry_document import (
     RegistryDocument,
     RegistryPresence,
     RegistrySnapshot,
 )
+from agent_comms.registry.registry_names import RegistryNames
+from agent_comms.registry.task_owner import TaskOwner
+from agent_comms.registry.task_registry import TaskRegistry
 from agent_comms.registry.thread_creation import ThreadCreationSource
 from agent_comms.registry.thread_identity import TurnFence
+from agent_comms.registry.thread_identity_source import ThreadIdentitySource
 from agent_comms.registry.thread_presentation import ThreadOwnerBinding
 from agent_comms.registry.threads import (
     Thread,
     ThreadProvenance,
 )
-from agent_comms.registry_names import RegistryNames
 from agent_comms.registry.relationships import RelationshipSource
 from agent_comms.registry.relationships import ThreadRelationships
-from agent_comms.response_message_source import ResponseMessageSource
 from agent_comms.messaging.response_policy import ResponsePolicy
 from agent_comms.registry.route_client import ActivityClient
 from agent_comms.messaging.routing import DeliveryScope
@@ -105,10 +108,7 @@ from agent_comms.messaging.routing import TurnRouting
 from agent_comms.cli_bridges.runtime_updates import RuntimeUpdate
 from agent_comms.cli_bridges.runtime_updates import SessionFacts
 from agent_comms.execution.session_config_options import SessionConfigOptions
-from agent_comms.task_owner import TaskOwner
-from agent_comms.task_registry import TaskRegistry
 from agent_comms.messaging.task_sources import ScopedTaskDeclaration
-from agent_comms.thread_identity_source import ThreadIdentitySource
 from agent_comms.execution.tracked_turn import TrackedTurnSession
 from agent_comms.transcript.transcript_events import TranscriptEvent
 from agent_comms.execution.transcript_routes import NoSentInputText
@@ -361,7 +361,7 @@ def test_dependency_reply_reads_its_original_sender_identity() -> None:
     "agent_comms.task_scope",
     "agent_comms.task_scope_owner",
     "agent_comms.task_sources",
-    "agent_comms.agent_event",
+    "agent_comms.execution.agent_event",
     "agent_comms.registry_names",
     "agent_comms.task_owner",
     "agent_comms.task_registry",

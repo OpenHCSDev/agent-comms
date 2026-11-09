@@ -22,6 +22,10 @@ from agent_comms.execution.native_entries import (
     NoEvidenceRead,
 )
 from agent_comms.execution.native_evidence_read import NativeInputUncommitted
+from agent_comms.execution.native_failure_reads import (
+    NativeOperationFailureRead,
+    NativeResponseFailureRead,
+)
 from agent_comms.execution.native_failures import NativePiUnavailable, NativeRequestFailure
 from agent_comms.execution.native_input_proof import NativeContextProof
 from agent_comms.execution.native_session_files import NativeAgentSettings, NativeSessionFiles
@@ -30,7 +34,6 @@ from agent_comms.execution.pi_vocabulary import NoThinkingOverride, ThinkingChoi
 from agent_comms.execution.selected.session import SelectedSession
 from agent_comms.installer.active_route import ActiveRoute, resolve_comms_route
 from agent_comms.installer.native_package import MANIFEST, SYSTEM_PROMPT, VerifiedNativePackage
-from agent_comms.native_failure_reads import NativeOperationFailureRead, NativeResponseFailureRead
 from agent_comms.nominal.field_codec import InputId
 from agent_comms.transport.native_tool_transport import NativeToolMode
 

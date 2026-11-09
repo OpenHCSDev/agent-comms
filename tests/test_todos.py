@@ -28,7 +28,6 @@ from agent_comms.installer.practice import PracticeCopy
 from agent_comms.installer.runtime_resolution import CorePackage, TextualPackage, ToadPackage
 from agent_comms.messaging.bus import Bus
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId
-from agent_comms.order_phase import UnplannedPhase
 from agent_comms.planning.goal_actions import ClearGoalAction, SetGoalAction
 from agent_comms.planning.goals import (
     GoalChangedError,
@@ -37,6 +36,7 @@ from agent_comms.planning.goals import (
     ProblemGoalOrder,
 )
 from agent_comms.planning.held_orders import HeldOrders
+from agent_comms.planning.order_phase import UnplannedPhase
 from agent_comms.planning.order_runs import ApplicationOrderRun, MechanicalOrderRun, OrderRun
 from agent_comms.planning.order_words import StrikeReason
 from agent_comms.planning.orders import (

@@ -23,6 +23,7 @@ from agent_comms.coordination.tables.attempts import (
     ReplayFact,
 )
 from agent_comms.coordination.tables.participants import Participants
+from agent_comms.execution.turn_failure_reads import ReplayPreparation
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     MalformedRecord,
@@ -56,7 +57,6 @@ from agent_comms.storage.typed_table import (
     RetainsChildren,
     TextStorage,
 )
-from agent_comms.turn_failure_reads import ReplayPreparation
 from agent_comms.waking.wake_candidate_index import ProjectionUnavailableError
 
 if TYPE_CHECKING:

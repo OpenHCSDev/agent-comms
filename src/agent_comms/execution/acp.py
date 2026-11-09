@@ -102,6 +102,7 @@ from agent_comms.execution.selected.actions import BoundSelectedWriteAuthority
 from agent_comms.execution.selected.write_plan import SelectedWritePlans
 from agent_comms.execution.session_effects import SessionEffects
 from agent_comms.execution.session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
+from agent_comms.execution.session_reads import SessionClient
 from agent_comms.execution.turn_effects import TurnEffects
 from agent_comms.execution.turn_runner import RELAY_PREFIX, TurnRunner
 from agent_comms.installer.active_route import ActiveRoute
@@ -119,7 +120,6 @@ from agent_comms.nominal.field_codec import (
 from agent_comms.registry.activity import FailedWakeDiagnostic
 from agent_comms.registry.thread_identity import OwnerIdentity
 from agent_comms.registry.threads import Thread
-from agent_comms.session_reads import SessionClient
 from agent_comms.transport.owner_connection import socket_path
 from agent_comms.transport.owner_requests import RetainedOwnerLaunch
 from agent_comms.transport.runtime_server import RuntimeServer

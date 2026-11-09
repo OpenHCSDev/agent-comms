@@ -27,7 +27,6 @@ from agent_comms.coordination.session import NativeCapture
 from agent_comms.errors import MissingSourceLine, TodoError
 from agent_comms.execution.child_process import ChildResult, OrderCheckFailedError
 from agent_comms.execution.launch_runtime import LaunchRuntime
-from agent_comms.goal_work import GoalAssignment, GoalAssignments
 from agent_comms.installer.build_identity import (
     BuildIdentity,
     CommitInstallation,
@@ -35,7 +34,6 @@ from agent_comms.installer.build_identity import (
     RecordedBuildIdentity,
     UnrecordedBuildIdentity,
 )
-from agent_comms.message_directions import DirectiveWriter
 from agent_comms.messaging.bus import BusReader
 from agent_comms.messaging.bus_publication import AgentOrigin
 from agent_comms.messaging.channel_targets import (
@@ -44,6 +42,7 @@ from agent_comms.messaging.channel_targets import (
     IncarnationThreadTarget,
     NamedTarget,
 )
+from agent_comms.messaging.message_directions import DirectiveWriter
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import InfoKind, Message
 from agent_comms.messaging.published_bus import PublishedBus
@@ -68,7 +67,6 @@ from agent_comms.nominal.field_codec import (
     boundary_decoder,
 )
 from agent_comms.nominal.lifecycle_capability import LifecycleCapability, Pending
-from agent_comms.order_phase import OrderPhase, UnplannedPhase
 from agent_comms.planning.command import Command
 from agent_comms.planning.delivery_evidence import (
     SOURCE_READ_FAILURES,
@@ -82,7 +80,9 @@ from agent_comms.planning.delivery_evidence import (
     WorkingEvidence,
 )
 from agent_comms.planning.goal_scope import OneGoal
+from agent_comms.planning.goal_work import GoalAssignment, GoalAssignments
 from agent_comms.planning.goals import CheckedCommit, OrderCheck
+from agent_comms.planning.order_phase import OrderPhase, UnplannedPhase
 from agent_comms.planning.order_runs import OrderRun
 from agent_comms.planning.order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from agent_comms.planning.order_words import (

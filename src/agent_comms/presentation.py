@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.messaging.display_sources import ChannelSortView
 from agent_comms.messaging.notification_contracts import RevisionChanges
 
 from abc import ABC, abstractmethod
@@ -16,11 +17,7 @@ from typing import Annotated, ClassVar, Self
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.coordination.errors import DMPaintedBoundChanged
 from agent_comms.display_order import ChannelSort, NameChannelSort
-from agent_comms.display_sources import ChannelSortView
 from agent_comms.execution.runtime_info import RuntimeInfo
-from agent_comms.goal_execution import GoalExecution
-from agent_comms.goal_execution_snapshot import GoalExecutionSnapshot
-from agent_comms.goal_snapshots import GoalSnapshots
 from agent_comms.messaging.activity_clocks import ChannelActivity
 from agent_comms.messaging.bus import BusSnapshot, DisplayUnread
 from agent_comms.messaging.bus_read_source import BusReadSource
@@ -70,6 +67,9 @@ from agent_comms.nominal.field_codec import (
 )
 from agent_comms.notification_assignment import NotificationAssignment
 from agent_comms.pi_counts import PiCount
+from agent_comms.planning.goal_execution import GoalExecution
+from agent_comms.planning.goal_execution_snapshot import GoalExecutionSnapshot
+from agent_comms.planning.goal_snapshots import GoalSnapshots
 from agent_comms.planning.goal_waits import GoalWaits
 from agent_comms.planning.orders import TodoStore
 from agent_comms.registry import relationships
@@ -79,6 +79,7 @@ from agent_comms.registry.catalog_document import CatalogDocument
 from agent_comms.registry.catalog_store import ChannelCatalog
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.registry_names import DeletedThread
 from agent_comms.registry.roster_visibility import DEFAULT_ROSTER, RosterVisibility
 from agent_comms.registry.thread_presentation import (
     ThreadOwnerBinding,
@@ -87,7 +88,6 @@ from agent_comms.registry.thread_presentation import (
 )
 from agent_comms.registry.thread_status import ActiveThreadPresence, ThreadStatus, ThreadStatusName
 from agent_comms.registry.threads import Thread
-from agent_comms.registry_names import DeletedThread
 from agent_comms.storage.locked_store import GoalWakeFile
 from agent_comms.storage.private_path import FileRevision
 from agent_comms.storage.storage_room import RoomLedger

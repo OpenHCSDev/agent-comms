@@ -44,6 +44,7 @@ from agent_comms.execution.pi_events import CancelledUiChoice, DialogUiRequest, 
 from agent_comms.execution.queued_input import InitialInput
 from agent_comms.execution.reservation_rules import ReservationRule, ReservationViolationError
 from agent_comms.execution.session_lifecycle import SessionLifecycle
+from agent_comms.execution.session_owner_reads import SessionTaskOwner
 from agent_comms.execution.turn_context import SegmentManifest
 from agent_comms.execution.turn_effects import TurnEffects
 from agent_comms.execution.turn_input_source import (
@@ -63,7 +64,6 @@ from agent_comms.pi_payloads import NativeContextData, StateData
 from agent_comms.planning.goal_actions import GoalPrecondition, OwnerInvocable, PausedGoalAction
 from agent_comms.planning.goal_scope import OneGoal
 from agent_comms.registry.threads import Thread
-from agent_comms.session_owner_reads import SessionTaskOwner
 from agent_comms.team.pi_rule_gate import PiRedeal
 from agent_comms.transcript.transcript_updates import TurnTranscriptUpdate
 from agent_comms.transport.runtime_server import RuntimeServer, SubscriberClosed

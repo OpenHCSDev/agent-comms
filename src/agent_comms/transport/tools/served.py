@@ -34,13 +34,13 @@ from agent_comms.config_options import ConfigOptions
 from agent_comms.coordination.tables.refusals import SendRefusal
 from agent_comms.coordination.working_memory_annotations import WorkingMemoryAnnotations
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.imported_session_metadata import ImportedSessionMetadata
 from agent_comms.execution.input_origin import HumanInputOrigin
 from agent_comms.execution.owner_lifecycle import OwnerStartResult
 from agent_comms.execution.pi_vocabulary import ServiceTier, ThinkingLevelField
 from agent_comms.execution.restart_queue import QueuedRestart, RestartQueue, RestartQueued
 from agent_comms.execution.turn_context import ContextManifest, ContextSourceText, SegmentManifest
 from agent_comms.history_views import RetiredViews
-from agent_comms.imported_session_metadata import ImportedSessionMetadata
 from agent_comms.importing import ThreadImported
 from agent_comms.messaging.bus_identity import BusIdentityStore
 from agent_comms.messaging.channel_management import ListTagEdit, TagEdit
@@ -92,6 +92,7 @@ from agent_comms.nominal.field_codec import (
     WireName,
     WireOmitDefault,
 )
+from agent_comms.planning.task_scope import CurrentTaskScopeSelection, TaskScopeSelection
 from agent_comms.presentation import ChannelView, WireRevision
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.work_branches import WorkBranch, WorkBranches
@@ -124,7 +125,6 @@ from agent_comms.registry.threads import (
     OwnerLifecycleControl,
     StartOwnerControl,
 )
-from agent_comms.task_scope import CurrentTaskScopeSelection, TaskScopeSelection
 from agent_comms.team.standing import InstallDue
 from agent_comms.transport.host_logs import HostLog, HostLogRead
 from agent_comms.transport.native_tools import CommunicationCall

@@ -2,7 +2,7 @@ import sqlite3
 from dataclasses import replace
 
 from agent_comms.nominal.field_codec import GoalId
-from agent_comms.goal_wait_target import GoalWaitTarget
+from agent_comms.planning.goal_wait_target import GoalWaitTarget
 from agent_comms.planning.goal_waits import GoalWaits
 from agent_comms.planning.goal_waits import GoalWaitTargetRow
 from agent_comms.planning.goal_waits import RecordedGoalWait

@@ -28,7 +28,7 @@ operations.append(patch(path, [(before, after)]))
 path = SRC / "initial_origin.py"
 before = path.read_text()
 after = before.replace("from agent_comms.bus_record_builder import RecordBuilder\n", "")
-after = after.replace("from agent_comms.message_writer import MessageWriter\n", "")
+after = after.replace("from agent_comms.messaging.message_writer import MessageWriter", "")
 after = after.replace(statement, "")
 after = after.replace("build: RecordBuilder", "build: bus_record_builder.RecordBuilder")
 after = after.replace("bus: MessageWriter", "bus: message_writer.MessageWriter")
@@ -43,7 +43,7 @@ operations.append(patch(path, [(before, after)]))
 
 path = SRC / "input_origin.py"
 before = path.read_text()
-old = "from agent_comms.initial_origin import HumanOrigin\n"
+old = "from agent_comms.messaging.initial_origin import HumanOrigin"
 if old not in before:
     raise ValueError("Original HumanOrigin author import changed")
 after = before.replace(old, "")

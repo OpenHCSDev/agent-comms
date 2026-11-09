@@ -9,13 +9,13 @@ from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from typing import Annotated, ClassVar
 
-from agent_comms.channel_sources import ChannelHistorySource, ChannelMemberSource
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.display_order import ChannelSort, CreatedThreadSort, ThreadSort
-from agent_comms.display_sources import ChannelSortView, SortedChannel, StoredThreadOrder
 from agent_comms.errors import RelationViolationError
 from agent_comms.messaging.activity_clocks import ChannelActivity
+from agent_comms.messaging.channel_sources import ChannelHistorySource, ChannelMemberSource
 from agent_comms.messaging.channel_targets import ChannelTarget, Tag
+from agent_comms.messaging.display_sources import ChannelSortView, SortedChannel, StoredThreadOrder
 from agent_comms.messaging.history_result import (
     ChannelHistoryPageResult,
     EverythingHistoryPageResult,
@@ -30,9 +30,9 @@ from agent_comms.messaging.read_basis import (
 )
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import CatalogExclude, FieldCodec
+from agent_comms.registry.registry_names import RegistryNames
 from agent_comms.registry.roster_visibility import RosterVisibility
-from agent_comms.registry_names import RegistryNames
-from agent_comms.tagged_thread_source import TaggedThreadSource
+from agent_comms.registry.tagged_thread_source import TaggedThreadSource
 from agent_comms.transport.tool_result import ToolResult
 
 
