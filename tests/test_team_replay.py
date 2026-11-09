@@ -20,6 +20,7 @@ import pytest
 from agent_comms.cli_bridges.codex_connection import CodexConnection
 from agent_comms.comms import Comms
 from agent_comms.execution.launch_runtime import LaunchRoot
+from agent_comms.execution.transcript_sources import ExternalTranscript
 from agent_comms.execution.turn_item import (
     NativeItemId,
     NativeTurnId,
@@ -72,7 +73,6 @@ from agent_comms.team.standing_rules import (
     UnparsedBranch,
 )
 from agent_comms.team.team_heartbeat import TeamObservation
-from agent_comms.transcript.external_transcript import ExternalTranscript
 from agent_comms.transcript.transcript_events import ToolStartTranscript
 from agent_comms.ui_model.teammate_state import Unreadable
 from conftest import declare_test_bus

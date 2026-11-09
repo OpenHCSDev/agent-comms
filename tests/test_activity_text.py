@@ -9,6 +9,7 @@ from agent_comms.cli_bridges.runtime_updates import ThreadOutput
 from agent_comms.display_order import LastActivityThreadSort
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.pi_events import ToolExecutionStart
+from agent_comms.execution.transcript_sources import ExternalTranscript
 from agent_comms.execution.turn_phase import (
     FailedPhase,
     IdlePhase,
@@ -32,7 +33,6 @@ from agent_comms.registry.activity import (
     ReadyDrainReadiness,
 )
 from agent_comms.registry.threads import ExternalThread, NativeThread
-from agent_comms.transcript.external_transcript import ExternalTranscript
 from agent_comms.ui_model.observation import ObserveSidebar, SidebarObserved
 from agent_comms.ui_model.sidebar import SidebarModel
 

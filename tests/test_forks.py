@@ -33,6 +33,7 @@ from agent_comms.errors import (
 )
 from agent_comms.execution.native_transcript import NativeTranscript
 from agent_comms.execution.session_file import RegistrySessionLocation
+from agent_comms.execution.transcript_sources import ExternalTranscript
 from agent_comms.execution.turn_bound import TurnsSince
 from agent_comms.execution.turn_digests import (
     OrderEditCountRead,
@@ -114,7 +115,6 @@ from agent_comms.storage.typed_table import HeldBusFile
 from agent_comms.team.order import MessageNotification, OrderFile, Team, TeamContext
 from agent_comms.team.standing import Unjudged
 from agent_comms.team.team_heartbeat import TeamObservation
-from agent_comms.transcript.external_transcript import ExternalTranscript
 from agent_comms.transcript.transcript_events import ToolStartTranscript
 from agent_comms.transport.tool_caller import ForkCaller, SubagentCaller
 from agent_comms.transport.tool_declaration import ToolDeclaration

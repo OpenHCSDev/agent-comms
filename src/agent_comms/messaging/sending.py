@@ -16,6 +16,7 @@ from agent_comms.errors import (
     UnreceivedAnswerError,
     UnregisteredThreadError,
 )
+from agent_comms.execution.transcript_sources import ExternalTranscript
 from agent_comms.execution.turn_context import ContextSegment
 from agent_comms.execution.turn_item import NoSourceTurn, SourceTurn
 from agent_comms.messaging.bus_publication import (
@@ -64,7 +65,6 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.threads import Thread
-from agent_comms.transcript.external_transcript import ExternalTranscript
 
 
 class AnswerAuthority(ABC):

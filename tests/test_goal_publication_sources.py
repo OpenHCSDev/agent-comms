@@ -15,6 +15,7 @@ from agent_comms.cli_bridges.runtime_updates import ThreadOutput
 from agent_comms.comms import wire
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.controller import SessionUpdateSink
+from agent_comms.execution.transcript_sources import ExternalTranscript
 from agent_comms.execution.turn_phase import (
     IdlePhase,
     ToolRunningPhase,
@@ -37,7 +38,6 @@ from agent_comms.registry.registry_document import RegistryDocument
 from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.storage.locked_store import GoalWakeFile, RegistryFile
-from agent_comms.transcript.external_transcript import ExternalTranscript
 from delivery_owner_fixture import canonical_agent
 from goal_owner_fixture import canonical_goal_wire
 

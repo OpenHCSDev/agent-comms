@@ -112,7 +112,7 @@ def test_captured_draft_cannot_delete_a_later_turns_draft(tmp_path):
 async def test_turn_owned_draft_commit_reaches_a_watching_reader(tmp_path):
     turn_turn_id = NativeTurnId('turn')
     from agent_comms.messaging.watched import ChangeSignal, FileSource
-    from agent_comms.transcript.external_transcript import TurnDraftPublication
+    from agent_comms.execution.transcript_sources import TurnDraftPublication
 
     comms = wire(tmp_path / "wire")
     comms.registry.declare(NativeThread('cli', frozenset(), Checkout(tmp_path)))
@@ -135,7 +135,7 @@ async def test_turn_owned_draft_commit_reaches_a_watching_reader(tmp_path):
 def test_turn_owned_draft_refuses_maintenance_without_changing_the_saved_draft(tmp_path):
     from agent_comms.errors import RelationViolationError
     from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
-    from agent_comms.transcript.external_transcript import TurnDraftPublication
+    from agent_comms.execution.transcript_sources import TurnDraftPublication
 
     comms = wire(tmp_path / 'wire')
     comms.registry.declare(NativeThread('cli', frozenset(), Checkout(tmp_path)))
