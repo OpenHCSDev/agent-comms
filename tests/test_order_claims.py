@@ -697,15 +697,17 @@ def test_two_delivery_claims_warn_without_deadlocking_other_orders(
     assert store.get("P2") == claims[1]
 
 
-def test_claimed_order_to_another_teammate_is_refused_and_writes_nothing(held_team, cited_source):
+def test_claimant_can_hand_off_unfinished_work_without_losing_its_claim(held_team, cited_source):
     ctx = held_team
     ctx.comms.registry.register(thread("other", ctx.root, 3.0))
     claimed = claimed_by_worker(ctx)
-    with pytest.raises(TodoError, match="Only an undelivered order can change owner"):
-        main(["send", "other", corrected_order_file(ctx, cited_source), "--clean", "--reassign",
-              "the claimant reported the delivery, so moving it would discard that claim",
-              "--as", "worker"], ctx)
-    assert ctx.comms.goals.todos.get("P1") == claimed
+    main(["send", "other", corrected_order_file(ctx, cited_source), "--clean", "--reassign",
+          "the claimant transfers the unfinished work while preserving its recorded claim",
+          "--as", "worker"], ctx)
+    following = ctx.comms.goals.todos.get("P1")
+    assert following.held().owner_identity == ctx.comms.registry.require("other").incarnation
+    assert isinstance(following.order, PendingProblemOrder)
+    assert claimed.order in following.history.events(following.id, CheckedProblemOrder)
 
 
 def test_claimed_order_takes_a_check_correction_through_the_real_verb(held_team):

@@ -173,7 +173,8 @@ def test_phase_checks_keep_folded_declarations_and_exact_creator_birth(
 @pytest.mark.parametrize('retire_goal', (
     ClearGoalAction(), SetGoalAction(text='A different task after the handoff'),
 ))
-def test_retired_goal_does_not_keep_assignment_consent(comms, source_repository, retire_goal):
+@pytest.mark.parametrize('merged', (False, True))
+def test_retired_goal_does_not_keep_assignment_consent(comms, source_repository, retire_goal, merged):
     for name in ('holder', 'replacement'):
         comms.registry.declare(ExternalThread(name, frozenset(), Checkout(comms.root)))
     holder = comms.registry.require('holder')
@@ -183,18 +184,20 @@ def test_retired_goal_does_not_keep_assignment_consent(comms, source_repository,
     store = comms.goals.todos
     request = store.add_request(holder.incarnation, 'Repair the held assignment').id
     handoff_request = store.add_request(replacement.incarnation, 'Take over the held work').id
+    checked = order(source_repository)
+    checked = checked.merged(source_repository.main_commit) if merged else checked
     todo = store.create(
         'P1', source_repository.github, 'Fix the held assignment',
         creator=holder, owner=holder, assigner=holder.incarnation,
         generation=original_goal.id, review_at=RecordedEventTime(1000),
-        order=order(source_repository), request=request,
+        order=checked, request=request,
     )
 
     def take_over():
         return store.assign(
             (ExpectedProblem(todo.id, todo.revision),), owner=replacement,
             assigner=replacement.incarnation, generation=new_goal.id, request=handoff_request,
-            review_at=RecordedEventTime(1000), order=order(source_repository),
+            review_at=RecordedEventTime(1000), order=checked,
         )[0]
 
     with pytest.raises(TodoError, match='cannot release or replace'):
@@ -203,12 +206,13 @@ def test_retired_goal_does_not_keep_assignment_consent(comms, source_repository,
         store.assign(
             (ExpectedProblem(todo.id, todo.revision),), owner=holder,
             assigner=replacement.incarnation, generation=original_goal.id, request=handoff_request,
-            review_at=RecordedEventTime(1000), order=order(source_repository),
+            review_at=RecordedEventTime(1000), order=checked,
         )
     comms.goals.update_goal('holder', retire_goal)
     assigned = take_over()
     assert assigned.held().owner_identity == replacement.incarnation
     assert assigned.held().generation == new_goal.id
+    assert assigned.order == checked
 
 
 def _assign_process(root: str, checkout: str, name: str, created: float, gate) -> tuple[str, str]:
