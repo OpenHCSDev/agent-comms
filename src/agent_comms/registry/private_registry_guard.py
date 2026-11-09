@@ -33,6 +33,7 @@ from agent_comms.coordination.errors import PublicationActivationBlocked
 from agent_comms.coordination.private_runtime_schema import PrivateCoordinatorTable
 from agent_comms.coordination.schema import CoordinatorTable
 from agent_comms.coordination.tables.participants import Participants
+from agent_comms.coordination.tables.response_schema import ResponseTable
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import Platform
 from agent_comms.execution.native_input_owner import RegistryOwner
@@ -304,7 +305,6 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
         ).insert_if_absent(db)
 
     def publication_connection(self, connection: sqlite3.Connection) -> sqlite3.Connection:
-        from agent_comms.coordination.response import ResponseTable
 
         NativeRuntimeTable.require_installed(connection)
         ResponseTable.require_installed(connection)
