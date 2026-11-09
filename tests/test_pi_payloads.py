@@ -6,11 +6,13 @@ from dataclasses import dataclass
 import pytest
 
 from agent_comms.agent_events import ProviderUsage
+from agent_comms.execution.pi_commands import GetState, PiCommand, Prompt
+from agent_comms.execution.pi_events import MessageEnd, MessageUpdate, Response, UnknownPiEvent
+from agent_comms.execution.pi_rpc import PiRpcChannel
+from agent_comms.execution.pi_wire import PiPayload
 from agent_comms.execution.turn_usage import UsageAccount
 from agent_comms.nominal.field_codec import FieldCodec, InputId, MalformedRecord
-from agent_comms.pi_commands import GetState, PiCommand, Prompt
 from agent_comms.pi_counts import PiCount, ReportedCount, UnreportedCount
-from agent_comms.pi_events import MessageEnd, MessageUpdate, Response, UnknownPiEvent
 from agent_comms.pi_payloads import (
     AssistantMessage,
     MissingData,
@@ -24,8 +26,6 @@ from agent_comms.pi_payloads import (
     UnreportedModel,
     UnreportedUsage,
 )
-from agent_comms.pi_rpc import PiRpcChannel
-from agent_comms.pi_wire import PiPayload
 from agent_comms.registry.thread_model import (
     DeclaredModel,
     UndeclaredModel,
@@ -199,7 +199,7 @@ def test_optional_native_observations_have_named_absence_and_one_serialization()
 
 
 def test_tracked_commit_observations_preserve_original_receipt_and_refuse_repetition():
-    from agent_comms.backend import ObservedNativeCommit, PendingNativeCommit
+    from agent_comms.execution.backend import ObservedNativeCommit, PendingNativeCommit
     from agent_comms.execution.native_failures import NativePiUnavailable
 
     event = decode({"type": "input_committed", "inputId": "a" * 32, "sessionId": "session", "sessionEntryId": "entry", "sessionEntryStart": 128})
@@ -303,7 +303,7 @@ def test_saved_failed_turn_uses_the_live_turn_end_decision(stop, content, error,
 
 
 def test_answer_given_before_a_later_input_stands_when_that_input_ends_without_text():
-    from agent_comms.tracked_turn import AnsweredTrackedTerminal, PendingTrackedTerminal
+    from agent_comms.execution.tracked_turn import AnsweredTrackedTerminal, PendingTrackedTerminal
 
     answered = PendingTrackedTerminal().append("first answer").later_input(["first ", "answer"])
 
@@ -367,8 +367,8 @@ def test_raw_tool_arguments_reach_the_declared_call_refusal():
 )
 def test_auto_retry_end_decodes_pi_boolean_success_into_its_outcome(line, member):
     """Pi's own auto_retry_end record (agent-session.js) selects the outcome by its boolean."""
-    from agent_comms.pi_events import AutoRetryEnd
-    from agent_comms.pi_rpc import PiRpcChannel
+    from agent_comms.execution.pi_events import AutoRetryEnd
+    from agent_comms.execution.pi_rpc import PiRpcChannel
 
     event = PiRpcChannel.decode_record(line, strict=True)
 

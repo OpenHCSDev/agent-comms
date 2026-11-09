@@ -22,7 +22,7 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.agent_events import CompactionEnd
 from agent_comms.comms import wire
-from agent_comms.controller import SessionUpdateSink
+from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.native_arguments import GivenArguments, GivenBinary
 from agent_comms.launch_runtime import RestartEnvironment
 from agent_comms.nominal.field_codec import AcpSessionId, InputId

@@ -15,17 +15,17 @@ from queue import Empty
 import pytest
 
 from agent_comms.attempt_recovery import RecoveryMonitorCapability
-from agent_comms.attempt_resolution import OperatorStopped, RetryDecision
 from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import RecoveryBlocked
 from agent_comms.errors import GoalRefused, StaleAttemptError, UnresolvedAttemptError
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput
+from agent_comms.execution.pi_wire import PiUsage
 from agent_comms.execution.turn_failure import BackendFailed, FailedTurnResolution
 from agent_comms.nominal.field_codec import AttemptId, GoalId, MalformedRecord, RetryDecisionId
 from agent_comms.pi_counts import PiCount, UnreportedCount
-from agent_comms.pi_wire import PiUsage
+from agent_comms.planning.attempt_resolution import OperatorStopped, RetryDecision
 from agent_comms.planning.goal_actions import SetGoalAction
 from agent_comms.planning.goal_attempt_phase import (
     ClaimedAttempt,

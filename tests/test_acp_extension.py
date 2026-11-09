@@ -35,10 +35,12 @@ from agent_comms.acp_extension import (
     decode_updates,
     encode_updates,
 )
-from agent_comms.acp_failure import ACPFailure, BackendDeliveryFailure
 from agent_comms.agent_events import CompactionStart
-from agent_comms.context_reading import UnmeasuredContext
+from agent_comms.execution.acp_failure import ACPFailure, BackendDeliveryFailure
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.context_reading import UnmeasuredContext
+from agent_comms.execution.pi_wire import McpLiveAcknowledgement
+from agent_comms.execution.transcript_sources import NoDraft
 from agent_comms.execution.turn_context import (
     ContextManifest,
     NextContextTurn,
@@ -57,7 +59,6 @@ from agent_comms.nominal.field_codec import (
     RootId,
     TurnId,
 )
-from agent_comms.pi_wire import McpLiveAcknowledgement
 from agent_comms.planning.goal_presentation import IdleGoalExecution
 from agent_comms.planning.goals import NoGoal
 from agent_comms.projects.checkouts import Checkout
@@ -67,7 +68,6 @@ from agent_comms.registry.thread_identity import (
 )
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.private_path import MissingFile
-from agent_comms.transcript_sources import NoDraft
 from agent_comms.transcripts import NativeTranscriptCursor
 
 
@@ -85,7 +85,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
     from agent_comms.execution.native_session_reopen import PiSessionId
     from agent_comms.execution.native_transcript import PresentSessionCut
     from agent_comms.execution.turn_item import NativeItemId
-    from agent_comms.sent_message import AssignedSourceIdentity
+    from agent_comms.messaging.sent_message import AssignedSourceIdentity
     from agent_comms.storage.private_path import FileRevision
     from agent_comms.transcripts import NativeCommittedPrefix
     sample_path = tmp_path / "session.jsonl"

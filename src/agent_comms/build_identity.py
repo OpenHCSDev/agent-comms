@@ -17,7 +17,7 @@ from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
 
 if TYPE_CHECKING:
-    from agent_comms.order_runs import OrderRun
+    from agent_comms.planning.order_runs import OrderRun
     from agent_comms.planning.orders import MergedProblemOrder, Todo
 
 

@@ -42,7 +42,12 @@ from agent_comms.installer.native_build_inputs import (
     GitLaunch,
 )
 from agent_comms.nominal_census import NominalCensus
-from agent_comms.phase_evidence import (
+from agent_comms.planning.orders import (
+    CitedEvidence,
+    DraftPullRequest,
+    UnmergedPullRequest,
+)
+from agent_comms.planning.phase_evidence import (
     BusStorageAbsent,
     CommitMerged,
     EvidenceFound,
@@ -50,11 +55,6 @@ from agent_comms.phase_evidence import (
     MainTree,
     PathsAbsent,
     PhaseEvidence,
-)
-from agent_comms.planning.orders import (
-    CitedEvidence,
-    DraftPullRequest,
-    UnmergedPullRequest,
 )
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.git_errors import (

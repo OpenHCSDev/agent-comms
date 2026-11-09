@@ -10,12 +10,12 @@ from agent_comms.execution.child_process import (
     ChildProcess,
     SynchronousProcess,
 )
+from agent_comms.execution.pending_requests import PendingRequests
+from agent_comms.execution.pi_rpc import PiRpcChannel
 from agent_comms.messaging.read_ledger import ReadLedger
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.nominal.sealed import Sealed
-from agent_comms.pending_requests import PendingRequests
-from agent_comms.pi_rpc import PiRpcChannel
 
 pytestmark = pytest.mark.refactor_guard
 

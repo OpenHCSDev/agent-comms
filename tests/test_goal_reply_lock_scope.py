@@ -10,11 +10,11 @@ import pytest
 
 from agent_comms.bus import Bus
 from agent_comms.bus_publication import Delivered
-from agent_comms.bus_tables import ReceivedSource
 from agent_comms.coordination.errors import StaleFence
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_key import BusInputKey
+from agent_comms.messaging.bus_tables import ReceivedSource
 from agent_comms.messaging.messages import ConversationRole, NoticeRole
 from agent_comms.nominal.field_codec import GoalWaitId, TurnId
 from agent_comms.planning.goal_actions import (

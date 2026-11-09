@@ -26,7 +26,7 @@ from agent_comms.execution.owner_lifecycle import (
     OwnerRestartSelection,
 )
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, RestoredRuntime
-from agent_comms.owner_release import OwnerCompletion
+from agent_comms.registry.owner_release import OwnerCompletion
 from agent_comms.registry.thread_identity import ThreadAuthority
 from agent_comms.registry.threads import Thread
 from agent_comms.restart_refusals import OwnerSelectionChangedRefusal

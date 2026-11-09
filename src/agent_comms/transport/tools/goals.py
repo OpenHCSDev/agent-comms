@@ -44,9 +44,9 @@ from agent_comms.planning.goal_scope import AllGoals, OneGoal
 from agent_comms.planning.goals import GoalDeclaration
 from agent_comms.progress_claims import ProgressClaim
 from agent_comms.tool_caller import ThreadCaller, ToolCaller
-from agent_comms.tool_request import ThreadReadTool, ThreadToolRequest
 from agent_comms.tool_result import ToolResult
 from agent_comms.transport.request import ListedNames, OmittedNames, tool_field
+from agent_comms.transport.tool_request import ThreadReadTool, ThreadToolRequest
 from agent_comms_hooks import ToolRefusedError
 
 if TYPE_CHECKING:

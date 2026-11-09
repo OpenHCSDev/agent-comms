@@ -10,18 +10,20 @@ from abc import abstractmethod
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Annotated, Callable, ClassVar, Self
 
-from agent_comms.acp_failure import (
+from agent_comms.agent_events import CompactionEvent
+from agent_comms.execution.acp_failure import (
     ACPFailure,
     BackendDeliveryFailure,
     DeliveryFailure,
     FailureSource,
     UnrecordedFailureSource,
 )
-from agent_comms.agent_events import CompactionEvent
-from agent_comms.context_reading import ContextReading
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.context_reading import ContextReading
 from agent_comms.execution.native_output import NativeOutputScope
 from agent_comms.execution.native_runtime_input import CurrentNativeCursor
+from agent_comms.execution.pi_wire import McpLiveAcknowledgement
+from agent_comms.execution.transcript_sources import NoDraft
 from agent_comms.execution.turn_context import ContextManifest
 from agent_comms.execution.turn_inbox import SendNow, TurnInbox
 from agent_comms.execution.turn_lease import TurnState
@@ -46,14 +48,12 @@ from agent_comms.nominal.field_codec import (
     WireValue,
 )
 from agent_comms.owner_protocol import IncompatibleOwner
-from agent_comms.pi_wire import McpLiveAcknowledgement
 from agent_comms.planning.goal_presentation import GoalExecution, GoalSnapshot
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import ClaimedIdentity, ClaimScoped, ThreadIncarnation
 from agent_comms.reported_turn import ReportedTurn, ReportedTurnState
 from agent_comms.routing import MessageRoute, NoMessageRoute
 from agent_comms.tool_result import ToolResult
-from agent_comms.transcript_sources import NoDraft
 from agent_comms.transcripts import (
     LivePageSource,
     NativeCommittedPrefix,

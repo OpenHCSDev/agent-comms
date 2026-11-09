@@ -13,8 +13,8 @@ import pytest
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 
-from agent_comms.build_artifact import BuildArtifact
 from agent_comms.execution.child_process import Platform
+from agent_comms.installer.build_artifact import BuildArtifact
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.probes.interpreter import InterpreterBuildProbe
 from agent_comms.installer.probes.packages import (

@@ -14,13 +14,13 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.input_attempt import UnobservedInputDeliveryScope
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_key import BusInputKey
-from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.bus_read import (
     BusRead,
     OwnerScopedRead,
 )
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.notification_reads import LiveNotificationRead
 from agent_comms.nominal.field_codec import MessageId
-from agent_comms.notification_reads import LiveNotificationRead
 from agent_comms.owner_connection import OwnerIdentityChangedError
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation

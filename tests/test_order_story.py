@@ -16,11 +16,11 @@ from agent_comms.nominal.field_codec import (
     OrderId,
     ToolCallId,
 )
-from agent_comms.order_story import OrderStory, TeamStory
 from agent_comms.planning.goal_actions import (
     CreateProblemGoalAction,
     OrderGoalAction,
 )
+from agent_comms.planning.order_story import OrderStory, TeamStory
 from agent_comms.planning.order_words import StrikeReason
 from agent_comms.planning.orders import (
     AcceptedVerdict,
@@ -36,10 +36,10 @@ from agent_comms.planning.orders import (
     WithdrawTodo,
 )
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.registry.threads import NativeThread
-from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.tool_caller import NoThreadCaller, PeerCaller, ThreadCaller
 from agent_comms.transport.tools.orders import (
     CommsChangeProblemTool,

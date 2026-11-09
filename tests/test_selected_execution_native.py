@@ -16,6 +16,7 @@ from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.cursor_owner import CursorOwner
+from agent_comms.execution.historical_native_inputs import read_historical_native_inputs
 from agent_comms.execution.native_input_record import FullNativeExecution, TriageNativeExecution
 from agent_comms.execution.native_pi import CommittedInput, read_tracked_input_commitment
 from agent_comms.execution.selected.actions import CodingSelectedAction
@@ -24,7 +25,6 @@ from agent_comms.execution.turn_phase import (
     ModelWaitPhase,
     ToolRunningPhase,
 )
-from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.lifecycle_capability import Complete
 from agent_comms.pi_vocabulary import LowThinkingLevel

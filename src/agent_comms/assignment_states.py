@@ -38,12 +38,12 @@ if TYPE_CHECKING:
     from agent_comms.bus_publication import Delivered
     from agent_comms.coordination.tables.assignments import WakeAssignment
     from agent_comms.coordination.tables.responses import ResponseObligation
-    from agent_comms.execution.native_input_record import TriageNativeExecution
-    from agent_comms.frozen_recipient import FrozenRecipient
-    from agent_comms.historical_native_inputs import (
+    from agent_comms.execution.historical_native_inputs import (
         FailedTriageHistoricalNativeInput,
         HistoricalNativeInput,
     )
+    from agent_comms.execution.native_input_record import TriageNativeExecution
+    from agent_comms.frozen_recipient import FrozenRecipient
     from agent_comms.message_notification import MessageNotification
     from agent_comms.notification_assignment import AssignmentActivity
 
@@ -574,7 +574,7 @@ class FailedAssignment(Failed, Terminal, InterruptedAssignment):
 
     def rejected_triage_history(self, execution: TriageNativeExecution, **source) -> FailedTriageHistoricalNativeInput:
         """A proved rejected result is delivered source, never an IGNORE decision."""
-        from agent_comms.historical_native_inputs import FailedTriageHistoricalNativeInput
+        from agent_comms.execution.historical_native_inputs import FailedTriageHistoricalNativeInput
 
         return FailedTriageHistoricalNativeInput(execution=execution, **source)
 

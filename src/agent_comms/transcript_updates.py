@@ -20,7 +20,7 @@ from agent_comms.ui_model.observation import ReadTranscript
 if TYPE_CHECKING:
     from agent_comms.acp_extension import TranscriptSnapshotUpdate
     from agent_comms.comms import Comms
-    from agent_comms.controller import SessionUpdateSink
+    from agent_comms.execution.controller import SessionUpdateSink
 
 
 @dataclass(frozen=True, kw_only=True)

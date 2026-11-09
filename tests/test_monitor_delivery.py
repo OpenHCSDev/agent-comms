@@ -17,7 +17,6 @@ import pytest
 
 from agent_comms.agent_inbox import TakenInputStart
 from agent_comms.assignment_states import DeferredAssignment, DeliveredAssignment
-from agent_comms.messaging.channel_targets import ThreadTarget
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.claude_protocol import (
     ClaudeMonitorFrame,
@@ -28,7 +27,23 @@ from agent_comms.cli_bridges.claude_protocol import (
     ReadResultObserved,
 )
 from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
+from agent_comms.cli_bridges.harness_delivery_states import (
+    DeliveredOutcome,
+    EmittedOutcome,
+    MismatchedMonitor,
+    ObservedMonitor,
+    ReceivingMonitor,
+    UnconfirmedOutcome,
+    UnrecordedMonitor,
+)
 from agent_comms.cli_bridges.monitor import MonitorPeer
+from agent_comms.cli_bridges.runtime_updates import (
+    AllTurnsEnded,
+    FinishedItem,
+    FinishedTurn,
+    HiddenItem,
+    RuntimeUpdate,
+)
 from agent_comms.cli_bridges.shared import (
     MONITOR_FRAME,
     Binding,
@@ -50,39 +65,24 @@ from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
-from agent_comms.diagnostics import record_terminal_failure
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.diagnostics import record_terminal_failure
 from agent_comms.execution.turn_failure import BackendFailed
 from agent_comms.execution.turn_item import (
     NativeItemId,
     NativeTurnId,
 )
 from agent_comms.external_transcript import ExternalTurnInput
-from agent_comms.harness_delivery_states import (
-    DeliveredOutcome,
-    EmittedOutcome,
-    MismatchedMonitor,
-    ObservedMonitor,
-    ReceivingMonitor,
-    UnconfirmedOutcome,
-    UnrecordedMonitor,
-)
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.launch_runtime import InstalledSource, LaunchRuntime, RuntimeReplacedError
+from agent_comms.messaging.channel_targets import ThreadTarget
 from agent_comms.messaging.message_reference import BridgeStart, MessageReference
 from agent_comms.messaging.messages import AlertKind, InfoKind, Message, NoticeRole, QuestionKind
 from agent_comms.messaging.read_ledger import ReadLedger
 from agent_comms.nominal.field_codec import FieldCodec, InputId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import ExternalThread, NativeThread
-from agent_comms.runtime_updates import (
-    AllTurnsEnded,
-    FinishedItem,
-    FinishedTurn,
-    HiddenItem,
-    RuntimeUpdate,
-)
 from agent_comms.storage.locked_store import RootFile
 from agent_comms.storage.maintenance_barrier import (
     MaintenanceBarrier,
@@ -1120,8 +1120,8 @@ async def test_confirmed_human_direct_request_receives_one_reply(bridge, reply_e
 
 def test_independent_sessions_share_the_delivered_message_reply_policy(comms, tmp_path):
     """Storage colleague and peer follow the same original-message reply policy."""
+    from agent_comms.cli_bridges.runtime_updates import ReplyingThreadOutput
     from agent_comms.registry.registry_document import RegisteredTeamProject
-    from agent_comms.runtime_updates import ReplyingThreadOutput
 
     colleague, teammate = (comms.registry.declare(ExternalThread(
         name, frozenset(), Checkout(tmp_path))) for name in ("colleague", "teammate"))

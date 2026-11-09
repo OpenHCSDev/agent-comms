@@ -13,9 +13,12 @@ import pytest
 
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.coordination.owner_fence import prepare_fence_token
 from agent_comms.coordination.tables.executions import WireOrigin
 from agent_comms.cursor_publication import CursorDelivery
+from agent_comms.execution.fresh_private_session import create_fresh_private_session
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput
+from agent_comms.execution.private_send_stage import TriageNativeSend
 from agent_comms.execution.selected.actions import CodingSelectedAction, NoSelectedWritePlans
 from agent_comms.execution.selected.participant import SelectedParticipant
 from agent_comms.execution.selected.request import SelectedRequest
@@ -24,12 +27,9 @@ from agent_comms.execution.selected.turn import (
     SelectedAttempt,
     SelectedPrompt,
 )
-from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.launch_runtime import ThreadLaunch
 from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.private_send_claim import PrivateSendClaim
-from agent_comms.private_send_stage import TriageNativeSend
 from agent_comms.text_digest import TextDigest
 from conftest import accept_initial, publish_initial
 from native_proof_cases import append_input_entry, recorded_context, write_proof_rows

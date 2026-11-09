@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Literal
 
-from agent_comms.install_choices import (
+from agent_comms.installer.install_choices import (
     InstallerChoice,
     LiveMode,
     RehearsalMode,

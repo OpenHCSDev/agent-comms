@@ -24,7 +24,6 @@ from agent_comms.catalog_document import CatalogAccess, NoCatalog
 from agent_comms.cli_failures import CLI_FAILURES
 from agent_comms.cli_verbs.cli_result import CliResult, ResultShower, TargetEditResult
 from agent_comms.cli_verbs.target_fields import TargetField
-from agent_comms.command import Command
 from agent_comms.comms import Comms
 from agent_comms.config_options import CatalogChoice, ConfigOptions
 from agent_comms.declared_verb import DeclaredCommand
@@ -50,6 +49,7 @@ from agent_comms.nominal.field_codec import (
     TargetBound,
     WireValue,
 )
+from agent_comms.planning.command import Command
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_document import RegistrySnapshot, ResolvedChannel
 from agent_comms.tool_result import ToolResult

@@ -219,7 +219,7 @@ class AgentActivity:
         if diagnostic.owner != owner:
             raise RelationViolationError("Drain diagnostic belongs to another owner.")
         if source_error is not None:
-            from agent_comms.diagnostics import record_drain_failure
+            from agent_comms.execution.diagnostics import record_drain_failure
 
             path = record_drain_failure(
                 self.registry.store.path.parent,

@@ -97,7 +97,7 @@ def test_a_port_nothing_serves_refuses_without_naming_endpoints():
 
 def test_both_probes_run_a_command_one_way():
     from agent_comms.probed_command import ProbedCommand
-    from agent_comms.tailnet_buses import TailnetBuses
+    from agent_comms.transport.tailnet_buses import TailnetBuses
     assert issubclass(ServedEndpoints, ProbedCommand) and issubclass(TailnetBuses, ProbedCommand)
     # A classmethod binds per access, so the comparison is of the one function behind it.
     assert ServedEndpoints.run.__func__ is ProbedCommand.run.__func__

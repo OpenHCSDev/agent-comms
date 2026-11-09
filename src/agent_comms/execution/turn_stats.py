@@ -9,13 +9,13 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from agent_comms import agent_events as events
-from agent_comms import pi_commands as commands
+from agent_comms.execution.pending_requests import PendingRequest
+from agent_comms.execution.pi_commands import GetSessionStats, GetState
 from agent_comms.execution.turn_failure import BackendFailed
 from agent_comms.execution.turn_phase import ModelWaitPhase
-from agent_comms.pending_requests import PendingRequest
 
 if TYPE_CHECKING:
-    from agent_comms.backend import FinishSignal, NativeSession
+    from agent_comms.execution.backend import FinishSignal, NativeSession
     from agent_comms.execution.turn_watchdog import ProgressWatchdog, TurnWait
 
 
@@ -51,8 +51,8 @@ class StatsRequest:
         # in async prompt preflight; join its original RPC acknowledgement first.
         await session.native.reader.pending.before_settlement()
         pending = (
-            session.native.send(commands.GetState()),
-            session.native.send(commands.GetSessionStats()),
+            session.native.send(GetState()),
+            session.native.send(GetSessionStats()),
         )
         await session.native.drain()
         return ReadingStats(pending)
@@ -104,7 +104,7 @@ class RequestingStats(RequestedStats):
 
 @dataclass(frozen=True)
 class ReadingStats(RequestedStats):
-    pending: tuple[PendingRequest[commands.GetState], PendingRequest[commands.GetSessionStats]]
+    pending: tuple[PendingRequest[GetState], PendingRequest[GetSessionStats]]
 
     def wait_for(self, watchdog: ProgressWatchdog, active: TurnWait) -> TurnWait:
         # Only the metadata replies use the short snapshot wait. A prompt still

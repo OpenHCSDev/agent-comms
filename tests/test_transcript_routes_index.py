@@ -5,16 +5,16 @@ import sqlite3
 import pytest
 
 from agent_comms.errors import RelationViolationError
-from agent_comms.execution.turn_item import FreshNativeId
-from agent_comms.routing import MessageRoute, TurnRouting
-from agent_comms.text_digest import TextDigest
-from agent_comms.transcript_routes import (
+from agent_comms.execution.transcript_routes import (
     DisplayText,
     InputDisplay,
     NoDisplayText,
     SentInputText,
     TranscriptRoutes,
 )
+from agent_comms.execution.turn_item import FreshNativeId
+from agent_comms.routing import MessageRoute, TurnRouting
+from agent_comms.text_digest import TextDigest
 from bus_record_fixture import INPUT_ID
 
 

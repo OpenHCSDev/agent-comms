@@ -32,6 +32,9 @@ from agent_comms.execution.native_input_record import (
 )
 from agent_comms.execution.native_pi import read_tracked_input_commitment
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
+from agent_comms.execution.private_send_rules import NativeIdentityCheck
+from agent_comms.execution.private_sidecar import PrivateSnapshotFile, native_request_digest
+from agent_comms.execution.reservation_rules import ReservationViolationError
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     InputId,
@@ -40,10 +43,7 @@ from agent_comms.nominal.field_codec import (
     Sha256Text,
     ThreadLookup,
 )
-from agent_comms.private_send_rules import NativeIdentityCheck
-from agent_comms.private_sidecar import PrivateSnapshotFile, native_request_digest
 from agent_comms.registry.threads import Thread
-from agent_comms.reservation_rules import ReservationViolationError
 from agent_comms.storage.typed_table import (
     Column,
     DurableTables,
@@ -55,7 +55,7 @@ from agent_comms.storage.typed_table import (
 )
 
 if TYPE_CHECKING:
-    from agent_comms.private_send_stage import NativeSendStage
+    from agent_comms.execution.private_send_stage import NativeSendStage
 
 
 @dataclass(frozen=True, slots=True)

@@ -10,17 +10,18 @@ from dataclasses import replace
 import pytest
 
 from agent_comms import agent_events as events
-from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.cli_bridges.hook_read_gate import ReadInput
-from agent_comms.context_reading import ContextUsage
+from agent_comms.execution.context_reading import ContextUsage
+from agent_comms.execution.fresh_private_session import create_fresh_private_session
 from agent_comms.execution.selected.tool_broker import (
     SelectedToolRequest,
     SelectedWriteArguments,
 )
-from agent_comms.fresh_private_session import create_fresh_private_session
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.nominal.field_codec import FieldCodec, MessageId
 from agent_comms.pi_rule_gate import PiRedeal, RulesUnread
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.rule_probes import Probe
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import NativeThread
 from agent_comms.rule_deal import (
@@ -40,7 +41,6 @@ from agent_comms.rule_deal import (
     Unmeant,
     Unread,
 )
-from agent_comms.rule_probes import Probe
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.task_attachments.owner_notices import MeantNotice, RestartNotice
 from agent_comms.team.package import TeamPackage

@@ -10,9 +10,13 @@ from pathlib import Path
 import pytest
 
 from agent_comms.assignment_states import CompletedAssignment
-from agent_comms.attempt_start import AttemptStart
-from agent_comms.attempt_states import ModelRunningAttempt, PromptAcceptedAttempt, SettlingAttempt
 from agent_comms.comms import Comms, wire
+from agent_comms.coordination.attempt_start import AttemptStart
+from agent_comms.coordination.attempt_states import (
+    ModelRunningAttempt,
+    PromptAcceptedAttempt,
+    SettlingAttempt,
+)
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import (
@@ -20,6 +24,13 @@ from agent_comms.coordination.errors import (
     StaleFence,
     StaleRevision,
 )
+from agent_comms.coordination.execution_states import CompletedExecution
+from agent_comms.coordination.obligation_states import (
+    PendingResponse,
+    PublishedResponse,
+    PublishingResponse,
+)
+from agent_comms.coordination.owner_fence import OwnerFence, prepare_fence_token
 from agent_comms.coordination.response import (
     LiveResponseOwner,
     PublicationAppendDispatches,
@@ -36,12 +47,9 @@ from agent_comms.coordination.tables.publications import PublicationEvidence, Pu
 from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.selected.source_batch import SelectedSource
-from agent_comms.execution_states import CompletedExecution
 from agent_comms.lifecycle_capability import Active, Complete
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.nominal.field_codec import AssignmentId, InputId, RootId, ThreadLookup, TurnId
-from agent_comms.obligation_states import PendingResponse, PublishedResponse, PublishingResponse
-from agent_comms.owner_fence import OwnerFence, prepare_fence_token
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.publisher import ParticipantPublisher
 from agent_comms.registry.registration import Registration

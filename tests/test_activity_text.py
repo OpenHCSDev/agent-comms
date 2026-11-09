@@ -6,8 +6,10 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.activity import Activity, ActivityState, ObservedActivity, ReadyDrainReadiness
+from agent_comms.cli_bridges.runtime_updates import ThreadOutput
 from agent_comms.display_order import LastActivityThreadSort
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.pi_events import ToolExecutionStart
 from agent_comms.execution.turn_phase import (
     FailedPhase,
     IdlePhase,
@@ -20,14 +22,12 @@ from agent_comms.nominal.field_codec import (
     ToolCallId,
     TurnId,
 )
-from agent_comms.pi_events import ToolExecutionStart
 from agent_comms.pi_payloads import (
     CodelessProviderDiagnosticError,
     ReportedText,
 )
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import ExternalThread, NativeThread
-from agent_comms.runtime_updates import ThreadOutput
 from agent_comms.ui_model.observation import ObserveSidebar, SidebarObserved
 from agent_comms.ui_model.sidebar import SidebarModel
 

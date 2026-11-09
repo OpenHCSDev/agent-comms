@@ -18,7 +18,8 @@ from metaclass_registry.mro_dispatch import (
     handles,
 )
 
-from agent_comms.acp_failure import (
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.acp_failure import (
     FailedNativeTurnOutcome,
     FailureSource,
     NativeTurnOutcome,
@@ -28,9 +29,15 @@ from agent_comms.acp_failure import (
     UnrecordedFailureSource,
     UnresolvedNativeTurnOutcome,
 )
-from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_output import NativeOutputLocation, NativeRecordLocation
+from agent_comms.execution.pi_wire import (
+    McpLiveAcknowledgement,
+    PiDiagnostic,
+    PiOmitted,
+    PiRequestId,
+    PiUsage,
+)
 from agent_comms.execution.turn_failure import NoTurnFailure, TurnFailure
 from agent_comms.execution.turn_goal_account import OriginGoalSettlement, VerifiedGoalSettlement
 from agent_comms.execution.turn_item import UsageChargeId
@@ -45,13 +52,6 @@ from agent_comms.pi_vocabulary import (
     ThinkingLevelField,
     UnknownCompactionReason,
 )
-from agent_comms.pi_wire import (
-    McpLiveAcknowledgement,
-    PiDiagnostic,
-    PiOmitted,
-    PiRequestId,
-    PiUsage,
-)
 from agent_comms.planning.goal_presentation import GoalSnapshot
 from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
 from agent_comms.rule_deal import CompactedDeal
@@ -64,13 +64,13 @@ if TYPE_CHECKING:
     from agent_comms.agent_event_updates import AcpEventConsumer
     from agent_comms.comms import Comms
     from agent_comms.execution.input_drain import InputDrain
+    from agent_comms.execution.started_input import StartedInput
     from agent_comms.execution.turn_input_source import OriginalTurnInput
     from agent_comms.execution.turn_progress import TurnProgress
     from agent_comms.input_disposition import InputDocument
     from agent_comms.planning.goal_presentation import GoalPublicationSnapshot
     from agent_comms.rule_deal import Redeals
     from agent_comms.runtime_info import AgentRuntimeInfo
-    from agent_comms.started_input import StartedInput
 
 
 class AgentEvent:

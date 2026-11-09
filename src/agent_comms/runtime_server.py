@@ -27,17 +27,16 @@ from typing import (
 from pydantic import BaseModel
 
 import agent_comms
-from agent_comms.command import Command
-from agent_comms.controller import (
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.errors import CoordinationError, IdentityConflict, Refused
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.controller import (
     UNBOUND_CONTROLLER,
     CancelledOutcome,
     Controller,
     PermissionOutcome,
     SessionUpdateSink,
 )
-from agent_comms.coordination.coordinator import Coordination
-from agent_comms.coordination.errors import CoordinationError, IdentityConflict, Refused
-from agent_comms.errors import RelationViolationError
 from agent_comms.execution.native_failures import NativeRequestFailure
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec
 from agent_comms.nominal.served_declaration import ServesDeclaration
@@ -50,6 +49,7 @@ from agent_comms.owner_protocol import (
     OwnerResult,
     OwnerUpdate,
 )
+from agent_comms.planning.command import Command
 from agent_comms.registry.registry_document import RegistryEntry
 from agent_comms.registry.threads import Thread
 from agent_comms.storage.private_path import PrivateSocketRole

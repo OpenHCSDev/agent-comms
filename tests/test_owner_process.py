@@ -34,9 +34,9 @@ from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.nominal.field_codec import AcpSessionId, GoalId, TurnId, compile_decoder
 from agent_comms.owner_connection import socket_path
-from agent_comms.owner_release import NoRelease
 from agent_comms.pi_vocabulary import ThinkingLevelField
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.owner_release import NoRelease
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread

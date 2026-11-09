@@ -14,7 +14,7 @@ from agent_comms.storage.maintenance_barrier import CarriedDocument
 from agent_comms.storage.store_files import CatalogTier, SingleFileStore
 
 if TYPE_CHECKING:
-    from agent_comms.activity_clocks import ActivityClocks
+    from agent_comms.messaging.activity_clocks import ActivityClocks
     from agent_comms.registry.threads import Thread
 
 

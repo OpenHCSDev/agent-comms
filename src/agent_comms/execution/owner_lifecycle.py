@@ -22,9 +22,9 @@ from typing import TYPE_CHECKING
 from agent_comms.active_route import resolve_comms_route
 from agent_comms.attempt_recovery import RecoveryMonitorCapability
 from agent_comms.cli_verbs.cli_result import TargetEditResult
-from agent_comms.diagnostics import OwnerProcessOutput
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import Platform, ProcessIdentity
+from agent_comms.execution.diagnostics import OwnerProcessOutput
 from agent_comms.execution.native_arguments import (
     ConfiguredBinary,
     InheritedArguments,
@@ -46,8 +46,8 @@ from agent_comms.messaging.channel_targets import ThreadTarget
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.nominal.field_codec import InputId, RecordMember
 from agent_comms.owner_connection import OwnerConnection
-from agent_comms.owner_release import OwnerReleaseStore
 from agent_comms.private_nk_entrypoint import PrivateNkLaunch, RootLaunch
+from agent_comms.registry.owner_release import OwnerReleaseStore
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.registry_store import RegistryEdit

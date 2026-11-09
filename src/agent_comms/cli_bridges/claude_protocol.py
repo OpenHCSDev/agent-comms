@@ -22,6 +22,34 @@ from pydantic import (
 )
 
 from agent_comms.agent_events import TranscriptModelUsage
+from agent_comms.cli_bridges.cli_protocol import (
+    Declared,
+    OpenWire,
+    TaggedWire,
+    TextWire,
+    TimestampedWire,
+    WireHeader,
+)
+from agent_comms.cli_bridges.runtime_updates import (
+    ActiveItem,
+    AllTurnsCancelled,
+    AllTurnsEnded,
+    FinishedItem,
+    HiddenItem,
+    HistoryNotice,
+    OfferedToolsObserved,
+    ReadingPhase,
+    RuntimeInfoObserved,
+    RuntimeUpdate,
+    SessionFacts,
+    StartedItem,
+    StatusUpdate,
+    Summarized,
+    ToolDraft,
+    TurnEnded,
+    TurnStarted,
+)
+from agent_comms.cli_bridges.session_receipts import SessionReceipts
 from agent_comms.cli_bridges.shared import (
     MONITOR_FRAME,
     ConfirmedDelivery,
@@ -36,14 +64,7 @@ from agent_comms.cli_bridges.shared import (
     TranscriptConfirmsDelivery,
     WireReference,
 )
-from agent_comms.cli_protocol import (
-    Declared,
-    OpenWire,
-    TaggedWire,
-    TextWire,
-    TimestampedWire,
-    WireHeader,
-)
+from agent_comms.cli_bridges.wire_models import WireModel
 from agent_comms.execution.turn_item import (
     NamedSourceTurn,
     NativeItemId,
@@ -63,26 +84,6 @@ from agent_comms.recorded_time import EventTime
 from agent_comms.registry.thread_identity import OfferedTools, ToolName, UnobservedTools
 from agent_comms.registry.thread_model import ThreadModel
 from agent_comms.registry.thread_text import ThreadText
-from agent_comms.runtime_updates import (
-    ActiveItem,
-    AllTurnsCancelled,
-    AllTurnsEnded,
-    FinishedItem,
-    HiddenItem,
-    HistoryNotice,
-    OfferedToolsObserved,
-    ReadingPhase,
-    RuntimeInfoObserved,
-    RuntimeUpdate,
-    SessionFacts,
-    StartedItem,
-    StatusUpdate,
-    Summarized,
-    ToolDraft,
-    TurnEnded,
-    TurnStarted,
-)
-from agent_comms.session_receipts import SessionReceipts
 from agent_comms.tool_calls import CliToolArguments, ToolCall
 from agent_comms.tool_declaration import ContextRows, one_line
 from agent_comms.transcript_events import (
@@ -93,7 +94,6 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
-from agent_comms.wire_models import WireModel
 
 if TYPE_CHECKING:
     from agent_comms.cli_bridges.shared import MonitorAttachment

@@ -6,8 +6,8 @@ from dataclasses import (
 )
 from typing import Annotated
 
-from agent_comms.activity_clocks import ChannelActivity
-from agent_comms.bus_activity_index import ActivityMaximum
+from agent_comms.messaging.activity_clocks import ChannelActivity
+from agent_comms.messaging.bus_activity_index import ActivityMaximum
 from agent_comms.storage.typed_table import Column
 
 

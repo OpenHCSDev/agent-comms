@@ -13,7 +13,6 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Self
 
 from agent_comms.owner_requests import NewestOpenRequest
-from agent_comms.phase_tasks import PhaseTask
 from agent_comms.planning.goal_actions import (
     CreateProblemGoalAction,
     GoalActionContext,
@@ -21,15 +20,16 @@ from agent_comms.planning.goal_actions import (
     ProblemOrderGoalAction,
 )
 from agent_comms.planning.orders import PendingProblemOrder
+from agent_comms.planning.phase_tasks import PhaseTask
 from agent_comms.projects.checkouts import Checkout, CheckoutStart
 from agent_comms.projects.repo import Repo
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.repository_sources import LocalRepositorySource
 from agent_comms.projects.storage_projection import StorageProjection
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.native_settings import NativeThreadDefaults
 from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.threads import NativeThread, Thread
-from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.shell_effects import AcquireRepositoryStorageEffect, CreateCheckoutStorageEffect
 

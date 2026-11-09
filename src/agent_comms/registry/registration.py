@@ -9,17 +9,18 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Concatenate
 
 from agent_comms.catalog_store import ChannelCatalog
-from agent_comms.messaging.channel_targets import DeclaredTag
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import NoProcess, ProcessIdentity
 from agent_comms.execution.native_input_owner import RegistryOwner
+from agent_comms.messaging.channel_targets import DeclaredTag
 from agent_comms.nominal.field_codec import ThreadLookup, TurnId
 from agent_comms.planning.goal_history import GoalHistoryEntry, GoalHistoryStore
 from agent_comms.planning.goal_scope import AllGoals, GoalScope
 from agent_comms.projects.checkouts import Checkout, CheckoutTransfer, RepositoryReads
 from agent_comms.projects.repo import Repo
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.storage_rules import StorageRule
-from agent_comms.registration_change import RegistrationChange
+from agent_comms.registry.registration_change import RegistrationChange
 from agent_comms.registry.registry_document import (
     FoundProjectThread,
     ProjectThreadSelection,
@@ -40,7 +41,6 @@ from agent_comms.registry.thread_status import (
 )
 from agent_comms.registry.thread_text import ForkedParent, SubagentRole
 from agent_comms.registry.threads import ExternalThread, NativeThread, SubagentThread, Thread
-from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.routing import NoTurnRouting, Routing
 
 if TYPE_CHECKING:

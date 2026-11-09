@@ -12,8 +12,8 @@ import tempfile
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
-from agent_comms.build_artifact import BuildArtifact
 from agent_comms.execution.child_process import ResidentManager
+from agent_comms.installer.build_artifact import BuildArtifact
 from agent_comms.installer.building_runtime import BuildingRuntime
 from agent_comms.installer.carry import STEPS
 from agent_comms.installer.commands import InstallCommands

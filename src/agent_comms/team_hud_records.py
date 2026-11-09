@@ -20,7 +20,7 @@ from agent_comms.nominal.field_codec import (
     OrderId,
     projected,
 )
-from agent_comms.order_story import OrderStory
+from agent_comms.planning.order_story import OrderStory
 from agent_comms.planning.orders import OrderProgress, PullRequest
 from agent_comms.planning.plan_phases import Plan, PlanPhase
 from agent_comms.planning.progress_readings import ProgressPoint

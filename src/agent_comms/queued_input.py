@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING, Generic, Self, TypeVar
 from agent_comms.acp_extension import InputStartedUpdate, QueueItem
 from agent_comms.assignment_states import DeferredAssignment, DeliveredAssignment
 from agent_comms.context_segments.wake import MessageDelivery
-from agent_comms.controller import NO_CONTROLLER, Controller
 from agent_comms.coordination.cohort import pending_sealed_assignments
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
@@ -25,6 +24,10 @@ from agent_comms.coordination.session import ReadNativeCoordinationSession
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.controller import NO_CONTROLLER, Controller
+from agent_comms.execution.image_input import ImageInput
+from agent_comms.execution.ordinary_turn_rules import MissingAcceptedInputCheck
+from agent_comms.execution.reservation_rules import ReservationRule, RuleCheck
 from agent_comms.execution.turn_context import TurnContext
 from agent_comms.execution.turn_goal_permission import AcceptedGoalPermission, TurnGoalPermission
 from agent_comms.execution.turn_inbox import InputContent, InputRequest
@@ -33,18 +36,15 @@ from agent_comms.execution.turn_input_source import (
     DeliveredFollowingInput,
     TurnAcceptance,
 )
-from agent_comms.image_input import ImageInput
 from agent_comms.input_attempt import InputAttempt, ReservedInput
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_key import AcpInputKey, InputKey
 from agent_comms.input_origin import InputOrigin, UnattributedInputOrigin, WireInputOrigin
 from agent_comms.messaging.messages import Message
 from agent_comms.nominal.field_codec import AcpSessionId, GoalId, InputId, RootId
-from agent_comms.ordinary_turn_rules import MissingAcceptedInputCheck
 from agent_comms.planning.goals import GoalDeclaration, NoGoal
 from agent_comms.registry.thread_identity import ClaimedIdentity, ClaimScoped
 from agent_comms.registry.threads import Thread
-from agent_comms.reservation_rules import ReservationRule, RuleCheck
 from agent_comms.routing import ScheduledTurn
 
 if TYPE_CHECKING:

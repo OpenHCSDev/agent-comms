@@ -7,15 +7,8 @@ from typing import ClassVar, Literal
 
 from pydantic import ConfigDict, Field, JsonValue, model_validator
 
-from agent_comms.cli_protocol import Declared, TaggedWire, TextWire, WireHeader
-from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
-from agent_comms.execution.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
-from agent_comms.nominal.field_codec import (
-    FieldCodec,
-    ToolCallId,
-)
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.runtime_updates import (
+from agent_comms.cli_bridges.cli_protocol import Declared, TaggedWire, TextWire, WireHeader
+from agent_comms.cli_bridges.runtime_updates import (
     CompletedItem,
     HiddenItem,
     HistoryNotice,
@@ -25,6 +18,14 @@ from agent_comms.runtime_updates import (
     TextDraft,
     ToolDraft,
 )
+from agent_comms.cli_bridges.wire_models import WireModel
+from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
+from agent_comms.execution.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
+from agent_comms.nominal.field_codec import (
+    FieldCodec,
+    ToolCallId,
+)
+from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.tool_calls import CliToolArguments, ToolCall
 from agent_comms.transcript_events import (
     AssistantTranscript,
@@ -33,7 +34,6 @@ from agent_comms.transcript_events import (
     ThinkingTranscript,
     UserTranscript,
 )
-from agent_comms.wire_models import WireModel
 
 
 class MessageTime(WireModel):

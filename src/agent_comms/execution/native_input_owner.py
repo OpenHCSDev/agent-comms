@@ -15,16 +15,16 @@ from agent_comms.coordination.errors import StaleFence
 from agent_comms.coordination.tables.participants import OwnerGenerations
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.execution.child_process import ProcessIdentity
-from agent_comms.execution.turn_goal_permission import GoalPermission, OwnerGoalPermission
-from agent_comms.nominal.field_codec import GoalId, ThreadLookup
-from agent_comms.private_send_rules import (
+from agent_comms.execution.private_send_rules import (
     GoalRegistryClaimCheck,
     GoalRegistryIdentityCheck,
     RegistryIdentityCheck,
     RunningTurnRegistryCheck,
 )
+from agent_comms.execution.reservation_rules import ReservationViolationError
+from agent_comms.execution.turn_goal_permission import GoalPermission, OwnerGoalPermission
+from agent_comms.nominal.field_codec import GoalId, ThreadLookup
 from agent_comms.registry.threads import NativeThread, Thread
-from agent_comms.reservation_rules import ReservationViolationError
 
 if TYPE_CHECKING:
     from agent_comms.execution.turn_lease import TurnLeaseFence

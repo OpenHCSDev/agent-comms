@@ -13,6 +13,7 @@ from typing import AsyncIterator, ClassVar, Self
 
 import aiohttp
 
+from agent_comms.cli_bridges.cli_protocol import EarlierItems
 from agent_comms.cli_bridges.codex_connection import CodexConnection
 from agent_comms.cli_bridges.codex_protocol import (
     BusInput,
@@ -25,21 +26,9 @@ from agent_comms.cli_bridges.codex_protocol import (
     ResumeThread,
     ToolOutput,
 )
+from agent_comms.cli_bridges.harness_delivery_states import AcceptedOutcome, Outcome
 from agent_comms.cli_bridges.history import CodexHistory, HarnessAddress, OnlineHistory
-from agent_comms.cli_bridges.shared import (
-    IncomingFrame,
-    Options,
-    SessionBinding,
-    TranscriptBridge,
-    run_bridge,
-)
-from agent_comms.cli_protocol import EarlierItems
-from agent_comms.execution.child_process import ProcessIdentity
-from agent_comms.harness_delivery_states import AcceptedOutcome, Outcome
-from agent_comms.messaging.messages import Message
-from agent_comms.projects.checkouts import Checkout
-from agent_comms.registry.thread_identity import UnreportedTools
-from agent_comms.runtime_updates import (
+from agent_comms.cli_bridges.runtime_updates import (
     EarlierPublishedPage,
     OfferedToolsObserved,
     PublishedPage,
@@ -47,6 +36,17 @@ from agent_comms.runtime_updates import (
     SessionFacts,
     ThreadOutput,
 )
+from agent_comms.cli_bridges.shared import (
+    IncomingFrame,
+    Options,
+    SessionBinding,
+    TranscriptBridge,
+    run_bridge,
+)
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.messaging.messages import Message
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import UnreportedTools
 from agent_comms.send_result import SendResult
 
 

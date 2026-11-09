@@ -25,11 +25,11 @@ import fixture_git  # noqa: F401
 import goal_owner_fixture
 from agent_comms.bus import Bus, BusRecord
 from agent_comms.bus_publication import AgentOrigin
-from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.comms import Comms, wire
 from agent_comms.cursor_publication import CursorDelivery
 from agent_comms.execution.native_entries import NativeEvidenceScope, SessionEntry
+from agent_comms.execution.pi_durable_backend import PiDurableBackend
 from agent_comms.installer.native_package import (
     VerifiedNativePackage,
     pinned_location,
@@ -37,6 +37,8 @@ from agent_comms.installer.native_package import (
 )
 from agent_comms.installer.probes.interpreter import InterpreterBuildProbe, RecordedInterpreterBuild
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messaging.messages import (
     ConversationRole,
     InfoKind,
@@ -44,9 +46,7 @@ from agent_comms.messaging.messages import (
     MessageKind,
     MessageRole,
 )
-from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.pi_durable_backend import PiDurableBackend
 from agent_comms.pi_payloads import PiMessage
 from agent_comms.pi_rule_gate import PiRedeal, PiRuleGate
 from agent_comms.projects.checkouts import Checkout
@@ -191,8 +191,8 @@ def accept_initial(bus: MessageBus, root_id: str, seq: int, store) -> tuple:
     """
     from concurrent.futures import ThreadPoolExecutor
 
-    from agent_comms.cohort_foreground import _accept_visible_deliveries
     from agent_comms.coordination.cohort import sealed_cohort_assignments
+    from agent_comms.coordination.cohort_foreground import _accept_visible_deliveries
 
     recipients = bus.bus.delivery(seq).recipients
     if recipients:
@@ -357,7 +357,7 @@ def test_uv(monkeypatch: pytest.MonkeyPatch) -> Path:
 @pytest.fixture(scope="session")
 def native_runtime_package(pinned_native: Path) -> VerifiedNativePackage:
     """The running interpreter's artifact, qualified by the real installer before tests."""
-    from agent_comms.deal_prompt import DealPrompt
+    from agent_comms.installer.deal_prompt import DealPrompt
     from agent_comms.installer.native_package import VerifiedNativePackage
 
     package = VerifiedNativePackage.qualify(pinned_native)

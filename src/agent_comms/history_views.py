@@ -11,11 +11,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 from agent_comms.activity import ActivityCapture, ObservedActivity
-from agent_comms.activity_clocks import ChannelActivity
 from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.context_segments.retained import RetainedSegment
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.messaging.activity_clocks import ChannelActivity
+from agent_comms.messaging.sent_message import AssignedSourceIdentity
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, PresenceExclude, WireForm
 from agent_comms.projects.checkouts import Checkout
@@ -25,11 +26,10 @@ from agent_comms.registry.registry_document import (
     RegistrySnapshot,
     RosterVisibility,
 )
+from agent_comms.registry.shared_ledger import LedgerDocument
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.threads import ConversationPreparation, Thread, current_thread
 from agent_comms.retained_task_facts import RetainedTaskFacts
-from agent_comms.sent_message import AssignedSourceIdentity
-from agent_comms.shared_ledger import LedgerDocument
 from agent_comms.tool_result import ToolResult
 from agent_comms.view_unread import transcript_read_state
 
@@ -37,7 +37,6 @@ if TYPE_CHECKING:
     from agent_comms.registry_provenance import DeletedThread
 from agent_comms.agent_activity import AgentActivity
 from agent_comms.channel_management import ChannelManagement
-from agent_comms.collaboration_ledger import CollaborationLedger
 from agent_comms.errors import UnknownChannelError
 from agent_comms.exporting import (
     WireExportBoundary,
@@ -61,6 +60,7 @@ from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messaging.message_page import NEWEST_PAGE, MessagePage, PageBounds
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import Message
+from agent_comms.messaging.page_traversal import LiveCursor
 from agent_comms.messaging.read_basis import (
     AnonymousViewer,
     DisplayViewer,
@@ -74,7 +74,6 @@ from agent_comms.notification_evidence import (
     RecipientCursor,
     RecipientLimit,
 )
-from agent_comms.page_traversal import LiveCursor
 from agent_comms.planning.goal_management import Goals
 from agent_comms.presentation import (
     BusPresentation,
@@ -88,6 +87,7 @@ from agent_comms.presentation import (
     ThreadView,
     WireRevision,
 )
+from agent_comms.registry.collaboration_ledger import CollaborationLedger
 from agent_comms.registry.thread_presentation import NoThreadPresentation, ThreadPresentation
 from agent_comms.transcripts import TranscriptCursor, Transcripts
 from agent_comms.transport.progress import WireExportObserver

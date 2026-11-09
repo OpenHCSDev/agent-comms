@@ -16,6 +16,8 @@ from agent_comms.coordination.errors import (
     StaleFence,
     StaleRevision,
 )
+from agent_comms.coordination.execution_states import ExecutionState
+from agent_comms.coordination.reason_codes import ReasonCode
 from agent_comms.coordination.schema import CoordinatorRow
 from agent_comms.coordination.tables.attempts import (
     APPROVED_REPLAY_FACT_MASK,
@@ -23,7 +25,6 @@ from agent_comms.coordination.tables.attempts import (
     ReplayFact,
 )
 from agent_comms.coordination.tables.participants import Participants
-from agent_comms.execution_states import ExecutionState
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     MalformedRecord,
@@ -34,7 +35,6 @@ from agent_comms.nominal.field_codec import (
     ThreadLookup,
     projected,
 )
-from agent_comms.reason_codes import ReasonCode
 from agent_comms.registry.thread_text import AbsentText, GivenText, TextChoice
 from agent_comms.storage.typed_table import (
     AccumulatingBits,

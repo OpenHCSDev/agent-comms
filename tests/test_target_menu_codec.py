@@ -87,8 +87,8 @@ def test_a_ui_lists_and_applies_a_menu_action_through_core(tmp_path):
     from agent_comms.cli_verbs.cli_result import TargetEditResult
     from agent_comms.cli_verbs.read_target import ReadTargetCliCommand
     from agent_comms.comms import wire
-    from agent_comms.core_access import LocalCoreAccess
     from agent_comms.messaging.channels import Channel
+    from agent_comms.transport.core_access import LocalCoreAccess
     from agent_comms.transport.tools.sidebar import (
         CommsTargetActionsTool,
         CommsTargetEditTool,
@@ -113,7 +113,7 @@ def test_a_ui_lists_and_applies_a_menu_action_through_core(tmp_path):
 def test_an_opened_action_is_prepared_through_core(tmp_path):
     """Opening an action, or editing it, asks Core for the choices it offers."""
     from agent_comms.comms import wire
-    from agent_comms.core_access import LocalCoreAccess
+    from agent_comms.transport.core_access import LocalCoreAccess
     from agent_comms.transport.tools.sidebar import (
     CommsPrepareTargetActionTool,
     CommsTargetActionsTool,

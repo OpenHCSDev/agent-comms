@@ -247,8 +247,8 @@ def test_a_closed_reader_is_not_reused_and_other_views_keep_their_marks(tmp_path
 
 def test_a_ui_marks_a_thread_read_through_core(tmp_path):
     """The owner's acknowledgement crosses the wire as a request and lands as the local one."""
-    from agent_comms.core_access import LocalCoreAccess
     from agent_comms.nominal.field_codec import FieldCodec
+    from agent_comms.transport.core_access import LocalCoreAccess
     from agent_comms.transport.tools.sidebar import CommsMarkThreadViewReadTool
 
     comms, source = setup_thread(tmp_path)

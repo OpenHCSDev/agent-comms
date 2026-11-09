@@ -22,6 +22,7 @@ from agent_comms.context_store import (
 from agent_comms.display_order import ChannelSort, ThreadSort
 from agent_comms.display_references import ReferenceNames
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.session_revision import SessionObservation
 from agent_comms.execution.turn_context import (
     CodexRolloutProvenance,
     ContextSourceText,
@@ -54,9 +55,9 @@ from agent_comms.messaging.channel_targets import (
 )
 from agent_comms.messaging.channels import Channel
 from agent_comms.messaging.message_page import NEWEST_PAGE, MessagePage, PageBounds
+from agent_comms.messaging.page_traversal import LatestSequence
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import ThreadLookup, WireName
-from agent_comms.page_traversal import LatestSequence
 from agent_comms.presentation import WireRevision
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_document import (
@@ -77,7 +78,6 @@ from agent_comms.registry.threads import Thread
 from agent_comms.relationships import SortableRelationshipGroup, ThreadCommsSnapshot
 from agent_comms.send_result import MessagePublished
 from agent_comms.served_bus import ServedBus, UnidentifiedBus
-from agent_comms.session_revision import SessionObservation
 from agent_comms.tool_result import ToolResult
 from agent_comms.transcripts import TranscriptCursor
 from agent_comms.transport.request import ObservedRequest, ReadRequest, ToolRequest, tool_field

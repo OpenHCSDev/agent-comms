@@ -9,8 +9,8 @@ from agent_comms.cli_verbs.cli_command import CliCommand
 from agent_comms.cli_verbs.cli_commands import NameArgument
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.comms import Comms
-from agent_comms.heartbeat_delivery import HeartbeatDelivery
 from agent_comms.nominal.field_codec import Argument
+from agent_comms.registry.heartbeat_delivery import HeartbeatDelivery
 
 
 @dataclass(frozen=True)

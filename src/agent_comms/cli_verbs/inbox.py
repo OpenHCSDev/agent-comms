@@ -9,8 +9,8 @@ from agent_comms.cli_verbs.cli_commands import InboxResult, ThreadArgument
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.comms import Comms
 from agent_comms.messaging.message_reference import NewestUnreadStart
+from agent_comms.messaging.page_traversal import NewestCursor, PageCursor
 from agent_comms.nominal.field_codec import Argument
-from agent_comms.page_traversal import NewestCursor, PageCursor
 
 
 @dataclass(frozen=True, kw_only=True)

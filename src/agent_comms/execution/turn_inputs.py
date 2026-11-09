@@ -13,9 +13,19 @@ from metaclass_registry.mro_dispatch import (
 )
 
 from agent_comms import agent_events as events
-from agent_comms import pi_commands as commands
-from agent_comms.acp_failure import UnrecordedFailureSource
+from agent_comms.execution.acp_failure import UnrecordedFailureSource
 from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.pending_requests import PendingRequest
+from agent_comms.execution.pi_commands import (
+    ClearQueue,
+    FollowingPrompt,
+    InterruptSteering,
+    PiCommand,
+    SetModel,
+    SetSteeringMode,
+    SetThinkingLevel,
+)
+from agent_comms.execution.prompt_state import PreparedSession, UnwrittenPrompt
 from agent_comms.execution.turn_failure import PromptSendFailed
 from agent_comms.execution.turn_inbox import (
     ClearQueuedInputs,
@@ -26,14 +36,12 @@ from agent_comms.execution.turn_inbox import (
     UseSettings,
 )
 from agent_comms.nominal.field_codec import InputId
-from agent_comms.pending_requests import PendingRequest
-from agent_comms.prompt_state import PreparedSession, UnwrittenPrompt
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
 
 if TYPE_CHECKING:
-    from agent_comms.backend import NativeSession, TurnSession
-    from agent_comms.pi_events import MessageStart, Response
+    from agent_comms.execution.backend import NativeSession, TurnSession
+    from agent_comms.execution.pi_events import MessageStart, Response
 
 
 class NoCurrentItem(TurnInboxItem):
@@ -46,7 +54,7 @@ class NoCurrentItem(TurnInboxItem):
 @dataclass
 class InputForwarding(MroDispatch):
     queue: TurnInbox = field(default_factory=TurnInbox)
-    pending: dict[InputId, PendingRequest[commands.FollowingPrompt]] = field(default_factory=dict)
+    pending: dict[InputId, PendingRequest[FollowingPrompt]] = field(default_factory=dict)
     current: TurnInboxItem = field(default_factory=NoCurrentItem)
     started: bool = False
     uncertain: bool = False
@@ -89,7 +97,7 @@ class InputForwarding(MroDispatch):
     async def forward(self, session: NativeSession) -> None:
         # Inputs that wait through one tool batch reach the model together,
         # not one model call apiece.
-        await self.write(session, commands.SetSteeringMode(mode="all"))
+        await self.write(session, SetSteeringMode(mode="all"))
         while True:
             self.current = await self.queue.get()
             try:
@@ -139,7 +147,7 @@ class InputForwarding(MroDispatch):
         await session.stats.request(session)
         return True
 
-    async def write(self, session: NativeSession, *written: commands.PiCommand) -> None:
+    async def write(self, session: NativeSession, *written: PiCommand) -> None:
         for command in written:
             session.native.send(command)
         self.release_current()
@@ -157,7 +165,7 @@ class InputForwarding(MroDispatch):
 
     @handles(ClearQueuedInputs)
     async def clear_queue(self, item: ClearQueuedInputs, session: TurnSession) -> bool:
-        command = commands.ClearQueue(input_ids=await self.queued(item.input_ids))
+        command = ClearQueue(input_ids=await self.queued(item.input_ids))
         if not command.input_ids:
             return True
         await self.write(session, command)
@@ -179,9 +187,9 @@ class InputForwarding(MroDispatch):
         # Pi resets thinking to the new model's default, so the level follows the model.
         await self.write(
             session,
-            item.model.set_model(commands.SetModel),
+            item.model.set_model(SetModel),
             *item.thinking_level.native_arguments(
-                lambda level: commands.SetThinkingLevel(level=level.wire_value())
+                lambda level: SetThinkingLevel(level=level.wire_value())
             ),
         )
         return True
@@ -198,7 +206,7 @@ class InputForwarding(MroDispatch):
                 candidates[0], first.content.text,
             ) as outcome:
                 completion = outcome.dispatch(self, session, item, lambda: session.native.send(
-                    commands.InterruptSteering(input_ids=list(candidates))
+                    InterruptSteering(input_ids=list(candidates))
                 ))
         return await completion
 
@@ -207,7 +215,7 @@ class InputForwarding(MroDispatch):
         public_id = item.input_id
         native_id = InputId.mint()
         text = item.content.text
-        command = commands.FollowingPrompt(
+        command = FollowingPrompt(
             input=item,
             input_id=native_id,
             message=text,

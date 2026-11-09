@@ -16,10 +16,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
 from agent_comms import presentation
-from agent_comms.messaging.channel_targets import CommandTarget
-from agent_comms.command import Command
 from agent_comms.display_order import CreatedThreadSort, LastActivityThreadSort, ThreadSort
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.messages import Message, MessageInput, MessageRole
 from agent_comms.nominal import field_codec
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -31,6 +30,7 @@ from agent_comms.peer_relevance import (
     PeerRelevance,
     StrangerRelevance,
 )
+from agent_comms.planning.command import Command
 from agent_comms.planning.goals import Goal, GoalMentionBinding
 from agent_comms.registry.registry_document import RegistrySnapshot, RosterVisibility
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation

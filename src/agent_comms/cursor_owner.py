@@ -22,9 +22,9 @@ from agent_comms.execution.native_runtime_input import (
     NativeRuntimeInput,
     NativeRuntimeTable,
 )
+from agent_comms.execution.private_send_rules import RunningTurnRegistryCheck
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.nominal.field_codec import InputId, RootId, ThreadLookup
-from agent_comms.private_send_rules import RunningTurnRegistryCheck
 from agent_comms.proven_source_coverage import SourceCoverage, SourcePrefix
 from agent_comms.registry.thread_identity import GenerationCounter
 
@@ -33,8 +33,8 @@ if TYPE_CHECKING:
 
     from agent_comms.coordination.session import NativeCapture
     from agent_comms.coordination.tables.participants import OwnerGenerations
+    from agent_comms.execution.historical_native_inputs import HistoricalNativeInput
     from agent_comms.execution.native_entries import NativeEvidenceScope
-    from agent_comms.historical_native_inputs import HistoricalNativeInput
     from agent_comms.proven_source_coverage import (
         CoverageInput,
         NoInjectedInput,

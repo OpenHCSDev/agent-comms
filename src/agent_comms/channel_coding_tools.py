@@ -19,6 +19,11 @@ from agent_comms.coordination.database import CoordinationStore
 from agent_comms.envelope_claim_transitions import ClaimOwner, FileClaimPath, WakeClaim
 from agent_comms.execution.native_arguments import NativeArguments
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput
+from agent_comms.execution.reservation_rules import (
+    ReservationRule,
+    ReservationViolationError,
+    RuleCheck,
+)
 from agent_comms.execution.selected.claim import (
     publish_selected_resource_claim,
     verify_selected_wake,
@@ -38,7 +43,6 @@ from agent_comms.planning.goals import GoalDeclaration
 from agent_comms.projects.storage_projection import StorageProjection
 from agent_comms.registry.thread_identity import OfferedTools
 from agent_comms.registry.threads import Thread
-from agent_comms.reservation_rules import ReservationRule, ReservationViolationError, RuleCheck
 from agent_comms.storage_room import NoRoomNeeded, RoomReservation
 from agent_comms.tool_denial import SelectedToolDenied, StorageDenied
 from agent_comms.transport.native_tool_call import CodingCall, ToolNotExecuting
@@ -51,8 +55,8 @@ from agent_comms.transport.native_tool_transport import (
 from agent_comms.transport.native_tools import NativeToolDeclaration
 
 if TYPE_CHECKING:
-    from agent_comms.backend import TurnSession
     from agent_comms.coordination.tables.assignments import WakeAssignment
+    from agent_comms.execution.backend import TurnSession
     from agent_comms.pi_payloads import PiToolResult
 
 

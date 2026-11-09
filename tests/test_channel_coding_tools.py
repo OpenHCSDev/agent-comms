@@ -22,8 +22,8 @@ from agent_comms.envelope_claim_transitions import (
     WritableFileClaim,
 )
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.nominal.field_codec import ClaimId, InputId, TurnId
-from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import (
     AssistantMessage,
     ReportedFlag,

@@ -12,10 +12,15 @@ from pathlib import Path
 import pytest
 from yarl import URL
 
-from agent_comms.connector_profile import BearerSecret, HttpsMcpEndpoint, UiCredential, UiGrantId
 from agent_comms.nominal.field_codec import FieldCodec, RootId
 from agent_comms.remote_core_process import ProcessRemoteCoreAccess, ProcessViewerEnd
 from agent_comms.tool_result import ToolResult
+from agent_comms.transport.connector_profile import (
+    BearerSecret,
+    HttpsMcpEndpoint,
+    UiCredential,
+    UiGrantId,
+)
 from agent_comms.transport.progress import WireExportObserver, WireExportProgress
 from agent_comms.transport.request import ObservedRequest, ReadRequest, ToolRequest
 

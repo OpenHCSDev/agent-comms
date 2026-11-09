@@ -20,8 +20,8 @@ from agent_comms.acp_extension import (
     encode_updates,
 )
 from agent_comms.comms import wire
-from agent_comms.controller import SessionUpdateSink
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.native_arguments import GivenBinary
 from agent_comms.input_disposition import InputDispositions, InputDocument
 from agent_comms.input_key import BusInputKey

@@ -50,7 +50,6 @@ from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.cli_verbs.target_action import TargetActionCliCommand
 from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.host_services import HostService, RestartedService
-from agent_comms.install_choices import InstallerChoice
 from agent_comms.installer.backup import (
     BackupReport,
     RestoreSpace,
@@ -63,6 +62,7 @@ from agent_comms.installer.backup import (
 )
 from agent_comms.installer.carry import CarryChain
 from agent_comms.installer.commands import InstallCommands
+from agent_comms.installer.install_choices import InstallerChoice
 from agent_comms.installer.interpreter_operation import (
     AbortMaintenancePhase,
     AfterMigrationFileScanPhase,

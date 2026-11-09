@@ -8,9 +8,9 @@ from functools import partial
 from pathlib import Path
 from time import perf_counter
 
-from agent_comms import backend
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.backend import TurnSession
 from agent_comms.execution.turn_inbox import SteerInputPolicy
 from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.installer.practice import PracticeCopy
@@ -60,7 +60,7 @@ async def test_message_injects_into_next_tool_call(
                     # A refused tool ends the turn, so its refusal is the failure, not a 30 s wait.
                     await wait_for(lambda: ready.exists() or turn.done())
                     assert ready.exists(), native.provider.requests[-1]['messages'][-1]
-                    running = backend.TurnSession.active[turn]
+                    running = TurnSession.active[turn]
                     forwarding = running.inputs
                     assert not returned.exists()
                     assert not turn.done()

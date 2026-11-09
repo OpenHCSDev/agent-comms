@@ -13,7 +13,7 @@ from agent_comms.execution.child_process import (
     ProcessState,
 )
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.owner_release import OwnerReleaseEvidence
+from agent_comms.registry.owner_release import OwnerReleaseEvidence
 
 
 @pytest.mark.parametrize("process, wire", [(NoProcess(), None), (ProcessIdentity(123, 456), {"pid": 123, "start_time": 456})])

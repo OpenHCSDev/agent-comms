@@ -23,7 +23,7 @@ from agent_comms.planning.goal_presentation import (
 )
 
 if TYPE_CHECKING:
-    from agent_comms.attempt_resolution import WorkDecision
+    from agent_comms.planning.attempt_resolution import WorkDecision
     from agent_comms.planning.goal_actions import GoalActionContext
     from agent_comms.planning.goal_attempts import Generation, GoalAttemptStore
     from agent_comms.planning.goal_failure_observation import GoalFailureEvidence

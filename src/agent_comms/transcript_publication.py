@@ -16,10 +16,10 @@ from functools import partial
 from typing import ClassVar
 
 from agent_comms.agent_runtime import PublishesTranscript
+from agent_comms.cli_bridges.runtime_updates import RuntimeUpdate, ThreadOutput
 from agent_comms.comms import Comms
 from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.execution.child_process import Platform
-from agent_comms.runtime_updates import RuntimeUpdate, ThreadOutput
 
 
 class WaitsOnBusyStore:

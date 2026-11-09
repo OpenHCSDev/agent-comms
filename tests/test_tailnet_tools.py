@@ -5,9 +5,9 @@ import subprocess
 import pytest
 
 from agent_comms.connector_caller import UiCaller, UiReadCaller
-from agent_comms.core_access import LocalCoreAccess
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.tailnet_buses import (
+from agent_comms.transport.core_access import LocalCoreAccess
+from agent_comms.transport.tailnet_buses import (
     PeerBus,
     PeerHoldsBus,
     PeerOffline,
@@ -17,8 +17,8 @@ from agent_comms.tailnet_buses import (
     TailnetBuses,
     TailnetPeer,
 )
-from agent_comms.tailnet_profiles import AskedPeer, PeerRefusedProfile, TailnetProfiles
-from agent_comms.tool_request import ServedRequest
+from agent_comms.transport.tailnet_profiles import AskedPeer, PeerRefusedProfile, TailnetProfiles
+from agent_comms.transport.tool_request import ServedRequest
 from agent_comms.transport.tools.tailnet import (
     CommsTailnetBusesTool,
     CommsTailnetProfileTool,
@@ -100,7 +100,7 @@ def test_a_typed_address_must_name_a_peer_core_already_reports():
     exactly what it exists to stop, so each member says which peer it means among Core's
     own and one guard covers both kinds.
     """
-    from agent_comms.tailnet_buses import NamedHost
+    from agent_comms.transport.tailnet_buses import NamedHost
 
     peers = (PEER,)
     # Either spelling Tailscale itself uses resolves to the peer, not to the text.

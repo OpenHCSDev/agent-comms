@@ -20,6 +20,10 @@ from agent_comms.coordination.cohort import AcceptedCohort, _claim_record
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.coordination.session import NativeCapture
+from agent_comms.execution.historical_native_inputs import (
+    HistoricalNativeInput,
+    read_historical_native_inputs,
+)
 from agent_comms.execution.native_input_record import (
     NumberNativeColumn,
     TextNativeColumn,
@@ -31,10 +35,6 @@ from agent_comms.execution.native_runtime_input import (
     NativeRuntimeTable,
 )
 from agent_comms.frozen_recipient import FrozenRecipient
-from agent_comms.historical_native_inputs import (
-    HistoricalNativeInput,
-    read_historical_native_inputs,
-)
 from agent_comms.lifecycle_capability import Active
 from agent_comms.messaging.bus_source_page import CoveragePage
 from agent_comms.messaging.message_bus import MessageBus

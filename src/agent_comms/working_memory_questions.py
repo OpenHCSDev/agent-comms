@@ -4,7 +4,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from typing import ClassVar
 
-from agent_comms.annotation_disclosure import PublicInstructionDisclosure
+from agent_comms.execution.annotation_disclosure import PublicInstructionDisclosure
 from agent_comms.nominal.declared_family import DeclaredFamily
 
 

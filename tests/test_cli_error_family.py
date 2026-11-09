@@ -10,8 +10,8 @@ import pytest
 from pydantic import ValidationError
 
 from agent_comms.cli import CliInvocation, _fail
+from agent_comms.cli_bridges.cli_protocol import WATCH_LINE, FailedCoreError, UnavailableCoreError
 from agent_comms.cli_bridges.shared import Binding, GivenBinding, StoredBinding
-from agent_comms.cli_protocol import WATCH_LINE, FailedCoreError, UnavailableCoreError
 from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.nominal.field_codec import RecordProblems
 from agent_comms.projects.checkouts import Checkout

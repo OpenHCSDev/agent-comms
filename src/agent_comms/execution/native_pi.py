@@ -22,18 +22,18 @@ from agent_comms.execution.native_evidence_read import NativeInputUncommitted
 from agent_comms.execution.native_failures import NativePiUnavailable, NativeRequestFailure
 from agent_comms.execution.native_input_proof import NativeContextProof
 from agent_comms.execution.native_session_files import NativeAgentSettings, NativeSessionFiles
+from agent_comms.execution.participant_identity import ParticipantIdentity
 from agent_comms.execution.selected.session import SelectedSession
 from agent_comms.installer.native_package import MANIFEST, SYSTEM_PROMPT, VerifiedNativePackage
 from agent_comms.launch_root import LaunchRoot, started
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
 from agent_comms.nominal.field_codec import InputId
-from agent_comms.participant_identity import ParticipantIdentity
 from agent_comms.pi_vocabulary import NoThinkingOverride, ThinkingChoice
 from agent_comms.transport.native_tool_transport import NativeToolMode
 
 if TYPE_CHECKING:
-    from agent_comms import pi_events as pi
     from agent_comms.execution.native_entries import NativeEvidenceRead
+    from agent_comms.execution.pi_events import NativeOperationError, Response
     from agent_comms.execution.turn_failure import TurnFailure
 
 CAPABILITY = "pi-native-input-v1-live-only"
@@ -87,7 +87,7 @@ class NativePiInputNotSent(NativePiUnavailable):
 class NativePiPromptRejected(NativePiUnavailable):
     """A refusal matched to its RPC request; it permits neither retry nor new input."""
 
-    def __init__(self, response: pi.Response):
+    def __init__(self, response: Response):
         self.response = response
         # Pi's own words reach the failure, not just the diagnostic file: on 2026-11-07 a
         # thread could not resume because summarisation hit "The usage limit has been
@@ -104,7 +104,7 @@ class NativePiPromptRejected(NativePiUnavailable):
 class NativePiOperationFailed(NativePiUnavailable):
     """Keep the native event private while reporting a fixed public failure."""
 
-    def __init__(self, event: pi.NativeOperationError) -> None:
+    def __init__(self, event: NativeOperationError) -> None:
         self.event = event
         super().__init__("Native Pi refused an operation (see diagnostic)")
 

@@ -29,6 +29,7 @@ from agent_comms.agent_backend import (
     RuntimeLocation,
 )
 from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.fresh_private_session import create_fresh_private_session
 from agent_comms.execution.native_arguments import NativeArguments
 from agent_comms.execution.native_entries import NativeEvidenceScope
 from agent_comms.execution.native_failures import NativePiUnavailable
@@ -41,21 +42,21 @@ from agent_comms.execution.native_session_files import (
 )
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity
 from agent_comms.execution.native_transcript import NativeTranscript
+from agent_comms.execution.pi_commands import Compact, NativeQuery
+from agent_comms.execution.pi_events import NativePiEvent
+from agent_comms.execution.pi_wire import PiOmitted
 from agent_comms.execution.selected.session import SavedSelectedSession
-from agent_comms.execution.turn_inbox import InputContent
-from agent_comms.fresh_private_session import create_fresh_private_session
-from agent_comms.installer.native_package import SYSTEM_PROMPT
-from agent_comms.nominal.field_codec import AcpSessionId
-from agent_comms.pi_commands import Compact, NativeQuery
-from agent_comms.pi_payloads import PiResponseData
-from agent_comms.pi_wire import PiOmitted
-from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
-from agent_comms.rule_deal import SystemPromptDelivery
-from agent_comms.session_revision import (
+from agent_comms.execution.session_revision import (
     SessionObservation,
     SessionRevision,
     SessionRevisionUnavailable,
 )
+from agent_comms.execution.turn_inbox import InputContent
+from agent_comms.installer.native_package import SYSTEM_PROMPT
+from agent_comms.nominal.field_codec import AcpSessionId
+from agent_comms.pi_payloads import PiResponseData
+from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
+from agent_comms.rule_deal import SystemPromptDelivery
 
 if TYPE_CHECKING:
     from agent_comms.agent_events import AgentEvent, AgentInfo
@@ -276,7 +277,7 @@ class PiNativeBackend(
     async def run_turn(
         self, thread: Thread, content: InputContent, delivery: TurnDelivery
     ) -> AsyncIterator[AgentEvent]:
-        from agent_comms import backend
+        from agent_comms.execution import backend
 
         images = {"images": content.images} if content.images else {}
         package = self.comms.owners.require_private_launch().native_package
@@ -307,7 +308,7 @@ class PiNativeBackend(
             yield event
 
     async def abort[Result](self, owner: asyncio.Task[Result]) -> None:
-        from agent_comms import backend
+        from agent_comms.execution import backend
 
         await backend.terminate_task_process(owner)
 
@@ -342,3 +343,5 @@ class PiNativeBackend(
         )
         return PiSessionFile(identity.session_file)
 
+
+PiNativeBackend.require_event_family(NativePiEvent)

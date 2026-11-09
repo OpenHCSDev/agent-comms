@@ -34,9 +34,9 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.cli_verbs.rule_gate import RuleGateCliCommand
 from agent_comms.comms import wire
-from agent_comms.controller import NO_CONTROLLER, SessionUpdateSink
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution.child_process import SpawnedProcess
+from agent_comms.execution.controller import NO_CONTROLLER, SessionUpdateSink
 from agent_comms.execution.native_arguments import GivenArguments, GivenBinary
 from agent_comms.installer.native_build_inputs import DetachedChildStdio
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec

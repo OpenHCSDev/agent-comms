@@ -9,7 +9,6 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.bus_tables import AuthoredAnswers
 from agent_comms.change_report import FileLine
 from agent_comms.coordination.errors import (
     CoordinationBeginUnavailable,
@@ -19,6 +18,7 @@ from agent_comms.errors import (
     HumanSendRefusedError,
     TodoError,
 )
+from agent_comms.messaging.bus_tables import AuthoredAnswers
 from agent_comms.messaging.messages import HandoffKind, Message, QuestionKind
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -27,12 +27,12 @@ from agent_comms.nominal.field_codec import (
     RecordProblems,
     ToolCallId,
 )
-from agent_comms.order_runs import ApplicationOrderRun
 from agent_comms.planning.goal_actions import SetGoalAction
 from agent_comms.planning.goals import (
     OrderCheck,
     ProblemGoalOrder,
 )
+from agent_comms.planning.order_runs import ApplicationOrderRun
 from agent_comms.planning.order_words import (
     DeliveryReport,
     StrikeReason,

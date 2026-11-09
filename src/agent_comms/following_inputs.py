@@ -19,8 +19,8 @@ from agent_comms.registry.threads import Thread
 
 if TYPE_CHECKING:
     from agent_comms.agent_events import InputRefused
+    from agent_comms.execution.tracked_turn import TrackedTurnSession
     from agent_comms.execution.turn_runner import TurnRunner
-    from agent_comms.tracked_turn import TrackedTurnSession
 
 
 class FollowingInputs:

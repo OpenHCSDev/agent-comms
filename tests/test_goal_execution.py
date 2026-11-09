@@ -14,8 +14,8 @@ import pytest
 
 from agent_comms import agent_events as events
 from agent_comms.acp import CommsAgent
-from agent_comms.acp_failure import NativeTurnError
 from agent_comms.comms import Comms, wire
+from agent_comms.execution.acp_failure import NativeTurnError
 from agent_comms.execution.child_process import (
     ChildOutcome,
     ProcessIdentity,

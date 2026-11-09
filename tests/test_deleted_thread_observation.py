@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 from agent_comms import activity
 from agent_comms.activity import ActivityState, ObservedActivity
-from agent_comms.notification_reads import LiveNotificationRead
+from agent_comms.messaging.notification_reads import LiveNotificationRead
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_document import DEFAULT_ROSTER
 from agent_comms.registry.thread_presentation import NoThreadPresentation, ThreadRetired

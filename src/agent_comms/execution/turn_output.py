@@ -8,7 +8,7 @@ from dataclasses import (
 from typing import TYPE_CHECKING
 
 from agent_comms import agent_events as events
-from agent_comms.acp_failure import (
+from agent_comms.execution.acp_failure import (
     FailureSource,
     NoRetry,
     ProviderRetryResult,
@@ -19,9 +19,9 @@ from agent_comms.execution.turn_failure import NoTurnFailure, TurnFailure
 from agent_comms.pi_payloads import NativeMessageFailureSource
 
 if TYPE_CHECKING:
-    from agent_comms.backend import NativeSession
+    from agent_comms.execution.backend import NativeSession
+    from agent_comms.execution.pi_wire import PiDiagnostic
     from agent_comms.pi_payloads import AssistantMessage
-    from agent_comms.pi_wire import PiDiagnostic
 
 
 @dataclass

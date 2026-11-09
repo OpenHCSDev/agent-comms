@@ -6,9 +6,9 @@ from typing import Type
 
 import pytest
 
-from agent_comms.audience_manifest import AudiencedMessage, freeze_audience
 from agent_comms.frozen_recipient import FrozenRecipient
-from agent_comms.mentions import ThreadMention
+from agent_comms.messaging.audience_manifest import AudiencedMessage, freeze_audience
+from agent_comms.messaging.mentions import ThreadMention
 from agent_comms.messaging.messages import (
     AckKind,
     HandoffKind,
@@ -19,6 +19,18 @@ from agent_comms.messaging.messages import (
     MessageKind,
     NoticeRole,
 )
+from agent_comms.messaging.response_policy import (
+    CollectivePolicy,
+    InformationalPolicy,
+    MentionedPolicy,
+)
+from agent_comms.messaging.wake import (
+    MessageControl,
+    OrdinaryControl,
+    SystemControl,
+    resolve_wake,
+    resolve_wake_cohort,
+)
 from agent_comms.nominal.field_codec import ThreadLookup
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import (
@@ -27,14 +39,6 @@ from agent_comms.registry.thread_identity import (
     UserThreadRole,
 )
 from agent_comms.registry.threads import NativeThread
-from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, MentionedPolicy
-from agent_comms.wake import (
-    MessageControl,
-    OrdinaryControl,
-    SystemControl,
-    resolve_wake,
-    resolve_wake_cohort,
-)
 from agent_comms.wake_policy import (
     BoundedTriageWake,
     FullWake,

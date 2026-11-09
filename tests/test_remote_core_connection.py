@@ -11,10 +11,15 @@ import urllib.error
 import pytest
 from yarl import URL
 
-from agent_comms.connector_profile import BearerSecret, HttpsMcpEndpoint, UiCredential, UiGrantId
 from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.nominal.field_codec import RootId
-from agent_comms.remote_core import RemoteCoreAccess
+from agent_comms.transport.connector_profile import (
+    BearerSecret,
+    HttpsMcpEndpoint,
+    UiCredential,
+    UiGrantId,
+)
+from agent_comms.transport.remote_core import RemoteCoreAccess
 from agent_comms.transport.request import ConnectionDropped
 from agent_comms.transport.tools.channels import CommsChannelsTool
 from agent_comms.transport.tools.orders import CommsEmergencyReleaseTool

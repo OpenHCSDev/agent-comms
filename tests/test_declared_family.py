@@ -175,7 +175,7 @@ def test_independent_families_and_inherited_names_are_derived():
 
 
 def test_ordered_family_views_have_one_declaration_module():
-    from agent_comms.acp_failure import ACPFailure
+    from agent_comms.execution.acp_failure import ACPFailure
     from agent_comms.execution.native_input_record import NativeInputExecution
     from agent_comms.execution.turn_failure import TurnFailure
     from agent_comms.planning.orders import FoundProgress

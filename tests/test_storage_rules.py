@@ -16,9 +16,9 @@ from agent_comms.cli_verbs.select_checkout import SelectCheckoutCliCommand
 from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, RecordProblems
-from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.planning.goal_actions import SetGoalAction
 from agent_comms.planning.goals import OrderCheck
+from agent_comms.planning.order_runs import MechanicalOrderRun
 from agent_comms.planning.orders import (
     AssignedBoundaryRead,
     EditWorkplaces,

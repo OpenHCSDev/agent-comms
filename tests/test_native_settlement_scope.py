@@ -5,8 +5,8 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.attempt_states import SucceededAttempt
 from agent_comms.bus import Bus
+from agent_comms.coordination.attempt_states import SucceededAttempt
 from agent_comms.coordination.coordinator import StandaloneCoordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.execution.child_process import NoProcess

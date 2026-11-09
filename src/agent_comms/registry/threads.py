@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from agent_comms.activity import ObservedActivity
 from agent_comms.agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
-from agent_comms.messaging.channel_targets import DeclaredTag, Tag
 from agent_comms.context_segments.wake_values import WakeWorkContext
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import NoProcess, ProcessIdentity, ProcessState
@@ -25,10 +24,10 @@ from agent_comms.execution.turn_lease import (
     TurnRecord,
     TurnState,
 )
-from agent_comms.heartbeat_delivery import HeartbeatDelivery, OffHeartbeatDelivery
 from agent_comms.launch_runtime import ThreadLaunch
 from agent_comms.lifecycle import LifecycleState
 from agent_comms.lifecycle_capability import Executing
+from agent_comms.messaging.channel_targets import DeclaredTag, Tag
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     Argument,
@@ -51,6 +50,7 @@ from agent_comms.pi_vocabulary import (
 from agent_comms.planning.goals import GoalDeclaration, NoGoal
 from agent_comms.projects.checkouts import Checkout, RepositoryReads
 from agent_comms.registration_inheritance import InheritApplied, InheritEmpty, InheritPrevious
+from agent_comms.registry.heartbeat_delivery import HeartbeatDelivery, OffHeartbeatDelivery
 from agent_comms.registry.thread_creation import (
     CreationSeconds,
     CreationTime,
@@ -950,6 +950,7 @@ def current_thread(registry) -> Thread:
 
 # Thread's backend field is the lookup boundary. Declare both implementations
 # after the record graph, then reject incomplete declarations before any lookup.
-from agent_comms import pi_durable_backend, pi_native_backend  # noqa: E402, F401
+from agent_comms import pi_native_backend  # noqa: E402, F401
+from agent_comms.execution import pi_durable_backend  # noqa: E402, F401
 
 AgentBackend.seal()

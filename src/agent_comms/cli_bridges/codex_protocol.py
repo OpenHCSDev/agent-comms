@@ -18,25 +18,8 @@ from pydantic import (
     field_validator,
 )
 
-from agent_comms.cli_bridges.shared import BridgeInputObserved
-from agent_comms.cli_protocol import Declared, TaggedWire, TextWire
-from agent_comms.execution.turn_item import NamedSourceTurn, NativeItemId, NativeTurnId
-from agent_comms.execution.turn_phase import (
-    CompactionPhase,
-    ModelWaitPhase,
-    ToolRunningPhase,
-    TurnPhase,
-)
-from agent_comms.external_transcript import EarlierPage, NoEarlierPage
-from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
-from agent_comms.nominal.field_codec import (
-    FieldCodec,
-    MessageId,
-    ToolCallId,
-    boundary_decoder,
-)
-from agent_comms.recorded_time import EventTime, UnrecordedEventTime
-from agent_comms.runtime_updates import (
+from agent_comms.cli_bridges.cli_protocol import Declared, TaggedWire, TextWire
+from agent_comms.cli_bridges.runtime_updates import (
     AppendDraftItem,
     CompletedItem,
     DraftAccumulator,
@@ -53,6 +36,25 @@ from agent_comms.runtime_updates import (
     TurnEnded,
     TurnStarted,
 )
+from agent_comms.cli_bridges.shared import BridgeInputObserved
+from agent_comms.cli_bridges.usage_reading import RateLimits
+from agent_comms.cli_bridges.wire_models import DeclaredWireFamily, WireModel
+from agent_comms.execution.turn_item import NamedSourceTurn, NativeItemId, NativeTurnId
+from agent_comms.execution.turn_phase import (
+    CompactionPhase,
+    ModelWaitPhase,
+    ToolRunningPhase,
+    TurnPhase,
+)
+from agent_comms.external_transcript import EarlierPage, NoEarlierPage
+from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
+from agent_comms.nominal.field_codec import (
+    FieldCodec,
+    MessageId,
+    ToolCallId,
+    boundary_decoder,
+)
+from agent_comms.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.tool_calls import DecodedToolCall, ToolCall
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.tool_results import NoToolDiff, ToolDiff
@@ -65,8 +67,6 @@ from agent_comms.transcript_events import (
     UserTranscript,
 )
 from agent_comms.transport.native_tools import FilePatchTool
-from agent_comms.usage_reading import RateLimits
-from agent_comms.wire_models import DeclaredWireFamily, WireModel
 
 
 class UserInput(TaggedWire, ABC, affix=""):

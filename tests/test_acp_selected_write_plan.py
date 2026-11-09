@@ -20,9 +20,9 @@ from agent_comms.acp_extension import (
     encode_request,
 )
 from agent_comms.assignment_states import TriagePendingAssignment
-from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.comms import wire
 from agent_comms.coordination.cohort import sealed_cohort_assignments
+from agent_comms.coordination.cohort_foreground import _accept_visible_deliveries
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import UnclaimedResource
 from agent_comms.execution.child_process import ProcessIdentity

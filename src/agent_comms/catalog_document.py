@@ -6,20 +6,20 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 
-from agent_comms.activity_clocks import ActivityClocks
+from agent_comms.display_order import ChannelSort, CreatedThreadSort, NameChannelSort, ThreadSort
+from agent_comms.errors import RelationViolationError, UnknownChannelError
+from agent_comms.messaging.activity_clocks import ActivityClocks
 from agent_comms.messaging.channel_targets import ChannelTarget, DeclaredTag, Tag
 from agent_comms.messaging.channels import (
     BuiltinChannelView,
     Channel,
     Channels,
+    RetiredTagChannel,
     SavedView,
     SavedViewChannel,
     TagChannel,
     ViewPredicate,
 )
-from agent_comms.display_order import ChannelSort, CreatedThreadSort, NameChannelSort, ThreadSort
-from agent_comms.errors import RelationViolationError, UnknownChannelError
-from agent_comms.messaging.channels import RetiredTagChannel
 
 
 @dataclass(frozen=True, slots=True)

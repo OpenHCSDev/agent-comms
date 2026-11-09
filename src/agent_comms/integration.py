@@ -19,6 +19,7 @@ from agent_comms.active_route import resolve_comms_route
 from agent_comms.build_identity import RepositoryCommit
 from agent_comms.declared_verb import DeclaredOptions
 from agent_comms.execution.child_process import STOP_GRACE_SECONDS, ResidentManager, SpawnedProcess
+from agent_comms.execution.test_lease import LeaseStart, TestLease
 from agent_comms.head_review import (
     BaseSide,
     CombinedInput,
@@ -66,7 +67,6 @@ from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.systemd_unit import AgentsSlice
 from agent_comms.team.order import TeamContext
-from agent_comms.test_lease import LeaseStart, TestLease
 from agent_comms.tool_caller import PeerCaller
 from agent_comms.work_branches import WorkBranches
 from agent_comms_hooks import ToolRefusedError

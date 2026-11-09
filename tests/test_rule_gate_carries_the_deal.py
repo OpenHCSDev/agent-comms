@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.deal_prompt import CloudDealPrompt, DealPrompt
+from agent_comms.installer.deal_prompt import CloudDealPrompt, DealPrompt
 from agent_comms.team.package import TeamPackage
 from agent_comms_hooks.skill import DeckReader
 

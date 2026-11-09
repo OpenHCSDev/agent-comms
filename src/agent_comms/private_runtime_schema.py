@@ -16,7 +16,7 @@ class PrivateCoordinatorTable(SharedFileTables, DurableTables):
         import agent_comms.cohort_schema  # noqa: E401, F401 - declarations register in the existing TypedTable family
         import agent_comms.coordination.response
         import agent_comms.execution.native_runtime_input
-        import agent_comms.triage_native_sources
+        import agent_comms.execution.triage_native_sources
 
         return TypedTable.members_with(cls)
 

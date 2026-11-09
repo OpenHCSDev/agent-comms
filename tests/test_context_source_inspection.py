@@ -298,7 +298,7 @@ async def test_mixed_recorded_root_merges_capture_and_verified_parts_once(tmp_pa
     assert await root.public_text(read_reference) == (
         "Original transformed message\nOriginal journal message")
     assert reads == [root]
-    from agent_comms.pi_commands import AgentCommsInspectContextSegment
+    from agent_comms.execution.pi_commands import AgentCommsInspectContextSegment
 
     request = AgentCommsInspectContextSegment.for_manifest(root)
     assert request.parts == (value.measured_manifest(),)

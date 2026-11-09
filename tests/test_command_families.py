@@ -15,7 +15,7 @@ from agent_comms.execution.native_arguments import (
     GivenBinary,
     InheritedArguments,
 )
-from agent_comms.history_result import (
+from agent_comms.messaging.history_result import (
     ChannelHistoryPageResult,
     DmHistoryPageResult,
     EverythingHistoryPageResult,

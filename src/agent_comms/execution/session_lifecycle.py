@@ -32,11 +32,13 @@ from agent_comms import agent_events as events
 from agent_comms.acp_extension import CoordinationChangedUpdate, GoalChangedUpdate, encode_updates
 from agent_comms.comms import Comms
 from agent_comms.config_options import ConfigOptions
-from agent_comms.controller import NO_CONTROLLER, NoController
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import Refused
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity, join_retirement
+from agent_comms.execution.controller import NO_CONTROLLER, NoController
+from agent_comms.execution.session_config_options import SessionConfigOptions
+from agent_comms.execution.session_effects import SessionEffects
 from agent_comms.execution.turn_input_source import NoTurnAcceptance
 from agent_comms.input_key import InputKey, InputKeyText
 from agent_comms.launch_runtime import ThreadLaunch
@@ -67,8 +69,6 @@ from agent_comms.registry.thread_text import NoThreadText, ThreadText
 from agent_comms.registry.threads import NativeThread, Thread
 from agent_comms.runtime import RuntimeProxy
 from agent_comms.runtime_server import RuntimeServer
-from agent_comms.session_config_options import SessionConfigOptions
-from agent_comms.session_effects import SessionEffects
 from agent_comms.transcript_updates import TranscriptReplay
 from agent_comms.transport.owner_requests import RetainedOwnerLaunch
 from agent_comms.transport.runtime_requests import (

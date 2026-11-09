@@ -16,7 +16,7 @@ from agent_comms.coordination.errors import (
     CoordinationReadUnavailable,
     IntegrityViolationError,
 )
-from agent_comms.publication_measurements import PublicationMeasurements
+from agent_comms.execution.publication_measurements import PublicationMeasurements
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.store_files import (
     DEFAULT_STORE_CONTENTION,
@@ -24,7 +24,7 @@ from agent_comms.storage.store_files import (
 )
 
 if TYPE_CHECKING:
-    from agent_comms.attempt_states import TerminalAttempt
+    from agent_comms.coordination.attempt_states import TerminalAttempt
     from agent_comms.coordination.snapshot import RecoverySnapshot
     from agent_comms.messaging.message_bus import MessageBus
     from agent_comms.private_registry_guard import RegistryPrivacy

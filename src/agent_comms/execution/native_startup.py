@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agent_comms.execution.child_process import NoProcess, ProcessState
+from agent_comms.execution.publication_measurements import PublicationMeasurements
 from agent_comms.nominal.field_codec import boundary_decoder
-from agent_comms.publication_measurements import PublicationMeasurements
 
 if TYPE_CHECKING:
     from agent_comms.execution.native_pi import NativePiRpcLaunch

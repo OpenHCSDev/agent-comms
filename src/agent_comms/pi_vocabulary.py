@@ -21,9 +21,9 @@ from agent_comms.pi_counts import PiCount, UnreportedCount
 if TYPE_CHECKING:
     import sqlite3
 
-    from agent_comms.attempt_states import UnsuccessfulTerminal
-    from agent_comms.backend import TurnSession
+    from agent_comms.coordination.attempt_states import UnsuccessfulTerminal
     from agent_comms.coordination.tables.executions import ExecutionRecord
+    from agent_comms.execution.backend import TurnSession
 
 
 class PiStopReason(LifecycleCapability, ExternalName, affix="StopReason"):
@@ -42,7 +42,7 @@ class PiStopReason(LifecycleCapability, ExternalName, affix="StopReason"):
 
     @classmethod
     def record_recovery(cls, db: sqlite3.Connection, execution: ExecutionRecord) -> UnsuccessfulTerminal:
-        from agent_comms.attempt_states import UnknownOutcomeAttempt
+        from agent_comms.coordination.attempt_states import UnknownOutcomeAttempt
         from agent_comms.coordination.tables import executions
 
         outcome = UnknownOutcomeAttempt()
@@ -94,7 +94,7 @@ class FailedUnpublishedPiStop:
 
     @classmethod
     def record_recovery(cls, db: sqlite3.Connection, execution: ExecutionRecord) -> UnsuccessfulTerminal:
-        from agent_comms.attempt_states import AttemptFailedAttempt
+        from agent_comms.coordination.attempt_states import AttemptFailedAttempt
 
         return AttemptFailedAttempt()
 

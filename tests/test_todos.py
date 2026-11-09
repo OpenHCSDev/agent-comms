@@ -35,7 +35,6 @@ from agent_comms.installer.practice import PracticeCopy
 from agent_comms.installer.runtime_resolution import CorePackage, TextualPackage, ToadPackage
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId
-from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun, OrderRun
 from agent_comms.owner_requests import NewestOpenRequest
 from agent_comms.planning.goal_actions import SetGoalAction
 from agent_comms.planning.goals import (
@@ -43,6 +42,7 @@ from agent_comms.planning.goals import (
     NoGoal,
     OrderCheck,
 )
+from agent_comms.planning.order_runs import ApplicationOrderRun, MechanicalOrderRun, OrderRun
 from agent_comms.planning.order_words import StrikeReason
 from agent_comms.planning.orders import (
     Assignment,
@@ -87,12 +87,12 @@ from agent_comms.planning.pull_requests import (
     PullRequestLink,
 )
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.thread_identity import CoreWatcherIncarnation
 from agent_comms.registry.threads import ExternalThread, NativeThread, Thread
-from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.storage.locked_store import RootFile
 from agent_comms.task_attachments.team_pings import RulePing
 from agent_comms.team.order import PullRequestVerb, SayVerb, Team

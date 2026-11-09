@@ -19,6 +19,7 @@ from agent_comms.cli_bridges.claude_protocol import (
     UserRecord,
 )
 from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
+from agent_comms.cli_bridges.runtime_updates import ActiveItem, FinishedItem, StartedItem
 from agent_comms.execution.turn_item import (
     NativeItemId,
     NativeTurnId,
@@ -28,7 +29,6 @@ from agent_comms.execution.turn_phase import (
     ToolRunningPhase,
 )
 from agent_comms.recorded_time import EventTime
-from agent_comms.runtime_updates import ActiveItem, FinishedItem, StartedItem
 from agent_comms.tool_calls import ToolCall
 from agent_comms.transcript_events import AssistantTranscript
 from transcript_record_fixture import transcript_record

@@ -8,27 +8,32 @@ from dataclasses import (
 from functools import partial
 
 from agent_comms.assignment_states import CompletedAssignment
-from agent_comms.attempt_start import AttemptStart
 from agent_comms.channel_coding_tools import SelectedCodingToolOwner
 from agent_comms.context_segments.selected import (
     SelectedTriageSegment,
     SelectedWorkSegment,
 )
 from agent_comms.context_segments.wake import SelectedWakeSegment
+from agent_comms.coordination.attempt_start import AttemptStart
 from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.durable_turn import DurableTurn
 from agent_comms.coordination.errors import (
     CoordinationError,
     IdentityConflict,
     StaleFence,
 )
+from agent_comms.coordination.owner_fence import prepare_fence_token
 from agent_comms.coordination.snapshot import RecoverySnapshot
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.coordination.tables.executions import WireOrigin
 from agent_comms.coordination.tables.responses import ResponseObligation
-from agent_comms.durable_turn import DurableTurn
 from agent_comms.envelope_claim_transitions import WakeClaim
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_pi import NativeTurnResult
+from agent_comms.execution.private_send_stage import (
+    FullNativeSend,
+    TriageNativeSend,
+)
 from agent_comms.execution.selected.actions import (
     BatchSelectedAction,
     NoSelectedTools,
@@ -54,11 +59,6 @@ from agent_comms.execution.turn_phase import (
     PublishingPhase,
 )
 from agent_comms.optional_awareness_projection import OptionalAwarenessProjection
-from agent_comms.owner_fence import prepare_fence_token
-from agent_comms.private_send_stage import (
-    FullNativeSend,
-    TriageNativeSend,
-)
 from agent_comms.wake_candidate_index import WakeCandidateIndex
 
 

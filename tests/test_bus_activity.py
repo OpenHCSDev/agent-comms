@@ -3,9 +3,9 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.activity_clocks import ChannelActivity
 from agent_comms.bus import PublicRecord
-from agent_comms.mentions import ThreadMention
+from agent_comms.messaging.activity_clocks import ChannelActivity
+from agent_comms.messaging.mentions import ThreadMention
 from agent_comms.messaging.messages import InfoKind, Message, NoticeRole
 from agent_comms.messaging.read_basis import (
     AllChannelDisplayScope,

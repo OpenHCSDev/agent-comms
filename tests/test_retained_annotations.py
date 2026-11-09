@@ -16,6 +16,10 @@ from agent_comms.context_store import (
 from agent_comms.coordination.coordinator import StandaloneCoordination
 from agent_comms.coordination.database import CoordinationStore, ReadableStore
 from agent_comms.coordination.tables.annotations import AnnotationRequestsRow, SpanAnnotationsRow
+from agent_comms.coordination.working_memory_annotations import (
+    PreviouslyRequestedAnnotation,
+    WorkingMemoryAnnotations,
+)
 from agent_comms.execution.turn_context import (
     ContextManifest,
     ContextSpan,
@@ -27,6 +31,7 @@ from agent_comms.execution.turn_context import (
     UnattributedProvenance,
 )
 from agent_comms.execution.turn_item import PiRequestKey
+from agent_comms.execution.working_memory_disclosure import DisclosureState
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.practice import PracticeCopy, PracticeMeasurement
@@ -42,11 +47,6 @@ from agent_comms.registry.thread_identity import (
 )
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.task_sources import AnnotationDisclosureGrant, ProjectTaskScope
-from agent_comms.working_memory_annotations import (
-    PreviouslyRequestedAnnotation,
-    WorkingMemoryAnnotations,
-)
-from agent_comms.working_memory_disclosure import DisclosureState
 from agent_comms.working_memory_labels import (
     HumanLabel,
     JevChoice,

@@ -76,8 +76,8 @@ def test_assignment_row_changes_attribute_only_their_view(
     from agent_comms.assignment_states import DeferredAssignment
     from agent_comms.coordination.cohort import sealed_cohort_assignments
     from agent_comms.coordination.coordinator import Coordination
+    from agent_comms.messaging.notification_reads import LiveNotificationRead
     from agent_comms.notification_read import NotificationsRead
-    from agent_comms.notification_reads import LiveNotificationRead
     from agent_comms.registry.threads import NativeThread
     from conftest import accept_initial, publish_initial
     from test_coordinated_runtime import _root

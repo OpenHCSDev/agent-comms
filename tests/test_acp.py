@@ -16,7 +16,7 @@ from acp import RequestError
 from acp.schema import TextContentBlock
 
 import agent_comms.agent_events as ae
-import agent_comms.backend as backend
+import agent_comms.execution.backend as backend
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import (
     CoordinationChangedUpdate,
@@ -24,19 +24,19 @@ from agent_comms.acp_extension import (
     decode_updates,
 )
 from agent_comms.activity import ActivityState
-from agent_comms.messaging.channel_targets import CommandTarget
-from agent_comms.messaging.channels import AnyChannel
 from agent_comms.comms import wire
-from agent_comms.context_reading import ContextUsage, UnmeasuredContext
-from agent_comms.controller import SessionUpdateSink
 from agent_comms.coordination.errors import Refused
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.context_reading import ContextUsage, UnmeasuredContext
+from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.native_arguments import GivenArguments
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.channels import AnyChannel
+from agent_comms.messaging.read_basis import NamedViewer
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, TurnId
 from agent_comms.pi_counts import PiCount
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.messaging.read_basis import NamedViewer
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import NativeThread
 from agent_comms.ui_model.observation import ReadTranscript, SubscribeTranscript

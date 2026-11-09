@@ -10,11 +10,6 @@ from pathlib import Path
 
 from agent_comms.bus_publication import AgentOrigin, AutomatedOrigin, HumanOrigin, InitialOrigin
 from agent_comms.change_report import NoChangeReport, ReportEvidence
-from agent_comms.messaging.channel_targets import (
-    CommandTarget,
-    IncarnationThreadTarget,
-    NamedTarget,
-)
 from agent_comms.coordination.session import NativeCapture
 from agent_comms.errors import (
     CommittedMessageError,
@@ -26,6 +21,12 @@ from agent_comms.errors import (
 from agent_comms.execution.turn_context import ContextSegment
 from agent_comms.execution.turn_item import NoSourceTurn, SourceTurn
 from agent_comms.external_transcript import ExternalTranscript
+from agent_comms.messaging.channel_targets import (
+    CommandTarget,
+    IncarnationThreadTarget,
+    NamedTarget,
+)
+from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import (
     ConversationRole,
@@ -35,7 +36,6 @@ from agent_comms.messaging.messages import (
     MessageRole,
     NoticeRole,
 )
-from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.nominal.field_codec import ThreadLookup
 from agent_comms.planning.goal_management import Goals
 from agent_comms.planning.orders import TodoStore
@@ -50,6 +50,7 @@ from agent_comms.send_result import (
     SendResult,
 )
 from agent_comms.task_sources import (
+    AnnotationDisclosureGrant,
     CurrentTaskScopeSelection,
     HumanConstraintPin,
     NativeInputConstraintPin,
@@ -59,7 +60,6 @@ from agent_comms.task_sources import (
     TaskChange,
     TaskScopeSelection,
 )
-from agent_comms.working_memory_policy import AnnotationDisclosureGrant
 
 
 class AnswerAuthority(ABC):

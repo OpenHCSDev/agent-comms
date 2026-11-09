@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 import pytest_session as sessions
+from agent_comms.execution.test_lease import HostTestLease, NewTestRun
 from agent_comms.projects.storage_rules import StorageRule
-from agent_comms.test_lease import HostTestLease, NewTestRun
 
 pytest_plugins = ("pytester",)
 
@@ -38,7 +38,7 @@ def test_forged_worker_hint_defers_but_never_bypasses_admission(
     tmp_path: Path, controller_session: pytest.Session,
 ):
     lease = HostTestLease.in_home(tmp_path)
-    hold = ("from pathlib import Path; import sys; from agent_comms.test_lease import"
+    hold = ("from pathlib import Path; import sys; from agent_comms.execution.test_lease import"
             " HostTestLease\nwith HostTestLease(Path(sys.argv[1])).held():\n"
             "    print('held', flush=True); sys.stdin.read(1)")
     with subprocess.Popen((sys.executable, "-c", hold, str(lease.path)), stdin=subprocess.PIPE,

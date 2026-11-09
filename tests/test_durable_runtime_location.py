@@ -5,10 +5,10 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.execution.pi_durable_backend import DurableDatabase, Inspect, PiDurableBackend
 from agent_comms.execution.turn_digests import LastTurns
 from agent_comms.execution.turn_runner import TurnRunner
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.pi_durable_backend import DurableDatabase, Inspect, PiDurableBackend
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread, Thread
 from agent_comms.session_file import NoSessionFile, RegistrySessionLocation

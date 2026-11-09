@@ -234,7 +234,7 @@ def test_inherited_scroll_window_survives_child_session_persistence(tmp_path):
 
 
 def test_wire_cursor_keeps_the_furthest_committed_native_prefix_within_it():
-    from agent_comms.transcript_sources import AssignedSourceCursor
+    from agent_comms.execution.transcript_sources import AssignedSourceCursor
 
     wire_at = AssignedSourceCursor("root", RecordedThreadIncarnation("recipient", 1.0), 5).at
     cursor = WireTranscriptCursor("a.jsonl", 900, wire_at(5), file=MissingFile())

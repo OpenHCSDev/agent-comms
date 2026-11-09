@@ -9,15 +9,16 @@ import pytest
 
 from agent_comms.build_identity import RecordedBuildIdentity
 from agent_comms.errors import TodoError
+from agent_comms.execution.child_process import OrderCheckFailedError
 from agent_comms.installer.runtime_resolution import CorePackage, RuntimeResolution
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.nominal.field_codec import FieldCodec, RecordProblems
-from agent_comms.order_runs import ApplicationOrderRun
 from agent_comms.planning.goals import (
     CheckedCommit,
     CountCheckResult,
     OrderCheck,
 )
+from agent_comms.planning.order_runs import ApplicationOrderRun
 from agent_comms.planning.orders import (
     CorrectCheckTodo,
     DeliveredProblemOrder,
@@ -34,13 +35,12 @@ from agent_comms.planning.orders import (
     TriageScope,
 )
 from agent_comms.planning.pull_requests import PullRequestLink
-from agent_comms.execution.child_process import OrderCheckFailedError
 from agent_comms.progress_claims import InstalledClaim
-from agent_comms.projects.repo import Repo
 from agent_comms.projects.checkouts import (
     Checkout,
     DetachedStart,
 )
+from agent_comms.projects.repo import Repo
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.team.order import Team, main
 from agent_comms.team.standing import HolderGone

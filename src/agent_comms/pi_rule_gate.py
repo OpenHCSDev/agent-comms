@@ -38,8 +38,8 @@ from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms_hooks.skill import DeckReader, RulesOnly
 
 if TYPE_CHECKING:
+    from agent_comms.execution.transcript_sources import TranscriptSource
     from agent_comms.registry.registry_document import RegistrySnapshot
-    from agent_comms.transcript_sources import TranscriptSource
     from agent_comms.transport.native_tool_call import NativeToolCall
 
 

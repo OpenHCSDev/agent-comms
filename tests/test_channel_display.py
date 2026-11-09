@@ -7,14 +7,14 @@ from threading import Thread as WorkerThread
 
 import pytest
 
-from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
-from agent_comms.messaging.channels import ActivityView, AnyOfMatch, ViewPredicate
 from agent_comms.comms import wire
 from agent_comms.coordination.errors import DMPaintedBoundChanged, DMScopeChanged
+from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
+from agent_comms.messaging.channels import ActivityView, AnyOfMatch, ViewPredicate
 from agent_comms.messaging.message_page import PageBounds
-from agent_comms.page_traversal import LiveCursor, NewerTraversal
-from agent_comms.projects.checkouts import Checkout
+from agent_comms.messaging.page_traversal import LiveCursor, NewerTraversal
 from agent_comms.messaging.read_basis import ChannelDisplayScope, DMDisplayScope, NamedViewer
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from bus_record_fixture import prepare_native_comms
 

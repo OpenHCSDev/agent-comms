@@ -9,9 +9,9 @@ from pathlib import Path
 import pytest
 
 from agent_comms.bus import Bus, PublicRecord
-from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.comms import wire
 from agent_comms.coordination.errors import HistoricalSourceChanged, ReloadRequired
+from agent_comms.execution.transcript_routes import DisplayText
 from agent_comms.execution.turn_item import FreshNativeId
 from agent_comms.historical_views import (
     AllHistoricalSenders,
@@ -22,15 +22,13 @@ from agent_comms.historical_views import (
     NamedHistoricalSender,
 )
 from agent_comms.installer.backup import bus_files
-from agent_comms.messaging.messages import Message
+from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.messaging.message_page import (
     MessagePageRequest,
     PageBounds,
 )
-from agent_comms.messaging.read_ledger import ReadLedger
-from agent_comms.nominal.field_codec import FieldCodec, InputId
-from agent_comms.page_traversal import HistoryCursor
-from agent_comms.projects.checkouts import Checkout
+from agent_comms.messaging.messages import Message
+from agent_comms.messaging.page_traversal import HistoryCursor
 from agent_comms.messaging.read_basis import (
     AllChannelDisplayScope,
     ChannelConversation,
@@ -40,6 +38,9 @@ from agent_comms.messaging.read_basis import (
     NamedViewer,
     ReadCursor,
 )
+from agent_comms.messaging.read_ledger import ReadLedger
+from agent_comms.nominal.field_codec import FieldCodec, InputId
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.threads import NativeThread, ThreadProvenance
 from agent_comms.registry_provenance import RegistryProvenance
@@ -47,7 +48,6 @@ from agent_comms.routing import MessageRoute, TurnRouting
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.storage.locked_store import LiveFilesRequest, RegistryFile
 from agent_comms.storage.store_files import StoreOwner
-from agent_comms.transcript_routes import DisplayText
 from agent_comms.transcripts import (
     RecordedPageSource,
     RecordedTranscriptReadIdentity,

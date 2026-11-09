@@ -10,11 +10,12 @@ import pytest
 
 from agent_comms.bus_publication import Delivered
 from agent_comms.cli_bridges.claude import ClaudeBridge
+from agent_comms.cli_bridges.harness_delivery_states import PersistedOutcome
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
-from agent_comms.harness_delivery_states import PersistedOutcome
 from agent_comms.message_notification import MessageNotification
+from agent_comms.messaging.notification_reads import LiveNotificationRead
 from agent_comms.messaging.read_ledger import ReadLedger
 from agent_comms.notification_assignment import (
     AssignmentSource,
@@ -28,7 +29,6 @@ from agent_comms.notification_evidence import (
     RecipientLimit,
 )
 from agent_comms.notification_progress import AnsweredResponse
-from agent_comms.notification_reads import LiveNotificationRead
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.ui_model.observation import ReadNotifications

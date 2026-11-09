@@ -24,18 +24,18 @@ from metaclass_registry.mro_dispatch import (
 
 from agent_comms import agent_events as events
 from agent_comms.acp_extension import LiveQueueScope, TranscriptChangedUpdate, encode_updates
-from agent_comms.acp_failure import NativeTurnOutcome
 from agent_comms.agent_event_updates import RoutedTurnEventConsumer, TurnEventConsumer
 from agent_comms.context_store import UNREAD_CONTEXT, ContextPrior
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.diagnostics import record_request_progress, record_terminal_failure
+from agent_comms.execution.acp_failure import NativeTurnOutcome
+from agent_comms.execution.diagnostics import record_request_progress, record_terminal_failure
 from agent_comms.execution.native_turn_context import ContextObserved
+from agent_comms.execution.publication_measurements import PublicationMeasurements
 from agent_comms.execution.turn_failure import ModelRequestFailed, NoTurnFailure
 from agent_comms.execution.turn_lease import TurnState
 from agent_comms.execution.turn_phase import NativePhaseChanged, PublishingPhase
 from agent_comms.messaging.messages import AlertKind, NoticeRole
 from agent_comms.nominal.field_codec import AcpSessionId
-from agent_comms.publication_measurements import PublicationMeasurements
 from agent_comms.registry.thread_identity import ClaimedIdentity
 from agent_comms.send_result import SendResult
 from agent_comms.transcript_updates import TurnTranscriptUpdate

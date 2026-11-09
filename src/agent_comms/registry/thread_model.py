@@ -16,7 +16,7 @@ from agent_comms.registry.thread_text import AbsentText, GivenText, TextChoice
 
 if TYPE_CHECKING:
     from agent_comms.execution.native_arguments import ProviderChoice
-    from agent_comms.pi_commands import SetModel
+    from agent_comms.execution.pi_commands import SetModel
 
 
 class ModelSelection(TextChoice):

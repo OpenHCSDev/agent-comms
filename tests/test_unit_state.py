@@ -20,8 +20,8 @@ from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.launch_runtime import LaunchRoot
 from agent_comms.nominal.field_codec import OrderId, ToolCallId
-from agent_comms.order_runs import ApplicationOrderRun
 from agent_comms.planning.goal_actions import CreateProblemGoalAction
+from agent_comms.planning.order_runs import ApplicationOrderRun
 from agent_comms.planning.orders import (
     DeliverTodo,
     OperationDelivery,

@@ -15,11 +15,11 @@ from pydantic import Field
 from agent_comms.cli_bridges.history import OfflineHistory, OpenCodeHistory
 from agent_comms.cli_bridges.opencode_parts import SavedMessage
 from agent_comms.cli_bridges.opencode_protocol import Revert, Session
+from agent_comms.cli_bridges.runtime_updates import RuntimeUpdate
+from agent_comms.cli_bridges.wire_models import WireModel
 from agent_comms.nominal.field_codec import StoredSessionId
-from agent_comms.runtime_updates import RuntimeUpdate
 from agent_comms.storage.locked_store import SQLiteFile
 from agent_comms.storage.typed_table import SQLiteSchemaObject, TypedRow
-from agent_comms.wire_models import WireModel
 
 
 class OpenCodeStore(OpenCodeHistory, OfflineHistory):

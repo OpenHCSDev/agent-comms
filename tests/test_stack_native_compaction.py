@@ -16,12 +16,12 @@ from uuid import uuid4
 import pytest
 
 import agent_comms.agent_events as ae
-import agent_comms.backend as backend
+import agent_comms.execution.backend as backend
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import CompactionChangedUpdate, decode_updates
 from agent_comms.activity import ActivityState
 from agent_comms.comms import wire
-from agent_comms.controller import SessionUpdateSink
+from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.native_arguments import GivenArguments, GivenBinary
 from agent_comms.execution.selected.actions import NoSelectedTools
 from agent_comms.launch_root import LaunchRoot

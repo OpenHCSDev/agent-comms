@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from agent_comms.class_fact import ClassFact
+from agent_comms.messaging.page_traversal import LiveCursor, NewestCursor, PageCursor, PageTraversal
+from agent_comms.messaging.projection_source import ProducedRow, ProjectionSource
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     MalformedRecord,
@@ -16,8 +18,6 @@ from agent_comms.nominal.field_codec import (
     SingleFieldValue,
     SubclassUnion,
 )
-from agent_comms.page_traversal import LiveCursor, NewestCursor, PageCursor, PageTraversal
-from agent_comms.projection_source import ProducedRow, ProjectionSource
 from agent_comms.storage.typed_table import TypedRow
 
 if TYPE_CHECKING:
@@ -31,7 +31,7 @@ class MessageReference(TypedRow, ProjectionSource):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from agent_comms.bus_tables import AnsweredSource, MessageIdentitySource
+        from agent_comms.messaging.bus_tables import AnsweredSource, MessageIdentitySource
         return (MessageIdentitySource, AnsweredSource)
 
     seq: int

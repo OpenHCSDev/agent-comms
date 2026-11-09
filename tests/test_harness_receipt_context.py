@@ -7,10 +7,7 @@ import pytest
 
 from agent_comms.bus import Bus
 from agent_comms.cli_bridges.claude import ClaudeBridge
-from agent_comms.coordination.coordinator import Coordination
-from agent_comms.coordination.database import CoordinationStore
-from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
-from agent_comms.harness_delivery_states import (
+from agent_comms.cli_bridges.harness_delivery_states import (
     AcceptedOutcome,
     DeliveredOutcome,
     EmittedOutcome,
@@ -20,6 +17,9 @@ from agent_comms.harness_delivery_states import (
     UnconfirmedOutcome,
     UnrecordedMonitor,
 )
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
 from agent_comms.input_attempt import ReservedInput
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.installer.practice import PracticeCopy

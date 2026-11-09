@@ -10,16 +10,16 @@ from dataclasses import replace
 import pytest
 from yarl import URL
 
-from agent_comms.connector_profile import (
+from agent_comms.nominal.field_codec import FieldCodec, RootId
+from agent_comms.transport.connector_profile import (
     BearerSecret,
     HttpsMcpEndpoint,
     UiConnectionProfile,
     UiCredential,
     UiGrantId,
 )
-from agent_comms.nominal.field_codec import FieldCodec, RootId
-from agent_comms.tailnet_buses import PeerHoldsBus, TailnetPeer
-from agent_comms.tailnet_profiles import (
+from agent_comms.transport.tailnet_buses import PeerHoldsBus, TailnetPeer
+from agent_comms.transport.tailnet_profiles import (
     HoldingPeerProfile,
     OfferedPeerProfile,
     PeerAnsweredNothing,
@@ -94,8 +94,8 @@ def test_a_held_profile_pointing_anywhere_but_mcp_is_not_openable(tmp_path, monk
     """
     import time
 
-    from agent_comms.connector_profile import MCP_PATH
     from agent_comms.connector_store import HeldUiProfiles, MisdirectedProfile, OpenableProfile
+    from agent_comms.transport.connector_profile import MCP_PATH
 
     monkeypatch.setattr(HeldUiProfiles, "directory", classmethod(lambda cls: tmp_path))
     live = time.time() + 3600

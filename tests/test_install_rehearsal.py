@@ -20,7 +20,6 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.history_result import ChannelHistoryPageResult
 from agent_comms.installer.backup import bus_files
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import InstalledProgram
@@ -37,6 +36,7 @@ from agent_comms.installer.upgrade import (
     Upgrade,
 )
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.messaging.history_result import ChannelHistoryPageResult
 from agent_comms.messaging.messages import Message, TeamUpdatePosition
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout, ScratchCheckout

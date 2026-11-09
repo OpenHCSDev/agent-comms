@@ -15,6 +15,7 @@ from typing import ClassVar
 
 from pydantic import AliasChoices, Field, JsonValue, ValidationError
 
+from agent_comms.cli_bridges.wire_models import DeclaredWireFamily, WireModel
 from agent_comms.execution.turn_item import NativeItemId
 from agent_comms.nominal.declared_family import UniqueExternalSelector
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, ToolCallId
@@ -29,7 +30,6 @@ from agent_comms.transport.native_tools import (
     ReadTool,
     WriteTool,
 )
-from agent_comms.wire_models import DeclaredWireFamily, WireModel
 
 
 @dataclass(frozen=True)

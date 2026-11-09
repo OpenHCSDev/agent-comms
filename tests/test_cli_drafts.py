@@ -1,17 +1,7 @@
 """The shared owner reconstructs prefixes, not the CLI decoders or the database."""
 import pytest
 
-from agent_comms.execution.turn_item import (
-    NativeItemId,
-    NativeTurnId,
-)
-from agent_comms.execution.turn_phase import (
-    ModelWaitPhase,
-    ToolRunningPhase,
-)
-from agent_comms.nominal.field_codec import ToolCallId
-from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
-from agent_comms.runtime_updates import (
+from agent_comms.cli_bridges.runtime_updates import (
     ActiveItem,
     AllTurnsEnded,
     AppendDraftItem,
@@ -25,9 +15,19 @@ from agent_comms.runtime_updates import (
     ToolDraft,
     TurnEnded,
 )
+from agent_comms.execution.transcript_sources import NoDraft
+from agent_comms.execution.turn_item import (
+    NativeItemId,
+    NativeTurnId,
+)
+from agent_comms.execution.turn_phase import (
+    ModelWaitPhase,
+    ToolRunningPhase,
+)
+from agent_comms.nominal.field_codec import ToolCallId
+from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from agent_comms.tool_calls import ToolCall
 from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript
-from agent_comms.transcript_sources import NoDraft
 from test_codex_items import _output
 
 

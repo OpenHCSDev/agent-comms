@@ -6,8 +6,8 @@ import os
 
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
-from agent_comms.controller import UNBOUND_CONTROLLER
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.controller import UNBOUND_CONTROLLER
 from agent_comms.execution.input_drain import WakeScheduleCheck
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.projects.checkouts import Checkout

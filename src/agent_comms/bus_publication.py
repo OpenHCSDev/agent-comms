@@ -8,27 +8,25 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from agent_comms.audience_manifest import AudiencedMessage
-from agent_comms.bus_tables import (
+from agent_comms.class_fact import ClassFact
+from agent_comms.coordination.response_acknowledgement import KeyedResponseAcknowledgement
+from agent_comms.errors import (
+    CommittedMessageError,
+    HumanSendRefusedError,
+    RelationViolationError,
+)
+from agent_comms.messaging.audience_manifest import AudiencedMessage
+from agent_comms.messaging.bus_tables import (
     AwaitingAnswerSource,
     MessageIdentitySource,
     ReceivedSource,
     SentSource,
 )
 from agent_comms.messaging.channel_targets import ThreadTarget
-from agent_comms.class_fact import ClassFact
-from agent_comms.errors import (
-    CommittedMessageError,
-    HumanSendRefusedError,
-    RelationViolationError,
-)
 from agent_comms.messaging.messages import BusRecord, BusRow, Message
+from agent_comms.messaging.projection_source import ProducedRow
 from agent_comms.nominal.field_codec import FieldCodec, MessageId, ThreadLookup
-from agent_comms.projection_source import ProducedRow
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.response_acknowledgement import (
-    KeyedResponseAcknowledgement,
-)
 from agent_comms.storage.typed_table import Column, Generated, sql_literal
 from agent_comms.wake_policy import RecipientDecision
 

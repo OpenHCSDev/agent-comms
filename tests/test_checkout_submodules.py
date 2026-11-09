@@ -15,9 +15,9 @@ from agent_comms.change_report import FileLine
 from agent_comms.cli_verbs.cli_commands import OrderCheckoutGrant
 from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
-from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.planning.goal_actions import SetGoalAction
 from agent_comms.planning.goals import OrderCheck
+from agent_comms.planning.order_runs import MechanicalOrderRun
 from agent_comms.planning.orders import (
     PendingProblemOrder,
     TodoConflict,

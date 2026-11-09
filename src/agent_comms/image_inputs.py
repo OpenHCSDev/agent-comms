@@ -14,7 +14,7 @@ from metaclass_registry.mro_dispatch import (
     handles,
 )
 
-from agent_comms import image_input
+from agent_comms.execution.image_input import MAX_IMAGE_BYTES, ImageInput
 
 MAX_PROMPT_IMAGES = 8
 
@@ -23,18 +23,18 @@ class PromptImages(MroDispatch):
     """Project ACP's declared content family into bounded native images."""
 
     def __init__(self) -> None:
-        self.images: list[image_input.ImageInput] = []
+        self.images: list[ImageInput] = []
 
-    def append(self, image: image_input.ImageInput) -> None:
+    def append(self, image: ImageInput) -> None:
         self.images.append(image)
         if len(self.images) > MAX_PROMPT_IMAGES:
             raise ValueError("At most 8 image attachments are allowed per prompt.")
-        if sum(image.size for image in self.images) > image_input.MAX_IMAGE_BYTES:
+        if sum(image.size for image in self.images) > MAX_IMAGE_BYTES:
             raise ValueError("Image attachments exceed the 4 MiB prompt limit.")
 
     @handles(ImageContentBlock)
     def image(self, block: ImageContentBlock) -> None:
-        self.append(image_input.ImageInput(block.data, block.mime_type))
+        self.append(ImageInput(block.data, block.mime_type))
 
     @handles(EmbeddedResourceContentBlock)
     def resource(self, block: EmbeddedResourceContentBlock) -> None:
@@ -43,7 +43,7 @@ class PromptImages(MroDispatch):
     @handles(BlobResourceContents)
     def blob(self, resource: BlobResourceContents) -> None:
         if resource.mime_type and resource.mime_type.startswith("image/"):
-            self.append(image_input.ImageInput(resource.blob, resource.mime_type))
+            self.append(ImageInput(resource.blob, resource.mime_type))
 
     @handles(TextResourceContents)
     def text(self, resource: TextResourceContents) -> None:
@@ -51,7 +51,7 @@ class PromptImages(MroDispatch):
             raise ValueError("Image input requires base64 data and a MIME type.")
 
 
-def prompt_images(request: PromptRequest) -> tuple[image_input.ImageInput, ...]:
+def prompt_images(request: PromptRequest) -> tuple[ImageInput, ...]:
     images = PromptImages()
     for block in request.prompt:
         images.dispatch_sync(block)

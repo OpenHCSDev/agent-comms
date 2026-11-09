@@ -32,18 +32,10 @@ from typing import (
 )
 
 from agent_comms import errors
-from agent_comms.attempt_resolution import (
-    AttemptResolution,
-    DecidedResolution,
-    GoalCleared,
-    NoResolution,
-    OperatorStopped,
-    OriginFailed,
-    UnverifiedLaunchRetired,
-    WorkDecision,
-)
 from agent_comms.execution.child_process import Platform
 from agent_comms.execution.goal_turn_permit import GoalTurnPermit
+from agent_comms.execution.pi_wire import PiUsage
+from agent_comms.execution.reservation_rules import ReservationRule, RuleCheck
 from agent_comms.execution.turn_failure import TurnFailure
 from agent_comms.execution.turn_item import UsageChargeId
 from agent_comms.lifecycle_capability import Failed
@@ -58,7 +50,16 @@ from agent_comms.nominal.field_codec import (
     TurnId,
 )
 from agent_comms.pi_counts import PiCount, UnreportedCount
-from agent_comms.pi_wire import PiUsage
+from agent_comms.planning.attempt_resolution import (
+    AttemptResolution,
+    DecidedResolution,
+    GoalCleared,
+    NoResolution,
+    OperatorStopped,
+    OriginFailed,
+    UnverifiedLaunchRetired,
+    WorkDecision,
+)
 from agent_comms.planning.goal_attempt_identity import FailureNotObserved, GoalAttemptIdentity
 from agent_comms.planning.goal_attempt_phase import (
     ClaimedAttempt,
@@ -84,7 +85,6 @@ from agent_comms.planning.goal_generation import (
     ReadyGeneration,
     ReservedGeneration,
 )
-from agent_comms.reservation_rules import ReservationRule, RuleCheck
 from agent_comms.storage.locked_store import FileStore, GoalWakeFile, SQLiteReader
 from agent_comms.storage.maintenance_barrier import DrainSettledFile
 from agent_comms.storage.store_files import AtomicFile

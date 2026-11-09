@@ -25,7 +25,7 @@ from agent_comms.transcript_events import ImportedInput, ImportedMessage, NoReta
 
 if TYPE_CHECKING:
     from agent_comms.cli_bridges.history import History
-    from agent_comms.runtime_updates import SessionFacts
+    from agent_comms.cli_bridges.runtime_updates import SessionFacts
     from agent_comms.transcript_events import TranscriptEvent
 
 

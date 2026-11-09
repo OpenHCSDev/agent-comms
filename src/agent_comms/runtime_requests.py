@@ -32,10 +32,11 @@ from agent_comms.acp_extension import GoalSnapshotReply
 from agent_comms.acp_request_consumer import AcpRequestConsumer
 from agent_comms.agent_event_updates import AcpEventConsumer
 from agent_comms.comms import Comms
-from agent_comms.controller import NO_CONTROLLER
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import Refused
+from agent_comms.coordination.working_memory_annotations import WorkingMemoryAnnotations
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.controller import NO_CONTROLLER
 from agent_comms.execution.turn_context import ContextManifest, ContextSourceText, TurnContext
 from agent_comms.manual_compaction_bridge import compact_context
 from agent_comms.messaging.bus_read import OwnerReadRuntimeRequest, OwnerScopedRead
@@ -85,7 +86,6 @@ from agent_comms.transport.runtime_requests import (
 from agent_comms.transport.tools.reads import OwnerGoalRead
 from agent_comms.transport.tools.sidebar import ClearQueueQueueAction, SendNowQueueAction
 from agent_comms.ui_model.observation import SubscribeTranscript
-from agent_comms.working_memory_annotations import WorkingMemoryAnnotations
 from agent_comms.working_memory_labels import ModelLabel
 
 

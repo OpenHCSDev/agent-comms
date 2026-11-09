@@ -35,9 +35,9 @@ from agent_comms.acp_extension import (
     TextRouteUpdate,
     encode_updates,
 )
-from agent_comms.context_reading import ContextUsage, UnsizedContext
-from agent_comms.controller import SessionUpdateSink
 from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.context_reading import ContextUsage, UnsizedContext
+from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.turn_effects import TurnEffects
 from agent_comms.nominal.field_codec import AcpSessionId, TurnId
 from agent_comms.routing import MessageRoute, NoMessageRoute

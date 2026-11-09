@@ -6,10 +6,12 @@ from typing import (
     ClassVar,
 )
 
+from agent_comms.execution.pi_events import PiEvent
 from agent_comms.installer.probes.carry import Carry
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import Id128, MessageId, NominalSpelling, NominalText
-from agent_comms.phase_evidence import (
+from agent_comms.planning.phase_artifacts import RecordedArtifact
+from agent_comms.planning.phase_evidence import (
     AllEvidence,
     AuditPatternPresent,
     BusStorageAbsent,
@@ -32,9 +34,7 @@ from agent_comms.phase_evidence import (
     QualifiedName,
     RestatedMembersAbsent,
 )
-from agent_comms.phase_tasks import PhaseTask, UnspecifiedPhaseTask
-from agent_comms.pi_events import PiEvent
-from agent_comms.planning.phase_artifacts import RecordedArtifact
+from agent_comms.planning.phase_tasks import PhaseTask, UnspecifiedPhaseTask
 from agent_comms.private_registry_guard import RegistryPrivacy
 from agent_comms.registry.thread_identity import BirthlessIncarnation
 from agent_comms.storage.store_files import SqliteStore
@@ -358,7 +358,7 @@ class BusHistoryReadersPhase(VirtualBusPhase):
             "src/agent_comms/historical_views.py",
             "src/agent_comms/presentation.py",
             "src/agent_comms/transcripts.py",
-            "src/agent_comms/transcript_sources.py",
+            "src/agent_comms/execution/transcript_sources.py",
             "src/agent_comms/active_route.py",
             "src/agent_comms/acp.py",
             "src/agent_comms/comms.py",
@@ -901,7 +901,7 @@ class RecordsPhase(RemainingSlopPhase):
                 (
                     "src/agent_comms/messaging/read_ledger.py",
                     "src/agent_comms/relationships.py",
-                    "src/agent_comms/shared_ledger.py",
+                    "src/agent_comms/registry/shared_ledger.py",
                     "src/agent_comms/input_disposition.py",
                     "src/agent_comms/execution/owner_lifecycle.py",
                 ),

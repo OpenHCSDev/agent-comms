@@ -9,7 +9,9 @@ from nominal_refactor_advisor.audit.findings import GodFunction
 
 import fixture_git
 from agent_comms.nominal_census import NominalCensus
-from agent_comms.phase_evidence import (
+from agent_comms.plan_reading import PlanReading
+from agent_comms.planning.phase_artifacts import RecordedArtifact
+from agent_comms.planning.phase_evidence import (
     AllEvidence,
     ClassChecks,
     ClassDeclared,
@@ -34,8 +36,6 @@ from agent_comms.phase_evidence import (
     SourceFacts,
     UnreadableEvidenceError,
 )
-from agent_comms.plan_reading import PlanReading
-from agent_comms.planning.phase_artifacts import RecordedArtifact
 from agent_comms.planning.plan_phases import (
     FLAG,
     BusDeletionPhase,
@@ -138,8 +138,8 @@ def test_roster_evidence_keeps_external_abi_and_each_remaining_internal_registry
         ("src/agent_comms/private_registry_guard.py", "class RegistryPrivacy:\n    kinds = {}\n"),
         ("src/agent_comms/registry/thread_identity.py", "class BirthlessIncarnation:\n    members = {}\n"),
         ("src/agent_comms/tool_calls.py", "class CliToolArguments:\n    types = {}\n"),
-        ("src/agent_comms/pi_events.py", "class PiEvent:\n    _start_phases = {}\n"),
-        ("src/agent_comms/pi_events.py", "class PiEvent:\n    _end_events = {}\n"),
+        ("src/agent_comms/execution/pi_events.py", "class PiEvent:\n    _start_phases = {}\n"),
+        ("src/agent_comms/execution/pi_events.py", "class PiEvent:\n    _end_events = {}\n"),
     ):
         remaining_file = tmp_path / path
         remaining_file.parent.mkdir(parents=True, exist_ok=True)
@@ -274,7 +274,7 @@ def test_changed_paths_between_commits_and_of_a_commit_against_itself(tmp_path):
 
 def test_bus_deletion_evidence_reads_uses_without_matching_its_own_declaration(tmp_path):
     reading = main_of(tmp_path, {
-        "src/phase.py": "from agent_comms.phase_evidence import BusStorageAbsent\n"
+        "src/phase.py": "from agent_comms.planning.phase_evidence import BusStorageAbsent\n"
                         "evidence = BusStorageAbsent()\n"
                         "# Delete bus.jsonl and bus_meta once the carry is accepted.\n"
                         "def documentation():\n    'bus.jsonl'\n",

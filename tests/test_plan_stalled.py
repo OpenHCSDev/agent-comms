@@ -5,13 +5,13 @@ import pytest
 
 from agent_comms.nominal.field_codec import OrderId
 from agent_comms.nominal_census import NominalCensus
-from agent_comms.phase_evidence import MainTree
 from agent_comms.plan_reading import PlanReading
 from agent_comms.planning.order_words import StrikeReason
 from agent_comms.planning.orders import (
     ReleaseTodo,
     StoredOrderStory,
 )
+from agent_comms.planning.phase_evidence import MainTree
 from agent_comms.planning.plan_phases import (
     BusWriterPhase,
     PlanPhase,

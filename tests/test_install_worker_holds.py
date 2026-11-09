@@ -10,7 +10,7 @@ from typing import TextIO
 import pytest
 
 from agent_comms.cli import CliInvocation
-from agent_comms.cli_arguments import CliArgumentParser
+from agent_comms.cli_bridges.cli_arguments import CliArgumentParser
 from agent_comms.cli_verbs.read_back import ReadBackCliCommand
 from agent_comms.cli_verbs.start import StartCliCommand
 from agent_comms.cli_verbs.stop import StopCliCommand

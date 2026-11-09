@@ -23,8 +23,8 @@ from agent_comms.assignment_states import (
     PassiveAssignment,
     TriagePendingAssignment,
 )
-from agent_comms.attempt_start import INITIAL_LEASE_DURATION_MS, AttemptStart
-from agent_comms.attempt_states import (
+from agent_comms.coordination.attempt_start import INITIAL_LEASE_DURATION_MS, AttemptStart
+from agent_comms.coordination.attempt_states import (
     AttemptFailedAttempt,
     LiveAttempt,
     ModelRunningAttempt,
@@ -42,6 +42,17 @@ from agent_comms.coordination.errors import (
     StaleFence,
     StaleRevision,
 )
+from agent_comms.coordination.execution_states import (
+    ActiveExecution,
+    CompletedExecution,
+    DeferredExecution,
+    FailedExecution,
+    PendingExecution,
+)
+from agent_comms.coordination.owner_fence import OwnerFence, prepare_fence_token
+from agent_comms.coordination.reason_codes import GivenReasonCode, NoDetail
+from agent_comms.coordination.recovery_states import FailedRecovery
+from agent_comms.coordination.response_acknowledgement import canonical_publication_key
 from agent_comms.coordination.results import AlreadyApplied, Applied
 from agent_comms.coordination.schema import CoordinatorTable
 from agent_comms.coordination.snapshot import RecoverySnapshot
@@ -61,19 +72,8 @@ from agent_comms.coordination.tables.publications import (
 )
 from agent_comms.execution.selected.source_batch import SelectedSource
 from agent_comms.execution.turn_failure import ProviderRetryExhausted
-from agent_comms.execution_states import (
-    ActiveExecution,
-    CompletedExecution,
-    DeferredExecution,
-    FailedExecution,
-    PendingExecution,
-)
 from agent_comms.messaging.messages import InfoKind, Message
 from agent_comms.nominal.field_codec import AssignmentId, FieldCodec, MessageId, SnapshotExclude
-from agent_comms.owner_fence import OwnerFence, prepare_fence_token
-from agent_comms.reason_codes import GivenReasonCode, NoDetail
-from agent_comms.recovery_states import FailedRecovery
-from agent_comms.response_acknowledgement import canonical_publication_key
 from agent_comms.storage.typed_table import SQLiteForeignKeys
 from agent_comms.wake_policy import (
     BoundedTriageWake,
@@ -95,10 +95,10 @@ def store(path: Path) -> StandaloneCoordination:
 
 
 def wire_source(db: StandaloneCoordination, assignment_id: AssignmentId, original: Message, mode: WakePolicy) -> SelectedSource:
-    from agent_comms.audience_manifest import freeze_audience
     from agent_comms.bus import PrivateRecord
     from agent_comms.execution.selected.source_batch import SelectedSource
     from agent_comms.frozen_recipient import FrozenRecipient
+    from agent_comms.messaging.audience_manifest import freeze_audience
     from agent_comms.wake_policy import WakeDecision
 
     audience = freeze_audience(original, (FrozenRecipient(SENDER_LOOKUP, "Owner"),),
@@ -161,7 +161,7 @@ def started(db: StandaloneCoordination) -> tuple[str, OwnerFence]:
 
 
 def final_evidence(db: StandaloneCoordination, fence: OwnerFence, pointer_revision: int = 1) -> OwnerFence:
-    from agent_comms.owner_fence import OwnerFence
+    from agent_comms.coordination.owner_fence import OwnerFence
 
     assert isinstance(fence, OwnerFence)
     result = db.advance(

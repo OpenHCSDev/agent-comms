@@ -7,12 +7,13 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import backend
 from agent_comms.acp import CommsAgent
 from agent_comms.channel_coding_tools import OrdinaryGoalRule
-from agent_comms.controller import NO_CONTROLLER
+from agent_comms.execution.backend import TurnSession
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.controller import NO_CONTROLLER
 from agent_comms.execution.owned_turn import OwnedTurn
+from agent_comms.execution.reservation_rules import ReservationViolationError
 from agent_comms.execution.turn_inbox import InputContent
 from agent_comms.execution.turn_input_source import NoTurnAcceptance
 from agent_comms.nominal.field_codec import AcpSessionId, InputId, OrderId
@@ -26,11 +27,10 @@ from agent_comms.planning.goal_actions import (
 )
 from agent_comms.planning.goal_states import ActiveGoal
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.queued_input import InitialInput, QueuedInput
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.threads import NativeThread
-from agent_comms.projects.repository_name import RepositoryName
-from agent_comms.reservation_rules import ReservationViolationError
 from compaction_loopback import LoopbackProvider
 from conftest import answer_rules, declare_team, installed_comms
 from native_backend_fixture import native_backend_fixture, wait_for
@@ -77,7 +77,7 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
              input_id=InputId.mint()))
             try:
                 await wait_for(lambda: saved.provider.posts == 1)
-                sender = backend.TurnSession.active[task].send_boundary
+                sender = TurnSession.active[task].send_boundary
                 assert isinstance(sender, OwnedSend)
                 original_turn = sender.turn
                 original_process = comms.registry.require(worker).process_identity

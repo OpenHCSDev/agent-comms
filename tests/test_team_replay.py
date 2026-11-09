@@ -26,12 +26,12 @@ from agent_comms.execution.turn_item import (
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.launch_runtime import LaunchRoot
 from agent_comms.nominal.field_codec import ToolCallId
-from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun
 from agent_comms.planning.goal_actions import CreateProblemGoalAction
 from agent_comms.planning.goals import (
     CountCheckResult,
     OrderCheck,
 )
+from agent_comms.planning.order_runs import ApplicationOrderRun, MechanicalOrderRun
 from agent_comms.planning.orders import (
     ClaimOrder,
     DraftListedPullRequest,
@@ -50,6 +50,7 @@ from agent_comms.projects.checkouts import (
     UnpushedHead,
 )
 from agent_comms.projects.repo import Repo
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.thread_identity import (
     ReportedTools,
@@ -57,7 +58,6 @@ from agent_comms.registry.thread_identity import (
 )
 from agent_comms.registry.thread_text import ForkedParent
 from agent_comms.registry.threads import NativeThread, Thread
-from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.team.publication_rules import EmptyPullRequest, UnpushedBranch
 from agent_comms.team.spinning import SpinningTeammate, StaleUncommittedEdits
 from agent_comms.team.standing_rules import (

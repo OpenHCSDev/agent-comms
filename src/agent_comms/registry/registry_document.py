@@ -59,7 +59,7 @@ from agent_comms.projects.checkouts import Checkout, RepositoryReads
 from agent_comms.projects.repo import Repo, RepositorySelection
 from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.storage_rules import StorageRule
-from agent_comms.registration_change import (
+from agent_comms.registry.registration_change import (
     InitialRegistration,
     RegistrationChange,
     UpdatedRegistration,

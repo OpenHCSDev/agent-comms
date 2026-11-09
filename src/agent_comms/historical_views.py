@@ -15,21 +15,39 @@ from typing import TYPE_CHECKING, Self
 
 from agent_comms.bus import Bus
 from agent_comms.catalog_store import ChannelCatalog
-from agent_comms.messaging.channel_targets import NamedTarget, ThreadTarget
-from agent_comms.messaging.channels import Channel
 from agent_comms.coordination.errors import DMScopeChanged, HistoricalSourceChanged
 from agent_comms.display_references import ReferenceContext
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.execution.child_process import Platform
+from agent_comms.execution.transcript_routes import TranscriptRoutes
 from agent_comms.message_notification import MessageNotification, NotificationWindow
-from agent_comms.messaging.message_reference import MessageReference
-from agent_comms.messaging.messages import CarriesEnvelope, Message, MessageHistory
+from agent_comms.messaging.channel_targets import NamedTarget, ThreadTarget
+from agent_comms.messaging.channels import Channel
 from agent_comms.messaging.message_page import (
     NEWEST_PAGE,
     ConversationMessagePageRequest,
     MessagePage,
     MessagePageRequest,
     PageBounds,
+)
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import CarriesEnvelope, Message, MessageHistory
+from agent_comms.messaging.page_traversal import HistoryCursor, HistorySourceKey, OlderTraversal
+from agent_comms.messaging.read_basis import (
+    AnonymousViewer,
+    ChannelDisplayIdentity,
+    ChannelDisplayScope,
+    DisplayBasis,
+    DisplayIdentity,
+    DisplayViewer,
+    DMDisplayBasis,
+    DMDisplayIdentity,
+    DMDisplayScope,
+    MessageDisplayScope,
+    NamedViewer,
+    NoDisplaySelection,
+    SelectedDisplay,
+    SourceDisplayIdentity,
 )
 from agent_comms.messaging.read_ledger import ReadLedger
 from agent_comms.nominal.field_codec import (
@@ -47,25 +65,8 @@ from agent_comms.notification_evidence import (
     RecipientCursor,
     RecipientLimit,
 )
-from agent_comms.page_traversal import HistoryCursor, HistorySourceKey, OlderTraversal
 from agent_comms.presentation import WireRevision
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.messaging.read_basis import (
-    AnonymousViewer,
-    ChannelDisplayIdentity,
-    ChannelDisplayScope,
-    DisplayBasis,
-    DisplayIdentity,
-    DisplayViewer,
-    DMDisplayBasis,
-    DMDisplayIdentity,
-    DMDisplayScope,
-    MessageDisplayScope,
-    NamedViewer,
-    NoDisplaySelection,
-    SelectedDisplay,
-    SourceDisplayIdentity,
-)
 from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
@@ -83,7 +84,6 @@ from agent_comms.storage.private_path import (
 )
 from agent_comms.storage.store_files import SingleFileStore, SourceTier, StoreOwner
 from agent_comms.tool_result import ToolResult
-from agent_comms.transcript_routes import TranscriptRoutes
 
 if TYPE_CHECKING:
     from agent_comms.catalog_document import CatalogDocument

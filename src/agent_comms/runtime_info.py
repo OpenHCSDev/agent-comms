@@ -7,8 +7,8 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from agent_comms.context_reading import ContextReading, UnmeasuredContext
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.context_reading import ContextReading, UnmeasuredContext
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, SingleFieldValue, WireName, WireRequired
 from agent_comms.pi_counts import PiCount, UnreportedCount

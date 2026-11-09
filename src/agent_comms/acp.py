@@ -54,16 +54,24 @@ from pydantic import BaseModel, JsonValue, ValidationError
 
 from agent_comms import acp_extension, manual_compaction_bridge
 from agent_comms.acp_extension import encode_updates
-from agent_comms.acp_failure import NativeTurnError
 from agent_comms.acp_request_consumer import AcpRequestConsumer
 from agent_comms.active_route import ActiveRoute
 from agent_comms.activity import FailedWakeDiagnostic
 from agent_comms.agent_backend import CompactionOutcome
-from agent_comms.messaging.channel_targets import NamedTarget
-from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.comms import Comms, wire
 from agent_comms.config_options import ConfigOptions
-from agent_comms.controller import (
+from agent_comms.coordinated_runtime import SelectedExecution
+from agent_comms.coordination.cohort import next_sealed_assignment
+from agent_comms.coordination.cohort_foreground import _accept_visible_deliveries
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.errors import IdentityConflict, Refused
+from agent_comms.coordination.working_memory_worker import AnnotationWorker
+from agent_comms.cursor_owner import CursorOwner
+from agent_comms.cursor_publication import CursorPublication
+from agent_comms.drain_failures import drain_failures
+from agent_comms.execution.acp_failure import NativeTurnError
+from agent_comms.execution.controller import (
     ACP_PERMISSION_TIMEOUT_SECONDS,
     CancelledOutcome,
     Controller,
@@ -71,14 +79,6 @@ from agent_comms.controller import (
     PermissionOutcome,
     SessionUpdateSink,
 )
-from agent_comms.coordinated_runtime import SelectedExecution
-from agent_comms.coordination.cohort import next_sealed_assignment
-from agent_comms.coordination.coordinator import Coordination
-from agent_comms.coordination.database import CoordinationStore
-from agent_comms.coordination.errors import IdentityConflict, Refused
-from agent_comms.cursor_owner import CursorOwner
-from agent_comms.cursor_publication import CursorPublication
-from agent_comms.drain_failures import drain_failures
 from agent_comms.execution.input_drain import (
     InputDrain,
     SchedulesWake,
@@ -86,15 +86,18 @@ from agent_comms.execution.input_drain import (
     WakeHeld,
     WakeOutcome,
 )
+from agent_comms.execution.input_effects import InputEffects
 from agent_comms.execution.selected.actions import BoundSelectedWriteAuthority
 from agent_comms.execution.selected.write_plan import SelectedWritePlans
+from agent_comms.execution.session_effects import SessionEffects
 from agent_comms.execution.session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
 from agent_comms.execution.turn_effects import TurnEffects
 from agent_comms.execution.turn_runner import TurnRunner
 from agent_comms.image_inputs import prompt_images
-from agent_comms.input_effects import InputEffects
 from agent_comms.launch_root import LaunchRoot, started
+from agent_comms.messaging.channel_targets import NamedTarget
 from agent_comms.messaging.message_bus import MessageBus
+from agent_comms.messaging.working_memory_policy import AnnotationPolicy
 from agent_comms.nominal.field_codec import (
     AcpSessionId,
     AcpSessionIdText,
@@ -109,10 +112,7 @@ from agent_comms.registry.thread_identity import OwnerIdentity
 from agent_comms.registry.threads import Thread
 from agent_comms.runtime import RuntimeProxy
 from agent_comms.runtime_server import RuntimeServer
-from agent_comms.session_effects import SessionEffects
 from agent_comms.transport.owner_requests import RetainedOwnerLaunch
-from agent_comms.working_memory_policy import AnnotationPolicy
-from agent_comms.working_memory_worker import AnnotationWorker
 
 if TYPE_CHECKING:
     from agent_comms.coordination.tables.assignments import WakeAssignment

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Annotated, Self
 
 from agent_comms.build_identity import InstalledBuild
+from agent_comms.cli_bridges.usage_reading import RateLimitReading
 from agent_comms.comms import Comms
 from agent_comms.disclosure_text import (
     ViewFacts,
@@ -52,7 +53,6 @@ from agent_comms.team_hud_records import (
 )
 from agent_comms.team_service import TeamService
 from agent_comms.ui_model.teammate_state import TeammateState
-from agent_comms.usage_reading import RateLimitReading
 from agent_comms_hooks.board import BoardEntry
 
 

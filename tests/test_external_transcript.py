@@ -4,6 +4,7 @@ import pytest
 
 from agent_comms.bus import Bus
 from agent_comms.comms import wire
+from agent_comms.execution.transcript_sources import NoDraft
 from agent_comms.execution.turn_digests import LastTurns
 from agent_comms.execution.turn_item import (
     NativeItemId,
@@ -14,7 +15,6 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript
-from agent_comms.transcript_sources import NoDraft
 from agent_comms.transcripts import LatestPage, TranscriptReadIdentity, UnreadTranscriptCursor
 
 
@@ -160,9 +160,9 @@ def test_turn_owned_draft_refuses_maintenance_without_changing_the_saved_draft(t
 @pytest.mark.asyncio
 async def test_earlier_page_requests_reach_initial_and_committed_watch_observations(tmp_path):
     turn_turn_id = NativeTurnId('turn')
-    from agent_comms.cli_protocol import EarlierItems
+    from agent_comms.cli_bridges.cli_protocol import EarlierItems
+    from agent_comms.cli_bridges.runtime_updates import FinishedItem
     from agent_comms.external_transcript import EarlierPage
-    from agent_comms.runtime_updates import FinishedItem
 
     comms = wire(tmp_path / "wire")
     comms.registry.declare(NativeThread("cli", frozenset(), Checkout(tmp_path)))

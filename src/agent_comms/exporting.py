@@ -13,9 +13,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import BinaryIO, ClassVar
 
-from agent_comms.bus_tables import MessageIdentitySource
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.errors import ExportDestinationExists
+from agent_comms.messaging.bus_tables import MessageIdentitySource
 from agent_comms.messaging.channels import Channel
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import Message, StoredWireHistory

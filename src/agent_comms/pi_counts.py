@@ -7,7 +7,7 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from agent_comms.context_reading import (
+from agent_comms.execution.context_reading import (
     ContextReading,
     ContextUsage,
     UnmeasuredContext,
@@ -26,7 +26,7 @@ from agent_comms.nominal.field_codec import (
 
 if TYPE_CHECKING:
     from agent_comms.agent_events import AgentEvent
-    from agent_comms.backend import TurnSession
+    from agent_comms.execution.backend import TurnSession
     from agent_comms.execution.turn_usage import UsageAccount
 
 

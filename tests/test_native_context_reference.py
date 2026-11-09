@@ -19,6 +19,10 @@ from agent_comms.cursor_owner import (
     RecordedCursor,
     UnstartedCursor,
 )
+from agent_comms.execution.historical_native_inputs import (
+    FullHistoricalNativeInput,
+    TriageHistoricalNativeInput,
+)
 from agent_comms.execution.native_claim_epoch import RecordedNativeClaim
 from agent_comms.execution.native_input_proof import NativeContextProof
 from agent_comms.execution.native_input_record import (
@@ -38,10 +42,6 @@ from agent_comms.execution.selected.triage import (
     DecidedTriageRecord,
     FullSelectedTriage,
     IgnoreSelectedTriage,
-)
-from agent_comms.historical_native_inputs import (
-    FullHistoricalNativeInput,
-    TriageHistoricalNativeInput,
 )
 from agent_comms.nominal.field_codec import FieldCodec, InputId, MessageId, RootId, ThreadLookup
 from agent_comms.projects.checkouts import Checkout

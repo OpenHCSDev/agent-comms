@@ -19,16 +19,16 @@ from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import Refused
 from agent_comms.execution.native_arguments import NativeArguments
 from agent_comms.execution.native_pi import NativePiRpcLaunch
-from agent_comms.launch_root import LaunchRoot
-from agent_comms.launch_runtime import LaunchRuntime, ThreadLaunch
-from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.pi_commands import (
+from agent_comms.execution.pi_commands import (
     GetAvailableModels,
     GetAvailableThinkingLevels,
     SetModel,
     SetThinkingLevel,
 )
+from agent_comms.launch_root import LaunchRoot
+from agent_comms.launch_runtime import LaunchRuntime, ThreadLaunch
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.pi_vocabulary import ServiceTier, ThinkingChoice
 from agent_comms.registry.thread_model import CatalogSelection, ThreadModel
 from agent_comms.registry.threads import ChosenServiceTier, NextTurnConfiguration, Thread
@@ -37,10 +37,10 @@ from agent_comms.transport.project_request import ProjectRuntimeRequest
 from agent_comms.watched import FileSource
 
 if TYPE_CHECKING:
+    from agent_comms.execution.session_config_options import SessionConfigOptions
     from agent_comms.installer.native_package import VerifiedNativePackage
     from agent_comms.nominal.field_codec import AcpSessionId
     from agent_comms.registry.registry_document import RegistrySnapshot
-    from agent_comms.session_config_options import SessionConfigOptions
 
 
 class InvalidConfigChoice(ValueError):

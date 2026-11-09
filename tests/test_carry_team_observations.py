@@ -11,10 +11,10 @@ from cutover.carry_team_update_lines import TeamUpdateLines
 
 from agent_comms.bus import Bus
 from agent_comms.comms import Comms
-from agent_comms.heartbeat_delivery import OnHeartbeatDelivery
 from agent_comms.installer.carry import CarryChain
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.heartbeat_delivery import OnHeartbeatDelivery
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.locked_store import LiveFilesRequest

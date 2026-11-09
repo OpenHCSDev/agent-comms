@@ -11,9 +11,9 @@ from pydantic import JsonValue
 
 from agent_comms.bus_publication import DirectorOrigin
 from agent_comms.comms import Comms
+from agent_comms.messaging.read_basis import OperatorOutcomes
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, RootId
 from agent_comms.planning.order_words import DirectiveText
-from agent_comms.messaging.read_basis import OperatorOutcomes
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.tool_caller import (
     ForkCaller,
@@ -22,9 +22,9 @@ from agent_comms.tool_caller import (
     ThreadCaller,
     ToolCaller,
 )
-from agent_comms.tool_request import ReadTool, ServedRequest, ToolArgumentsRefusedError
 from agent_comms.tool_result import ToolResult
 from agent_comms.transport.request import ToolRequest, tool_field
+from agent_comms.transport.tool_request import ReadTool, ServedRequest, ToolArgumentsRefusedError
 from agent_comms_hooks import ToolRefusedError
 
 

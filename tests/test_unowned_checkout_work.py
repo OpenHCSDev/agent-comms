@@ -24,8 +24,8 @@ from agent_comms.execution.turn_item import (
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
-from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.planning.goals import OrderCheck
+from agent_comms.planning.order_runs import MechanicalOrderRun
 from agent_comms.planning.order_words import StrikeReason
 from agent_comms.planning.orders import (
     Assignment,
@@ -42,10 +42,10 @@ from agent_comms.projects.checkouts import (
     Checkout,
     RepositoryReads,
 )
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.threads import ExternalThread, NativeThread
-from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.storage.locked_store import RootFile
 from agent_comms.task_attachments.team_pings import RulePing, TeamUpdate

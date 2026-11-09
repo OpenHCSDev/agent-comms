@@ -14,7 +14,7 @@ from agent_comms.nominal.field_codec import (
     OrderId,
     ToolCallId,
 )
-from agent_comms.order_story import StoryEvent
+from agent_comms.planning.order_story import StoryEvent
 from agent_comms.planning.order_words import StrikeReason
 from agent_comms.planning.orders import (
     AcceptedVerdict,

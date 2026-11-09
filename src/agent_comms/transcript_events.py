@@ -12,6 +12,7 @@ from urllib.parse import quote
 from pydantic import JsonValue
 
 from agent_comms import tool_declaration
+from agent_comms.execution.pi_wire import PiOmitted, ReportedInputId
 from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
 from agent_comms.history_view import Dated
 from agent_comms.messaging.message_reference import MessageReference
@@ -28,7 +29,6 @@ from agent_comms.nominal.field_codec import (
     WireOmitDefault,
     projected,
 )
-from agent_comms.pi_wire import PiOmitted, ReportedInputId
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.routing import MessageRoute, NoTurnRouting, Routing, TurnRouting
 from agent_comms.tool_results import (
@@ -51,8 +51,8 @@ from agent_comms.ui_model.message_category import (
 )
 
 if TYPE_CHECKING:
+    from agent_comms.execution.transcript_sources import TranscriptSource
     from agent_comms.importing import ImportBuffer, ImportLimits
-    from agent_comms.transcript_sources import TranscriptSource
 
 
 TRUNCATED = "\n[Import excerpt truncated]"

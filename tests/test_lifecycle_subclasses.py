@@ -7,7 +7,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.attempt_states import (
+from agent_comms.coordination.attempt_states import (
     AbortingAttempt,
     AttemptFailedAttempt,
     AttemptState,
@@ -23,6 +23,9 @@ from agent_comms.attempt_states import (
     UnknownOutcomeAttempt,
     UnsuccessfulTerminal,
 )
+from agent_comms.coordination.execution_states import DeferredExecution, FailedExecution
+from agent_comms.coordination.owner_fence import prepare_fence_token
+from agent_comms.coordination.reason_codes import NoReasonCode
 from agent_comms.coordination.tables.attempts import AttemptRecord, ReplayFact
 from agent_comms.coordination.tables.executions import (
     AcpOrigin,
@@ -32,10 +35,7 @@ from agent_comms.coordination.tables.executions import (
     NoPointedExecution,
     ReplayAssessments,
 )
-from agent_comms.execution_states import DeferredExecution, FailedExecution
-from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.pi_vocabulary import PendingStopReason
-from agent_comms.reason_codes import NoReasonCode
 from test_coordination_store import final_evidence, ready, started
 
 FAILED_SUCCESSOR_SOURCES = (

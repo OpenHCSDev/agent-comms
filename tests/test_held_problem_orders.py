@@ -11,7 +11,6 @@ from agent_comms.coordination.errors import Refused
 from agent_comms.errors import GoalRefused
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId
-from agent_comms.order_runs import ApplicationOrderRun
 from agent_comms.owner_protocol import OwnerFailure, OwnerLine
 from agent_comms.owner_requests import NewestOpenRequest
 from agent_comms.planning.goal_actions import (
@@ -24,6 +23,7 @@ from agent_comms.planning.goals import (
     OrderCheck,
     ProblemGoalOrder,
 )
+from agent_comms.planning.order_runs import ApplicationOrderRun
 from agent_comms.planning.order_words import DeliveryReport
 from agent_comms.planning.orders import (
     DeliveredProblemOrder,

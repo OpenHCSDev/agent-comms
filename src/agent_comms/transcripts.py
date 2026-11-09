@@ -28,6 +28,19 @@ from agent_comms.execution.native_output import NativeRecordLocation
 from agent_comms.execution.native_runtime_input import PublishedReplyRevision
 from agent_comms.execution.native_session_files import NativeSessionFiles
 from agent_comms.execution.native_transcript import NativeTranscript, RecordsCut, SessionCut
+from agent_comms.execution.transcript_routes import TranscriptRoutes
+from agent_comms.execution.transcript_sources import (
+    AssignedSourceCursor,
+    AssignedTranscriptSource,
+    EarlierTranscript,
+    LaterTranscript,
+    LiveAssignedTranscriptSource,
+    NoWireFrontier,
+    TranscriptDraft,
+    TranscriptSource,
+    TranscriptTraversal,
+    WireFrontier,
+)
 from agent_comms.execution.turn_digests import (
     InputAnswerRead,
     ThreadTurns,
@@ -40,8 +53,10 @@ from agent_comms.historical_views import HistorySource
 from agent_comms.history_view import HistoryView, OwnHistory
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.message_notification import MessageNotification, NotificationWindow
-from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.message_bus import MessageBus
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.page_traversal import HistorySourceKey
+from agent_comms.messaging.sent_message import AssignedSourceIdentity
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     ContentExclude,
@@ -52,7 +67,6 @@ from agent_comms.nominal.field_codec import (
 )
 from agent_comms.notification_assignment import NotificationAssignment, NotificationSelection
 from agent_comms.notification_evidence import OwnerOutcomes
-from agent_comms.page_traversal import HistorySourceKey
 from agent_comms.private_registry_guard import RegistryPrivacy
 from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.registry.registration import Registration
@@ -60,7 +74,6 @@ from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.thread_presentation import ThreadPresentation
 from agent_comms.registry.threads import Thread, ThreadProvenance
 from agent_comms.routing import TurnRouting
-from agent_comms.sent_message import AssignedSourceIdentity
 from agent_comms.sent_reports import CapturedSentReports
 from agent_comms.storage.private_path import (
     FileIdentity,
@@ -69,19 +82,6 @@ from agent_comms.storage.private_path import (
     MissingFile,
 )
 from agent_comms.transcript_events import ForkOriginTranscript, ForkTaskTranscript, TranscriptEvent
-from agent_comms.transcript_routes import TranscriptRoutes
-from agent_comms.transcript_sources import (
-    AssignedSourceCursor,
-    AssignedTranscriptSource,
-    EarlierTranscript,
-    LaterTranscript,
-    LiveAssignedTranscriptSource,
-    NoWireFrontier,
-    TranscriptDraft,
-    TranscriptSource,
-    TranscriptTraversal,
-    WireFrontier,
-)
 
 if TYPE_CHECKING:
     from sqlite3 import Connection

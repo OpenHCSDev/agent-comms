@@ -17,6 +17,16 @@ from agent_comms.envelope_claim_transitions import NativeClaim
 from agent_comms.execution.goal_turn_permit import GoalTurnPermit
 from agent_comms.execution.input_drain import InputDrain
 from agent_comms.execution.native_input_proof import NativeContextProof
+from agent_comms.execution.ordinary_turn_rules import (
+    MissingAcceptedInputRule,
+    MissingTurnOwnerCheck,
+)
+from agent_comms.execution.reservation_rules import (
+    ReservationRule,
+    ReservationViolationError,
+    RuleCheck,
+)
+from agent_comms.execution.send_outcome import AuthorityChangedSend, SendBoundary, SendOutcome
 from agent_comms.execution.turn_input_source import (
     OrdinaryOwnerCheck,
     OriginalTurnInput,
@@ -25,12 +35,9 @@ from agent_comms.execution.turn_input_source import (
 )
 from agent_comms.input_attempt import InputAlreadyCleared
 from agent_comms.nominal.field_codec import AcpSessionId, ClaimId, InputId, TurnId
-from agent_comms.ordinary_turn_rules import MissingAcceptedInputRule, MissingTurnOwnerCheck
 from agent_comms.planning.goal_attempts import GoalAttemptStore
 from agent_comms.planning.goal_waits import GoalWait
 from agent_comms.registry.threads import Thread
-from agent_comms.reservation_rules import ReservationRule, ReservationViolationError, RuleCheck
-from agent_comms.send_outcome import AuthorityChangedSend, SendBoundary, SendOutcome
 from agent_comms.tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:

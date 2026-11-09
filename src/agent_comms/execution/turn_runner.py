@@ -19,15 +19,13 @@ from metaclass_registry.mro_dispatch import (
 from pydantic import JsonValue
 
 from agent_comms import agent_events as events
-from agent_comms import pi_events as pi
 from agent_comms.agent_backend import AgentBackend
 from agent_comms.agent_event_updates import AcpEventConsumer, TurnEventConsumer
-from agent_comms.messaging.channel_targets import NamedTarget
-from agent_comms.messaging.channels import AllChannel
-from agent_comms.controller import Controller
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.controller import Controller
 from agent_comms.execution.goal_scheduler import GoalScheduler
+from agent_comms.execution.image_input import ImageInput
 from agent_comms.execution.input_drain import (
     BackgroundWake,
     SessionScheduleCheck,
@@ -35,6 +33,13 @@ from agent_comms.execution.input_drain import (
 )
 from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.execution.owned_turn import OwnedTurn
+from agent_comms.execution.pi_commands import (
+    AgentCommsInspectContext,
+    AgentCommsInspectContextSegment,
+    NativeQuery,
+)
+from agent_comms.execution.pi_events import CancelledUiChoice, DialogUiRequest, ExtensionUiChoice
+from agent_comms.execution.reservation_rules import ReservationRule, ReservationViolationError
 from agent_comms.execution.turn_context import SegmentManifest
 from agent_comms.execution.turn_effects import TurnEffects
 from agent_comms.execution.turn_input_source import (
@@ -45,31 +50,26 @@ from agent_comms.execution.turn_input_source import (
 from agent_comms.execution.turn_lease import TurnLeaseFence, TurnState
 from agent_comms.execution.turn_phase import CancellingPhase, TurnPhase
 from agent_comms.following_inputs import OwnerFollowingInputs
-from agent_comms.image_input import ImageInput
 from agent_comms.input_key import InputKey
 from agent_comms.input_origin import InputOrigin, UnattributedInputOrigin
+from agent_comms.messaging.channel_targets import NamedTarget
+from agent_comms.messaging.channels import AllChannel
 from agent_comms.messaging.messages import Message
 from agent_comms.nominal.field_codec import AcpSessionId, GoalId, InputId, TurnId
-from agent_comms.pi_commands import (
-    AgentCommsInspectContext,
-    AgentCommsInspectContextSegment,
-    NativeQuery,
-)
 from agent_comms.pi_payloads import NativeContextData, StateData
 from agent_comms.pi_rule_gate import PiRedeal
 from agent_comms.planning.goal_actions import GoalPrecondition, OwnerInvocable, PausedGoalAction
 from agent_comms.planning.goal_scope import OneGoal
 from agent_comms.queued_input import InitialInput
 from agent_comms.registry.threads import Thread
-from agent_comms.reservation_rules import ReservationRule, ReservationViolationError
 from agent_comms.routing import NoTurnRouting, Routing, ScheduledTurn
 from agent_comms.runtime_server import RuntimeServer, SubscriberClosed
 from agent_comms.transcript_updates import TurnTranscriptUpdate
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
-    from agent_comms.context_reading import ContextUsage
     from agent_comms.coordinated_runtime import SelectedExecution
+    from agent_comms.execution.context_reading import ContextUsage
     from agent_comms.execution.input_drain import DrainTurn, InputDrain, OwnerSession
     from agent_comms.execution.session_lifecycle import SessionLifecycle
 
@@ -368,28 +368,28 @@ class TurnRunner:
         session_id: AcpSessionId,
         turn_id: TurnId,
         controller: Controller,
-        request: pi.DialogUiRequest,
-    ) -> pi.ExtensionUiChoice:
+        request: DialogUiRequest,
+    ) -> ExtensionUiChoice:
         """Project one bounded Pi UI dialog to exactly the turn's ACP controller.
 
         No ACP response updates package configuration, launch trust or call grants.
         The backend revalidates this result before replying to the same Pi child.
         """
         if not await Coordination.run_worker(partial(self.owns_turn, session_id, turn_id)):
-            return pi.CancelledUiChoice()
+            return CancelledUiChoice()
         permission = request.permission(turn_id)
         if permission is None:
-            return pi.CancelledUiChoice()
+            return CancelledUiChoice()
         try:
             outcome = await controller.request_ui_permission(self, session_id, permission)
         except (TimeoutError, SubscriberClosed, RequestError):
             # A timed-out, departed or explicitly refusing controller grants no permission.
             # Unexpected decoder and transport defects propagate.
-            return pi.CancelledUiChoice()
+            return CancelledUiChoice()
         if not await Coordination.run_worker(partial(self.owns_turn, session_id, turn_id)):
-            return pi.CancelledUiChoice()
+            return CancelledUiChoice()
         if controller.departed(self.runtime, session_id):
-            return pi.CancelledUiChoice()
+            return CancelledUiChoice()
         return outcome.answer(request)
 
     def acquire_turn(

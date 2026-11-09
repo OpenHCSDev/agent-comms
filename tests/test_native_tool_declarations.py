@@ -160,9 +160,9 @@ def test_foreign_protocol_owners_decode_canonical_preview_arguments():
 
 def test_core_commands_share_native_identity_without_changing_external_decode():
     from agent_comms.tool_declaration import NativeRequestTools
-    from agent_comms.tool_request import NativeToolRequest
     from agent_comms.transport.native_tools import NativeExecutableTool
     from agent_comms.transport.request import ToolRequest
+    from agent_comms.transport.tool_request import NativeToolRequest
     from agent_comms.transport.tools.send import CommsSendTool
 
     schemas = NativeRequestTools.catalog()

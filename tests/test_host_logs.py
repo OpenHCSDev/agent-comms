@@ -4,7 +4,12 @@ from pathlib import Path
 import pytest
 
 from agent_comms.connector_caller import ThreadConnectorCaller
-from agent_comms.host_logs import ConnectorHostLog, HostLog, InstallHostLog, ProcessesHostLog
+from agent_comms.transport.host_logs import (
+    ConnectorHostLog,
+    HostLog,
+    InstallHostLog,
+    ProcessesHostLog,
+)
 from agent_comms.transport.tools.served import CommsHostLogTool
 
 GITHUB = "ghp_" + "a1b2c3d4" * 4

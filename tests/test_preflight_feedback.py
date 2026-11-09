@@ -48,7 +48,7 @@ def test_delivery_projection_requires_complete_homogeneous_actual_rows():
 
 
 def test_post_dispatch_failure_preserves_bound_uncertainty(tmp_path):
-    from agent_comms.acp_failure import ACPFailure
+    from agent_comms.execution.acp_failure import ACPFailure
     from agent_comms.input_attempt import BoundUnknownInput, SentInput
     from agent_comms.input_disposition import InputDispositions
 

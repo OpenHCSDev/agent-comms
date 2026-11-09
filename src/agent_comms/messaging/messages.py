@@ -14,10 +14,10 @@ from functools import cache
 from inspect import get_annotations
 from itertools import accumulate, batched
 from typing import (
+    TYPE_CHECKING,
     Annotated,
     ClassVar,
     Self,
-    TYPE_CHECKING,
     Type,
     cast,
     dataclass_transform,
@@ -25,7 +25,6 @@ from typing import (
 )
 
 from agent_comms.change_report import NoChangeReport, ReportEvidence, SourceRoots
-from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.class_fact import ClassFact
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.envelope_claim_transitions import (
@@ -40,8 +39,17 @@ from agent_comms.envelope_claim_transitions import (
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.turn_origin import TurnOrigin
 from agent_comms.input_key import InputKey
-from agent_comms.mentions import ThreadMention
+from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
+from agent_comms.messaging.mentions import ThreadMention
 from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.page_traversal import LiveCursor, PageCursor
+from agent_comms.messaging.projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
+from agent_comms.messaging.response_policy import (
+    NO_ALIASES,
+    InformationalPolicy,
+    ResponseEligibility,
+    ResponsePolicy,
+)
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     ClaimId,
@@ -58,24 +66,16 @@ from agent_comms.nominal.field_codec import (
     compile_decoder,
     projected,
 )
-from agent_comms.page_traversal import LiveCursor, PageCursor
-from agent_comms.projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
 from agent_comms.recorded_time import Timestamped
 from agent_comms.registry.thread_identity import AgentThreadRole, ThreadRole
-from agent_comms.response_policy import (
-    InformationalPolicy,
-    NO_ALIASES,
-    ResponseEligibility,
-    ResponsePolicy,
-)
 from agent_comms.storage.typed_table import (
+    LOCAL_TABLE_SOURCE,
     AppendOnlyTables,
     Column,
     DerivedTables,
     DurableTables,
     ForeignKey,
     Index,
-    LOCAL_TABLE_SOURCE,
     ProducedTable,
     SharedFileTables,
     TableReference,
@@ -552,8 +552,8 @@ class MessageRoutes(ProjectionOutputs):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from agent_comms.bus_tables import AwaitingAnswerSource
         from agent_comms.messaging.bus_route_counts import BusRouteCounts, BusRouteKeys
+        from agent_comms.messaging.bus_tables import AwaitingAnswerSource
         return (BusRouteCounts, BusRouteKeys, AwaitingAnswerSource)
 
     conversation_message: ClassVar[bool] = True
@@ -670,8 +670,8 @@ class RoleActivitySource(ProjectionSource):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from agent_comms.bus_activity_index import SentActivity
-        from agent_comms.bus_tables import AwaitingAnswerSource
+        from agent_comms.messaging.bus_activity_index import SentActivity
+        from agent_comms.messaging.bus_tables import AwaitingAnswerSource
         return (SentActivity, AwaitingAnswerSource)
 
 
@@ -803,11 +803,11 @@ class ConversationActivity(ProjectionSource):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from agent_comms.bus_activity_index import SentActivity
+        from agent_comms.messaging.bus_activity_index import SentActivity
         return (SentActivity,)
 
     def activity_rows(self, message: Message) -> tuple[TypedTable, ...]:
-        from agent_comms.bus_activity_index import SentActivity
+        from agent_comms.messaging.bus_activity_index import SentActivity
 
         return (SentActivity(message.sender, message.timestamp),)
 
@@ -980,7 +980,7 @@ class Message(MessageInput, TurnOrigin):
 
     def require_answers(self, db: sqlite3.Connection) -> None:
         """Validate public references once, before appending their sequence-only projection."""
-        from agent_comms.bus_tables import MessageIdentitySource
+        from agent_comms.messaging.bus_tables import MessageIdentitySource
 
         MessageIdentitySource.require_references(db, self.answers)
 
@@ -1211,10 +1211,10 @@ class BusRecord(CarriesEnvelope, Message, DeclaredFamily, affix="Record"):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from agent_comms.bus_activity_index import BusActivityIndex, SentActivity
-        from agent_comms.bus_tables import AnsweredSource, MessageIdentitySource
+        from agent_comms.messaging.bus_activity_index import BusActivityIndex, SentActivity
         from agent_comms.messaging.bus_display_index import BusDisplayIndex
         from agent_comms.messaging.bus_route_counts import BusRouteCounts, BusRouteKeys
+        from agent_comms.messaging.bus_tables import AnsweredSource, MessageIdentitySource
         # Task rows are written by the record that carries the task, so the record kinds own
         # them too: that is what lets a carry replay old records into a new task row.
         return tuple(dict.fromkeys((
@@ -1225,9 +1225,9 @@ class BusRecord(CarriesEnvelope, Message, DeclaredFamily, affix="Record"):
         )))
 
     def projections(self):
-        from agent_comms.bus_activity_index import BusActivityIndex
-        from agent_comms.bus_tables import AnsweredSource, MessageIdentitySource
+        from agent_comms.messaging.bus_activity_index import BusActivityIndex
         from agent_comms.messaging.bus_display_index import BusDisplayIndex
+        from agent_comms.messaging.bus_tables import AnsweredSource, MessageIdentitySource
 
         yield from super().projections()
         yield BusActivityIndex.from_message(self, target=self.target)

@@ -5,7 +5,7 @@ from typing import Annotated
 
 from agent_comms.assignment_states import AssignmentState
 from agent_comms.coordination.tables.publications import PublicationEvidence
-from agent_comms.diagnostics import record_terminal_failure
+from agent_comms.execution.diagnostics import record_terminal_failure
 from agent_comms.execution.turn_failure import BackendFailed
 from agent_comms.execution.turn_outcome import TurnOutcome
 from agent_comms.messaging.messages import (

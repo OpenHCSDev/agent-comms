@@ -16,30 +16,30 @@ from agent_comms.agent_activity import AgentActivity
 from agent_comms.agent_inbox import TakenInputStart
 from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.channel_management import ChannelManagement
-from agent_comms.collaboration_ledger import CollaborationLedger
 from agent_comms.context_store import ContextStore
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.execution.owner_lifecycle import OwnerLifecycle
+from agent_comms.execution.transcript_sources import TranscriptSource
 from agent_comms.history_views import HistoryViews
-from agent_comms.messaging.message_reference import InboxStart
-from agent_comms.messaging.messages import Message
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messaging.message_page import InboxPage
+from agent_comms.messaging.message_reference import InboxStart
+from agent_comms.messaging.messages import Message
 from agent_comms.messaging.sending import Messaging
 from agent_comms.planning.goal_management import Goals
 from agent_comms.publisher import OwnerPublisher
+from agent_comms.registry.collaboration_ledger import CollaborationLedger
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot, UnreadRegistry
+from agent_comms.registry.route_client import ActivityClient
 from agent_comms.registry.thread_configuration import ThreadConfiguration
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_management import ThreadManagement
 from agent_comms.relationships import ThreadRelationships
-from agent_comms.route_client import ActivityClient
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
 from agent_comms.storage.private_path import FileRevision
-from agent_comms.transcript_sources import TranscriptSource
 from agent_comms.transcripts import Transcripts
 from agent_comms.watched import FileSource
 

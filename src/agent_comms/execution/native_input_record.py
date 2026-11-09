@@ -21,6 +21,7 @@ from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.execution.native_input_proof import NativeContextProof
 from agent_comms.execution.native_integer import PositiveNativeIntegerBounds
 from agent_comms.execution.native_session_reopen import PiSessionId
+from agent_comms.execution.transcript_routes import InputDisplay, NoDisplayText
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     AssignmentId,
@@ -39,20 +40,19 @@ from agent_comms.storage.typed_table import (
     TextStorage,
     sql_literal,
 )
-from agent_comms.transcript_routes import InputDisplay, NoDisplayText
 
 if TYPE_CHECKING:
     from sqlite3 import Connection
 
     from agent_comms.assignment_states import AssignmentState
     from agent_comms.cursor_owner import CursorOwner
+    from agent_comms.execution.historical_native_inputs import HistoricalNativeInput
     from agent_comms.execution.native_entries import (
         MessageEntry,
         RecordedEntry,
         TranscriptProjection,
     )
     from agent_comms.execution.native_runtime_input import NativeRuntimeInput
-    from agent_comms.historical_native_inputs import HistoricalNativeInput
     from agent_comms.messaging.message_reference import MessageReference
     from agent_comms.transcript_events import TranscriptEvent
 
@@ -268,7 +268,7 @@ class TriageNativeExecution(NativeInputExecution):
     def source_membership_sql(
         cls, *, table_source: TableSource = LOCAL_TABLE_SOURCE,
     ) -> str:
-        from agent_comms.triage_native_sources import TriageNativeSource
+        from agent_comms.execution.triage_native_sources import TriageNativeSource
 
         return (f"SELECT s.input_id, s.assignment_id, s.ordinal, s.attempt "
                 f"FROM {TriageNativeSource.qualified_table(table_source)} s")
@@ -277,7 +277,7 @@ class TriageNativeExecution(NativeInputExecution):
         self, db: Connection, input_id: InputId, assignments: tuple[WakeAssignment, ...],
         *, attempt: int = 0,
     ) -> None:
-        from agent_comms.triage_native_sources import TriageNativeSource
+        from agent_comms.execution.triage_native_sources import TriageNativeSource
 
         if not assignments:
             raise IdentityConflict("Native input membership names at least one original source")
@@ -386,7 +386,7 @@ class FullNativeExecution(NativeInputExecution):
     def historical_proof(
         self, record: NativeRuntimeInput, *, lifecycle: AssignmentState, **source,
     ) -> HistoricalNativeInput:
-        from agent_comms.historical_native_inputs import FullHistoricalNativeInput
+        from agent_comms.execution.historical_native_inputs import FullHistoricalNativeInput
 
         record.verdict.require_undecided()
         return FullHistoricalNativeInput(execution=self, **source)

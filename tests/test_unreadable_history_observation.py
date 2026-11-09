@@ -25,8 +25,8 @@ from agent_comms.errors import (
     StoredHistoryUnreadable,
 )
 from agent_comms.execution.turn_context import RecordedContextManifest
+from agent_comms.messaging.notification_reads import LiveNotificationRead
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.notification_reads import LiveNotificationRead
 from agent_comms.owner_connection import OwnerIdentityChangedError, OwnerReplyLostError
 from agent_comms.presentation import WireRevision
 from agent_comms.projects.checkouts import Checkout

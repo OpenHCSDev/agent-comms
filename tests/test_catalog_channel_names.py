@@ -1,7 +1,7 @@
 """A catalog's channel names are the channels it builds, read without activity clocks."""
 
-from agent_comms.activity_clocks import ActivityClocks
 from agent_comms.comms import Comms
+from agent_comms.messaging.activity_clocks import ActivityClocks
 from agent_comms.projects.checkouts import Checkout
 
 

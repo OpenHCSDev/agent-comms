@@ -30,7 +30,6 @@ from agent_comms.head_review import (
     PullRequestHead,
     ReadPullRequestHead,
 )
-from agent_comms.heartbeat_delivery import OnHeartbeatDelivery
 from agent_comms.heartbeat_subjects import HeadSubject, TeamHistory, UnlandedHeadSubject
 from agent_comms.integration import IntegrationRun
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, MalformedRecord, RecordProblems
@@ -71,11 +70,12 @@ from agent_comms.planning.pull_requests import (
     PullRequestLink,
 )
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.registry.heartbeat_delivery import OnHeartbeatDelivery
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.threads import NativeThread
-from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.task_attachments.team_pings import (
     RulePing,
     TeamDecisions,

@@ -16,10 +16,12 @@ import pytest
 from agent_comms.attempt_recovery import RecoveryMonitorCapability, VerifiedOwnerLoss
 from agent_comms.bus import Bus
 from agent_comms.cli import CliInvocation
-from agent_comms.cli_protocol import WATCH_LINE, CoreError
+from agent_comms.cli_bridges.cli_protocol import WATCH_LINE, CoreError
 from agent_comms.comms import wire
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import RecoveryBlocked
+from agent_comms.coordination.execution_states import FailedExecution
+from agent_comms.coordination.reason_codes import GivenReasonCode
 from agent_comms.coordination.tables.attempts import ReplayFact
 from agent_comms.coordination.tables.executions import CurrentExecutions, WireOrigin
 from agent_comms.cursor_publication import CursorDelivery
@@ -36,14 +38,12 @@ from agent_comms.execution.native_input_record import (
 from agent_comms.execution.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
 from agent_comms.execution.selected.participant import SelectedParticipant
 from agent_comms.execution.selected.turn import SelectedAttempt
-from agent_comms.execution_states import FailedExecution
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import ThreadLaunch
 from agent_comms.lifecycle_capability import Failed
 from agent_comms.nominal.field_codec import InputId, TurnId
 from agent_comms.owner_connection import socket_path
-from agent_comms.reason_codes import GivenReasonCode
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.storage.private_path import FileRevision

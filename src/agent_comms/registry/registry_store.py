@@ -30,10 +30,10 @@ from agent_comms.execution.turn_lease import (
     TurnRecord,
 )
 from agent_comms.nominal.field_codec import FieldCodec, NullMember, TurnId
-from agent_comms.presence import PresenceStore
 from agent_comms.private_registry_guard import PrivateRegistryGuard, PublicRegistry, RegistryPrivacy
 from agent_comms.private_runtime_schema import PrivateCoordinatorTable
-from agent_comms.registration_change import InitialRegistration, NativeSourcePublication
+from agent_comms.registry.presence import PresenceStore
+from agent_comms.registry.registration_change import InitialRegistration, NativeSourcePublication
 from agent_comms.registry.registry_document import (
     HistoricalRootPurpose,
     RegistryDocument,

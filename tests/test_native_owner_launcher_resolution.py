@@ -17,7 +17,7 @@ async def test_fork_runs_selected_python_before_copying_saved_history(
     tmp_path, monkeypatch, native_runtime_package, *, thread_registration
 ):
     from agent_comms.comms import wire
-    from agent_comms.fresh_private_session import create_fresh_private_session
+    from agent_comms.execution.fresh_private_session import create_fresh_private_session
     from agent_comms.pi_native_backend import PiNativeBackend
 
     package = native_runtime_package

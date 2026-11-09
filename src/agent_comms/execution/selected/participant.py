@@ -29,6 +29,8 @@ from agent_comms.coordination.errors import (
     IdentityConflict,
     StaleFence,
 )
+from agent_comms.coordination.participant_store import ParticipantSnapshot
+from agent_comms.coordination.reason_codes import GivenReasonCode
 from agent_comms.coordination.response import (
     LiveResponseOwner,
     ResponseTable,
@@ -45,6 +47,7 @@ from agent_comms.execution.native_input_owner import (
     RegistryOwner,
 )
 from agent_comms.execution.native_runtime_input import NativeRuntimeTable
+from agent_comms.execution.pi_events import TurnContextObserved
 from agent_comms.execution.selected.source_batch import (
     SelectedSource,
     SelectedSourceBatch,
@@ -62,8 +65,8 @@ from agent_comms.message_notification import (
     MessageNotification,
     SentMessageOutcome,
 )
-from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.message_bus import MessageBus
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.field_codec import (
     RootId,
     ThreadLookup,
@@ -75,10 +78,7 @@ from agent_comms.notification_assignment import (
     NotificationSelection,
 )
 from agent_comms.notification_evidence import OwnerOutcomes
-from agent_comms.participant_store import ParticipantSnapshot
-from agent_comms.pi_events import TurnContextObserved
 from agent_comms.publisher import ParticipantPublisher
-from agent_comms.reason_codes import GivenReasonCode
 
 
 class NoLivePublication(MroDispatch):

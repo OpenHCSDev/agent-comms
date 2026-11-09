@@ -7,12 +7,13 @@ import sqlite3
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from agent_comms.audience_manifest import MAX_AUDIENCE_BYTES
 from agent_comms.coordination.contracts import POLICY_VERSION, RESOLVER_VERSION
 from agent_comms.coordination.errors import IdentityConflict, SchemaVersionError
+from agent_comms.coordination.response_acknowledgement import _canonical
 from agent_comms.coordination.schema import CoordinatorTable
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.coordination.tables.participants import OwnerGenerations, OwnerRecord, Participants
+from agent_comms.messaging.audience_manifest import MAX_AUDIENCE_BYTES
 from agent_comms.nominal.field_codec import (
     AssignmentId,
     MessageId,
@@ -23,7 +24,6 @@ from agent_comms.nominal.field_codec import (
 )
 from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from agent_comms.registry.thread_text import AbsentText, GivenText, TextChoice
-from agent_comms.response_acknowledgement import _canonical
 from agent_comms.storage.typed_table import (
     Column,
     ColumnGuard,

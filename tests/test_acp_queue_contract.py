@@ -27,6 +27,7 @@ from agent_comms.acp_extension import (
 from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.transcript_routes import NoDisplayText
 from agent_comms.input_attempt import ReservedInput
 from agent_comms.input_key import AcpInputKey
 from agent_comms.nominal.field_codec import AcpSessionId, InputId, RootId, TurnId
@@ -38,7 +39,6 @@ from agent_comms.registry.thread_identity import (
 )
 from agent_comms.registry.threads import NativeThread
 from agent_comms.runtime import present_session
-from agent_comms.transcript_routes import NoDisplayText
 from bus_record_fixture import prepare_native_comms
 from stored_inputs import stored_inputs
 

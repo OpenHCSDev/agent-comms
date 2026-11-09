@@ -25,7 +25,7 @@ from agent_comms_hooks.watch import SessionEndpoint
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
     from agent_comms.head_review import HeadReviewOrder, PullRequestHead
-    from agent_comms.tool_request import ServedRequest
+    from agent_comms.transport.tool_request import ServedRequest
 
 
 @dataclass(frozen=True)

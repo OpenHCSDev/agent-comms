@@ -6,9 +6,9 @@ import pytest
 
 from agent_comms import agent_events as events
 from agent_comms.agent_backend import InputStartListener, NoInputStartListener
-from agent_comms.backend import EventFinishSignal, FinishSignal, NoFinishSignal
 from agent_comms.change_report import FileLine, NoSourceReference
 from agent_comms.errors import TodoError
+from agent_comms.execution.backend import EventFinishSignal, FinishSignal, NoFinishSignal
 from agent_comms.execution.input_drain import DrainedSession
 from agent_comms.execution.native_child import NoInputForwarder
 from agent_comms.execution.native_session_reopen import NoSessionRetention
@@ -17,6 +17,8 @@ from agent_comms.execution.native_startup import (
     SessionLoad,
     UnmeasuredSessionLoad,
 )
+from agent_comms.execution.pi_commands import GetState
+from agent_comms.execution.pi_wire import AnonymousRequest, RequestId
 from agent_comms.execution.turn_goal_permission import (
     InactiveGoalPermission,
     TurnGoalPermission,
@@ -32,8 +34,6 @@ from agent_comms.execution.turn_stats import (
     StatsRequest,
 )
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, InputId
-from agent_comms.pi_commands import GetState
-from agent_comms.pi_wire import AnonymousRequest, RequestId
 
 
 def test_drain_lifecycle_keeps_inbox_and_original_in_one_owner():

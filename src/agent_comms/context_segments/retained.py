@@ -49,7 +49,7 @@ class RetainedSegment(ContextSegment):
 
     def export(self, destination: Path | str, *, overwrite: bool = False) -> WireExportProvenance:
         """Publish this immutable read's selection through the original writer."""
-        from agent_comms.retained_context import RetainedFormat
+        from agent_comms.context_segments.retained_context import RetainedFormat
 
         selected = sorted((source for fact in self.retained.facts
                            for source in fact.wire_sources()

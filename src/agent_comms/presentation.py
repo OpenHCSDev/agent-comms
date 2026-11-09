@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from agent_comms import relationships
 from agent_comms.activity import Activity, ActivityData, ActivityState, ObservedActivity
-from agent_comms.activity_clocks import ChannelActivity
 from agent_comms.agent_activity import AgentActivity
 from agent_comms.bus import DisplayUnread
 from agent_comms.cli_verbs.cli_result import CliResult
@@ -21,10 +20,11 @@ from agent_comms.coordination.errors import DMPaintedBoundChanged, StaleRevision
 from agent_comms.display_order import ChannelSort, NameChannelSort
 from agent_comms.display_references import CurrentDisplayReferences
 from agent_comms.external_transcript import ExternalTranscript
-from agent_comms.mentions import MentionCandidate
 from agent_comms.message_notification import MessageNotification, NotificationPass
+from agent_comms.messaging.activity_clocks import ChannelActivity
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.channels import Channel, ChannelMemberIndex, Channels
+from agent_comms.messaging.mentions import MentionCandidate
 from agent_comms.messaging.message_page import NEWEST_PAGE, MessagePage, PageBounds
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.read_basis import (

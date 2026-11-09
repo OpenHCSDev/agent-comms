@@ -11,9 +11,9 @@ from agent_comms.cli_verbs.cli_commands import BusReadBack
 from agent_comms.cli_verbs.history import HistoryCliCommand
 from agent_comms.errors import RelationViolationError, ThreadNotStoppedError
 from agent_comms.host_services import RestartedService
-from agent_comms.install_choices import LiveMode, RehearsalMode
 from agent_comms.installer.backup import BackupReport, RestoreSpace
 from agent_comms.installer.commands import InstallCommands
+from agent_comms.installer.install_choices import LiveMode, RehearsalMode
 from agent_comms.installer.interpreter_operation import CommandPhase, InstalledProgram, PhaseTiming
 from agent_comms.installer.launch import InstallReport
 from agent_comms.installer.owner_starts import RefusedOwner, StartedOwner

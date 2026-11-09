@@ -12,11 +12,11 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
-from agent_comms.messaging.channel_targets import ThreadTarget
+from agent_comms.cli_bridges.harness_delivery_states import DeliveredOutcome, Outcome
 from agent_comms.disclosure_text import AccentTone, ViewHeading, ViewTable, WarningTone
 from agent_comms.errors import RelationViolationError
-from agent_comms.harness_delivery_states import DeliveredOutcome, Outcome
 from agent_comms.heartbeat_subjects import HeartbeatSubject, TeamHistory
+from agent_comms.messaging.channel_targets import ThreadTarget
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import (
     ConversationRole,
@@ -25,6 +25,7 @@ from agent_comms.messaging.messages import (
     NoticeRole,
     TeamUpdatePosition,
 )
+from agent_comms.messaging.projection_source import ProducedRow
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -33,7 +34,6 @@ from agent_comms.nominal.field_codec import (
     PublicationExclude,
     ThreadLookup,
 )
-from agent_comms.projection_source import ProducedRow
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.storage.locked_store import DocumentChange, DurableFile, LockedStore, PatternFile

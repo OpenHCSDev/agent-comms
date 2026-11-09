@@ -7,10 +7,12 @@ import pytest
 from pydantic import TypeAdapter
 
 from agent_comms.cli_bridges.claude_protocol import AssistantBlock, ResultPart, UserBlock
+from agent_comms.cli_bridges.cli_protocol import TextWire
 from agent_comms.cli_bridges.codex_protocol import UserInput
 from agent_comms.cli_bridges.opencode_parts import Part
-from agent_comms.cli_protocol import TextWire
 from agent_comms.execution.native_startup import NativeStartupPolicy
+from agent_comms.execution.pi_events import PiEvent
+from agent_comms.execution.pi_wire import PiDiagnostic, PiPayload, UnknownPayload
 from agent_comms.execution.turn_output import TurnOutput
 from agent_comms.execution.turn_phase import (
     ModelWaitPhase,
@@ -31,7 +33,6 @@ from agent_comms.nominal.field_codec import (
     Id128Text,
     MalformedRecord,
 )
-from agent_comms.pi_events import PiEvent
 from agent_comms.pi_payloads import (
     ContentDelta,
     NativeToolDetails,
@@ -46,7 +47,6 @@ from agent_comms.pi_payloads import (
     UnknownData,
 )
 from agent_comms.pi_vocabulary import CompactionReason, PiStopReason
-from agent_comms.pi_wire import PiDiagnostic, PiPayload, UnknownPayload
 
 
 class CapabilityRepresentation(DeclaredFamily, FieldRepresentation, affix="Representation"):
@@ -224,8 +224,8 @@ def test_external_name_families_derive_one_default_without_accepting_invalid_val
 
 @pytest.mark.parametrize("value", [None, False, "3", {}, 1.5, 0, -1, 2])
 def test_measured_totals_share_one_declared_integer_policy(value):
+    from agent_comms.execution.pi_wire import PiUsage
     from agent_comms.pi_payloads import PiContextUsage
-    from agent_comms.pi_wire import PiUsage
 
     totals = (PiUsage.from_wire({"totalTokens": value}).total_tokens,
               PiContextUsage.from_wire({"tokens": value}).tokens)
@@ -234,8 +234,8 @@ def test_measured_totals_share_one_declared_integer_policy(value):
 
 @pytest.mark.parametrize("value", [False, "3", {}, 1.5])
 def test_retained_totals_reject_values_only_external_ingress_may_treat_as_unreported(value):
+    from agent_comms.execution.pi_wire import PiUsage
     from agent_comms.pi_payloads import PiContextUsage
-    from agent_comms.pi_wire import PiUsage
 
     for family, key in ((PiUsage, "totalTokens"), (PiContextUsage, "tokens")):
         with pytest.raises(MalformedRecord):
@@ -244,8 +244,10 @@ def test_retained_totals_reject_values_only_external_ingress_may_treat_as_unrepo
 
 @pytest.mark.parametrize("command", ["switch_session", "watch", "compact_durable"])
 def test_exact_response_capability_covers_sdk_and_durable_commands(command):
-    from agent_comms import pi_durable_backend  # Registers the actual host command family.
-    from agent_comms.pi_events import Response
+    from agent_comms.execution import (
+        pi_durable_backend,  # Registers the actual host command family.
+    )
+    from agent_comms.execution.pi_events import Response
 
     wire = {"id": "proof", "type": "response", "command": command,
             "success": False, "error": "failed"}
@@ -298,8 +300,8 @@ def test_external_collections_produce_resolved_members(annotation, wire):
 
 
 def test_response_command_owns_data_decoding_without_redecoding_its_identity():
-    from agent_comms.pi_commands import PiCommand
-    from agent_comms.pi_events import Response
+    from agent_comms.execution.pi_commands import PiCommand
+    from agent_comms.execution.pi_events import Response
 
     seen = []
 
@@ -331,7 +333,7 @@ def test_response_command_owns_data_decoding_without_redecoding_its_identity():
 
 @pytest.mark.parametrize("command", [None, False, 1, {}])
 def test_malformed_response_commands_are_not_unknown_commands(command):
-    from agent_comms.pi_events import Response
+    from agent_comms.execution.pi_events import Response
 
     with pytest.raises(MalformedRecord):
         Response.from_wire({"type": "response", "command": command})
@@ -359,7 +361,7 @@ def test_native_delta_records_are_not_normalized_as_the_null_union_member(wire):
 
 
 def test_exact_envelope_derives_additional_response_fields():
-    from agent_comms.pi_events import Response
+    from agent_comms.execution.pi_events import Response
 
     @dataclass(frozen=True, kw_only=True)
     class HeaderProofResponse(Response):

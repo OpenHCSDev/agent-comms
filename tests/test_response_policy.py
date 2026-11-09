@@ -1,9 +1,9 @@
 from agent_comms.messaging.messages import ConversationRole, InfoKind, Message
+from agent_comms.messaging.response_policy import ResponseEligibility, ResponsePolicy
 from agent_comms.nominal.field_codec import GoalId
 from agent_comms.planning.goal_scope import OneGoal
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.response_policy import ResponseEligibility, ResponsePolicy
 from agent_comms.routing import ScheduledTurn
 
 

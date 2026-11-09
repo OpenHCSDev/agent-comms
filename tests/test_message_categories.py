@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from agent_comms.bus_publication import Delivered
+from agent_comms.execution.transcript_sources import AssignedTranscriptSource
 from agent_comms.messaging.messages import (
     ConversationRole,
     HistoricalConversationRole,
@@ -23,7 +24,6 @@ from agent_comms.registry.thread_identity import (
     UserThreadRole,
 )
 from agent_comms.transcript_events import IncomingTranscript
-from agent_comms.transcript_sources import AssignedTranscriptSource
 from agent_comms.ui_model.message_category import (
     AgentActivityBoundary,
     AgentCategory,

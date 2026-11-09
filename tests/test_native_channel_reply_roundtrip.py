@@ -20,7 +20,7 @@ from agent_comms.acp_extension import (
     decode_updates,
 )
 from agent_comms.comms import wire
-from agent_comms.controller import SessionUpdateSink
+from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.native_input_record import TriageNativeExecution
 from agent_comms.execution.turn_lease import NoTurnRecord
 from agent_comms.launch_runtime import RestoredRuntime
@@ -360,7 +360,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
         if reject_triage:
             from agent_comms.assignment_states import FailedAssignment
             from agent_comms.coordination.coordinator import Coordination
-            from agent_comms.historical_native_inputs import read_historical_native_inputs
+            from agent_comms.execution.historical_native_inputs import read_historical_native_inputs
 
             with Coordination(str(comms.root / "coordination.sqlite3")) as store:
                 rejected = read_historical_native_inputs(

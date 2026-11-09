@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from agent_comms.channel_coding_tools import CodingToolSocket
-from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
+from agent_comms.execution.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import (
     AssistantMessage,
     ReportedFlag,

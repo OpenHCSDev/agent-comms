@@ -6,8 +6,8 @@ import pytest
 
 from agent_comms.acp_extension import GoalChangedUpdate, decode_updates
 from agent_comms.comms import wire
-from agent_comms.controller import SessionUpdateSink
 from agent_comms.coordination.errors import Refused
+from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.native_arguments import GivenArguments, GivenBinary
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec
 from agent_comms.planning.goal_actions import (

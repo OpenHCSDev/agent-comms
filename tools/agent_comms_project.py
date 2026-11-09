@@ -45,8 +45,8 @@ from agent_comms.nominal import field_codec
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import boundary_decoder
 from agent_comms.nominal_census import NominalCensus
-from agent_comms.phase_evidence import MainTree
 from agent_comms.plan_reading import PlanReading
+from agent_comms.planning.phase_evidence import MainTree
 from agent_comms.planning.plan_phases import PlanPhase
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.repo import Repo

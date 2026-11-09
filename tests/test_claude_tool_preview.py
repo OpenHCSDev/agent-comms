@@ -9,8 +9,8 @@ from agent_comms.cli_bridges.claude_protocol import (
     ToolResult,
     ToolUse,
 )
+from agent_comms.cli_bridges.runtime_updates import FinishedItem
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.runtime_updates import FinishedItem
 from agent_comms.tool_calls import ToolCall
 from agent_comms.tool_results import NoToolDiff
 from agent_comms.transport.native_tools import BashTool

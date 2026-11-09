@@ -15,9 +15,9 @@ from collections.abc import Sequence
 from typing import TextIO
 
 from agent_comms.active_route import resolve_comms_route
-from agent_comms.cli_arguments import CliArgumentParser, CliArguments, CliParserExit
+from agent_comms.cli_bridges.cli_arguments import CliArgumentParser, CliArguments, CliParserExit
+from agent_comms.cli_bridges.cli_protocol import CoreError
 from agent_comms.cli_failures import CLI_FAILURES
-from agent_comms.cli_protocol import CoreError
 from agent_comms.launch_root import LaunchRoot, started
 
 

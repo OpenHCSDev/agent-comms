@@ -5,7 +5,7 @@ from __future__ import annotations
 from contextlib import AsyncExitStack, aclosing
 from pathlib import Path
 
-import agent_comms.backend as backend
+import agent_comms.execution.backend as backend
 from agent_comms.agent_backend import NoInputStartListener
 from agent_comms.comms import wire
 from agent_comms.cursor_publication import CursorDelivery

@@ -19,7 +19,7 @@ from agent_comms.execution.child_process import Platform, ProcessIdentity
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_input_proof import NativeInputProof
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity
-from agent_comms.participant_identity import ParticipantIdentity
+from agent_comms.execution.participant_identity import ParticipantIdentity
 from agent_comms.storage.locked_store import DurableFile, PatternFile
 from agent_comms.storage.private_path import PrivateDirectoryRole, TrustedAncestorRole
 from agent_comms_hooks.process_claim import ProcessSingleton

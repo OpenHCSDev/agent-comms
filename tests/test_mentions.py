@@ -1,10 +1,15 @@
 
 import pytest
 
-from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.comms import wire
-from agent_comms.mentions import MentionCandidate, MentionQuery, ThreadMention
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.mentions import MentionCandidate, MentionQuery, ThreadMention
 from agent_comms.messaging.messages import AlertKind, InfoKind, Message, NoticeRole
+from agent_comms.messaging.response_policy import (
+    CollectivePolicy,
+    InformationalPolicy,
+    MentionedPolicy,
+)
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import (
     AgentThreadRole,
@@ -12,7 +17,6 @@ from agent_comms.registry.thread_identity import (
 )
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import NativeThread
-from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, MentionedPolicy
 from agent_comms.routing import ScheduledTurn
 from agent_comms.tool_caller import NoThreadCaller
 from bus_history import read_history

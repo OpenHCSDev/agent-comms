@@ -8,8 +8,8 @@ from functools import partial
 import pytest
 
 from agent_comms.assignment_states import DeferredAssignment, FullPendingAssignment
-from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.coordination.cohort import pending_sealed_assignments
+from agent_comms.coordination.cohort_foreground import _accept_visible_deliveries
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.input_attempt import NotSentInput
 from agent_comms.nominal.field_codec import InputId, TurnId

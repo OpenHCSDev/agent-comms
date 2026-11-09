@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated
 
 from agent_comms.bus_publication import HumanOrigin
-from agent_comms.controller import NO_CONTROLLER
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.controller import NO_CONTROLLER
 from agent_comms.execution.turn_context import Provenance
 from agent_comms.harness_install import HarnessSession
 from agent_comms.input_key import InputKey, InputKeyText

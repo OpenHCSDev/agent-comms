@@ -20,7 +20,6 @@ import pytest
 
 from agent_comms.activity import ActivityStore
 from agent_comms.bus import Bus
-from agent_comms.bus_tables import MessageIdentitySource
 from agent_comms.cli_bridges.codex import CodexBridge
 from agent_comms.cli_bridges.shared import BridgeDeliveryStore, BridgeStateTable
 from agent_comms.cli_verbs.cli_command import CliCommand
@@ -34,12 +33,14 @@ from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.session import CoordinationSession
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput
+from agent_comms.execution.triage_native_sources import TriageNativeSource
 from agent_comms.installer.backup import StoreBackup, bus_files
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.installer.probes.carry import WriterOwnedOpeningProbe
 from agent_comms.installer.upgrade import Stack
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.messaging.bus_tables import MessageIdentitySource
 from agent_comms.messaging.messages import (
     BusProjectionTables,
     BusRow,
@@ -70,7 +71,6 @@ from agent_comms.storage.typed_table import (
     WriterOwnedFile,
     WriterOwnedStore,
 )
-from agent_comms.triage_native_sources import TriageNativeSource
 from bus_record_fixture import OWNER_LOOKUP
 from cli_command import core
 from conftest import ledger_one_failure_short, maintenance_held

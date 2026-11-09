@@ -6,10 +6,10 @@ from dataclasses import dataclass
 from typing import Literal
 
 from agent_comms.execution.turn_context import ContextSpan
+from agent_comms.execution.working_memory_disclosure import DisclosureState
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.working_memory_disclosure import DisclosureState
 from agent_comms.working_memory_labels import ClassifierVersion, JevUsage, QuestionVersion
 from agent_comms.working_memory_questions import SpanQuestion
 

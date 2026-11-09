@@ -14,9 +14,9 @@ import pytest
 
 from agent_comms.activity import ActivityState, ReadyDrainReadiness, StalledDeliveryReadiness
 from agent_comms.cli_bridges.claude_transcript import ReconnectUrl
+from agent_comms.cli_bridges.harness_delivery_states import TakingLedger
 from agent_comms.comms import InboxActivity, wire
 from agent_comms.execution.child_process import ProcessIdentity
-from agent_comms.harness_delivery_states import TakingLedger
 from agent_comms.inbox_watch import InboxWatch
 from agent_comms.team.standing import UnitDeaf
 from test_cli import cli  # noqa: F401  (the installed-root command line fixture)

@@ -20,6 +20,11 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput
 from agent_comms.execution.native_transcript import RecordsCut
+from agent_comms.execution.transcript_sources import (
+    TranscriptDraft,
+    TranscriptRecord,
+    TranscriptSource,
+)
 from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -52,7 +57,6 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     TurnDigest,
 )
-from agent_comms.transcript_sources import TranscriptDraft, TranscriptRecord, TranscriptSource
 from agent_comms.transport.native_tools import MutatingPathTool
 from agent_comms.watched import FileSource, Watched
 

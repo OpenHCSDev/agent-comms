@@ -15,15 +15,16 @@ from agent_comms.assignment_states import (
     IgnoredAssignment,
 )
 from agent_comms.bus import Bus
-from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.cli_bridges.claude import ClaudeBridge
+from agent_comms.cli_bridges.harness_delivery_states import DeliveredOutcome, ObservedMonitor
 from agent_comms.comms import wire
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import DMScopeChanged, SchemaVersionError
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
-from agent_comms.harness_delivery_states import DeliveredOutcome, ObservedMonitor
 from agent_comms.historical_views import HistoricalDisplay
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.read_basis import ReadCursor
 from agent_comms.messaging.read_ledger import ReadLedger
 from agent_comms.nominal.field_codec import InputId, MessageId, TurnId
 from agent_comms.notification_evidence import AllOutcomes
@@ -39,7 +40,6 @@ from agent_comms.notification_progress import (
     WorkingTakenProgress,
 )
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.messaging.read_basis import ReadCursor
 from agent_comms.registry.thread_identity import (
     AgentThreadRole,
     UserThreadRole,
@@ -501,7 +501,7 @@ def test_live_cli_ack_does_not_become_archived_ack(archived_notification):
     # The root-free recorded operation reads the same archive, not today's live evidence,
     # and a key that is no longer attached refuses instead of falling back to live reads.
     from agent_comms.coordination.errors import HistoricalSourceChanged
-    from agent_comms.notification_reads import RecordedNotificationRead
+    from agent_comms.messaging.notification_reads import RecordedNotificationRead
 
     recorded, = RecordedNotificationRead((messages[0].reference,), source.key).read(live).outcomes[
         messages[0].seq, messages[0].message_id

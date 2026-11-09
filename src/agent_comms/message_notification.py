@@ -12,8 +12,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.agent_activity import AgentActivity, RecordedRecipientActivity
-from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.execution.transcript_sources import AssignedTranscriptSource
 from agent_comms.frozen_recipient import FrozenRecipient
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import Message
 from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
@@ -39,7 +40,6 @@ from agent_comms.notification_progress import (
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.revision_views import NotificationEvidenceView
-from agent_comms.transcript_sources import AssignedTranscriptSource
 
 if TYPE_CHECKING:
     from agent_comms.agent_activity import RecipientActivity

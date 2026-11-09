@@ -10,7 +10,8 @@ from subprocess import TimeoutExpired
 from threading import Lock
 from typing import ClassVar
 
-from agent_comms.phase_evidence import (
+from agent_comms.planning.orders import Todo
+from agent_comms.planning.phase_evidence import (
     Census,
     EvidenceFound,
     EvidenceRead,
@@ -19,7 +20,6 @@ from agent_comms.phase_evidence import (
     PhaseEvidence,
     UnreadableEvidenceError,
 )
-from agent_comms.planning.orders import Todo
 from agent_comms.projects.checkouts import Checkout, CheckoutHistory
 from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.projects.repo import Repo

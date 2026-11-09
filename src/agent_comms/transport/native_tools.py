@@ -13,6 +13,7 @@ from agent_comms.envelope_claim_transitions import (
     FileClaimPath,
     WritableFileClaim,
 )
+from agent_comms.execution.pi_wire import PiReported
 from agent_comms.nominal.declared_family import UnknownFamilyMember
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -22,7 +23,6 @@ from agent_comms.nominal.field_codec import (
     WireContext,
     WireOmitDefault,
 )
-from agent_comms.pi_wire import PiReported
 from agent_comms.recorded_time import EventTime
 from agent_comms.registry.thread_identity import OfferedTools, UnobservedTools
 from agent_comms.rule_deal import ReadSpan

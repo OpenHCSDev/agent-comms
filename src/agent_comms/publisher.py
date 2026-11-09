@@ -12,14 +12,12 @@ from itertools import groupby
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_comms.activity_clocks import ActivityClocks
-from agent_comms.audience_manifest import freeze_audience
 from agent_comms.bus import Bus, BusReader, BusSnapshot, ClaimRecord, PrivateRecord, RecordBuilder
 from agent_comms.bus_publication import InitialOrigin
 from agent_comms.change_report import OrderRoots
-from agent_comms.messaging.channel_targets import CommandTarget, NamedTarget
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.response_acknowledgement import canonical_publication_key
 from agent_comms.coordination.tables.publications import (
     PublicationIntents,
 )
@@ -37,14 +35,16 @@ from agent_comms.errors import (
     UnregisteredThreadError,
 )
 from agent_comms.frozen_recipient import FrozenRecipient
-from agent_comms.mentions import ThreadMention
+from agent_comms.messaging.activity_clocks import ActivityClocks
+from agent_comms.messaging.audience_manifest import freeze_audience
+from agent_comms.messaging.channel_targets import CommandTarget, NamedTarget
+from agent_comms.messaging.mentions import ThreadMention
 from agent_comms.messaging.messages import BusRecord, ClaimNoticeKind, Message
+from agent_comms.messaging.wake import OrdinaryControl, resolve_wake_cohort
 from agent_comms.nominal.field_codec import ClaimId
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import DEFAULT_ROSTER, RegistrySnapshot
-from agent_comms.response_acknowledgement import canonical_publication_key
 from agent_comms.storage.private_path import FileRevision
-from agent_comms.wake import OrdinaryControl, resolve_wake_cohort
 
 if TYPE_CHECKING:
     from agent_comms.coordination.session import NativeCapture

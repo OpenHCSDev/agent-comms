@@ -26,9 +26,9 @@ from agent_comms.cli_bridges.codex_protocol import (
     RpcNotification,
     RpcReply,
 )
+from agent_comms.cli_bridges.usage_reading import RateLimits
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.team_hud import CodexUsage, UnreadableUsage
-from agent_comms.usage_reading import RateLimits
 
 
 class CodexConnection:

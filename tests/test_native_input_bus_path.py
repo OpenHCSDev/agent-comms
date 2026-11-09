@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 import agent_comms.installer.native_package as native_package
-from agent_comms.backend import NativeSession
+from agent_comms.execution.backend import NativeSession
 from agent_comms.execution.child_process import Platform
 from agent_comms.execution.native_arguments import NativeInputProofArgument
 from agent_comms.execution.native_input_proof import NativeContextJournal

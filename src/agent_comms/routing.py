@@ -6,12 +6,14 @@ from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Annotated
 
-from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.turn_origin import TurnOrigin
 from agent_comms.input_key import InputKey
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import PublicSender
+from agent_comms.messaging.read_basis import DMDisplayScope, MessageDisplayScope
+from agent_comms.messaging.response_policy import NO_ALIASES
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     NullMember,
@@ -23,18 +25,16 @@ from agent_comms.nominal.field_codec import (
 )
 from agent_comms.planning.goal_scope import AllGoals, GoalScope
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.messaging.read_basis import DMDisplayScope, MessageDisplayScope
-from agent_comms.response_policy import NO_ALIASES
 
 if TYPE_CHECKING:
     from agent_comms.bus_publication import Delivered
     from agent_comms.catalog_document import CatalogDocument
+    from agent_comms.execution.transcript_routes import NoSentInputText, SentInputText
     from agent_comms.input_disposition import InputDispositions
     from agent_comms.messaging.messages import Message
     from agent_comms.registry.thread_identity import ThreadIncarnation
     from agent_comms.registry.threads import Thread
     from agent_comms.registry_provenance import RegistryProvenance
-    from agent_comms.transcript_routes import NoSentInputText, SentInputText
 
 
 class NoTurnOrigin(NullMember, TurnOrigin):

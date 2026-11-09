@@ -29,12 +29,12 @@ from importlib.util import find_spec
 from pathlib import Path, PurePosixPath
 from typing import ClassVar, Self
 
-from agent_comms.context_reading import ContextUsage
+from agent_comms.execution.context_reading import ContextUsage
 from agent_comms.instruction_deck import DealtCalls
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, MessageId
 from agent_comms.projects.repo import Repo
-from agent_comms.rule_probes import Probe, ProbeContext
+from agent_comms.projects.rule_probes import Probe, ProbeContext
 from agent_comms.storage.locked_store import DocumentChange, LockedStore
 from agent_comms.storage.store_files import AtomicFile, DependentStateTier, SingleFileStore
 from agent_comms.team.rule_file import RuleFile

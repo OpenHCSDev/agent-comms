@@ -6,7 +6,7 @@ from agent_comms.build_identity import (
     RecordedBuildIdentity,
 )
 from agent_comms.heartbeat_subjects import TeamHistory, TeammateSubject
-from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun
+from agent_comms.planning.order_runs import ApplicationOrderRun, MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.task_attachments.team_pings import RulePing, TeammatePing

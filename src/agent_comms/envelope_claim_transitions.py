@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 from agent_comms.class_fact import ClassFact
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
 from agent_comms.nominal.field_codec import (
     AssignmentId,
     BoundedText,
@@ -33,7 +34,6 @@ from agent_comms.nominal.field_codec import (
     WireOmitDefault,
     WireRequired,
 )
-from agent_comms.projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
 from agent_comms.registry.thread_identity import GenerationCounter, RecordedThreadIncarnation
 from agent_comms_hooks import ToolRefusedError
 
