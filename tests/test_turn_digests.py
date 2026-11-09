@@ -45,7 +45,7 @@ from agent_comms.messaging.watched import FileSource
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import ExternalThread, NativeThread
-from agent_comms.transcript.external_transcript import NoEarlierPage
+from agent_comms.transcript.external_transcript_rows import NoEarlierPage
 from agent_comms.transcript.transcript_events import AssistantTranscript, TurnDigest
 from agent_comms_hooks import ToolRefusedError
 from transcript_record_fixture import transcript_record

@@ -44,6 +44,7 @@ from agent_comms.storage.private_path import FileIdentity, MissingFile
 from agent_comms.storage.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.storage.typed_table import StoreWriter
 from agent_comms.team.rule_deal import Mute, Speaking, Voice
+from agent_comms.transcript.external_transcript_rows import ExternalPageRow
 from agent_comms.transcript.transcript_events import (
     IncomingTranscript,
     SentTranscript,
@@ -53,7 +54,6 @@ from agent_comms.transcript.transcript_events import (
 )
 
 if TYPE_CHECKING:
-    from agent_comms.transcript.external_transcript import ExternalPageRow
     from agent_comms.transcript.transcripts import NativeTranscriptCursor, TranscriptCursor
 
 

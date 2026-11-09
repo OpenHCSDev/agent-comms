@@ -56,7 +56,7 @@ from agent_comms.nominal.field_codec import (
     boundary_decoder,
 )
 from agent_comms.storage.recorded_time import EventTime, UnrecordedEventTime
-from agent_comms.transcript.external_transcript import EarlierPage, NoEarlierPage
+from agent_comms.transcript.external_transcript_rows import EarlierPage, NoEarlierPage
 from agent_comms.transcript.transcript_events import (
     AssistantTranscript,
     NoticeTranscript,

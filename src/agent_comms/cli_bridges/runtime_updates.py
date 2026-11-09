@@ -23,7 +23,8 @@ from agent_comms.registry.agent_activity import AgentActivity
 from agent_comms.registry.thread_identity import OfferedTools
 from agent_comms.registry.thread_text import NoThreadText, ThreadText
 from agent_comms.storage.recorded_time import EventTime, UnrecordedEventTime
-from agent_comms.transcript.external_transcript import ExternalPage, ExternalTranscript
+from agent_comms.transcript.external_transcript import ExternalTranscript
+from agent_comms.transcript.external_transcript_rows import ExternalPage
 from agent_comms.transcript.transcript_events import (
     LiveTextTranscript,
     ToolStartTranscript,
