@@ -60,6 +60,7 @@ from agent_comms.storage.locked_store import (
 from agent_comms.storage.maintenance_barrier import CarriedDocument
 from agent_comms.storage.private_path import FileObservation, FileRevision, MissingFile
 from agent_comms.storage.store_files import RegistryLocking
+from agent_comms.storage.typed_table import TableSchema
 
 
 class CachedRegistry(ABC):
@@ -703,15 +704,27 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
     def coordinator_reader(self) -> ReadableStore:
         return ReadableStore(CoordinationStore.path_in(self.path.parent))
 
-    def _check_guard_unlocked(self) -> RegistryPrivacy:
+    def coordinator_schema(self) -> type[TableSchema]:
+        """Read schema declarations without loading executable registry state.
+
+        A target installer needs these declarations before its registry carry can run.
+        The protocol marker's shape is stable; it grants no participant or launch access.
+        """
+        with self.guarded_read():
+            return self._privacy_declaration_unlocked().declared_schema_at(self.path)
+
+    def _privacy_declaration_unlocked(self) -> type[RegistryPrivacy]:
         if self.guard_path.exists() or self.guard_path.is_symlink():
-            return PrivateRegistryGuard.load(self.path)
+            return PrivateRegistryGuard
         coordinator = CoordinationStore.path_in(self.path.parent)
         if coordinator.exists() or coordinator.is_symlink():
             with self.coordinator_reader.reader_snapshot() as db:
                 if PrivateCoordinatorTable.stored_schema(db):
                     raise RelationViolationError("Native runtime has no registry authority")
-        return PublicRegistry()
+        return PublicRegistry
+
+    def _check_guard_unlocked(self) -> RegistryPrivacy:
+        return self._privacy_declaration_unlocked().load(self.path)
 
 
 def _link_revision(path: Path) -> FileObservation:

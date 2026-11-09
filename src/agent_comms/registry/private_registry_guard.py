@@ -186,9 +186,20 @@ class RegistryPrivacy(ABC):
         self, selection: NotificationSelection,
     ) -> NotificationAssignmentRead: ...
 
+    @classmethod
     @abstractmethod
-    def coordinator_schema(self) -> type[TableSchema]:
-        """The complete schema this root's authority requires during reconciliation."""
+    def coordinator_schema(cls) -> type[TableSchema]:
+        """The table family declared by this protocol kind."""
+
+    @classmethod
+    def declared_schema_at(cls, registry_path: Path) -> type[TableSchema]:
+        """Read a schema declaration without constructing a usable registry capability."""
+        return cls.coordinator_schema()
+
+    @classmethod
+    @abstractmethod
+    def load(cls, registry_path: Path) -> RegistryPrivacy:
+        """Load the root's usable privacy capability, including its data commitment checks."""
 
     @abstractmethod
     def declare_acceptance(self, db: sqlite3.Connection, recipient_lookup: ThreadLookup) -> None:
@@ -207,9 +218,14 @@ class PublicRegistry(RegistryPrivacy):
     def publication_connection(self, connection: sqlite3.Connection) -> None:
         """Public attached history has no private native publication relations."""
 
-    def coordinator_schema(self) -> type[TableSchema]:
+    @classmethod
+    def coordinator_schema(cls) -> type[TableSchema]:
         CoordinatorTable.declarations()
         return CoordinatorTable
+
+    @classmethod
+    def load(cls, registry_path: Path) -> PublicRegistry:
+        return cls()
 
     def notification_context_sql(self, connection: sqlite3.Connection) -> str:
         return (
@@ -298,9 +314,15 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
         ResponseTable.require_installed(connection)
         return connection
 
-    def coordinator_schema(self) -> type[TableSchema]:
+    @classmethod
+    def coordinator_schema(cls) -> type[TableSchema]:
         PrivateCoordinatorTable.declarations()
         return PrivateCoordinatorSchema
+
+    @classmethod
+    def declared_schema_at(cls, registry_path: Path) -> type[TableSchema]:
+        cls.namespace_at(registry_path)
+        return cls.coordinator_schema()
 
     def prepare_runtime(self) -> None:
         PrivateCoordinatorTable.declarations()
@@ -326,8 +348,8 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
         self.root_id = bytes.fromhex(wire_root_id)
 
     @classmethod
-    def load(cls, registry_path: Path) -> PrivateRegistryGuard:
-        """Read this guard's namespace; both slots and the registry must corroborate it."""
+    def namespace_at(cls, registry_path: Path) -> RootId:
+        """Decode the protocol marker without granting access to registry data."""
         descriptor = PrivateFileRole.read(cls.path_in(registry_path.parent),
             RelationViolationError("Private registry guard file is not a fixed owner-only regular file"))
         try:
@@ -338,7 +360,12 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
             _reject("slot has an invalid length")
         _, _, root_id, _, _, _ = _HEADER.unpack(raw[:_HEADER.size])
         _decode(raw, root_id)
-        guard = cls(registry_path, RootId(root_id.hex()))
+        return RootId(root_id.hex())
+
+    @classmethod
+    def load(cls, registry_path: Path) -> PrivateRegistryGuard:
+        """Read this guard's namespace; both slots and the registry must corroborate it."""
+        guard = cls(registry_path, cls.namespace_at(registry_path))
         guard.verify()
         return guard
 
